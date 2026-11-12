@@ -62,6 +62,11 @@ const TYPE_ORDER = [
   "Betaalrekening",
   "Spaarrekening",
   "Beleggingsrekening",
+  "Lening",
+  "Woning",
+  "Voertuig",
+  "Overig bezit",
+  "Overige schuld",
   "Overig",
 ];
 
@@ -77,24 +82,29 @@ function typeLabel(c: MoneyCopy["accountTypes"], kind: AccountTypeKind): string 
       return c.credit;
     case "investment":
       return c.investment;
+    case "loan":
+      return c.loan;
+    case "property":
+      return c.property;
+    case "vehicle":
+      return c.vehicle;
+    case "otherAsset":
+      return c.otherAsset;
+    case "otherLiability":
+      return c.otherLiability;
     case "other":
       return c.other;
   }
 }
 
-/** Four faces, cycled by position. Every stop is an existing token.
- *
- *  DRIE STOPS, NIET TWEE, en alledrie beginnen ze donker. Dat is dezelfde
- *  ingreep als in `cardRamp` (brandFace.ts) en om dezelfde reden: een verloop
- *  wordt sterker door zijn bereik, en het bereik kan alleen naar de donkere kant
- *  groeien omdat de lichte kant de leesbaarheid van het saldo draagt. Twee van
- *  deze vier liepen van accent naar chart-blue en van teal naar accent — dat zijn
- *  kleuren die dicht bij elkaar liggen, dus het verloop was er nauwelijks. */
+/** Four flat faces, cycled by position, each a --card-face-* token that holds
+ *  --card-text at 4.5:1.
+ */
 const FACES = [
-  "linear-gradient(135deg, var(--ink) 0%, var(--ink-soft) 38%, var(--accent) 100%)",
-  "linear-gradient(135deg, var(--ink) 0%, var(--accent) 45%, var(--chart-blue) 100%)",
-  "linear-gradient(135deg, var(--ink) 0%, var(--chart-teal) 45%, var(--accent) 100%)",
-  "linear-gradient(135deg, var(--ink) 0%, var(--ink-soft) 38%, var(--chart-purple) 100%)",
+  "var(--card-face-1)",
+  "var(--card-face-2)",
+  "var(--card-face-3)",
+  "var(--card-face-4)",
 ];
 
 /* Corporate-form words, dropped before matching. `account.bank` arrives as "ING"
@@ -259,7 +269,7 @@ export default function KaartenBlock({ accounts, onNavigate }: KaartenBlockProps
                           width: 16,
                           height: 16,
                           objectFit: "contain",
-                          background: "#fff",
+                          background: "var(--card-text)",
                           borderRadius: 3,
                           padding: 1,
                           marginRight: 6,

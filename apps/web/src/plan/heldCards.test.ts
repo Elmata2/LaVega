@@ -152,3 +152,48 @@ test("a bank card the catalogue knows carries its catalogue id; one it does not 
   expect(cards[0]!.catalogueId).toBe("abn-amro-creditcard");
   expect(cards[1]!.catalogueId).toBeNull();
 });
+
+test("stated credit cards are added with catalogue facts; held and other ones are not", () => {
+  const abnCard = buildHeldCards({ ...base, accounts: [ABN], facts: [], assumptionOn: true });
+  const abnEntry = CATALOGUE_ENTRIES.find((e) => e.id === "abn-amro-creditcard")!;
+  expect(abnEntry).toBeDefined();
+  // not held: added once, with the catalogue's fx fee and its source
+  const out = buildHeldCards({
+    ...base,
+    accounts: [],
+    facts: [],
+    assumptionOn: true,
+    statedCreditIds: ["abn-amro-creditcard", "abn-amro-creditcard", "other", "gone-id"],
+  });
+  expect(out).toHaveLength(1);
+  expect(out[0]).toMatchObject({
+    accountKey: "stated:abn-amro-creditcard",
+    label: abnEntry.product,
+    fxFeePct: 2,
+    cashback: { tier: "onbekend" },
+    provenance: { fxFeePct: { asOf: expect.any(String) } },
+  });
+  // also in bank data: counts once (the bank one)
+  const both = buildHeldCards({
+    ...base,
+    accounts: [ABN],
+    facts: [],
+    assumptionOn: true,
+    statedCreditIds: ["abn-amro-creditcard"],
+  });
+  expect(both).toHaveLength(1);
+  expect(both[0]!.accountKey).toBe("abn-cc");
+  expect(abnCard).toHaveLength(1);
+});
+
+test("without stated cards the output is the bank cards only", () => {
+  const a = buildHeldCards({ ...base, accounts: [ABN], facts: [], assumptionOn: true });
+  const b = buildHeldCards({
+    ...base,
+    accounts: [ABN],
+    facts: [],
+    assumptionOn: true,
+    statedCreditIds: [],
+  });
+  expect(b).toEqual(a);
+});

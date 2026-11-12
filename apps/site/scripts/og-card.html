@@ -1,0 +1,48 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>LaVega OG card</title>
+<style>
+  @font-face { font-family: "Instrument Serif"; font-weight: 400; src: url("__SERIF_400__") format("woff2"); }
+  @font-face { font-family: "Geist"; font-weight: 100 900; src: url("__GEIST__") format("woff2-variations"); }
+  html, body { margin: 0; width: 1200px; height: 630px; overflow: hidden; background: #02070a; }
+  .card { position: relative; box-sizing: border-box; width: 1200px; height: 630px; padding: 72px 80px;
+    background:
+      radial-gradient(ellipse 40% 15% at 50% 100%, rgba(252, 115, 77, 0.85) 0%, transparent 100%),
+      radial-gradient(ellipse 66% 30% at 50% 92%, rgba(2, 151, 222, 0.7) 0%, transparent 100%),
+      #02070a;
+    color: #fff; display: flex; flex-direction: column; justify-content: space-between; }
+  .logo { width: 400px; height: 125px; overflow: hidden; position: relative; }
+  .logo img { position: absolute; width: 667px; left: -147px; top: -36px;
+    filter: grayscale(1) invert(1) brightness(1.1); mix-blend-mode: screen; }
+  h1 { margin: 0; font-family: "Instrument Serif", Georgia, serif; font-weight: 400; font-size: 104px;
+    font-synthesis: none; line-height: 1.04; letter-spacing: 0; max-width: 1040px; }
+  .foot { font-family: "Geist", system-ui, sans-serif; font-size: 30px; color: #a9b4bb; }
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="logo"><img src="__LOGO__" alt=""></div>
+  <h1 id="t"></h1>
+  <div class="foot">www.lavega.dev</div>
+</div>
+<script>
+  const q = new URLSearchParams(location.search);
+  const h1 = document.getElementById("t");
+  h1.textContent = q.get("title") || "";
+  document.documentElement.lang = q.get("locale") || "nl";
+  /* The headline must fit 104px on one line or shrink. Shrink to fit instead of
+   * hand-tuning a size per locale: the Dutch title is longer than the English
+   * one, and either can change with the landing copy. `nowrap` is what makes
+   * the measurement meaningful — wrapped text never overflows its own box — and
+   * it waits for the webfont, or it would measure the Georgia fallback. */
+  h1.style.whiteSpace = "nowrap";
+  document.fonts.ready.then(() => {
+    for (let size = 104; size > 56 && h1.scrollWidth > h1.clientWidth; size -= 2) {
+      h1.style.fontSize = `${size}px`;
+    }
+  });
+</script>
+</body>
+</html>

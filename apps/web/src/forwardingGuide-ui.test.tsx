@@ -49,7 +49,7 @@ function render(
     nowMs: number;
     onChange: (u: (prev: GuideState) => GuideState) => void;
     onStartTest: () => void;
-    onOpenKoppelingen: () => void;
+    onOpenAccounts: () => void;
     /** The guide lives in a modal; most tests want it open. */
     open: boolean;
   }> = {},
@@ -66,7 +66,7 @@ function render(
     nowMs: NOW,
     onChange: () => {},
     onStartTest: () => {},
-    onOpenKoppelingen: () => {},
+    onOpenAccounts: () => {},
     ...rest,
   };
   act(() => {
@@ -118,7 +118,7 @@ for (const lang of ["nl", "en"] as const) {
 
   test(`${lang}: no address shows the way to Koppelingen and no steps`, () => {
     const onOpen = vi.fn();
-    const c = render(lang, emptyGuideState(), { address: "", onOpenKoppelingen: onOpen });
+    const c = render(lang, emptyGuideState(), { address: "", onOpenAccounts: onOpen });
     expect(c.textContent).toContain(g.noAddress);
     expect(c.textContent).not.toContain(g.gmail.openSettings);
     expect(c.querySelectorAll('input[type="checkbox"]').length).toBe(0);

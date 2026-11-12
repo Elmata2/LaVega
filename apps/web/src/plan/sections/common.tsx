@@ -22,7 +22,7 @@ export function useSectionCopy() {
 }
 
 const ACTION_VIEW: Record<Missing["action"], View> = {
-  "connect-bank": "koppelingen",
+  "connect-bank": "accounts",
   import: "overview",
   "intake-question": "intake",
   "enter-figure": "about-you",

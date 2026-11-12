@@ -50,9 +50,17 @@ export type CardsCopy = SectionCopy<CardsFigures, CardsReasonKey, CardsMissingKi
   };
   /** Under the stated credit cards when the bank data holds no credit card. */
   statedCardsNote: string;
+  /** Appended to the lines of a card ranked on the stated spend. */
+  statedEstimate: string;
   /** A stated card that is not in the catalogue. */
   otherCard: string;
   netLine: (net: CardNet, fmt: PlanFmt) => string;
+  /** For someone who does not always pay the card off. */
+  interest: {
+    warning: string;
+    /** Null when the rate or the spend is unknown: only the warning shows. */
+    line: (name: string, yearlyCents: number | null, fmt: PlanFmt) => string | null;
+  };
   /** Plain statement that a fee share under twelve months covers only those months. */
   feeShareNote: (months: number) => string;
   pointsLine: (name: string, net: CardNet, fmt: PlanFmt) => string | null;
@@ -68,6 +76,16 @@ export type CardsCopy = SectionCopy<CardsFigures, CardsReasonKey, CardsMissingKi
  *  show. Which card nets more is for the reader to see in the figures. */
 const NET_PER_CARD_NL = "Nettowaarde per kaart bij dezelfde uitgaven:";
 const NET_PER_CARD_EN = "Net value per card for the same spending:";
+
+/** The foreign-currency fees already taken off the net value, when assumed. */
+const nlFx = (net: CardNet, fmt: PlanFmt): string =>
+  net.fxFeeCents == null || net.fxFeeCents <= 0
+    ? ""
+    : ` Daarin zit ${fmt.eur(net.fxFeeCents)} aan kosten voor betalen in vreemde valuta.`;
+const enFx = (net: CardNet, fmt: PlanFmt): string =>
+  net.fxFeeCents == null || net.fxFeeCents <= 0
+    ? ""
+    : ` That includes ${fmt.eur(net.fxFeeCents)} in foreign currency fees.`;
 
 const nl: CardsCopy = {
   reasons: {
@@ -119,8 +137,17 @@ const nl: CardsCopy = {
     alsoHeld: (names) => `Ook opgegeven, staat hieronder bij je rekeningen: ${names}`,
   },
   statedCardsNote:
-    "Deze kaarten staan niet in je bankgegevens, dus hun eigen gebruik is niet te zien. De kaartvergelijking hieronder rekent met je uitgaven op al je rekeningen.",
+    "Deze kaarten staan niet in je bankgegevens. Zonder uitgaven op de kaart is er geen nettowaarde te berekenen. Er is niets geschat. De kaartvergelijking hieronder rekent met je uitgaven op al je rekeningen.",
+  statedEstimate: "geschat op basis van je antwoorden",
   otherCard: "Een andere kaart",
+  interest: {
+    warning:
+      "Je betaalt je kaart niet altijd helemaal af. Dan kost rente meer dan cashback oplevert.",
+    line: (name, yearlyCents, fmt) =>
+      yearlyCents === null
+        ? null
+        : `${name}: rente per jaar bij één maand uitgaven: ${fmt.eur(yearlyCents)}`,
+  },
   netLine: (net, fmt) => {
     if (net.netCents === null || net.earnedCents === null)
       return `${net.name}: de cashback is onbekend, dus er is geen nettowaarde berekend.`;
@@ -129,7 +156,7 @@ const nl: CardsCopy = {
         ? "de kosten zijn onbekend"
         : `na ${fmt.eurExact(net.feeShareCents)} kosten`;
     const tier = net.cashbackTier === "assumed" ? " (cashback aangenomen)" : "";
-    return `Bij jouw eigen uitgaven van ${fmt.eur(net.spendCents)} levert ${net.name} ${fmt.eur(net.earnedCents)} op${tier}; ${fee} is de nettowaarde ${fmt.eur(net.netCents)}.`;
+    return `Bij jouw eigen uitgaven van ${fmt.eur(net.spendCents)} levert ${net.name} ${fmt.eur(net.earnedCents)} op${tier}; ${fee} is de nettowaarde ${fmt.eur(net.netCents)}.${nlFx(net, fmt)}`;
   },
   feeShareNote: (months) =>
     months >= PLAN_NUMBERS.cardHorizonMonths
@@ -138,7 +165,9 @@ const nl: CardsCopy = {
   pointsLine: (name, net, fmt) =>
     net.pointsEarned === null
       ? null
-      : net.pointsValueRange === null
+      : net.pointsValueRange !== null && net.pointsValueRange.highCents === 0
+        ? `Bij jouw eigen uitgaven levert ${name} ${fmt.count(net.pointsEarned)} punten op. Je koos cashback boven punten, dus de punten tellen voor ${fmt.eur(0)}.`
+        : net.pointsValueRange === null
         ? `Bij jouw eigen uitgaven levert ${name} ${fmt.count(net.pointsEarned)} punten op. Zonder eigen inwisselvoorbeelden is er geen waarde in euro berekend.`
         : `Bij jouw eigen uitgaven levert ${name} ${fmt.count(net.pointsEarned)} punten op, met een waarde van ${fmt.eurRange(net.pointsValueRange.lowCents, net.pointsValueRange.highCents)} volgens je eigen inwisselvoorbeelden.`,
   balanceLine: (points, expiresOn, stale, fmt) =>
@@ -274,8 +303,17 @@ const en: CardsCopy = {
     alsoHeld: (names) => `Also stated, shown below with your accounts: ${names}`,
   },
   statedCardsNote:
-    "These cards are not in your bank data, so their own use cannot be seen. The card comparison below uses your spending on all your accounts.",
+    "These cards are not in your bank data. Without spending on the card, no net value can be calculated. Nothing has been estimated. The card comparison below uses your spending on all your accounts.",
+  statedEstimate: "estimated from your answers",
   otherCard: "Another card",
+  interest: {
+    warning:
+      "You do not always pay your card off in full. Then interest costs more than cashback earns.",
+    line: (name, yearlyCents, fmt) =>
+      yearlyCents === null
+        ? null
+        : `${name}: interest per year on one month of spending: ${fmt.eur(yearlyCents)}`,
+  },
   netLine: (net, fmt) => {
     if (net.netCents === null || net.earnedCents === null)
       return `${net.name}: the cashback is unknown, so no net value has been calculated.`;
@@ -284,7 +322,7 @@ const en: CardsCopy = {
         ? "the fee is unknown"
         : `after ${fmt.eurExact(net.feeShareCents)} in fees`;
     const tier = net.cashbackTier === "assumed" ? " (cashback assumed)" : "";
-    return `At your own spend of ${fmt.eur(net.spendCents)}, ${net.name} earns ${fmt.eur(net.earnedCents)}${tier}; ${fee}, the net value is ${fmt.eur(net.netCents)}.`;
+    return `At your own spend of ${fmt.eur(net.spendCents)}, ${net.name} earns ${fmt.eur(net.earnedCents)}${tier}; ${fee}, the net value is ${fmt.eur(net.netCents)}.${enFx(net, fmt)}`;
   },
   feeShareNote: (months) =>
     months >= PLAN_NUMBERS.cardHorizonMonths
@@ -293,7 +331,9 @@ const en: CardsCopy = {
   pointsLine: (name, net, fmt) =>
     net.pointsEarned === null
       ? null
-      : net.pointsValueRange === null
+      : net.pointsValueRange !== null && net.pointsValueRange.highCents === 0
+        ? `At your own spend, ${name} earns ${fmt.count(net.pointsEarned)} points. You chose cashback over points, so the points count for ${fmt.eur(0)}.`
+        : net.pointsValueRange === null
         ? `At your own spend, ${name} earns ${fmt.count(net.pointsEarned)} points. Without redemption examples of your own, no euro value has been calculated.`
         : `At your own spend, ${name} earns ${fmt.count(net.pointsEarned)} points, worth ${fmt.eurRange(net.pointsValueRange.lowCents, net.pointsValueRange.highCents)} by your own redemption examples.`,
   balanceLine: (points, expiresOn, stale, fmt) =>

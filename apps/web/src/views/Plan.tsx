@@ -13,6 +13,7 @@ import {
 } from "@lavega/core";
 import type { View } from "../App";
 import { useAppLocale } from "../appLocale.js";
+import { ConnectChecklist } from "../components/blocks/ConnectChecklist.js";
 import { inviteState } from "../components/blocks/IntakeInviteCard.js";
 import Button from "../components/ui/Button.js";
 import Card from "../components/ui/Card.js";
@@ -23,7 +24,9 @@ import BackboneStrip from "../plan/BackboneStrip.js";
 import CashflowCard from "../plan/CashflowCard.js";
 import FromAnswers from "../plan/FromAnswers.js";
 import ChangeLog from "../plan/ChangeLog.js";
+import { orderSections } from "../plan/orderSections.js";
 import PlanHeader, { ASSUMPTIONS_ANCHOR } from "../plan/PlanHeader.js";
+import ReportsCard from "../plan/ReportsCard.js";
 import ScenarioTable from "../plan/ScenarioTable.js";
 import BufferSection from "../plan/sections/BufferSection.js";
 import CardsSection from "../plan/sections/CardsSection.js";
@@ -115,7 +118,7 @@ export default function Plan({
     const invite = inviteState(store, asOf);
     const steps = intakeCopy[locale].home.invite;
     const resume =
-      invite === null
+      invite === null || invite.kind !== "intake"
         ? null
         : invite.riskDue
           ? steps.riskDue
@@ -187,12 +190,18 @@ export default function Plan({
         month={plan.result.sections.month}
         onNavigate={onNavigate}
       />
+      <ConnectChecklist
+        store={profile.store}
+        accounts={personalAccounts}
+        onOpenAccounts={() => onNavigate("accounts")}
+      />
       <BackboneStrip backbone={plan.result.backbone} publicFacts={publicFacts} />
       <ChangeLog diff={plan.changes} since={plan.changesSince} />
-      {SECTION_IDS.map((id) => (
+      {orderSections(SECTION_IDS, planProfileOf(store).priorities).map((id) => (
         <SectionBody key={id} section={id} ctx={ctx} />
       ))}
       {plan.result.cashflow !== null && <CashflowCard cashflow={plan.result.cashflow} ctx={ctx} />}
+      <ReportsCard reports={plan.result.reports} />
       <ScenarioTable id={ASSUMPTIONS_ANCHOR} />
       <footer className="text-muted text-[0.85rem]" data-testid="plan-footer">
         <p className="m-0 mb-2">{shell.footer.notice}</p>

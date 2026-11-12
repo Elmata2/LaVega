@@ -1,6 +1,10 @@
 import type { SectorProfile } from "@lavega/adapters";
 import { createJsonFileStore, runtimeDataFile } from "./jsonFileStore.js";
-import { sanitizeSectorProfile, type SectorProfileStore } from "./inMemorySectorProfileStore.js";
+import {
+  sanitizeSectorProfile,
+  type SectorProfileStore,
+  type StoredSectorProfile,
+} from "./inMemorySectorProfileStore.js";
 
 export type { SectorProfileStore } from "./inMemorySectorProfileStore.js";
 
@@ -28,19 +32,33 @@ function isSectorProfile(value: unknown): value is SectorProfile {
  *  `source` field at all — just `{sector, industry}`. Every symbol classified
  *  before this shipped is one of these on disk. Reading it as `null` would
  *  silently revert every previously-classified stock to Unknown on deploy. */
-function normalizeLegacyRecord(value: unknown): SectorProfile | null {
+function normalizeLegacyRecord(value: unknown): StoredSectorProfile | null {
   if (!value || typeof value !== "object") return null;
   const record = value as Record<string, unknown>;
+  const attempt =
+    typeof record.providerAttemptedAt === "string"
+      ? { providerAttemptedAt: record.providerAttemptedAt }
+      : {};
+  if (record.kind === "none")
+    return attempt.providerAttemptedAt ? { kind: "none", ...attempt } : null;
   if (record.kind === "stock" || record.kind === "fund")
-    return isSectorProfile(record) ? sanitizeSectorProfile(record as SectorProfile) : null;
+    return isSectorProfile(record)
+      ? { ...sanitizeSectorProfile(record as SectorProfile), ...attempt }
+      : null;
   if (typeof record.sector === "string" && typeof record.industry === "string")
-    return { kind: "stock", sector: record.sector, industry: record.industry, source: "provider" };
+    return {
+      kind: "stock",
+      sector: record.sector,
+      industry: record.industry,
+      source: "provider",
+      ...attempt,
+    };
   return null;
 }
 
 /** Persistent per-symbol sector metadata cache for the Docker runtime. */
 export function createFileSectorProfileStore(filePath: string): SectorProfileStore {
-  const store = createJsonFileStore<Record<string, SectorProfile>>(filePath, {
+  const store = createJsonFileStore<Record<string, StoredSectorProfile>>(filePath, {
     empty: {},
     validate: (contents) => {
       const parsed: unknown = JSON.parse(contents);
@@ -56,7 +74,8 @@ export function createFileSectorProfileStore(filePath: string): SectorProfileSto
   const key = (symbol: string) => symbol.toUpperCase();
   return {
     async get(symbol) {
-      return (await store.read())[key(symbol)] ?? null;
+      const row = (await store.read())[key(symbol)];
+      return row ? sanitizeSectorProfile(row) : null;
     },
     async set(symbol, profile) {
       await store.update((current) => {
@@ -65,8 +84,30 @@ export function createFileSectorProfileStore(filePath: string): SectorProfileSto
         /* Same non-overwrite guard as the Neon store: a provider row is
          * never displaced by an inferred one written after it. */
         const existing = current[k];
-        if (existing?.source === "provider" && sanitized.source !== "provider") return current;
-        return { ...current, [k]: sanitized };
+        if (existing && "source" in existing && existing.source === "provider") {
+          if (sanitized.source !== "provider") return current;
+        }
+        /* A non-provider write keeps the attempt time. */
+        const attemptedAt = existing?.providerAttemptedAt;
+        return {
+          ...current,
+          [k]:
+            sanitized.source !== "provider" && attemptedAt !== undefined
+              ? { ...sanitized, providerAttemptedAt: attemptedAt }
+              : sanitized,
+        };
+      });
+    },
+    async lastProviderAttempt(symbol) {
+      return (await store.read())[key(symbol)]?.providerAttemptedAt ?? null;
+    },
+    async recordProviderAttempt(symbol, at) {
+      await store.update((current) => {
+        const k = key(symbol);
+        return {
+          ...current,
+          [k]: { ...(current[k] ?? { kind: "none" as const }), providerAttemptedAt: at },
+        };
       });
     },
   };

@@ -85,7 +85,7 @@ export default function RecenteTransactiesBlock({
       period={
         <input
           type="search"
-          className="w-60 max-w-full rounded-pill py-[6px] px-[14px] text-[0.8rem] [@media(max-width:520px)]:w-full"
+          className="w-60 max-w-full rounded-pill py-[6px] px-[14px] text-[0.8rem] min-w-0 [@media(max-width:520px)]:w-auto [@media(max-width:520px)]:flex-1"
           data-testid="tx-search"
           placeholder={c.zoekPlaceholder}
           aria-label={c.zoekenAria}
@@ -118,7 +118,7 @@ export default function RecenteTransactiesBlock({
                     </span>
                   </div>
                 </div>
-                <div className="flex items-center gap-3 flex-none">
+                <div className="flex items-center gap-3 flex-none [@media(max-width:420px)]:flex-col-reverse [@media(max-width:420px)]:items-end [@media(max-width:420px)]:gap-1">
                   <button
                     type="button"
                     className="inline-flex items-center flex-none rounded-pill border border-line bg-surface-2 text-muted text-[0.72rem] py-[3px] px-[10px] whitespace-nowrap [@media(max-width:520px)]:text-[0.68rem] [@media(max-width:520px)]:px-2 cursor-pointer hover:text-ink hover:border-accent"

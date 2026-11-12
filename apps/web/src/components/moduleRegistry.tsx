@@ -28,6 +28,7 @@ export type ModuleId = Extract<
   | "transactions"
   | "accounts"
   | "forecast"
+  | "bills"
   | "optimalisatie"
   | "valuta"
   | "punten"
@@ -221,6 +222,32 @@ export const MODULES: ModuleDef[] = [
         <Tile x={8} y={44} w={80} h={10} />
         <Line x={13} y={47.5} w={34} />
         <Line x={72} y={48} w={10} strong />
+      </Thumb>
+    ),
+  },
+  {
+    id: "bills",
+    label: "Verplichtingen",
+    what: "Wat er af moet, wat betaald is en wat tekort is voor je volgende salaris.",
+    icon: (
+      <Icon>
+        <rect x="4" y="5" width="16" height="16" rx="2" />
+        <path d="M8 3v4M16 3v4M4 10h16" />
+        <path d="M8 14h3M8 17h6" />
+      </Icon>
+    ),
+    preview: (
+      <Thumb>
+        <Tile x={8} y={8} w={80} h={13} />
+        <Line x={12} y={11} w={18} strong />
+        <Line x={62} y={11.5} w={18} />
+        <Tile x={8} y={24} w={80} h={13} />
+        <Line x={12} y={27} w={26} strong />
+        <Line x={62} y={27.5} w={18} />
+        <Tile x={8} y={40} w={38} h={14} />
+        <Line x={12} y={44} w={16} strong />
+        <Tile x={50} y={40} w={38} h={14} />
+        <Line x={54} y={44} w={20} strong />
       </Thumb>
     ),
   },
@@ -491,6 +518,7 @@ export type WidgetId =
   | "aandacht"
   | "intake-invite"
   | "room-card"
+  | "connect-checklist"
   | "positie"
   | "betaalagenda"
   | "facturen-open"
@@ -577,6 +605,25 @@ export const WIDGETS: WidgetDef[] = [
     ),
   },
   {
+    id: "connect-checklist",
+    label: "Koppel voor het complete beeld",
+    what: "Welke van je banken nog niet gekoppeld zijn, met een link naar Rekeningen.",
+    note: "Verschijnt alleen als je banken hebt opgegeven die nog niet gekoppeld zijn.",
+    defaultOn: true,
+    preview: (
+      <Thumb>
+        <Tile x={8} y={10} w={80} h={40} />
+        <Line x={14} y={17} w={36} strong />
+        <circle cx="16" cy="29" r="2.5" fill="var(--warn)" />
+        <Line x={23} y={28} w={34} />
+        <Line x={68} y={28} w={14} strong />
+        <circle cx="16" cy="40" r="2.5" fill="var(--warn)" />
+        <Line x={23} y={39} w={26} />
+        <Line x={68} y={39} w={14} strong />
+      </Thumb>
+    ),
+  },
+  {
     id: "positie",
     label: "Positie",
     what: "Een kleine kaart met de verdeling van je geld over je bedrijven.",
@@ -621,7 +668,8 @@ export const WIDGETS: WidgetDef[] = [
           width="14"
           height="14"
           rx="3"
-          fill="rgba(176, 120, 30, 0.18)"
+          fill="var(--warn)"
+          fillOpacity="0.18"
           stroke="var(--warn)"
         />
         <Line x={11} y={34} w={8} strong />

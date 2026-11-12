@@ -1,5 +1,14 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
-import type { Account, EntityScope, EntitySummary, LearnedFact } from "@lavega/core";
+import type {
+  Account,
+  EntityScope,
+  EntitySummary,
+  ImportSession,
+  LearnedFact,
+  Tx,
+  Valuation,
+  VaultDocument,
+} from "@lavega/core";
 import type { ConversionMode } from "../settings.js";
 import {
   accountType,
@@ -38,6 +47,10 @@ import { shellCopy } from "../copy/shell.js";
 import { intakeCopy } from "../copy/intake.js";
 import type { View } from "../appRoutes.js";
 import { heldCashbackSentence } from "../copy/optimise.js";
+import DocumentsCard, { type DocumentNotice } from "../components/documents/DocumentsCard.js";
+import GenericImportCard, {
+  type GenericImportRequest,
+} from "../components/import/GenericImportCard.js";
 import Import from "./Import";
 import Koppelingen from "./Koppelingen";
 import Backup from "./Backup";
@@ -106,6 +119,24 @@ type ProfielProps = {
   storage: VaultStorage;
   asOf: string;
   onRestored: () => void;
+  /** Statement documents (WS3.4/WS3.5, issue #293): metadata only; the bytes
+   *  live sealed in their own store. */
+  documents?: VaultDocument[];
+  documentNotice?: DocumentNotice | null;
+  documentErased?: number | null;
+  accounts?: readonly Account[];
+  txs?: readonly Tx[];
+  valuations?: readonly Valuation[];
+  onDocumentUpload?: (file: File) => void;
+  onDocumentLink?: (id: string, accountKey: string) => void;
+  onDocumentReject?: (id: string) => void;
+  onDocumentRemove?: (id: string) => void;
+  onDocumentEraseAll?: () => void;
+  /** Generic import sessions (WS3.6, issue #294). */
+  importSessions?: ImportSession[];
+  importNotice?: string | null;
+  onGenericImport?: (request: GenericImportRequest) => void;
+  onGenericRevert?: (sessionId: string) => void;
 };
 
 /* Account — sign in against the configured LaVega server so the owner can test
@@ -459,6 +490,21 @@ export default function Profiel({
   storage,
   asOf,
   onRestored,
+  documents = [],
+  documentNotice = null,
+  documentErased = null,
+  accounts = [],
+  txs = [],
+  valuations = [],
+  onDocumentUpload,
+  onDocumentLink,
+  onDocumentReject,
+  onDocumentRemove,
+  onDocumentEraseAll,
+  importSessions = [],
+  importNotice = null,
+  onGenericImport,
+  onGenericRevert,
   onNavigate,
 }: ProfielProps) {
   const [locale, setLocale] = useAppLocale();
@@ -536,7 +582,7 @@ export default function Profiel({
         aria-label={c.profiel.head.ariaLabel}
       >
         <span
-          className="inline-flex items-center justify-center flex-none w-[56px] h-[56px] rounded-pill border border-line bg-surface-2 text-ink font-display text-[1.15rem] font-semibold tracking-[0.02em]"
+          className="inline-flex items-center justify-center flex-none w-[56px] h-[56px] rounded-pill border border-line bg-surface-2 text-ink font-body text-[1.15rem] font-semibold tracking-[0.02em]"
           aria-hidden="true"
           data-testid="profile-head-avatar"
         >
@@ -764,6 +810,36 @@ export default function Profiel({
         onImport={onImport}
         onRefreshBank={onRefreshBank}
       />
+
+      {onGenericImport != null && (
+        <GenericImportCard
+          accounts={[...accounts]}
+          existingTxs={[...txs]}
+          sessions={importSessions}
+          busy={busy}
+          notice={importNotice}
+          onImport={onGenericImport}
+          onRevert={onGenericRevert ?? (() => {})}
+        />
+      )}
+
+      {onDocumentUpload != null && (
+        <DocumentsCard
+          documents={documents}
+          accounts={[...accounts]}
+          txs={[...txs]}
+          valuations={valuations}
+          asOf={asOf}
+          busy={busy}
+          notice={documentNotice}
+          erased={documentErased}
+          onUpload={onDocumentUpload}
+          onLink={onDocumentLink ?? (() => {})}
+          onReject={onDocumentReject ?? (() => {})}
+          onRemove={onDocumentRemove ?? (() => {})}
+          onEraseAll={onDocumentEraseAll ?? (() => {})}
+        />
+      )}
 
       {SHOW_INVOICE_FORWARDING && <Koppelingen />}
 

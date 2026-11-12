@@ -4,6 +4,7 @@ import { Hono, type Context, type Next } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { secureHeaders } from "hono/secure-headers";
 import { fileURLToPath } from "node:url";
+import { existsSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { loadConfig, maskApplicationId } from "./config.js";
 import { getRates } from "./rates.js";
@@ -25,11 +26,13 @@ import {
   investingTenantId,
   runInvestingCron,
   shouldMountInvesting,
+  runInvestingDrain,
 } from "./investing-mount.js";
 import { authTrustedOrigins, getAuth, verifiedSession } from "./auth.js";
 import { authEmailConfig } from "./authEmail.js";
 import { createPublicAuthLimiter } from "./authLimits.js";
 import { apiGuard, guardIsDisabled, INVESTING_API_ALIAS } from "./apiGuard.js";
+import { mcpRouteDependencies, registerMcpRoutes } from "./mcp/routes.js";
 import { sameOriginGuard } from "./sameOrigin.js";
 import { withRuntimeDatabase } from "@lavega/investing-server/src/credentialStore.js";
 import { LOCAL_TENANT_ID, localeRedirectTarget } from "@lavega/core";
@@ -266,6 +269,15 @@ for (const path of API_SURFACES) app.use(path, crossSite);
 const sessionGuard = apiGuard();
 for (const path of API_SURFACES) app.use(path, sessionGuard);
 
+/* The external agent endpoint (#285, ADR 0012). It speaks JSON-RPC to machine
+ * clients, so it is not on `/api/*`, but it registers the SAME guard: that guard
+ * has a bearer branch for `/mcp` and does not honour the `pnpm dev` escape hatch
+ * there, because "no token" must always be 401 (ADR 0012 §2). Registered before
+ * the static catch-all so the route wins. */
+app.use("/mcp", limitBody);
+app.use("/mcp", sessionGuard);
+registerMcpRoutes(app, mcpRouteDependencies());
+
 app.get("/health", (c) => c.json({ ok: true }));
 
 /* One limiter for the three mail/account endpoints, per address AND across all
@@ -398,6 +410,11 @@ app.get("/terms", (c) => c.html(termsHtml));
  * investing-web dist exists (production Docker build). */
 if (shouldMountInvesting()) {
   app.get("/api/cron/investing-sync", (c) => runInvestingCron(c.req.raw));
+  /* The external scheduler's entry point (issue #311). One call advances the
+   * queue by one invocation budget; it never self-continues. GET as well as
+   * POST so a plain external cron service can drive it. */
+  app.get("/api/cron/investing-drain", (c) => runInvestingDrain(c.req.raw));
+  app.post("/api/cron/investing-drain", (c) => runInvestingDrain(c.req.raw));
   /* Every investing API call is served under one tenant, and the session names
    * it. A request that cannot name a tenant is refused rather than falling back
    * to the local one — that fallback would hand one user another user's data. */
@@ -491,7 +508,14 @@ app.use("/*", serveStatic({ root: WEB_DIST }));
  * we had still saw 200s. Cloudflare then cached the HTML under the .js URL for
  * four hours. A file that is not there is a 404. */
 app.get("/*", (c, next) => (isStaticAssetPath(c.req.path) ? c.text("Not Found", 404) : next()));
-app.get("/*", serveStatic({ path: `${WEB_DIST}/index.html` }));
+/* The view fallback is the bare SPA shell (app-shell.html), not index.html: the
+ * build pre-renders index.html into the Dutch landing page for crawlers, and
+ * /app or /reset-password must not start from that markup. Older builds without
+ * app-shell.html still get index.html. */
+app.get("/*", (c, next) => {
+  const shell = existsSync(`${WEB_DIST}/app-shell.html`) ? "app-shell.html" : "index.html";
+  return serveStatic({ path: `${WEB_DIST}/${shell}` })(c, next);
+});
 
 /* Only start listening when run directly (`tsx src/index.ts`), not when imported by tests. */
 if (import.meta.url === `file://${process.argv[1]}`) {

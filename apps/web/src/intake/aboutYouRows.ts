@@ -1,18 +1,49 @@
 import {
   AdvisorProfile,
+  REWARD_PROGRAMS,
   fingerprint,
   removeDerived,
   type CardBalance,
+  type CardRepayment,
+  type CheckInCadence,
+  type CutTarget,
   type Debt,
   type FieldSource,
+  type FlightsPerYear,
+  type ForeignSpend,
   type Goal,
+  type IncomeRegularity,
+  type MoneySharing,
+  type PointsGoal,
+  type Priority,
+  type SpendArea,
 } from "@lavega/core";
 import type { AboutYouCopy, ProfileSection } from "../copy/intake.js";
 import { formatDate, formatEuroIn } from "../format.js";
+import { wizardCopy } from "../copy/wizard.js";
 import type { Locale } from "../locale.js";
 import { cardLabel } from "./wizard/cardOptions.js";
 import { WORK_ORDER, answerCards, reopenRisk } from "./wizard/screens.js";
-import { applyChargesVat, applyStatedCards, applyStatedDebitCards, applyWork } from "./state.js";
+import {
+  applyBirthYear,
+  applyCardRepayment,
+  applyChargesVat,
+  applyCheckInCadence,
+  applyConfidence,
+  applyCutTargets,
+  applyFlightsPerYear,
+  applyForeignSpend,
+  applyIncomeRegularity,
+  applyMoneySharing,
+  applyPointsGoal,
+  applyPriorities,
+  applySpendMix,
+  applyStatedBanks,
+  applyStatedCards,
+  applyStatedDebitCards,
+  applyStatedPrograms,
+  applyWork,
+} from "./state.js";
 
 type Fact<T> = {
   value: T;
@@ -38,6 +69,14 @@ export type Editor =
       kind: "years";
       initial: readonly number[];
       apply: (p: AdvisorProfile, years: number[]) => AdvisorProfile;
+    }
+  | {
+      /** One four-digit year, inside the range the wizard accepts. */
+      kind: "year";
+      initial: number;
+      min: number;
+      max: number;
+      apply: (p: AdvisorProfile, year: number) => AdvisorProfile;
     }
   | {
       kind: "text";
@@ -252,29 +291,151 @@ function cardBalanceRows(p: AdvisorProfile, ctx: RowContext): Row[] {
   }));
 }
 
+/** One value out of a fixed list, labelled with the wizard's own option text. */
+function pick<T extends string>(
+  ctx: RowContext,
+  section: ProfileSection,
+  f: Fact<T> | undefined,
+  labels: Record<T, string>,
+  order: readonly T[],
+  apply: (p: AdvisorProfile, v: T, asOf: string) => AdvisorProfile,
+): Row[] {
+  return single(
+    ctx,
+    section,
+    f,
+    (v) => labels[v] ?? v,
+    (cur) => ({
+      kind: "choice",
+      options: order.map((id) => ({ id, label: labels[id] })),
+      initial: cur.value,
+      apply: (q, id) => apply(q, order.find((o) => o === id) ?? cur.value, ctx.asOf),
+    }),
+  );
+}
+
+/** Several values out of a fixed list; an empty list reads as "none". */
+function pickMany<T extends string>(
+  ctx: RowContext,
+  section: ProfileSection,
+  f: Fact<readonly T[]> | undefined,
+  labels: Record<T, string>,
+  order: readonly T[],
+  apply: (p: AdvisorProfile, v: T[], asOf: string) => AdvisorProfile,
+): Row[] {
+  const none = wizardCopy[ctx.locale].noneCard;
+  return single(
+    ctx,
+    section,
+    f,
+    (v) => (v.length === 0 ? none : v.map((id) => labels[id] ?? id).join(", ")),
+    (cur) => {
+      // A stored id the list no longer knows stays tickable, so editing keeps it.
+      const all = [...order, ...cur.value.filter((id) => !order.includes(id))];
+      return {
+        kind: "multi",
+        options: all.map((id) => ({ id, label: labels[id] ?? id })),
+        initial: cur.value,
+        apply: (q, ids) =>
+          apply(
+            q,
+            all.filter((o) => ids.includes(o)),
+            ctx.asOf,
+          ),
+      };
+    },
+  );
+}
+
+const MONEY_SHARING: readonly MoneySharing[] = ["shared", "separate", "mixed"];
+const INCOME_REGULARITY: readonly IncomeRegularity[] = ["fixed", "varies"];
+const CARD_REPAYMENT: readonly CardRepayment[] = ["full", "sometimes", "rarely"];
+const SPEND_AREAS: readonly SpendArea[] = [
+  "groceries",
+  "travel",
+  "online",
+  "fuel",
+  "eating-out",
+  "other",
+];
+const FOREIGN_SPEND: readonly ForeignSpend[] = ["often", "sometimes", "never"];
+const PRIORITIES: readonly Priority[] = [
+  "spend-less",
+  "save-more",
+  "pay-off-debt",
+  "cards-points",
+  "subscriptions",
+  "children",
+  "start-investing",
+];
+const CUT_TARGETS: readonly CutTarget[] = [...SPEND_AREAS, "subscriptions"];
+const CADENCES: readonly CheckInCadence[] = ["daily", "weekly", "when-it-matters"];
+const CONFIDENCE = [1, 2, 3, 4] as const;
+const POINTS_GOALS: readonly PointsGoal[] = [
+  "flights",
+  "upgrades",
+  "shopping",
+  "cashback",
+  "no-preference",
+];
+const FLIGHTS: readonly FlightsPerYear[] = ["0", "1-2", "3-5", "6+"];
+
+/** The household row, plus a row for money sharing when the household is two. */
+function householdRows(p: AdvisorProfile, ctx: RowContext): Row[] {
+  const rows = single(
+    ctx,
+    "household",
+    p.household,
+    (v) => ctx.c.values.household[v.kind],
+    (f, set) => ({
+      kind: "choice",
+      options: [
+        { id: "alone", label: ctx.c.values.household.alone },
+        { id: "together", label: ctx.c.values.household.together },
+      ],
+      initial: f.value.kind,
+      apply: (q, id) => {
+        const kind = id === "together" ? "together" : "alone";
+        const { partnerIncomeInScope: _p, moneySharing: _m, ...rest } = f.value;
+        return set(q, kind === "together" ? { ...f.value, kind } : { ...rest, kind });
+      },
+    }),
+  );
+  const h = p.household;
+  if (h === undefined || h.value.kind !== "together" || h.value.moneySharing === undefined)
+    return rows;
+  const labels = wizardCopy[ctx.locale].moneySharing;
+  const sharing = h.value.moneySharing;
+  return [
+    ...rows,
+    {
+      key: "household:moneySharing",
+      section: "household",
+      detail: wizardCopy[ctx.locale].questions.moneySharing,
+      value: labels[sharing],
+      source: h.source,
+      at: h.at,
+      editor: {
+        kind: "choice",
+        options: MONEY_SHARING.map((id) => ({ id, label: labels[id] })),
+        initial: sharing,
+        apply: (q, id) =>
+          applyMoneySharing(q, MONEY_SHARING.find((m) => m === id) ?? sharing, ctx.asOf),
+      },
+      remove: (q) => {
+        const cur = q.household;
+        if (cur === undefined) return q;
+        const { moneySharing: _m, ...value } = cur.value;
+        return rebuild(q, { household: { ...cur, value } });
+      },
+    },
+  ];
+}
+
 /** One builder per profile section. `Record<ProfileSection, …>` makes a new
  *  section without a builder a type error. */
 export const FIELD_ROWS: Record<ProfileSection, (p: AdvisorProfile, ctx: RowContext) => Row[]> = {
-  household: (p, ctx) =>
-    single(
-      ctx,
-      "household",
-      p.household,
-      (v) => ctx.c.values.household[v.kind],
-      (f, set) => ({
-        kind: "choice",
-        options: [
-          { id: "alone", label: ctx.c.values.household.alone },
-          { id: "together", label: ctx.c.values.household.together },
-        ],
-        initial: f.value.kind,
-        apply: (q, id) => {
-          const kind = id === "together" ? "together" : "alone";
-          const { partnerIncomeInScope: _p, ...rest } = f.value;
-          return set(q, kind === "together" ? { ...f.value, kind } : { ...rest, kind });
-        },
-      }),
-    ),
+  household: householdRows,
   children: (p, ctx) =>
     single(
       ctx,
@@ -564,6 +725,144 @@ export const FIELD_ROWS: Record<ProfileSection, (p: AdvisorProfile, ctx: RowCont
       ];
     });
   },
+  birthYear: (p, ctx) =>
+    single(
+      ctx,
+      "birthYear",
+      p.birthYear,
+      (v) => String(v),
+      (f) => {
+        const currentYear = new Date(ctx.asOf).getFullYear();
+        return {
+          kind: "year",
+          initial: f.value,
+          min: currentYear - 100,
+          max: currentYear - 16,
+          apply: (q, year) => applyBirthYear(q, year, ctx.asOf),
+        };
+      },
+    ),
+  incomeRegularity: (p, ctx) =>
+    pick(
+      ctx,
+      "incomeRegularity",
+      p.incomeRegularity,
+      wizardCopy[ctx.locale].incomeRegularity,
+      INCOME_REGULARITY,
+      applyIncomeRegularity,
+    ),
+  statedBanks: (p, ctx) => {
+    const names = wizardCopy[ctx.locale].bankNames;
+    const order = Object.keys(names);
+    return pickMany(ctx, "statedBanks", p.statedBanks, names, order, applyStatedBanks);
+  },
+  cardRepayment: (p, ctx) =>
+    pick(
+      ctx,
+      "cardRepayment",
+      p.cardRepayment,
+      wizardCopy[ctx.locale].cardRepayment,
+      CARD_REPAYMENT,
+      applyCardRepayment,
+    ),
+  spendMix: (p, ctx) =>
+    pickMany(
+      ctx,
+      "spendMix",
+      p.spendMix,
+      wizardCopy[ctx.locale].spendAreas,
+      SPEND_AREAS,
+      applySpendMix,
+    ),
+  foreignSpend: (p, ctx) =>
+    pick(
+      ctx,
+      "foreignSpend",
+      p.foreignSpend,
+      wizardCopy[ctx.locale].foreignSpend,
+      FOREIGN_SPEND,
+      applyForeignSpend,
+    ),
+  priorities: (p, ctx) =>
+    pickMany(
+      ctx,
+      "priorities",
+      p.priorities,
+      wizardCopy[ctx.locale].priorities,
+      PRIORITIES,
+      applyPriorities,
+    ),
+  cutTargets: (p, ctx) =>
+    pickMany(
+      ctx,
+      "cutTargets",
+      p.cutTargets,
+      wizardCopy[ctx.locale].cutTargets,
+      CUT_TARGETS,
+      applyCutTargets,
+    ),
+  checkInCadence: (p, ctx) =>
+    pick(
+      ctx,
+      "checkInCadence",
+      p.checkInCadence,
+      wizardCopy[ctx.locale].checkInCadence,
+      CADENCES,
+      applyCheckInCadence,
+    ),
+  confidence: (p, ctx) => {
+    const labels = wizardCopy[ctx.locale].confidence;
+    return single(
+      ctx,
+      "confidence",
+      p.confidence,
+      (v) => {
+        const n = CONFIDENCE.find((c) => c === v);
+        return n === undefined ? String(v) : labels[n];
+      },
+      (f) => ({
+        kind: "choice",
+        options: CONFIDENCE.map((n) => ({ id: String(n), label: labels[n] })),
+        initial: String(f.value),
+        apply: (q, id) => {
+          const n =
+            CONFIDENCE.find((c) => String(c) === id) ?? CONFIDENCE.find((c) => c === f.value);
+          return n === undefined ? q : applyConfidence(q, n, ctx.asOf);
+        },
+      }),
+    );
+  },
+  statedPrograms: (p, ctx) => {
+    const labels: Record<string, string> = Object.fromEntries(
+      REWARD_PROGRAMS.map((r) => [r.name, r.name]),
+    );
+    return pickMany(
+      ctx,
+      "statedPrograms",
+      p.statedPrograms,
+      labels,
+      REWARD_PROGRAMS.map((r) => r.name),
+      applyStatedPrograms,
+    );
+  },
+  pointsGoal: (p, ctx) =>
+    pick(
+      ctx,
+      "pointsGoal",
+      p.pointsGoal,
+      wizardCopy[ctx.locale].pointsGoal,
+      POINTS_GOALS,
+      applyPointsGoal,
+    ),
+  flightsPerYear: (p, ctx) =>
+    pick(
+      ctx,
+      "flightsPerYear",
+      p.flightsPerYear,
+      wizardCopy[ctx.locale].flights,
+      FLIGHTS,
+      applyFlightsPerYear,
+    ),
 };
 
 export const profileRows = (p: AdvisorProfile, ctx: RowContext): Row[] =>

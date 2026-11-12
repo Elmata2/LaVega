@@ -6,7 +6,17 @@ import {
   scoreKnowledge,
   scoreTolerance,
   type CardBalance,
+  type CardRepayment,
+  type CheckInCadence,
+  type CutTarget,
+  type FlightsPerYear,
+  type ForeignSpend,
   type Goal,
+  type IncomeRegularity,
+  type MoneySharing,
+  type PointsGoal,
+  type Priority,
+  type SpendArea,
   type WorkKind,
 } from "@lavega/core";
 
@@ -80,9 +90,68 @@ export const applyStatedSavings = (p: AdvisorProfile, totalCents: number, asOf: 
 
 export const applyHousehold = (
   p: AdvisorProfile,
-  value: { kind: "alone" | "together"; partnerIncomeInScope?: boolean },
+  value: { kind: "alone" | "together"; partnerIncomeInScope?: boolean; moneySharing?: MoneySharing },
   asOf: string,
-) => copyProfile(p, { household: { value, source: "stated", at: asOf } });
+) => {
+  const { moneySharing, ...rest } = value;
+  // Together again after Back keeps the earlier answer to "do you share?".
+  const prev = p.household?.value;
+  const sharing =
+    moneySharing ?? (value.kind === "together" && prev?.kind === "together" ? prev.moneySharing : undefined);
+  const kept = value.kind === "alone" || sharing === undefined ? rest : { ...rest, moneySharing: sharing };
+  return copyProfile(p, { household: { value: kept, source: "stated", at: asOf } });
+};
+
+/** Living alone has nobody to share with: the answer is ignored. */
+export const applyMoneySharing = (p: AdvisorProfile, sharing: MoneySharing, asOf: string) =>
+  p.household?.value.kind === "alone"
+    ? p
+    : copyProfile(p, {
+        household: {
+          value: { ...(p.household?.value ?? { kind: "together" as const }), moneySharing: sharing },
+          source: "stated",
+          at: asOf,
+        },
+      });
+
+export const applyBirthYear = (p: AdvisorProfile, year: number, asOf: string) =>
+  copyProfile(p, { birthYear: { value: year, source: "stated", at: asOf } });
+
+export const applyIncomeRegularity = (p: AdvisorProfile, v: IncomeRegularity, asOf: string) =>
+  copyProfile(p, { incomeRegularity: { value: v, source: "stated", at: asOf } });
+
+export const applyStatedBanks = (p: AdvisorProfile, ids: readonly string[], asOf: string) =>
+  copyProfile(p, { statedBanks: { value: [...ids], source: "stated", at: asOf } });
+
+export const applyCardRepayment = (p: AdvisorProfile, v: CardRepayment, asOf: string) =>
+  copyProfile(p, { cardRepayment: { value: v, source: "stated", at: asOf } });
+
+export const applySpendMix = (p: AdvisorProfile, areas: readonly SpendArea[], asOf: string) =>
+  copyProfile(p, { spendMix: { value: areas.slice(0, 3), source: "stated", at: asOf } });
+
+export const applyForeignSpend = (p: AdvisorProfile, v: ForeignSpend, asOf: string) =>
+  copyProfile(p, { foreignSpend: { value: v, source: "stated", at: asOf } });
+
+export const applyPriorities = (p: AdvisorProfile, v: readonly Priority[], asOf: string) =>
+  copyProfile(p, { priorities: { value: [...v], source: "stated", at: asOf } });
+
+export const applyCutTargets = (p: AdvisorProfile, v: readonly CutTarget[], asOf: string) =>
+  copyProfile(p, { cutTargets: { value: [...v], source: "stated", at: asOf } });
+
+export const applyCheckInCadence = (p: AdvisorProfile, v: CheckInCadence, asOf: string) =>
+  copyProfile(p, { checkInCadence: { value: v, source: "stated", at: asOf } });
+
+export const applyConfidence = (p: AdvisorProfile, n: 1 | 2 | 3 | 4, asOf: string) =>
+  copyProfile(p, { confidence: { value: n, source: "stated", at: asOf } });
+
+export const applyStatedPrograms = (p: AdvisorProfile, ids: readonly string[], asOf: string) =>
+  copyProfile(p, { statedPrograms: { value: [...ids], source: "stated", at: asOf } });
+
+export const applyPointsGoal = (p: AdvisorProfile, v: PointsGoal, asOf: string) =>
+  copyProfile(p, { pointsGoal: { value: v, source: "stated", at: asOf } });
+
+export const applyFlightsPerYear = (p: AdvisorProfile, v: FlightsPerYear, asOf: string) =>
+  copyProfile(p, { flightsPerYear: { value: v, source: "stated", at: asOf } });
 
 export const applyChildren = (
   p: AdvisorProfile,

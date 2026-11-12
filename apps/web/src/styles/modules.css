@@ -68,7 +68,7 @@
     min-height: 32px;
     padding-bottom: var(--sp-3);
     margin-bottom: var(--sp-4);
-    border-bottom: 1px solid var(--ink);
+    border-bottom: 1px solid var(--line);
   }
 
   /* Uppercase, letter-spaced, mono — the reference's card title register. */
@@ -202,6 +202,13 @@
       flex-wrap: wrap;
       row-gap: var(--sp-2);
     }
+    /* Once the header wraps, the controls may use the whole line and shrink
+     * with it; at `flex: none` a full-width search plus a link ran past the card. */
+    .module-controls {
+      flex: 1 1 auto;
+      min-width: 0;
+      justify-content: flex-end;
+    }
   }
 
   /* ---------- "Toon meer" — de onderbouwing opgevouwen ----------
@@ -320,7 +327,7 @@
     border: 1px solid var(--line);
     background: var(--surface-2);
     color: var(--muted);
-    font-family: var(--font-display);
+    font-family: var(--font-body);
     font-size: 0.85rem;
     font-weight: 600;
     line-height: 1;
@@ -398,7 +405,7 @@
     }
   }
   .guide-dialog::backdrop {
-    background: rgba(26, 26, 23, 0.45);
+    background: var(--scrim);
     opacity: 0;
     transition: opacity 250ms var(--ease-emphasized);
   }

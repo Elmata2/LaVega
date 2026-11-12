@@ -27,7 +27,12 @@ export async function* runChat(args: {
   facts?: readonly LearnedFact[];
   apiKey: string;
   userId?: string;
-  onUsage?: (usage: { inputTokens: number; outputTokens: number }) => void | Promise<void>;
+  onUsage?: (usage: {
+    inputTokens: number;
+    outputTokens: number;
+    cacheWriteTokens?: number;
+    cacheReadTokens?: number;
+  }) => void | Promise<void>;
 }): AsyncGenerator<string> {
   const system =
     loadChatPrompt(args.tab) +
@@ -61,6 +66,15 @@ export async function* runChat(args: {
     await args.onUsage?.({ inputTokens: 0, outputTokens: CHAT_MAX_OUTPUT_TOKENS });
     throw e;
   }
-  await args.onUsage?.({ inputTokens: res.usage.input, outputTokens: res.usage.output });
+  await args.onUsage?.({
+    inputTokens: res.usage.input,
+    outputTokens: res.usage.output,
+    ...(res.usage.cacheWriteTokens === undefined
+      ? {}
+      : { cacheWriteTokens: res.usage.cacheWriteTokens }),
+    ...(res.usage.cacheReadTokens === undefined
+      ? {}
+      : { cacheReadTokens: res.usage.cacheReadTokens }),
+  });
   yield full;
 }

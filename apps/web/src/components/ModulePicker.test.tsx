@@ -258,8 +258,8 @@ test("een verse installatie toont alleen de kaarten die standaard aan staan", ()
   // dezelfde zin met de tegenovergestelde opdracht ("als de gebruiker dat wilt")
   // en begint daarom uit.
   expect(getEnabledWidgets()).toBeNull();
-  expect(DEFAULT_WIDGETS).toEqual(["intake-invite", "room-card", "betaalagenda", "btw-stand"]);
-  expect(enabledWidgets(null)).toEqual(["intake-invite", "room-card", "betaalagenda", "btw-stand"]);
+  expect(DEFAULT_WIDGETS).toEqual(["intake-invite", "room-card", "connect-checklist", "betaalagenda", "btw-stand"]);
+  expect(enabledWidgets(null)).toEqual(["intake-invite", "room-card", "connect-checklist", "betaalagenda", "btw-stand"]);
   expect(DEFAULT_WIDGETS).not.toContain("facturen-open");
 });
 
@@ -274,10 +274,11 @@ test("een oude opgeslagen lijst zet alleen uit waar hij toen over ging", () => {
     "aandacht",
     "intake-invite",
     "room-card",
+    "connect-checklist",
     "betaalagenda",
     "btw-stand",
   ]);
-  expect(enabledWidgets([])).toEqual(["intake-invite", "room-card", "betaalagenda", "btw-stand"]);
+  expect(enabledWidgets([])).toEqual(["intake-invite", "room-card", "connect-checklist", "betaalagenda", "btw-stand"]);
   // Een nav-lijst die per ongeluk hier belandt levert geen enkele widget op
   // behalve de standaard: geen van die ids is een widget.
   expect(enabledWidgets(["overview", "valuta", "punten"])).toEqual(DEFAULT_WIDGETS);
@@ -309,6 +310,7 @@ test("uitzetten werkt ook voor de kaart die standaard aan staat", () => {
   expect(enabledWidgets({ on: [], seen: ["btw-stand"] })).toEqual([
     "intake-invite",
     "room-card",
+    "connect-checklist",
     "betaalagenda",
   ]);
 
@@ -319,12 +321,14 @@ test("uitzetten werkt ook voor de kaart die standaard aan staat", () => {
   expect(enabledWidgets({ on: [], seen: gezienToen })).toEqual([
     "intake-invite",
     "room-card",
+    "connect-checklist",
     "btw-stand",
   ]);
   expect(enabledWidgets({ on: ["aandacht"], seen: gezienToen })).toEqual([
     "aandacht",
     "intake-invite",
     "room-card",
+    "connect-checklist",
     "btw-stand",
   ]);
 });
@@ -453,7 +457,7 @@ test("a widget he switched on survives a reload; one he never touched stays off"
    * meenemen. En `seen` is de hele registerlijst, want de picker toont ze
    * allemaal tegelijk: wie er één omzet heeft de rest ook voor zich gehad. */
   expect(JSON.parse(localStorage.getItem("lavega.overviewWidgets") ?? "null")).toEqual({
-    on: ["aandacht", "intake-invite", "room-card", "betaalagenda", "btw-stand"],
+    on: ["aandacht", "intake-invite", "room-card", "connect-checklist", "betaalagenda", "btw-stand"],
     seen: WIDGETS.map((w) => w.id),
   });
 

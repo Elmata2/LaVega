@@ -16,3 +16,5 @@ export * from "./cashflow.js";
 export * from "./publicFacts.js";
 export * from "./compute.js";
 export * from "./changes.js";
+export * from "./connectChecklist.js";
+export * from "./forecastError.js";

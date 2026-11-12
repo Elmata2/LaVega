@@ -7,10 +7,6 @@ import { signIn, useAuthState } from "../authClient.js";
 
 (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
-/* CardSpiral drives GSAP against a real scroller; it has nothing to say about
- * sign-in, so it is stubbed out rather than rendered (same as Landing.signin.test.tsx). */
-vi.mock("./CardSpiral", () => ({ default: () => null }));
-
 vi.mock("../authClient.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../authClient.js")>();
   return { ...actual, useAuthState: vi.fn(), signIn: vi.fn() };

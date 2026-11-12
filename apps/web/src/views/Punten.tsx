@@ -416,11 +416,14 @@ export default function Punten({
   asOf,
   busy,
   onSave,
+  statedPrograms = [],
 }: {
   balances: RewardsBalance[];
   asOf: string;
   busy: boolean;
   onSave: (next: RewardsBalance[]) => void;
+  /** Programmes named in the intake wizard. Those without a balance get an empty row. */
+  statedPrograms?: readonly string[];
 }) {
   const [locale] = useAppLocale();
   const c = optimiseCopy[locale].punten;
@@ -443,6 +446,36 @@ export default function Punten({
    * one click too. Dropped the moment he writes a figure himself, so the undo can
    * never put an old number back over a newer one. */
   const [removed, setRemoved] = useState<RewardsBalance | null>(null);
+  // Typed text per stated programme (keyed by norm) that has no balance yet.
+  const [statedText, setStatedText] = useState<Record<string, string>>({});
+  const [statedError, setStatedError] = useState<Record<string, string>>({});
+
+  /* Stated programmes with no stored balance, matched on the same norm() the
+   * balance ids use. Nothing is stored for them until he enters a number. */
+  const pendingStated = statedPrograms.filter(
+    (name, i, all) =>
+      name.trim() !== "" &&
+      all.findIndex((n) => norm(n) === norm(name)) === i &&
+      !balances.some((b) => b.id === norm(name)),
+  );
+
+  function saveStated(name: string) {
+    const key = norm(name);
+    const pts = parseBalanceReply(statedText[key] ?? "");
+    if (pts === null || pts < 0) {
+      setStatedError({ ...statedError, [key]: c.addForm.errorAskNoNumber });
+      return;
+    }
+    setStatedError({ ...statedError, [key]: "" });
+    setStatedText({ ...statedText, [key]: "" });
+    setRemoved(null);
+    onSave(
+      upsertBalance(
+        balances,
+        makeRewardsBalance({ program: name.trim(), points: Math.round(pts), updatedAt: asOf }),
+      ),
+    );
+  }
 
   const rows = puntenRows(balances, asOf);
   const attention = rows.filter(
@@ -524,10 +557,10 @@ export default function Punten({
   return (
     <Card as="section" aria-label={c.header.ariaLabel}>
       <div
-        className="flex items-baseline justify-between gap-4 flex-wrap pb-2 mt-6 mb-4 border-b-2 border-ink first:mt-0"
+        className="flex items-baseline justify-between gap-4 flex-wrap pb-2 mt-6 mb-4 border-b border-line first:mt-0"
         data-testid="view-head"
       >
-        <h2 className="m-0 font-display text-[1.5rem] font-semibold tracking-[-0.01em] text-ink">
+        <h2 className="m-0 font-body text-[1.5rem] font-semibold tracking-[-0.01em] text-ink">
           {c.header.title}
         </h2>
         {/* SALDI TELLEN, GEEN PROGRAMMA'S. Dit getal telt de rijen waar hij een
@@ -551,7 +584,7 @@ export default function Punten({
           uitleg over het scherm maar een eigenschap van dat programma, en zonder
           die zin zou een lege plek als een ontbrekend cijfer lezen. */}
 
-      {rows.length === 0 ? (
+      {rows.length === 0 && pendingStated.length === 0 ? (
         <div
           className="border border-dashed border-line rounded bg-surface-2 p-4"
           data-testid="empty-guide"
@@ -567,6 +600,52 @@ export default function Punten({
         </div>
       ) : (
         <div className="grid grid-cols-[repeat(auto-fit,minmax(280px,1fr))] gap-4 mt-4">
+          {pendingStated.map((name) => (
+            <article
+              className="flex flex-col border border-line rounded bg-surface-2 p-4"
+              data-testid="punt-stated"
+              key={`stated-${norm(name)}`}
+            >
+              <div className="font-semibold text-ink [overflow-wrap:anywhere]">{name}</div>
+              <label
+                className="mt-2 text-[0.82rem] text-muted"
+                htmlFor={`punt-stated-${slug(norm(name))}`}
+              >
+                {c.card.statedBalanceHint}
+              </label>
+              <div className="flex flex-wrap gap-2 mt-2">
+                <SaldoInput
+                  id={`punt-stated-${slug(norm(name))}`}
+                  className="flex-[1_1_120px] min-w-0"
+                  inputMode="decimal"
+                  placeholder={
+                    programUnit(name) === "eur"
+                      ? c.card.askPlaceholderEur
+                      : c.card.askPlaceholderPoints
+                  }
+                  value={statedText[norm(name)] ?? ""}
+                  disabled={busy}
+                  onChange={(e) => {
+                    setStatedText({ ...statedText, [norm(name)]: e.target.value });
+                    setStatedError({ ...statedError, [norm(name)]: "" });
+                  }}
+                />
+                <Button
+                  variant="primary"
+                  disabled={busy}
+                  aria-label={`${c.card.askSave} ${name}`}
+                  onClick={() => saveStated(name)}
+                >
+                  {c.card.askSave}
+                </Button>
+              </div>
+              {statedError[norm(name)] ? (
+                <p className="mt-2 mb-0 text-[0.82rem] text-neg" data-testid="punt-error">
+                  {statedError[norm(name)]}
+                </p>
+              ) : null}
+            </article>
+          ))}
           {rows.map(({ balance: b, status, unit }) => {
             const category = programCategory(b.program);
             const facts = programFacts(b.program);
@@ -594,7 +673,7 @@ export default function Punten({
 
                 <div className="flex items-baseline gap-2 mt-3">
                   <span
-                    className="font-display text-[2rem] font-semibold text-ink tabular-nums [overflow-wrap:anywhere]"
+                    className="font-body text-[2rem] font-semibold text-ink tabular-nums [overflow-wrap:anywhere]"
                     data-testid="punt-value"
                   >
                     {unit === "eur"
@@ -713,10 +792,10 @@ export default function Punten({
       ) : null}
 
       <div
-        className="flex items-baseline justify-between gap-4 flex-wrap pb-2 mt-6 mb-4 border-b-2 border-ink first:mt-0"
+        className="flex items-baseline justify-between gap-4 flex-wrap pb-2 mt-6 mb-4 border-b border-line first:mt-0"
         data-testid="view-head"
       >
-        <h3 className="m-0 font-display text-[1.2rem] font-semibold tracking-[-0.01em] text-ink">
+        <h3 className="m-0 font-body text-[1.2rem] font-semibold tracking-[-0.01em] text-ink">
           {c.addForm.heading}
         </h3>
         <span className="eyebrow flex-none">{c.addForm.overwriteHint}</span>

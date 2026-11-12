@@ -1,5 +1,6 @@
 import { expect, test, vi } from "vitest";
 import { YahooHttpClient } from "./http.js";
+import { createImmediatePartnerBudget } from "../../partnerBudget/fakes.js";
 import { loadYahooPriceHistory, YahooNoListingError } from "./history.js";
 import { createYahooPriceProvider } from "./priceProvider.js";
 import { notFoundYahooFixture } from "./__fixtures__/not-found.js";
@@ -55,7 +56,12 @@ function stubClient(
       },
     });
   }) as typeof fetch;
-  return { client: new YahooHttpClient(fetchFn, 20_000, 1), charts: requested };
+  return {
+    client: new YahooHttpClient(fetchFn, 20_000, 1, {
+      partnerBudget: createImmediatePartnerBudget(),
+    }),
+    charts: requested,
+  };
 }
 
 test("does not guess another venue when the encoded listing has no closes", async () => {
@@ -156,7 +162,9 @@ test("stops candidate lookup after a server failure", async () => {
     if (symbol === "SKX") return new Response("Internal Server Error", { status: 500 });
     return new Response(notFoundYahooFixture.body, { status: notFoundYahooFixture.status });
   }) as typeof fetch;
-  const client = new YahooHttpClient(fetchFn, 20_000, 1);
+  const client = new YahooHttpClient(fetchFn, 20_000, 1, {
+    partnerBudget: createImmediatePartnerBudget(),
+  });
 
   const rejection = await loadYahooPriceHistory({
     ticker: "SKX_US_EQ",

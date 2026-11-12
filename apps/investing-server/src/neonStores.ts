@@ -3,15 +3,22 @@ import {
   createBrokerSyncOperationRepository,
   createPersonalNetWorthRepository,
   createPreferencesRepository,
-  createPriceBarRepository,
+  createPartnerBudgetRepository,
   createPriceSyncStateRepository,
+  createSharedPriceRepository,
   createSyncStateRepository,
   type Database,
 } from "@lavega/database";
-import type { PersonalNetWorthStore } from "./personalNetWorthStore.js";
+import type { Layer } from "effect";
+import { PartnerBudget } from "@lavega/adapters";
+import type { PersonalNetWorthStore, PersonalNetWorthTotal } from "./personalNetWorthStore.js";
+import type { CashFlowRule, CashFlowSuggestion } from "@lavega/core";
+import type { CashFlowStore } from "./cashFlowSuggestions.js";
 import {
+  validateAccountWrapperMap,
   validateBenchmarkSymbols,
   validateInvestingLayout,
+  type AccountWrapperStore,
   type BenchmarkSelectionStore,
   type InvestingLayoutStore,
 } from "@lavega/core";
@@ -22,12 +29,19 @@ import {
 } from "./marketDataConsent.js";
 import type { SectorCorrectionStore } from "./sectorCorrectionStore.js";
 import type { SectorInferenceSettingStore } from "./sectorInferenceSetting.js";
+import {
+  validateIdentifierOverrides,
+  type IdentifierOverrideStore,
+  type IdentifierSelectionSettingStore,
+} from "./identifierSelectionStore.js";
 import type { AgentRunRecord, AgentRunStore } from "./fileAgentRunStore.js";
 import type {
   BrokerAccountSnapshot,
   BrokerSyncOperationStore,
-  PriceStore,
   ScheduledBroker,
+  SharedPriceBar,
+  SharedPriceCoverage,
+  SharedPriceStore,
 } from "@lavega/adapters";
 import type { PriceSyncProgress, PriceSyncProgressStore } from "./priceOrchestrator.js";
 
@@ -41,25 +55,49 @@ import type { PriceSyncProgress, PriceSyncProgressStore } from "./priceOrchestra
  * that costs nothing and keeps the interfaces unchanged.
  */
 
-export function createNeonPriceStore(
-  db: Database,
-  resolveTenantId: () => string | Promise<string>,
-): PriceStore {
+/**
+ * The shared, instrument-keyed price store (issue #307). The SQL lives in
+ * `@lavega/database`; this maps a stored row to the contract's row shape, which
+ * carries no instrument key and no symbol (the series is the key; the reader
+ * supplies its own symbol).
+ */
+export function createNeonSharedPriceStore(db: Database): SharedPriceStore {
+  const repository = createSharedPriceRepository(db);
+  const bar = ({ instrumentKey: _key, ...rest }: { instrumentKey: string } & SharedPriceBar) =>
+    rest;
   return {
-    getRanges: (tenantId, symbols) => createPriceBarRepository(db, tenantId).getRanges(symbols),
-    getRange: (tenantId, symbol, from, to) =>
-      createPriceBarRepository(db, tenantId).getRange(symbol, from, to),
-    lastDate: (tenantId, symbol) => createPriceBarRepository(db, tenantId).lastDate(symbol),
-    upsert: (tenantId, bars) => createPriceBarRepository(db, tenantId).upsert(bars),
-    replaceRange: (tenantId, symbol, bars, from, to) =>
-      createPriceBarRepository(db, tenantId).replaceRange(symbol, bars, from, to),
-    getCoverage: (tenantId, symbol) => createPriceBarRepository(db, tenantId).getCoverage(symbol),
-    putCoverage: (tenantId, coverage) =>
-      createPriceBarRepository(db, tenantId).putCoverage(coverage),
-    async purgeAll() {
-      // No tenant in the signature, so the caller's own is the only safe one.
-      await createPriceBarRepository(db, await resolveTenantId()).purgeAll();
+    async getRange(key, from, to) {
+      return (await repository.getRange(key, from, to)).map(bar);
     },
+    async getRanges(keys) {
+      const grouped = await repository.getRanges(keys);
+      return new Map([...grouped].map(([key, rows]) => [key, rows.map(bar)]));
+    },
+    lastDate: (key) => repository.lastDate(key),
+    upsert: (instrumentKey, bars) =>
+      repository.upsert(
+        instrumentKey,
+        bars.map((row) => ({ ...row, instrumentKey })),
+      ),
+    replaceRange: (instrumentKey, bars, from, to) =>
+      repository.replaceRange(
+        instrumentKey,
+        bars.map((row) => ({ ...row, instrumentKey })),
+        from,
+        to,
+      ),
+    async getCoverage(key): Promise<SharedPriceCoverage | null> {
+      const row = await repository.getCoverage(key);
+      if (!row) return null;
+      const { instrumentKey: _key, ...coverage } = row;
+      return coverage;
+    },
+    putCoverage: (instrumentKey, coverage) =>
+      repository.putCoverage(instrumentKey, { ...coverage, instrumentKey }),
+    latestChange: (instrumentKeys) => repository.latestChange(instrumentKeys),
+    adoptAlias: (key, alias) => repository.adoptAlias(key, alias),
+    claim: (key, owner, ttlMs) => repository.claim(key, owner, ttlMs),
+    release: (key, owner) => repository.release(key, owner),
   };
 }
 
@@ -85,7 +123,16 @@ export function createNeonBenchmarkSelectionStore(db: Database): BenchmarkSelect
  *  (personal.net_worth_totals), through apps/server's own repository call. */
 export function createNeonPersonalNetWorthStore(db: Database): PersonalNetWorthStore {
   return {
-    list: (tenantId) => createPersonalNetWorthRepository(db, tenantId).list(),
+    list: async (tenantId) =>
+      (await createPersonalNetWorthRepository(db, tenantId).list()).map((row) => ({
+        date: row.date,
+        totalCents: row.totalCents,
+        /* Stored rows are validated before they are written (#300 WS5.5); this
+         * is a trust-the-database cast, not a second decode. */
+        ...(row.provenance
+          ? { provenance: row.provenance as PersonalNetWorthTotal["provenance"] }
+          : {}),
+      })),
   };
 }
 
@@ -98,6 +145,23 @@ export function createNeonInvestingLayoutStore(db: Database): InvestingLayoutSto
     async set(selection) {
       await createPreferencesRepository(db, selection.tenantId).setLayout(
         validateInvestingLayout(selection),
+      );
+    },
+  };
+}
+
+/** Account tax-treatment labels (plan §3 WS4.4, #296). They ride the same
+ *  per-tenant preferences row as the layout, so the existing RLS policy scopes
+ *  them and an unknown label is dropped on read instead of trusted. */
+export function createNeonAccountWrapperStore(db: Database): AccountWrapperStore {
+  return {
+    async get(tenantId) {
+      const stored = await createPreferencesRepository(db, tenantId).getAccountWrappers();
+      return validateAccountWrapperMap(stored);
+    },
+    async set(selection) {
+      await createPreferencesRepository(db, selection.tenantId).setAccountWrappers(
+        validateAccountWrapperMap(selection.entries),
       );
     },
   };
@@ -156,6 +220,32 @@ export function createNeonSectorInferenceSettingStore(db: Database): SectorInfer
   };
 }
 
+/** The identifier-selection switch and the owner's symbol overrides (Jev-03,
+ *  issue #136), on the same per-tenant preferences row as the other switches. */
+export function createNeonIdentifierSelectionSettingStore(
+  db: Database,
+): IdentifierSelectionSettingStore {
+  return {
+    get: (tenantId) => createPreferencesRepository(db, tenantId).getIdentifierSelectionEnabled(),
+    set: (tenantId, enabled) =>
+      createPreferencesRepository(db, tenantId).setIdentifierSelectionEnabled(enabled),
+  };
+}
+
+export function createNeonIdentifierOverrideStore(db: Database): IdentifierOverrideStore {
+  return {
+    async get(tenantId) {
+      const stored = await createPreferencesRepository(db, tenantId).getIdentifierOverrides();
+      return validateIdentifierOverrides(stored);
+    },
+    async set(tenantId, map) {
+      await createPreferencesRepository(db, tenantId).setIdentifierOverrides(
+        validateIdentifierOverrides(map),
+      );
+    },
+  };
+}
+
 export function createNeonBrokerSyncStateStore(
   db: Database,
   tenantId: string,
@@ -206,5 +296,40 @@ export function createNeonAgentRunStore(db: Database, tenantId: string): AgentRu
     },
     start: (record) => repository.start(record),
     finish: (record) => repository.finish(record),
+  };
+}
+
+/** The hosted partner request budget: slots come from `investing.partner_budgets`,
+ *  so every invocation and every tenant counts against the same partner limits.
+ *  Built per request from the request-scoped pool, like the stores above. */
+export function createNeonPartnerBudget(db: Database): Layer.Layer<PartnerBudget> {
+  return PartnerBudget.storeLayer(createPartnerBudgetRepository(db));
+}
+
+/** Cash-flow rules and suggestions live in the tenant's preferences row
+ *  (issue #137). Rules are owner data and export as the array itself;
+ *  suggestions never affect a computed figure. */
+export function createNeonCashFlowStore(db: Database, tenantId: string): CashFlowStore {
+  const repo = () => createPreferencesRepository(db, tenantId);
+  const asArray = <T>(raw: unknown): T[] => (Array.isArray(raw) ? (raw as T[]) : []);
+  return {
+    async listSuggestions() {
+      return asArray<CashFlowSuggestion>(await repo().getCashFlowSuggestions());
+    },
+    async saveSuggestions(suggestions) {
+      await repo().setCashFlowSuggestions([...suggestions]);
+    },
+    async listRules() {
+      return asArray<CashFlowRule>(await repo().getCashFlowRules());
+    },
+    async saveRules(rules) {
+      await repo().setCashFlowRules([...rules]);
+    },
+    async suggestionsEnabled() {
+      return repo().getCashFlowSuggestionsEnabled();
+    },
+    async setSuggestionsEnabled(enabled) {
+      await repo().setCashFlowSuggestionsEnabled(enabled);
+    },
   };
 }

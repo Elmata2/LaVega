@@ -130,3 +130,44 @@ test("the plan sees the stated credit cards and their balances; none stated give
     cardBalances: [{ cardId: "american-express-gold-card", balanceCents: 250_000, paysInFull: false, ratePct: 14.9 }],
   });
 });
+
+test("planProfileOf exposes the new fields and they change profileHash", () => {
+  const stated = { source: "stated" as const, at: "2026-10-24" };
+  const empty = planProfileOf(storeWith({ ...base }));
+  expect(empty).toMatchObject({
+    moneySharing: null,
+    birthYear: null,
+    incomeRegularity: null,
+    cardRepayment: null,
+    spendMix: [],
+    foreignSpend: null,
+    priorities: [],
+    pointsGoal: null,
+  });
+  const fields = {
+    household: { value: { kind: "together" as const, moneySharing: "mixed" as const }, ...stated },
+    birthYear: { value: 1990, ...stated },
+    incomeRegularity: { value: "varies" as const, ...stated },
+    cardRepayment: { value: "sometimes" as const, ...stated },
+    spendMix: { value: ["travel" as const, "fuel" as const], ...stated },
+    foreignSpend: { value: "often" as const, ...stated },
+    priorities: { value: ["save-more" as const], ...stated },
+    pointsGoal: { value: "cashback" as const, ...stated },
+  };
+  const full = planProfileOf(storeWith({ ...base, ...fields }));
+  expect(full).toMatchObject({
+    moneySharing: "mixed",
+    birthYear: 1990,
+    incomeRegularity: "varies",
+    cardRepayment: "sometimes",
+    spendMix: ["travel", "fuel"],
+    foreignSpend: "often",
+    priorities: ["save-more"],
+    pointsGoal: "cashback",
+  });
+  expect(full.profileHash).not.toBe(empty.profileHash);
+  for (const [k, v] of Object.entries(fields)) {
+    const one = planProfileOf(storeWith({ ...base, [k]: v }));
+    expect(one.profileHash, k).not.toBe(empty.profileHash);
+  }
+});

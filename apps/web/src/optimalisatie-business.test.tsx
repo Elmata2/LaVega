@@ -53,7 +53,7 @@ test("Zakelijk before the deadline shows the promo, plan range, source and check
     "5,25% actierente voor nieuwe klanten die zich aanmelden tot en met 15-11-2026: 3 maanden, over de eerste €100.000. Daarna 1,25–2,50%, afhankelijk van je Revolut-abonnement.",
   );
   expect(text).toContain("1,25–2,50%");
-  expect(text).toContain("gecontroleerd op 15-10-2026");
+  expect(text).toContain("gecontroleerd op 11-11-2026");
   expect(
     host!.querySelector('a[href="https://www.revolut.com/en-NL/business/savings/"]'),
   ).not.toBeNull();

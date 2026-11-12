@@ -8,6 +8,13 @@ import {
   type Goal,
   type Debt,
   type WorkKind,
+  type MoneySharing,
+  type IncomeRegularity,
+  type CardRepayment,
+  type SpendArea,
+  type ForeignSpend,
+  type Priority,
+  type PointsGoal,
 } from "../advisor/profile.js";
 import { fixedCostsMonthlyCents } from "../advisor/resolve.js";
 import { hash } from "../hash.js";
@@ -53,6 +60,15 @@ export type PlanProfile = {
   workKinds: WorkKind[];
   /** Stated: they charge VAT. Null = not asked or not answered. */
   chargesVat: boolean | null;
+  moneySharing: MoneySharing | null;
+  birthYear: number | null;
+  incomeRegularity: IncomeRegularity | null;
+  /** Do they pay the credit card off in full? Null = not asked. */
+  cardRepayment: CardRepayment | null;
+  spendMix: SpendArea[];
+  foreignSpend: ForeignSpend | null;
+  priorities: Priority[];
+  pointsGoal: PointsGoal | null;
   intakeBlocksDone: number;
   profileHash: string;
   /** When the profile was last written (store.updatedAt); null for no store or
@@ -101,6 +117,14 @@ export function planProfileOf(
     spendStatedRange: p?.statedRanges?.value.spend ?? null,
     workKinds: [...(p?.work?.value ?? [])],
     chargesVat: p?.chargesVat?.value ?? null,
+    moneySharing: p?.household?.value.moneySharing ?? null,
+    birthYear: p?.birthYear?.value ?? null,
+    incomeRegularity: p?.incomeRegularity?.value ?? null,
+    cardRepayment: p?.cardRepayment?.value ?? null,
+    spendMix: [...(p?.spendMix?.value ?? [])],
+    foreignSpend: p?.foreignSpend?.value ?? null,
+    priorities: [...(p?.priorities?.value ?? [])],
+    pointsGoal: p?.pointsGoal?.value ?? null,
     intakeBlocksDone: p?.intake.blocksDone ?? 0,
     profileHash: emptyHash(p ?? emptyProfile()),
     profileUpdatedAt:

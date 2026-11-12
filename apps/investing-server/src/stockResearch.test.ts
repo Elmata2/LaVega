@@ -1,3 +1,5 @@
+import { DateTime } from "effect";
+import { PartnerBudgetUnavailable, PartnerWait } from "@lavega/adapters";
 import { expect, test, vi } from "vitest";
 import { createHmac } from "node:crypto";
 import { Hono } from "hono";
@@ -335,4 +337,35 @@ test("a failed reasoning call keeps the typed report with signal criteria", asyn
     reasoning: expect.stringContaining("favorable view"),
   });
   expect(report.judgments[1]?.reasoning).toContain("do not contain the evidence");
+});
+
+test("a budget stop on the fundamentals fetch answers the route's no-data 404, not a 500", async () => {
+  const consent = createInMemoryMarketDataConsentStore();
+  await consent.set({
+    tenantId: "alice",
+    accepted: true,
+    decidedAt: new Date(now).toISOString(),
+    disclosureVersion: YAHOO_DISCLOSURE_VERSION,
+  });
+  const stops = [
+    new PartnerWait({ until: DateTime.makeUnsafe(now + 120_000) }),
+    new PartnerBudgetUnavailable({ message: "store down" }),
+  ];
+  for (const stop of stops) {
+    const app = attachStockResearchRoutes(new Hono(), {
+      resolveTenantId: () => "alice",
+      consent,
+      fundamentals: { fetch: vi.fn(async () => Promise.reject(stop)) },
+      judge,
+      chatModel: model,
+      tokenSecret: "test-secret",
+      now: () => now,
+    });
+    const response = await app.request("/api/agents/research/run", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ symbol: "AAPL" }),
+    });
+    expect(response.status).toBe(404);
+  }
 });

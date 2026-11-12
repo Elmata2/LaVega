@@ -96,9 +96,12 @@ export const CardBalance = Schema.Struct({
   ratePct: Schema.optionalKey(Schema.Finite.check(Schema.isGreaterThanOrEqualTo(0))),
 });
 export type CardBalance = Schema.Schema.Type<typeof CardBalance>;
+export const MoneySharing = Schema.Literals(["shared", "separate", "mixed"]);
+export type MoneySharing = Schema.Schema.Type<typeof MoneySharing>;
 
 const Household = Schema.Struct({
   kind: Schema.Literals(["alone", "together"]),
+  moneySharing: Schema.optionalKey(MoneySharing),
   partnerIncomeInScope: Schema.optionalKey(Schema.Boolean),
 });
 const Child = Schema.Struct({ id: Id, birthYear: Schema.Int });
@@ -155,6 +158,54 @@ export const WorkKind = Schema.Literals([
 ]);
 export type WorkKind = Schema.Schema.Type<typeof WorkKind>;
 
+export const IncomeRegularity = Schema.Literals(["fixed", "varies"]);
+export type IncomeRegularity = Schema.Schema.Type<typeof IncomeRegularity>;
+
+export const CardRepayment = Schema.Literals(["full", "sometimes", "rarely"]);
+export type CardRepayment = Schema.Schema.Type<typeof CardRepayment>;
+
+export const SpendArea = Schema.Literals([
+  "groceries",
+  "travel",
+  "online",
+  "fuel",
+  "eating-out",
+  "other",
+]);
+export type SpendArea = Schema.Schema.Type<typeof SpendArea>;
+
+export const ForeignSpend = Schema.Literals(["often", "sometimes", "never"]);
+export type ForeignSpend = Schema.Schema.Type<typeof ForeignSpend>;
+
+export const Priority = Schema.Literals([
+  "spend-less",
+  "save-more",
+  "pay-off-debt",
+  "cards-points",
+  "subscriptions",
+  "children",
+  "start-investing",
+]);
+export type Priority = Schema.Schema.Type<typeof Priority>;
+
+export const CutTarget = Schema.Union([SpendArea, Schema.Literal("subscriptions")]);
+export type CutTarget = Schema.Schema.Type<typeof CutTarget>;
+
+export const CheckInCadence = Schema.Literals(["daily", "weekly", "when-it-matters"]);
+export type CheckInCadence = Schema.Schema.Type<typeof CheckInCadence>;
+
+export const PointsGoal = Schema.Literals([
+  "flights",
+  "upgrades",
+  "shopping",
+  "cashback",
+  "no-preference",
+]);
+export type PointsGoal = Schema.Schema.Type<typeof PointsGoal>;
+
+export const FlightsPerYear = Schema.Literals(["0", "1-2", "3-5", "6+"]);
+export type FlightsPerYear = Schema.Schema.Type<typeof FlightsPerYear>;
+
 export const Experience = Schema.Literals(["beginner", "some", "experienced"]);
 
 export class AdvisorProfile extends Schema.Class<AdvisorProfile>("AdvisorProfile")({
@@ -181,6 +232,23 @@ export class AdvisorProfile extends Schema.Class<AdvisorProfile>("AdvisorProfile
   statedDebitCards: Schema.optionalKey(Field(Schema.Array(Schema.String))),
   /** Balance, paid-in-full and interest rate of the credit cards in `statedCards`. */
   cardBalances: Schema.optionalKey(Field(Schema.Array(CardBalance))),
+  birthYear: Schema.optionalKey(Field(Schema.Int)),
+  incomeRegularity: Schema.optionalKey(Field(IncomeRegularity)),
+  /** Catalogue ids of banks the user says they use, or "other". */
+  statedBanks: Schema.optionalKey(Field(Schema.Array(Schema.String))),
+  cardRepayment: Schema.optionalKey(Field(CardRepayment)),
+  spendMix: Schema.optionalKey(Field(Schema.Array(SpendArea))),
+  foreignSpend: Schema.optionalKey(Field(ForeignSpend)),
+  priorities: Schema.optionalKey(Field(Schema.Array(Priority))),
+  cutTargets: Schema.optionalKey(Field(Schema.Array(CutTarget))),
+  checkInCadence: Schema.optionalKey(Field(CheckInCadence)),
+  confidence: Schema.optionalKey(
+    Field(Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 4 }))),
+  ),
+  /** Names from REWARD_PROGRAMS of the points programmes the user says they use. */
+  statedPrograms: Schema.optionalKey(Field(Schema.Array(Schema.String))),
+  pointsGoal: Schema.optionalKey(Field(PointsGoal)),
+  flightsPerYear: Schema.optionalKey(Field(FlightsPerYear)),
   /** Evidence fingerprints of derived facts the user removed. */
   removed: Schema.Array(Schema.String),
   intake: Schema.Struct({
@@ -190,6 +258,7 @@ export class AdvisorProfile extends Schema.Class<AdvisorProfile>("AdvisorProfile
     lastScreen: Schema.optionalKey(Schema.String),
     noUserDebts: Schema.optionalKey(Schema.Boolean),
     noCards: Schema.optionalKey(Schema.Boolean),
+    round2Done: Schema.optionalKey(Schema.Boolean),
   }),
 }) {}
 

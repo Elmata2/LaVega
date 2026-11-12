@@ -1,4 +1,10 @@
-import { isIsoDate, lastDayOfMonth, previousMonths } from "../advisor/months.js";
+import { isIsoDate, isoMonth, lastDayOfMonth, previousMonths } from "../advisor/months.js";
+import {
+  budgetPeriodAt,
+  budgetPeriodsOf,
+  computeBudgetChain,
+  type BudgetPeriodState,
+} from "../budget.js";
 import { personalView } from "../advisor/scopePersonal.js";
 import { scopedOwn } from "../advisor/room.js";
 import { accountTypeKind } from "../balance.js";
@@ -70,6 +76,11 @@ export type SpendHistoryRow = {
   overLimitMonths: number;
 };
 
+/** The envelope state the plan shows: the budget for the last complete month,
+ *  with the surplus it carries into the next month. Null when that month has no
+ *  initialized budget. */
+export type SpendingBudget = BudgetPeriodState;
+
 export type SpendingFigures = {
   /** Full calendar months of history that the spending figures rest on. */
   months: number;
@@ -79,6 +90,7 @@ export type SpendingFigures = {
   /** Foreign-currency rows left out of every figure (no rate, or separate mode). */
   excludedForeignCount: number;
   rows: SpendHistoryRow[];
+  budget: SpendingBudget | null;
   externalBenchmark: ExternalBenchmark | null;
   budgetAdviceLink: "nibud-persoonlijk-budgetadvies";
 };
@@ -101,6 +113,10 @@ export type SpendHistoryInput = {
    *  (the cards section drops what cannot be paid by card). Its cents are
    *  totalled in `skippedCents` instead. */
   skip?: (t: Tx, category: string) => boolean;
+  /** Also return `asOf`'s own month, so the budget envelope can read the month
+   *  in progress. Off by default: the spending figures only rest on full
+   *  months, and a partial month must never enter them. */
+  includeCurrentMonth?: boolean;
 };
 
 export type SpendHistory = {
@@ -175,6 +191,7 @@ export function spendHistory(i: SpendHistoryInput): SpendHistory {
     } else if (started) break;
   }
   const months = picked.reverse();
+  if (i.includeCurrentMonth) months.push(isoMonth(i.asOf));
   const inWindow = new Set(months);
 
   const own = scopedOwn(view.accounts, i.own);
@@ -206,6 +223,46 @@ export function spendHistory(i: SpendHistoryInput): SpendHistory {
     if (!isEurCurrency(t.currency)) foreignCents += cents;
   }
   return { months, byCategory, excludedForeignCount, foreignCents, skippedCents, staleAccounts };
+}
+
+/** The envelope state the plan shows: `asOf`'s own month when it has an
+ *  initialized budget, else the last full month that does. The actual for a
+ *  month in progress is read from a second history pass that includes it; the
+ *  spending figures themselves still rest on full months only, so no total
+ *  moves because a budget exists. Null while the history is stale or no
+ *  initialized month falls inside the history window. */
+function budgetForMonth(i: PlanInput, stale: boolean, last: string | null): SpendingBudget | null {
+  if (stale || last === null) return null;
+  const currentMonth = isoMonth(i.asOf);
+  const history = spendHistory({
+    txs: i.txs,
+    accounts: i.accounts,
+    entityProfiles: i.entityProfiles,
+    rules: i.rules,
+    own: i.own,
+    asOf: i.asOf,
+    mode: i.mode,
+    fxHistory: i.fxHistory,
+    movedCategories: i.movedCategories,
+    windowMonths: MAX_HISTORY_PERIODS,
+    includeCurrentMonth: true,
+  });
+  const known = new Set(history.months);
+  const periods = budgetPeriodsOf(i.budgetPeriods, i.preferences.categoryLimits).filter((p) =>
+    known.has(p.month),
+  );
+  if (periods.length === 0) return null;
+  const actuals: Record<string, Record<string, number>> = {};
+  for (const month of history.months) {
+    const row: Record<string, number> = {};
+    for (const [category, per] of history.byCategory) {
+      const cents = per.get(month);
+      if (cents !== undefined) row[category] = cents;
+    }
+    actuals[month] = row;
+  }
+  const chain = computeBudgetChain({ periods, actuals, groups: i.categoryGroups ?? [] });
+  return budgetPeriodAt(chain, known.has(currentMonth) ? currentMonth : last);
 }
 
 const median = (xs: readonly number[]): number | null => {
@@ -410,6 +467,7 @@ export function computeSpending(i: PlanInput): SectionResult<SpendingFigures> {
       firstMonth: n === 0 ? null : months[0]!,
       lastMonth: last,
       excludedForeignCount: hist.excludedForeignCount,
+      budget: budgetForMonth(i, stale, last),
       rows,
       externalBenchmark: null,
       budgetAdviceLink: "nibud-persoonlijk-budgetadvies",

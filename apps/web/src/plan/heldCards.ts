@@ -1,5 +1,7 @@
 import {
   CATALOGUE_KINDS_FOR,
+  STATED_CARD_PREFIX,
+  accountFees,
   TRAVEL_AGENT,
   accountCosts,
   accountLabel,
@@ -17,6 +19,7 @@ import {
   type LearnedFact,
   type RewardsBalance,
 } from "@lavega/core";
+import { OTHER_CARD } from "../intake/wizard/cardOptions";
 
 type Provenance = NonNullable<HeldCardInput["provenance"]>;
 
@@ -72,7 +75,7 @@ export function heldCatalogueIds(
  *  else gives nothing, and the plan then shows the figure as unknown. */
 function sourced(
   entry: CatalogueEntryLike | null,
-  key: "fxFeePct" | "pointsPerEuro",
+  key: "fxFeePct" | "pointsPerEuro" | "interestPct",
 ): { value: number; provenance: { asOf: string; sourceUrl: string | null } } | null {
   const v = entry?.fields?.[key];
   if (v === undefined || !isCovered(v) || typeof v.value !== "number") return null;
@@ -101,10 +104,16 @@ export function buildHeldCards(i: {
   entries: readonly CatalogueEntryLike[];
   rewards: RewardsBalance[];
   assumptionOn: boolean;
+  /** Catalogue ids of credit cards the person stated; "other" is skipped. */
+  statedCreditIds?: readonly string[];
 }): HeldCardInput[] {
   const cards = i.accounts.filter(isSpendable);
   const costs = new Map(accountCosts(cards, i.entries).rows.map((r) => [r.account.key, r.cost]));
-  return cards.map((account) => {
+  const interestOf = (entry: CatalogueEntryLike | null): Pick<HeldCardInput, "interestPct"> => {
+    const v = sourced(entry, "interestPct");
+    return v === null ? {} : { interestPct: v.value };
+  };
+  const bank = cards.map((account) => {
     const product = productOf(account);
     const fact = factEntry(i.facts, TRAVEL_AGENT, product, "cashbackPct");
     const pct = product ? factNumber(i.facts, TRAVEL_AGENT, product, "cashbackPct") : null;
@@ -144,7 +153,36 @@ export function buildHeldCards(i: {
       fxFeePct: fx?.value ?? null,
       pointsPerEuro: pts?.value ?? null,
       programId: programFor(account, i.rewards),
+      ...interestOf(entry),
       ...(Object.keys(provenance).length === 0 ? {} : { provenance }),
     };
   });
+  const held = heldCatalogueIds(i.accounts, i.entries);
+  const byId = new Map(i.entries.map((e) => [e.id, e]));
+  // A stated card has no account and no learned cashback fact, and the catalogue
+  // has no cashback figure: its cashback is unknown, never an assumed zero.
+  const stated = [...new Set(i.statedCreditIds ?? [])].flatMap((id): HeldCardInput[] => {
+    const entry = byId.get(id);
+    if (id === OTHER_CARD || entry === undefined || held.has(id)) return [];
+    const fx = sourced(entry, "fxFeePct");
+    const pts = sourced(entry, "pointsPerEuro");
+    const provenance: Provenance = {
+      ...(fx === null ? {} : { fxFeePct: fx.provenance }),
+      ...(pts === null ? {} : { pointsPerEuro: pts.provenance }),
+    };
+    return [
+      {
+        accountKey: `${STATED_CARD_PREFIX}${id}`,
+        label: entry.product,
+        cashback: { tier: "onbekend", reason: "soort-onbekend" },
+        fee: accountFees([entry])[0] ?? null,
+        fxFeePct: fx?.value ?? null,
+        pointsPerEuro: pts?.value ?? null,
+        programId: null,
+        ...interestOf(entry),
+        ...(Object.keys(provenance).length === 0 ? {} : { provenance }),
+      },
+    ];
+  });
+  return [...bank, ...stated];
 }

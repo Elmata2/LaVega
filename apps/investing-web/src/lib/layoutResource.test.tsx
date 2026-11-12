@@ -150,7 +150,7 @@ test("applies the tenant's stored choices once the fetch resolves", async () => 
   await step(() => root.render(<Probe />));
   expect(text(container, "status")).toBe("ready");
   expect(text(container, "modules")).toBe("overview,positions,net-worth");
-  expect(text(container, "widgets")).toBe("performance,allocation,kpis,risk,agent");
+  expect(text(container, "widgets")).toBe("performance,allocation,risk,agent");
   act(() => root.unmount());
 });
 
@@ -218,7 +218,7 @@ test("a toggle made before the initial fetch resolves is saved on top of the ser
   expect(bodies).toEqual([
     { modules: { agents: false, "net-worth": false }, widgets: { sectors: false } },
   ]);
-  expect(text(container, "widgets")).toBe("performance,allocation,kpis,risk,agent");
+  expect(text(container, "widgets")).toBe("performance,allocation,risk,agent");
   act(() => root.unmount());
 });
 
@@ -277,7 +277,7 @@ test("when the in-flight save fails, the queued edit is still sent and its succe
   await step(() => puts[1]!.resolve(ok()));
   expect(text(container, "save-error")).toBe("");
   expect(text(container, "modules")).toBe("overview,positions,net-worth");
-  expect(text(container, "widgets")).toBe("performance,allocation,kpis,risk,agent");
+  expect(text(container, "widgets")).toBe("performance,allocation,risk,agent");
   act(() => root.unmount());
 });
 
@@ -293,7 +293,7 @@ test("when the first save lands and the queued one fails, the layout reverts to 
   expect(store.saved).toEqual({ modules: { agents: false }, widgets: {} });
   expect(text(container, "save-error")).toBe("Couldn't save — try again.");
   expect(text(container, "modules")).toBe("overview,positions,net-worth");
-  expect(text(container, "widgets")).toBe("performance,allocation,kpis,risk,sectors,agent");
+  expect(text(container, "widgets")).toBe("performance,allocation,risk,sectors,agent");
   act(() => root.unmount());
 });
 
@@ -408,7 +408,7 @@ test("after a failed initial fetch, a toggle retries the fetch instead of saving
   );
   expect(bodies).toEqual([{ modules: { agents: false }, widgets: { sectors: false } }]);
   expect(text(container, "save-error")).toBe("");
-  expect(text(container, "widgets")).toBe("performance,allocation,kpis,risk,agent");
+  expect(text(container, "widgets")).toBe("performance,allocation,risk,agent");
   act(() => root.unmount());
 });
 
@@ -500,6 +500,6 @@ test("a different account without a sign-out gets a fresh store, and the old que
 
   const next = await mountReady();
   expect(text(next.container, "modules")).toBe("overview,positions,net-worth,agents");
-  expect(text(next.container, "widgets")).toBe("performance,allocation,kpis,risk,sectors,agent");
+  expect(text(next.container, "widgets")).toBe("performance,allocation,risk,sectors,agent");
   act(() => next.root.unmount());
 });

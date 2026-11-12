@@ -284,3 +284,62 @@ test("cardBalances rejects a negative or fractional balance", () => {
   expect(bad(-1)).toThrow();
   expect(bad(10.5)).toThrow();
 });
+
+const stated = <T>(value: T) => ({ value, source: "stated" as const, at: "2026-11-03" });
+
+test("an old stored profile without the new fields still decodes", () => {
+  const old = {
+    current: {
+      household: stated({ kind: "alone" }),
+      work: stated(["employed"]),
+      removed: [],
+      intake: { blocksDone: 1, step0: null, lastScreen: "work" },
+    },
+    versions: [],
+    updatedAt: "2026-10-22T10:00:00Z",
+  };
+  const decoded = Schema.decodeUnknownSync(AdvisorProfileStoreSchema)(old);
+  expect(decoded.current.birthYear).toBeUndefined();
+  expect(decoded.current.household?.value.moneySharing).toBeUndefined();
+  expect(decoded.current.intake.round2Done).toBeUndefined();
+});
+
+test("new fields round-trip", () => {
+  const full = {
+    household: stated({ kind: "together", moneySharing: "mixed" }),
+    birthYear: stated(1990),
+    incomeRegularity: stated("varies"),
+    statedBanks: stated(["ing", "other"]),
+    cardRepayment: stated("sometimes"),
+    spendMix: stated(["groceries", "travel", "online", "fuel", "eating-out", "other"]),
+    foreignSpend: stated("often"),
+    priorities: stated([
+      "spend-less",
+      "save-more",
+      "pay-off-debt",
+      "cards-points",
+      "subscriptions",
+      "children",
+      "start-investing",
+    ]),
+    cutTargets: stated(["groceries", "subscriptions"]),
+    checkInCadence: stated("when-it-matters"),
+    confidence: stated(4),
+    statedPrograms: stated(["avios"]),
+    pointsGoal: stated("no-preference"),
+    flightsPerYear: stated("1-2"),
+    removed: [],
+    intake: { blocksDone: 0, step0: null, round2Done: true },
+  };
+  const p = Schema.decodeUnknownSync(AdvisorProfile)(full);
+  const again = Schema.decodeUnknownSync(AdvisorProfile)(Schema.encodeSync(AdvisorProfile)(p));
+  expect(again).toEqual(p);
+  expect(again.flightsPerYear?.value).toBe("1-2");
+  expect(again.intake.round2Done).toBe(true);
+  const decode = Schema.decodeUnknownSync(AdvisorProfile);
+  const base = { removed: [], intake: { blocksDone: 0, step0: null } };
+  expect(() => decode({ ...base, confidence: stated(5) })).toThrow();
+  expect(() => decode({ ...base, confidence: stated(0) })).toThrow();
+  expect(() => decode({ ...base, birthYear: stated(1890.5) })).toThrow();
+  expect(() => decode({ ...base, flightsPerYear: stated("2") })).toThrow();
+});

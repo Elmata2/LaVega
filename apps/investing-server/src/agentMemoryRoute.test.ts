@@ -4,7 +4,7 @@ import type { PGlite } from "@electric-sql/pglite";
 import { simulateReadableStream } from "ai";
 import { MockLanguageModelV4 } from "ai/test";
 import { afterAll, beforeAll, beforeEach, expect, test, vi } from "vitest";
-import { createInMemoryPriceStore } from "@lavega/adapters";
+import { createInMemorySharedPriceStore } from "@lavega/adapters";
 import { createAgentMemoryRepository, type Database } from "@lavega/database";
 import { migratedTestDatabase } from "@lavega/database/testing";
 import { createRuntimeApp } from "./index.js";
@@ -87,7 +87,7 @@ function scriptedModel(steps: Step[]) {
 
 async function runtime(chatModel = scriptedModel([{ text: "Noted." }]), tenant = "alice") {
   return createRuntimeApp({
-    priceStore: createInMemoryPriceStore(),
+    priceStore: createInMemorySharedPriceStore(),
     chatModel,
     resolveTenantId: () => tenant,
     agentMemory: (tenantId) => createAgentMemoryRepository(db, tenantId),
@@ -280,9 +280,23 @@ test("the owner sets risk tolerance and edits theses and goals, within the rules
 
 test("without a database memory answers 503 and the chat still works", async () => {
   const app = await createRuntimeApp({
-    priceStore: createInMemoryPriceStore(),
+    priceStore: createInMemorySharedPriceStore(),
     chatModel: scriptedModel([{ text: "Hello." }]),
   });
   expect((await app.request("http://localhost/api/memory")).status).toBe(503);
   expect((await turn(app, "hi", { id: null })).body).toContain("Hello.");
+});
+
+test("a turn that produces no text is persisted as failed, not as a completed answer", async () => {
+  const app = await runtime(scriptedModel([{ text: "" }]));
+  await turn(app, "What about ASML?");
+
+  const { thread } = (await json(app, `/api/memory/threads/${THREAD}`)) as {
+    thread: { messages: Array<{ role: string; metadata?: { failed?: boolean } }> };
+  };
+  expect(thread.messages[0]).toMatchObject({ role: "user" });
+  expect(thread.messages[1]).toMatchObject({
+    role: "assistant",
+    metadata: { failed: true },
+  });
 });

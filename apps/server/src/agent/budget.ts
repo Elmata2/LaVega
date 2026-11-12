@@ -16,6 +16,10 @@ export type UsageInput = {
   // it), traded for not having to parse tool-invocation detail out of every
   // response just to price a call correctly.
   searches?: number;
+  /** Provider-reported prompt-cache counts (#300, WS5.7 leftover). Stored on the
+   *  row even when the price model treats them pessimistically. */
+  cacheWriteTokens?: number;
+  cacheReadTokens?: number;
 };
 
 /** A held reservation, returned by `checkBudget()` and threaded into
@@ -114,6 +118,13 @@ export const WORST_CASE_CENTS: Record<AiUsage["route"], number> = {
   travel: 20,
   "portfolio-persona": 1,
   "sector-inference": 1,
+  /* Jev-04: one batched Choice over at most 24 unknown types, each with a short
+   * type string, description, currency and sign — same order as one
+   * portfolio-persona call. */
+  "cash-flow-suggestion": 1,
+  /* One Jev Choice over the provider's candidate set with a small state; the
+   * identifier-selection route's own ceiling (issue #136). */
+  "identifier-selection": 2,
 };
 
 /** Is there room for a call on `route`, counting what that call could cost —
@@ -220,9 +231,19 @@ export async function recordUsage(
   const outputTokens = input.outputTokens ?? 0;
   const pages = input.pages ?? 0;
   const searches = input.searches ?? 0;
+  const cacheWriteTokens = input.cacheWriteTokens ?? 0;
+  const cacheReadTokens = input.cacheReadTokens ?? 0;
   let costCents: number;
   try {
-    costCents = totalCostCents({ model: input.model, inputTokens, outputTokens, pages, searches });
+    costCents = totalCostCents({
+      model: input.model,
+      inputTokens,
+      outputTokens,
+      pages,
+      searches,
+      cacheWriteTokens,
+      cacheReadTokens,
+    });
   } catch (e) {
     // pricing.ts refuses to price an unrecognized model rather than silently
     // charging 0 (see its own comment) — that protects the cap from a renamed
@@ -255,6 +276,8 @@ export async function recordUsage(
             pages,
             searches,
             costCents,
+            cacheWriteTokens,
+            cacheReadTokens,
           },
           reservation.userId,
         );
@@ -269,6 +292,8 @@ export async function recordUsage(
           pages,
           searches,
           costCents,
+          cacheWriteTokens,
+          cacheReadTokens,
         });
       }
       return;
@@ -303,6 +328,84 @@ export async function recordUsage(
     console.error(
       `agent/budget: failed to persist usage: ${e instanceof Error ? e.message : String(e)}`,
     );
+  }
+}
+
+/** Record a model call that REACHED the provider and then failed (#300, WS5.7
+ *  leftover).
+ *
+ *  Before this, the failure path called `releaseReservation`, which deletes the
+ *  placeholder: a provider refusal, timeout or 5xx left no ledger trace, so an
+ *  operator could not see why spend had stopped. This turns the hold into a
+ *  FAILED row instead — same row, cost 0 (nothing was billed with certainty) or
+ *  the price of bought searches when the route bought any, plus the route's own
+ *  machine error code and the upstream HTTP status (0 = timeout/transport).
+ *
+ *  Never throws: it runs from a route's catch block, which must not fail twice.
+ *  A database error releases the hold so the cap does not keep a worst-case
+ *  charge for a call that never completed. */
+export async function recordFailure(
+  input: {
+    route: AiUsage["route"];
+    model: string;
+    errorCode: string;
+    httpStatus?: number;
+    /** A travel lookup buys its searches before the model can time out. */
+    searches?: number;
+    cacheWriteTokens?: number;
+    cacheReadTokens?: number;
+  },
+  reservation?: ReservationHandle,
+): Promise<void> {
+  const searches = input.searches ?? 0;
+  const cacheWriteTokens = input.cacheWriteTokens ?? 0;
+  const cacheReadTokens = input.cacheReadTokens ?? 0;
+  let costCents = 0;
+  if (searches > 0) {
+    try {
+      costCents = totalCostCents({
+        model: input.model,
+        inputTokens: 0,
+        outputTokens: 0,
+        pages: 0,
+        searches,
+        cacheWriteTokens,
+        cacheReadTokens,
+      });
+    } catch (e) {
+      /* An unknown model must not stop the failure row from being written. */
+      console.error(`agent/budget: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+  console.log(
+    `ai.usage.failed route=${input.route} model=${input.model} code=${input.errorCode} status=${input.httpStatus ?? 0} cost_cents=${costCents}`,
+  );
+
+  try {
+    const db = runtimeDatabase();
+    if (db && reservation?.kind === "db") {
+      await createAiUsageRepository(db).fail(
+        {
+          id: reservation.id,
+          model: input.model,
+          errorCode: input.errorCode,
+          ...(input.httpStatus === undefined ? {} : { httpStatus: input.httpStatus }),
+          cacheWriteTokens,
+          cacheReadTokens,
+          costCents,
+        },
+        reservation.userId,
+      );
+      return;
+    }
+    /* No database, no row to write; the failure still has to give back the
+     * worst-case hold, exactly as releaseReservation would have. */
+    await releaseReservation(reservation);
+  } catch (e) {
+    console.error(
+      `agent/budget: failed to persist failure: ${e instanceof Error ? e.message : String(e)}`,
+    );
+    await releaseReservation(reservation);
   }
 }
 

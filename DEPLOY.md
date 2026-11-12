@@ -158,7 +158,7 @@ or down. Use this endpoint to diagnose an empty Trading 212 portfolio.
   | Store                              | Table                                 |
   | ---------------------------------- | ------------------------------------- |
   | Broker credentials and snapshots   | `investing.broker_vaults` (encrypted) |
-  | Daily price bars                   | `investing.price_bars`                |
+  | Daily price bars (shared)          | `investing.instrument_price_bars`     |
   | Benchmarks and market-data consent | `investing.preferences`               |
   | Broker sync state                  | `investing.sync_state` (per broker)   |
   | Price sync progress                | `investing.sync_state` (key `prices`) |
@@ -262,6 +262,36 @@ Do not add filesystem persistence on Vercel. Anything a user must get back on
 their next visit belongs in Neon, behind a repository in `@lavega/database` that
 runs inside `withTenant` so row-level security applies.
 
+### Investing sync scheduler (GitHub Actions)
+
+A run that needs more than one 240 s budget cannot continue itself: Vercel
+answers the fifth self-request with HTTP 508 (issue #306). The scheduler that
+drains those runs lives outside the request chain:
+`.github/workflows/investing-sync.yml`.
+
+- **Cadence:** every 15 minutes UTC (`*/15 * * * *`), plus `workflow_dispatch`.
+  GitHub can delay a scheduled run; the queue is drained eventually, not on the
+  dot. One call advances the queue by one invocation budget, and the durable
+  `investing.sync_state` cursors resume it on the next call.
+- **Setup:** add repository secret `CRON_SECRET` with the same value as the
+  Vercel `CRON_SECRET`. Vercel stores that variable as a Secret, so an existing
+  value cannot be read or pulled; when it is unknown, rotate it: set a new
+  random value in Vercel (Production), redeploy production so the function
+  reads it, then save the same value as the repository secret. When the
+  deployment is not `https://www.lavega.dev`, add repository variable
+  `INVESTING_SYNC_URL` with the origin to call. The workflow is enabled on the
+  default branch; GitHub disables scheduled workflows after 60 days without
+  repository activity, so re-enable it in the Actions tab if the cadence stops.
+  Until `CRON_SECRET` exists a scheduled tick warns and skips instead of failing
+  every 15 minutes; a manual dispatch fails so the missing setup is visible.
+- **Kill switch:** repository variable `INVESTING_SYNC_SCHEDULER=off` stops the
+  workflow without editing it; Vercel variable `INVESTING_SYNC_SCHEDULER=off`
+  stops the drain route on the server. `INVESTING_SYNC_CHAIN` stays off and is
+  not needed on this path.
+- **Cost:** each tick is one short runner job. Lower the frequency in the
+  workflow file when the budget matters more than background freshness; the
+  daily Vercel cron stays as a backstop.
+
 ## Environments
 
 |                | Production                           | Preview                               | Local                                                |
@@ -308,6 +338,15 @@ locally, create your own Neon branch and put its connection string, a
 - `LAVEGA_ALLOW_UNAUTHENTICATED` — set to `1` ONLY for a run with no
   authentication at all (local dev, single-user self-host). Never in production
   or preview: it opens every `/api/*` route to anyone.
+- `CRON_SECRET` — bearer secret for the machine routes: the daily
+  `/api/cron/investing-sync` pass, the external scheduler's
+  `/api/cron/investing-drain`, and the run's internal `/api/sync/drive` and
+  `/api/sync/continue`. Use a long random value. The same value is a GitHub
+  repository secret for the investing sync workflow (below); without it the
+  external scheduler cannot authenticate and a server-owned run cannot resume.
+- `INVESTING_SYNC_SCHEDULER` — optional. Set to `off` to disable the external
+  scheduler's drain route without touching the workflow (it then answers
+  `{ "enabled": false }`). Unset means on.
 - `MISTRAL_API_KEY` — enables `/api/agent/*` (invoice extraction, chat, AI
   categorization). Obtained from console.mistral.ai (La Plateforme). Absent
   means `/api/agent/status` answers `configured: false` and the agent routes

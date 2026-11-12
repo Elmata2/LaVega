@@ -1,6 +1,7 @@
 import { createAgentUIStreamResponse, ToolLoopAgent, type LanguageModel, type UIMessage } from "ai";
 import type { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
+import { isPartnerBudgetStop } from "@lavega/adapters";
 import type { FundamentalsProvider } from "@lavega/core";
 import type { MarketDataConsentStore } from "./marketDataConsent.js";
 import { resolvePortfolioChatModel } from "./portfolioChat.js";
@@ -81,7 +82,11 @@ export function attachStockResearchRoutes<T extends Hono>(
           403,
         );
       assertResearchSigningConfigured(deps.tokenSecret);
-      const company = await deps.fundamentals.fetch(symbol);
+      // No partner slot within the request's budget: the same answer as a ticker
+      // Yahoo does not know, not a failure of the request.
+      const company = await deps.fundamentals
+        .fetch(symbol)
+        .catch((error: unknown) => (isPartnerBudgetStop(error) ? null : Promise.reject(error)));
       if (!company)
         return c.json({ problems: ["No company financials found for this ticker"] }, 404);
       const report = await runStockResearch({

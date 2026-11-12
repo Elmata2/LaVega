@@ -25,3 +25,8 @@ jobs:
       - run: pnpm run typecheck
       - run: pnpm run lint
       - run: pnpm run test
+      # The verify-investing CLI is a skill, not a workspace package, so
+      # `turbo run test` never reaches its node:test suite. It is black-box
+      # (spawns the real CLI against a stub server and fake binaries) and
+      # needs no install, so it adds seconds, not minutes.
+      - run: pnpm run test:verify-investing

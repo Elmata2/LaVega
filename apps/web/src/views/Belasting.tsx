@@ -389,7 +389,7 @@ export default function Belasting({
   if (entities.length === 0) {
     return (
       <>
-        <div className="flex items-baseline justify-between gap-4 flex-wrap pb-2 mt-6 mx-0 mb-4 border-b-2 border-b-ink first:mt-0">
+        <div className="flex items-baseline justify-between gap-4 flex-wrap pb-2 mt-6 mx-0 mb-4 border-b border-b-line first:mt-0">
           <h2 className="m-0 text-[1.5rem]">
             {c.header.title} · {countryLabel}
           </h2>
@@ -406,7 +406,7 @@ export default function Belasting({
 
   return (
     <>
-      <div className="flex items-baseline justify-between gap-4 flex-wrap pb-2 mt-6 mx-0 mb-4 border-b-2 border-b-ink first:mt-0">
+      <div className="flex items-baseline justify-between gap-4 flex-wrap pb-2 mt-6 mx-0 mb-4 border-b border-b-line first:mt-0">
         {/* HET ⓘ VERVANGT DE VOLLE-BREEDTE MODULE "Niet berekend" ONDERAAN.
             Die lijst is anders niet te beoordelen (zie de kop van dit bestand),
             maar hoeft niet standaard open te staan om dat te blijven doen —
@@ -495,7 +495,7 @@ export default function Belasting({
                 <div className="flex items-baseline justify-between gap-3 mb-2">
                   <span className="font-semibold text-ink">{entity}</span>
                   <span
-                    className={`font-display text-[1.2rem] font-semibold ${!known ? "" : direction === "terugvragen" ? "text-pos" : "text-neg"}`}
+                    className={`font-body text-[1.2rem] font-semibold tabular-nums ${!known ? "" : direction === "terugvragen" ? "text-pos" : "text-neg"}`}
                   >
                     {known ? formatEuroIn(locale, Math.abs(netCents) / 100) : c.vat.noAmount}
                   </span>
@@ -718,7 +718,7 @@ export default function Belasting({
                   <div className="flex items-baseline justify-between gap-3 mb-2">
                     <span className="font-semibold text-ink">{entity}</span>
                     <span
-                      className={`font-display text-[1.2rem] font-semibold ${total > 0 ? "text-neg" : ""}`}
+                      className={`font-body text-[1.2rem] font-semibold tabular-nums ${total > 0 ? "text-neg" : ""}`}
                     >
                       {flows.length > 0 ? formatEuroIn(locale, total / 100) : c.profitTax.noAmount}
                     </span>

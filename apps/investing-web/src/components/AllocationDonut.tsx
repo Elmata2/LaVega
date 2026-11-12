@@ -1,15 +1,20 @@
 import { useState } from "react";
 import { Cell, Pie, PieChart } from "recharts";
-import type { Allocation } from "@lavega/core";
+import type { Allocation, InvestingDashboardData } from "@lavega/core";
 import { EmptyState } from "./EmptyState";
 import { Swatch } from "./Swatch";
-import { Button } from "./ui/button";
+import { segmentedItem, segmentedTrack } from "./ui/segmented";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { ChartContainer } from "./ui/chart";
+
+type AllocationLadderView = NonNullable<InvestingDashboardData["allocation"]["ladder"]>;
 
 type AllocationDonutProps = {
   instrument: Allocation;
   entity: Allocation;
+  /** Cash-aware ladder with the documented denominator (WS4.6, #297). Absent
+   *  on a dashboard payload stored before the ladder existed. */
+  ladder?: AllocationLadderView;
   currency?: string;
 };
 
@@ -63,6 +68,7 @@ function buildDisplayBuckets(
 ): DisplayBucket[] {
   const sorted = [...priced]
     .filter((bucket): bucket is { key: string; label: string; value: number } => !!bucket.value)
+    .map((bucket) => ({ ...bucket, label: bucket.label || "Unclassified" }))
     .sort((a, b) => b.value - a.value);
   if (sorted.length <= MAX_NAMED_BUCKETS) {
     return sorted.map((bucket, index) => ({ ...bucket, color: colors[index] }));
@@ -81,7 +87,66 @@ function buildDisplayBuckets(
   ];
 }
 
-export function AllocationDonut({ instrument, entity, currency = "EUR" }: AllocationDonutProps) {
+function LadderRows({
+  ladder,
+  currency,
+}: {
+  ladder: AllocationLadderView["instrument"];
+  currency: string;
+}) {
+  return (
+    <div className="mt-5 border-t border-border pt-4" data-dashboard-section="allocation-ladder">
+      <div className="flex items-baseline justify-between gap-3">
+        <h3 className="text-sm font-semibold">Ladder</h3>
+        <span className="text-xs text-muted-foreground tabular-nums">
+          {ladder.weightsSum === null
+            ? "Weights unknown"
+            : `Weights ${(ladder.weightsSum * 100).toFixed(1)}%`}
+        </span>
+      </div>
+      <ul aria-label="Allocation ladder" className="mt-2 space-y-1.5 text-sm">
+        {ladder.rows.map((row) => (
+          <li key={`${row.kind}-${row.key}`} className="flex items-center justify-between gap-3">
+            <span className="flex min-w-0 items-center gap-2">
+              <span
+                className={`truncate ${row.kind === "cash" ? "font-semibold" : ""} ${
+                  row.kind === "unclassified" ? "text-warning" : ""
+                }`}
+              >
+                {row.label}
+              </span>
+              <span className="rounded-chip bg-secondary px-1.5 py-0.5 text-2xs font-semibold uppercase tracking-wide text-muted-foreground">
+                {row.kind}
+              </span>
+            </span>
+            <span className="flex items-baseline gap-2">
+              <span className="text-xs text-muted-foreground tabular-nums">
+                {row.weight === null ? "Unknown" : `${(row.weight * 100).toFixed(1)}%`}
+              </span>
+              <span className="font-semibold tabular-nums">
+                {row.value === null
+                  ? "Unknown"
+                  : row.value.toLocaleString("en-GB", {
+                      style: "currency",
+                      currency,
+                      maximumFractionDigits: 0,
+                    })}
+              </span>
+            </span>
+          </li>
+        ))}
+      </ul>
+      <p className="mt-3 text-xs text-muted-foreground">{ladder.denominatorRule}</p>
+    </div>
+  );
+}
+
+export function AllocationDonut({
+  instrument,
+  entity,
+  ladder,
+  currency = "EUR",
+}: AllocationDonutProps) {
   const [group, setGroup] = useState<"instrument" | "entity">("instrument");
   const [showOverige, setShowOverige] = useState(false);
   const allocation = group === "instrument" ? instrument : entity;
@@ -94,37 +159,30 @@ export function AllocationDonut({ instrument, entity, currency = "EUR" }: Alloca
   return (
     <Card>
       <CardHeader gap="wide" className="flex-row items-start justify-between">
-        <div>
-          <p className="text-sm font-medium text-muted-foreground">Allocation</p>
-          <CardTitle>Portfolio</CardTitle>
-        </div>
-        <div
-          aria-label="Group allocation"
-          className="flex rounded-pill bg-secondary p-1"
-          role="group"
-        >
-          <Button
+        <CardTitle>Allocation</CardTitle>
+        <div aria-label="Group allocation" className={segmentedTrack} role="group">
+          <button
+            type="button"
             aria-pressed={group === "instrument"}
             onClick={() => {
               setGroup("instrument");
               setShowOverige(false);
             }}
-            size="sm"
-            variant={group === "instrument" ? "default" : "ghost"}
+            className={segmentedItem(group === "instrument")}
           >
             Holding
-          </Button>
-          <Button
+          </button>
+          <button
+            type="button"
             aria-pressed={group === "entity"}
             onClick={() => {
               setGroup("entity");
               setShowOverige(false);
             }}
-            size="sm"
-            variant={group === "entity" ? "default" : "ghost"}
+            className={segmentedItem(group === "entity")}
           >
             Entity
-          </Button>
+          </button>
         </div>
       </CardHeader>
       <CardContent>
@@ -205,7 +263,7 @@ export function AllocationDonut({ instrument, entity, currency = "EUR" }: Alloca
                     </span>
                   </div>
                   {bucket.members && showOverige && (
-                    <div className="mt-3 rounded-lg border border-border/70 bg-secondary/40 p-3">
+                    <div className="mt-3 rounded-tile border border-border/70 bg-secondary/40 p-3">
                       <div className="mb-2 flex items-center justify-between gap-3 text-xs">
                         <span className="font-semibold text-foreground">Other holdings</span>
                         <span className="tabular-nums text-muted-foreground">
@@ -244,6 +302,12 @@ export function AllocationDonut({ instrument, entity, currency = "EUR" }: Alloca
               )}
             </ul>
           </div>
+        )}
+        {ladder && (
+          <LadderRows
+            ladder={group === "instrument" ? ladder.instrument : ladder.entity}
+            currency={currency}
+          />
         )}
       </CardContent>
     </Card>

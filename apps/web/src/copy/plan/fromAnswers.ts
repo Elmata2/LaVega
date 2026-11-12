@@ -16,6 +16,8 @@ export type FromAnswersCopy = {
   rows: { income: string; spend: string };
   statedAlone: string;
   statedTogether: string;
+  /** Money kept apart: the stated figure is the person's own, not the household's. */
+  statedOwn: { income: string; spend: string };
   measured: { income: string; spend: string };
   /** With a household of two: the accounts imported may not be all of theirs. */
   togetherPartial: string;
@@ -27,7 +29,7 @@ export type FromAnswersCopy = {
   noBankData: string;
   importLink: string;
   change: string;
-  notes: { month: string; buffer: string };
+  notes: { month: string; buffer: string; varies: string };
 };
 
 const nl: FromAnswersCopy = {
@@ -40,6 +42,7 @@ const nl: FromAnswersCopy = {
   rows: { income: "Netto inkomen per maand", spend: "Uitgaven per maand" },
   statedAlone: "opgegeven",
   statedTogether: "opgegeven, voor jullie samen",
+  statedOwn: { income: "opgegeven, jouw eigen inkomen", spend: "opgegeven, jouw eigen uitgaven" },
   measured: {
     income: "binnengekomen op je gekoppelde rekeningen",
     spend: "uitgegeven op je gekoppelde rekeningen",
@@ -58,6 +61,7 @@ const nl: FromAnswersCopy = {
       "Je gaf aan dat je (ook) als zzp'er of ondernemer werkt. Inkomstenbelasting en btw die je zelf afdraagt, zitten niet apart in deze cijfers.",
     buffer:
       "Je gaf aan dat een deel van je inkomen kan wisselen. Je buffer is hier gemeten in maanden vaste lasten.",
+    varies: "Je inkomen wisselt per maand. Houd daarom een grotere buffer aan.",
   },
 };
 
@@ -70,6 +74,7 @@ const en: FromAnswersCopy = {
   rows: { income: "Net income per month", spend: "Spending per month" },
   statedAlone: "stated",
   statedTogether: "stated, for the two of you together",
+  statedOwn: { income: "stated, your own income", spend: "stated, your own spending" },
   measured: {
     income: "received on your linked accounts",
     spend: "spent on your linked accounts",
@@ -88,6 +93,7 @@ const en: FromAnswersCopy = {
       "You said you also work as a freelancer or business owner. Income tax and VAT you pay yourself are not shown separately in these figures.",
     buffer:
       "You said part of your income can vary. Your buffer here is measured in months of fixed costs.",
+    varies: "Your income varies from month to month, so keep a larger buffer.",
   },
 };
 

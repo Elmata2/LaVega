@@ -28,7 +28,7 @@ export const buttonVariants = cva(
          * an arbitrary property, not the `brightness-*` scale, because no
          * step on that scale is 1.08 and rounding it is a visible regression
          * the test suite cannot catch. */
-        primary: "border-accent bg-accent text-white hover:enabled:[filter:brightness(1.08)]",
+        primary: "border-cta bg-cta text-on-cta hover:enabled:[filter:brightness(1.08)]",
       },
     },
     defaultVariants: { variant: "default" },

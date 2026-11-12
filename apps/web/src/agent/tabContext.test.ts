@@ -294,3 +294,77 @@ test("punten sends no balance note: it is where a card number or a login lives",
   });
   expect(JSON.stringify(context)).not.toContain("example.com");
 });
+
+// --- profile summary (privacy path) ---
+import { AdvisorProfile, type ProfileSummary } from "@lavega/core";
+import { profileSummaryOf } from "./profileSummary.js";
+
+const stated = <T>(value: T) => ({ value, source: "stated" as const, at: "2026-11-03" });
+const richProfile = () =>
+  new AdvisorProfile({
+    household: stated({ kind: "together" as const, moneySharing: "mixed" as const }),
+    birthYear: stated(1987),
+    statedBanks: stated(["ing", "abn-amro"]),
+    statedCards: stated(["amex-gold"]),
+    statedPrograms: stated(["flying-blue"]),
+    worries: stated("IBAN NL91ABNA0417164300 en mijn schuld van 12000"),
+    priorities: stated(["save-more" as const, "save-more" as const, "cards-points" as const]),
+    cutTargets: stated(["eating-out" as const, "subscriptions" as const]),
+    checkInCadence: stated("weekly" as const),
+    confidence: stated(3),
+    incomeRegularity: stated("varies" as const),
+    spendMix: stated(["groceries" as const, "travel" as const]),
+    cardRepayment: stated("full" as const),
+    pointsGoal: stated("flights" as const),
+    removed: [],
+    intake: { blocksDone: 0, step0: null },
+  });
+
+test("summary carries only enums", () => {
+  const s = profileSummaryOf(richProfile());
+  expect(s).toEqual({
+    priorities: ["save-more", "cards-points"],
+    cutTargets: ["eating-out", "subscriptions"],
+    checkInCadence: "weekly",
+    confidence: 3,
+    household: "together",
+    moneySharing: "mixed",
+    incomeRegularity: "varies",
+    spendMix: ["groceries", "travel"],
+    cardRepayment: "full",
+    pointsGoal: "flights",
+  } satisfies ProfileSummary);
+});
+
+test("empty profile gives an empty summary", () => {
+  const s = profileSummaryOf(new AdvisorProfile({ removed: [], intake: { blocksDone: 0, step0: null } }));
+  expect(s.priorities).toEqual([]);
+  expect(s.household).toBeNull();
+  expect(s.confidence).toBeNull();
+});
+
+test("birthYear and statedBanks never appear, in the summary or the built context", () => {
+  const summary = profileSummaryOf(richProfile());
+  for (const view of ["overview", "forecast", "backup", "unknown-view"]) {
+    const { context } = buildTabContext(view, { profileSummary: summary });
+    const json = JSON.stringify(context);
+    for (const leak of ["1987", "birthYear", "statedBanks", "abn-amro", "ing", "amex", "flying-blue", "NL91", "12000", "worries"]) {
+      // "ing" is checked as a whole JSON string value, not as a substring
+      if (leak === "ing") expect(json).not.toContain('"ing"');
+      else expect(json).not.toContain(leak);
+    }
+    expect(context.profile).toEqual(summary);
+  }
+});
+
+test("buildTabContext adds no profile key without a summary", () => {
+  expect(buildTabContext("backup", {}).context).toEqual({});
+});
+
+test("a tampered summary is re-sanitized in the browser too", () => {
+  const { context } = buildTabContext("backup", {
+    profileSummary: { ...profileSummaryOf(richProfile()), priorities: ["NL91ABNA0417164300"], birthYear: 1987 } as never,
+  });
+  expect((context.profile as ProfileSummary).priorities).toEqual([]);
+  expect(JSON.stringify(context)).not.toContain("birthYear");
+});

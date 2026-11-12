@@ -2,20 +2,13 @@ import { isIsoDate, monthsBetween } from "../advisor/months.js";
 import { personalView } from "../advisor/scopePersonal.js";
 import { computeBuffer, type BufferFigures } from "./buffer.js";
 import { computeCashflow, type CashflowResult } from "./cashflow.js";
+import { computeReports, type Reports } from "../reports.js";
 import { computeCards, type CardsFigures } from "./cards.js";
 import { computeDebts, type DebtFigures } from "./debts.js";
-import {
-  PLAN_ENGINE_VERSION,
-  buildFactSheet,
-  type FactSheet,
-} from "./factsheet.js";
+import { PLAN_ENGINE_VERSION, buildFactSheet, type FactSheet } from "./factsheet.js";
 import { computeGoals, type GoalsFigures } from "./goals.js";
 import { computeMonth, type MonthFigures } from "./month.js";
-import type {
-  PlanMarkers,
-  PlanSnapshot,
-  RefreshTrigger,
-} from "./preferences.js";
+import type { PlanMarkers, PlanSnapshot, RefreshTrigger } from "./preferences.js";
 import { computeSpending, type SpendingFigures } from "./spending.js";
 import { computeSubscriptions, type SubsFigures } from "./subs.js";
 import { PLAN_THRESHOLDS } from "./thresholds.js";
@@ -53,14 +46,13 @@ export type PlanResult = {
   sections: PlanSections;
   facts: PlanFact[];
   /** A function so the locale-dependent hash is computed lazily. */
-  factSheet: (
-    locale: "nl" | "en",
-    taskType?: "plan" | "digest" | "note",
-  ) => FactSheet;
+  factSheet: (locale: "nl" | "en", taskType?: "plan" | "digest" | "note") => FactSheet;
   markers: PlanMarkers;
   backbone: PlanBackbone;
   /** The cash-flow view for irregular income; null when it does not apply. */
   cashflow: CashflowResult | null;
+  /** The balance sheet and the income statements (WS3.3, issue #292). */
+  reports: Reports;
   freshness: {
     bankDataTo: string | null;
     profileConfirmedAt: string | null;
@@ -84,17 +76,13 @@ function markersOf(i: PlanInput, s: PlanSections): PlanMarkers {
     incomeMedianCents: s.month.figures.incomeMiddleCents,
     incomeStreamIds: sorted(i.profile.incomeStreams.map((x) => x.id)),
     flaggedIncreaseKeys: sorted(
-      s.subscriptions.figures.rows
-        .filter((r) => r.facts.includes("price-up"))
-        .map((r) => r.key),
+      s.subscriptions.figures.rows.filter((r) => r.facts.includes("price-up")).map((r) => r.key),
     ),
     goalsWithin12m: sorted(within12m),
     debtIds: sorted(i.profile.debts.map((d) => d.id)),
     childCount: i.profile.children.length,
     cardKeys: sorted(s.cards.figures.nets.map((n) => n.cardKey)),
-    pointsProgramIds: sorted(
-      s.cards.figures.balances.map((b) => b.programId),
-    ),
+    pointsProgramIds: sorted(s.cards.figures.balances.map((b) => b.programId)),
     bufferBelowWish: s.buffer.statusReason.key === "below-target",
   };
 }
@@ -107,17 +95,10 @@ function backboneOf(s: PlanSections): PlanBackbone {
   return {
     buffer: buffer.headline?.value == null ? null : buffer.headline,
     debtInterestPerYear:
-      debts.figures.rows.length === 0 || interest === null
-        ? null
-        : cents(interest),
-    goalsGap:
-      rows.length === 0
-        ? null
-        : cents(goals.figures.totalGapCents),
+      debts.figures.rows.length === 0 || interest === null ? null : cents(interest),
+    goalsGap: rows.length === 0 ? null : cents(goals.figures.totalGapCents),
     investingUnallocated:
-      un.kind === "computed"
-        ? { low: cents(un.lowCents), high: cents(un.highCents) }
-        : null,
+      un.kind === "computed" ? { low: cents(un.lowCents), high: cents(un.highCents) } : null,
   };
 }
 
@@ -186,6 +167,18 @@ export function computePlan(i: PlanInput): PlanResult {
     markers: markersOf(i, sections),
     backbone: backboneOf(sections),
     cashflow: computeCashflow(i),
+    reports: computeReports({
+      txs: i.txs,
+      accounts: i.accounts,
+      entityProfiles: i.entityProfiles,
+      rules: i.rules,
+      own: i.own,
+      valuations: i.valuations,
+      mode: i.mode,
+      fxHistory: i.fxHistory,
+      movedCategories: i.movedCategories,
+      asOf: i.asOf,
+    }),
     freshness: { bankDataTo: newestTxDate(i), profileConfirmedAt: i.profile.profileUpdatedAt },
   };
 }

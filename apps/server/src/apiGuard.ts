@@ -1,5 +1,11 @@
 import type { Context, MiddlewareHandler } from "hono";
 import { verifiedSession } from "./auth.js";
+import {
+  mcpBearerToken,
+  resolveMcpToken,
+  type McpTokenIdentity,
+  type McpTokenResolver,
+} from "./mcp/tokens.js";
 
 /**
  * The session guard for `/api/*` — and for `/investing/api/*`, which is the
@@ -30,6 +36,9 @@ const PUBLIC_API_PATHS = new Set([
   "/api/n8n/status", // { configured: bool } only
   "/api/card-terms/ingest", // machine endpoint; carries its OWN shared secret
   "/api/cron/investing-sync", // machine endpoint; carries its OWN bearer secret
+  "/api/cron/investing-drain", // external scheduler; carries the same bearer secret
+  "/api/sync/continue", // machine endpoint; carries the cron bearer secret
+  "/api/sync/drive", // machine endpoint; the cron worker for one tenant
   "/api/investing/health", // { ok, service } only, no personal data
 ]);
 
@@ -72,6 +81,34 @@ export function isPublicApiPath(path: string): boolean {
 }
 
 /**
+ * The external agent endpoint (ADR 0012). It is NOT under `/api/*` because it
+ * speaks JSON-RPC to machine clients and shares no cookie path, but it is
+ * guarded here for the same reason every API route is: one place decides who
+ * may reach this process.
+ */
+export const MCP_PATH = "/mcp";
+
+export function isMcpPath(path: string): boolean {
+  return path === MCP_PATH || path.startsWith(`${MCP_PATH}/`);
+}
+
+/** The resolved token for the current request, set by the guard after auth. */
+export function mcpIdentity(c: Context): McpTokenIdentity | undefined {
+  return (c as unknown as { get(k: string): unknown }).get("lavegaMcpToken") as
+    | McpTokenIdentity
+    | undefined;
+}
+
+function setMcpIdentity(c: Context, identity: McpTokenIdentity): void {
+  (c as unknown as { set(k: string, v: unknown): void }).set("lavegaMcpToken", identity);
+}
+
+export type ApiGuardDependencies = {
+  /** Injected in tests; production resolves the hashed table or the env pair. */
+  resolveMcpToken?: McpTokenResolver;
+};
+
+/**
  * Is this a hosted deployment, where the escape hatch below must never apply?
  *
  * `NODE_ENV=production` is what the long-lived Docker/Railway image runs with;
@@ -108,8 +145,37 @@ export function guardIsDisabled(): boolean {
   return !isHostedDeployment();
 }
 
-export function apiGuard(): MiddlewareHandler {
+export function apiGuard(dependencies: ApiGuardDependencies = {}): MiddlewareHandler {
+  const resolveToken = dependencies.resolveMcpToken ?? resolveMcpToken;
   return async (c, next) => {
+    /* The machine endpoint is checked BEFORE the `pnpm dev` escape hatch: a
+     * local run starts with `LAVEGA_ALLOW_UNAUTHENTICATED=1`, and `/mcp` must
+     * still answer 401 without a token there. ADR 0012: missing token is 401,
+     * never local-tenant data. */
+    if (isMcpPath(c.req.path)) {
+      const raw = mcpBearerToken(c.req.raw);
+      let identity: McpTokenIdentity | null = null;
+      try {
+        identity = raw ? await resolveToken(raw) : null;
+      } catch {
+        /* A database outage must not read as "your token is wrong" and must not
+         * leak the cause to the caller. */
+        return c.json({ error: "authorization unavailable", hint: "Try again shortly." }, 503);
+      }
+      if (!identity) {
+        const response = c.json(
+          { error: "unauthorized", hint: "Send Authorization: Bearer <token>." },
+          401,
+        );
+        response.headers.set("WWW-Authenticate", 'Bearer realm="lavega-mcp"');
+        return response;
+      }
+      setMcpIdentity(c, identity);
+      /* Same context slot the API rate limiter reads, so one identity is the
+       * tenant for the tool call and for anything that attributes usage. */
+      setSessionUserId(c, identity.tenantId);
+      return next();
+    }
     if (!isGuardedApiPath(c.req.path)) return next();
     if (isPublicApiPath(c.req.path)) return next();
     /* There is deliberately no `OPTIONS` bypass here anymore. It existed so a

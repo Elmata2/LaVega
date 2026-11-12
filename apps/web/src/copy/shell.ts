@@ -262,6 +262,7 @@ const nl: ShellCopy = {
       accounts: "Rekeningen",
       rules: "Regels",
       forecast: "Forecast",
+      bills: "Verplichtingen",
       optimalisatie: "Optimalisatie",
       valuta: "Valuta",
       belasting: "Belasting",
@@ -286,6 +287,7 @@ const nl: ShellCopy = {
       accounts: "Rekeningen",
       transactions: "Transacties",
       forecast: "Forecast",
+      bills: "Verplichtingen",
       optimalisatie: "Optimalisatie",
       valuta: "Valuta",
       punten: "Punten",
@@ -304,6 +306,7 @@ const nl: ShellCopy = {
       transactions:
         "Al je transacties in één lijst, met filters op periode, rekening en categorie.",
       forecast: "Wat er de komende 30, 60 en 90 dagen binnenkomt en uitgaat.",
+      bills: "Wat er af moet, wat betaald is en wat tekort is voor je volgende salaris.",
       optimalisatie: "Abonnementen die je kunt opzeggen en spaarrentes die meer opleveren.",
       valuta: "De beste route om geld om te wisselen, met de live ECB-koers.",
       punten: "Je spaarpunten en airmiles op één plek, met de regels van elk programma.",
@@ -321,6 +324,11 @@ const nl: ShellCopy = {
         label: "Je ruimte per maand",
         what: "Wat er gemiddeld per maand overblijft, met de laagste en hoogste maand als bandbreedte.",
         note: "Verschijnt zodra je de eerste vragen hebt beantwoord.",
+      },
+      "connect-checklist": {
+        label: "Koppel voor het complete beeld",
+        what: "Welke van je banken nog niet gekoppeld zijn, met een link naar Rekeningen.",
+        note: "Verschijnt alleen als je banken hebt opgegeven die nog niet gekoppeld zijn.",
       },
       aandacht: {
         label: "Aandacht",
@@ -612,6 +620,7 @@ const en: ShellCopy = {
       accounts: "Accounts",
       rules: "Rules",
       forecast: "Forecast",
+      bills: "Bills",
       optimalisatie: "Optimise",
       valuta: "Currency",
       belasting: "Tax",
@@ -636,6 +645,7 @@ const en: ShellCopy = {
       accounts: "Accounts",
       transactions: "Transactions",
       forecast: "Forecast",
+      bills: "Bills",
       optimalisatie: "Optimise",
       valuta: "Currency",
       punten: "Points",
@@ -654,6 +664,7 @@ const en: ShellCopy = {
       transactions:
         "All your transactions in one list, with filters for period, account and category.",
       forecast: "What's coming in and going out over the next 30, 60 and 90 days.",
+      bills: "What is due, what is paid, and what is short before your next payday.",
       optimalisatie: "Subscriptions you can cancel and savings rates that pay more.",
       valuta: "The best route to exchange money, with the live ECB rate.",
       punten: "Your reward points and air miles in one place, with each program's rules.",
@@ -671,6 +682,11 @@ const en: ShellCopy = {
         label: "Your room each month",
         what: "What is left on average each month, with the lowest and highest month as the range.",
         note: "Appears once you have answered the first questions.",
+      },
+      "connect-checklist": {
+        label: "Connect for the full picture",
+        what: "Which of your banks are not connected yet, with a link to Accounts.",
+        note: "Appears only when you named banks that are not connected yet.",
       },
       aandacht: {
         label: "Attention",

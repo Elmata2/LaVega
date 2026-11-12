@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
+import { AuthHonestyLine } from "@/components/auth-layout";
 import { Input } from "@/components/ui/input";
 
 export type SignupValues = { name: string; email: string; password: string };
@@ -37,7 +38,6 @@ export function SignupForm({
   return (
     <Card className="w-full">
       <CardHeader>
-        <p className="text-xs font-semibold uppercase tracking-widest text-primary">LaVega</p>
         <CardTitle as="h1">Create your account</CardTitle>
         <CardDescription>Start with your name, email address, and a password.</CardDescription>
       </CardHeader>
@@ -94,6 +94,7 @@ export function SignupForm({
                 </p>
               </div>
             )}
+            <AuthHonestyLine />
             <Button type="submit" disabled={pending} className="w-full">
               {pending ? "Creating account…" : "Create account"}
             </Button>
@@ -101,7 +102,7 @@ export function SignupForm({
               Already have an account?{" "}
               <Link
                 to="/sign-in"
-                className="font-semibold text-primary underline-offset-4 hover:underline"
+                className="font-semibold text-accent underline-offset-4 hover:underline"
               >
                 Sign in
               </Link>

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { createMistralProvider, fetchWithTimeout } from "./mistral.js";
+import { createMistralProvider, fetchWithTimeout, parseMistralUsage } from "./mistral.js";
 
 const fetchMock = vi.fn();
 
@@ -445,4 +445,51 @@ test("fetchWithTimeout() rethrows a non-abort fetch error unchanged", async () =
   fetchMock.mockRejectedValue(boom);
 
   await expect(fetchWithTimeout("https://example.test", {}, 1000, "chat")).rejects.toBe(boom);
+});
+
+test("parseMistralUsage reads prompt cache tokens from the shapes the API has used", () => {
+  expect(
+    parseMistralUsage({
+      usage: {
+        prompt_tokens: 1000,
+        completion_tokens: 100,
+        cached_tokens: 400,
+        cache_creation_input_tokens: 50,
+      },
+    }),
+  ).toEqual({ input: 1000, output: 100, cacheReadTokens: 400, cacheWriteTokens: 50 });
+
+  expect(
+    parseMistralUsage({
+      usage: {
+        prompt_tokens: 10,
+        completion_tokens: 2,
+        prompt_tokens_details: { cached_tokens: 7, cache_write_tokens: 3 },
+      },
+    }),
+  ).toEqual({ input: 10, output: 2, cacheReadTokens: 7, cacheWriteTokens: 3 });
+});
+
+test("parseMistralUsage leaves an unreported cache count undefined, not a guessed 0", () => {
+  expect(parseMistralUsage({ usage: { prompt_tokens: 10, completion_tokens: 2 } })).toEqual({
+    input: 10,
+    output: 2,
+  });
+  expect(parseMistralUsage({})).toEqual({ input: 0, output: 0 });
+});
+
+test("complete() returns the provider's cache counts alongside its token counts", async () => {
+  fetchMock.mockResolvedValue(
+    jsonResponse({
+      choices: [{ message: { content: "hoi" } }],
+      usage: {
+        prompt_tokens: 10,
+        completion_tokens: 5,
+        prompt_tokens_details: { cached_tokens: 4 },
+      },
+    }),
+  );
+  const provider = createMistralProvider("sk-test", "mistral-small-latest");
+  const res = await provider.complete({ system: "s", user: "u", maxTokens: 10 });
+  expect(res.usage).toEqual({ input: 10, output: 5, cacheReadTokens: 4 });
 });

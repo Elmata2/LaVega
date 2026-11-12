@@ -22,6 +22,9 @@ import {
   type EntityProfile,
   type LearnedFact,
   type OwnAccounts,
+  setBudgetLineAllocation,
+  type BudgetPeriod,
+  type CategoryGroup,
   type ChangeBaseline,
   type PlanDiff,
   type PlanEvent,
@@ -35,6 +38,7 @@ import {
   type RewardsBalance,
   type Rule,
   type Tx,
+  type Valuation,
   type VaultEvent,
 } from "@lavega/core";
 import type { VaultStorage } from "@lavega/adapters";
@@ -43,8 +47,12 @@ import { getCashbackAssumptionEnabled } from "../settings";
 import { nowIso, todayIso } from "./clock";
 import { buildHeldCards } from "./heldCards";
 
-/** The three vault calls the plan needs; a full VaultStorage satisfies it. */
-export type PlanStorage = Pick<VaultStorage, "getSection" | "putSection" | "appendEvents">;
+/** The vault calls the plan needs; a full VaultStorage satisfies it. The three
+ *  budget calls are optional so a test double (and an adapter from before
+ *  WS2.9) still works: without them the plan reads the legacy `categoryLimits`
+ *  and stores no budget. */
+export type PlanStorage = Pick<VaultStorage, "getSection" | "putSection" | "appendEvents"> &
+  Partial<Pick<VaultStorage, "getBudgetPeriods" | "putBudgetPeriods" | "getCategoryGroups">>;
 
 export type UsePlanInput = {
   store: AdvisorProfileStore | null;
@@ -63,6 +71,8 @@ export type UsePlanInput = {
   fxHistory: Record<string, Record<string, number>>;
   /** The saved tax setups; the filing frequency of the person's own entity is read from them. */
   vatSettings?: readonly VatSettings[];
+  /** Dated absolute valuations (WS3.1); the reports read them. */
+  valuations?: readonly Valuation[];
   /** ISO day, fixed at app mount. */
   asOf: string;
   /** False while the app is still loading the data the plan reads; nothing is
@@ -93,6 +103,10 @@ export type UsePlan = {
   setPreference(
     patch: Partial<PlanPreferences> | ((current: PlanPreferences) => Partial<PlanPreferences>),
   ): Promise<void>;
+  /** Save one category's monthly envelope for `asOf`'s month. Writes the
+   *  budget period's line and keeps the legacy `categoryLimits` record in step,
+   *  so an older build still reads the same limit. `null` clears both. */
+  setLimit(category: string, cents: number | null): Promise<void>;
   appendPlanEvent(e: PlanEvent): Promise<void>;
 };
 
@@ -104,8 +118,14 @@ export type ChangesSince =
 const NO_CHANGES: PlanDiff = { changes: [], statusChanges: [], material: false, baseline: true };
 const MOVED = new Set(MOVED_CATEGORIES.map((m) => m.category));
 
+/** The budget the plan reads and edits. Empty until the vault stores periods;
+ *  the legacy limits still become the first period on read. */
+type BudgetState = { periods: BudgetPeriod[]; groups: CategoryGroup[] };
+const NO_BUDGET: BudgetState = { periods: [], groups: [] };
+
 type Stored = {
   preferences: PlanPreferences;
+  budget: BudgetState;
   /** When the vault last stamped the preferences; null = it never held any. */
   prefsAt: string | null;
   snapshots: PlanSnapshot[];
@@ -121,7 +141,9 @@ export function vatFrequencyOf(
   accounts: readonly Account[],
   entityProfiles: readonly EntityProfile[],
 ): VatSettings["frequency"] | null {
-  const personal = new Set(personalView(accounts, [], entityProfiles).accounts.map((a) => a.entity));
+  const personal = new Set(
+    personalView(accounts, [], entityProfiles).accounts.map((a) => a.entity),
+  );
   return settings.find((s) => personal.has(s.entity))?.frequency ?? null;
 }
 
@@ -156,6 +178,7 @@ export function usePlan(i: UsePlanInput): UsePlan {
     void (async () => {
       let section: PlanSection;
       let events: VaultEvent[];
+      let budget: BudgetState = NO_BUDGET;
       try {
         [section, events] = (await Promise.all([
           storage.getSection("plan"),
@@ -166,6 +189,7 @@ export function usePlan(i: UsePlanInput): UsePlan {
         blocked.current = true;
         commit({
           preferences: emptyPlanPreferences(),
+          budget: NO_BUDGET,
           prefsAt: null,
           snapshots: [],
           events: [],
@@ -174,10 +198,23 @@ export function usePlan(i: UsePlanInput): UsePlan {
         return;
       }
       if (!alive) return;
+      // The budget is additive: a read that fails leaves the legacy limits to
+      // speak, it does not block the plan.
+      try {
+        const [periods, groups] = await Promise.all([
+          storage.getBudgetPeriods?.() ?? Promise.resolve([]),
+          storage.getCategoryGroups?.() ?? Promise.resolve([]),
+        ]);
+        budget = { periods, groups };
+      } catch {
+        budget = NO_BUDGET;
+      }
+      if (!alive) return;
       try {
         const state = decodePlanState(section);
         commit({
           preferences: state.preferences,
+          budget,
           prefsAt: section.preferences?.at ?? null,
           snapshots: state.snapshots,
           events,
@@ -187,6 +224,7 @@ export function usePlan(i: UsePlanInput): UsePlan {
         blocked.current = true;
         commit({
           preferences: emptyPlanPreferences(),
+          budget,
           prefsAt: null,
           snapshots: [],
           events,
@@ -254,11 +292,13 @@ export function usePlan(i: UsePlanInput): UsePlan {
 
   const asOf = clockDay !== null && clockDay > i.asOf ? clockDay : i.asOf;
   const preferences = stored?.preferences ?? emptyPlanPreferences();
+  const budget = stored?.budget ?? NO_BUDGET;
   const anchors = useMemo(() => goalAnchorsOf(stored?.events ?? []), [stored?.events]);
   const profile = useMemo(() => planProfileOf(i.store, anchors), [i.store, anchors]);
   const assumptionOn = useMemo(() => getCashbackAssumptionEnabled(), []);
   const events = stored?.events;
   const planEvents = useMemo(() => (events ?? []).flatMap((e) => planEventOf(e) ?? []), [events]);
+  const statedCreditIds = i.store?.current.statedCards?.value;
   const heldCards = useMemo(
     () =>
       buildHeldCards({
@@ -267,8 +307,9 @@ export function usePlan(i: UsePlanInput): UsePlan {
         entries: i.catalogue,
         rewards: i.rewards,
         assumptionOn,
+        statedCreditIds,
       }),
-    [i.accounts, i.facts, i.catalogue, i.rewards, assumptionOn],
+    [i.accounts, i.facts, i.catalogue, i.rewards, assumptionOn, statedCreditIds],
   );
 
   const vatFrequency = useMemo(
@@ -289,11 +330,14 @@ export function usePlan(i: UsePlanInput): UsePlan {
       rates: i.rates,
       heldCards,
       preferences,
+      budgetPeriods: budget.periods,
+      categoryGroups: budget.groups,
       events: planEvents,
       mode: i.mode,
       fxHistory: i.fxHistory,
       movedCategories: MOVED,
       vatFrequency,
+      valuations: i.valuations,
       asOf: day,
     }),
     [
@@ -308,10 +352,12 @@ export function usePlan(i: UsePlanInput): UsePlan {
       i.rates,
       heldCards,
       preferences,
+      budget,
       planEvents,
       i.mode,
       i.fxHistory,
       vatFrequency,
+      i.valuations,
     ],
   );
   const result = useMemo(() => computePlan(inputAt(asOf)), [inputAt, asOf]);
@@ -365,6 +411,31 @@ export function usePlan(i: UsePlanInput): UsePlan {
     [run, planWrite],
   );
 
+  const setLimit = useCallback(
+    (category: string, cents: number | null) =>
+      run((s, at) => {
+        const limits = { ...s.preferences.categoryLimits };
+        if (cents === null) delete limits[category];
+        else limits[category] = { cents, at };
+        const periods = setBudgetLineAllocation(s.budget.periods, at, category, cents);
+        const next = {
+          ...s,
+          preferences: { ...s.preferences, categoryLimits: limits },
+          budget: { ...s.budget, periods: [...periods] },
+          prefsAt: at,
+        };
+        return {
+          next,
+          write: async () => {
+            await planWrite(next, at)();
+            if (storage.putBudgetPeriods !== undefined)
+              await storage.putBudgetPeriods([...periods]);
+          },
+        };
+      }, true),
+    [run, planWrite, storage],
+  );
+
   const appendPlanEvent = useCallback(
     (e: PlanEvent) =>
       run((s) => {
@@ -408,6 +479,7 @@ export function usePlan(i: UsePlanInput): UsePlan {
     writeError,
     recompute,
     setPreference,
+    setLimit,
     appendPlanEvent,
   };
 }

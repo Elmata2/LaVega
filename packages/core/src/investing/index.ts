@@ -7,10 +7,13 @@ export * from "./hash.js";
 export * from "./credentials.js";
 export * from "./portfolio.js";
 export * from "./allocation.js";
+export * from "./securities.js";
 export * from "./calendar.js";
 export * from "./dividend.js";
 export * from "./markers.js";
 export * from "./dashboard.js";
+export * from "./costBasis.js";
+export * from "./realized.js";
 export * from "./positions.js";
 export * from "./valuation.js";
 export * from "./benchmarks.js";
@@ -22,3 +25,8 @@ export * from "./personalNetWorth.js";
 export * from "./fundamentals.js";
 export * from "./portfolioBrief.js";
 export * from "./mentions.js";
+/* Price-series identity (issue #307). Exported under a distinct name because the
+ * security master already exports `instrumentKey` for its own (ISIN/MIC) key. */
+export { instrumentKey as priceInstrumentKey } from "./instrumentKey.js";
+export * from "./syncState.js";
+export * from "./cashFlowRules.js";

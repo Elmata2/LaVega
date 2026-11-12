@@ -40,27 +40,17 @@ import type { CategorySlice } from "./blocks/statistics.js";
  * arrives somewhere (charts.css, [data-open]).
  */
 
-/** Eight tokens, then grey. Chosen to stay distinguishable in both themes and to
- *  avoid green/red, which mean income and expense everywhere else in this app —
- *  a green slice in a spending chart would read as money coming in. */
-const SLICE_COLORS = [
-  "#4c6ef5",
-  "#7950f2",
-  "#e8590c",
-  "#0c8599",
-  "#f08c00",
-  "#c2255c",
-  "#2b8a3e",
-  "#495057",
-];
+/** Eight theme tokens (--slice-1..8 in tokens.css), then grey. Per theme so the
+ *  slices stay distinguishable on both dark and white panels. */
+const SLICE_COUNT = 8;
 
 export function sliceColor(i: number): string {
-  return SLICE_COLORS[i] ?? "#adb5bd";
+  return i < SLICE_COUNT ? `var(--slice-${i + 1})` : "var(--slice-rest)";
 }
 
-/** Alpha suffix for the arcs that are NOT being read. The ring sits on the card,
- *  so a translucent stop blends into the card's own colour. */
-const DIMMED = "33";
+/** The arcs that are NOT being read. The ring sits on the card, so a translucent
+ *  stop blends into the card's own colour. */
+const dimmed = (colour: string) => `color-mix(in srgb, ${colour} 20%, transparent)`;
 
 /** How much of the ring's radius the hole takes up — .spend-pie-hole is 108 of
  *  the 168px ring, so the hole ends at 64% of the radius. Kept slightly under
@@ -142,7 +132,7 @@ export default function SpendPie({
     const from = shown.slice(0, i).reduce((sum, slice) => sum + slice.share * 100, 0);
     const at = from + s.share * 100;
     const to = i === shown.length - 1 ? 100 : Math.round(at * 100) / 100;
-    const colour = reading === null || i === active ? sliceColor(i) : `${sliceColor(i)}${DIMMED}`;
+    const colour = reading === null || i === active ? sliceColor(i) : dimmed(sliceColor(i));
     return `${colour} ${Math.round(from * 100) / 100}% ${to}%`;
   });
 
@@ -203,7 +193,7 @@ export default function SpendPie({
             or a row is being read — what THAT slice cost and how much of the
             period it is. A bare euro amount in the middle of a ring would
             otherwise be read as the total it is sitting in. */}
-        <div className="spend-pie-hole w-[108px] h-[108px] [@media(max-width:560px)]:w-[86px] [@media(max-width:560px)]:h-[86px] rounded-full bg-white grid place-items-center content-center gap-px text-center leading-[1.15]">
+        <div className="spend-pie-hole w-[108px] h-[108px] [@media(max-width:560px)]:w-[86px] [@media(max-width:560px)]:h-[86px] rounded-full bg-surface grid place-items-center content-center gap-px text-center leading-[1.15]">
           {reading ? (
             <>
               <div className="spend-pie-slice font-mono text-[0.6rem] tracking-[0.03em] uppercase text-muted max-w-[92%] whitespace-normal [overflow-wrap:anywhere]">
@@ -241,7 +231,7 @@ export default function SpendPie({
                   impossible to hit on the ring itself. */}
               <button
                 type="button"
-                className="spend-pie-item grid grid-cols-[0.75rem_1fr_auto_2.6rem] items-center gap-2 w-full [padding:0.2rem_0.25rem] border-0 rounded-[6px] [background:none] [font:inherit] text-inherit text-left data-[filter=yes]:cursor-pointer hover:bg-[rgb(0_0_0/4%)] focus-visible:bg-[rgb(0_0_0/4%)] data-[active=on]:bg-[rgb(0_0_0/4%)] focus-visible:outline-2 focus-visible:outline-[var(--ink)] focus-visible:outline-offset-[-2px]"
+                className="spend-pie-item grid grid-cols-[0.75rem_1fr_auto_2.6rem] items-center gap-2 w-full [padding:0.2rem_0.25rem] border-0 rounded-[6px] [background:none] [font:inherit] text-inherit text-left data-[filter=yes]:cursor-pointer hover:bg-surface-2 focus-visible:bg-surface-2 data-[active=on]:bg-surface-2 focus-visible:outline-2 focus-visible:outline-[var(--ink)] focus-visible:outline-offset-[-2px]"
                 data-filter={filters ? "yes" : "no"}
                 data-active={active === i ? "on" : "off"}
                 onClick={filters ? () => onSelect?.(s.category) : undefined}

@@ -54,6 +54,14 @@ function ThesisEditor({ thesis, onSaved }: { thesis: Thesis; onSaved: (next: The
               From previous holding
             </span>
           )}
+          {thesis.reviewRequired && (
+            <span
+              className="ml-2 rounded-chip bg-warning/15 px-1.5 py-0.5 text-xs font-semibold text-warning"
+              title="Another broker spelling of this instrument has a different confirmed thesis. Resolve them by editing one."
+            >
+              Needs review
+            </span>
+          )}
         </p>
         {!editing && (
           <button
@@ -62,7 +70,7 @@ function ThesisEditor({ thesis, onSaved }: { thesis: Thesis; onSaved: (next: The
               setDraft(thesis);
               setEditing(true);
             }}
-            className="pressable text-xs font-semibold text-primary hover:underline"
+            className="pressable text-xs font-semibold text-accent hover:underline"
           >
             Edit
           </button>
@@ -138,7 +146,7 @@ function GoalEditor({ goal, onSaved }: { goal: Goal; onSaved: (next: Goal) => vo
               setText(goal.text);
               setEditing(true);
             }}
-            className="pressable text-xs font-semibold text-primary hover:underline"
+            className="pressable text-xs font-semibold text-accent hover:underline"
           >
             Edit
           </button>
@@ -224,7 +232,7 @@ export function AgentMemorySection() {
                     role="radio"
                     aria-checked={memory.riskTolerance === level}
                     onClick={() => void chooseRisk(level)}
-                    className={`pressable rounded-pill border px-3 py-1.5 text-sm font-semibold transition-colors ${memory.riskTolerance === level ? "border-primary bg-primary text-primary-foreground" : "border-border hover:bg-secondary"}`}
+                    className={`pressable rounded-pill border px-3 py-1.5 text-sm font-semibold transition-colors ${memory.riskTolerance === level ? "border-accent bg-accent text-accent-foreground" : "border-border hover:bg-secondary"}`}
                   >
                     {RISK_TOLERANCE_LABELS[level]}
                   </button>
@@ -300,7 +308,7 @@ export function AgentMemorySection() {
               <a
                 href="/api/memory/export"
                 download
-                className="font-semibold text-primary hover:underline"
+                className="font-semibold text-accent hover:underline"
               >
                 Export agent memory
               </a>

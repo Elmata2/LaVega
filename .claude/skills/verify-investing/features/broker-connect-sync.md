@@ -94,8 +94,10 @@ is a failure — the read model did not pick up the write.
 - Credential rows existing in the database does not mean a sync has landed. Never-synced
   is `history.<broker>.lastSyncedAt: null` on `/api/brokers/sync/status`.
   `investing.sync_state.state` is jsonb, not a numeric `0`.
-- `sync` without `--wait` returns as soon as the run is accepted. Progress lives at
-  `/api/brokers/sync/status`, and the UI polls it only while a sync is in flight.
+- `sync` without `--wait` returns as soon as the run is accepted. The CLI reads progress at
+  `/api/brokers/sync/status`; the web app no longer reads that route. It posts one
+  `POST /api/sync/refresh` intent and polls `GET /api/sync/state` every 2 s only while a run
+  is active, so a tab closed mid-run does not stop the server-owned work.
 - Trading 212 rate-limits hard. `waitUntil` in the progress payload is a real pause, not a
   hang; `--timeout` on `sync --wait` may need raising rather than the sync being retried.
 - `sync` and `unlock` are write commands. Run them against `--target prod` only when the user

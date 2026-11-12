@@ -1,6 +1,11 @@
 import type { Hono } from "hono";
 import { createPersonalNetWorthRepository } from "@lavega/database";
 import {
+  decodeProvenanceCitation,
+  provenanceCitationProblem,
+  type ProvenanceCitation,
+} from "@lavega/core";
+import {
   credentialsArePerTenant,
   requireRuntimeDatabase,
 } from "@lavega/investing-server/src/credentialStore.js";
@@ -52,7 +57,7 @@ function parseTotalCents(raw: unknown): number | null {
 export type NetWorthRouteDependencies = {
   tenantId: (request: Request) => Promise<string | null>;
   repository: (tenantId: string) => {
-    put(date: string, totalCents: number): Promise<void>;
+    put(date: string, totalCents: number, provenance?: Record<string, unknown>): Promise<void>;
     deleteAll(): Promise<void>;
   };
   /** Injectable so a test can fix "today" instead of racing the clock. */
@@ -74,8 +79,13 @@ export function registerNetWorthRoutes(app: Hono, dependencies: NetWorthRouteDep
     const tenantId = await dependencies.tenantId(c.req.raw);
     if (!tenantId) return c.json({ problems: ["Authentication is required"] }, 401);
 
-    const body: { date?: unknown; totalCents?: unknown; currency?: unknown } = await c.req
-      .json<{ date?: unknown; totalCents?: unknown; currency?: unknown }>()
+    const body: {
+      date?: unknown;
+      totalCents?: unknown;
+      currency?: unknown;
+      provenance?: unknown;
+    } = await c.req
+      .json<{ date?: unknown; totalCents?: unknown; currency?: unknown; provenance?: unknown }>()
       .catch(() => ({}));
 
     const date = parseIsoDate(body.date);
@@ -89,7 +99,20 @@ export function registerNetWorthRoutes(app: Hono, dependencies: NetWorthRouteDep
     if (totalCents === null)
       return c.json({ problems: ["totalCents must be a bounded integer"] }, 400);
 
-    await dependencies.repository(tenantId).put(date, totalCents);
+    /* The browser share flow cites nothing (the owner is looking at their own
+     * number), so provenance is OPTIONAL here. When it IS sent it must be the
+     * structured citation — a malformed one is refused, never stored as prose.
+     * The agent path (MCP `record_valuation`) makes it mandatory instead. */
+    let provenance: ProvenanceCitation | undefined;
+    if (body.provenance !== undefined) {
+      const problem = provenanceCitationProblem(body.provenance);
+      if (problem) return c.json({ problems: [problem.hint], error: problem.error }, 400);
+      provenance = decodeProvenanceCitation(body.provenance);
+    }
+
+    await dependencies
+      .repository(tenantId)
+      .put(date, totalCents, provenance === undefined ? undefined : { ...provenance });
     return c.json({ stored: true });
   });
 

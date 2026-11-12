@@ -10,6 +10,7 @@ import type {
   ConversionMode,
   FxRate,
   Invoice,
+  ProfileSummary,
   RewardsBalance,
   Rule,
   ScheduledFlow,
@@ -21,8 +22,12 @@ import {
   computeAlerts,
   detectSubscriptions,
   forecastCashflow,
+  isRuleV2,
   ownAccounts,
   resolveAccountRate,
+  ruleCategoryValue,
+  ruleTextValue,
+  sanitizeProfileSummary,
   scrubPersonalValuesDeep,
 } from "@lavega/core";
 
@@ -68,6 +73,8 @@ export type TabState = {
    *  what an all-EUR scope already computed before conversion existed. */
   fxHistory?: Record<string, Record<string, number>>;
   mode?: ConversionMode;
+  /** Enum-only profile answers (`profileSummaryOf`); sent on every tab. */
+  profileSummary?: ProfileSummary;
 };
 
 /** Cap for any array leaving the browser as context — keeps a tab's slice
@@ -111,7 +118,10 @@ export function buildTabContext(
   state: TabState,
 ): { tab: string; context: Record<string, unknown> } {
   const { tab, context } = buildTabSlice(view, state);
-  return { tab, context: scrubPersonalValuesDeep(context) };
+  const withProfile = state.profileSummary
+    ? { ...context, profile: sanitizeProfileSummary(state.profileSummary) }
+    : context;
+  return { tab, context: scrubPersonalValuesDeep(withProfile) };
 }
 
 function buildTabSlice(
@@ -185,8 +195,15 @@ function buildTabSlice(
 
     case "regels": {
       const rules = (state.rules ?? []) as Rule[];
+      /* A Rule is a legacy row OR the v2 AST, so the chat context reads the
+       * meaning through the core accessors instead of the union's fields: a v2
+       * rule has no `match`/`category` of its own. The shape sent to the agent
+       * stays `{match, category}` so the prompt contract does not drift. */
       const context = {
-        rules: rules.slice(0, MAX_ITEMS).map((r) => ({ match: r.match, category: r.category })),
+        rules: rules.slice(0, MAX_ITEMS).map((r) => ({
+          match: ruleTextValue(r) ?? (isRuleV2(r) ? r.name : undefined) ?? "",
+          category: ruleCategoryValue(r) ?? "",
+        })),
       };
       return { tab, context };
     }

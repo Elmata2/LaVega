@@ -2,6 +2,7 @@ import { describe, expect, test } from "vitest";
 import { mkAccount, mkTx } from "../advisor/testkit.js";
 import { MIN_HISTORY_PERIODS } from "../spendPercentile.js";
 import { buildFactSheet } from "./factsheet.js";
+import { budgetPeriodFromLimits } from "../budget.js";
 import { emptyPlanPreferences } from "./preferences.js";
 import { SPENDING_CALC_IDS, computeSpending, spendHistory } from "./spending.js";
 import { AS_OF, planInput } from "./testkit.js";
@@ -40,7 +41,10 @@ const hist = (txs: Tx[], over = {}) => {
 
 describe("spendHistory", () => {
   test("full months only, newest unbroken run, asOf's own month dropped", () => {
-    const txs = [...history([100, 100, 100]), mkTx("Shop", "2026-10-03", -50, { category: "Boodschappen" })];
+    const txs = [
+      ...history([100, 100, 100]),
+      mkTx("Shop", "2026-10-03", -50, { category: "Boodschappen" }),
+    ];
     const h = hist(txs);
     expect(h.months).toEqual(["2026-07", "2026-08", "2026-09"]);
     expect(h.byCategory.get("Boodschappen")!.get("2026-09")).toBe(10_000);
@@ -107,7 +111,10 @@ describe("spendHistory", () => {
   test("accountKeys filters to those accounts; windowMonths keeps the newest", () => {
     const a1 = ACC();
     const a2 = mkAccount("C2", { balance: 0, balanceDate: "2026-10-20" });
-    const txs = [...history([100, 100, 100, 100]), ...history([500, 500, 500, 500], "Reizen", "C2")];
+    const txs = [
+      ...history([100, 100, 100, 100]),
+      ...history([500, 500, 500, 500], "Reizen", "C2"),
+    ];
     const base = {
       txs,
       accounts: [a1, a2],
@@ -279,9 +286,15 @@ describe("computeSpending", () => {
   test("fact ids: category names are hashed and the whole set passes buildFactSheet", () => {
     const prefs = emptyPlanPreferences();
     (prefs.categoryLimits as Mut)["Boodschappen & Zo"] = { cents: 20_000, at: "2026-10-01" };
-    const r = run(history([100, 200, 300, 400, 500, 600, 700].map((x) => x * 100), "Boodschappen & Zo"), {
-      preferences: prefs,
-    });
+    const r = run(
+      history(
+        [100, 200, 300, 400, 500, 600, 700].map((x) => x * 100),
+        "Boodschappen & Zo",
+      ),
+      {
+        preferences: prefs,
+      },
+    );
     expect(r.facts.length).toBeGreaterThanOrEqual(4);
     expect(r.facts.some((f) => /boodschappen|zo/i.test(f.factId))).toBe(false);
     expect(() => buildFactSheet(r.facts, { locale: "nl", asOf: AS_OF })).not.toThrow();
@@ -298,3 +311,118 @@ describe("computeSpending", () => {
 });
 
 type Mut = Record<string, { cents: number; at: string }>;
+
+describe("budget envelopes in the spending section", () => {
+  type MutPrefs = { categoryLimits: Record<string, { cents: number; at: string }> };
+
+  test("legacy limits become the first envelope and the existing totals do not move", () => {
+    const prefs = emptyPlanPreferences();
+    (prefs.categoryLimits as unknown as MutPrefs["categoryLimits"])["Boodschappen"] = {
+      cents: 40_000,
+      at: "2026-10-02",
+    };
+    const txs = history([100, 200, 300, 400, 500, 600, 700].map((x) => x * 100));
+    const legacy = run(txs, { preferences: prefs });
+    const stored = run(txs, {
+      preferences: prefs,
+      budgetPeriods: [budgetPeriodFromLimits(prefs.categoryLimits)!],
+    });
+    // Reading the stored lines instead of the legacy limits is the same plan:
+    // no existing total, row or status moves because a budget exists.
+    expect(stored.flat).toEqual(legacy.flat);
+    expect(stored.status).toBe(legacy.status);
+    expect(stored.statusReason).toEqual(legacy.statusReason);
+    expect(stored.figures.rows).toEqual(legacy.figures.rows);
+    expect(stored.figures.budget).toEqual(legacy.figures.budget);
+    const b = stored.figures.budget!;
+    expect(b.month).toBe("2026-10");
+    expect(b.budgetedSpendingCents).toBe(40_000);
+    expect(b.allocatedCents).toBe(40_000);
+    expect(b.availableToAllocateCents).toBe(0);
+    expect(b.topLevel.map((l) => l.category)).toEqual(["Boodschappen"]);
+    expect(b.billsReservedCents).toBeNull();
+  });
+
+  test("a stored chain reads the current month with the surplus carried in", () => {
+    const prefs = emptyPlanPreferences();
+    const periods = [
+      {
+        month: "2026-09",
+        currency: "EUR",
+        budgetedSpendingCents: 30_000,
+        rollover: true,
+        billsReservedCents: null,
+        lines: [{ category: "Boodschappen", allocationCents: 30_000, rollover: true }],
+      },
+      {
+        month: "2026-10",
+        currency: "EUR",
+        budgetedSpendingCents: 30_000,
+        rollover: true,
+        billsReservedCents: null,
+        lines: [{ category: "Boodschappen", allocationCents: 30_000, rollover: true }],
+      },
+    ];
+    // 2026-09 spend is 70_000? keep it under the allocation so September carries.
+    const txs = [
+      ...history([100, 100, 100, 100, 100, 100, 100]),
+      mkTx("Shop", "2026-10-09", -120, { category: "Boodschappen" }),
+    ];
+    const r = run(txs, { preferences: prefs, budgetPeriods: periods });
+    const b = r.figures.budget!;
+    expect(b.month).toBe("2026-10");
+    // September: 10_000 spent of 30_000 -> 20_000 carried into October.
+    expect(b.carryInCents).toBe(20_000);
+    expect(b.topLevel[0]!.availableCents).toBe(50_000);
+    expect(b.topLevel[0]!.actualCents).toBe(12_000);
+    expect(b.topLevel[0]!.remainingCents).toBe(38_000);
+    expect(b.topLevel[0]!.carryOutCents).toBe(38_000);
+  });
+
+  test("grouped children roll up once; an ungrouped category stays top-level", () => {
+    const prefs = emptyPlanPreferences();
+    const txs = [
+      ...history([100, 100, 100, 100, 100, 100, 100], "Boodschappen"),
+      mkTx("Train", "2026-10-05", -50, { category: "Vervoer" }),
+    ];
+    const r = run(txs, {
+      preferences: prefs,
+      budgetPeriods: [
+        {
+          month: "2026-10",
+          currency: "EUR",
+          budgetedSpendingCents: 40_000,
+          rollover: true,
+          billsReservedCents: null,
+          lines: [
+            { category: "Boodschappen", allocationCents: 25_000 },
+            { category: "Vervoer", allocationCents: 15_000 },
+          ],
+        },
+      ],
+      categoryGroups: [{ name: "Huishouden", categories: ["Boodschappen"] }],
+    });
+    const b = r.figures.budget!;
+    expect(b.groups.map((g) => g.name)).toEqual(["Huishouden"]);
+    expect(b.topLevel.map((l) => l.category)).toEqual(["Vervoer"]);
+    expect(b.groups[0]!.allocationCents).toBe(25_000);
+    expect(b.allocatedCents).toBe(40_000);
+    // The child carry and the top-level carry are disjoint.
+    expect(b.groups[0]!.carryOutCents + b.topLevel.reduce((s, l) => s + l.carryOutCents, 0)).toBe(
+      25_000 + (15_000 - 5_000),
+    );
+  });
+
+  test("stale history shows no budget rather than a partial number", () => {
+    const prefs = emptyPlanPreferences();
+    (prefs.categoryLimits as unknown as MutPrefs["categoryLimits"])["Boodschappen"] = {
+      cents: 40_000,
+      at: "2026-10-02",
+    };
+    const stale = mkAccount("A1", { balance: 0, balanceDate: "2026-09-10" });
+    const txs = history([100, 100, 100, 100, 100, 100, 100]);
+    const r = computeSpending(planInput({ accounts: [stale], txs, preferences: prefs }));
+    expect(r.status).toBe("not-enough-data");
+    expect(r.figures.budget).toBeNull();
+  });
+});

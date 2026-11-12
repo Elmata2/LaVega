@@ -248,6 +248,11 @@ function rekProps(): RekProps {
     onDeleteAccount: noop,
     duplicateGroups: [],
     onMergeDuplicates: noop,
+    valuations: [],
+    asOf: "2026-11-11",
+    onOpeningCommit: noop,
+    onValuationCommit: noop,
+    onValuationRemove: noop,
   };
 }
 
@@ -707,4 +712,58 @@ test("without a fetch moment the linked-on wording is unchanged", () => {
   if (age.kind !== "undated") throw new Error("onbereikbaar");
   expect(age.fetchedAt).toBeNull();
   expect(saldoAgeShort(age, "nl")).toBe(moneyCopy.nl.rekeningen.datumOnbekend);
+});
+
+/* ── Punten prefill uit de opgegeven programma's ───────────────────────── */
+
+test("stated Flying Blue shows an empty row", () => {
+  mount(<Punten {...puntenProps([])} statedPrograms={["Flying Blue"]} />);
+  const cards = container!.querySelectorAll("[data-testid=punt-stated]");
+  expect(cards).toHaveLength(1);
+  expect(cards[0].textContent).toContain("Flying Blue");
+  expect(cards[0].textContent).toContain("Vul je saldo in");
+  expect(cards[0].querySelector<HTMLInputElement>("input")!.value).toBe("");
+  // Nothing invented: no balance card, no zero.
+  expect(container!.querySelectorAll("[data-testid=punt-card]")).toHaveLength(0);
+});
+
+test("stated programme with a balance is not duplicated", () => {
+  const fb = makeRewardsBalance({ program: "Flying Blue", points: 5000, updatedAt: "2026-08-01" });
+  mount(<Punten {...puntenProps([fb])} statedPrograms={["flying  blue"]} />);
+  expect(container!.querySelectorAll("[data-testid=punt-stated]")).toHaveLength(0);
+  expect(container!.querySelectorAll("[data-testid=punt-card]")).toHaveLength(1);
+});
+
+test("entering a balance saves through the normal path", () => {
+  const saved: RewardsBalance[][] = [];
+  mount(
+    <Punten
+      {...puntenProps([])}
+      onSave={(next) => saved.push(next)}
+      statedPrograms={["Flying Blue"]}
+    />,
+  );
+  const card = container!.querySelector<HTMLElement>("[data-testid=punt-stated]")!;
+  type(card.querySelector<HTMLInputElement>("input")!, "12500");
+  click(card.querySelector<HTMLButtonElement>("button")!);
+  expect(saved).toHaveLength(1);
+  expect(saved[0]).toHaveLength(1);
+  expect(saved[0][0]).toMatchObject({ program: "Flying Blue", points: 12500, updatedAt: ASOF });
+});
+
+test("saving an empty stated row shows the error and does not save", () => {
+  const saved: RewardsBalance[][] = [];
+  mount(
+    <Punten
+      {...puntenProps([])}
+      onSave={(next) => saved.push(next)}
+      statedPrograms={["Flying Blue"]}
+    />,
+  );
+  const card = container!.querySelector<HTMLElement>("[data-testid=punt-stated]")!;
+  const btn = card.querySelector<HTMLButtonElement>("button")!;
+  expect(btn.getAttribute("aria-label")).toContain("Flying Blue");
+  click(btn);
+  expect(saved).toHaveLength(0);
+  expect(card.querySelector("[data-testid=punt-error]")!.textContent).toBeTruthy();
 });

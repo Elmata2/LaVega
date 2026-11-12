@@ -1,10 +1,10 @@
 @import "tailwindcss";
 
 @theme {
-  --radius-lg: var(--radius);
-  --radius-card: var(--radius-card);
-  --radius-frame: var(--radius-frame);
-  --radius-pill: var(--radius-pill);
+  --radius-lg: 20px;
+  --radius-card: 20px;
+  --radius-frame: 32px;
+  --radius-pill: 999px;
   --radius-tile: 14px;
   --radius-chip: 10px;
 
@@ -42,32 +42,15 @@
   --color-chart-amber: hsl(var(--chart-amber));
   --color-chart-coral: hsl(var(--chart-coral));
 
-  --shadow-md: var(--shadow-soft);
+  --shadow-sm: none;
+  --shadow-md: none;
+  /* Only floating layers (menus, popovers, tooltips) lift. */
   --shadow-xl: var(--shadow-float);
 
-  --tracking-eyebrow: 0.16em;
   --text-2xs: 11px;
 
-  --font-display: var(--font-display);
-  --font-sans: var(--font-body);
-}
-
-/*
-  The default border color has changed to `currentcolor` in Tailwind CSS v4,
-  so we've added these compatibility styles to make sure everything still
-  looks the same as it did with Tailwind CSS v3.
-
-  If we ever want to remove these styles, we need to add an explicit border
-  color utility to any element that depends on these defaults.
-*/
-@layer base {
-  *,
-  ::after,
-  ::before,
-  ::backdrop,
-  ::file-selector-button {
-    border-color: var(--color-gray-200, currentcolor);
-  }
+  --font-display: "Instrument Serif", "Instrument Serif Fallback", Georgia, serif;
+  --font-sans: "Geist", "Geist Fallback", system-ui, -apple-system, "Segoe UI", sans-serif;
 }
 
 @utility pressable {
@@ -89,6 +72,26 @@
   animation: mention-menu-in 120ms ease-out;
 }
 
+/* Edge fade on a sideways-scrolling strip; JS sets data-fade when content
+ * overflows that side. */
+@utility scroll-fade-x {
+  &[data-fade="end"] {
+    mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
+  }
+  &[data-fade="start"] {
+    mask-image: linear-gradient(to left, #000 calc(100% - 28px), transparent);
+  }
+  &[data-fade="both"] {
+    mask-image: linear-gradient(
+      to right,
+      transparent,
+      #000 28px,
+      #000 calc(100% - 28px),
+      transparent
+    );
+  }
+}
+
 @utility net-worth-hatch {
   background: repeating-linear-gradient(
     135deg,
@@ -97,44 +100,127 @@
   );
 }
 
+/* Same two families as apps/web and apps/site. Instrument Serif is display
+ * only: one drawn weight, no tabular figures, so it is opted into with the
+ * `font-display` class at text-3xl (30px) and up and never carries a number.
+ * Geist (variable, real `tnum`) is everything else, headings below 30px
+ * included. Relative url() so Vite fingerprints and bundles the files. Font
+ * files and their OFL licenses live in src/assets/fonts/. */
+@font-face {
+  font-family: "Instrument Serif";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("../assets/fonts/instrument-serif-latin-400-normal.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Instrument Serif";
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+  src: url("../assets/fonts/instrument-serif-latin-400-italic.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Geist";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("../assets/fonts/geist-latin-wght-normal.woff2") format("woff2-variations");
+}
+@font-face {
+  font-family: "Geist";
+  font-style: italic;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("../assets/fonts/geist-latin-wght-italic.woff2") format("woff2-variations");
+}
+@font-face {
+  font-family: "Instrument Serif Fallback";
+  src: local("Times New Roman"), local("TimesNewRomanPSMT");
+  size-adjust: 92%;
+  ascent-override: 107%;
+  descent-override: 34%;
+  line-gap-override: 0%;
+}
+@font-face {
+  font-family: "Geist Fallback";
+  src: local("Arial"), local("ArialMT");
+  size-adjust: 104%;
+  ascent-override: 97%;
+  descent-override: 28%;
+  line-gap-override: 0%;
+}
+
+/* "Midnight": the lavega.dev palette (apps/web/src/styles/tokens.css) as HSL
+ * triplets, so `bg-primary/10` style alpha modifiers keep working. Hex source
+ * of each value in the trailing comment. */
 @layer base {
   :root {
-    --background: 40 27% 97%;
-    --foreground: 60 7% 10%;
-    --card: 0 0% 100%;
+    color-scheme: dark;
+    --background: 202.5 66.7% 2.4%; /* #02070a */
+    --foreground: 0 0% 100%; /* #ffffff */
+    --card: 202.5 38.1% 8.2%; /* #0d171d surface */
+    --card-foreground: 0 0% 100%;
+    --popover: 202.5 38.1% 8.2%; /* #0d171d */
+    --popover-foreground: 0 0% 100%;
+    --primary: 13 96.7% 64.5%; /* #fc734d coral, the CTA */
+    --primary-foreground: 202.5 66.7% 2.4%; /* #02070a */
+    --secondary: 204 31.2% 12.5%; /* #16222a surface-2 */
+    --secondary-foreground: 0 0% 100%;
+    --muted: 204 31.2% 12.5%; /* #16222a */
+    --muted-foreground: 203.3 11.7% 69.8%; /* #a9b4bb */
+    --accent: 199.4 98.2% 43.9%; /* #0297de blue: links, active, focus */
+    --accent-foreground: 202.5 66.7% 2.4%; /* #02070a */
+    --border: 0 0% 100% / 0.12; /* white at 12% hairline */
+    --input: 0 0% 100% / 0.12;
+    --ring: 199.4 98.2% 43.9%; /* #0297de */
+    --pos: 143.8 56.9% 60%; /* #5fd38d */
+    --neg: 0 100% 78%; /* #ff8f8f */
+    --positive: var(--pos);
+    --negative: var(--neg);
+    --warning: 39.2 86.5% 62.2%; /* #f2b84b */
+    --chart-blue: 202.1 84.5% 62.2%; /* #4db4f0 */
+    --chart-purple: 248.4 100% 80.4%; /* #a99bff */
+    --chart-teal: 172.2 58.6% 56.5%; /* #4fd1c0 */
+    --chart-amber: 40.1 100% 63.9%; /* #ffc247 */
+    --chart-coral: 337 100% 74.9%; /* #ff7fb0 pink; never the CTA hue */
+    --scrim: rgba(2, 7, 10, 0.72);
+    --shadow-float: 0 24px 48px -16px rgba(0, 0, 0, 0.7), 0 4px 12px -4px rgba(0, 0, 0, 0.5);
+  }
+
+  /* Light "warm paper": same roles, same hue order, only color changes.
+   * Selected segmented pill and switch knob use bg-foreground / text-background,
+   * which flip on their own (white pill on dark, ink pill on paper).
+   * Proved by scripts/check-contrast.mjs. */
+  :root[data-theme="light"] {
+    color-scheme: light;
+    --background: 40 27% 97%; /* warm paper */
+    --foreground: 60 7% 10%; /* ink */
+    --card: 40 20% 95%;
     --card-foreground: 60 7% 10%;
-    --popover: 0 0% 100%;
+    --popover: 40 20% 95%;
     --popover-foreground: 60 7% 10%;
-    --primary: 202 55% 27%;
-    --primary-foreground: 40 27% 97%;
-    --secondary: 40 20% 93%;
+    --primary: 13 96.7% 64.5%; /* #fc734d coral, unchanged */
+    --primary-foreground: 202.5 66.7% 2.4%; /* #02070a */
+    --secondary: 40 20% 93%; /* linen */
     --secondary-foreground: 60 7% 10%;
     --muted: 40 20% 93%;
     --muted-foreground: 48 5% 41%;
-    --accent: 202 55% 27%;
+    --accent: 201 98% 33%; /* #0270a8 blue: links, active, focus */
     --accent-foreground: 40 27% 97%;
-    --border: 40 17% 88%;
-    --input: 40 17% 88%;
-    --ring: 202 55% 27%;
-    --pos: 101 35% 35%;
-    --neg: 11 59% 44%;
-    --positive: var(--pos);
-    --negative: var(--neg);
-    --warning: 39 71% 41%;
-    --chart-blue: 211 47% 44%;
-    --chart-purple: 249 42% 59%;
-    --chart-teal: 174 51% 37%;
-    --chart-amber: 39 71% 48%;
-    --chart-coral: 11 59% 55%;
-    --radius: 18px;
-    --radius-card: 22px;
-    --radius-frame: 26px;
-    --radius-pill: 999px;
-    --shadow-soft: 0 1px 2px rgba(26, 26, 23, 0.04), 0 18px 40px -28px rgba(26, 26, 23, 0.16);
-    --shadow-float:
-      0 32px 64px -28px rgba(26, 26, 23, 0.3), 0 6px 16px -10px rgba(26, 26, 23, 0.12);
-    --font-display: "EB Garamond", Georgia, serif;
-    --font-body: "Inter", system-ui, sans-serif;
+    --border: 40 12% 82%;
+    --input: 40 12% 82%;
+    --ring: 201 98% 33%;
+    --pos: 101 38% 30%;
+    --neg: 355 60% 42%; /* crimson: stays apart from the coral CTA */
+    --warning: 39 85% 28%;
+    --chart-blue: 205 75% 38%;
+    --chart-purple: 250 45% 50%;
+    --chart-teal: 174 70% 30%;
+    --chart-amber: 38 90% 38%;
+    --chart-coral: 335 60% 48%; /* pink; never the CTA hue */
+    --scrim: rgba(26, 26, 23, 0.4);
+    --shadow-float: 0 1px 2px rgba(26, 26, 23, 0.06), 0 18px 40px -16px rgba(26, 26, 23, 0.28);
   }
 
   * {
@@ -142,14 +228,53 @@
   }
   body {
     @apply bg-background text-foreground antialiased;
-    font-family: var(--font-body);
+    font-family: var(--font-sans);
+    font-variant-numeric: tabular-nums;
+  }
+  /* Headings default to Geist, where weight carries rank. The serif is an
+   * opt-in (`font-display`) for large titles only; see the rule below. */
+  h1,
+  h2,
+  h3,
+  h4 {
+    font-family: var(--font-sans);
+    font-weight: 600;
   }
   :focus-visible {
     @apply outline-hidden ring-2 ring-ring ring-offset-2 ring-offset-background;
   }
 }
 
+/*
+  Display serif. Instrument Serif has one drawn weight, so `font-synthesis:
+  none` stops a stray `font-semibold` turning it into a faux-bold smear, and
+  the weight is pinned to 400. It is already condensed: Tailwind's text-3xl+
+  line-height 1 and tracking-tight squeeze it until it reads cropped, so this
+  rule resets both. Unlayered on purpose: it must beat every text-* /
+  leading-* / tracking-* / font-* utility on serif text.
+*/
+.font-display {
+  font-weight: 400;
+  font-synthesis: none;
+  line-height: 1.12;
+  letter-spacing: 0;
+  padding-block: 0.04em;
+}
+
+@keyframes auth-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+.auth-fade {
+  animation: auth-fade-in 180ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
 @media (prefers-reduced-motion: reduce) {
+  .auth-fade {
+    animation: none;
+  }
   .axis-label,
   .pressable {
     transition: none;

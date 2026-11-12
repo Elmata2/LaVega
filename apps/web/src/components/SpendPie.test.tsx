@@ -123,9 +123,9 @@ test("the arc answers where it is pointed, and the rest of the ring steps back",
   expect(hole?.textContent).toContain("€450");
   // The slice being read is the only one at full strength; dimming the others is
   // what connects the number in the hole to one arc rather than to the ring.
-  // (jsdom normalises the hex stops to rgb()/rgba(); the alpha is the dimming.)
-  expect(ring?.style.background).toContain("rgb(76, 110, 245) 0% 50%");
-  expect(ring?.style.background).toContain("rgba(121, 80, 242, 0.2)");
+  // Slice colours are theme tokens; the 20% mix is the dimming.
+  expect(ring?.style.background).toContain("var(--slice-1) 0% 50%");
+  expect(ring?.style.background).toContain("color-mix(in srgb, var(--slice-2) 20%, transparent)");
   expect(ring?.getAttribute("data-active")).toBe("0");
 
   // Six o'clock is 180°, the second slice (180–288°).

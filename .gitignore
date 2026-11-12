@@ -15,10 +15,21 @@ state.json
 !.env.example
 !**/.env.example
 .DS_Store
+# Finder / iCloud conflict copies ("agentRun 2.ts", "NOTICE 2"). Never tracked.
+* 2.*
+* 2
+* 3.*
+* 3
 .superpowers/
 .worktrees/
 .gstack/
 .lavega/
+# Phase 0 scrub rules (plan §2.6): local artifacts derived from the real vault
+# never enter the repo. Listed explicitly so narrowing the catch-all above cannot
+# leak a scrubbed export, the pinned Sure reference clone, or baseline aggregates.
+.lavega/scrub/
+.lavega/reference/
+.lavega/baselines/
 
 # Local Claude state stays out of the repo; the verification skills in
 # .claude/skills are checked in, because every agent working here needs them.
@@ -31,3 +42,8 @@ state.json
 # store from an older install is still ignored.
 .pnpm-store/
 .env.local
+# Vercel CLI global config when ~/Library is not writable (see .claude/skills/verify-investing)
+.vercel-cli/
+apps/site/dist
+apps/site/dist-preview
+apps/web/dist-ssr

@@ -8,8 +8,6 @@ import type { Locale } from "../locale.js";
 
 (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
-vi.mock("./CardSpiral", () => ({ default: () => null }));
-
 vi.mock("../authClient.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../authClient.js")>();
   return { ...actual, useAuthState: vi.fn() };
@@ -46,8 +44,8 @@ function dialog(el: HTMLElement): HTMLDialogElement {
 }
 
 test.each([
-  ["nl", "Account aanmaken"],
-  ["en", "Create account"],
+  ["nl", "Vraag vroege toegang aan"],
+  ["en", "Get early access"],
 ] as const)("%s: every account CTA opens the dialog on the sign-up view", (locale, label) => {
   const el = render(locale);
   const ctas = [...el.querySelectorAll("button, a")].filter(
@@ -67,7 +65,7 @@ test.each([
 test("the dialog toggles between sign-up and sign-in", () => {
   const el = render("nl");
   const cta = [...el.querySelectorAll("button")].find(
-    (b) => !dialog(el).contains(b) && b.textContent?.trim().startsWith("Account aanmaken"),
+    (b) => !dialog(el).contains(b) && b.textContent?.trim().startsWith("Vraag vroege toegang aan"),
   );
   act(() => click(cta));
   act(() => click(dialog(el).querySelector("[data-testid='auth-toggle']")));
@@ -80,11 +78,11 @@ test("the dialog toggles between sign-up and sign-in", () => {
 test("header Inloggen on the open sign-up view switches to sign-in and stays open", () => {
   const el = render("nl");
   const cta = [...el.querySelectorAll("button")].find(
-    (b) => !dialog(el).contains(b) && b.textContent?.trim().startsWith("Account aanmaken"),
+    (b) => !dialog(el).contains(b) && b.textContent?.trim().startsWith("Vraag vroege toegang aan"),
   );
   act(() => click(cta));
   expect(dialog(el).querySelector("#signup-consent")).not.toBeNull();
-  const login = [...el.querySelectorAll("header button")].find(
+  const login = [...el.querySelectorAll("nav .login")].find(
     (b) => b.textContent?.trim() === "Inloggen",
   );
   act(() => click(login));

@@ -35,7 +35,11 @@ function cap(raw: string | undefined, fallback: number): number {
   return Number.isFinite(value) && value >= 0 ? value : fallback;
 }
 
-export async function checkSystemOneBudget(userId = "unscoped"): Promise<SystemOneBudget> {
+export async function checkSystemOneBudget(
+  userId = "unscoped",
+  /** The route's own worst-case ceiling; defaults to the shared one. */
+  worstCaseCents = WORST_CASE_CENTS,
+): Promise<SystemOneBudget> {
   const { day, month } = parts();
   const database = databaseSource();
   const spent = database
@@ -44,9 +48,9 @@ export async function checkSystemOneBudget(userId = "unscoped"): Promise<SystemO
         dayCents: memory.get(`day:${userId}:${day}`) ?? 0,
         monthCents: memory.get(`month:${userId}:${month}`) ?? 0,
       };
-  if (spent.dayCents + WORST_CASE_CENTS >= cap(process.env.AI_DAILY_BUDGET_CENTS, 400))
+  if (spent.dayCents + worstCaseCents >= cap(process.env.AI_DAILY_BUDGET_CENTS, 400))
     return { ok: false, scope: "day" };
-  if (spent.monthCents + WORST_CASE_CENTS >= cap(process.env.AI_MONTHLY_BUDGET_CENTS, 2000))
+  if (spent.monthCents + worstCaseCents >= cap(process.env.AI_MONTHLY_BUDGET_CENTS, 2000))
     return { ok: false, scope: "month" };
   return { ok: true };
 }

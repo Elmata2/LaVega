@@ -77,6 +77,7 @@ export type AboutYouCopy = {
     euros: string;
     months: string;
     childYears: string;
+    birthYear: string;
     childYearsHint: string;
     worries: string;
     low: string;
@@ -126,11 +127,18 @@ export type IntakeCopy = {
       resume: string;
       resumed: string;
       riskDue: string;
+      newQuestions: { title: string; count: (n: number) => string };
+      round2: { title: string; count: (n: number) => string };
     };
     room: {
       title: string;
       open: string;
       importLink: string;
+    };
+    connect: {
+      title: string;
+      line: (bank: string) => string;
+      link: string;
     };
   };
   block3: {
@@ -199,11 +207,24 @@ export const intakeCopy: Record<Locale, IntakeCopy> = {
         resumed: "Je bent gestart; ga verder waar je bleef.",
         riskDue:
           "Het is tijd om je antwoorden over risico nog eens langs te lopen; je andere antwoorden blijven staan.",
+        newQuestions: {
+          title: "Een paar nieuwe vragen",
+          count: (n) => `${n} ${n === 1 ? "vraag" : "vragen"}, ongeveer een minuut`,
+        },
+        round2: {
+          title: "Nog een paar vragen",
+          count: (n) => `${n} ${n === 1 ? "vraag" : "vragen"} zodat LaVega je kan coachen`,
+        },
       },
       room: {
         title: "Je ruimte per maand",
         open: "Pas je antwoorden aan",
         importLink: "Naar importeren en koppelen",
+      },
+      connect: {
+        title: "Koppel voor het complete beeld",
+        line: (bank) => `${bank} is nog niet gekoppeld`,
+        link: "Koppelen",
       },
     },
     block3: {
@@ -320,6 +341,19 @@ export const intakeCopy: Record<Locale, IntakeCopy> = {
         statedCards: "Creditcards",
         statedDebitCards: "Betaalpassen",
         cardBalances: "Saldo creditcards",
+        birthYear: "Geboortejaar",
+        incomeRegularity: "Vast of wisselend inkomen",
+        statedBanks: "Banken",
+        cardRepayment: "Creditcard aflossen",
+        spendMix: "Grootste uitgaven",
+        foreignSpend: "Buitenland en valuta",
+        priorities: "Waar LaVega mee helpt",
+        cutTargets: "Minder uitgeven aan",
+        checkInCadence: "Hoe vaak LaVega je bijpraat",
+        confidence: "Overzicht",
+        statedPrograms: "Puntenprogramma's",
+        pointsGoal: "Doel van je punten",
+        flightsPerYear: "Vluchten per jaar",
       },
       edit: "Wijzig",
       remove: "Verwijder",
@@ -374,6 +408,7 @@ export const intakeCopy: Record<Locale, IntakeCopy> = {
         euros: "Bedrag in euro",
         months: "Aantal maanden",
         childYears: "Geboortejaren",
+        birthYear: "Geboortejaar",
         childYearsHint: "Gescheiden door komma's, bijvoorbeeld 2015, 2018",
         worries: "Wat je bezighoudt",
         low: "Van (euro)",
@@ -439,11 +474,24 @@ export const intakeCopy: Record<Locale, IntakeCopy> = {
         resumed: "You have started; pick up where you stopped.",
         riskDue:
           "It is time to look at your answers about risk again; your other answers stay as they are.",
+        newQuestions: {
+          title: "A few new questions",
+          count: (n) => `${n} ${n === 1 ? "question" : "questions"}, about a minute`,
+        },
+        round2: {
+          title: "A few more questions",
+          count: (n) => `${n} ${n === 1 ? "question" : "questions"} so LaVega can coach you`,
+        },
       },
       room: {
         title: "Your room each month",
         open: "Change your answers",
         importLink: "Go to import and linking",
+      },
+      connect: {
+        title: "Connect for the full picture",
+        line: (bank) => `${bank} is not connected yet`,
+        link: "Connect",
       },
     },
     block3: {
@@ -560,6 +608,19 @@ export const intakeCopy: Record<Locale, IntakeCopy> = {
         statedCards: "Credit cards",
         statedDebitCards: "Debit cards",
         cardBalances: "Credit card balances",
+        birthYear: "Birth year",
+        incomeRegularity: "Fixed or varying income",
+        statedBanks: "Banks",
+        cardRepayment: "Paying off credit card",
+        spendMix: "Biggest spending",
+        foreignSpend: "Abroad and currency",
+        priorities: "What LaVega helps with",
+        cutTargets: "Spend less on",
+        checkInCadence: "How often LaVega checks in",
+        confidence: "Overview",
+        statedPrograms: "Points programmes",
+        pointsGoal: "What points are for",
+        flightsPerYear: "Flights per year",
       },
       edit: "Edit",
       remove: "Remove",
@@ -613,6 +674,7 @@ export const intakeCopy: Record<Locale, IntakeCopy> = {
         euros: "Amount in euros",
         months: "Number of months",
         childYears: "Birth years",
+        birthYear: "Birth year",
         childYearsHint: "Separated by commas, for example 2015, 2018",
         worries: "What is on your mind",
         low: "From (euros)",

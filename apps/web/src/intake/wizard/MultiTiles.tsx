@@ -2,7 +2,7 @@ import { useRef, type KeyboardEvent } from "react";
 
 export type MultiTilesProps<T extends string> = {
   label: string;
-  options: { value: T; label: string }[];
+  options: { value: T; label: string; disabled?: boolean }[];
   selected: readonly T[];
   onToggle: (value: T) => void;
   disabled?: boolean;
@@ -15,7 +15,13 @@ export default function MultiTiles<T extends string>(p: MultiTilesProps<T>) {
   const tabIdx = firstOn >= 0 ? firstOn : 0;
 
   const move = (from: number, delta: number) => {
-    refs.current[(from + delta + n) % n]?.focus();
+    for (let step = 1; step <= n; step++) {
+      const at = (((from + delta * step) % n) + n) % n;
+      if (p.options[at]?.disabled !== true) {
+        refs.current[at]?.focus();
+        return;
+      }
+    }
   };
   const onKey = (e: KeyboardEvent<HTMLButtonElement>, i: number) => {
     if (e.key === "ArrowDown" || e.key === "ArrowRight") {
@@ -41,7 +47,7 @@ export default function MultiTiles<T extends string>(p: MultiTilesProps<T>) {
             role="checkbox"
             aria-checked={on}
             tabIndex={i === tabIdx ? 0 : -1}
-            disabled={p.disabled}
+            disabled={p.disabled || o.disabled}
             className={`wz-tile${on ? " is-selected" : ""}`}
             onKeyDown={(e) => onKey(e, i)}
             onClick={() => p.onToggle(o.value)}

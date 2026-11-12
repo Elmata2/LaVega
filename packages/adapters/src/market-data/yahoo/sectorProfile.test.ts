@@ -1,3 +1,5 @@
+import { DateTime } from "effect";
+import { PartnerBudgetUnavailable, PartnerWait } from "../../partnerBudget/PartnerBudget.js";
 import { expect, test, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
@@ -108,5 +110,16 @@ test("continues after a missing sector listing", async () => {
 test("stops sector candidate lookup after rate limiting", async () => {
   const fetchJsonWithCrumb = vi.fn().mockRejectedValue(new Error("[429] Too Many Requests"));
   expect(await fetchYahooSectorProfile("HLMA", { fetchJsonWithCrumb } as never)).toBeNull();
+  expect(fetchJsonWithCrumb).toHaveBeenCalledTimes(1);
+});
+
+test.each([
+  ["PartnerWait", () => new PartnerWait({ until: DateTime.makeUnsafe(60_000) })],
+  ["PartnerBudgetUnavailable", () => new PartnerBudgetUnavailable({ message: "store down" })],
+])("rethrows a budget stop (%s) instead of answering null", async (_name, makeError) => {
+  const fetchJsonWithCrumb = vi.fn().mockRejectedValue(makeError());
+  await expect(fetchYahooSectorProfile("HLMA", { fetchJsonWithCrumb } as never)).rejects.toEqual(
+    expect.objectContaining({ _tag: expect.stringMatching(/^Partner/) }),
+  );
   expect(fetchJsonWithCrumb).toHaveBeenCalledTimes(1);
 });

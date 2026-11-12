@@ -37,7 +37,12 @@ export type GoalsFactId = Extract<
   | "duo-rules"
 >;
 
-export type GoalsCopy = SectionCopy<GoalsFigures, GoalsReasonKey, GoalsMissingKind, GoalsCalcId> & {
+export type GoalsCopy = SectionCopy<
+  GoalsFigures,
+  GoalsReasonKey,
+  GoalsMissingKind,
+  GoalsCalcId
+> & {
   labels: {
     unallocated: string;
     capacity: string;
@@ -50,17 +55,37 @@ export type GoalsCopy = SectionCopy<GoalsFigures, GoalsReasonKey, GoalsMissingKi
     yearsLeft: string;
   };
   /** Computed: both ends use the same deductions. */
-  unallocatedLine: (line: Extract<UnallocatedLine, { kind: "computed" }>, fmt: PlanFmt) => string;
+  unallocatedLine: (
+    line: Extract<UnallocatedLine, { kind: "computed" }>,
+    fmt: PlanFmt,
+  ) => string;
   /** The short form of the same line, for the card's headline. */
   unallocatedHeadline: (
     line: Extract<UnallocatedLine, { kind: "computed" }>,
     fmt: PlanFmt,
   ) => string;
-  unallocatedStopped: (missing: Extract<UnallocatedLine, { kind: "stopped" }>["missing"]) => string;
-  stoppedPart: Record<Extract<UnallocatedLine, { kind: "stopped" }>["missing"][number], string>;
+  unallocatedStopped: (
+    missing: Extract<UnallocatedLine, { kind: "stopped" }>["missing"],
+  ) => string;
+  stoppedPart: Record<
+    Extract<UnallocatedLine, { kind: "stopped" }>["missing"][number],
+    string
+  >;
   capacityLine: (capacity: number | null, tolerance: number | null) => string;
   disagreement: Record<GoalsFigures["disagreement"], string>;
-  lossLine: (loss: NonNullable<GoalsFigures["loss"]>, amountLabel: string, fmt: PlanFmt) => string;
+  /** Education only: years until 67 and, for a beginner, what investing means. */
+  investing: {
+    /** The text before the SVB link; `years` null = at or past 67. */
+    lead: (years: number | null) => string;
+    linkLabel: string;
+    linkHref: string;
+    explainer: string;
+  };
+  lossLine: (
+    loss: NonNullable<GoalsFigures["loss"]>,
+    amountLabel: string,
+    fmt: PlanFmt,
+  ) => string;
   goal: {
     savedLine: (row: GoalRow, fmt: PlanFmt) => string;
     savedSource: Record<GoalRow["savedSource"], string>;
@@ -71,7 +96,11 @@ export type GoalsCopy = SectionCopy<GoalsFigures, GoalsReasonKey, GoalsMissingKi
     gapLine: (row: GoalRow, fmt: PlanFmt) => string;
     scheduleLine: (row: GoalRow, fmt: PlanFmt) => string | null;
     requiredLine: (row: GoalRow, fmt: PlanFmt) => string[];
-    sharedLine: (n: number, balanceCents: number, fmt: PlanFmt) => string | null;
+    sharedLine: (
+      n: number,
+      balanceCents: number,
+      fmt: PlanFmt,
+    ) => string | null;
     excludedLine: (n: number) => string | null;
     brokerLine: (n: number) => string | null;
     undated: string;
@@ -96,7 +125,11 @@ export function learnShortHorizonText(
   locale: Locale,
   facts?: readonly PublicFact[],
 ): string | null {
-  return factLine("afm-long-term", goalsCopy[locale].learnShortHorizon.body, facts);
+  return factLine(
+    "afm-long-term",
+    goalsCopy[locale].learnShortHorizon.body,
+    facts,
+  );
 }
 
 type ScenarioTable = ReturnType<typeof publicScenarioTable>;
@@ -104,9 +137,13 @@ type ScenarioTable = ReturnType<typeof publicScenarioTable>;
 const spanOf = (low: number, high: number, fmt: PlanFmt): string =>
   low === high ? fmt.eur(low) : fmt.eurRange(low, high);
 const listNl = (xs: string[]): string =>
-  xs.length < 2 ? xs.join("") : `${xs.slice(0, -1).join(", ")} en ${xs[xs.length - 1]}`;
+  xs.length < 2
+    ? xs.join("")
+    : `${xs.slice(0, -1).join(", ")} en ${xs[xs.length - 1]}`;
 const listEn = (xs: string[]): string =>
-  xs.length < 2 ? xs.join("") : `${xs.slice(0, -1).join(", ")} and ${xs[xs.length - 1]}`;
+  xs.length < 2
+    ? xs.join("")
+    : `${xs.slice(0, -1).join(", ")} and ${xs[xs.length - 1]}`;
 
 const educationNl: Education[] = [
   {
@@ -126,7 +163,8 @@ const educationNl: Education[] = [
   },
   {
     conceptId: "instrument-differences",
-    title: "Verschillen tussen sparen, deposito's, obligaties, fondsen en aandelen",
+    title:
+      "Verschillen tussen sparen, deposito's, obligaties, fondsen en aandelen",
     body: "Deze vormen verschillen in kosten, risico, hoe snel het geld beschikbaar is en hoe ze belast worden. Die verschillen zijn te vergelijken zonder dat één vorm als de juiste wordt aangewezen.",
   },
 ];
@@ -203,12 +241,23 @@ const nl: GoalsCopy = {
     `De regel voor wat niet is toegewezen stopt, omdat dit ontbreekt: ${missing.map((m) => nl.stoppedPart[m]).join(", ")}.`,
   stoppedPart: {
     room: "je ruimte per maand",
-    "room-stale": "recente bankgegevens: je ruimte per maand rust op oudere maanden",
+    "room-stale":
+      "recente bankgegevens: je ruimte per maand rust op oudere maanden",
     "buffer-top-up": "het aantal maanden waarover je buffer wordt aangevuld",
     "goal-monthly": "het maandbedrag van een doel",
   },
   capacityLine: (c, t) =>
     `Draagkracht uit je cijfers (schaal 1 tot 5): ${c === null ? DASH : c}. Risicotolerantie uit je antwoorden (schaal 1 tot 5): ${t === null ? DASH : t}.`,
+  investing: {
+    lead: (years) =>
+      years === null
+        ? "Je hebt de AOW-leeftijd bereikt of bijna bereikt. Kijk bij de "
+        : `Nog ${years} jaar tot je 67e. Je precieze AOW-leeftijd staat bij de `,
+    linkLabel: "SVB",
+    linkHref: "https://www.svb.nl/nl/aow/aow-leeftijd/uw-aow-leeftijd",
+    explainer:
+      "Beleggen betekent dat je geld voor langere tijd in bijvoorbeeld aandelen zet. De waarde gaat op en neer. Hoe langer je kunt wachten, hoe beter je schommelingen kunt opvangen.",
+  },
   disagreement: {
     disagree:
       "Deze twee wijken van elkaar af. Ze meten iets anders: draagkracht gaat over je financiën, tolerantie over hoe een daling voor je voelt.",
@@ -258,14 +307,16 @@ const nl: GoalsCopy = {
       n > 0
         ? `${n} gekoppelde rekening(en) tellen niet mee: een andere valuta, geen bekend saldo of niet gevonden.`
         : null,
-    brokerLine: (n) => (n > 0 ? `${n} koppeling(en) met een broker tellen niet mee.` : null),
+    brokerLine: (n) =>
+      n > 0 ? `${n} koppeling(en) met een broker tellen niet mee.` : null,
     undated: "Dit doel heeft geen einddatum; er is geen schema berekend.",
   },
   studyLine: (s, fmt) =>
     `Studieplan tegen prijzen van nu: ${fmt.eur(s.totalCents)} (${fmt.eur(s.monthlyCostCents)} per maand gedurende ${s.months} maanden plus ${fmt.eur(s.tuitionCents)} collegegeld). Je hebt een prijsstijging van ${fmt.points(s.inflationPct)} per jaar ingevuld; die zit niet in dit bedrag.`,
   scenario: {
     title: "Een voorbeeld met vaste aannames",
-    caption: "Een illustratie met vermelde aannames, geen voorspelling en geen keuze voor jou.",
+    caption:
+      "Een illustratie met vermelde aannames, geen voorspelling en geen keuze voor jou.",
     assumptions: (t, fmt) =>
       `${fmt.eur(t.monthlyCents)} per maand gedurende ${t.years} jaar (${fmt.eur(t.paidInCents)} ingelegd). Rendement vóór kosten ${listNl(t.grossRates.map((r) => fmt.pct(r)))}; kosten ${listNl(t.costs.map((r) => fmt.pct(r)))} per jaar. Maandelijkse rente-op-rente, inleg aan het einde van de maand, vast rendement, geen belasting, geen inflatie.`,
     cell: (gross, cost, end) =>
@@ -288,24 +339,33 @@ const nl: GoalsCopy = {
     "duo-rules": (value, source) => `${value} (${source})`,
   },
   headline: (f, fmt) => {
-    if (f.unallocated.kind === "computed") return nl.unallocatedHeadline(f.unallocated, fmt);
-    return f.rows.length > 0 ? `${f.rows.length} doel${f.rows.length === 1 ? "" : "en"}` : DASH;
+    if (f.unallocated.kind === "computed")
+      return nl.unallocatedHeadline(f.unallocated, fmt);
+    return f.rows.length > 0
+      ? `${f.rows.length} doel${f.rows.length === 1 ? "" : "en"}`
+      : DASH;
   },
   explain: {
     simple: (f, fmt) => {
       const out: string[] = [];
-      if (f.unallocated.kind === "computed") out.push(nl.unallocatedLine(f.unallocated, fmt));
-      else if (f.rows.length > 0) out.push(nl.unallocatedStopped(f.unallocated.missing));
+      if (f.unallocated.kind === "computed")
+        out.push(nl.unallocatedLine(f.unallocated, fmt));
+      else if (f.rows.length > 0)
+        out.push(nl.unallocatedStopped(f.unallocated.missing));
       for (const r of f.rows) out.push(nl.goal.savedLine(r, fmt));
       return out;
     },
     detailed: (f, fmt) => {
       const out: string[] = [];
-      if (f.unallocated.kind === "computed") out.push(nl.unallocatedLine(f.unallocated, fmt));
-      else if (f.rows.length > 0) out.push(nl.unallocatedStopped(f.unallocated.missing));
+      if (f.unallocated.kind === "computed")
+        out.push(nl.unallocatedLine(f.unallocated, fmt));
+      else if (f.rows.length > 0)
+        out.push(nl.unallocatedStopped(f.unallocated.missing));
       for (const r of f.rows) {
         out.push(nl.goal.savedLine(r, fmt));
-        out.push(`Het gespaarde bedrag is ${nl.goal.savedSource[r.savedSource]}.`);
+        out.push(
+          `Het gespaarde bedrag is ${nl.goal.savedSource[r.savedSource]}.`,
+        );
         if (r.savedSource === "stated" && r.scheduleFrom !== null)
           out.push(nl.goal.statedAsOf(r.scheduleFrom, fmt));
         out.push(nl.goal.gapLine(r, fmt));
@@ -324,7 +384,9 @@ const nl: GoalsCopy = {
       out.push(nl.capacityLine(f.capacity.score, f.toleranceScore));
       out.push(nl.disagreement[f.disagreement]);
       if (f.loss !== null)
-        out.push(nl.lossLine(f.loss, "het bedrag dat je in beleggingen hebt", fmt));
+        out.push(
+          nl.lossLine(f.loss, "het bedrag dat je in beleggingen hebt", fmt),
+        );
       if (f.study !== null) out.push(nl.studyLine(f.study, fmt));
       return out;
     },
@@ -357,7 +419,8 @@ const en: GoalsCopy = {
       "For at least one goal, the amount saved is below the straight-line schedule.",
     "no-goals": "No goals have been entered yet.",
     "no-room": "There is no figure for your room each month.",
-    "no-goal-dates": "No goal has an end date, so there is no schedule to compare with.",
+    "no-goal-dates":
+      "No goal has an end date, so there is no schedule to compare with.",
   },
   labels: {
     unallocated: "Not allocated each month",
@@ -397,12 +460,23 @@ const en: GoalsCopy = {
     `The line for what is not allocated stops, because this is missing: ${missing.map((m) => en.stoppedPart[m]).join(", ")}.`,
   stoppedPart: {
     room: "your room each month",
-    "room-stale": "recent bank data: your room each month rests on older months",
+    "room-stale":
+      "recent bank data: your room each month rests on older months",
     "buffer-top-up": "the number of months over which your buffer is topped up",
     "goal-monthly": "the monthly amount of a goal",
   },
   capacityLine: (c, t) =>
     `Capacity from your figures (scale 1 to 5): ${c === null ? DASH : c}. Risk tolerance from your answers (scale 1 to 5): ${t === null ? DASH : t}.`,
+  investing: {
+    lead: (years) =>
+      years === null
+        ? "You have reached or almost reached the AOW age. Check with the "
+        : `${years} years until you turn 67. Your exact AOW age is on the `,
+    linkLabel: "SVB",
+    linkHref: "https://www.svb.nl/nl/aow/aow-leeftijd/uw-aow-leeftijd",
+    explainer:
+      "Investing means putting your money away for a longer time in, for example, shares. The value goes up and down. The longer you can wait, the better you can absorb the swings.",
+  },
   disagreement: {
     disagree:
       "These two differ. They measure different things: capacity is about your finances, tolerance is about how a fall feels to you.",
@@ -459,7 +533,8 @@ const en: GoalsCopy = {
     `Study plan at today's prices: ${fmt.eur(s.totalCents)} (${fmt.eur(s.monthlyCostCents)} a month for ${s.months} months plus ${fmt.eur(s.tuitionCents)} tuition). You entered a price rise of ${fmt.points(s.inflationPct)} a year; it is not in this amount.`,
   scenario: {
     title: "An example with fixed assumptions",
-    caption: "An illustration with stated assumptions, not a forecast and not a choice for you.",
+    caption:
+      "An illustration with stated assumptions, not a forecast and not a choice for you.",
     assumptions: (t, fmt) =>
       `${fmt.eur(t.monthlyCents)} a month for ${t.years} years (${fmt.eur(t.paidInCents)} paid in). Gross returns of ${listEn(t.grossRates.map((r) => fmt.pct(r)))}; costs of ${listEn(t.costs.map((r) => fmt.pct(r)))} a year. Monthly compounding, contributions at month end, constant return, no tax, no inflation.`,
     cell: (gross, cost, end) =>
@@ -482,21 +557,28 @@ const en: GoalsCopy = {
     "duo-rules": (value, source) => `${value} (${source})`,
   },
   headline: (f, fmt) => {
-    if (f.unallocated.kind === "computed") return en.unallocatedHeadline(f.unallocated, fmt);
-    return f.rows.length > 0 ? `${f.rows.length} goal${f.rows.length === 1 ? "" : "s"}` : DASH;
+    if (f.unallocated.kind === "computed")
+      return en.unallocatedHeadline(f.unallocated, fmt);
+    return f.rows.length > 0
+      ? `${f.rows.length} goal${f.rows.length === 1 ? "" : "s"}`
+      : DASH;
   },
   explain: {
     simple: (f, fmt) => {
       const out: string[] = [];
-      if (f.unallocated.kind === "computed") out.push(en.unallocatedLine(f.unallocated, fmt));
-      else if (f.rows.length > 0) out.push(en.unallocatedStopped(f.unallocated.missing));
+      if (f.unallocated.kind === "computed")
+        out.push(en.unallocatedLine(f.unallocated, fmt));
+      else if (f.rows.length > 0)
+        out.push(en.unallocatedStopped(f.unallocated.missing));
       for (const r of f.rows) out.push(en.goal.savedLine(r, fmt));
       return out;
     },
     detailed: (f, fmt) => {
       const out: string[] = [];
-      if (f.unallocated.kind === "computed") out.push(en.unallocatedLine(f.unallocated, fmt));
-      else if (f.rows.length > 0) out.push(en.unallocatedStopped(f.unallocated.missing));
+      if (f.unallocated.kind === "computed")
+        out.push(en.unallocatedLine(f.unallocated, fmt));
+      else if (f.rows.length > 0)
+        out.push(en.unallocatedStopped(f.unallocated.missing));
       for (const r of f.rows) {
         out.push(en.goal.savedLine(r, fmt));
         out.push(`The amount saved is ${en.goal.savedSource[r.savedSource]}.`);
@@ -517,7 +599,10 @@ const en: GoalsCopy = {
       }
       out.push(en.capacityLine(f.capacity.score, f.toleranceScore));
       out.push(en.disagreement[f.disagreement]);
-      if (f.loss !== null) out.push(en.lossLine(f.loss, "the amount you have in investments", fmt));
+      if (f.loss !== null)
+        out.push(
+          en.lossLine(f.loss, "the amount you have in investments", fmt),
+        );
       if (f.study !== null) out.push(en.studyLine(f.study, fmt));
       return out;
     },

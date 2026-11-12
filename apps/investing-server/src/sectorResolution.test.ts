@@ -1,9 +1,14 @@
+import { PartnerBudgetUnavailable, PartnerWait } from "@lavega/adapters";
+import { DateTime } from "effect";
 import { expect, test, vi } from "vitest";
+import type { SectorProfile } from "@lavega/adapters";
 import { createInMemorySectorProfileStore } from "./inMemorySectorProfileStore.js";
 import {
   FUND_PROFILE_REFRESH_DAYS,
+  needsProviderFetch,
   resolvePortfolioSectors,
   resolvedStockSector,
+  SECTOR_FETCH_BUDGET_MS,
   UNKNOWN_SECTOR,
 } from "./sectorResolution.js";
 
@@ -306,7 +311,7 @@ test("an owner correction outranks a freshly-fetched stock and never invokes the
   // AAPL isn't a fund before trusting the correction — but the correction,
   // not the fetched stock's own sector, is what gets displayed and the
   // classifier is never reached for it.
-  expect(fetchProfile).toHaveBeenCalledWith("AAPL");
+  expect(fetchProfile).toHaveBeenCalledWith("AAPL", { deadlineMs: expect.any(Number) });
   expect(classifier).not.toHaveBeenCalledWith(expect.objectContaining({ symbol: "AAPL" }));
 });
 
@@ -593,7 +598,7 @@ test("a cached inferred profile is reused without re-invoking the classifier, bu
   });
 
   expect(classifier).not.toHaveBeenCalled();
-  expect(fetchProfile).toHaveBeenCalledWith("MYST");
+  expect(fetchProfile).toHaveBeenCalledWith("MYST", { deadlineMs: expect.any(Number) });
   expect(sectorBySymbol.get("MYST")).toBe("Technology");
 });
 
@@ -816,7 +821,9 @@ test("resolvedStockSector reports Unknown, not the inferred label, when showInfe
 
 test("a renamed holding resolves its sector under the price-resolved listing, not the stale broker code", async () => {
   const store = createInMemorySectorProfileStore();
-  const resolveListing = vi.fn(async (symbol: string) => (symbol === "OAC_US_EQ" ? "HIMS" : null));
+  const resolveListing = vi.fn(async (position: { symbol: string }) =>
+    position.symbol === "OAC_US_EQ" ? "HIMS" : null,
+  );
   const fetchProfile = vi.fn(async (symbol: string) =>
     symbol === "HIMS"
       ? {
@@ -834,8 +841,8 @@ test("a renamed holding resolves its sector under the price-resolved listing, no
   );
 
   expect(sectorBySymbol.get("OAC_US_EQ")).toBe("Healthcare");
-  expect(fetchProfile).toHaveBeenCalledWith("HIMS");
-  expect(fetchProfile).not.toHaveBeenCalledWith("OAC_US_EQ");
+  expect(fetchProfile).toHaveBeenCalledWith("HIMS", { deadlineMs: expect.any(Number) });
+  expect(fetchProfile).not.toHaveBeenCalledWith("OAC_US_EQ", expect.anything());
   expect(await store.get("HIMS")).toMatchObject({ sector: "Healthcare" });
   expect(await store.get("OAC_US_EQ")).toBeNull();
 });
@@ -877,7 +884,7 @@ test("a symbol prices never resolved a listing for behaves exactly as before, ke
   });
 
   expect(sectorBySymbol.get("AAPL")).toBe("Technology");
-  expect(fetchProfile).toHaveBeenCalledWith("AAPL");
+  expect(fetchProfile).toHaveBeenCalledWith("AAPL", { deadlineMs: expect.any(Number) });
   expect(await store.get("AAPL")).toMatchObject({ sector: "Technology" });
 });
 
@@ -895,7 +902,7 @@ test("omitting resolveListing keeps every call keyed by the broker symbol, same 
     fetchProfile,
   });
 
-  expect(fetchProfile).toHaveBeenCalledWith("OAC_US_EQ");
+  expect(fetchProfile).toHaveBeenCalledWith("OAC_US_EQ", { deadlineMs: expect.any(Number) });
 });
 
 test("an owner correction still keys off the broker symbol even when the listing resolves elsewhere", async () => {
@@ -972,4 +979,215 @@ test("coverage splits across a mixed portfolio and sums to 1", async () => {
   expect(
     coverage.provider + coverage.inferred + coverage.correction + coverage.unknown,
   ).toBeCloseTo(1, 12);
+});
+
+const HOUR_MS = 60 * 60 * 1000;
+const stockProvider = {
+  kind: "stock" as const,
+  sector: "Technology",
+  industry: "Hardware",
+  source: "provider" as const,
+};
+const stockInferred = {
+  kind: "stock" as const,
+  sector: "Healthcare",
+  industry: "Unknown",
+  source: "inferred" as const,
+  specificity: "sector" as const,
+  confidence: 0.8,
+  inferredAt: "2026-11-01T00:00:00.000Z",
+};
+
+test("needsProviderFetch follows the freshness table for every stored-profile row", () => {
+  const now = Date.parse("2026-11-10T12:00:00.000Z");
+  const ago = (hours: number) => new Date(now - hours * HOUR_MS).toISOString();
+  const freshFund = {
+    kind: "fund" as const,
+    weights: [],
+    source: "provider" as const,
+    fetchedAt: ago(24 * 30),
+  };
+  const staleFund = { ...freshFund, fetchedAt: ago(24 * (FUND_PROFILE_REFRESH_DAYS + 1)) };
+  const attempts = [null, ago(23), ago(25)] as const;
+  const rows: [string, SectorProfile | null, [boolean, boolean, boolean]][] = [
+    ["provider stock", stockProvider, [false, false, false]],
+    ["fresh provider fund", freshFund, [false, false, false]],
+    ["stale provider fund", staleFund, [true, false, true]],
+    ["no profile", null, [true, false, true]],
+    ["inferred profile", stockInferred, [true, false, true]],
+  ];
+  for (const [label, profile, expected] of rows)
+    attempts.forEach((attempt, index) =>
+      expect(needsProviderFetch(profile, attempt, now), `${label}, attempt ${attempt}`).toBe(
+        expected[index],
+      ),
+    );
+  expect(needsProviderFetch(null, "not-a-date", now)).toBe(true);
+  const { fetchedAt: _omitted, ...legacyFund } = freshFund;
+  expect(needsProviderFetch(legacyFund, null, now), "fund without fetchedAt").toBe(true);
+});
+
+test("a symbol the provider cannot answer is fetched once across reads, and again after 24 hours", async () => {
+  vi.useFakeTimers();
+  try {
+    const store = createInMemorySectorProfileStore();
+    const fetchProfile = vi.fn(async () => null);
+    const read = () =>
+      resolvePortfolioSectors([{ symbol: "X", marketValue: 10 }], { store, fetchProfile });
+
+    await read();
+    await read();
+    expect(fetchProfile).toHaveBeenCalledTimes(1);
+
+    vi.advanceTimersByTime(25 * HOUR_MS);
+    await read();
+    expect(fetchProfile).toHaveBeenCalledTimes(2);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test("a provider call that throws also counts as an attempt", async () => {
+  const store = createInMemorySectorProfileStore();
+  const fetchProfile = vi.fn(async () => {
+    throw new Error("yahoo down");
+  });
+  const read = () =>
+    resolvePortfolioSectors([{ symbol: "X", marketValue: 10 }], { store, fetchProfile });
+  await read();
+  await read();
+  expect(fetchProfile).toHaveBeenCalledTimes(1);
+});
+
+test("a failure to record the attempt is swallowed", async () => {
+  const store = createInMemorySectorProfileStore();
+  store.recordProviderAttempt = async () => {
+    throw new Error("db down");
+  };
+  const { sectorBySymbol } = await resolvePortfolioSectors([{ symbol: "X", marketValue: 10 }], {
+    store,
+    fetchProfile: async () => null,
+  });
+  expect(sectorBySymbol.get("X")).toBe(UNKNOWN_SECTOR);
+});
+
+test("an inferred profile with a recent attempt is not fetched and still shows its sector", async () => {
+  const store = createInMemorySectorProfileStore();
+  await store.set("X", stockInferred);
+  await store.recordProviderAttempt("X", new Date(Date.now() - HOUR_MS).toISOString());
+  const fetchProfile = vi.fn(async () => stockProvider);
+
+  const { sectorBySymbol } = await resolvePortfolioSectors([{ symbol: "X", marketValue: 10 }], {
+    store,
+    fetchProfile,
+  });
+
+  expect(fetchProfile).not.toHaveBeenCalled();
+  expect(sectorBySymbol.get("X")).toBe("Healthcare");
+});
+
+test("read, inference, read again: the second read does not fetch the symbol the first read missed", async () => {
+  const store = createInMemorySectorProfileStore();
+  const fetchProfile = vi.fn(async () => null);
+  const positionsX = [{ symbol: "X", marketValue: 10 }];
+
+  await resolvePortfolioSectors(positionsX, { store, fetchProfile });
+  await resolvePortfolioSectors(positionsX, {
+    store,
+    classifier: async () => ({
+      kind: "classified" as const,
+      sector: "Healthcare",
+      specificity: "sector" as const,
+      confidence: 0.8,
+    }),
+  });
+  const { sectorBySymbol } = await resolvePortfolioSectors(positionsX, { store, fetchProfile });
+
+  expect(fetchProfile).toHaveBeenCalledTimes(1);
+  expect(sectorBySymbol.get("X")).toBe("Healthcare");
+});
+
+test("a read without fetchProfile makes no provider call and records no attempt", async () => {
+  const store = createInMemorySectorProfileStore();
+  const record = vi.spyOn(store, "recordProviderAttempt");
+  await resolvePortfolioSectors([{ symbol: "X", marketValue: 10 }], { store });
+  expect(record).not.toHaveBeenCalled();
+  expect(await store.lastProviderAttempt("X")).toBeNull();
+});
+
+test("a read stops fetching after the time budget and records no attempt for a cut-off call", async () => {
+  vi.useFakeTimers();
+  try {
+    const store = createInMemorySectorProfileStore();
+    const fetchProfile = vi.fn(
+      (_symbol: string) => new Promise<null>((resolve) => setTimeout(() => resolve(null), 3_000)),
+    );
+    const symbols = Array.from({ length: 40 }, (_, index) => `S${index}`);
+    const started = Date.now();
+
+    const reading = resolvePortfolioSectors(
+      symbols.map((symbol) => ({ symbol, marketValue: 10 })),
+      { store, fetchProfile },
+    );
+    await vi.advanceTimersByTimeAsync(SECTOR_FETCH_BUDGET_MS + 1_000);
+    await reading;
+
+    expect(Date.now() - started).toBeLessThan(9_500);
+    expect(fetchProfile.mock.calls.length).toBeLessThanOrEqual(24);
+    const attempted: string[] = [];
+    for (const symbol of symbols)
+      if ((await store.lastProviderAttempt(symbol)) !== null) attempted.push(symbol);
+    /* Two full waves of 8 answered within the budget; the third wave was cut
+     * off at 8 s and the rest never started. */
+    expect(attempted).toHaveLength(16);
+    const cutOff = fetchProfile.mock.calls
+      .map(([symbol]) => symbol)
+      .filter((symbol) => !attempted.includes(symbol));
+    expect(cutOff).toHaveLength(8);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test.each([
+  ["PartnerWait", () => new PartnerWait({ until: DateTime.makeUnsafe(Date.now() + 60_000) })],
+  ["PartnerBudgetUnavailable", () => new PartnerBudgetUnavailable({ message: "store down" })],
+])(
+  "a profile fetch that fails with %s records no attempt, stores nothing, and the next read fetches again",
+  async (_name, makeError) => {
+    const store = createInMemorySectorProfileStore();
+    const fetchProfile = vi.fn(async () => {
+      throw makeError();
+    });
+    const read = () =>
+      resolvePortfolioSectors([{ symbol: "X", marketValue: 10 }], { store, fetchProfile });
+
+    const first = await read();
+    expect(first.sectorBySymbol.get("X")).toBe(UNKNOWN_SECTOR);
+    expect(await store.lastProviderAttempt("X")).toBeNull();
+    expect(await store.get("X")).toBeNull();
+
+    await read();
+    expect(fetchProfile).toHaveBeenCalledTimes(2);
+  },
+);
+
+test("the profile fetch gets the read's own deadline: its start plus the fetch budget", async () => {
+  vi.useFakeTimers({ now: 5_000_000 });
+  try {
+    const store = createInMemorySectorProfileStore();
+    const fetchProfile = vi.fn(async (_symbol: string, _options?: { deadlineMs?: number }) => null);
+    await resolvePortfolioSectors(
+      [
+        { symbol: "A", marketValue: 10 },
+        { symbol: "B", marketValue: 10 },
+      ],
+      { store, fetchProfile },
+    );
+    expect(fetchProfile).toHaveBeenCalledTimes(2);
+    for (const [, options] of fetchProfile.mock.calls)
+      expect(options).toEqual({ deadlineMs: 5_000_000 + SECTOR_FETCH_BUDGET_MS });
+  } finally {
+    vi.useRealTimers();
+  }
 });

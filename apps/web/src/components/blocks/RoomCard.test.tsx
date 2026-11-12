@@ -339,7 +339,7 @@ test("copy scan: no room or home string trips findAdviceLanguage or recommends i
 test("the room card is a widget: in the registry, on by default, and it respects the switch", () => {
   expect(WIDGETS.some((w) => w.id === "room-card" && w.defaultOn === true)).toBe(true);
   const store = {
-    current: markDone(emptyProfile(), "savings"),
+    current: markDone(emptyProfile(), "foreign-spend"),
     versions: [],
     updatedAt: "x",
   } as AdvisorProfileStore;

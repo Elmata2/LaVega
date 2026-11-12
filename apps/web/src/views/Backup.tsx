@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import type { CipherBlob, VaultStorage } from "@lavega/adapters";
-import { backupFilename, serializeBackup, parseBackup } from "../backup.js";
+import { backupFilename, buildPortableExport, serializeBackup, parseBackup } from "../backup.js";
 import { eraseServerData, fetchServerBackup, uploadServerBackup } from "../vaultSync.js";
 import { adminCopy } from "../copy/admin.js";
 import { useAppLocale } from "../appLocale.js";
@@ -14,10 +14,76 @@ import { Field, CheckboxField } from "../components/ui/Field.js";
 type BackupProps = {
   storage: VaultStorage;
   asOf: string;
+  /** How many documents the vault holds; used to refuse a server backup that
+   *  cannot carry them, instead of silently dropping the files. */
+  documentCount?: number;
   // Called after a successful restore so App reloads accounts/txs/rules from
   // the (now swapped) vault state — restore() itself never touches React state.
   onRestored: () => void;
 };
+
+/**
+ * Draagbare export (WS6.1, #302): a readable, versioned ZIP of the open vault,
+ * read back through the core reader before the screen reports success. The
+ * encrypted `.lavega` download above stays what it is: a restore artifact, not
+ * a portable one.
+ */
+function PortableExport({ storage, asOf }: { storage: VaultStorage; asOf: string }) {
+  const [locale] = useAppLocale();
+  const c = adminCopy[locale].backup.portable;
+  const [state, setState] = useState<"idle" | "building" | "verified" | "failed">("idle");
+  const [message, setMessage] = useState("");
+
+  async function handleExport() {
+    setState("building");
+    setMessage("");
+    try {
+      const built = await buildPortableExport(storage, asOf);
+      const url = URL.createObjectURL(
+        new Blob([built.bytes.slice().buffer as ArrayBuffer], { type: "application/zip" }),
+      );
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = built.filename;
+      link.click();
+      URL.revokeObjectURL(url);
+      if (built.readback.ok) {
+        const rows = Object.values(built.manifest.recordCounts).reduce(
+          (sum, count) => sum + count,
+          0,
+        );
+        setState("verified");
+        setMessage(c.verified(rows, built.manifest.sections.length));
+      } else {
+        setState("failed");
+        setMessage(c.verificationFailed(built.readback.problems.length));
+      }
+    } catch {
+      setState("failed");
+      setMessage(c.error);
+    }
+  }
+
+  return (
+    <>
+      <h3>{c.title}</h3>
+      <p>{c.description}</p>
+      <Button
+        variant="primary"
+        data-testid="portable-export"
+        disabled={state === "building"}
+        onClick={handleExport}
+      >
+        {state === "building" ? c.building : c.button}
+      </Button>
+      {message !== "" && (
+        <p role={state === "failed" ? "alert" : undefined} data-testid="portable-export-result">
+          {message}
+        </p>
+      )}
+    </>
+  );
+}
 
 const formatDateTime = (locale: Locale, iso: string) =>
   new Date(iso).toLocaleString(locale === "nl" ? "nl-NL" : "en-GB");
@@ -28,7 +94,13 @@ const formatDateTime = (locale: Locale, iso: string) =>
  * mag bestaan naast de download, en het is ook de reden dat een verloren
  * wachtwoord deze back-up net zo onbruikbaar maakt als die op schijf.
  */
-function ServerBackup({ storage }: { storage: VaultStorage }) {
+function ServerBackup({
+  storage,
+  documentCount = 0,
+}: {
+  storage: VaultStorage;
+  documentCount?: number;
+}) {
   const [locale] = useAppLocale();
   const c = adminCopy[locale].backup;
   const [state, setState] = useState<"checking" | "signed-out" | "ready">("checking");
@@ -132,7 +204,16 @@ function ServerBackup({ storage }: { storage: VaultStorage }) {
         {updatedAt ? c.server.lastBackup(formatDateTime(locale, updatedAt)) : c.server.noBackupYet}{" "}
         {c.server.encryptionNote}
       </p>
-      <Button variant="primary" disabled={busy || erasing} onClick={() => void upload(false)}>
+      {documentCount > 0 && (
+        <p role="status" data-testid="server-backup-documents-blocked">
+          {c.server.documentsBlocked(documentCount)}
+        </p>
+      )}
+      <Button
+        variant="primary"
+        disabled={busy || erasing || documentCount > 0}
+        onClick={() => void upload(false)}
+      >
         {busy ? c.common.busy : c.server.backupNowButton}
       </Button>
       {conflict && (
@@ -207,7 +288,7 @@ function ServerBackup({ storage }: { storage: VaultStorage }) {
   );
 }
 
-export default function Backup({ storage, asOf, onRestored }: BackupProps) {
+export default function Backup({ storage, asOf, documentCount = 0, onRestored }: BackupProps) {
   const [locale] = useAppLocale();
   const c = adminCopy[locale].backup;
   const [file, setFile] = useState<File | null>(null);
@@ -217,8 +298,10 @@ export default function Backup({ storage, asOf, onRestored }: BackupProps) {
   const [error, setError] = useState("");
   const [restored, setRestored] = useState(false);
 
-  function handleDownload() {
-    const blob = storage.export();
+  async function handleDownload() {
+    // The FULL bundle (v3): the vault AND the sealed document bytes. A download
+    // that dropped documents would be worse than no download at all.
+    const blob = await storage.exportBundle();
     if (!blob) return; // locked/empty — nothing to download
     const url = URL.createObjectURL(
       new Blob([serializeBackup(blob)], { type: "application/json" }),
@@ -228,7 +311,7 @@ export default function Backup({ storage, asOf, onRestored }: BackupProps) {
     a.download = backupFilename(asOf);
     a.click();
     URL.revokeObjectURL(url);
-    posthog.capture("backup_downloaded");
+    posthog.capture("backup_downloaded", { documents: documentCount });
   }
 
   async function handleRestore(e: FormEvent) {
@@ -268,7 +351,9 @@ export default function Backup({ storage, asOf, onRestored }: BackupProps) {
         {c.download.button}
       </Button>
 
-      <ServerBackup storage={storage} />
+      <PortableExport storage={storage} asOf={asOf} />
+
+      <ServerBackup storage={storage} documentCount={documentCount} />
 
       <h3>{c.restore.title}</h3>
       <p className="text-warn">{c.restore.warning}</p>

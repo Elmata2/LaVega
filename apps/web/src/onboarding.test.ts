@@ -5,7 +5,6 @@ import { findAdviceLanguage } from "@lavega/core";
 import { markOnboardingSeen, onboardingSeen, showOnboarding } from "./onboarding.js";
 import { LANDING_COPY, landingCopy } from "./landingCopy.js";
 import { shellCopy } from "./copy/shell.js";
-import type { Locale } from "./locale.js";
 
 beforeEach(() => {
   const store = new Map<string, string>();
@@ -53,14 +52,32 @@ test("landing copy mentions only features that still exist", () => {
   }
 });
 
-test("the intake pointers (landing FAQ, overview prompt) stay inside the information-only line", () => {
-  /* Only the pointers this task added: the FAQ also holds security answers
-   * ("is my data safe") that are not advice and trip the generic list. */
+/* Hits the detector raises on FAQ wording that is not advice. Each is a known false
+ * positive on a negated or non-financial use, keyed by locale and the answer's
+ * topic so a new hit anywhere else still fails. */
+const FAQ_ALLOWED: Record<string, string[]> = {
+  // "veilig"/"safe" is about data security, not a safety claim about a product.
+  "nl:Zijn mijn gegevens veilig?": ["safe"],
+  "en:Is my data safe?": ["safe", "buy/sell/hold"], // "we hold the keys"
+  // "Moet ik" is the question form of "do I have to", not an instruction.
+  "nl:Moet ik mijn bank koppelen?": ["should"],
+  // The disclaimer itself: "never recommends or buys them".
+  "en:Does LaVega give investment advice?": ["recommend", "advice"],
+};
+
+test("the landing FAQ stays inside the information-only line", () => {
   for (const l of ["nl", "en"] as const) {
-    const item = landingCopy(l).faq.items.find((i) => /profiel|profile/i.test(i.q));
-    expect(item, `${l} FAQ has no profile entry`).toBeDefined();
-    expect(findAdviceLanguage(`${item!.q} ${item!.a}`, l as Locale)).toEqual([]);
+    for (const item of landingCopy(l).faq.items) {
+      const key = `${l}:${item.q}`;
+      const hits = findAdviceLanguage(`${item.q} ${item.a}`, l).filter(
+        (h) => !(FAQ_ALLOWED[key] ?? []).includes(h),
+      );
+      expect(hits, key).toEqual([]);
+    }
   }
+});
+
+test("the overview prompt stays inside the information-only line", () => {
   const prompt = readFileSync(
     fileURLToPath(new URL("../../server/src/agent/prompts/overview.md", import.meta.url)),
     "utf8",

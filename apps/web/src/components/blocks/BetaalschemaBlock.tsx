@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
-import type { ScheduledFlow, Tx } from "@lavega/core";
+import type { PaycheckPreview, ScheduledFlow, Tx } from "@lavega/core";
 import { detectScheduleStreams } from "@lavega/core";
-import { formatEuroIn, monthShort } from "../../format.js";
+import { formatDate, formatEuroIn, monthShort } from "../../format.js";
 import Module from "../Module.js";
 import { useWidgetEnabled } from "../moduleRegistry";
 import { daysBetween, shiftDate } from "./dates.js";
@@ -125,9 +125,12 @@ type BetaalschemaBlockProps = {
   txs: Tx[];
   /** Today, ISO — a planned date before it is left off the agenda. */
   asOf: string;
+  /** The declared-income paycheck preview (#288). Absent means the bills lane
+   *  has not been wired here, and the agenda keeps its #286 behaviour. */
+  paycheck?: PaycheckPreview;
 };
 
-export function BetaalschemaBlock({ scheduledFlows, txs, asOf }: BetaalschemaBlockProps) {
+export function BetaalschemaBlock({ scheduledFlows, txs, asOf, paycheck }: BetaalschemaBlockProps) {
   const [locale] = useAppLocale();
   const c = moneyCopy[locale].betaalschema;
   const upcoming = useMemo(
@@ -168,10 +171,44 @@ export function BetaalschemaBlock({ scheduledFlows, txs, asOf }: BetaalschemaBlo
   const [open, setOpen] = useState<string | null>(null);
 
   return (
-    <Module
-      title={c.title}
-      height="tall"
-    >
+    <Module title={c.title} height="tall">
+      {paycheck != null && (
+        <div
+          data-testid="betaalschema-paycheck"
+          className="flex flex-wrap items-baseline gap-x-3 gap-y-1 mb-2 text-[0.8rem] text-muted"
+        >
+          {!paycheck.hasIncome ? (
+            <span>{c.paycheck.noIncome}</span>
+          ) : (
+            <>
+              <span>{c.paycheck.until(formatDate(locale, paycheck.coversUntil))}</span>
+              <span className="tabular-nums">
+                {c.paycheck.due(formatEuroIn(locale, paycheck.dueBeforePaydayCents / 100))}
+              </span>
+              {paycheck.reservedCents > 0 && (
+                <span className="tabular-nums">
+                  {c.paycheck.reserved(formatEuroIn(locale, paycheck.reservedCents / 100))}
+                </span>
+              )}
+              <span
+                className={
+                  paycheck.shortfallCents == null
+                    ? ""
+                    : paycheck.shortfallCents > 0
+                      ? "text-neg"
+                      : "text-pos"
+                }
+              >
+                {paycheck.shortfallUnknown || paycheck.shortfallCents == null
+                  ? c.paycheck.unknown
+                  : paycheck.shortfallCents > 0
+                    ? c.paycheck.short(formatEuroIn(locale, paycheck.shortfallCents / 100))
+                    : c.paycheck.covered}
+              </span>
+            </>
+          )}
+        </div>
+      )}
       {upcoming.length === 0 ? (
         <p className="block-empty">{c.nietsIngepland}</p>
       ) : (
@@ -211,7 +248,7 @@ export function BetaalschemaBlock({ scheduledFlows, txs, asOf }: BetaalschemaBlo
                   </span>
                 </span>
                 <span className="flex-1 min-w-0 flex flex-col items-start">
-                  <span className="flex items-baseline gap-2 w-full min-w-0 font-semibold">
+                  <span className="flex items-baseline gap-x-2 w-full min-w-0 font-semibold [@media(max-width:420px)]:flex-wrap">
                     {/* De naam staat in een eigen span, en dat is niet
                         cosmetisch: het afkappen zat op hetzelfde vakje als de
                         "voorspeld"-pil, dus bij een lange naam viel die pil
