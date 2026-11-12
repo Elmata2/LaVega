@@ -4,6 +4,7 @@ import type { RateBenchmark } from "../interest.js";
 import { makeRewardsBalance } from "../rewards.js";
 import {
   CARD_ADVICE_MIN_GAIN_CENTS,
+  carriesCardDebt,
   computeCardAdvice,
   programForCard,
   type CardAdviceInput,
@@ -553,6 +554,21 @@ describe("review fixes", () => {
     expect(
       computeCardAdvice(input({ cardBalances: [bal("free-card", 100_000, 10)] })).ignoresInterest,
     ).toBe(true);
+  });
+});
+
+describe("carriesCardDebt", () => {
+  const owed = { cardId: "a", balanceCents: 1, paysInFull: false };
+  test("true for a global sometimes or rarely, or for any card with an unpaid balance", () => {
+    expect(carriesCardDebt({ cardRepayment: "sometimes", cardBalances: [] })).toBe(true);
+    expect(carriesCardDebt({ cardRepayment: "rarely", cardBalances: [] })).toBe(true);
+    expect(carriesCardDebt({ cardRepayment: "full", cardBalances: [owed] })).toBe(true);
+    expect(carriesCardDebt({ cardRepayment: null, cardBalances: [owed] })).toBe(true);
+  });
+  test("false when unanswered or paid in full, and a zero balance is no debt", () => {
+    expect(carriesCardDebt({ cardRepayment: null, cardBalances: [] })).toBe(false);
+    expect(carriesCardDebt({ cardRepayment: "full", cardBalances: [{ ...owed, paysInFull: true }] })).toBe(false);
+    expect(carriesCardDebt({ cardRepayment: "full", cardBalances: [{ ...owed, balanceCents: 0 }] })).toBe(false);
   });
 });
 

@@ -977,6 +977,49 @@ describe("computeCards: advice", () => {
     });
   });
 
+  describe("one debt signal for the warning and the advice", () => {
+    const run = (profile: Partial<PlanProfile>) =>
+      computeCards(
+        planInput({
+          accounts: [cur],
+          txs: spendOn("CUR", 100_000),
+          catalogue: CAT,
+          profile: { statedCardIds: ["gold"], ...profile },
+        }),
+        { liquidSavingsCents: 1_000_000, fixedCostsMonthlyCents: 100_000, targetMonths: 3 },
+      ).figures;
+    const paid = { cardId: "gold", balanceCents: 0, paysInFull: true };
+    const debt = { cardId: "gold", balanceCents: 200_000, paysInFull: false, ratePct: 14 };
+
+    test("A: rarely pays in full but the only card is marked paid in full: warning and caveat, no pay-off block", () => {
+      const f = run({ cardRepayment: "rarely", cardBalances: [paid] });
+      expect(f.interest).toBeDefined();
+      expect(f.advice.ignoresInterest).toBe(true);
+      expect(f.advice.interest).toEqual([]);
+    });
+
+    test("B: always pays in full but one card carries a balance: warning, caveat and pay-off block", () => {
+      const f = run({ cardRepayment: "full", cardBalances: [debt] });
+      expect(f.interest).toBeDefined();
+      expect(f.advice.ignoresInterest).toBe(true);
+      expect(f.advice.interest).toHaveLength(1);
+    });
+
+    test("C: always pays in full and every card is paid in full: neither", () => {
+      const f = run({ cardRepayment: "full", cardBalances: [paid] });
+      expect(f.interest).toBeUndefined();
+      expect(f.advice.ignoresInterest).toBe(false);
+      expect(f.advice.interest).toEqual([]);
+    });
+
+    test("D: sometimes pays in full and no per-card balances: warning and caveat, no invented balance", () => {
+      const f = run({ cardRepayment: "sometimes", cardBalances: [] });
+      expect(f.interest).toBeDefined();
+      expect(f.advice.ignoresInterest).toBe(true);
+      expect(f.advice.interest).toEqual([]);
+    });
+  });
+
   test("a bank-data card with a catalogue match counts as held", () => {
     const a = adviceRun({
       heldCards: [card("CUR", { catalogueId: "free" })],

@@ -455,6 +455,18 @@ test("answering Nee on cards drops the stated balances", () => {
   expect(answerCards(p, false, AS_OF).cardBalances).toBeUndefined();
 });
 
+test("card-balances is answered when every stated credit card has an entry, or none is stated", () => {
+  const entry = (cardId: string) => ({ cardId, balanceCents: 0, paysInFull: true });
+  const two = applyStatedCards(emptyProfile(), ["a", "b"], AS_OF);
+  expect(isAnswered(emptyProfile(), "card-balances")).toBe(true);
+  expect(isAnswered(answerCards(two, false, AS_OF), "card-balances")).toBe(true);
+  expect(isAnswered(two, "card-balances")).toBe(false);
+  const one = applyCardBalances(two, [entry("a")], AS_OF);
+  expect(isAnswered(one, "card-balances")).toBe(false);
+  expect(isAnswered(applyCardBalances(two, [entry("a"), entry("b")], AS_OF), "card-balances")).toBe(true);
+  expect(isAnswered(applyStatedCards(one, ["c"], AS_OF), "card-balances")).toBe(false);
+});
+
 test("Nee on cards drops cardRepayment", () => {
   const p = new AdvisorProfile({
     ...emptyProfile(),

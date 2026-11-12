@@ -29,6 +29,7 @@ export default function CardBalancesEditor({ ctx }: { ctx: PlanCtx }) {
     rewards,
     nameOf: (id) => cardName(id, w.otherCard, w.cardDetails.unknownCard),
     askPoints: ctx.saveRewards !== undefined,
+    repayment: profile?.cardRepayment?.value ?? null,
   });
   const key = JSON.stringify([
     profile?.cardBalances?.value ?? [],

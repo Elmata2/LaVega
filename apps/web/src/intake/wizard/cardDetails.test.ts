@@ -25,6 +25,18 @@ describe("detailRows", () => {
     ]);
   });
 
+  test("a card with no answer of its own starts from the global repayment answer", () => {
+    const paid = (repayment: "full" | "sometimes" | "rarely" | null | undefined) =>
+      rows(["american-express-gold-card"], { repayment })[0]!.paysInFull;
+    expect(paid("full")).toBe(true);
+    expect(paid("sometimes")).toBe(false);
+    expect(paid("rarely")).toBe(false);
+    expect(paid(null)).toBeNull();
+    expect(paid(undefined)).toBeNull();
+    const own = [{ cardId: "american-express-gold-card", balanceCents: 0, paysInFull: true }];
+    expect(rows(["american-express-gold-card"], { repayment: "rarely", balances: own })[0]!.paysInFull).toBe(true);
+  });
+
   test("points are asked once per programme, not at all for cards without one or when they cannot be saved", () => {
     const r = rows(["american-express-gold-card", "american-express-green-card", "abn-amro-creditcard", "other"]);
     expect(r.map((x) => x.programName)).toEqual(["American Express Membership Rewards", null, null, null]);

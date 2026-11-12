@@ -11,7 +11,7 @@ import {
   type NetBenefit,
 } from "../netBenefit.js";
 import { isStale } from "../rewards.js";
-import { computeCardAdvice, type BufferInput, type CardAdvice } from "./cardAdvice.js";
+import { carriesCardDebt, computeCardAdvice, type BufferInput, type CardAdvice } from "./cardAdvice.js";
 import type { Tx } from "../model.js";
 import type { ForeignSpend, SpendArea } from "../advisor/profile.js";
 import { fig } from "./internal.js";
@@ -427,7 +427,7 @@ export function computeCards(
   // Someone who does not always pay in full: interest outweighs cashback, so
   // the cards are ranked by interest, and one month of spend carried for a year
   // is priced at each card's catalogue rate.
-  const revolver = i.profile.cardRepayment === "sometimes" || i.profile.cardRepayment === "rarely";
+  const revolver = carriesCardDebt(i.profile);
   const interestMonthlyCents = statedBasis
     ? statedMonthlyCents
     : months > 0
@@ -546,6 +546,7 @@ export function computeCards(
     ],
     hasOtherCard: i.profile.statedCardIds.includes("other"),
     cardBalances: i.profile.cardBalances,
+    cardRepayment: i.profile.cardRepayment,
     rewards: i.rewards,
     preferences: i.preferences,
     rates: i.rates,

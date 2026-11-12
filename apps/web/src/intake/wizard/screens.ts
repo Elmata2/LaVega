@@ -152,6 +152,10 @@ export function isAnswered(p: AdvisorProfile, id: ScreenId): boolean {
       return p.statedCards !== undefined || p.intake.noCards === true;
     case "card-repayment":
       return p.cardRepayment !== undefined;
+    case "card-balances": {
+      const ids = p.intake.noCards === true ? [] : (p.statedCards?.value ?? []);
+      return ids.every((id) => p.cardBalances?.value.some((b) => b.cardId === id) === true);
+    }
     case "spend-mix":
       return p.spendMix !== undefined;
     case "foreign-spend":

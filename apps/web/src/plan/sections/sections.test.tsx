@@ -954,11 +954,12 @@ const currentAccount: Account = {
 };
 
 /** The cards section as the app builds it: a real held-card list from `accounts`. */
-function cardsFor(accounts: Account[], patch: Record<string, unknown>) {
+function cardsFor(accounts: Account[], patch: Record<string, unknown>, over: Record<string, unknown> = {}) {
   const store = asClass(richStore(), patch);
   const rich = richPlanInput(store);
   const input = {
     ...rich,
+    ...over,
     accounts: [...rich.accounts, ...accounts],
     heldCards: buildHeldCards({
       accounts,
@@ -978,6 +979,42 @@ function cardsFor(accounts: Account[], patch: Record<string, unknown>) {
 const statedPatch = {
   statedCards: { value: ["ing-creditcard"], source: "stated", at: AS_OF },
 };
+
+test("rarely paying in full with the only card marked paid in full: warning and interest caveat agree", () => {
+  const cv = (value: number, extra: Record<string, unknown> = {}) => ({
+    value,
+    route: "provider-page",
+    sourceUrl: "https://example.test/bron",
+    checkedAt: "2026-08-20",
+    conditions: null,
+    conditionsKnown: true,
+    ...extra,
+  });
+  const card = (id: string, fee: number) => ({
+    id,
+    product: id,
+    kind: "creditcard",
+    fields: { accountFee: cv(fee, { period: "jaar" }), fxFeePct: cv(0), pointsPerEuro: cv(0) },
+  });
+  const { ctx, result } = cardsFor(
+    [],
+    {
+      ...statedPatch,
+      cardRepayment: { value: "rarely", source: "stated", at: AS_OF },
+      cardBalances: {
+        value: [{ cardId: "ing-creditcard", balanceCents: 0, paysInFull: true }],
+        source: "stated",
+        at: AS_OF,
+      },
+    },
+    { catalogue: [card("ing-creditcard", 100), card("cheap-card", 0)] },
+  );
+  const c = mount(<CardsSection result={result} ctx={ctx} />);
+  openAll(c);
+  expect(c.textContent).toContain("You do not always pay your card off in full");
+  expect(q(c, "plan-card-interest-ignored")).not.toBeNull();
+  unmount();
+});
 
 test("M2: a real betaalrekening (no creditcard account) still shows the stated card and no contradicting note", () => {
   const { ctx, result } = cardsFor([currentAccount], statedPatch);
@@ -1296,7 +1333,8 @@ test("lines of a card ranked on the stated spend say they are estimated from the
   const text = c.textContent ?? "";
   expect(text).toContain("foreign currency fees");
   expect(text).toContain("(estimated from your answers).");
-  // The card-advice block has its own "Nothing has been estimated"; only the stated-card note must be gone.
   expect(text).not.toContain("Without spending on the card, no net value can be calculated");
+  // The advice block has its own "Nothing has been estimated"; a stated-spend estimate must not sit next to it elsewhere.
+  expect(scanText(c, "en")).not.toContain("Nothing has been estimated");
   unmount();
 });

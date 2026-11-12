@@ -3,6 +3,7 @@ import {
   norm,
   programForCard,
   type CardBalance,
+  type CardRepayment,
   type RewardsBalance,
 } from "@lavega/core";
 import { cardLabel } from "./cardOptions.js";
@@ -38,7 +39,11 @@ export function detailRows(i: {
   rewards: readonly RewardsBalance[];
   nameOf: (cardId: string) => string;
   askPoints: boolean;
+  /** The global repayment answer: the start for a card with no answer of its own. */
+  repayment?: CardRepayment | null;
 }): DetailRowInit[] {
+  const fromRepayment =
+    i.repayment === "full" ? true : i.repayment === "sometimes" || i.repayment === "rarely" ? false : null;
   const asked = new Set<string>();
   return [...new Set(i.cardIds)].map((cardId) => {
     const b = i.balances.find((x) => x.cardId === cardId);
@@ -50,7 +55,7 @@ export function detailRows(i: {
       cardId,
       name: i.nameOf(cardId),
       balanceCents: b?.balanceCents ?? null,
-      paysInFull: b === undefined ? null : b.paysInFull,
+      paysInFull: b === undefined ? fromRepayment : b.paysInFull,
       ratePct: b?.ratePct ?? null,
       programName: first ? program : null,
       points: held?.points ?? null,

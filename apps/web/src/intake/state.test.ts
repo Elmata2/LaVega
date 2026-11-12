@@ -147,6 +147,17 @@ describe("card balances", () => {
     expect(next.cardBalances?.value).toEqual([rows[0]]);
     expect(applyStatedCards(base, ["x"], AT).cardBalances).toBeUndefined();
   });
+  test("an empty card list clears the repayment answer and the balances", () => {
+    const filled = applyCardRepayment(
+      applyCardBalances(applyStatedCards(emptyProfile(), ["gold"], AT), rows, AT),
+      "sometimes",
+      AT,
+    );
+    const next = applyStatedCards(filled, [], AT);
+    expect(next.statedCards?.value).toEqual([]);
+    expect(next.cardBalances).toBeUndefined();
+    expect(next.cardRepayment).toBeUndefined();
+  });
 });
 
 const stated = <T,>(value: T) => ({ value, source: "stated", at: AS_OF });

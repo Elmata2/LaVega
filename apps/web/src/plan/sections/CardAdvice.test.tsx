@@ -10,6 +10,7 @@ import {
   type CardAdviceInput,
   type CatalogueEntryLike,
 } from "@lavega/core";
+import { cardAdviceCopy } from "../../copy/cardAdvice";
 import CardAdviceBlock from "./CardAdvice";
 
 (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -239,4 +240,21 @@ test("a minimum-spend fee explains itself and shows the source's own words", () 
   expect(t).toContain("Jaarkosten: €35,00");
   expect(t).toContain("vanaf €3.000 per jaar");
   expect(t).toContain("Bij een minimale besteding van € 3.000 per jaar");
+});
+
+test("not comparable without any named reason prints no empty parentheses, in NL and EN", () => {
+  const advice = {
+    ...computeCardAdvice(base),
+    state: "ok",
+    options: [],
+    notComparable: [{ reasons: [] }],
+  } as unknown as CardAdvice;
+  const fmt = {} as never;
+  for (const locale of ["nl", "en"] as const) {
+    const text = cardAdviceCopy[locale].noAdvice(advice, fmt);
+    expect(text).not.toContain("()");
+    expect(text).not.toMatch(/ \.|\s\(\s*\)/);
+  }
+  expect(cardAdviceCopy.nl.noAdvice(advice, fmt)).toContain("te vergelijken. Er is niets geschat.");
+  expect(cardAdviceCopy.en.noAdvice(advice, fmt)).toContain("compared in full. Nothing has been estimated.");
 });

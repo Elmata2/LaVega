@@ -218,7 +218,12 @@ export default function IntakeWizard(props: IntakeWizardProps) {
     if (returnTo !== null) {
       const changed = change(profile);
       const fresh = after.filter((x) => !fullList.includes(x) && !isAnswered(changed, x));
-      const queue = [...pending.filter((x) => after.includes(x) && !isAnswered(changed, x)), ...fresh];
+      const lost = after.filter(
+        (x) => x !== id && isAnswered(profile, x) && !isAnswered(changed, x),
+      );
+      const queue = [
+        ...new Set([...pending.filter((x) => after.includes(x) && !isAnswered(changed, x)), ...fresh, ...lost]),
+      ];
       const [head, ...rest] = queue;
       setPending(rest);
       if (head !== undefined) {
@@ -675,6 +680,7 @@ export default function IntakeWizard(props: IntakeWizardProps) {
           rewards,
           nameOf: (id) => cardName(id, w.otherCard, w.cardDetails.unknownCard),
           askPoints: props.onSaveRewards !== undefined,
+          repayment: profile.cardRepayment?.value ?? null,
         })}
         onSkip={() => void save((p) => p)}
         onSubmit={(result) => {

@@ -872,7 +872,7 @@ test("a revolving balance with a rate and a points balance is stored: profile fo
   ]);
 });
 
-test("a balance needs the paid-in-full answer; nothing is saved until it is given", async () => {
+test("the paid-in-full answer starts from the global repayment answer, so a balance saves without a second tap", async () => {
   const { c, onSave } = mount(withCards([AMEX]), async () => {}, false, undefined, {
     rewards: [],
     onSaveRewards: async () => {},
@@ -880,10 +880,7 @@ test("a balance needs the paid-in-full answer; nothing is saved until it is give
   await type(field(c, /Outstanding balance/), "800");
   const before = onSave.mock.calls.length;
   await act(async () => nextBtn(c).click());
-  expect(onSave.mock.calls.length).toBe(before);
-  expect(c.querySelector("[role='alert']")?.textContent).toContain("pay the balance in full");
-  await act(async () => tile(c, "Yes, every month").click());
-  await act(async () => nextBtn(c).click());
+  expect(c.querySelector("[role='alert']")).toBeNull();
   expect(onSave.mock.calls.length).toBe(before + 1);
 });
 
@@ -1250,6 +1247,26 @@ test("editing work to freelance from the summary asks vat, then returns with a v
   expect(saved().current.chargesVat?.value).toBe(true);
   expect(h1(c)).toBe("This is what LaVega knows about you now");
   expect(editBtn(c, "vat")).not.toBeNull();
+});
+
+test("replacing the stated card from the summary asks the card details again for the new card", async () => {
+  const { c } = mount(
+    fromScreen("priorities", (p) =>
+      applyCardBalances(
+        applyCardRepayment(applyStatedCards(summaryProfile(p), [AMEX], AS_OF), "full", AS_OF),
+        [{ cardId: AMEX, balanceCents: 1000, paysInFull: true }],
+        AS_OF,
+      ),
+    ),
+  );
+  expect(editBtn(c, "card-balances")).not.toBeNull();
+  await act(async () => editBtn(c, "cards").click());
+  await openBrand(c, /^ING/);
+  await act(async () => box(c, "ING creditcard").click());
+  await openBrand(c, /^American Express/);
+  await act(async () => (boxes(c).find((b) => b.getAttribute("aria-checked") === "true" && b.textContent !== "ING creditcard") as HTMLElement).click());
+  await act(async () => nextBtn(c).click());
+  expect(h1(c)).toBe("What is on your credit cards right now?");
 });
 
 test("editing household to together asks money sharing, then returns to the summary", async () => {

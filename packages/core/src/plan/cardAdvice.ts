@@ -4,7 +4,7 @@ import {
   type AccountFeeEntryLike,
 } from "../accountCosts.js";
 import { isIsoDate, daysBetween } from "../advisor/months.js";
-import type { CardBalance } from "../advisor/profile.js";
+import type { CardBalance, CardRepayment } from "../advisor/profile.js";
 import { isCovered, type CatalogValue } from "../catalog.js";
 import type { CatalogueEntryLike } from "../catalogRates.js";
 import { norm } from "../hash.js";
@@ -269,6 +269,19 @@ export type BufferInput = {
   targetMonths: number | null;
 } | null;
 
+/** The one answer to "does this user carry card debt": the global repayment
+ *  answer says so, or any card holds an unpaid balance. */
+export function carriesCardDebt(p: {
+  cardRepayment: CardRepayment | null;
+  cardBalances: readonly CardBalance[];
+}): boolean {
+  return (
+    p.cardRepayment === "sometimes" ||
+    p.cardRepayment === "rarely" ||
+    p.cardBalances.some((b) => !b.paysInFull && b.balanceCents > 0)
+  );
+}
+
 export type CardAdviceInput = {
   spend: CardAdviceSpend;
   catalogue: readonly CatalogueEntryLike[];
@@ -277,6 +290,7 @@ export type CardAdviceInput = {
   /** The user also stated a card that is not in the catalogue. */
   hasOtherCard: boolean;
   cardBalances: readonly CardBalance[];
+  cardRepayment?: CardRepayment | null;
   rewards: readonly RewardsBalance[];
   preferences: PlanPreferences;
   rates: readonly RateBenchmark[];
@@ -630,8 +644,11 @@ export function computeCardAdvice(i: CardAdviceInput): CardAdvice {
     options,
     notComparable,
     interest,
-    /** True when a balance is carried: the ranking compares fees and points only. */
-    ignoresInterest: interest.length > 0,
+    /** True when card debt is carried: the ranking compares fees and points only. */
+    ignoresInterest: carriesCardDebt({
+      cardRepayment: i.cardRepayment ?? null,
+      cardBalances: i.cardBalances,
+    }),
     points,
   };
 }

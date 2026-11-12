@@ -65,13 +65,18 @@ export function applyCardBalances(
   return copyProfile(p, { cardBalances: { value: [...rows], source: "stated", at: asOf } });
 }
 
-/** Picking other cards drops the balances of cards that are no longer stated. */
+/** Picking other cards drops the balances of cards that are no longer stated.
+ *  An empty list also clears the repayment answer, as "no cards" does. */
 export function applyStatedCards(
   p: AdvisorProfile,
   ids: readonly string[],
   asOf: string,
 ): AdvisorProfile {
   const next = copyProfile(p, { statedCards: { value: [...ids], source: "stated", at: asOf } });
+  if (ids.length === 0) {
+    const { cardBalances: _b, cardRepayment: _r, ...rest } = next;
+    return new AdvisorProfile(rest);
+  }
   const kept = (p.cardBalances?.value ?? []).filter((b) => ids.includes(b.cardId));
   if (p.cardBalances === undefined || kept.length === p.cardBalances.value.length) return next;
   return applyCardBalances(next, kept, p.cardBalances.at);
