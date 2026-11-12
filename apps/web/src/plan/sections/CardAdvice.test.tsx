@@ -71,6 +71,7 @@ const base: CardAdviceInput = {
   cardBalances: [
     { cardId: "american-express-gold-card", balanceCents: 300_000, paysInFull: false, ratePct: 15 },
   ],
+  cardRepayment: null,
   rewards: [
     makeRewardsBalance({
       program: "American Express Membership Rewards",
@@ -200,6 +201,20 @@ test("unknown buffer: says why there is no pay-off advice", () => {
 test("a revolving user is told the comparison leaves out card interest", () => {
   const c = mount(computeCardAdvice(base));
   expect(q(c, "plan-card-interest-ignored")!.textContent).toContain("rente van kaarten zit niet");
+});
+
+test.each(["sometimes", "rarely"] as const)(
+  "paying the card %s in full shows the interest-ignored alert even with no balance on file",
+  (cardRepayment) => {
+    const c = mount(computeCardAdvice({ ...base, cardBalances: [], cardRepayment }));
+    expect(q(c, "plan-card-interest-ignored")!.textContent).toContain("rente van kaarten zit niet");
+  },
+);
+
+test("paying the card always in full, with no balance, shows no interest-ignored alert", () => {
+  const c = mount(computeCardAdvice({ ...base, cardBalances: [], cardRepayment: "full" }));
+  expect(q(c, "plan-card-verdict")).not.toBeNull();
+  expect(q(c, "plan-card-interest-ignored")).toBeNull();
 });
 
 test("an unvalued held card: no switch, and the reason is named", () => {

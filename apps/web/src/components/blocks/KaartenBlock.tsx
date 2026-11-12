@@ -6,6 +6,7 @@ import { formatEuroIn } from "../../format.js";
 import { BANK_LOGOS, type BankLogo } from "../../assets/bank-logos.generated.js";
 import useBrandRamps from "../../useBrandRamps.js";
 import Module from "../Module.js";
+import Button from "../ui/Button.js";
 import CardLink from "../ui/CardLink.js";
 import { useAppLocale } from "../../appLocale.js";
 import { moneyCopy, type MoneyCopy } from "../../copy/money.js";
@@ -387,18 +388,12 @@ export default function KaartenBlock({
                   {c.nietGekoppeld}
                 </div>
                 <footer className="flex">
-                  <button
-                    type="button"
-                    className="cursor-pointer rounded-sm px-3 py-1 text-[0.85rem] font-semibold"
-                    style={{
-                      background: "transparent",
-                      color: "var(--ink)",
-                      border: "1px solid var(--line)",
-                    }}
+                  <Button
+                    className="px-3 py-1 text-[0.85rem] font-semibold bg-transparent"
                     onClick={() => onNavigate("accounts")}
                   >
                     {c.koppelen}
-                  </button>
+                  </Button>
                 </footer>
               </article>
             );

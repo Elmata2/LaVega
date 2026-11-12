@@ -290,7 +290,7 @@ export type CardAdviceInput = {
   /** The user also stated a card that is not in the catalogue. */
   hasOtherCard: boolean;
   cardBalances: readonly CardBalance[];
-  cardRepayment?: CardRepayment | null;
+  cardRepayment: CardRepayment | null;
   rewards: readonly RewardsBalance[];
   preferences: PlanPreferences;
   rates: readonly RateBenchmark[];
@@ -646,7 +646,7 @@ export function computeCardAdvice(i: CardAdviceInput): CardAdvice {
     interest,
     /** True when card debt is carried: the ranking compares fees and points only. */
     ignoresInterest: carriesCardDebt({
-      cardRepayment: i.cardRepayment ?? null,
+      cardRepayment: i.cardRepayment,
       cardBalances: i.cardBalances,
     }),
     points,

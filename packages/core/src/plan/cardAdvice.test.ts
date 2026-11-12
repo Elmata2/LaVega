@@ -67,6 +67,7 @@ const input = (o: Partial<CardAdviceInput> = {}): CardAdviceInput => ({
   heldIds: [],
   hasOtherCard: false,
   cardBalances: [],
+  cardRepayment: null,
   rewards: [],
   preferences: emptyPlanPreferences(),
   rates: [],

@@ -1229,14 +1229,13 @@ export default function Rekeningen({
         >
           <div className="flex items-center justify-between gap-3 flex-wrap">
             <h3 className="m-0">{c.nietGekoppeldHeading}</h3>
-            <button
-              type="button"
-              className="cursor-pointer rounded-sm px-3 py-1 font-semibold bg-transparent text-ink border border-line"
+            <Button
+              className="px-3 py-1 font-semibold bg-transparent"
               aria-expanded={linking}
               onClick={() => setLinking(!linking)}
             >
               {c.nietGekoppeldKoppelen}
-            </button>
+            </Button>
           </div>
           <ul className="m-0 mt-2 pl-5">
             {placeholders.map((p) => (
