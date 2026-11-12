@@ -401,7 +401,7 @@ function PortfolioKpis({ data }: { data: InvestingDashboardData }) {
       className="rounded-card border border-border bg-card p-5"
       data-dashboard-section="kpis"
     >
-      <h3 className="font-display text-2xl">Key figures</h3>
+      <h3 className="font-sans text-xl font-semibold tracking-tight">Key figures</h3>
       <dl className="mt-4 space-y-4">
         <div>
           <dt className="text-xs text-muted-foreground">Portfolio value</dt>

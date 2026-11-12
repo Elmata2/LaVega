@@ -560,7 +560,7 @@ export default function Punten({
         className="flex items-baseline justify-between gap-4 flex-wrap pb-2 mt-6 mb-4 border-b border-line first:mt-0"
         data-testid="view-head"
       >
-        <h2 className="m-0 font-display text-[1.5rem] font-semibold tracking-[-0.01em] text-ink">
+        <h2 className="m-0 font-body text-[1.5rem] font-semibold tracking-[-0.01em] text-ink">
           {c.header.title}
         </h2>
         {/* SALDI TELLEN, GEEN PROGRAMMA'S. Dit getal telt de rijen waar hij een
@@ -673,7 +673,7 @@ export default function Punten({
 
                 <div className="flex items-baseline gap-2 mt-3">
                   <span
-                    className="font-display text-[2rem] font-semibold text-ink tabular-nums [overflow-wrap:anywhere]"
+                    className="font-body text-[2rem] font-semibold text-ink tabular-nums [overflow-wrap:anywhere]"
                     data-testid="punt-value"
                   >
                     {unit === "eur"
@@ -795,7 +795,7 @@ export default function Punten({
         className="flex items-baseline justify-between gap-4 flex-wrap pb-2 mt-6 mb-4 border-b border-line first:mt-0"
         data-testid="view-head"
       >
-        <h3 className="m-0 font-display text-[1.2rem] font-semibold tracking-[-0.01em] text-ink">
+        <h3 className="m-0 font-body text-[1.2rem] font-semibold tracking-[-0.01em] text-ink">
           {c.addForm.heading}
         </h3>
         <span className="eyebrow flex-none">{c.addForm.overwriteHint}</span>

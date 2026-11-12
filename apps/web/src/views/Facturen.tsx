@@ -990,7 +990,7 @@ export default function Facturen({
         className="flex items-baseline justify-between gap-4 flex-wrap pb-2 mt-6 mb-4 border-b border-line first:mt-0"
         data-testid="view-head"
       >
-        <h2 className="m-0 font-display text-[1.5rem] font-semibold tracking-[-0.01em] text-ink">
+        <h2 className="m-0 font-body text-[1.5rem] font-semibold tracking-[-0.01em] text-ink">
           {c.head.title}
         </h2>
         <span className="eyebrow flex-none">{c.head.eyebrow}</span>
@@ -1061,7 +1061,7 @@ export default function Facturen({
               if (file) handleFile(file);
             }}
           >
-            <span className="font-display text-[1.15rem] text-ink">
+            <span className="font-body text-[1.15rem] text-ink">
               {c.forms.drop.dropzoneTitle}
             </span>
             <span className="text-[0.8rem] max-w-[34ch]">{c.forms.drop.dropzoneSub}</span>
@@ -1454,7 +1454,7 @@ export default function Facturen({
         className="flex items-baseline justify-between gap-4 flex-wrap pb-2 mt-6 mb-4 border-b border-line first:mt-0"
         data-testid="view-head"
       >
-        <h2 className="m-0 font-display text-[1.5rem] font-semibold tracking-[-0.01em] text-ink">
+        <h2 className="m-0 font-body text-[1.5rem] font-semibold tracking-[-0.01em] text-ink">
           {c.list.heading}
         </h2>
         <span className="eyebrow flex-none">

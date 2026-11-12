@@ -1171,7 +1171,7 @@ export default function Optimalisatie({
   return (
     <>
       <div className="flex items-baseline justify-between gap-[var(--sp-4)] flex-wrap pb-[var(--sp-2)] mt-[var(--sp-5)] mb-[var(--sp-4)] border-b border-b-line first:mt-0">
-        <h2 className="m-0 font-display text-[1.5rem] font-semibold tracking-[-0.01em] text-ink">
+        <h2 className="m-0 font-body text-[1.5rem] font-semibold tracking-[-0.01em] text-ink">
           {c.header.title}
         </h2>
         <span className="eyebrow flex-none">{c.header.eyebrow}</span>
@@ -1691,7 +1691,7 @@ export default function Optimalisatie({
                   wat je erop overhoudt, terwijl de rekening waar je heen gaat zelf
                   ook geld kan kosten: € 50 rente meer op een pakket van € 4,50 per
                   maand is € 4,00 achteruit. De aftrek staat onderaan dit blok. */}
-              <p className="m-0 mb-[var(--sp-3)] font-display text-[1.25rem] text-ink">
+              <p className="m-0 mb-[var(--sp-3)] font-body text-[1.25rem] text-ink">
                 {renderSegments(
                   c.interest.leadSentence({
                     amount: euro(locale, interest.totalExtraPerYearCents),
@@ -2143,7 +2143,7 @@ export default function Optimalisatie({
                      een HERKEND kenmerk staat vooraan, de vrije brontekst
                      eromheen vouwt op. */}
               <p
-                className="m-0 mb-[var(--sp-3)] font-display text-[1.25rem] text-ink"
+                className="m-0 mb-[var(--sp-3)] font-body text-[1.25rem] text-ink"
                 data-testid="cashback-antwoord"
               >
                 {c.cashback.answerLine({
@@ -2532,7 +2532,7 @@ export default function Optimalisatie({
                 nooit op. */}
             {costs.total.kind === "complete" && (
               <p
-                className="m-0 mb-[var(--sp-3)] font-display text-[1.25rem] text-ink"
+                className="m-0 mb-[var(--sp-3)] font-body text-[1.25rem] text-ink"
                 data-testid="kosten-totaal"
               >
                 {c.costs.totalComplete(
@@ -2543,7 +2543,7 @@ export default function Optimalisatie({
             )}
             {costs.total.kind === "incomplete" && (
               <p
-                className="m-0 mb-[var(--sp-3)] font-display text-[1.25rem] text-ink"
+                className="m-0 mb-[var(--sp-3)] font-body text-[1.25rem] text-ink"
                 data-testid="kosten-totaal"
               >
                 {c.costs.totalIncomplete({

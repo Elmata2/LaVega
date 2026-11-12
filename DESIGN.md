@@ -20,35 +20,35 @@ colors:
   chart-pink: "#ff7fb0"
 typography:
   display:
-    fontFamily: "Libron, Georgia, serif"
+    fontFamily: "Instrument Serif, Georgia, serif"
     fontSize: "3.75rem"
     fontWeight: 400
     lineHeight: 1.18
     letterSpacing: "0.01em"
   headline:
-    fontFamily: "Libron, Georgia, serif"
+    fontFamily: "Instrument Serif, Georgia, serif"
     fontSize: "1.875rem"
     fontWeight: 400
     lineHeight: 1.18
     letterSpacing: "0.01em"
   title:
-    fontFamily: "Libron, Georgia, serif"
+    fontFamily: "Instrument Serif, Georgia, serif"
     fontSize: "1.5rem"
     fontWeight: 400
     lineHeight: 1.18
     letterSpacing: "0.01em"
   figure:
-    fontFamily: "Inter, system-ui, sans-serif"
+    fontFamily: "Geist, system-ui, sans-serif"
     fontSize: "3rem"
     fontWeight: 600
     fontFeature: "tnum"
   body:
-    fontFamily: "Inter, system-ui, sans-serif"
+    fontFamily: "Geist, system-ui, sans-serif"
     fontSize: "0.875rem"
     fontWeight: 400
     fontFeature: "tnum"
   caption:
-    fontFamily: "Inter, system-ui, sans-serif"
+    fontFamily: "Geist, system-ui, sans-serif"
     fontSize: "0.75rem"
     fontWeight: 600
 rounded:
@@ -100,14 +100,14 @@ components:
 
 The shared lavega.dev "Midnight" world, applied to investing: a near-black canvas, a serif voice for headings, and plain tabular figures. Investing-web and apps/web use the same palette; `apps/web/src/styles/tokens.css` is the palette source and `apps/investing-web/src/styles/tokens.css` re-expresses it as HSL triplets so Tailwind alpha modifiers (`bg-primary/10`) keep working. Do not switch investing to raw hex or var-to-var `@theme` values: alpha modifiers would then silently emit full opacity.
 
-Density is calm and moderate. Panels are separated by tone (midnight, surface, surface-2) and a 12% white hairline, never by shadow. Color is rare and meaningful: coral means act, blue means link, active or focus, green and rose mean gain and loss, amber means caution. Numbers are the content: Inter, tabular, aligned, never decorated.
+Density is calm and moderate. Panels are separated by tone (midnight, surface, surface-2) and a 12% white hairline, never by shadow. Color is rare and meaningful: coral means act, blue means link, active or focus, green and rose mean gain and loss, amber means caution. Numbers are the content: Geist, tabular, aligned, never decorated.
 
 Visual anti-references: neon crypto-trading dashboards (glow, gradient numbers, gamified color); a small uppercase kicker above a heading; coral used as a selected or active state.
 
 **Key Characteristics:**
 
 - Dark by default (`color-scheme: dark`) with an opt-in light "warm paper" theme; see Themes.
-- Libron for the wordmark and headings, Inter with tabular numerals for everything else.
+- Instrument Serif for the wordmark and titles from 30px up, Geist with tabular numerals for everything else.
 - Tone-plus-hairline depth; only floating layers cast a shadow.
 - Coral is the one filled call to action; blue carries links, active state and focus.
 - Radii follow the lavega.dev scale: pill buttons, 20px cards, 14px tiles.
@@ -178,25 +178,26 @@ The coral button boundary is below 3:1 on paper; its label (7.41:1) identifies i
 
 ## Typography
 
-**Display Font:** Libron (Georgia, serif), four styles (400, 700, both italics)
-**Body Font:** Inter (system-ui, sans-serif), weights 400 to 700
+**Display Font:** Instrument Serif (Georgia, serif), 400 and 400 italic only
+**Body Font:** Geist (system-ui, sans-serif), variable 100 to 900
 
-**Character:** A condensed literary serif over a plain grotesque. The serif gives the product its voice; Inter keeps every figure, control and small label honest.
+**Character:** A condensed display serif over a precise grotesque. The serif gives the product its voice at title sizes; Geist keeps every figure, control, label and smaller heading clean and honest. Same two faces as apps/web and apps/site (2026-11-11).
 
 ### Hierarchy
 
-- **Display** (400, 3.75rem at lg, 2.25rem on phones): the sign-in headline.
-- **Headline** (400, 1.875rem): card titles (`CardTitle` default), the wordmark at 1.875rem.
-- **Title** (400, 1.5rem): compact card titles (`size="md"`), sub-headings at 1.25rem.
-- **Figure** (Inter 600, tabular, 3rem at md for portfolio value, 1.5 to 1.875rem for secondary figures): headline numbers.
-- **Body** (Inter 400, 0.875rem): running text, controls, table cells.
-- **Caption** (Inter 600, 0.75rem): chips, notes, column labels.
+- **Display** (Instrument Serif 400, 3.75rem at lg, 2.25rem on phones): the sign-in headline.
+- **Headline** (Instrument Serif 400, 1.875rem): card titles (`CardTitle` default), the wordmark at 1.875rem.
+- **Title** (Geist 600, 1.25rem, `tracking-tight`): compact card titles (`size="md"`) and every sub-heading under 30px.
+- **Figure** (Geist 600, tabular, 3rem at md for portfolio value, 1.5 to 1.875rem for secondary figures): headline numbers.
+- **Body** (Geist 400, 0.875rem): running text, controls, table cells.
+- **Caption** (Geist 600, 0.75rem): chips, notes, column labels.
 
 ### Named Rules
 
-**The Size Rule.** Libron has a real Bold, but headings stay at 400 on purpose: hierarchy comes from size. Use 700 for emphasis inside running text, never to make a heading heavier.
-**The Serif Breathing Rule.** Libron is a book serif with tall ascenders and long descenders, so serif text takes `line-height: 1.18`, `letter-spacing: 0.01em` and `padding-block: 0.04em`. This rule is unlayered in `tokens.css` so it beats Tailwind `text-*`, `leading-*` and `tracking-*` utilities, which otherwise crop headings. Never put `leading-none` or `tracking-tight` on serif.
-**The Tabular Rule.** Figures, tables, inputs, small controls and text under 14px are Inter with `tabular-nums` (set on `body`), so columns align and values do not jitter. Libron also carries `tnum`, but the figures belong to Inter: one numeric voice across the product.
+**The Size Floor Rule.** Instrument Serif is opt-in through the `font-display` class and only at `text-3xl` (30px) and up. Below that its thin, condensed strokes stop reading; use Geist 600. Base `h1`–`h4` are Geist, so a heading without `font-display` is never serif by accident.
+**The One Weight Rule.** Instrument Serif has one drawn weight. The unlayered `.font-display` rule pins it to 400 with `font-synthesis: none`, so a stray `font-semibold` cannot fake a bold smear.
+**The Serif Spacing Rule.** `.font-display` sets `line-height: 1.12`, `letter-spacing: 0` and `padding-block: 0.04em`. It is unlayered in `tokens.css` so it beats Tailwind `leading-none` and `tracking-tight`, which crop and squeeze the condensed face.
+**The Tabular Rule.** Figures, tables, inputs, small controls and text under 14px are Geist with `tabular-nums` (set on `body`). Instrument Serif has no `tnum`, so it never carries a number.
 
 ## Layout
 
@@ -234,17 +235,17 @@ Soft and generous, on the lavega.dev scale: pill (999px) for buttons, nav and ch
 ### Cards / Containers
 
 - **Corner Style:** 20px. **Background:** Surface. **Border:** hairline. **Shadow:** none. **Padding:** 20px (24px at sm).
-- **Title:** Libron, 1.875rem (1.5rem compact).
+- **Title:** Instrument Serif, 1.875rem; compact (`size="md"`) is Geist 600, 1.25rem.
 - **Empty variant:** transparent, dashed hairline, no shadow.
 
 ### Inputs / Fields
 
-- **Style:** Midnight fill, hairline stroke, 14px radius, 10px 12px padding, Inter 14px.
+- **Style:** Midnight fill, hairline stroke, 14px radius, 10px 12px padding, Geist 14px.
 - **Focus:** the shared blue ring. Field stacks use 8px label-to-input gap and 24px between fields; descriptions are Mist 14px.
 
 ### KPI row
 
-Three cells divided by hairlines under a top and bottom hairline: label in Mist 14px, figure in Inter semibold tabular (3rem value, 1.5 to 1.875rem for change and return), a 12px Mist note beneath. Gain and loss color the figure with green or rose. An unknown figure reads "Unknown" in Mist, with its reason in the note; never zero.
+Three cells divided by hairlines under a top and bottom hairline: label in Mist 14px, figure in Geist semibold tabular (3rem value, 1.5 to 1.875rem for change and return), a 12px Mist note beneath. Gain and loss color the figure with green or rose. An unknown figure reads "Unknown" in Mist, with its reason in the note; never zero.
 
 ### Status line
 
@@ -270,7 +271,7 @@ Auth fade 180ms `cubic-bezier(0.23, 1, 0.32, 1)`; button press 150ms ease-out; m
 
 ### Do:
 
-- **Do** use Inter with tabular numerals for every figure, table, input, control and text under 14px.
+- **Do** use Geist with tabular numerals for every figure, table, input, control and text under 14px.
 - **Do** keep coral for the single filled CTA and blue for links, active state and focus.
 - **Do** separate panels with tone and the 12% white hairline.
 - **Do** show unknown figures as "Unknown" with a reason, never as zero.
@@ -287,4 +288,4 @@ Auth fade 180ms `cubic-bezier(0.23, 1, 0.32, 1)`; button press 150ms ease-out; m
 - **Don't** use green or rose except for gain, loss and problem; chart series never use green, rose or coral hues.
 - **Don't** put a shadow on a resting panel; only floating layers lift.
 - **Don't** set `leading-none` or `tracking-tight` on serif text, or add bold to it.
-- **Don't** set figures, tables or inputs in Libron; numbers are Inter.
+- **Don't** use the serif below 30px, or for figures, tables or inputs; those are Geist.

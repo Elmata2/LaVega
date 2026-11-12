@@ -495,7 +495,7 @@ export default function Belasting({
                 <div className="flex items-baseline justify-between gap-3 mb-2">
                   <span className="font-semibold text-ink">{entity}</span>
                   <span
-                    className={`font-display text-[1.2rem] font-semibold ${!known ? "" : direction === "terugvragen" ? "text-pos" : "text-neg"}`}
+                    className={`font-body text-[1.2rem] font-semibold tabular-nums ${!known ? "" : direction === "terugvragen" ? "text-pos" : "text-neg"}`}
                   >
                     {known ? formatEuroIn(locale, Math.abs(netCents) / 100) : c.vat.noAmount}
                   </span>
@@ -718,7 +718,7 @@ export default function Belasting({
                   <div className="flex items-baseline justify-between gap-3 mb-2">
                     <span className="font-semibold text-ink">{entity}</span>
                     <span
-                      className={`font-display text-[1.2rem] font-semibold ${total > 0 ? "text-neg" : ""}`}
+                      className={`font-body text-[1.2rem] font-semibold tabular-nums ${total > 0 ? "text-neg" : ""}`}
                     >
                       {flows.length > 0 ? formatEuroIn(locale, total / 100) : c.profitTax.noAmount}
                     </span>

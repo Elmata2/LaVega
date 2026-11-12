@@ -1,6 +1,6 @@
 ---
 name: LaVega App
-description: The product surface at app.lavega.dev. The lavega.dev "Midnight" world as a working dashboard: near-black ground, one serif voice, honest tabular figures, cantaloupe for the one primary action.
+description: The product surface at app.lavega.dev. The lavega.dev "Midnight" world as a working dashboard: near-black ground, a display serif over Geist, honest tabular figures, cantaloupe for the one primary action.
 colors:
   midnight: "#02070a"
   surface: "#0d171d"
@@ -18,35 +18,35 @@ colors:
   chart-teal: "#4fd1c0"
 typography:
   display:
-    fontFamily: "Libron, Georgia, Times New Roman, serif"
+    fontFamily: "Instrument Serif, Georgia, Times New Roman, serif"
     fontSize: "2.6rem"
-    fontWeight: 600
-    lineHeight: 1.05
-    letterSpacing: "-0.02em"
+    fontWeight: 400
+    lineHeight: 1.08
+    letterSpacing: "0"
   headline:
-    fontFamily: "Libron, Georgia, Times New Roman, serif"
+    fontFamily: "Geist, system-ui, sans-serif"
     fontSize: "1.25rem"
     fontWeight: 600
     lineHeight: 1.25
     letterSpacing: "-0.01em"
   body:
-    fontFamily: "Libron, Georgia, Times New Roman, serif"
+    fontFamily: "Geist, system-ui, sans-serif"
     fontSize: "1rem"
     fontWeight: 400
     lineHeight: 1.5
   label:
-    fontFamily: "Libron, Georgia, Times New Roman, serif"
+    fontFamily: "Geist, system-ui, sans-serif"
     fontSize: "0.85rem"
     fontWeight: 400
     lineHeight: 1.4
   figure:
-    fontFamily: "Libron, Georgia, Times New Roman, serif"
+    fontFamily: "Geist, system-ui, sans-serif"
     fontSize: "2.1rem"
     fontWeight: 700
     letterSpacing: "-0.02em"
     fontFeature: "tnum"
   eyebrow:
-    fontFamily: "Libron, Georgia, Times New Roman, serif"
+    fontFamily: "Geist, system-ui, sans-serif"
     fontSize: "0.75rem"
     fontWeight: 400
     letterSpacing: "0.02em"
@@ -94,7 +94,7 @@ The working product behind app.lavega.dev, and the reference the content site an
 
 **Key characteristics**
 
-- One typeface: Libron, self-hosted from `src/assets/fonts/` (four styles, OFL, license shipped next to the files).
+- Two faces, each with one job: Instrument Serif for display (28px and up, 400 only), Geist for everything else. Self-hosted from `src/assets/fonts/` with the OFL licenses.
 - Dark by default with an opt-in light theme; radius, type, spacing and motion are shared between the two.
 - The app is a single floating frame on the gutter, not a full-bleed page. Only the content inside scrolls.
 - Depth is tone plus a 12% hairline. Only floating layers (dialogs, menus) cast a shadow.
@@ -117,15 +117,27 @@ Delta pills use `--pos-tint` / `--neg-tint`, built with `color-mix` in srgb. Do 
 
 ## Typography
 
-**One family.** `--font-display`, `--font-body` and `--font-mono` are all Libron. There is no second face; hierarchy comes from size and weight, and small labels are the same face at a smaller size.
+**Two families, one job each** (2026-11-11, replacing Libron). `--font-display` is Instrument Serif; `--font-body` and `--font-mono` are Geist.
 
-**Libron has four real styles** (400, 700, and both italics), so `font-weight: 600` resolves to the drawn Bold. Do not declare the face over a synthetic `100 900` range: that was the workaround for the single-weight face this replaced, and it makes bold look like a smear.
+**The size floor.** Instrument Serif is a condensed face with thin strokes and ONE drawn weight. It reads at 28px and up and nowhere else: the page title (`.topbar-title`, 2.6rem), base `h1` (1.75rem), the `.brand` wordmark, and on the landing page `h1`/`h2`, the scroll-lit sentence, the chat question and the quote. Every heading under that (base `h2`/`h3`, module titles, dialog and chat titles, the `font-body` section titles in the views) is Geist 600. The last time this serif ran the whole app it was faux-bolded and set at label sizes, and headings were hard to read; the floor is what prevents that.
 
-**Tabular figures.** Libron carries a real `tnum` feature and the app sets `font-variant-numeric: tabular-nums` on numeric cells, so columns align by digit width. Keep it on anything that can change while the user watches.
+**No faux bold.** The serif is declared at 400 only and every display role sets `font-synthesis: none` and `font-weight: 400`. Tracking stays at 0 or above, never negative: the face is already condensed.
 
-**Missing glyphs.** Libron has no arrows or checks (`→ ← ↑ ↓ ✓`). Every stack ends in `Georgia, "Times New Roman", serif`, so those glyphs fall back per glyph. Do not set them in a decorative face.
+**Figures are Geist.** Instrument Serif has no `tnum`. Geist does, and the app sets `font-variant-numeric: tabular-nums` on numeric cells and big figures (`Valuta`, `Punten`, `Belasting` amounts carry `tabular-nums` on the element).
 
-**Scale.** `html` is 17px. The page title (`.topbar-title`) is 2.6rem at 600, 1.05 line-height and `-0.02em`; the base `h1` rule is 1.75rem, `h2` 1.25rem, `h3` 1rem in mist. Body is 1rem at line-height 1.5. A module figure is 2.1rem at 700 with `-0.02em` and tabular figures. Eyebrows are 0.75rem at 400 with `0.02em` tracking; the uppercase ones are per-component, not a global rule.
+**Missing glyphs.** Neither latin subset has arrows or checks (`→ ← ✓`). The stacks end in a system face, so those glyphs fall back per glyph.
+
+**Loading.** `* Fallback` `@font-face` rules scale Times New Roman / Arial to the webfont metrics, so the swap does not reflow (CLS 0 measured on throttled 3G). `vite.config.ts` preloads the three hero faces (serif upright + italic, Geist upright) and fails the build if their hashed names are not found.
+
+**Scale.** `html` is 17px. The page title is 2.6rem serif at 400, line-height 1.08. Base `h1` 1.75rem serif; `h2` 1.25rem and `h3` 1rem are Geist 600 (`h3` in mist). Body is Geist 1rem at 1.5. A module figure is Geist 2.1rem at 700, `-0.02em`, tabular. Eyebrows are 0.75rem at 400 with `0.02em` tracking.
+
+**Landing page.** Body is Geist 18px / 1.55. Headlines are Instrument Serif: `h1` clamp(3.3rem, 8.4vw, 6.8rem) at line-height 1.02 and `-0.005em`, `h2` at 1.06 and 0. `h3`, the quote's `cite` and the small `.acts h2` are Geist.
+
+**Landing responsive and slow-network rules.**
+
+- The full bar (links, sign-in, CTA) needs ~800px, so the burger takes over at 860px. Below 520px the header CTA moves into the menu panel; the hero keeps its own. Buttons never wrap (`white-space: nowrap`).
+- Touch targets are 44px or more: burger 44×44, FAQ summaries `min-height: 44px`, footer links get a padded hit area under `pointer: coarse`.
+- The prerendered page paints in ~1.8s on 3G, but the bundle lands at ~6s. `public/lp-early.js` (same-origin, the CSP forbids inline script) records a sign-in/sign-up tap in that gap and marks the button `aria-busy`; `Landing.tsx` replays it on mount. Buttons that open the dialog carry `data-lp-tap`.
 
 ## Layout
 
@@ -158,7 +170,7 @@ Reduced motion removes all three and shows the end state. Unlit words in the scr
 
 ## Rules
 
-- **Do** keep one typeface. A second face is a design change, not a component decision.
+- **Do** keep the two faces to their jobs: serif only at 28px and up at 400, Geist for everything else. A third face is a design change, not a component decision.
 - **Do** put every number in tabular figures, and keep the `tnum` feature on.
 - **Do** separate panels with tone and the hairline.
 - **Do** keep cantaloupe for the one primary action per screen.
@@ -166,4 +178,5 @@ Reduced motion removes all three and shows the end state. Unlit words in the scr
 - **Don't** use green or rose outside gain, loss and problem.
 - **Don't** add a shadow to a resting panel.
 - **Don't** introduce a grey outside the token list; use the hairline or a surface step.
-- **Don't** hard-code a font stack that omits the Georgia fallback, or `→` and `✓` disappear.
+- **Don't** hard-code a font stack; use `--font-display` / `--font-body`, which carry the metric fallbacks and the system tail for `→` and `✓`.
+- **Don't** put the serif on a number, a label, or anything under 28px.

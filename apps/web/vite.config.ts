@@ -24,6 +24,35 @@ function cspMetaPlugin() {
   };
 }
 
+/* Preload the three faces the first viewport paints: the hero headline
+ * (Instrument Serif, upright + italic) and Geist for everything else. Without
+ * it the browser finds the fonts only after parsing the CSS, and on a slow
+ * connection the hero renders in the fallback and then jumps. The file names
+ * carry Vite's content hash, so they are read from the finished bundle. */
+const PRELOAD_FONTS =
+  /assets\/(instrument-serif-latin-400-(normal|italic)|geist-latin-wght-normal)-[\w-]+\.woff2$/;
+function fontPreloadPlugin() {
+  return {
+    name: "lavega-font-preload",
+    apply: "build" as const,
+    transformIndexHtml: {
+      order: "post" as const,
+      handler(_html: string, ctx: { bundle?: Record<string, unknown> }) {
+        const files = Object.keys(ctx.bundle ?? {}).filter((f) => PRELOAD_FONTS.test(f));
+        if (files.length !== 3)
+          throw new Error(
+            `font preload: expected 3 hero fonts in the bundle, found ${files.length}`,
+          );
+        return files.map((f) => ({
+          tag: "link",
+          attrs: { rel: "preload", href: `/${f}`, as: "font", type: "font/woff2", crossorigin: "" },
+          injectTo: "head" as const,
+        }));
+      },
+    },
+  };
+}
+
 /* Which build is this tab running? Vercel sets VERCEL_GIT_COMMIT_SHA at build
  * time; a local build says "dev". Shown at the foot of Profiel so a stale
  * cached bundle is a fact you can read, not a guess. */
@@ -45,6 +74,7 @@ export default defineConfig(({ isSsrBuild }) => ({
   plugins: [
     react(),
     cspMetaPlugin(),
+    ...(isSsrBuild ? [] : [fontPreloadPlugin()]),
     ...(process.env.LAVEGA_PREVIEW === "1" ? [previewPlugin()] : []),
     ...(uploadSourceMaps && !isSsrBuild
       ? sentryVitePlugin({

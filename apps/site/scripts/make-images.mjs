@@ -9,7 +9,8 @@ import { landingCopy } from "../../web/src/landingCopy.ts";
 const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 const here = dirname(fileURLToPath(import.meta.url));
 const repo = resolve(here, "../../..");
-const serif = resolve(repo, "apps/site/assets/fonts/libron-regular.woff2");
+const serif = resolve(repo, "apps/site/assets/fonts/instrument-serif-latin-400-normal.woff2");
+const geist = resolve(repo, "apps/site/assets/fonts/geist-latin-wght-normal.woff2");
 const logo = resolve(repo, "LaVega_wordmark_hires_white.png");
 const outBrand = resolve(here, "../assets/brand");
 const outOg = resolve(here, "../assets/og");
@@ -62,7 +63,8 @@ function isWrittenPng(file) {
 const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 
 const template = readFileSync(resolve(here, "og-card.html"), "utf8")
-  .replace("__LIBRON_400__", url(serif))
+  .replace("__SERIF_400__", url(serif))
+  .replace("__GEIST__", url(geist))
   .replace("__LOGO__", url(logo));
 const card = join(tmp, "og-card.html");
 writeFileSync(card, template);

@@ -187,6 +187,10 @@ function head(o: {
     `<meta name="twitter:title" content="${esc(o.title)}">`,
     `<meta name="twitter:description" content="${esc(o.description)}">`,
     `<meta name="twitter:image" content="${esc(img)}">`,
+    /* Found only after site.css otherwise; on 3G that showed the headline in
+     * the fallback serif for ~1s before the swap. */
+    `<link rel="preload" href="/fonts/instrument-serif-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>`,
+    `<link rel="preload" href="/fonts/geist-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>`,
     `<link rel="stylesheet" href="${STYLESHEET}">`,
     `<link rel="icon" href="${WORDMARK}" type="image/png">`,
     ...o.jsonLd.map((j) => `<script type="application/ld+json">${safeJsonLd(j)}</script>`),

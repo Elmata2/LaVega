@@ -916,7 +916,7 @@ export default function Globe({ value, onPick, from = "EUR", supported }: GlobeP
           <p>{c.noSelection(value)}</p>
         ) : effect.kind === "euro" ? (
           <>
-            <p className="lv-globe-answer-lead font-display text-[1.1rem] text-ink">
+            <p className="lv-globe-answer-lead font-body text-[1.1rem] text-ink">
               {label} {c.effectEuro.leadSuffix}
             </p>
             {from.toUpperCase() === "EUR" ? (
@@ -927,7 +927,7 @@ export default function Globe({ value, onPick, from = "EUR", supported }: GlobeP
           </>
         ) : effect.kind === "set" ? (
           <>
-            <p className="lv-globe-answer-lead font-display text-[1.1rem] text-ink">
+            <p className="lv-globe-answer-lead font-body text-[1.1rem] text-ink">
               {label} — {currencyLabel(effect.code, locale)}
             </p>
             {/* "de rekenmachine" en niet "hierboven": de bol staat op een breed
@@ -937,7 +937,7 @@ export default function Globe({ value, onPick, from = "EUR", supported }: GlobeP
           </>
         ) : effect.kind === "noRate" ? (
           <>
-            <p className="lv-globe-answer-lead font-display text-[1.1rem] text-ink">
+            <p className="lv-globe-answer-lead font-body text-[1.1rem] text-ink">
               {label} {c.effectNoRate.leadSuffix}
             </p>
             <p>
@@ -954,7 +954,7 @@ export default function Globe({ value, onPick, from = "EUR", supported }: GlobeP
           </>
         ) : effect.kind === "noTender" ? (
           <>
-            <p className="lv-globe-answer-lead font-display text-[1.1rem] text-ink">
+            <p className="lv-globe-answer-lead font-body text-[1.1rem] text-ink">
               {label} {c.effectNoTender.leadSuffix}
             </p>
             {/* Geen praktische tip erbij ("neem dollars mee", "je betaalt bij je
@@ -970,7 +970,7 @@ export default function Globe({ value, onPick, from = "EUR", supported }: GlobeP
           </>
         ) : effect.kind === "choice" ? (
           <>
-            <p className="lv-globe-answer-lead font-display text-[1.1rem] text-ink">
+            <p className="lv-globe-answer-lead font-body text-[1.1rem] text-ink">
               {label} {c.effectChoice.leadSuffix}
             </p>
             <p>{c.effectChoice.prompt}</p>
@@ -994,7 +994,7 @@ export default function Globe({ value, onPick, from = "EUR", supported }: GlobeP
           </>
         ) : (
           <>
-            <p className="lv-globe-answer-lead font-display text-[1.1rem] text-ink">
+            <p className="lv-globe-answer-lead font-body text-[1.1rem] text-ink">
               {label} {c.effectUnknown.leadSuffix}
             </p>
             <p>{c.effectUnknown.body}</p>

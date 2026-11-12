@@ -582,7 +582,7 @@ export default function Profiel({
         aria-label={c.profiel.head.ariaLabel}
       >
         <span
-          className="inline-flex items-center justify-center flex-none w-[56px] h-[56px] rounded-pill border border-line bg-surface-2 text-ink font-display text-[1.15rem] font-semibold tracking-[0.02em]"
+          className="inline-flex items-center justify-center flex-none w-[56px] h-[56px] rounded-pill border border-line bg-surface-2 text-ink font-body text-[1.15rem] font-semibold tracking-[0.02em]"
           aria-hidden="true"
           data-testid="profile-head-avatar"
         >

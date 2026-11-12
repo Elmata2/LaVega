@@ -105,7 +105,7 @@ function ReconciliationBadge({ disposal }: { disposal: RealizedDisposal }) {
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
     <section className="rounded-card border border-border bg-card p-5">
-      <h2 className="font-display text-2xl">{title}</h2>
+      <h2 className="font-sans text-xl font-semibold tracking-tight">{title}</h2>
       <div className="mt-4">{children}</div>
     </section>
   );

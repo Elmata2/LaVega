@@ -248,7 +248,7 @@ export function BetaalschemaBlock({ scheduledFlows, txs, asOf, paycheck }: Betaa
                   </span>
                 </span>
                 <span className="flex-1 min-w-0 flex flex-col items-start">
-                  <span className="flex items-baseline gap-2 w-full min-w-0 font-semibold">
+                  <span className="flex items-baseline gap-x-2 w-full min-w-0 font-semibold [@media(max-width:420px)]:flex-wrap">
                     {/* De naam staat in een eigen span, en dat is niet
                         cosmetisch: het afkappen zat op hetzelfde vakje als de
                         "voorspeld"-pil, dus bij een lange naam viel die pil
