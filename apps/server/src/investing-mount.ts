@@ -362,3 +362,105 @@ export async function runInvestingCron(request: Request): Promise<Response> {
   }
   return Response.json({ tenants: results, skipped, hop, continued: continuing });
 }
+
+/** The kill switch for the external scheduler. Unset means on, because the
+ *  scheduler is what makes a run longer than one Vercel budget finish at all
+ *  (issue #311); a deployment that wants the old daily-only cadence sets this
+ *  to `off` without touching the cron route. */
+export function investingSchedulerEnabled(): boolean {
+  return process.env.INVESTING_SYNC_SCHEDULER?.trim().toLowerCase() !== "off";
+}
+
+/** A run needs at least this much of the pass left to be started: enough for
+ *  one lane slice and the persistence that follows it. */
+export const CRON_DRAIN_MIN_TENANT_MS = 30_000;
+
+/**
+ * The external scheduler's worker (issue #311).
+ *
+ * The Vercel cron runs once a day, so a run that needs more than one 240 s
+ * budget only continues when the owner opens the app. Vercel rejects the
+ * server's own continuation (508 INFINITE_LOOP_DETECTED, fifth self-request,
+ * #306), so continuity has to come from outside the request chain. A scheduled
+ * runner (`.github/workflows/investing-sync.yml`) calls this route on a short
+ * cadence; each call advances the queue by ONE invocation budget and the run
+ * resumes from its durable `investing.sync_state` cursors on the next call.
+ * Nothing here self-fetches the deployment.
+ *
+ * The queue is `investing.list_broker_sync_tenants()`, the same fairness order
+ * the daily pass uses: least recently started first. A tenant whose drive
+ * returns `"continue"` has spent its budget and moves to the back of that
+ * order, so the other tenants are driven before it resumes. Nothing is stored
+ * in the runner: the cursor is the tenants' own durable state.
+ *
+ * Auth is `Authorization: Bearer $CRON_SECRET`, like the daily cron. The
+ * trigger itself adds no partner traffic of its own: every broker and price
+ * call inside `/api/sync/drive` takes a slot from the durable partner budget,
+ * and the per-tenant run lease stops two invocations working one tenant.
+ */
+export async function runInvestingDrain(request: Request): Promise<Response> {
+  if (!authorizedCronRequest(request))
+    return Response.json({ problems: ["Unauthorized cron request"] }, { status: 401 });
+  if (!investingSchedulerEnabled())
+    return Response.json({ enabled: false, driven: [], pending: 0, deadlineReached: false });
+  const url = new URL(request.url);
+  /* One clock for the whole pass, started before the tenant listing. The pass
+   * budget is the same 240 s the daily cron gets, so one trigger can never
+   * outlive the host's maxDuration. */
+  const { cronMs } = syncBudgets((name) => process.env[name]?.trim() || undefined);
+  const deadlineMs = cronMs === undefined ? undefined : Date.now() + cronMs;
+  let tenants: string[];
+  try {
+    tenants = await investingCronTenantIds();
+  } catch (error) {
+    cronProblem("Could not list tenants to drain", error);
+    return Response.json({ problems: ["Could not list tenants to drain"] }, { status: 503 });
+  }
+  if (tenants.length === 0)
+    return Response.json({ enabled: true, driven: [], pending: 0, deadlineReached: false });
+  if (!hasBrokerSyncTime(deadlineMs, CRON_DRAIN_MIN_TENANT_MS)) {
+    cronProblem("Drain budget is too small for one tenant; check INVESTING_SYNC_BUDGET_MS");
+    return Response.json({ problems: ["Sync budget too small for one tenant"] }, { status: 500 });
+  }
+  const origin = url.origin;
+  const secret = process.env.CRON_SECRET?.trim() ?? "";
+  const driven: Array<{ tenantId: string; status?: number; result?: unknown; error?: string }> = [];
+  let deadlineReached = false;
+
+  for (const tenantId of tenants) {
+    if (!hasBrokerSyncTime(deadlineMs, CRON_DRAIN_MIN_TENANT_MS)) {
+      /* Ran out of invocation budget. The rest of the queue is the next
+       * trigger's work, not this call's. */
+      if (driven.length > 0) deadlineReached = true;
+      break;
+    }
+    try {
+      const response = await forwardInvesting(
+        new Request(`${origin}/api/sync/drive`, {
+          method: "POST",
+          headers: {
+            authorization: `Bearer ${secret}`,
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({ force: false, deadlineMs }),
+        }),
+        tenantId,
+      );
+      const body = (await response.json().catch(() => null)) as { result?: unknown } | null;
+      driven.push({ tenantId, status: response.status, result: body?.result ?? null });
+    } catch (error) {
+      cronProblem(`Tenant ${tenantId} drain failed`, error);
+      driven.push({ tenantId, error: "Tenant drain failed" });
+    }
+  }
+
+  /* A drive that returns "continue" spent the tenant's budget, which is the
+   * pass budget, so the loop has normally stopped by now. Do not read that as a
+   * problem: the run row keeps the cursor and the next trigger resumes it. */
+  return Response.json({
+    enabled: true,
+    driven,
+    pending: Math.max(0, tenants.length - driven.length),
+    deadlineReached,
+  });
+}

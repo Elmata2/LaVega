@@ -525,7 +525,7 @@ One module, `apps/investing-web/src/lib/syncSession.ts`, owns the sync session f
 - An inactive state stops polling; the module never polls a paused or completed row on its own. A failed read with no run stops and shows **Connection: Offline** until the next wake (a new subscriber or a refresh intent).
 - The dashboard is invalidated once when each lane finishes a read, proven by a changed `holdings.syncedAt`, `history.syncedAt` or `prices.syncedAt`, and nowhere else. A failed read or a recovery does not invalidate.
 - One subscriber that unmounts removes only its listener. Polling stops when the last subscriber leaves.
-- The browser no longer posts price rounds and has no round limit. If the server cannot continue the run, `GET /api/sync/state` keeps reporting the stored lane state and the next refresh intent or daily cron resumes it from the durable cursors.
+- The browser no longer posts price rounds and has no round limit. If the server cannot continue the run, `GET /api/sync/state` keeps reporting the stored lane state and the next refresh intent or scheduled pass resumes it from the durable cursors: the external scheduler calls `POST /api/cron/investing-drain` every 15 minutes, and the daily Vercel cron is the backstop (issue #311).
 
 - Loading: preserve card geometry where practical and expose `role="status"`.
 - No broker data: show broker connection or import action.

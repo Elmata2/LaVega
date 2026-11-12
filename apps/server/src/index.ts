@@ -26,6 +26,7 @@ import {
   investingTenantId,
   runInvestingCron,
   shouldMountInvesting,
+  runInvestingDrain,
 } from "./investing-mount.js";
 import { authTrustedOrigins, getAuth, verifiedSession } from "./auth.js";
 import { authEmailConfig } from "./authEmail.js";
@@ -409,6 +410,11 @@ app.get("/terms", (c) => c.html(termsHtml));
  * investing-web dist exists (production Docker build). */
 if (shouldMountInvesting()) {
   app.get("/api/cron/investing-sync", (c) => runInvestingCron(c.req.raw));
+  /* The external scheduler's entry point (issue #311). One call advances the
+   * queue by one invocation budget; it never self-continues. GET as well as
+   * POST so a plain external cron service can drive it. */
+  app.get("/api/cron/investing-drain", (c) => runInvestingDrain(c.req.raw));
+  app.post("/api/cron/investing-drain", (c) => runInvestingDrain(c.req.raw));
   /* Every investing API call is served under one tenant, and the session names
    * it. A request that cannot name a tenant is refused rather than falling back
    * to the local one — that fallback would hand one user another user's data. */

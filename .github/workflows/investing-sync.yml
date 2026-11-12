@@ -1,0 +1,87 @@
+name: investing sync
+# The external scheduler for investing sync (issue #311).
+#
+# WHY THIS EXISTS. Vercel rejects a server that continues its own invocation
+# chain: the fifth self-request answers HTTP 508 INFINITE_LOOP_DETECTED (spike,
+# issue #306). The daily Vercel cron therefore gets one 240 s budget, and a run
+# that needs more only resumes when the owner opens the app. This workflow is
+# that scheduler: it lives outside the request chain, calls
+# POST /api/cron/investing-drain on a short cadence, and lets the run resume
+# from its durable investing.sync_state cursors. One call advances the queue by
+# one invocation budget and never self-continues, so INVESTING_SYNC_CHAIN can
+# stay off.
+on:
+  schedule:
+    # Every 15 minutes UTC. GitHub can delay a scheduled run, so treat the
+    # cadence as approximate: the queue is drained eventually, not on the dot.
+    - cron: "*/15 * * * *"
+  workflow_dispatch: # and on demand, for the first run and for a manual drain
+permissions: {}
+# Two ticks must not work the same tenant at once. The per-tenant run lease
+# already refuses the second worker; this keeps the wasted call away too.
+concurrency:
+  group: investing-sync
+  cancel-in-progress: false
+jobs:
+  drain:
+    runs-on: ubuntu-latest
+    # A drain call is one function invocation: 240 s budget, 300 s host limit,
+    # plus a little network slack. Never hold a runner longer than that.
+    timeout-minutes: 6
+    steps:
+      - name: Drain one invocation of due tenant work
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          SYNC_URL: ${{ vars.INVESTING_SYNC_URL || 'https://www.lavega.dev' }}
+          SCHEDULER: ${{ vars.INVESTING_SYNC_SCHEDULER }}
+        run: |
+          set -u
+          # KILL SWITCH, repository side. Set the repository variable
+          # INVESTING_SYNC_SCHEDULER=off to stop the cadence without editing
+          # this file. The deployment has its own switch: the Vercel
+          # environment variable INVESTING_SYNC_SCHEDULER=off makes the route
+          # answer { "enabled": false } and drive nothing.
+          if [ "${SCHEDULER:-}" = "off" ]; then
+            echo "investing sync scheduler is off (repository variable INVESTING_SYNC_SCHEDULER=off)"
+            exit 0
+          fi
+          SYNC_URL="${SYNC_URL%/}"
+          if [ -z "${CRON_SECRET:-}" ]; then
+            # A scheduled run without the secret must not mail a failure every
+            # 15 minutes while the operator is still wiring it up; it warns and
+            # skips. A human dispatch asked for the drain, so it fails.
+            if [ "${GITHUB_EVENT_NAME:-}" = "workflow_dispatch" ]; then
+              echo "::error::CRON_SECRET repository secret is not set; add it with the same value as Vercel"
+              exit 1
+            fi
+            echo "::warning::CRON_SECRET repository secret is not set; skipping this tick"
+            exit 0
+          fi
+          # One call is one invocation budget. Retry a 5xx once: a Neon or
+          # network hiccup is not a reason to lose the tick. A 401/403 is a
+          # configuration error and must be loud.
+          for attempt in 1 2; do
+            status=000
+            status=$(curl -sS -o /tmp/investing-drain.json -w '%{http_code}' \
+              --max-time 290 \
+              -X POST "$SYNC_URL/api/cron/investing-drain" \
+              -H "authorization: Bearer $CRON_SECRET" \
+              -H "content-type: application/json" \
+              -d '{}') || status=000
+            cat /tmp/investing-drain.json 2>/dev/null || true
+            echo
+            if [ "$status" -ge 200 ] && [ "$status" -lt 300 ]; then
+              exit 0
+            fi
+            if [ "$status" = "401" ] || [ "$status" = "403" ] || [ "$status" = "404" ]; then
+              echo "::error::investing drain refused with HTTP $status; check CRON_SECRET and INVESTING_SYNC_URL"
+              exit 1
+            fi
+            if [ "$status" != "000" ] && [ "$status" -lt 500 ]; then
+              echo "::error::investing drain answered HTTP $status"
+              exit 1
+            fi
+            if [ "$attempt" = "1" ]; then sleep 10; fi
+          done
+          echo "::error::investing drain answered HTTP $status after a retry"
+          exit 1

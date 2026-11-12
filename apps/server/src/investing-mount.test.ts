@@ -102,6 +102,7 @@ afterEach(() => {
   delete process.env.CRON_SECRET;
   delete process.env.INVESTING_SYNC_BUDGET_MS;
   delete process.env.INVESTING_PRICE_SYNC_BUDGET_MS;
+  delete process.env.INVESTING_SYNC_SCHEDULER;
   vi.useRealTimers();
   // clearAllMocks leaves unconsumed once-values queued for the next test.
   runtimeDatabaseMock.mockReset().mockReturnValue(null);
@@ -525,4 +526,228 @@ test("the forwarded /api namespaces are read from the investing app's own routes
   expect(await investingOwnsApiPath("/api/agents/portfolio")).toBe(true);
   expect(await investingOwnsApiPath("/api/investing/dashboard")).toBe(true);
   expect(await investingOwnsApiPath("/api/vault/backup")).toBe(false);
+});
+
+/* --- external scheduler (issue #311) ---------------------------------------
+ *
+ * Vercel answers the fifth self-request with 508 (issue #306), so a run longer
+ * than one 240 s budget cannot continue itself. A scheduled runner outside the
+ * request chain calls the drain route instead: one call advances the queue by
+ * one invocation budget, and the durable run row resumes it on the next call.
+ * These tests pin that boundary: auth, one budget per tenant, no self-request,
+ * and a run that needs three budgets finishing across three calls. */
+
+const drainRequest = () =>
+  new Request("https://lavega.dev/api/cron/investing-drain", {
+    method: "POST",
+    headers: { authorization: "Bearer cron-secret", "content-type": "application/json" },
+    body: "{}",
+  });
+
+async function drainMount(
+  tenants: string[],
+  handle: (tenant: string, path: string) => Response | Promise<Response> = () =>
+    Response.json({ result: "done" }),
+) {
+  vi.resetModules();
+  const mount = await import("./investing-mount.js");
+  const seen: string[] = [];
+  const bodies: string[] = [];
+  createDockerFetchMock.mockImplementation(() => async (request: Request) => {
+    const path = new URL(request.url).pathname;
+    if (path === "/api/sync/drive") bodies.push(await request.text());
+    const entry = `${mount.currentInvestingTenant()}:${path}`;
+    seen.push(entry);
+    return handle(mount.currentInvestingTenant(), path);
+  });
+  process.env.CRON_SECRET = "cron-secret";
+  getAuthMock.mockReturnValue({});
+  /* Persistent, unlike the daily-cron helper: one test runs several drain
+   * invocations, and each one lists the tenants again. */
+  runtimeDatabaseMock.mockReturnValue({});
+  listBrokerSyncTenantsMock.mockResolvedValue(tenants);
+  return { mount, seen, bodies };
+}
+
+test("the drain refuses a request without the cron secret", async () => {
+  const { mount, seen } = await drainMount(["user-a"]);
+
+  const anonymous = await mount.runInvestingDrain(
+    new Request("https://lavega.dev/api/cron/investing-drain", { method: "POST" }),
+  );
+  const wrong = await mount.runInvestingDrain(
+    new Request("https://lavega.dev/api/cron/investing-drain", {
+      method: "POST",
+      headers: { authorization: "Bearer not-the-secret" },
+    }),
+  );
+
+  expect(anonymous.status).toBe(401);
+  expect(wrong.status).toBe(401);
+  expect(seen).toEqual([]);
+});
+
+test("one drain invocation gives the head tenant the whole 240 s budget and leaves the rest for the next trigger", async () => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(0);
+  process.env.INVESTING_SYNC_BUDGET_MS = "240000";
+  const { mount, seen, bodies } = await drainMount(
+    ["user-a", "user-b", "user-c"],
+    (_tenant, path) => {
+      if (path === "/api/sync/drive") {
+        // A tenant that spends its full budget ends this invocation.
+        vi.setSystemTime(Date.now() + 240_000);
+        return Response.json({ result: "continue" });
+      }
+      return Response.json({ result: "done" });
+    },
+  );
+
+  const response = await mount.runInvestingDrain(drainRequest());
+  const body = (await response.json()) as {
+    enabled: boolean;
+    driven: Array<{ tenantId: string; result: unknown }>;
+    pending: number;
+    deadlineReached: boolean;
+  };
+
+  expect(response.status).toBe(200);
+  expect(body.driven.map((entry) => entry.tenantId)).toEqual(["user-a"]);
+  expect(body.pending).toBe(2);
+  expect(body.deadlineReached).toBe(true);
+  expect(seen).toEqual(["user-a:/api/sync/drive"]);
+  expect((JSON.parse(bodies[0] ?? "{}") as { deadlineMs?: number }).deadlineMs).toBe(240_000);
+});
+
+test("a run needing three budgets completes across three drain invocations, with no self-request", async () => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(0);
+  process.env.INVESTING_SYNC_BUDGET_MS = "240000";
+  const results = ["continue", "continue", "done"];
+  let drive = 0;
+  const { mount, seen } = await drainMount(["user-a"], (_tenant, path) => {
+    if (path !== "/api/sync/drive") return Response.json({ result: "done" });
+    const result = results[drive] ?? "done";
+    drive += 1;
+    vi.setSystemTime(Date.now() + 240_000);
+    return Response.json({ result });
+  });
+
+  const answers: unknown[] = [];
+  for (let tick = 0; tick < 3; tick += 1) {
+    const response = await mount.runInvestingDrain(drainRequest());
+    const body = (await response.json()) as { driven: Array<{ result: unknown }> };
+    answers.push(body.driven[0]?.result);
+  }
+
+  expect(answers).toEqual(["continue", "continue", "done"]);
+  expect(seen).toEqual(Array(3).fill("user-a:/api/sync/drive"));
+  /* The point of the external scheduler: nothing in the server continues the
+   * run. Every hop is the runner's next call. */
+  expect(continueFetch).not.toHaveBeenCalled();
+});
+
+test("a drain keeps driving the queue while the pass budget lasts", async () => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(0);
+  process.env.INVESTING_SYNC_BUDGET_MS = "240000";
+  const { mount, seen } = await drainMount(["user-a", "user-b", "user-c"], (_tenant, path) => {
+    if (path === "/api/sync/drive") {
+      vi.setSystemTime(Date.now() + 10_000);
+      return Response.json({ result: "done" });
+    }
+    return Response.json({ result: "done" });
+  });
+
+  const body = (await (await mount.runInvestingDrain(drainRequest())).json()) as {
+    driven: Array<{ tenantId: string }>;
+    pending: number;
+    deadlineReached: boolean;
+  };
+
+  expect(body.driven.map((entry) => entry.tenantId)).toEqual(["user-a", "user-b", "user-c"]);
+  expect(body.pending).toBe(0);
+  expect(body.deadlineReached).toBe(false);
+  expect(seen).toEqual([
+    "user-a:/api/sync/drive",
+    "user-b:/api/sync/drive",
+    "user-c:/api/sync/drive",
+  ]);
+});
+
+test("the drain only ever posts the internal drive path, never the lanes or the letter directly", async () => {
+  const { mount, seen } = await drainMount(["user-a"]);
+
+  await mount.runInvestingDrain(drainRequest());
+
+  expect(seen).toEqual(["user-a:/api/sync/drive"]);
+  expect(seen).not.toContain("user-a:/api/prices/sync");
+  expect(seen).not.toContain("user-a:/api/letters/ensure");
+});
+
+test("the drain's kill switch drives nothing and says so", async () => {
+  process.env.INVESTING_SYNC_SCHEDULER = "off";
+  const { mount, seen } = await drainMount(["user-a"]);
+
+  const response = await mount.runInvestingDrain(drainRequest());
+
+  expect(response.status).toBe(200);
+  expect(await response.json()).toEqual({
+    enabled: false,
+    driven: [],
+    pending: 0,
+    deadlineReached: false,
+  });
+  expect(seen).toEqual([]);
+});
+
+test("a pass budget that cannot fit one tenant is a 500, not a quiet 200", async () => {
+  process.env.INVESTING_SYNC_BUDGET_MS = "20000";
+  const { mount, seen } = await drainMount(["user-a"]);
+
+  const response = await mount.runInvestingDrain(drainRequest());
+
+  expect(response.status).toBe(500);
+  expect(JSON.stringify(await response.json())).toContain("budget");
+  expect(seen).toEqual([]);
+});
+
+test("with no connected broker the drain succeeds and does nothing", async () => {
+  const { mount, seen } = await drainMount([]);
+
+  const response = await mount.runInvestingDrain(drainRequest());
+
+  expect(response.status).toBe(200);
+  expect(await response.json()).toMatchObject({ driven: [], pending: 0 });
+  expect(seen).toEqual([]);
+});
+
+test("one tenant that throws does not stop the drain, and the failure is logged without the secret", async () => {
+  const log = vi.spyOn(console, "log").mockImplementation(() => {});
+  const { mount, seen } = await drainMount(["user-a", "user-b"], (tenant) => {
+    if (tenant === "user-a") throw new Error("vault exploded: token=secret-token");
+    return Response.json({ result: "done" });
+  });
+
+  const response = await mount.runInvestingDrain(drainRequest());
+
+  expect(response.status).toBe(200);
+  expect(seen).toContain("user-b:/api/sync/drive");
+  const text = JSON.stringify(await response.json());
+  expect(text).not.toContain("secret-token");
+  expect(text).toContain("user-a");
+  const logged = log.mock.calls.map((call) => String(call[0])).join("\n");
+  expect(logged).toContain("vault exploded");
+  expect(logged).not.toContain("secret-token");
+  log.mockRestore();
+});
+
+test("the drain answers tenant ids and statuses only, never per-user symbols", async () => {
+  const { mount } = await drainMount(["user-a"], () =>
+    Response.json({ result: "continue", remainingSymbols: ["AAPL"], currentSymbol: "AAPL" }),
+  );
+
+  const text = JSON.stringify(await (await mount.runInvestingDrain(drainRequest())).json());
+
+  expect(text).not.toMatch(/AAPL|remainingSymbols|currentSymbol/);
 });
