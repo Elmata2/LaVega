@@ -22,44 +22,66 @@
 
 /* LaVega design-system tokens. "Midnight" palette matching the marketing site:
  * near-black ground, two raised panel tones, hairline borders, cantaloupe for the
- * primary action and blue for links and active states. One typeface, Libron
- * (self-hosted, see the @font-face block below). The app sits as a single
+ * primary action and blue for links and active states. Instrument Serif for
+ * display, Geist for everything else (self-hosted, see the @font-face block below). The app sits as a single
  * floating, rounded "frame" on the gutter. Everything references these
  * variables, so the whole theme lives here. */
 
-/* Libron is a book serif: four real styles (400, 700, and both italics), so
- * `font-weight: 600` / `font-bold` resolves to the drawn Bold instead of a
- * synthesized faux-bold smear. It has no arrow or check glyphs (`→ ← ↑ ↓ ✓`),
- * so every stack ends in a system serif and the browser falls back per glyph.
- * Relative url(), not a package import, so Vite fingerprints and bundles the
- * file like any other asset. Font files + OFL license: src/assets/fonts/. */
+/* Two families, each with one job (2026-11-11):
+ * - Instrument Serif: display only. A condensed serif with ONE drawn weight
+ *   (400) and no tabular figures, so it is set only at 28px and up, always at
+ *   400 with `font-synthesis: none`. Smaller headings, labels and every
+ *   number use Geist. That rule is what keeps headings readable: the last time
+ *   this face ran the whole app, it was faux-bolded and set at label sizes.
+ * - Geist: body, UI, figures. A variable face (100-900) with real `tnum`.
+ * Neither latin subset has arrows or checks (`→ ← ✓`), so every stack ends in
+ * a system face and the browser falls back per glyph. The `* Fallback` faces
+ * scale a local font to the webfont's metrics so the swap does not reflow.
+ * Relative url(), so Vite fingerprints and bundles the files. Font files and
+ * OFL licenses: src/assets/fonts/. */
 @font-face {
-  font-family: "Libron";
+  font-family: "Instrument Serif";
   font-style: normal;
   font-weight: 400;
   font-display: swap;
-  src: url("../assets/fonts/libron-regular.woff2") format("woff2");
+  src: url("../assets/fonts/instrument-serif-latin-400-normal.woff2") format("woff2");
 }
 @font-face {
-  font-family: "Libron";
-  font-style: normal;
-  font-weight: 700;
-  font-display: swap;
-  src: url("../assets/fonts/libron-bold.woff2") format("woff2");
-}
-@font-face {
-  font-family: "Libron";
+  font-family: "Instrument Serif";
   font-style: italic;
   font-weight: 400;
   font-display: swap;
-  src: url("../assets/fonts/libron-italic.woff2") format("woff2");
+  src: url("../assets/fonts/instrument-serif-latin-400-italic.woff2") format("woff2");
 }
 @font-face {
-  font-family: "Libron";
-  font-style: italic;
-  font-weight: 700;
+  font-family: "Geist";
+  font-style: normal;
+  font-weight: 100 900;
   font-display: swap;
-  src: url("../assets/fonts/libron-bold-italic.woff2") format("woff2");
+  src: url("../assets/fonts/geist-latin-wght-normal.woff2") format("woff2-variations");
+}
+@font-face {
+  font-family: "Geist";
+  font-style: italic;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("../assets/fonts/geist-latin-wght-italic.woff2") format("woff2-variations");
+}
+@font-face {
+  font-family: "Instrument Serif Fallback";
+  src: local("Times New Roman"), local("TimesNewRomanPSMT");
+  size-adjust: 92%;
+  ascent-override: 107%;
+  descent-override: 34%;
+  line-gap-override: 0%;
+}
+@font-face {
+  font-family: "Geist Fallback";
+  src: local("Arial"), local("ArialMT");
+  size-adjust: 104%;
+  ascent-override: 97%;
+  descent-override: 28%;
+  line-gap-override: 0%;
 }
 
 :root {
@@ -131,13 +153,13 @@
   --sp-5: 24px;
   --sp-6: 32px;
 
-  /* Type: one family. Libron has real tabular figures (`tnum`), and the app
-   * already sets `font-variant-numeric: tabular-nums` on numeric cells, so
-   * columns align by digit width again. --font-mono is the same face by design:
-   * there is one typeface, small labels just use it at a smaller size. */
-  --font-display: "Libron", Georgia, "Times New Roman", serif;
-  --font-body: "Libron", Georgia, "Times New Roman", serif;
-  --font-mono: "Libron", Georgia, "Times New Roman", serif;
+  /* Type: two families. --font-display is for headings at 28px and up only;
+   * --font-body and --font-mono are Geist, which has real `tnum`, so numeric
+   * cells with `font-variant-numeric: tabular-nums` align by digit width. */
+  --font-display:
+    "Instrument Serif", "Instrument Serif Fallback", Georgia, "Times New Roman", serif;
+  --font-body: "Geist", "Geist Fallback", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "Geist", "Geist Fallback", system-ui, -apple-system, "Segoe UI", sans-serif;
 
   /* Elevation: panels are separated by tone and hairline, not shadow. Only
    * floating layers (dialogs, menus) get a shadow, and it is dark-on-dark. */

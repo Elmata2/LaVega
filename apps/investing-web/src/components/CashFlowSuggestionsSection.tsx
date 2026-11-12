@@ -426,7 +426,7 @@ export function CashFlowSuggestionsSection() {
 
           {status === "ready" && state != null && (
             <div className="border-t border-border pt-4">
-              <h3 className="font-display text-2xl">{copy.rulesTitle}</h3>
+              <h3 className="font-sans text-xl font-semibold tracking-tight">{copy.rulesTitle}</h3>
               <p className="mt-1 text-sm text-muted-foreground">{copy.rulesHint}</p>
               {state.rules.length === 0 ? (
                 <p className="mt-2 text-sm text-muted-foreground">{copy.rulesEmpty}</p>

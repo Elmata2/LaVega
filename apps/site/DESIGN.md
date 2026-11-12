@@ -1,6 +1,6 @@
 ---
 name: LaVega Content Site
-description: The reading surface at lavega.dev. Same "Midnight" world as the app, set for long-form answers: one column, 720px measure, Libron at reading size.
+description: The reading surface at lavega.dev. Same "Midnight" world as the app, set for long-form answers: one column, 720px measure, Geist at reading size under an Instrument Serif headline.
 colors:
   midnight: "#02070a"
   surface: "#0d171d"
@@ -14,39 +14,39 @@ colors:
   warn: "#fc734d"
 typography:
   h1:
-    fontFamily: "Libron, Georgia, serif"
-    fontSize: "clamp(2rem, 1.5rem + 2vw, 2.75rem)"
+    fontFamily: "Instrument Serif, Georgia, serif"
+    fontSize: "clamp(2.25rem, 1.6rem + 2.4vw, 3.25rem)"
     fontWeight: 400
-    lineHeight: 1.12
-    letterSpacing: "-0.015em"
+    lineHeight: 1.08
+    letterSpacing: "0"
   h2:
-    fontFamily: "Libron, Georgia, serif"
-    fontSize: "clamp(1.5rem, 1.3rem + 0.9vw, 1.875rem)"
-    fontWeight: 400
-    lineHeight: 1.15
+    fontFamily: "Geist, system-ui, sans-serif"
+    fontSize: "clamp(1.375rem, 1.25rem + 0.6vw, 1.625rem)"
+    fontWeight: 600
+    lineHeight: 1.25
     letterSpacing: "-0.015em"
   h3:
-    fontFamily: "Libron, Georgia, serif"
+    fontFamily: "Geist, system-ui, sans-serif"
     fontSize: "clamp(1.1875rem, 1.1rem + 0.5vw, 1.375rem)"
-    fontWeight: 400
-    lineHeight: 1.15
+    fontWeight: 600
+    lineHeight: 1.25
     letterSpacing: "-0.015em"
   body:
-    fontFamily: "Libron, Georgia, serif"
-    fontSize: "1.1875rem"
+    fontFamily: "Geist, system-ui, sans-serif"
+    fontSize: "1.125rem"
     fontWeight: 400
-    lineHeight: 1.6
+    lineHeight: 1.65
   body-mobile:
-    fontFamily: "Libron, Georgia, serif"
+    fontFamily: "Geist, system-ui, sans-serif"
     fontSize: "1.0625rem"
     fontWeight: 400
     lineHeight: 1.62
   meta:
-    fontFamily: "Libron, Georgia, serif"
+    fontFamily: "Geist, system-ui, sans-serif"
     fontSize: "0.9375rem"
     fontWeight: 400
   small:
-    fontFamily: "Libron, Georgia, serif"
+    fontFamily: "Geist, system-ui, sans-serif"
     fontSize: "0.875rem"
     fontWeight: 400
   code:
@@ -67,24 +67,26 @@ Static pages built by `apps/site` from `content/`: answers, guides, comparisons 
 **Key characteristics**
 
 - One column, 720px measure, 16px page padding. Nothing else competes with the text.
-- Libron at reading size (1.1875rem / 1.6 on desktop, 1.0625rem / 1.62 below 760px), 400 everywhere. Headings differ by size, not weight.
+- Geist at reading size (1.125rem / 1.65). The H1 is Instrument Serif 400; H2 and smaller are Geist 600, so rank shows in weight as well as size.
 - Dark only. There is no light theme on the content site.
 - Blue for links and blockquote accents; amber `#fc734d` only for the draft banner.
 - Running text is `--ink-body` (`#e9eef1`), a hair under paper white, to stop the glare that pure white on midnight produces at 19px. Headings stay `#fff`.
 
 ## Type
 
-- **H1** `clamp(2rem, 1.5rem + 2vw, 2.75rem)`, 400, line-height 1.12, `-0.015em`, `text-wrap: balance`. One per page.
-- **H2** `clamp(1.5rem, 1.3rem + 0.9vw, 1.875rem)`, **H3** `clamp(1.1875rem, 1.1rem + 0.5vw, 1.375rem)`, both 400 with 1.6em top margin so sections breathe. Both balance. Anchors clear the sticky header through `scroll-padding-top` on `html`, not per-heading `scroll-margin-top`.
-- **Body** 1.1875rem, line-height 1.6, `overflow-wrap: break-word`, `text-wrap: pretty` on paragraphs and lists so the last line never leaves one orphan word.
+- **H1** Instrument Serif `clamp(2.25rem, 1.6rem + 2.4vw, 3.25rem)`, 400 with `font-synthesis: none`, line-height 1.08, tracking 0, `text-wrap: balance`. One per page. The condensed face needs the extra size to read; never tighten it.
+- **H2** `clamp(1.375rem, 1.25rem + 0.6vw, 1.625rem)`, **H3** `clamp(1.1875rem, 1.1rem + 0.5vw, 1.375rem)`, both Geist 600, `-0.015em`, with 1.6em top margin so sections breathe. Both balance. Anchors clear the sticky header through `scroll-padding-top` on `html`, not per-heading `scroll-margin-top`.
+- **Body** Geist 1.125rem, line-height 1.65, `overflow-wrap: break-word`, `text-wrap: pretty` on paragraphs and lists so the last line never leaves one orphan word.
 - **Meta** (author, date) 0.9375rem in mist, directly under the H1, flex-wrapped so the date never splits; the `·` separator hides below 760px.
-- **Code** is the one exception to the single typeface: `ui-monospace` on surface-2, 0.9em.
+- **Code** is the one exception to the two faces: `ui-monospace` on surface-2, 0.9em.
 
-The scale is deliberately flat at the top: the H1 used to run to 60px and shout over the text it introduces. 44px on desktop, 32px on a phone, keeps the hierarchy (44 / 30 / 22 / 19) without the page opening like a hero.
+The scale is deliberately flat at the top: the H1 used to run to 60px and shout over the text it introduces. 44px on desktop, 32px on a phone, keeps the hierarchy (52 / 26 / 22 / 18) without the page opening like a hero.
 
-Libron ships four styles (400, 700, both italics) and real tabular figures. Bold is available for emphasis inside running text; headings stay 400. It has no arrows or checks (`→ ← ↑ ↓ ✓`), so the stack ends in `Georgia, serif` and those glyphs fall back per glyph.
+Instrument Serif has one drawn weight and no tabular figures, so it is only the H1 (and the OG card headline). Geist is variable (100–900) with real `tnum`. Neither latin subset has arrows or checks (`→ ← ✓`), so both stacks end in a system face and those glyphs fall back per glyph. `* Fallback` faces scale Times New Roman and Arial to the webfont metrics, so the swap does not reflow.
 
-Fonts are served from `/fonts/` as four WOFF2 with the OFL license beside them in `assets/fonts/`. Same files as `apps/web`; do not subset them per page.
+Fonts are served from `/fonts/` as four WOFF2 (Instrument Serif regular + italic, Geist variable upright + italic) with the OFL licenses beside them in `assets/fonts/`. Same files as `apps/web`. The head preloads Instrument Serif regular and Geist upright: without it, on 3G the headline sat in the fallback serif for ~1s.
+
+On touch (`pointer: coarse`) the header language link, breadcrumbs and table of contents get a 44px or taller hit area without moving the text.
 
 ## Blocks
 
@@ -116,4 +118,4 @@ Everything else is micro-feedback at interaction speed: `scroll-behavior: smooth
 - **Don't** animate text on entry. Motion here is orientation, never decoration.
 - **Don't** add a light theme or a colour outside the token list.
 - **Don't** set body copy in the monospace face; it is for code only.
-- **Don't** hand-write an OG card. `scripts/make-images.mjs` renders them from `og-card.html` with Libron, shrinking the headline to fit one line after the webfont loads.
+- **Don't** hand-write an OG card. `scripts/make-images.mjs` renders them from `og-card.html` with Instrument Serif (headline) and Geist (footer), shrinking the headline to fit one line after the webfont loads.

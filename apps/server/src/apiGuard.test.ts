@@ -108,8 +108,12 @@ test("/api/card-terms/ingest keeps its own shared-secret auth, not the session g
   expect(res.status).toBe(503);
 });
 
-test("/api/cron/investing-sync and /api/investing/health pass the guard without a session — each carries its own auth", async () => {
-  for (const path of ["/api/cron/investing-sync", "/api/investing/health"]) {
+test("the machine endpoints /api/cron/* and /api/investing/health pass the guard without a session — each carries its own auth", async () => {
+  for (const path of [
+    "/api/cron/investing-sync",
+    "/api/cron/investing-drain",
+    "/api/investing/health",
+  ]) {
     expect(isPublicApiPath(path)).toBe(true);
     const res = await app.request(path);
     expect(await res.text()).not.toContain('{"error":"unauthorized"}');

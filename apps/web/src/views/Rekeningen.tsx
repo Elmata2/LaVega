@@ -1227,13 +1227,13 @@ export default function Rekeningen({
                   onClick={() => setOpenBank(open ? null : g.id)}
                 >
                   <span
-                    className={`inline-flex items-center justify-center flex-none w-11 h-11 rounded-sm font-display text-[1.05rem] font-semibold tracking-[0.02em] ${bankMarkClass(bankTone(g.named ? g.label : ""))}`}
+                    className={`inline-flex items-center justify-center flex-none w-11 h-11 rounded-sm font-body text-[1.05rem] font-semibold tracking-[0.02em] ${bankMarkClass(bankTone(g.named ? g.label : ""))}`}
                     aria-hidden="true"
                   >
                     {bankInitials(g.named ? g.label : "")}
                   </span>
                   <span className="flex-auto min-w-0">
-                    <span className="block font-display text-[1.2rem] font-semibold text-ink [overflow-wrap:anywhere]">
+                    <span className="block font-body text-[1.2rem] font-semibold text-ink [overflow-wrap:anywhere]">
                       {g.named ? g.label : c.zonderBank}
                     </span>
                     <span className="block text-[0.8rem] text-muted">

@@ -398,7 +398,9 @@ export function StockResearch() {
                 aria-pressed={selected === item.agentId}
                 className={`pressable w-full rounded-card border bg-card p-4 text-left disabled:opacity-50 ${selected === item.agentId ? "border-accent ring-1 ring-accent" : "border-border hover:bg-secondary/40"}`}
               >
-                <span className="block font-display text-2xl">{item.displayName}</span>
+                <span className="block font-sans text-xl font-semibold tracking-tight">
+                  {item.displayName}
+                </span>
                 <span className="mt-1 block text-xs text-muted-foreground">
                   {LENSES[item.agentId]}
                 </span>

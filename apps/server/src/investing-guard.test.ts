@@ -5,6 +5,7 @@ const {
   investingTenantIdMock,
   forwardInvestingMock,
   runInvestingCronMock,
+  runInvestingDrainMock,
   investingOwnsApiPathMock,
   verifiedSessionMock,
 } = vi.hoisted(() => ({
@@ -14,6 +15,7 @@ const {
     async (_request: Request, tenantId: string) => new Response(`tenant:${tenantId}`),
   ),
   runInvestingCronMock: vi.fn(async () => Response.json({ tenants: [] })),
+  runInvestingDrainMock: vi.fn(async () => Response.json({ driven: [] })),
   investingOwnsApiPathMock: vi.fn(async (path: string) =>
     ["investing", "brokers", "prices", "market-data", "config", "agents"].includes(
       path.split("/")[2] ?? "",
@@ -38,6 +40,7 @@ vi.mock("./investing-mount.js", () => ({
   investingTenantId: investingTenantIdMock,
   forwardInvesting: forwardInvestingMock,
   runInvestingCron: runInvestingCronMock,
+  runInvestingDrain: runInvestingDrainMock,
   investingOwnsApiPath: investingOwnsApiPathMock,
   investingDist: () => "/tmp/investing-dist",
 }));
@@ -160,5 +163,19 @@ test("investing cron route uses cron handler instead of browser session auth", a
 
   expect(response.status).toBe(200);
   expect(runInvestingCronMock).toHaveBeenCalledOnce();
+  expect(investingTenantIdMock).not.toHaveBeenCalled();
+});
+
+test("the external scheduler's drain route is a machine endpoint, not a browser session", async () => {
+  verifiedSessionMock.mockResolvedValue(null);
+  investingTenantIdMock.mockResolvedValue(null);
+  const app = await investingApp();
+
+  const post = await app.request("/api/cron/investing-drain", { method: "POST" });
+  const get = await app.request("/api/cron/investing-drain");
+
+  expect(post.status).toBe(200);
+  expect(get.status).toBe(200);
+  expect(runInvestingDrainMock).toHaveBeenCalledTimes(2);
   expect(investingTenantIdMock).not.toHaveBeenCalled();
 });

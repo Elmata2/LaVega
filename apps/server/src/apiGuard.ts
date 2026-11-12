@@ -38,6 +38,7 @@ const PUBLIC_API_PATHS = new Set([
   "/api/cron/investing-sync", // machine endpoint; carries its OWN bearer secret
   "/api/cron/instinct", // machine endpoint; carries its OWN bearer secret (CRON_SECRET)
   "/api/whatsapp/webhook", // Meta callback; carries its OWN X-Hub-Signature-256 HMAC (WHATSAPP_APP_SECRET)
+  "/api/cron/investing-drain", // external scheduler; carries the same bearer secret
   "/api/sync/continue", // machine endpoint; carries the cron bearer secret
   "/api/sync/drive", // machine endpoint; the cron worker for one tenant
   "/api/investing/health", // { ok, service } only, no personal data
