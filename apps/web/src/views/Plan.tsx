@@ -25,6 +25,7 @@ import FromAnswers from "../plan/FromAnswers.js";
 import ChangeLog from "../plan/ChangeLog.js";
 import { orderSections } from "../plan/orderSections.js";
 import PlanHeader, { ASSUMPTIONS_ANCHOR } from "../plan/PlanHeader.js";
+import ReportsCard from "../plan/ReportsCard.js";
 import ScenarioTable from "../plan/ScenarioTable.js";
 import BufferSection from "../plan/sections/BufferSection.js";
 import CardsSection from "../plan/sections/CardsSection.js";
@@ -192,6 +193,7 @@ export default function Plan({
         <SectionBody key={id} section={id} ctx={ctx} />
       ))}
       {plan.result.cashflow !== null && <CashflowCard cashflow={plan.result.cashflow} ctx={ctx} />}
+      <ReportsCard reports={plan.result.reports} />
       <ScenarioTable id={ASSUMPTIONS_ANCHOR} />
       <footer className="text-muted text-[0.85rem]" data-testid="plan-footer">
         <p className="m-0 mb-2">{shell.footer.notice}</p>

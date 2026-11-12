@@ -32,8 +32,9 @@
   #root {
     height: 100%;
   }
-  /* Instrument Serif is a condensed display face and reads about one size
-   * smaller than the sans it replaces; the whole rem scale moves up with it. */
+  /* 17px root: Geist body at 1rem reads at desktop review distance, and the
+   * display serif only appears at 1.75rem (~30px) and up, where its thin,
+   * condensed strokes stay open. */
   html {
     font-size: 17px;
     background: var(--gutter);
@@ -53,17 +54,25 @@
     text-rendering: optimizeLegibility;
   }
 
+  /* h1 is the only base heading large enough for the display serif. It has
+   * one drawn weight, so it stays at 400 and `font-synthesis: none` stops the
+   * browser smearing a faux bold. h2/h3 are Geist, where weight carries rank. */
   h1,
   h2,
   h3 {
-    font-family: var(--font-display);
+    font-family: var(--font-body);
     font-weight: 600;
     letter-spacing: -0.01em;
     margin: 0 0 var(--sp-3);
     color: var(--ink);
   }
   h1 {
+    font-family: var(--font-display);
+    font-weight: 400;
+    font-synthesis: none;
     font-size: 1.75rem;
+    line-height: 1.1;
+    letter-spacing: 0;
   }
   h2 {
     font-size: 1.25rem;
@@ -469,8 +478,11 @@
     gap: var(--sp-2);
     flex: none;
     font-family: var(--font-display);
-    font-weight: 600;
-    font-size: 1.1rem;
+    font-weight: 400;
+    font-synthesis: none;
+    font-size: 1.5rem;
+    line-height: 1;
+    letter-spacing: 0.005em;
     color: var(--ink);
   }
 
@@ -588,8 +600,8 @@
   .topbar-title {
     margin: var(--sp-1) 0 0;
     font-size: 2.6rem;
-    line-height: 1.05;
-    letter-spacing: -0.02em;
+    line-height: 1.08;
+    letter-spacing: 0;
   }
   .topbar-right {
     display: flex;
@@ -1180,7 +1192,7 @@
     border-bottom: 1px solid var(--line);
   }
   .chat-header-title {
-    font-family: var(--font-display);
+    font-family: var(--font-body);
     font-weight: 600;
     font-size: 1rem;
   }

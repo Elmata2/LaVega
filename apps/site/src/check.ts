@@ -3,11 +3,6 @@ import { builtHubs, counterpart, urlFor, type Page } from "./content";
 
 export type Finding = { file: string; rule: string; detail: string };
 
-export const DISCLAIMER = {
-  nl: "Dit is informatie, geen advies.",
-  en: "This is information, not advice.",
-} as const;
-
 const DESCRIPTION_MIN = 50;
 const DESCRIPTION_MAX = 160;
 
@@ -55,9 +50,6 @@ export function checkPages(pages: Page[]): Finding[] {
     const len = p.description.length;
     if (len < DESCRIPTION_MIN || len > DESCRIPTION_MAX)
       add("description-length", `${len} chars, want ${DESCRIPTION_MIN}-${DESCRIPTION_MAX}`);
-
-    if (!p.bodyMarkdown.includes(DISCLAIMER[p.locale]))
-      add("disclaimer", `body lacks "${DISCLAIMER[p.locale]}"`);
 
     if (p.family !== "over" && p.sources.length === 0) add("sources", "needs at least one source");
 

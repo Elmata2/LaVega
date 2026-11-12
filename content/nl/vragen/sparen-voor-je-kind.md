@@ -3,7 +3,7 @@ id: saving-for-a-child
 family: vragen
 title: "Sparen voor je kind: welke mogelijkheden zijn er?"
 description: "Overzicht van manieren om geld opzij te zetten voor een kind: spaarrekening, beleggingsrekening en schenken, met de schenkvrijstelling voor 2026."
-status: draft
+status: published
 author: alexander
 updated: 2026-10-26
 sources:
@@ -72,5 +72,3 @@ Schenken is geen derde soort rekening: het bepaalt van wie het geld is, niet waa
 ## Wat doet LaVega hiermee?
 
 LaVega brengt rekeningen en beleggingen in één overzicht, zodat je kunt zien wat er al staat voor een doel en hoe je kaspositie eruitziet. Zie [Wat is een persoonlijke CFO?](/vragen/wat-is-een-persoonlijke-cfo). Op deze pagina noemen we geen banken, fondsen of aanbieders. LaVega kiest geen vorm voor je. LaVega geeft informatie en uitleg en heeft geen AFM-vergunning.
-
-Dit is informatie, geen advies.

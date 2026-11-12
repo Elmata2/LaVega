@@ -7,7 +7,7 @@ import {
   type InvestingDashboardData,
   type PortfolioRange,
 } from "@lavega/core";
-import { DASHBOARD_REFRESH_EVENT } from "./priceSync";
+import { DASHBOARD_REFRESH_EVENT } from "./syncSession";
 
 export type DashboardState =
   | { status: "loading" }
@@ -81,6 +81,9 @@ function normalizeDashboardData(data: InvestingDashboardData): InvestingDashboar
     allocation: {
       instrument: normalizeAllocation(data.allocation.instrument),
       entity: normalizeAllocation(data.allocation.entity),
+      /* The ladder is an optional additive section (WS4.6, #297); a decode
+       * that dropped it would silently hide the cash and unclassified buckets. */
+      ...(data.allocation.ladder ? { ladder: data.allocation.ladder } : {}),
     },
   };
 }

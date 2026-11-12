@@ -109,7 +109,7 @@ test("XIRR row shows percent-for-percent, not a pp spread", async () => {
       />,
     );
   });
-  expect(container.textContent).toContain("XIRR p.j. Portfolio +11.8% · AEX +29.4%");
+  expect(container.textContent).toContain("XIRR p.j. Your portfolio +11.8% · AEX +29.4%");
   expect(container.textContent).not.toContain("pp");
   await act(async () => root.unmount());
 });
@@ -189,7 +189,8 @@ test("renders indexed mode, accessible legend, and reflows colors after removal"
   expect(container.querySelector('button[aria-pressed="true"]')).not.toBeNull();
   const daxDotBefore = Array.from(container.querySelectorAll("span"))
     .find((node) => node.textContent?.includes("DAX"))
-    ?.querySelector<HTMLElement>("span")?.style.getPropertyValue("--swatch");
+    ?.querySelector<HTMLElement>("span")
+    ?.style.getPropertyValue("--swatch");
   await act(async () => {
     container.querySelector<HTMLButtonElement>('button[aria-label="^AEX remove"]')?.click();
     await Promise.resolve();
@@ -200,7 +201,8 @@ test("renders indexed mode, accessible legend, and reflows colors after removal"
   );
   const daxDotAfter = Array.from(container.querySelectorAll("span"))
     .find((node) => node.textContent?.includes("DAX"))
-    ?.querySelector<HTMLElement>("span")?.style.getPropertyValue("--swatch");
+    ?.querySelector<HTMLElement>("span")
+    ?.style.getPropertyValue("--swatch");
   expect(daxDotAfter).not.toBe(daxDotBefore);
   await act(async () => root.unmount());
 });
@@ -311,6 +313,9 @@ test("supports keyboard crosshair and announces exact unknown values", async () 
   expect(container.querySelector('ul[aria-label="Exact chart values"]')?.textContent).toContain(
     "AEX TWR",
   );
+  expect(container.querySelector('ul[aria-label="Exact chart values"]')?.textContent).toContain(
+    "1 month TWR",
+  );
   await act(async () => root.unmount());
 });
 
@@ -419,7 +424,7 @@ test("a wheel zoom marks the Custom tab pressed, and a preset click un-presses i
   await act(async () => root.unmount());
 });
 
-test("axis label box sizes to the widest label instead of wrapping under the title", async () => {
+test("the card has one title, not an eyebrow repeating it", async () => {
   mockSelectionFetch();
   const container = document.createElement("div");
   document.body.append(container);
@@ -428,15 +433,25 @@ test("axis label box sizes to the widest label instead of wrapping under the tit
     root.render(<PortfolioBenchmarkChart data={{ "1M": points }} benchmarks={benchmarks} />);
     await Promise.resolve();
   });
-  const labels = Array.from(container.querySelectorAll(".axis-label"));
-  expect(labels).toHaveLength(2);
-  for (const label of labels) {
-    expect(label.classList.contains("absolute")).toBe(false);
-    expect(label.classList.contains("whitespace-nowrap")).toBe(true);
-    expect(label.classList.contains("col-start-1")).toBe(true);
-    expect(label.classList.contains("row-start-1")).toBe(true);
-  }
-  expect(labels[0]!.parentElement!.classList.contains("grid")).toBe(true);
+  const headings = Array.from(container.querySelectorAll("h3")).map((h) => h.textContent);
+  expect(headings).toHaveLength(1);
+  expect(["Portfolio value", "Indexed return"]).toContain(headings[0]);
+  expect(container.textContent!.split(headings[0]!).length - 1).toBe(1);
+  await act(async () => root.unmount());
+});
+
+test("the legend lists Your portfolio first, then the benchmarks", async () => {
+  mockSelectionFetch();
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  await act(async () => {
+    root.render(<PortfolioBenchmarkChart data={{ "1M": points }} benchmarks={benchmarks} />);
+    await Promise.resolve();
+  });
+  const legend = container.querySelector('[aria-label="Chart series"]')!;
+  const labels = Array.from(legend.querySelectorAll("button")).map((b) => b.textContent);
+  expect(labels[0]).toBe("Your portfolio");
   await act(async () => root.unmount());
 });
 

@@ -1,11 +1,17 @@
 import { openDB, type IDBPDatabase } from "idb";
 import { Effect } from "effect";
 import {
+  budgetPeriodFromLimits,
+  decodePlanState,
   decodeProfileStore,
   emptyPlanSection,
   carryUnknownKeys,
   encodeProfileStore,
   mergeEvents,
+  migrateAccountTypes,
+  migrateTxStates,
+  normalizeValuation,
+  billDecisionsOf,
 } from "@lavega/core";
 import type {
   AdvisorProfileStore,
@@ -28,15 +34,35 @@ import type {
   CredentialStore,
   N8nSettings,
   N8nAutoBooked,
+  TransferPair,
+  Merchant,
+  BudgetPeriod,
+  CategoryGroup,
+  Bill,
+  BillDecisions,
+  BillOccurrence,
+  Valuation,
+  VaultDocument,
+  ImportSession,
+  AssistantState,
 } from "@lavega/core";
 import type { StorageAdapter } from "./StorageAdapter.js";
-import { deriveKey, decryptJSON, sealJSON } from "../crypto/vaultCrypto.js";
-import type { AccountCipherBlob, CipherBlob, PassphraseCipherBlob } from "../crypto/vaultCrypto.js";
+import { decryptJSON, deriveKey, openBytes, sealBytes, sealJSON } from "../crypto/vaultCrypto.js";
+import type {
+  AccountCipherBlob,
+  BundleBlob,
+  CipherBlob,
+  PassphraseCipherBlob,
+} from "../crypto/vaultCrypto.js";
 
 const DEFAULT_DB_NAME = "lavega-vault";
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 const STORE_NAME = "vault";
 const RECORD_KEY = "blob";
+/** The document BYTES live here, sealed, never in the vault blob: a document
+ *  upload must not rewrite the whole vault ciphertext (issue #293). One record
+ *  per document, keyed by its SHA-256. */
+const DOCUMENT_STORE = "documents";
 
 /**
  * What `open` found.
@@ -58,6 +84,27 @@ type VaultData = {
   vatSettings?: VatSettings[];
   invoices?: Invoice[];
   rewards?: RewardsBalance[];
+  /** First-class transfer records (issue #282): the DECISIONS only — confirmed
+   *  and rejected pairs. Suggestions are derived on read from the ledger, never
+   *  stored. Additive optional field: a legacy vault decrypts without it. */
+  transfers?: TransferPair[];
+  /** The minimal merchant registry (issue #284): canonical key + display name +
+   *  the raw spellings that resolve to it. Additive optional field, like
+   *  `transfers`: a legacy vault decrypts without it and reads [] (unknown
+   *  aliases are not invented; `labels.ts` then falls back to its token key). */
+  merchants?: Merchant[];
+  /** Bill series + their materialized occurrences (issue #286, WS2.1/WS2.3).
+   *  Two additive optional fields; a legacy vault decrypts without them and
+   *  reads []. Occurrences are generated lazily on unlock, and the pair is
+   *  saved together so materialization is ONE vault write. */
+  bills?: Bill[];
+  billOccurrences?: BillOccurrence[];
+  /** Paid-occurrence decisions (issue #287): allocations, marks, rejection
+   *  memory and price-change history. Additive like `bills`; a legacy vault
+   *  reads the empty section and the screen behaves exactly as #286. Written
+   *  by `putBillPlan` together with the rows it closes, so a decision is ONE
+   *  seal. */
+  billDecisions?: BillDecisions;
   facts?: LearnedFact[];
   entityProfiles?: EntityProfile[];
   credentials?: BrokerCredentials[];
@@ -87,8 +134,33 @@ type VaultData = {
    *  user entered is silently lost. */
   profileCorruptBackup?: unknown;
   plan?: PlanSection;
+  /** Budget envelopes (issue #289): one row per initialized month, carrying the
+   *  previous month's surplus. Additive optional field; a legacy vault decrypts
+   *  without it and the open pass migrates `categoryLimits` into the first
+   *  period (see `withMigratedBudgets`). */
+  budgetPeriods?: BudgetPeriod[];
+  /** The explicit category -> group map. Optional like `budgetPeriods`: absent
+   *  means every category is its own top-level budget line. */
+  categoryGroups?: CategoryGroup[];
+  /** Dated absolute valuations (WS3.1, issue #291): one row per account per
+   *  day, a hard reset the balance series replays from. Additive optional
+   *  field; a legacy vault decrypts without it and reads []. */
+  valuations?: Valuation[];
+  /** Statement metadata (WS3.5, issue #293). The BYTES are not here: they are
+   *  sealed in the separate `documents` object store under the same SHA-256.
+   *  Additive optional field; a legacy vault decrypts without it and reads []. */
+  documents?: VaultDocument[];
+  /** Generic import sessions (WS3.6, issue #294): which rows one import
+   *  created, so a revert removes exactly those. Additive optional field; a
+   *  legacy vault decrypts without it and reads []. */
+  importSessions?: ImportSession[];
   learning?: LearningSection;
   events?: VaultEvent[];
+  /** The personal assistant thin slice (WS5.8, issue #301): append-only
+   *  approval events and the memories an approval wrote. Additive optional
+   *  field, like `facts`: a legacy vault decrypts without it and reads the
+   *  empty state. Nothing here ever leaves the browser. */
+  assistant?: AssistantState;
 };
 
 export interface VaultStorage extends StorageAdapter, CredentialStore {
@@ -115,8 +187,67 @@ export interface VaultStorage extends StorageAdapter, CredentialStore {
   putInvoices(i: Invoice[]): Promise<void>;
   getRewards(): Promise<RewardsBalance[]>;
   putRewards(r: RewardsBalance[]): Promise<void>;
+  /** Stored transfer decisions; a legacy vault has none and reads []. */
+  getTransfers(): Promise<TransferPair[]>;
+  putTransfers(p: TransferPair[]): Promise<void>;
+  /** Stored budget envelopes, oldest month first; a legacy vault reads []. */
+  getBudgetPeriods(): Promise<BudgetPeriod[]>;
+  putBudgetPeriods(periods: BudgetPeriod[]): Promise<void>;
+  /** The category-group map; a legacy vault reads []. */
+  getCategoryGroups(): Promise<CategoryGroup[]>;
+  putCategoryGroups(groups: CategoryGroup[]): Promise<void>;
+  /** Dated absolute valuations, oldest first; a legacy vault reads []. */
+  getValuations(): Promise<Valuation[]>;
+  /** Replace-all: a merge or delete rewrites the whole list in one save, so a
+   *  valuation can never point at an account the vault no longer holds. */
+  putValuations(valuations: Valuation[]): Promise<void>;
+  /** Statement metadata, one row per document (identity = SHA-256). A legacy
+   *  vault reads []. The bytes are NOT in the vault blob. */
+  getDocuments(): Promise<VaultDocument[]>;
+  putDocuments(documents: VaultDocument[]): Promise<void>;
+  /** Seal and store one document's bytes under its SHA-256. Storing the same
+   *  hash twice is one record, never two. */
+  putDocumentBytes(sha256: string, bytes: Uint8Array): Promise<void>;
+  getDocumentBytes(sha256: string): Promise<Uint8Array | null>;
+  hasDocumentBytes(sha256: string): Promise<boolean>;
+  deleteDocumentBytes(sha256: string): Promise<void>;
+  listDocumentBytes(): Promise<string[]>;
+  /** Erase every sealed byte without touching the vault. */
+  deleteAllDocumentBytes(): Promise<void>;
+  /** The full back-up bundle (v3): vault data AND sealed document bytes sealed
+   *  together under the vault key. Null before open. */
+  exportBundle(): Promise<BundleBlob | null>;
+  /** Erase all document metadata and all sealed bytes in one pass (issue #293
+   *  acceptance: erase removes BOTH). Returns how many documents were erased. */
+  eraseDocuments(): Promise<number>;
+  /** Generic import sessions, oldest first; a legacy vault reads []. */
+  getImportSessions(): Promise<ImportSession[]>;
+  /** Replace-all: a revert rewrites the list in one save. */
+  putImportSessions(sessions: ImportSession[]): Promise<void>;
+  /** The owner's merchant aliases; a legacy vault has none and reads []. */
+  getMerchants(): Promise<Merchant[]>;
+  putMerchants(m: Merchant[]): Promise<void>;
+  /** Bill series and their occurrences; a legacy vault has neither and reads [].
+   *  Saved together: materialization and a schedule edit each rewrite the pair
+   *  in one persist, so the vault never holds a series without its rows. */
+  getBills(): Promise<Bill[]>;
+  getBillOccurrences(): Promise<BillOccurrence[]>;
+  /** The bills sidecar. A legacy vault has none and reads the empty section. */
+  getBillDecisions(): Promise<BillDecisions>;
+  /** Save series, rows AND the decisions that closed some of them in one
+   *  persist. `decisions` omitted keeps what the vault already holds, so a
+   *  schedule edit or a lazy materialization never drops a payment decision. */
+  putBillPlan(
+    bills: Bill[],
+    occurrences: BillOccurrence[],
+    decisions?: BillDecisions,
+  ): Promise<void>;
   getFacts(): Promise<LearnedFact[]>;
   putFacts(f: LearnedFact[]): Promise<void>;
+  /** The assistant's approval events and approved memories; a legacy vault
+   *  reads the empty state. One replace-all save per decision. */
+  getAssistant(): Promise<AssistantState>;
+  putAssistant(state: AssistantState): Promise<void>;
   getN8nSettings(): Promise<N8nSettings>;
   putN8nSettings(settings: N8nSettings): Promise<void>;
   getAutoBookedInvoices(): Promise<N8nAutoBooked[]>;
@@ -179,8 +310,46 @@ export function createEncryptedStorage(dbName: string = DEFAULT_DB_NAME): VaultS
         if (!db.objectStoreNames.contains(STORE_NAME)) {
           db.createObjectStore(STORE_NAME);
         }
+        // Version 1 databases upgrade in place: the vault blob stays where it
+        // is and the document store is added beside it.
+        if (!db.objectStoreNames.contains(DOCUMENT_STORE)) {
+          db.createObjectStore(DOCUMENT_STORE);
+        }
       },
     });
+  }
+
+  /** One short-lived connection per document operation, the same pattern the
+   *  blob read/write helpers use. A document write never touches the vault
+   *  ciphertext, which is the whole reason the store exists. */
+  async function withDocumentStore<T>(
+    mode: "readonly" | "readwrite",
+    run: (store: {
+      put(value: unknown, key: string): Promise<unknown>;
+      get(key: string): Promise<unknown>;
+      delete(key: string): Promise<unknown>;
+      getAllKeys(): Promise<unknown[]>;
+      clear(): Promise<unknown>;
+    }) => Promise<T> | T,
+  ): Promise<T> {
+    if (ownerDb == null) throw new Error(LOCKED_ERROR);
+    const db = await openVaultDb(ownerDb);
+    try {
+      const tx = db.transaction(DOCUMENT_STORE, mode);
+      const result = await run(
+        tx.store as unknown as {
+          put(value: unknown, key: string): Promise<unknown>;
+          get(key: string): Promise<unknown>;
+          delete(key: string): Promise<unknown>;
+          getAllKeys(): Promise<unknown[]>;
+          clear(): Promise<unknown>;
+        },
+      );
+      await tx.done;
+      return result;
+    } finally {
+      db.close();
+    }
   }
 
   async function readBlobFromDisk(name: string): Promise<CipherBlob | null> {
@@ -234,6 +403,57 @@ export function createEncryptedStorage(dbName: string = DEFAULT_DB_NAME): VaultS
     return run;
   }
 
+  /** The single tx-state migration pass (issue #284). Called on every path that
+   *  adopts an EXISTING vault, never on a fresh one. It returns the same object
+   *  when nothing is missing, which is what keeps the pass to one write: after
+   *  the first open every row has all four fields, so no later open re-seals. */
+  function withMigratedTxStates(vault: VaultData): { vault: VaultData; changed: boolean } {
+    const migrated = migrateTxStates(vault.txs ?? []);
+    return migrated.changed
+      ? { vault: { ...vault, txs: migrated.txs }, changed: true }
+      : { vault, changed: false };
+  }
+
+  /** The WS2.9 budget migration: the first stored period is built from the
+   *  legacy `categoryLimits`, once. After the field exists this returns the
+   *  same object, so the pass costs one write in total and a later open writes
+   *  nothing. A plan section that does not decode is left alone: its limits
+   *  stay readable and no guess is written. */
+  function withMigratedBudgets(vault: VaultData): { vault: VaultData; changed: boolean } {
+    if (vault.budgetPeriods !== undefined) return { vault, changed: false };
+    let limits: Record<string, { cents: number; at: string }>;
+    try {
+      limits = decodePlanState(vault.plan).preferences.categoryLimits;
+    } catch {
+      return { vault, changed: false };
+    }
+    const first = budgetPeriodFromLimits(limits);
+    return first === null
+      ? { vault, changed: false }
+      : { vault: { ...vault, budgetPeriods: [first] }, changed: true };
+  }
+
+  /** The WS3.1 account-type migration: known spellings become the canonical
+   *  Dutch strings once. An unknown value is left alone (it already reads as
+   *  "other"), so the pass never renames data it does not understand. */
+  function withMigratedAccountTypes(vault: VaultData): { vault: VaultData; changed: boolean } {
+    const migrated = migrateAccountTypes(vault.accounts ?? []);
+    return migrated.changed
+      ? { vault: { ...vault, accounts: migrated.accounts }, changed: true }
+      : { vault, changed: false };
+  }
+
+  /** Every open-time migration pass, so an old vault still re-seals once. */
+  function withMigrations(vault: VaultData): { vault: VaultData; changed: boolean } {
+    const types = withMigratedAccountTypes(vault);
+    const tx = withMigratedTxStates(types.vault);
+    const budget = withMigratedBudgets(tx.vault);
+    return {
+      vault: budget.vault,
+      changed: types.changed || tx.changed || budget.changed,
+    };
+  }
+
   return {
     async open(ownerKey, owner): Promise<VaultOpenResult> {
       if (!owner.trim()) throw new Error("vault owner is required");
@@ -246,8 +466,13 @@ export function createEncryptedStorage(dbName: string = DEFAULT_DB_NAME): VaultS
       if (onDisk?.v === 2) {
         // Throws if another key sealed it. That is not a state to paper over:
         // the key is per account and never replaced.
-        data = await decryptJSON<VaultData>(ownerKey, onDisk);
+        const opened = await decryptJSON<VaultData>(ownerKey, onDisk);
+        const migrated = withMigrations(opened);
+        data = migrated.vault;
         blob = onDisk;
+        // Exactly one save for the whole vault, and only when this open was the
+        // one that upgraded an old row (WS1.6). A re-open writes nothing.
+        if (migrated.changed) await enqueueWrite(() => persist());
         return "opened";
       }
       if (await passwordVault()) return "password-vault";
@@ -264,14 +489,19 @@ export function createEncryptedStorage(dbName: string = DEFAULT_DB_NAME): VaultS
       } catch {
         return false; // wrong passphrase, tampered blob, or sub-floor iterations
       }
-      await enqueueWrite(() => adopt(opened));
+      await enqueueWrite(() => adopt(withMigrations(opened).vault));
       // Only once the re-sealed copy is on disk is the password copy redundant.
       await deleteBlobFromDisk(dbName);
       return true;
     },
 
     async startFresh(): Promise<void> {
-      await enqueueWrite(() => adopt({ accounts: [], txs: [], rules: [] }));
+      await enqueueWrite(async () => {
+        // A fresh vault must not leave the previous vault's sealed documents
+        // behind: bytes nothing points at are still the owner's data.
+        await withDocumentStore("readwrite", (store) => store.clear());
+        await adopt({ accounts: [], txs: [], rules: [] });
+      });
     },
 
     lock(): void {
@@ -286,22 +516,125 @@ export function createEncryptedStorage(dbName: string = DEFAULT_DB_NAME): VaultS
 
     async restore(imported: CipherBlob, passphrase?: string): Promise<boolean> {
       if (key == null) return false;
-      let decrypted: VaultData;
+      // Verify OUTSIDE the write queue — this only reads the imported blob.
+      let vault: VaultData;
+      let documents: Array<{ sha256: string; blob: AccountCipherBlob }> = [];
+      let carriesDocuments = false;
       try {
-        // Verify OUTSIDE the write queue — this only reads the imported blob.
-        decrypted =
-          imported.v === 2
-            ? await decryptJSON<VaultData>(key, imported)
-            : await openPasswordBlob<VaultData>(imported, passphrase ?? "");
+        if (imported.v === 3) {
+          const bundle = await decryptJSON<{
+            vault: VaultData;
+            documents: Array<{ sha256: string; blob: AccountCipherBlob }>;
+          }>(key, imported);
+          vault = bundle.vault;
+          documents = Array.isArray(bundle.documents) ? bundle.documents : [];
+          carriesDocuments = true;
+        } else if (imported.v === 2) {
+          vault = await decryptJSON<VaultData>(key, imported);
+        } else {
+          vault = await openPasswordBlob<VaultData>(imported, passphrase ?? "");
+        }
       } catch {
-        // Wrong passphrase, another account's file, malformed blob, or
+        // Wrong passphrase, another account's file, malformed bundle, or
         // sub-floor iterations: leave the current vault untouched.
         return false;
       }
       // Through the same queue as every mutator, so a put still resolving
-      // cannot land after the swap and revert disk.
-      await enqueueWrite(() => adopt(decrypted));
+      // cannot land after the swap and revert disk. A v1/v2 file cannot carry
+      // documents, so restoring one CLEARS the document store: metadata from
+      // the replaced vault would otherwise point at bytes nothing can vouch
+      // for.
+      await enqueueWrite(async () => {
+        await withDocumentStore("readwrite", (store) => store.clear());
+        if (carriesDocuments) {
+          // The bundle carries the already-sealed bytes; restoring them writes
+          // the same ciphertext, never a re-encryption with a fresh IV.
+          await withDocumentStore("readwrite", async (store) => {
+            for (const doc of documents) await store.put(doc.blob, doc.sha256);
+          });
+        }
+        await adopt(withMigrations(vault).vault);
+      });
       return true;
+    },
+
+    async exportBundle(): Promise<BundleBlob | null> {
+      if (key == null || data == null) return null;
+      const documents = await withDocumentStore("readonly", async (store) => {
+        const keys = (await store.getAllKeys()) as string[];
+        const out: Array<{ sha256: string; blob: AccountCipherBlob }> = [];
+        for (const sha256 of keys) {
+          const blob = (await store.get(sha256)) as AccountCipherBlob | undefined;
+          if (blob != null) out.push({ sha256, blob });
+        }
+        return out;
+      });
+      const sealed = await sealJSON(key, { vault: data, documents });
+      return { v: 3, kdf: "account-key", iv: sealed.iv, ct: sealed.ct };
+    },
+
+    async getDocuments(): Promise<VaultDocument[]> {
+      if (data == null) throw new Error(LOCKED_ERROR);
+      return [...(data.documents ?? [])];
+    },
+    putDocuments(documents: VaultDocument[]): Promise<void> {
+      return enqueueWrite(async () => {
+        if (key == null || data == null) throw new Error(LOCKED_ERROR);
+        data = { ...data, documents: [...documents] };
+        await persist();
+      });
+    },
+    async getImportSessions(): Promise<ImportSession[]> {
+      if (data == null) throw new Error(LOCKED_ERROR);
+      return [...(data.importSessions ?? [])];
+    },
+    putImportSessions(sessions: ImportSession[]): Promise<void> {
+      return enqueueWrite(async () => {
+        if (key == null || data == null) throw new Error(LOCKED_ERROR);
+        data = { ...data, importSessions: [...sessions] };
+        await persist();
+      });
+    },
+    async putDocumentBytes(sha256: string, bytes: Uint8Array): Promise<void> {
+      // Sealed with the same vault key as everything else (ADR 0009): the store
+      // never holds plaintext bytes.
+      if (key == null) throw new Error(LOCKED_ERROR);
+      const blob = await sealBytes(key, bytes);
+      await withDocumentStore("readwrite", (store) => store.put(blob, sha256));
+    },
+    async getDocumentBytes(sha256: string): Promise<Uint8Array | null> {
+      if (key == null) throw new Error(LOCKED_ERROR);
+      const blob = (await withDocumentStore("readonly", (store) => store.get(sha256))) as
+        | AccountCipherBlob
+        | null
+        | undefined;
+      if (blob == null) return null;
+      return openBytes(key, blob);
+    },
+    async hasDocumentBytes(sha256: string): Promise<boolean> {
+      return (await withDocumentStore("readonly", (store) => store.get(sha256))) != null;
+    },
+    async deleteDocumentBytes(sha256: string): Promise<void> {
+      await withDocumentStore("readwrite", (store) => store.delete(sha256));
+    },
+    listDocumentBytes(): Promise<string[]> {
+      return withDocumentStore("readonly", async (store) => {
+        const keys = (await store.getAllKeys()) as string[];
+        return keys.sort();
+      });
+    },
+    async deleteAllDocumentBytes(): Promise<void> {
+      await withDocumentStore("readwrite", (store) => store.clear());
+    },
+    async eraseDocuments(): Promise<number> {
+      const documents = await this.getDocuments();
+      await withDocumentStore("readwrite", (store) => store.clear());
+      await enqueueWrite(async () => {
+        if (key == null || data == null) throw new Error(LOCKED_ERROR);
+        data = { ...data, documents: [] };
+        await persist();
+      });
+      return documents.length;
     },
 
     async getAccounts(): Promise<Account[]> {
@@ -415,6 +748,105 @@ export function createEncryptedStorage(dbName: string = DEFAULT_DB_NAME): VaultS
         await persist();
       });
     },
+    // transfers is also an optional VaultData field — a legacy vault decrypts
+    // without it, so the getter defaults to []. Replace-all, like putRewards.
+    // Only decisions are stored; a fresh import can invalidate a suggestion,
+    // so suggestions stay derived and never become stale vault state.
+    async getTransfers(): Promise<TransferPair[]> {
+      if (data == null) throw new Error(LOCKED_ERROR);
+      return [...(data.transfers ?? [])];
+    },
+    putTransfers(p: TransferPair[]): Promise<void> {
+      return enqueueWrite(async () => {
+        if (key == null || data == null) throw new Error(LOCKED_ERROR);
+        data = { ...data, transfers: [...p] };
+        await persist();
+      });
+    },
+    // Budget envelopes (issue #289): replace-all, additive optional fields. A
+    // vault written before this reads [] and the plan falls back to the legacy
+    // `categoryLimits` (see `budgetPeriodsOf` in @lavega/core).
+    async getBudgetPeriods(): Promise<BudgetPeriod[]> {
+      if (data == null) throw new Error(LOCKED_ERROR);
+      return structuredClone(data.budgetPeriods ?? []);
+    },
+    putBudgetPeriods(periods: BudgetPeriod[]): Promise<void> {
+      return enqueueWrite(async () => {
+        if (key == null || data == null) throw new Error(LOCKED_ERROR);
+        data = { ...data, budgetPeriods: structuredClone(periods) };
+        await persist();
+      });
+    },
+    async getCategoryGroups(): Promise<CategoryGroup[]> {
+      if (data == null) throw new Error(LOCKED_ERROR);
+      return structuredClone(data.categoryGroups ?? []);
+    },
+    putCategoryGroups(groups: CategoryGroup[]): Promise<void> {
+      return enqueueWrite(async () => {
+        if (key == null || data == null) throw new Error(LOCKED_ERROR);
+        data = { ...data, categoryGroups: structuredClone(groups) };
+        await persist();
+      });
+    },
+    // Bills and occurrences are the same additive optional field shape:
+    // replace-all, read [] on a legacy vault. They are written by ONE mutator
+    // because the generator's output (rows) only makes sense with its series,
+    // and the unlock pass must not pay two seals for one materialization.
+    async getBills(): Promise<Bill[]> {
+      if (data == null) throw new Error(LOCKED_ERROR);
+      return [...(data.bills ?? [])];
+    },
+    async getBillOccurrences(): Promise<BillOccurrence[]> {
+      if (data == null) throw new Error(LOCKED_ERROR);
+      return [...(data.billOccurrences ?? [])];
+    },
+    async getBillDecisions(): Promise<BillDecisions> {
+      if (data == null) throw new Error(LOCKED_ERROR);
+      return structuredClone(billDecisionsOf(data.billDecisions));
+    },
+    putBillPlan(
+      bills: Bill[],
+      occurrences: BillOccurrence[],
+      decisions?: BillDecisions,
+    ): Promise<void> {
+      return enqueueWrite(async () => {
+        if (key == null || data == null) throw new Error(LOCKED_ERROR);
+        data = {
+          ...data,
+          bills: [...bills],
+          billOccurrences: [...occurrences],
+          // Undefined keeps the stored decisions: a schedule edit or a
+          // materialization must not silently forget which rows were paid.
+          billDecisions: structuredClone(decisions ?? billDecisionsOf(data.billDecisions)),
+        };
+        await persist();
+      });
+    },
+    // merchants is the same additive optional field shape: replace-all, and a
+    // legacy vault reads [] so `labels.ts` falls back to its token key.
+    async getValuations(): Promise<Valuation[]> {
+      if (data == null) throw new Error(LOCKED_ERROR);
+      return [...(data.valuations ?? [])];
+    },
+    putValuations(valuations: Valuation[]): Promise<void> {
+      return enqueueWrite(async () => {
+        if (key == null || data == null) throw new Error(LOCKED_ERROR);
+        data = { ...data, valuations: valuations.map(normalizeValuation) };
+        await persist();
+      });
+    },
+
+    async getMerchants(): Promise<Merchant[]> {
+      if (data == null) throw new Error(LOCKED_ERROR);
+      return [...(data.merchants ?? [])];
+    },
+    putMerchants(m: Merchant[]): Promise<void> {
+      return enqueueWrite(async () => {
+        if (key == null || data == null) throw new Error(LOCKED_ERROR);
+        data = { ...data, merchants: [...m] };
+        await persist();
+      });
+    },
 
     // Privé/zakelijk per entity (item 4). Additive optional field, replace-all,
     // legacy vault => [] => every entity is personal, which is the default the
@@ -441,6 +873,29 @@ export function createEncryptedStorage(dbName: string = DEFAULT_DB_NAME): VaultS
       return enqueueWrite(async () => {
         if (key == null || data == null) throw new Error(LOCKED_ERROR);
         data = { ...data, facts: [...f] };
+        await persist();
+      });
+    },
+
+    // The personal assistant's approval events and approved memories
+    // (WS5.8, issue #301). Same additive optional field + replace-all shape as
+    // facts above; a legacy vault reads the empty state, so the panel starts
+    // with no timeline rather than a fabricated one.
+    async getAssistant(): Promise<AssistantState> {
+      if (data == null) throw new Error(LOCKED_ERROR);
+      const state = data.assistant;
+      return {
+        approvals: [...(state?.approvals ?? [])],
+        memories: [...(state?.memories ?? [])],
+      };
+    },
+    putAssistant(state: AssistantState): Promise<void> {
+      return enqueueWrite(async () => {
+        if (key == null || data == null) throw new Error(LOCKED_ERROR);
+        data = {
+          ...data,
+          assistant: { approvals: [...state.approvals], memories: [...state.memories] },
+        };
         await persist();
       });
     },

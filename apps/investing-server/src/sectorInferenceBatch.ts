@@ -20,8 +20,14 @@ export type SectorInferenceBatchInput = {
   exclude: ReadonlySet<string>;
   /** Every tenant correction in one read, keyed by upper-cased symbol. */
   corrections: Readonly<Record<string, string>>;
-  /** Broker symbol to the Yahoo listing price sync already resolved it to. */
-  resolveListing: (symbol: string) => Promise<string | null>;
+  /** Broker symbol to the Yahoo listing price sync already resolved it to. It
+   *  gets the position because the shared series key carries the ISIN and
+   *  currency (issue #307). */
+  resolveListing: (position: {
+    symbol: string;
+    isin?: string;
+    currency?: string;
+  }) => Promise<string | null>;
   store: SectorProfileStore;
   classifier?: SectorClassifier;
   batchSize: number;
@@ -76,7 +82,7 @@ export async function inferSectorBatch(
      * candidates aren't retried forever ahead of ones that might succeed. */
     if (exclude.has(key)) continue;
     if (corrections[key]) continue;
-    const lookupSymbol = (await resolveListing(position.symbol)) ?? position.symbol;
+    const lookupSymbol = (await resolveListing(position)) ?? position.symbol;
     if (await store.get(lookupSymbol)) continue;
     if (seenLookups.has(lookupSymbol)) continue;
     seenLookups.add(lookupSymbol);
@@ -87,7 +93,8 @@ export async function inferSectorBatch(
   await resolvePortfolioSectors(batch, {
     store,
     classifier,
-    resolveListing: async (symbol) => lookupSymbols.get(symbol.toUpperCase()) ?? symbol,
+    resolveListing: async (position) =>
+      lookupSymbols.get(position.symbol.toUpperCase()) ?? position.symbol,
   });
   /* classified counts symbols actually cached this round (classified or
    * no-match), never batch.length — a classifier failure leaves the

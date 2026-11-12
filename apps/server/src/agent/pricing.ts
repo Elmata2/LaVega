@@ -31,6 +31,21 @@ const SEARCH_USD_PER_1000 = 30;
 // the market rate. Revisit if it drifts far enough to matter.
 const USD_TO_EUR_RATE = 0.92;
 
+/* PROMPT-CACHE PRICING IS DELIBERATELY PESSIMISTIC (#300, WS5.7 leftover).
+ *
+ * Sure prices Anthropic's cache writes at 1.25x and cache reads at 0.1x of the
+ * input rate (`app/models/llm_usage.rb` @ 562fe09). Mistral, LaVega's only
+ * provider, does not publish its cache multipliers, and it is not documented
+ * whether `prompt_tokens` already includes cache hits. Under-billing a cache
+ * write would quietly widen the spend cap, so this bills cache tokens ON TOP of
+ * the input tokens at the full input rate for reads and +25% for writes:
+ * overstate the cost, never understate it. Correct downward only against a real
+ * invoice. */
+const CACHE_READ_RATE = 1;
+const CACHE_WRITE_PREMIUM = 0.25;
+
+export type CacheTokenCounts = { cacheWriteTokens?: number; cacheReadTokens?: number };
+
 /** USD cents for `model`'s token usage. Throws for an unrecognized model
  *  rather than silently pricing it at 0 — a model renamed at a call site
  *  without updating MODEL_PRICES must not go invisibly free from the budget's
@@ -38,12 +53,21 @@ const USD_TO_EUR_RATE = 0.92;
  *  loudly instead of failing the request that already succeeded; the real
  *  defence is pricing.test.ts's scan asserting every model string used in
  *  agent/*.ts is one of the constants in models.ts and is priced here. */
-export function priceTokensCents(model: string, inputTokens: number, outputTokens: number): number {
+export function priceTokensCents(
+  model: string,
+  inputTokens: number,
+  outputTokens: number,
+  cache: CacheTokenCounts = {},
+): number {
   const price = MODEL_PRICES[model];
   if (!price) throw new Error(`agent/pricing: no price configured for model "${model}"`);
+  const cacheWrite = Math.max(0, cache.cacheWriteTokens ?? 0);
+  const cacheRead = Math.max(0, cache.cacheReadTokens ?? 0);
   const usd =
     (inputTokens / 1_000_000) * price.inputPerMillion +
-    (outputTokens / 1_000_000) * price.outputPerMillion;
+    (outputTokens / 1_000_000) * price.outputPerMillion +
+    (cacheWrite / 1_000_000) * price.inputPerMillion * CACHE_WRITE_PREMIUM +
+    (cacheRead / 1_000_000) * price.inputPerMillion * CACHE_READ_RATE;
   return usd * 100;
 }
 
@@ -63,9 +87,14 @@ export function totalCostCents(input: {
   outputTokens: number;
   pages: number;
   searches: number;
+  cacheWriteTokens?: number;
+  cacheReadTokens?: number;
 }): number {
   const usdCents =
-    priceTokensCents(input.model, input.inputTokens, input.outputTokens) +
+    priceTokensCents(input.model, input.inputTokens, input.outputTokens, {
+      cacheWriteTokens: input.cacheWriteTokens,
+      cacheReadTokens: input.cacheReadTokens,
+    }) +
     priceOcrCents(input.pages) +
     priceSearchCents(input.searches);
   return Math.round(usdCents * USD_TO_EUR_RATE);

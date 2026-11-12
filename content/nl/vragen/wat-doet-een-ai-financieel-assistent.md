@@ -3,7 +3,7 @@ id: ai-finance-assistant
 family: vragen
 title: "Wat doet een AI financieel assistent?"
 description: "Wat een AI financieel assistent doet met je geldzaken, waar de grenzen liggen en welke privacyvragen je aan elke tool kunt stellen."
-status: draft
+status: published
 author: alexander
 updated: 2026-10-26
 sources:
@@ -74,5 +74,3 @@ Over de eerdere vragen:
 ## Wat je er zelf mee doet
 
 Gebruik een AI-assistent als hulpmiddel om je cijfers te begrijpen, en controleer wat je belangrijk vindt. Vergelijk een getal met je eigen bankafschrift. Zoek een belastingbedrag op in de bron. Zie ook [Wat is een persoonlijke CFO?](/vragen/wat-is-een-persoonlijke-cfo) voor de vraag welk werk software kan overnemen.
-
-Dit is informatie, geen advies.

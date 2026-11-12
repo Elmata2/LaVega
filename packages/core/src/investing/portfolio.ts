@@ -840,10 +840,19 @@ export function computePortfolioValueSeries(
   });
 }
 
+/** Calendar-month arithmetic for range windows. `setUTCMonth` rolls a day that
+ *  the target month does not have into the next month (31 March minus one month
+ *  became 3 March), which silently shortened or lengthened the window. Clamp to
+ *  the target month's last day instead. */
 function subtractMonths(date: string, months: number): string {
-  const value = new Date(`${date}T00:00:00Z`);
-  value.setUTCMonth(value.getUTCMonth() - months);
-  return value.toISOString().slice(0, 10);
+  const [year, month, day] = date.split("-").map(Number);
+  const target = new Date(Date.UTC(year!, month! - 1 - months, 1));
+  const lastDay = new Date(
+    Date.UTC(target.getUTCFullYear(), target.getUTCMonth() + 1, 0),
+  ).getUTCDate();
+  const clampedDay = Math.min(day!, lastDay);
+  const targetMonth = String(target.getUTCMonth() + 1).padStart(2, "0");
+  return `${target.getUTCFullYear()}-${targetMonth}-${String(clampedDay).padStart(2, "0")}`;
 }
 
 export function filterPortfolioValueRange<T extends { date: string }>(

@@ -262,7 +262,7 @@ const spendingProbes = (): SpendingFigures[] => {
     budgetAdviceLink: "nibud-persoonlijk-budgetadvies" as const,
   };
   const out: SpendingFigures[] = [
-    { ...base, months: 0, firstMonth: null, lastMonth: null, excludedForeignCount: 0, rows: [] },
+    { ...base, months: 0, firstMonth: null, lastMonth: null, excludedForeignCount: 0, rows: [], budget: null },
   ];
   for (const n of SPREAD)
     out.push({
@@ -271,6 +271,7 @@ const spendingProbes = (): SpendingFigures[] => {
       firstMonth: "2026-01",
       lastMonth: "2026-07",
       excludedForeignCount: 3,
+      budget: null,
       rows: [
         spendRow(n),
         spendRow(n, {

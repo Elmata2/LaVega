@@ -19,6 +19,11 @@ export type Thesis = {
   worth: string | null;
   entry: string | null;
   wrongIf: string | null;
+  /** ISIN-first canonical identity (WS4.5, #297); null until the migration
+   *  places the symbol. */
+  instrumentKey?: string | null;
+  /** Two confirmed theses of one instrument disagree; the owner must resolve. */
+  reviewRequired?: boolean;
   updatedAt: string;
 };
 export type Goal = { id: string; symbol: string | null; text: string; updatedAt: string };

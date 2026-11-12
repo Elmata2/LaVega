@@ -19,6 +19,7 @@
     "@lavega/database": "workspace:*",
     "@sentry/node": "^10.70.0",
     "@typesafe-ai/sdk": "0.6.0",
+    "@vercel/functions": "^3.11.1",
     "ai": "^7.0.77",
     "effect": "^4.0.1",
     "hono": "^4.13.7",

@@ -260,7 +260,7 @@
   /* Als Tailwind-utilities in Globe.tsx: .lv-globe-answer is
  * `py-3 px-4 border border-line border-l-[3px] border-l-accent rounded-sm
  * bg-surface-2 text-[0.9rem] leading-[1.5]`, en .lv-globe-answer-lead is
- * `font-display text-[1.1rem] text-ink`. */
+ * `font-body text-[1.1rem] text-ink`. */
   .lv-globe-answer p {
     margin: 0 0 var(--sp-2);
   }

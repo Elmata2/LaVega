@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { expect, test } from "vitest";
 import { createFileSectorProfileStore } from "./fileSectorProfileStore.js";
+import { describeSectorAttemptContract } from "./sectorProfileStoreContract.testing.js";
 
 test("sector profile store persists per-symbol lookups and survives invalid rows", async () => {
   const filePath = join(await mkdtemp(join(tmpdir(), "sectors-")), "sectors.json");
@@ -153,4 +154,19 @@ test("an inferred write never overwrites an existing provider profile on disk", 
   });
 
   expect(await store.get("AAPL")).toMatchObject({ sector: "Technology", source: "provider" });
+});
+
+describeSectorAttemptContract("file store", async () =>
+  createFileSectorProfileStore(join(await mkdtemp(join(tmpdir(), "sectors-")), "sectors.json")),
+);
+
+test("an attempt record survives a fresh file store instance and stays out of get", async () => {
+  const filePath = join(await mkdtemp(join(tmpdir(), "sectors-")), "sectors.json");
+  await createFileSectorProfileStore(filePath).recordProviderAttempt(
+    "X",
+    "2026-11-10T10:00:00.000Z",
+  );
+  const reopened = createFileSectorProfileStore(filePath);
+  expect(await reopened.lastProviderAttempt("X")).toBe("2026-11-10T10:00:00.000Z");
+  expect(await reopened.get("X")).toBeNull();
 });

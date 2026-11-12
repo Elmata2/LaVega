@@ -36,7 +36,7 @@ test("a valid total is stored for the session's own tenant", async () => {
   const res = await app.request("/api/personal/net-worth-total", putRequest(validBody));
   expect(res.status).toBe(200);
   expect(await res.json()).toEqual({ stored: true });
-  expect(put).toHaveBeenCalledWith("2026-09-15", 123_456_78);
+  expect(put).toHaveBeenCalledWith("2026-09-15", 123_456_78, undefined);
 });
 
 test("a malformed date is refused", async () => {
@@ -78,7 +78,7 @@ test("2000-01-01 itself is accepted", async () => {
     putRequest({ ...validBody, date: "2000-01-01" }),
   );
   expect(res.status).toBe(200);
-  expect(put).toHaveBeenCalledWith("2000-01-01", validBody.totalCents);
+  expect(put).toHaveBeenCalledWith("2000-01-01", validBody.totalCents, undefined);
 });
 
 test("today's date is accepted", async () => {
@@ -88,7 +88,7 @@ test("today's date is accepted", async () => {
     putRequest({ ...validBody, date: TODAY }),
   );
   expect(res.status).toBe(200);
-  expect(put).toHaveBeenCalledWith(TODAY, validBody.totalCents);
+  expect(put).toHaveBeenCalledWith(TODAY, validBody.totalCents, undefined);
 });
 
 test("a non-EUR currency is refused", async () => {
@@ -120,7 +120,7 @@ test("a negative total (debts exceeding assets) is accepted", async () => {
     putRequest({ ...validBody, totalCents: -50_000 }),
   );
   expect(res.status).toBe(200);
-  expect(put).toHaveBeenCalledWith(validBody.date, -50_000);
+  expect(put).toHaveBeenCalledWith(validBody.date, -50_000, undefined);
 });
 
 test("a malformed JSON body is refused, not crashed on", async () => {
@@ -147,4 +147,42 @@ test("deleting removes every stored total for the session's own tenant", async (
   expect(res.status).toBe(200);
   expect(await res.json()).toEqual({ deleted: true });
   expect(deleteAll).toHaveBeenCalledOnce();
+});
+
+/* Provenance on the shared valuation (#300, WS5.5). The browser share flow has
+ * no document to cite, so provenance is optional here; WHEN it is sent it must
+ * be the structured citation, never prose, and it is stored with the row so the
+ * investing UI can show where the number came from. */
+test("a structured citation sent with the total is decoded and stored with it", async () => {
+  const { app, put } = appWith("user-123");
+  const provenance = {
+    source: "Trading 212 account statement",
+    grade: "A",
+    date: "2026-09-15",
+    documentId: "statement-09",
+  };
+  const res = await app.request(
+    "/api/personal/net-worth-total",
+    putRequest({ ...validBody, provenance }),
+  );
+  expect(res.status).toBe(200);
+  expect(put).toHaveBeenCalledWith("2026-09-15", 123_456_78, provenance);
+});
+
+test("a malformed citation is refused with a hint and nothing is stored", async () => {
+  const { app, put } = appWith("user-123");
+  for (const provenance of [
+    { source: "a statement", grade: "D", date: "2026-09-15" },
+    { grade: "A", date: "2026-09-15" },
+    { source: "a statement", grade: "A", date: "2026-13-40" },
+    { source: "a statement", grade: "A", date: "2026-09-15", note: "free text" },
+  ]) {
+    const res = await app.request(
+      "/api/personal/net-worth-total",
+      putRequest({ ...validBody, provenance }),
+    );
+    expect(res.status, JSON.stringify(provenance)).toBe(400);
+    expect((await res.json()).error).toBe("invalid_citation");
+  }
+  expect(put).not.toHaveBeenCalled();
 });

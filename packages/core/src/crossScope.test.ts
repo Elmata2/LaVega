@@ -10,6 +10,7 @@ import {
   type CrossScopeAnswer,
   type CrossScopeReport,
 } from "./crossScope.js";
+import { confirmTransfer, transferPairId, type TransferPair } from "./transfers.js";
 
 /* De grens tussen privé en zakelijk. The tests are the argument here, not the
  * decoration: every number this module puts on a screen is one he could check
@@ -685,4 +686,83 @@ test("zijn eigen geld verschijnt niet als zijn eigen leverancier", () => {
   });
   if (r.state !== "gemeten") throw new Error(r.state);
   expect(r.rows).toHaveLength(0);
+});
+
+/* ── Bevestigde overboekingen zijn autoriteit, geen tweede gok ────────────── */
+
+const confirmedPair = (
+  outflowTxId: string,
+  inflowTxId: string,
+  amountCents: number,
+): TransferPair =>
+  confirmTransfer(
+    {
+      id: transferPairId(outflowTxId, inflowTxId),
+      outflowTxId,
+      inflowTxId,
+      status: "suggested",
+      kind: "funds_movement",
+      amountCents,
+      currency: "EUR",
+      createdAt: ASOF,
+    },
+    ASOF,
+  );
+
+test("een bevestigd paar over de grens wordt gemeten, ook buiten het vierdaagse venster", () => {
+  const txs = [
+    tx("o1", BV.key, "2026-03-10", -5000, "", "Overboeking"),
+    tx("i1", PRIVE.key, "2026-03-20", 5000, "", "Ontvangen"),
+  ];
+  // Zonder het paar weigert de heuristiek (tien dagen uit elkaar) en draagt geen
+  // van beide benen bewijs, dus er kruist niets.
+  expect(measured(run(txs)).crossings).toHaveLength(0);
+
+  const met = measured(
+    run(txs, {
+      transfers: [confirmedPair("o1", "i1", 500_000)],
+      // Zijn antwoord op de stroom moet op de autoritatieve kruising landen; het
+      // paar bepaalt WAT er kruiste, niet WAT het was.
+      answers: [
+        {
+          target: crossScopeStreamKey("BV1", "Privé"),
+          kind: "dividend",
+          source: "user",
+        },
+      ],
+    }),
+  );
+  expect(met.crossings).toHaveLength(1);
+  expect(met.crossings[0].matched).toBe(true);
+  expect(met.crossings[0].evidence).toBe("twee-benen");
+  expect(met.crossings[0].legs.map((l) => l.txId).sort()).toEqual(["i1", "o1"]);
+  expect(met.crossings[0].kind).toBe("dividend");
+  expect(met.crossings[0].kindSource).toBe("user");
+  expect(met.totalCents).toBe(500_000); // één beweging, geen som over benen
+  expect(met.matchedCents).toBe(500_000);
+});
+
+test("een bevestigd paar binnen één scope maakt geen kruising, maar claimt zijn benen", () => {
+  // BV1 -> BV2 is een interne overboeking, geen grens-kruising. Het paar mag
+  // alleen niet stilletjes alsnog met het privébeen van eenzelfde bedrag worden
+  // gematcht: dat zou € 3.000 verzinnen dat nooit over de grens ging.
+  const txs = [
+    tx("bv-uit", BV.key, "2026-03-10", -3000, "", "Naar BV2"),
+    tx("bv2-in", BV2.key, "2026-03-10", 3000, "BV1", "Van BV1"),
+    tx("prive-in", PRIVE.key, "2026-03-10", 3000, "", "Ontvangen"),
+  ];
+  const input = {
+    accounts: [BV, PRIVE, BV2],
+    txs,
+    profiles: [...PROFILES, { entity: "BV2", scope: "business" as const }],
+    asOf: ASOF,
+  };
+  const zonder = measured(crossScopeTransfers(input));
+  expect(zonder.crossings).toHaveLength(1); // de heuristiek koppelt BV-uit aan privé-in
+
+  const met = measured(
+    crossScopeTransfers({ ...input, transfers: [confirmedPair("bv-uit", "bv2-in", 300_000)] }),
+  );
+  expect(met.crossings).toHaveLength(0);
+  expect(met.totalCents).toBe(0);
 });

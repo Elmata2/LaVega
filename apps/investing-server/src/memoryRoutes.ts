@@ -1,6 +1,7 @@
 import type { Context, Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { isRiskTolerance, type AgentMemoryRepository, type ThesisBody } from "@lavega/database";
+import { planThesisMigration } from "@lavega/core";
 import { isPortfolioAgentId } from "./portfolioAgent.js";
 
 /*
@@ -14,6 +15,10 @@ export type MemoryRouteDependencies = {
   resolveTenantId: () => string | Promise<string>;
   /** Null without a database: memory is then unavailable. */
   memory: (tenantId: string) => AgentMemoryRepository | null;
+  /** Broker symbol to canonical instrument key, from the current broker
+   *  snapshot (WS4.5, #297). Absent when the snapshot cannot be read: the
+   *  migration then leaves every thesis key alone instead of guessing. */
+  instrumentKeys?: () => Promise<Record<string, string>>;
 };
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -69,6 +74,42 @@ export function attachMemoryRoutes<T extends Hono>(app: T, deps: MemoryRouteDepe
     return handle(memory);
   };
 
+  /* Move symbol-keyed theses onto the canonical instrument key (WS4.5, #297).
+   * Identical confirmed theses for one instrument fold into one key; a group
+   * whose confirmed theses disagree is flagged for review and keeps every row.
+   * The route is idempotent and never chooses between conflicting claims. */
+  app.post("/api/memory/instruments/migrate", (c) =>
+    withMemory(c, async (memory) => {
+      if (!deps.instrumentKeys)
+        return c.json({ problems: ["Instrument identity is unavailable"] }, 503);
+      let bySymbol: Record<string, string>;
+      try {
+        bySymbol = await deps.instrumentKeys();
+      } catch (error) {
+        return c.json(
+          {
+            problems: [
+              error instanceof Error
+                ? error.message
+                : "Broker data could not be read for instrument identity",
+            ],
+          },
+          503,
+        );
+      }
+      const theses = await memory.listTheses();
+      const plan = planThesisMigration(
+        theses.map((thesis) => ({
+          symbol: thesis.symbol,
+          status: thesis.status,
+          fingerprint: JSON.stringify([thesis.why, thesis.worth, thesis.entry, thesis.wrongIf]),
+        })),
+        { bySymbol },
+      );
+      const applied = await memory.applyThesisMigration(plan);
+      return c.json({ ...applied, reviews: plan.reviews });
+    }),
+  );
   app.get("/api/memory", (c) =>
     withMemory(c, async (memory) => {
       const [riskTolerance, theses, goals] = await Promise.all([

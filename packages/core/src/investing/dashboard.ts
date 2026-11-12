@@ -1,7 +1,7 @@
 import { Schema } from "effect";
 import { convertCurrency, MissingFxRateError, type FxRates } from "./portfolio.js";
 import type { DeepMutable } from "./schema.js";
-import { bucketPricedAllocation } from "./allocation.js";
+import { bucketPricedAllocation, buildAllocationLadder } from "./allocation.js";
 import {
   computePortfolioValueSeries,
   filterPortfolioValueRange,
@@ -20,6 +20,7 @@ import type {
   Trade,
 } from "./model.js";
 import type { BenchmarkInstrument } from "./benchmarks.js";
+import { replayCostBasis, selectCostBasis } from "./costBasis.js";
 import {
   brokerCostCoverage,
   buildCurrentPositions,
@@ -33,6 +34,13 @@ import { valuePosition } from "./valuation.js";
 import { anchoredSnapshotQuantity, latestOwnershipAnchors } from "./ownership.js";
 import { orderTrades, tradeDelta } from "./quantity.js";
 import { buildRiskProjection } from "./risk.js";
+import {
+  buildRealizedReport,
+  RealizedIncomeReportSchema,
+  summarizeDisposals,
+  type PositionRealizedSummary,
+} from "./realized.js";
+import type { AccountWrapperEntry } from "./model.js";
 
 export const PORTFOLIO_RANGES = [
   "1M",
@@ -61,6 +69,12 @@ export type InvestingPositionDetail = {
   averageCost: number | null;
   returns: PositionReturn;
   returnStatus: PositionReturnStatus;
+  /** Why the cost basis is known or unknown (WS4.2); absent on rows built
+   *  before the provenance slice. */
+  basis?: CurrentPosition["basis"];
+  /** Realised disposals of this security (WS4.3, #296). A summary, not the
+   *  whole report: the report route carries the per-disposal detail. */
+  realized?: PositionRealizedSummary;
   firstBuyDate: string | null;
   quantityHistory: PositionQuantityChange[];
   activity: PositionActivity[];
@@ -133,6 +147,28 @@ const AllocationSchema = Schema.Struct({
   buckets: Schema.Array(AllocationBucketSchema),
   unpriced: StringList,
 });
+const AllocationLadderRowSchema = Schema.Struct({
+  key: Schema.String,
+  label: Schema.String,
+  kind: Schema.Union([
+    Schema.Literal("holding"),
+    Schema.Literal("cash"),
+    Schema.Literal("unclassified"),
+  ]),
+  value: NullableNumber,
+  weight: NullableNumber,
+  unpriced: Schema.Boolean,
+});
+const AllocationLadderSchema = Schema.Struct({
+  rows: Schema.Array(AllocationLadderRowSchema),
+  cash: NullableNumber,
+  holdings: NullableNumber,
+  total: NullableNumber,
+  denominator: NullableNumber,
+  denominatorRule: Schema.String,
+  weightsSum: NullableNumber,
+  unpriced: StringList,
+});
 const PortfolioValuePointSchema = Schema.Struct({
   date: Schema.String,
   positionsValue: NullableNumber,
@@ -169,10 +205,38 @@ const PositionReturnSchema = Schema.Struct({
   firstBuyDate: NullableString,
   problem: Schema.optional(Schema.String),
 });
+const CostBasisSummarySchema = Schema.Struct({
+  status: Schema.Union([Schema.Literal("known"), Schema.Literal("unknown")]),
+  source: Schema.NullOr(
+    Schema.Union([
+      Schema.Literal("manual"),
+      Schema.Literal("calculated"),
+      Schema.Literal("provider"),
+    ]),
+  ),
+  amountCents: NullableNumber,
+  currency: Schema.String,
+  locked: Schema.Boolean,
+  reason: Schema.NullOr(
+    Schema.Union([
+      Schema.Literal("no-history"),
+      Schema.Literal("transfer-in"),
+      Schema.Literal("missing-fx"),
+      Schema.Literal("missing-price"),
+      Schema.Literal("missing-fee"),
+      Schema.Literal("quantity-mismatch"),
+      Schema.Literal("provider-incomplete"),
+    ]),
+  ),
+  firstBuyDate: NullableString,
+});
 const CurrentPositionSchema = Schema.Struct({
   symbol: Schema.String,
   entity: Schema.String,
   isin: Schema.optional(Schema.String),
+  /** ISIN-first canonical identity (WS4.5, #297). Optional so a row shaped
+   *  before the security master still decodes. */
+  instrumentKey: Schema.optional(Schema.String),
   description: Schema.optional(Schema.String),
   quantity: Schema.Number,
   currency: Schema.String,
@@ -181,6 +245,7 @@ const CurrentPositionSchema = Schema.Struct({
   portfolioWeight: NullableNumber,
   priceStatus: PositionPriceStatusSchema,
   returns: PositionReturnSchema,
+  basis: Schema.optional(CostBasisSummarySchema),
 });
 const PositionMarkerSchema = Schema.Struct({
   kind: Schema.Union([Schema.Literal("buy"), Schema.Literal("sell"), Schema.Literal("dividend")]),
@@ -220,6 +285,12 @@ const PositionActivitySchema = Schema.Struct({
   currency: Schema.String,
   sourceOrder: Schema.Number,
 });
+const PositionRealizedSummarySchema = Schema.Struct({
+  disposals: Schema.Number,
+  unknownDisposals: Schema.Number,
+  netProceedsCents: NullableNumber,
+  realizedGainCents: NullableNumber,
+});
 const PositionDetailSchema = Schema.Struct({
   symbol: Schema.String,
   description: Schema.optional(Schema.String),
@@ -236,6 +307,8 @@ const PositionDetailSchema = Schema.Struct({
   averageCost: NullableNumber,
   returns: PositionReturnSchema,
   returnStatus: PositionReturnStatusSchema,
+  basis: Schema.optional(CostBasisSummarySchema),
+  realized: Schema.optional(PositionRealizedSummarySchema),
   firstBuyDate: NullableString,
   quantityHistory: Schema.Array(PositionQuantityChangeSchema),
   activity: Schema.Array(PositionActivitySchema),
@@ -321,12 +394,23 @@ export const InvestingDashboardDataSchema = Schema.Struct({
   ),
   benchmarks: Schema.Array(BenchmarkSeriesSchema),
   externalCashFlows: Schema.Array(ExternalCashFlowSchema),
-  allocation: Schema.Struct({ instrument: AllocationSchema, entity: AllocationSchema }),
+  allocation: Schema.Struct({
+    instrument: AllocationSchema,
+    entity: AllocationSchema,
+    /** Cash-aware ladder with the documented denominator (WS4.6, #297).
+     *  Optional so a dashboard stored before it still decodes. */
+    ladder: Schema.optional(
+      Schema.Struct({ instrument: AllocationLadderSchema, entity: AllocationLadderSchema }),
+    ),
+  }),
   positions: Schema.Array(CurrentPositionSchema),
   position: Schema.NullOr(PositionDetailSchema),
   problems: StringList,
   risk: RiskProjectionSchema,
   composition: CompositionSchema,
+  /** Realised-gain and income report (WS4.3/WS4.4, #296). Optional so a
+   *  dashboard stored before the report existed still decodes. */
+  realized: Schema.optional(RealizedIncomeReportSchema),
 });
 
 export type InvestingDashboardData = DeepMutable<
@@ -349,6 +433,8 @@ export type InvestingDashboardInput = {
   problems?: readonly string[];
   today?: string;
   dataVersion?: number;
+  /** Account tax-treatment labels keyed by `(broker, account)` (WS4.4). */
+  accountWrappers?: readonly AccountWrapperEntry[];
 };
 
 /** The most the composition projection ever names. */
@@ -409,6 +495,18 @@ export function emptyInvestingDashboard(presentationCurrency = "EUR"): Investing
     risk: { byBenchmark: {}, defaultBenchmark: null },
     composition: buildCompositionProjection([]),
   };
+}
+
+/** The newest cash anchor per account, because a snapshot can carry one row
+ *  per statement date and summing them would double count. */
+function latestCashBalances(balances: readonly CashBalance[]): CashBalance[] {
+  const latest = new Map<string, CashBalance>();
+  for (const balance of balances) {
+    const key = `${balance.entity}\u0000${balance.broker}\u0000${balance.currency}`;
+    const existing = latest.get(key);
+    if (!existing || balance.asOf > existing.asOf) latest.set(key, balance);
+  }
+  return [...latest.values()];
 }
 
 /** Shape local domain records once, before they cross the server boundary. */
@@ -489,6 +587,27 @@ export function buildInvestingDashboard(reported: InvestingDashboardInput): Inve
         })
       : null;
 
+  /* The report is built from the snapshot rows as reported: `buildRealizedReport`
+   * restates splits itself, and `input` above is already restated. */
+  const realized = buildRealizedReport({
+    positions: reported.positions,
+    trades: reported.trades,
+    dividends: reported.dividends,
+    cashFlows: reported.cashFlows,
+    priceBars: reported.priceBars,
+    presentationCurrency: reported.presentationCurrency,
+    fxRates: reported.fxRates,
+    ...(reported.accountWrappers ? { accountWrappers: reported.accountWrappers } : {}),
+    today,
+  });
+  const selectedDisposals = selected
+    ? realized.disposals.filter((row) => row.symbol.toUpperCase() === selected)
+    : [];
+  const positionWithRealized =
+    position && selectedDisposals.length > 0
+      ? { ...position, realized: summarizeDisposals(selectedDisposals) }
+      : position;
+
   const externalByDate = new Map<string, number | null>();
   const seenFlows = new Set<string>();
   for (const flow of input.cashFlows ?? []) {
@@ -516,6 +635,44 @@ export function buildInvestingDashboard(reported: InvestingDashboardInput): Inve
       current === null || converted === null ? null : (current ?? 0) + converted,
     );
   }
+
+  /* Cash-aware ladder (WS4.6): the newest anchor per account, converted at its
+   * own date, is one labelled Cash bucket; holdings keep their instrument and
+   * entity grouping and an empty/unknown key folds into Unclassified. */
+  const cashRows = latestCashBalances(input.cashBalances ?? []).map((balance) => {
+    let value: number | null = null;
+    try {
+      value = convertCurrency(
+        balance.amount,
+        balance.currency,
+        input.presentationCurrency,
+        balance.asOf,
+        input.fxRates,
+      );
+    } catch {
+      // A missing FX rate leaves the cash bucket unpriced, never guessed.
+    }
+    return { label: `${balance.broker} ${balance.currency} cash`, value };
+  });
+  const ladder = {
+    instrument: buildAllocationLadder({
+      holdings: positions.map((position) => ({
+        key: position.symbol,
+        label: position.description ?? position.symbol,
+        value: position.marketValue,
+        parentKey: position.entity,
+      })),
+      cash: cashRows,
+    }),
+    entity: buildAllocationLadder({
+      holdings: positions.map((position) => ({
+        key: position.entity,
+        label: position.entity,
+        value: position.marketValue,
+      })),
+      cash: cashRows,
+    }),
+  };
 
   const dashboard: InvestingDashboardData = {
     dataVersion: input.dataVersion ?? 0,
@@ -556,10 +713,12 @@ export function buildInvestingDashboard(reported: InvestingDashboardInput): Inve
     allocation: {
       instrument: bucketPricedAllocation(positions, "instrument"),
       entity: bucketPricedAllocation(positions, "entity"),
+      ladder,
     },
     positions,
-    position,
+    position: positionWithRealized,
     problems: [...(input.problems ?? []), ...positionProblems],
+    realized,
     risk: { byBenchmark: {}, defaultBenchmark: null },
     composition: buildCompositionProjection(positions),
   };
@@ -633,6 +792,34 @@ function buildPositionDetail(input: {
     input.fxRates,
     { valuationDate, brokerCost: brokerCostCoverage(latestOwnershipAnchors(input.positions)) },
   );
+  const detailProvider = brokerCostCoverage(latestOwnershipAnchors(input.positions));
+  const basis = selectCostBasis({
+    presentationCurrency: input.presentationCurrency,
+    fxRates: input.fxRates,
+    manual:
+      input.positions.length > 0 && input.positions.every((position) => position.manualCostBasis)
+        ? {
+            legs: input.positions.map((position) => ({
+              amountCents: position.manualCostBasis!.amountCents,
+              currency: position.manualCostBasis!.currency,
+              date: position.asOf,
+              locked: position.manualCostBasis!.locked,
+            })),
+          }
+        : null,
+    calculated: replayCostBasis({
+      trades: input.trades,
+      presentationCurrency: input.presentationCurrency,
+      fxRates: input.fxRates,
+      expectedQuantity: quantity,
+    }),
+    provider:
+      detailProvider.status === "complete"
+        ? { status: "complete", legs: detailProvider.legs }
+        : detailProvider.coveredQuantity > 0
+          ? { status: "incomplete" }
+          : null,
+  });
   const averageCost =
     returns.remainingCostBasis === null || Math.abs(quantity) <= 1e-9
       ? null
@@ -684,6 +871,7 @@ function buildPositionDetail(input: {
     averageCost,
     returns,
     returnStatus: returns.status,
+    basis,
     firstBuyDate: returns.firstBuyDate,
     quantityHistory,
     activity,

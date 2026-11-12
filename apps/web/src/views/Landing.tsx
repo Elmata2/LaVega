@@ -49,7 +49,7 @@ function Heading({ lead, em }: { lead: string; em: string }) {
   );
 }
 
-/** Public marketing landing page: midnight palette, Instrument Serif, the
+/** Public marketing landing page: midnight palette, Instrument Serif over Geist, the
  *  gradient only in the hero and the closing call to action. Every "get early
  *  access" button opens the auth dialog on its sign-up view; "Log in" opens it
  *  on sign-in and enters the vault (`/app`) via `onEnter`. */
@@ -137,6 +137,17 @@ export default function Landing({
   const onCta = withOpener(openSignUp);
   const onLogin = withOpener(openSignIn);
 
+  /* A tap that landed before this bundle did (public/lp-early.js records it).
+   * Replayed once, so a visitor on a slow connection still gets the dialog. */
+  useEffect(() => {
+    const w = window as Window & { __lpTap?: string };
+    const tap = w.__lpTap;
+    delete w.__lpTap;
+    if (tap === "sign-up") openSignUp();
+    else if (tap === "sign-in") openSignIn();
+    // oxlint-disable-next-line react-hooks/exhaustive-deps -- mount-only replay
+  }, []);
+
   /* `<html lang>` has to follow the copy, and the two pages have to declare
    * each other as alternates — otherwise the English page reads to a search
    * engine as content competing with the Dutch one it exists alongside. Title
@@ -215,11 +226,15 @@ export default function Landing({
     };
   }, []);
 
-  // Scroll-reveal (fade/rise) via IntersectionObserver. Without one, show everything.
+  // Scroll-reveal (fade/rise) via IntersectionObserver. The hiding class is
+  // decided at render time (see .lp-reveal in landing.css), so the prerendered
+  // HTML stays readable if the bundle never runs, and a reduced-motion visitor
+  // gets the end state rather than a faster animation. Without an observer
+  // nothing is hidden in the first place.
   useEffect(() => {
     const els = rootRef.current?.querySelectorAll<HTMLElement>(".r");
     if (!els) return;
-    if (typeof IntersectionObserver === "undefined") {
+    if (!animated || typeof IntersectionObserver === "undefined") {
       els.forEach((el) => el.classList.add("in-view"));
       return;
     }
@@ -236,7 +251,7 @@ export default function Landing({
     );
     els.forEach((el) => io.observe(el));
     return () => io.disconnect();
-  }, []);
+  }, [animated]);
 
   // Scrollspy: the nav link of the section crossing the middle of the screen.
   useEffect(() => {
@@ -261,7 +276,7 @@ export default function Landing({
   const shot = c.hero.shot;
 
   return (
-    <div className="lp" ref={rootRef}>
+    <div className={animated ? "lp lp-reveal" : "lp"} ref={rootRef}>
       <a className="skip" href="#main">
         {c.skip}
       </a>
@@ -289,10 +304,16 @@ export default function Landing({
             </a>
           </div>
           <div className="right">
-            <button ref={triggerRef} type="button" className="login" onClick={onLogin}>
+            <button
+              ref={triggerRef}
+              type="button"
+              className="login"
+              data-lp-tap="sign-in"
+              onClick={onLogin}
+            >
               {c.nav.login}
             </button>
-            <button type="button" className="btn small" onClick={onCta}>
+            <button type="button" className="btn small" data-lp-tap="sign-up" onClick={onCta}>
               {c.nav.cta}
             </button>
             <button
@@ -341,6 +362,19 @@ export default function Landing({
         >
           {c.nav.menuLanguage}
         </a>
+        <button
+          type="button"
+          className="btn panel-cta"
+          data-lp-tap="sign-up"
+          style={{ "--n": 4 } as CSSProperties}
+          onClick={(e) => {
+            closeMenu();
+            onCta(e);
+            openerRef.current = burgerRef.current;
+          }}
+        >
+          {c.nav.cta}
+        </button>
       </div>
 
       <dialog
@@ -436,7 +470,7 @@ export default function Landing({
             {c.hero.lineTwo} <em>{c.hero.em}</em>
           </h1>
           <p className="sub">{c.hero.sub}</p>
-          <button type="button" className="btn" onClick={onCta}>
+          <button type="button" className="btn" data-lp-tap="sign-up" onClick={onCta}>
             {c.nav.cta}
           </button>
           <div className="shot" role="img" aria-label={shot.label}>
@@ -550,7 +584,13 @@ export default function Landing({
           <h2 className="r">
             <Heading {...c.end.title} />
           </h2>
-          <button type="button" className="btn r" style={delay(2)} onClick={onCta}>
+          <button
+            type="button"
+            className="btn r"
+            style={delay(2)}
+            data-lp-tap="sign-up"
+            onClick={onCta}
+          >
             {c.nav.cta}
           </button>
         </div>

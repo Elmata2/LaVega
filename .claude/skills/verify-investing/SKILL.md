@@ -383,6 +383,13 @@ real tenant. Prefer it over prod for anything that writes.
   stay on one host. Run `preview --refresh` to move the pin to the newest deploy, or
   `preview --branch <branch>` to pin the newest deploy of your PR branch. After the pin
   moves, log in again. Say the new `page` URL.
+- **Sandboxed CLI.** The CLI writes its OAuth token to a global config dir
+  (`~/Library/Application Support/com.vercel.cli` on macOS, `~/.vercel` on Linux). A
+  sandbox that blocks that write burns the refresh token: the CLI rotates it, then fails
+  to save it, and every later call answers 403. In that case log in once with
+  `vercel login --global-config <dir>` where `<dir>` is writable (`.vercel-cli/` in this
+  repo is git-ignored), and export `LAVEGA_VERCEL_GLOBAL_CONFIG=<dir>` for every command.
+  The CLI must be on `PATH`; `LAVEGA_VERCEL_BIN` overrides the binary.
 
 ```bash
 node $C preview --branch my-feature      # optional: verify this branch's deploy

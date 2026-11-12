@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { withCurrentBalances } from "@lavega/core";
+import { mergeInPersonalNetWorth, withCurrentBalances } from "@lavega/core";
 import { positionSeries, POSITION_WINDOW_DAYS } from "./totalePositie";
 import {
   computeShareableTotalCents,
@@ -325,4 +325,84 @@ test("pending-delete then switched back on: a same-value PUT queued behind an ou
   // have compared against the value it was about to clear, not the value it
   // actually left behind.
   expect(await put).toBe("stored");
+});
+
+/* WS4.7 (#298): the Personal share is bank money only. Investment accounts are
+ * the Investing portfolio's own figure, so a contribution moves the same euro
+ * from the Personal side to the Investing side and the combined net worth counts
+ * it once — never twice and never lost. */
+
+test("an investment account is left out of the shared Personal total", () => {
+  const accounts = [
+    account({ key: "bank", entity: "Privé", type: "Betaalrekening", balance: 9_000 }),
+    account({ key: "broker", entity: "Privé", type: "Beleggingsrekening", balance: 1_000 }),
+  ];
+  const cents = computeShareableTotalCents(accounts as never, [], "2026-09-29", {
+    fxHistory: {},
+    mode: "separate",
+  });
+  expect(cents).toBe(900_000);
+});
+
+test("only investment accounts leave nothing to share — Investing reports all of it", () => {
+  const accounts = [account({ key: "broker", type: "Beleggingsrekening", balance: 1_000 })];
+  expect(
+    computeShareableTotalCents(accounts as never, [], "2026-09-29", {
+      fxHistory: {},
+      mode: "separate",
+    }),
+  ).toBeNull();
+});
+
+test("a contribution moves between the Personal share and the portfolio, and the combined net worth does not change", () => {
+  const conversion = { fxHistory: {}, mode: "separate" as const };
+  const beforeAccounts = [
+    account({ key: "bank", entity: "Privé", type: "Betaalrekening", balance: 10_000 }),
+    account({ key: "broker", entity: "Privé", type: "Beleggingsrekening", balance: 0 }),
+  ];
+  const afterAccounts = [
+    account({ key: "bank", entity: "Privé", type: "Betaalrekening", balance: 9_000 }),
+    account({ key: "broker", entity: "Privé", type: "Beleggingsrekening", balance: 1_000 }),
+  ];
+  const point = (portfolio: number) => ({
+    date: "2026-09-29",
+    positionsValue: portfolio,
+    cashValue: 0,
+    value: portfolio,
+    unpriced: [],
+    forwardFilled: [],
+    cashUnknown: [],
+  });
+
+  const before = mergeInPersonalNetWorth(
+    [point(0)],
+    [
+      {
+        date: "2026-09-29",
+        totalCents: computeShareableTotalCents(
+          beforeAccounts as never,
+          [],
+          "2026-09-29",
+          conversion,
+        )!,
+      },
+    ],
+  );
+  const after = mergeInPersonalNetWorth(
+    [point(1_000)],
+    [
+      {
+        date: "2026-09-29",
+        totalCents: computeShareableTotalCents(
+          afterAccounts as never,
+          [],
+          "2026-09-29",
+          conversion,
+        )!,
+      },
+    ],
+  );
+  expect(before.points[0]).toMatchObject({ personalValue: 10_000, netWorth: 10_000 });
+  // The 1.000 appears once: it left the Personal share and arrived in the portfolio.
+  expect(after.points[0]).toMatchObject({ personalValue: 9_000, netWorth: 10_000 });
 });

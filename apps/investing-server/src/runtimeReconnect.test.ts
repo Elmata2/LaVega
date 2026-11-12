@@ -1,5 +1,5 @@
 import { afterEach, expect, test, vi } from "vitest";
-import { createInMemoryPriceStore } from "@lavega/adapters";
+import { createInMemorySharedPriceStore } from "@lavega/adapters";
 import { UnreadableBrokerCredentialsError, type EncryptedBrokerRepository } from "@lavega/database";
 import { createNeonCredentialStore } from "./neonCredentialStore.js";
 
@@ -84,7 +84,7 @@ test.each([
       createNeonCredentialStore(repository(unreadable), tenantId),
     );
     const app = await createRuntimeApp({
-      priceStore: createInMemoryPriceStore(),
+      priceStore: createInMemorySharedPriceStore(),
       resolveTenantId: () => tenantId,
     });
 
@@ -130,7 +130,7 @@ test("runtime reports storage outage instead of an empty vault", async () => {
   });
   storeFactory.mockImplementation(() => createNeonCredentialStore(failing, tenantId));
   const app = await createRuntimeApp({
-    priceStore: createInMemoryPriceStore(),
+    priceStore: createInMemorySharedPriceStore(),
     resolveTenantId: () => tenantId,
   });
   const status = await app.request("/api/brokers/credentials/status");

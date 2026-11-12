@@ -5,7 +5,15 @@ import type { InvoiceGap, SenderCheckDetail } from "../n8n.js";
 // VatNote/VatBasis/etc., because it is a closed vocabulary already defined
 // once as TAX_SHEET_FIELDS in packages/core/src/agentFacts.ts — duplicating
 // its six literal values here would drift silently if that list ever changes.
-import type { TaxSheetField } from "@lavega/core";
+import type {
+  RuleAction,
+  RuleAmountOp,
+  RuleCategoryOp,
+  RuleCondition,
+  RuleDateOp,
+  RuleTextOp,
+  TaxSheetField,
+} from "@lavega/core";
 
 /** SPF, DKIM and DMARC are called that in every language, so the parenthetical
  *  is built once rather than twice. */
@@ -543,7 +551,13 @@ export type BelastingCopy = {
   };
 };
 
-type RegelsCopy = {
+/** Condition/action vocabulary, derived from the engine's own unions so a new
+ *  kind is a type error here instead of a silent gap in the editor. */
+type RegelsConditionKind = RuleCondition["kind"];
+type RegelsActionKind = RuleAction["kind"];
+type RegelsTextTarget = Extract<RuleCondition, { kind: "text" }>["target"];
+
+export type RegelsCopy = {
   section: {
     /** aria-label on the <section> wrapping this screen. */
     ariaLabel: string;
@@ -565,6 +579,10 @@ type RegelsCopy = {
       unknownWord: string;
       afterUnknownWord: string;
     };
+    /** The stored order is the priority: the first matching rule wins. */
+    priorityNote: string;
+    /** Only setCategory is written to transactions today. */
+    categoryOnlyNote: string;
   };
   form: {
     /** Label text for the match-text input. */
@@ -578,19 +596,110 @@ type RegelsCopy = {
   };
   /** Warning shown under the form when the typed category isn't in CATEGORY_OPTIONS. */
   newCategoryWarning: (typedCategory: string) => string;
-  table: {
-    /** Column header over the match column. */
-    matchHeader: string;
-    /** Column header over the category column. */
-    categoryHeader: string;
-    /** Per-row delete button text. */
-    deleteButton: string;
+  list: {
+    priorityHeader: string;
+    ruleHeader: string;
+    actionsHeader: string;
     /** Shown instead of the table when there are no rules yet. */
     emptyState: string;
-    /** Footnote under the table, shown only when there is more than one rule:
-     *  explains the list is alphabetical for reading but match order (creation
-     *  order) decides which rule wins. */
-    sortNote: string;
+    /** Opens the typed editor without a stored rule. */
+    newButton: string;
+    /** A legacy row's one-substring meaning, readably. */
+    legacySummary: (match: string, category: string) => string;
+    /** A canonical v2 row whose one condition is a text "contains". */
+    textSummary: (value: string, category: string) => string;
+    /** Any other v2 row: number of conditions and the claimed category. */
+    conditionSummary: (count: number, category: string) => string;
+    /** A v2 row without a category action. */
+    conditionOnlySummary: (count: number) => string;
+    noActions: string;
+    editButton: string;
+    upButton: string;
+    downButton: string;
+    deleteButton: string;
+  };
+  conditions: {
+    kindLabel: string;
+    targetLabel: string;
+    opLabel: string;
+    valueLabel: string;
+    upperValueLabel: string;
+    fromLabel: string;
+    toLabel: string;
+    accountLabel: string;
+    categoryValueLabel: string;
+    directionLabel: string;
+    amountHint: string;
+    removeButton: string;
+    kinds: Record<RegelsConditionKind, string>;
+    textTargets: Record<RegelsTextTarget, string>;
+    textOps: Record<RuleTextOp, string>;
+    merchantOps: Record<"contains" | "equals", string>;
+    amountOps: Record<RuleAmountOp, string>;
+    categoryOps: Record<RuleCategoryOp, string>;
+    dateOps: Record<RuleDateOp, string>;
+    directions: Record<"in" | "out", string>;
+  };
+  actions: {
+    kindLabel: string;
+    valueLabel: string;
+    removeButton: string;
+    labels: Record<RegelsActionKind, string>;
+    valueLabels: {
+      setCategory: string;
+      setDisplayName: string;
+      setMerchant: string;
+      addTag: string;
+    };
+  };
+  editor: {
+    ariaLabel: string;
+    newHeading: string;
+    editHeading: string;
+    /** A legacy row opens lowered and becomes v2 when saved. */
+    legacyNote: string;
+    nameLabel: string;
+    namePlaceholder: string;
+    effectiveFromLabel: string;
+    effectiveFromHint: string;
+    conditionsHeading: string;
+    addConditionButton: string;
+    actionsHeading: string;
+    addActionButton: string;
+    stopProcessingLabel: string;
+    categoryOnlyNote: string;
+    saveButton: string;
+    cancelButton: string;
+  };
+  validation: {
+    needsCondition: string;
+    needsAction: string;
+    emptyValue: string;
+    invalidDate: string;
+  };
+  preview: {
+    button: string;
+    heading: string;
+    /** Matched / total / how many transactions would change category. */
+    summary: (matched: number, total: number, changed: number) => string;
+    byRuleHeading: string;
+    byRuleLine: (name: string, count: number) => string;
+    noMatches: string;
+    samplesHeading: string;
+    sampleHeaders: {
+      date: string;
+      counterparty: string;
+      amount: string;
+      current: string;
+      next: string;
+      rule: string;
+    };
+    lockedBadge: string;
+    lockedNote: string;
+    sameWinnerNote: string;
+    categoryOnlyNote: string;
+    noRule: string;
+    noTxs: string;
   };
 };
 
@@ -604,6 +713,19 @@ type BackupCopy = {
     title: string;
     description: string;
     button: string;
+    /** The full .lavega bundle carries the sealed documents too. */
+    includesDocuments: (count: number) => string;
+  };
+  /** WS6.1 (#302): the plain, versioned portability archive. */
+  portable: {
+    title: string;
+    description: string;
+    button: string;
+    building: string;
+    /** Rows across sections, sections in the archive — and that it read back. */
+    verified: (rows: number, sections: number) => string;
+    verificationFailed: (problems: number) => string;
+    error: string;
   };
   server: {
     title: string;
@@ -617,6 +739,10 @@ type BackupCopy = {
       overwriteButton: string;
     };
     success: string;
+    /** A server backup cannot carry the document bytes (a server-side bundle
+     *  needs a server change this slice does not own), so it refuses in words
+     *  instead of dropping them silently. */
+    documentsBlocked: (count: number) => string;
     errors: {
       locked: string;
       saveFailed: string;
@@ -1268,6 +1394,10 @@ const nlRegels: RegelsCopy = {
       afterUnknownWord:
         " staan bij Transacties? Daar staat er ook bij wáárom, en dat is meestal de tekst waar je hier een regel op maakt.",
     },
+    priorityNote:
+      "De volgorde hieronder is de prioriteit: de eerste regel die past, wint. Met Omhoog en Omlaag wijzig je die volgorde.",
+    categoryOnlyNote:
+      "Alleen de categorie-actie wordt nu op transacties toegepast. Weergavenaam, winkelier, tags, uitsluiten en transfer worden wel berekend en in de proef getoond, maar nog niet opgeslagen. Ze veranderen je totalen dus niet.",
   },
   form: {
     matchLabel: "Match",
@@ -1277,13 +1407,139 @@ const nlRegels: RegelsCopy = {
   },
   newCategoryWarning: (typedCategory: string) =>
     `"${typedCategory}" staat niet in de lijst. Dat mag, maar het wordt dan een aparte categorie in élk overzicht — ook als je een bestaande bedoelde met een andere spelling.`,
-  table: {
-    matchHeader: "Match",
-    categoryHeader: "Categorie",
-    deleteButton: "Verwijderen",
+  list: {
+    priorityHeader: "Prioriteit",
+    ruleHeader: "Regel",
+    actionsHeader: "Acties",
     emptyState: "Nog geen regels.",
-    sortNote:
-      "Op alfabet gesorteerd om te lezen. Kan één transactie op twee regels passen, dan wint de regel die je het eerst hebt gemaakt — niet de bovenste in deze lijst.",
+    newButton: "Nieuwe regel",
+    legacySummary: (match, category) => `${match} → ${category}`,
+    textSummary: (value, category) => `bevat "${value}" → ${category}`,
+    conditionSummary: (count, category) =>
+      `${count} ${count === 1 ? "voorwaarde" : "voorwaarden"} → ${category}`,
+    conditionOnlySummary: (count) => `${count} ${count === 1 ? "voorwaarde" : "voorwaarden"}`,
+    noActions: "Geen actie",
+    editButton: "Bewerken",
+    upButton: "Omhoog",
+    downButton: "Omlaag",
+    deleteButton: "Verwijderen",
+  },
+  conditions: {
+    kindLabel: "Soort",
+    targetLabel: "Veld",
+    opLabel: "Vergelijking",
+    valueLabel: "Waarde",
+    upperValueLabel: "Tot (€)",
+    fromLabel: "Vanaf",
+    toLabel: "Tot en met",
+    accountLabel: "Rekening",
+    categoryValueLabel: "Categorie",
+    directionLabel: "Richting",
+    amountHint: "Bedrag in euro's. Negatief is uit.",
+    removeButton: "Voorwaarde verwijderen",
+    kinds: {
+      text: "Tekst",
+      merchant: "Winkelier",
+      amount: "Bedrag",
+      account: "Rekening",
+      category: "Categorie",
+      direction: "Richting",
+      date: "Datum",
+    },
+    textTargets: {
+      text: "Tegenpartij of omschrijving",
+      counterparty: "Tegenpartij",
+      description: "Omschrijving",
+    },
+    textOps: {
+      contains: "bevat",
+      equals: "is gelijk aan",
+      startsWith: "begint met",
+      endsWith: "eindigt met",
+    },
+    merchantOps: { contains: "bevat", equals: "is gelijk aan" },
+    amountOps: {
+      eq: "gelijk aan",
+      gt: "groter dan",
+      gte: "groter of gelijk aan",
+      lt: "kleiner dan",
+      lte: "kleiner of gelijk aan",
+      between: "tussen",
+    },
+    categoryOps: { equals: "is", empty: "is leeg", notEmpty: "is niet leeg" },
+    dateOps: { onOrAfter: "op of na", onOrBefore: "op of voor", between: "tussen" },
+    directions: { in: "in", out: "uit" },
+  },
+  actions: {
+    kindLabel: "Actie",
+    valueLabel: "Waarde",
+    removeButton: "Actie verwijderen",
+    labels: {
+      setCategory: "Categorie zetten",
+      setDisplayName: "Weergavenaam zetten",
+      setMerchant: "Winkelier zetten",
+      addTag: "Tag toevoegen",
+      exclude: "Uitsluiten",
+      markTransfer: "Als transfer markeren",
+    },
+    valueLabels: {
+      setCategory: "Categorie",
+      setDisplayName: "Weergavenaam",
+      setMerchant: "Winkelier",
+      addTag: "Tag",
+    },
+  },
+  editor: {
+    ariaLabel: "Regel bewerken",
+    newHeading: "Nieuwe regel",
+    editHeading: "Regel bewerken",
+    legacyNote:
+      "Dit is een oude regel met één matchtekst en één categorie. Hier zie je hem als tekstvoorwaarde; opslaan maakt er een v2-regel van.",
+    nameLabel: "Naam (optioneel)",
+    namePlaceholder: "Bijvoorbeeld: boodschappen bij AH",
+    effectiveFromLabel: "Geldt voor transacties vanaf",
+    effectiveFromHint:
+      "Vergeleken met de datum van de transactie, niet met vandaag. Laat leeg om de regel altijd te laten gelden.",
+    conditionsHeading: "Voorwaarden",
+    addConditionButton: "Voorwaarde toevoegen",
+    actionsHeading: "Acties",
+    addActionButton: "Actie toevoegen",
+    stopProcessingLabel: "Stop na deze regel",
+    categoryOnlyNote:
+      "Alleen de categorie wordt opgeslagen. De andere acties zie je in de proef, maar veranderen je totalen niet.",
+    saveButton: "Opslaan",
+    cancelButton: "Annuleren",
+  },
+  validation: {
+    needsCondition: "Voeg minstens één voorwaarde toe.",
+    needsAction: "Voeg minstens één actie toe.",
+    emptyValue: "Vul alle verplichte waarden in.",
+    invalidDate: "Vul een geldige datum in (JJJJ-MM-DD).",
+  },
+  preview: {
+    button: "Proefdraaien",
+    heading: "Proefdraaien",
+    summary: (matched, total, changed) =>
+      `${matched} van ${total} transacties geraakt. ${changed} ${changed === 1 ? "transactie krijgt" : "transacties krijgen"} een andere categorie dan zonder je regels.`,
+    byRuleHeading: "Per regel",
+    byRuleLine: (name, count) => `${name}: ${count} ${count === 1 ? "transactie" : "transacties"}`,
+    noMatches: "Geen enkele transactie matcht deze regels.",
+    samplesHeading: "Voorbeelden",
+    sampleHeaders: {
+      date: "Datum",
+      counterparty: "Tegenpartij",
+      amount: "Bedrag",
+      current: "Huidige categorie",
+      next: "Nieuwe categorie",
+      rule: "Winnende regel",
+    },
+    lockedBadge: "met de hand gezet",
+    lockedNote: "Een met de hand gezette categorie is vergrendeld. Geen regel overschrijft hem.",
+    sameWinnerNote: "De proef gebruikt dezelfde winnaar als de echte categorisering.",
+    categoryOnlyNote:
+      "Alleen de categorie wordt opgeslagen. Weergavenaam, winkelier, tags, uitsluiten en transfer staan hier wel bij, maar veranderen je totalen niet.",
+    noRule: "Geen regel",
+    noTxs: "Geen transacties om te proeven.",
   },
 };
 
@@ -1297,6 +1553,20 @@ const nlBackup: BackupCopy = {
     title: "Download",
     description: "Download een versleutelde back-up. Hij gaat alleen open met jouw LaVega-account.",
     button: "Download back-up",
+    includesDocuments: (count) =>
+      `${count} document${count === 1 ? "" : "en"} zit${count === 1 ? "" : "ten"} in deze back-up: de bestanden worden mee versleuteld.`,
+  },
+  portable: {
+    title: "Draagbare export",
+    description:
+      "Een leesbaar archief (ZIP met NDJSON en CSV) van je gegevens, met een manifest dat zegt wat erin zit. LaVega leest het bestand na het maken terug; pas dan zegt het scherm dat het klopt.",
+    button: "Exporteer gegevens",
+    building: "Bezig met exporteren…",
+    verified: (rows, sections) =>
+      `Geëxporteerd en teruggelezen: ${rows} rijen over ${sections} onderdelen.`,
+    verificationFailed: (problems) =>
+      `Het bestand is gemaakt, maar het teruglezen vond ${problems} probleem${problems === 1 ? "" : "en"}.`,
+    error: "Exporteren mislukt.",
   },
   server: {
     title: "Back-up op de server",
@@ -1313,6 +1583,8 @@ const nlBackup: BackupCopy = {
       overwriteButton: "Toch overschrijven",
     },
     success: "Back-up opgeslagen.",
+    documentsBlocked: (count) =>
+      `De back-up op de server kan de ${count} document${count === 1 ? "" : "en"} niet meenemen. Download de volledige .lavega-back-up hierboven; die bevat de bestanden wel.`,
     errors: {
       locked: "Ontgrendel de kluis voordat je een back-up maakt.",
       saveFailed: "Back-up opslaan mislukt.",
@@ -1934,6 +2206,10 @@ const enRegels: RegelsCopy = {
       afterUnknownWord:
         " under Transactions? It shows why there too, and that's usually the text you'd base a rule on here.",
     },
+    priorityNote:
+      "The order below is the priority: the first rule that matches wins. Use Up and Down to change that order.",
+    categoryOnlyNote:
+      "Only the category action is applied to transactions today. Display name, merchant, tags, exclude and transfer are evaluated and shown in the preview, but are not stored yet. They do not change your totals.",
   },
   form: {
     matchLabel: "Match",
@@ -1943,13 +2219,140 @@ const enRegels: RegelsCopy = {
   },
   newCategoryWarning: (typedCategory: string) =>
     `"${typedCategory}" isn't in the list. That's fine, but it will become a separate category in every overview — even if you meant an existing one with different spelling.`,
-  table: {
-    matchHeader: "Match",
-    categoryHeader: "Category",
-    deleteButton: "Delete",
+  list: {
+    priorityHeader: "Priority",
+    ruleHeader: "Rule",
+    actionsHeader: "Actions",
     emptyState: "No rules yet.",
-    sortNote:
-      "Sorted alphabetically for reading. If one transaction matches two rules, the rule you created first wins — not the one on top of this list.",
+    newButton: "New rule",
+    legacySummary: (match, category) => `${match} → ${category}`,
+    textSummary: (value, category) => `contains "${value}" → ${category}`,
+    conditionSummary: (count, category) =>
+      `${count} ${count === 1 ? "condition" : "conditions"} → ${category}`,
+    conditionOnlySummary: (count) => `${count} ${count === 1 ? "condition" : "conditions"}`,
+    noActions: "No action",
+    editButton: "Edit",
+    upButton: "Up",
+    downButton: "Down",
+    deleteButton: "Delete",
+  },
+  conditions: {
+    kindLabel: "Type",
+    targetLabel: "Field",
+    opLabel: "Comparison",
+    valueLabel: "Value",
+    upperValueLabel: "Up to (€)",
+    fromLabel: "From",
+    toLabel: "Through",
+    accountLabel: "Account",
+    categoryValueLabel: "Category",
+    directionLabel: "Direction",
+    amountHint: "Amount in euros. Negative is out.",
+    removeButton: "Remove condition",
+    kinds: {
+      text: "Text",
+      merchant: "Merchant",
+      amount: "Amount",
+      account: "Account",
+      category: "Category",
+      direction: "Direction",
+      date: "Date",
+    },
+    textTargets: {
+      text: "Counterparty or description",
+      counterparty: "Counterparty",
+      description: "Description",
+    },
+    textOps: {
+      contains: "contains",
+      equals: "equals",
+      startsWith: "starts with",
+      endsWith: "ends with",
+    },
+    merchantOps: { contains: "contains", equals: "equals" },
+    amountOps: {
+      eq: "equal to",
+      gt: "greater than",
+      gte: "greater than or equal to",
+      lt: "less than",
+      lte: "less than or equal to",
+      between: "between",
+    },
+    categoryOps: { equals: "is", empty: "is empty", notEmpty: "is not empty" },
+    dateOps: { onOrAfter: "on or after", onOrBefore: "on or before", between: "between" },
+    directions: { in: "in", out: "out" },
+  },
+  actions: {
+    kindLabel: "Action",
+    valueLabel: "Value",
+    removeButton: "Remove action",
+    labels: {
+      setCategory: "Set category",
+      setDisplayName: "Set display name",
+      setMerchant: "Set merchant",
+      addTag: "Add tag",
+      exclude: "Exclude",
+      markTransfer: "Mark as transfer",
+    },
+    valueLabels: {
+      setCategory: "Category",
+      setDisplayName: "Display name",
+      setMerchant: "Merchant",
+      addTag: "Tag",
+    },
+  },
+  editor: {
+    ariaLabel: "Edit rule",
+    newHeading: "New rule",
+    editHeading: "Edit rule",
+    legacyNote:
+      "This is an old rule with one match text and one category. It shows here as a text condition; saving turns it into a v2 rule.",
+    nameLabel: "Name (optional)",
+    namePlaceholder: "For example: groceries at AH",
+    effectiveFromLabel: "Applies to transactions from",
+    effectiveFromHint:
+      "Compared with the transaction date, not with today. Leave empty to always apply the rule.",
+    conditionsHeading: "Conditions",
+    addConditionButton: "Add condition",
+    actionsHeading: "Actions",
+    addActionButton: "Add action",
+    stopProcessingLabel: "Stop after this rule",
+    categoryOnlyNote:
+      "Only the category is stored. The other actions appear in the preview, but do not change your totals.",
+    saveButton: "Save",
+    cancelButton: "Cancel",
+  },
+  validation: {
+    needsCondition: "Add at least one condition.",
+    needsAction: "Add at least one action.",
+    emptyValue: "Fill in every required value.",
+    invalidDate: "Fill in a valid date (YYYY-MM-DD).",
+  },
+  preview: {
+    button: "Dry run",
+    heading: "Dry run",
+    summary: (matched, total, changed) =>
+      `${matched} of ${total} transactions matched. ${changed} ${changed === 1 ? "transaction gets" : "transactions get"} a different category than without your rules.`,
+    byRuleHeading: "Per rule",
+    byRuleLine: (name, count) =>
+      `${name}: ${count} ${count === 1 ? "transaction" : "transactions"}`,
+    noMatches: "No transaction matches these rules.",
+    samplesHeading: "Samples",
+    sampleHeaders: {
+      date: "Date",
+      counterparty: "Counterparty",
+      amount: "Amount",
+      current: "Current category",
+      next: "New category",
+      rule: "Winning rule",
+    },
+    lockedBadge: "set by hand",
+    lockedNote: "A category set by hand is locked. No rule overwrites it.",
+    sameWinnerNote: "The preview uses the same winner as real categorisation.",
+    categoryOnlyNote:
+      "Only the category is stored. Display name, merchant, tags, exclude and transfer are shown here, but do not change your totals.",
+    noRule: "No rule",
+    noTxs: "No transactions to test.",
   },
 };
 
@@ -1963,6 +2366,20 @@ const enBackup: BackupCopy = {
     title: "Download",
     description: "Download an encrypted backup. Only your LaVega account can open it.",
     button: "Download backup",
+    includesDocuments: (count) =>
+      `${count} document${count === 1 ? "" : "s"} ${count === 1 ? "is" : "are"} in this backup: the files are sealed with it.`,
+  },
+  portable: {
+    title: "Portable export",
+    description:
+      "A readable archive (ZIP with NDJSON and CSV) of your data, with a manifest that says what it contains. LaVega reads the file back after building it; only then does the screen say it is complete.",
+    button: "Export data",
+    building: "Exporting…",
+    verified: (rows, sections) =>
+      `Exported and read back: ${rows} rows across ${sections} sections.`,
+    verificationFailed: (problems) =>
+      `The file was written, but reading it back found ${problems} problem${problems === 1 ? "" : "s"}.`,
+    error: "Export failed.",
   },
   server: {
     title: "Backup on the server",
@@ -1979,6 +2396,8 @@ const enBackup: BackupCopy = {
       overwriteButton: "Overwrite anyway",
     },
     success: "Backup saved.",
+    documentsBlocked: (count) =>
+      `The server backup cannot carry the ${count} document${count === 1 ? "" : "s"}. Download the full .lavega backup above; it includes the files.`,
     errors: {
       locked: "Unlock the vault before making a backup.",
       saveFailed: "Failed to save backup.",

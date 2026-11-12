@@ -21,6 +21,45 @@ const amex: Account = {
   balance: null,
 };
 
+test("the new asset/liability kinds are named on the card, not rendered blank", () => {
+  const kinds: Account[] = [
+    {
+      key: "L",
+      iban: "",
+      name: "Hypotheek",
+      bank: "ING",
+      entity: "Prive",
+      currency: "EUR",
+      balance: -180000,
+      type: "Lening",
+    },
+    {
+      key: "W",
+      iban: "",
+      name: "Woning",
+      bank: "",
+      entity: "Prive",
+      currency: "EUR",
+      balance: null,
+      type: "Woning",
+    },
+    {
+      key: "V",
+      iban: "",
+      name: "Auto",
+      bank: "",
+      entity: "Prive",
+      currency: "EUR",
+      balance: 18000,
+      type: "Voertuig",
+    },
+  ];
+  const html = renderToStaticMarkup(<KaartenBlock accounts={kinds} onNavigate={() => {}} />);
+  expect(html).toContain("Lening");
+  expect(html).toContain("Woning");
+  expect(html).toContain("Voertuig");
+});
+
 test("KaartenBlock never renders a card number it does not have", () => {
   const html = renderToStaticMarkup(<KaartenBlock accounts={accounts} onNavigate={() => {}} />);
   // No sixteen-digit PAN, and no four-group filler.

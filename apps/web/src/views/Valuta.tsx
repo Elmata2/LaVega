@@ -298,8 +298,8 @@ const NO_ACCOUNT = "";
  *  and muted while it isn't (was `.xfer-out`/`.xfer-out-unknown` in views.css). */
 function xferOutClass(unknown: boolean): string {
   return unknown
-    ? "font-display text-[1.35rem] font-semibold text-muted min-w-0 [overflow-wrap:anywhere]"
-    : "font-display text-[2rem] font-semibold text-ink min-w-0 [overflow-wrap:anywhere]";
+    ? "font-body text-[1.35rem] font-semibold tabular-nums text-muted min-w-0 [overflow-wrap:anywhere]"
+    : "font-body text-[2rem] font-semibold tabular-nums text-ink min-w-0 [overflow-wrap:anywhere]";
 }
 
 /** HET VERSCHIL MET DE GEKOZEN ROUTE, IN WOORDEN, en de twee zinnen zijn met opzet
@@ -753,7 +753,7 @@ export default function Valuta({ accounts, facts = [], entries = CATALOGUE_FX }:
         className="flex items-baseline justify-between gap-4 flex-wrap pb-2 mt-6 mb-4 border-b border-line first:mt-0"
         data-testid="view-head"
       >
-        <h2 className="m-0 font-display text-[1.5rem] font-semibold tracking-[-0.01em] text-ink">
+        <h2 className="m-0 font-body text-[1.5rem] font-semibold tracking-[-0.01em] text-ink">
           {c.head.title}
         </h2>
         {/* De kop volgt de koers die er ECHT ligt. Hier stond "live ECB-middenkoers"
@@ -813,7 +813,7 @@ export default function Valuta({ accounts, facts = [], entries = CATALOGUE_FX }:
               </div>
               <div className="flex items-center justify-between gap-3">
                 <input
-                  className="flex-auto min-w-0 [border:0] bg-transparent p-0 font-display text-[2rem] font-semibold text-ink focus:outline-none"
+                  className="flex-auto min-w-0 [border:0] bg-transparent p-0 font-body text-[2rem] font-semibold tabular-nums text-ink focus:outline-none"
                   type="number"
                   step={0.01}
                   min={0}

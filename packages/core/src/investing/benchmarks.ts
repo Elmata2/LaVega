@@ -39,11 +39,24 @@ export type IndexedSeriesPoint = {
   cashUnknown: string[];
 };
 
+/** The comparison a reader starts with before choosing one, and the benchmark
+ *  beta and alpha are measured against when the account has no selection. It
+ *  is a global equity index quoted in the presentation currency, so no FX
+ *  conversion stands between the benchmark and the portfolio return. */
+export const DEFAULT_BENCHMARK_SYMBOL = "IWDA.AS";
+export const DEFAULT_BENCHMARK: BenchmarkInstrument = {
+  symbol: DEFAULT_BENCHMARK_SYMBOL,
+  name: "MSCI World",
+  exchange: "Amsterdam",
+  currency: "EUR",
+};
+
 /** Yahoo's own names are inconsistent and often truncated ("DAX P", "EURO
  *  STOXX 50 I"). This is the one place a major index's display name is
  *  decided; every caller falls back to Yahoo's own name, then the symbol. */
 export const KNOWN_BENCHMARK_NAMES: Readonly<Record<string, string>> = {
   "^GSPC": "S&P 500",
+  "IWDA.AS": "MSCI World",
   "^GDAXI": "DAX",
   "^STOXX50E": "Euro Stoxx 50",
   "^AEX": "AEX",

@@ -45,6 +45,10 @@ function mount(extra: { statedCredit?: string[]; statedDebit?: string[] }) {
         onDeleteAccount={() => {}}
         duplicateGroups={[]}
         onMergeDuplicates={() => {}}
+        asOf="2026-01-01"
+        onOpeningCommit={() => {}}
+        onValuationCommit={() => {}}
+        onValuationRemove={() => {}}
         onRefreshBank={() => {}}
         {...extra}
       />,

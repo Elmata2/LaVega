@@ -301,6 +301,14 @@ await writeFile(
   JSON.stringify(
     {
       version: 3,
+      /* The daily pass is the BACKSTOP. The external scheduler
+       * (.github/workflows/investing-sync.yml) calls
+       * POST /api/cron/investing-drain every 15 minutes and is what finishes a
+       * run that needs more than one 240 s budget (issue #311); this pass still
+       * covers a deployment that has not configured the runner. The app-open
+       * path refreshes holdings on its own lane; this pass runs both lanes, and
+       * the history gate no longer reads "synced 18 h ago" as fresh, so a user
+       * who synced at 10:00 is not skipped the next morning. */
       crons: [{ path: "/api/cron/investing-sync", schedule: "0 4 * * *" }],
       routes: [
         /* Applied to every response, then `continue` so routing carries on and

@@ -1,6 +1,6 @@
 /* LaVega public landing page. Ported from the approved mockup
  * (docs/superpowers/specs/2026-11-02-website-redesign-mockup.html): midnight
- * palette, Instrument Serif everywhere on the page, the cantaloupe gradient
+ * palette, Instrument Serif headlines over Geist, the cantaloupe gradient
  * only in the hero and the closing call to action.
  *
  * Every page rule is scoped under `.lp` so it never reaches the app, and sits
@@ -37,13 +37,19 @@
     --gutter: clamp(20px, 5vw, 80px);
     --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
     --space: clamp(112px, 15vw, 216px);
-    --serif: "Instrument Serif", Georgia, serif;
+    /* Display serif only at ~28px and up (headlines, the wordmark, the
+     * quote); Geist for body, controls and every figure. */
+    --serif: "Instrument Serif", "Instrument Serif Fallback", Georgia, serif;
+    --sans: "Geist", "Geist Fallback", system-ui, -apple-system, "Segoe UI", sans-serif;
+
+    /* Lets the FAQ accordion interpolate its height from 0 to auto. */
+    interpolate-size: allow-keywords;
 
     min-height: 100vh;
     color: var(--text);
     background: var(--bg);
-    font: 400 19px/1.45 var(--serif);
-    letter-spacing: 0.002em;
+    font: 400 18px/1.55 var(--sans);
+    letter-spacing: 0;
     overflow-x: clip;
   }
   .lp *,
@@ -87,25 +93,41 @@
     margin: 0;
     color: var(--text);
   }
+  /* Instrument Serif has one drawn weight; never let the browser fake a bold.
+   * Tracking stays at or above zero: the face is already condensed, and
+   * tightening it is what made the old headlines hard to read. */
+  .lp h1,
+  .lp h2,
+  .lp .logo,
+  .lp .shot-nav b,
+  .lp .reveal,
+  .lp .ask,
+  .lp blockquote {
+    font-family: var(--serif);
+    font-weight: 400;
+    font-synthesis: none;
+  }
   .lp p,
   .lp li {
     text-wrap: pretty;
   }
   .lp h1 {
     font-size: clamp(3.3rem, 8.4vw, 6.8rem);
-    line-height: 1;
-    letter-spacing: -0.02em;
+    line-height: 1.02;
+    letter-spacing: -0.005em;
     margin-bottom: 16px;
   }
   .lp h2 {
     font-size: clamp(2.6rem, 5.8vw, 4.5rem);
-    line-height: 1.04;
-    letter-spacing: -0.015em;
+    line-height: 1.06;
+    letter-spacing: 0;
   }
   .lp h3 {
-    font-size: 1.5rem;
-    line-height: 1.2;
-    letter-spacing: -0.005em;
+    font-family: var(--sans);
+    font-weight: 600;
+    font-size: 1.35rem;
+    line-height: 1.25;
+    letter-spacing: -0.015em;
   }
   .lp .btn {
     display: inline-block;
@@ -115,10 +137,28 @@
     background: var(--accent);
     color: var(--on-accent);
     text-align: center;
+    white-space: nowrap;
     transition: transform 0.12s var(--ease-out);
   }
-  .lp .btn:active {
+  /* Press feedback on every real control: 140ms, scale(0.98) from an already
+   * visible shape. :not(:active) on the hover rule below keeps the later,
+   * equal-specificity hover declaration from overriding the press. */
+  .lp .btn:active,
+  .lp .login:active,
+  .lp .burger:active,
+  .lp .stack:active,
+  .lp .move:active,
+  .lp .faq summary:active {
     transform: scale(0.98);
+  }
+  .lp .login {
+    transition:
+      transform 140ms var(--ease-out),
+      color 140ms ease;
+  }
+  .lp .burger,
+  .lp .stack {
+    transition: transform 140ms var(--ease-out);
   }
   .lp .btn:focus-visible,
   .lp a:focus-visible,
@@ -126,6 +166,11 @@
   .lp summary:focus-visible {
     outline: 2px solid #fff;
     outline-offset: 3px;
+  }
+  /* Tapped before the bundle loaded (public/lp-early.js): show it registered. */
+  .lp [aria-busy="true"] {
+    opacity: 0.7;
+    cursor: progress;
   }
   .lp .btn.small {
     padding: 8px 18px;
@@ -183,6 +228,7 @@
   .lp .links {
     display: flex;
     gap: 26px;
+    white-space: nowrap;
     font-size: 1.05rem;
     color: var(--text2);
     margin-right: auto;
@@ -195,28 +241,30 @@
     display: flex;
     gap: 18px;
     align-items: center;
+    white-space: nowrap;
     font-size: 1.05rem;
   }
   .lp .burger {
     display: none;
-    width: 40px;
-    height: 40px;
+    flex: none;
+    width: 44px;
+    height: 44px;
     position: relative;
     border-radius: 50%;
   }
   .lp .burger i {
     position: absolute;
-    left: 11px;
-    right: 11px;
+    left: 13px;
+    right: 13px;
     height: 1.5px;
     background: #fff;
     transition: transform 0.3s var(--ease-out);
   }
   .lp .burger i:first-child {
-    top: 16px;
+    top: 18px;
   }
   .lp .burger i:last-child {
-    top: 23px;
+    top: 25px;
   }
   .lp .burger[aria-expanded="true"] i:first-child {
     transform: translateY(3.5px) rotate(45deg);
@@ -239,27 +287,43 @@
     font-size: 2rem;
     opacity: 0;
     visibility: hidden;
+    /* Asymmetric enter/exit: closing is faster than opening, and visibility
+     * holds on only until the 160ms fade has finished. */
     transition:
-      opacity 0.3s var(--ease-out),
-      visibility 0.3s;
+      opacity 160ms var(--ease-out),
+      visibility 0s linear 160ms;
   }
   .lp .panel.open {
     opacity: 1;
     visibility: visible;
+    transition:
+      opacity 300ms var(--ease-out),
+      visibility 0s;
   }
   .lp .panel a,
   .lp .panel button {
     opacity: 0;
     transform: translateY(24px);
+    /* Exit: no stagger, 140ms. Items leave the way they arrived. */
     transition:
-      opacity 0.4s var(--ease-out),
-      transform 0.4s var(--ease-out);
-    transition-delay: calc(var(--n) * 60ms);
+      opacity 140ms var(--ease-out),
+      transform 140ms var(--ease-out);
   }
   .lp .panel.open a,
   .lp .panel.open button {
     opacity: 1;
     transform: none;
+    /* Entrance: 400ms with a 60ms stagger, within the 30-80ms guidance. */
+    transition:
+      opacity 400ms var(--ease-out),
+      transform 400ms var(--ease-out);
+    transition-delay: calc(var(--n) * 60ms);
+  }
+
+  /* The header CTA is hidden on narrow phones; the menu carries it instead. */
+  .lp .panel .panel-cta {
+    margin-top: 12px;
+    font-size: 1.1rem;
   }
 
   /* ---- Gradients: hero and closing call to action only ---- */
@@ -315,15 +379,19 @@
     display: flex;
     align-items: center;
     gap: 6px;
+    overflow: hidden;
+    white-space: nowrap;
     padding: 14px 24px;
     border-bottom: 1px solid var(--line);
   }
   .lp .shot-nav b {
+    flex: none;
     font-weight: 400;
     font-size: 1.4rem;
     margin-right: 18px;
   }
   .lp .shot-nav span {
+    flex: none;
     padding: 5px 14px;
     border-radius: 999px;
     color: var(--text2);
@@ -423,13 +491,15 @@
   .lp .reveal {
     font-size: clamp(2.4rem, 5.6vw, 4.5rem);
     line-height: 1.08;
-    letter-spacing: -0.015em;
+    letter-spacing: 0;
     max-width: 880px;
     margin: 0 auto;
     text-align: center;
   }
+  /* 0.4 keeps unlit words at ~3.7:1 on midnight (WCAG AA large text). 0.3
+   * computed to 2.5:1 — the sentence was unreadable before its turn. */
   .lp .reveal span {
-    opacity: 0.3;
+    opacity: 0.4;
     transition: opacity 0.4s var(--ease-out);
   }
   .lp .reveal span.on {
@@ -552,7 +622,9 @@
     border-radius: 14px;
     background: var(--box2);
     border: 1px solid transparent;
-    transition: border-color 0.2s var(--ease-out);
+    transition:
+      border-color 0.2s ease,
+      transform 140ms var(--ease-out);
   }
   .lp .move span {
     color: var(--text2);
@@ -601,14 +673,14 @@
   .lp .feed {
     position: relative;
     width: min(310px, 100%);
-    height: 290px;
+    height: 336px;
   }
   .lp .note {
     position: absolute;
     left: 0;
     right: 0;
     top: 0;
-    height: 84px;
+    height: 104px;
     border-radius: 16px;
     padding: 12px 16px;
     background: var(--box2);
@@ -624,27 +696,30 @@
     display: block;
     color: var(--text2);
     font-size: 1rem;
-    white-space: nowrap;
+    line-height: 1.4;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
     overflow: hidden;
-    text-overflow: ellipsis;
   }
   .lp .note[data-p="0"] {
     transform: none;
   }
   .lp .note[data-p="1"] {
-    transform: translateY(100px);
+    transform: translateY(116px);
     opacity: 0.75;
   }
   .lp .note[data-p="2"] {
-    transform: translateY(200px);
+    transform: translateY(232px);
     opacity: 0.4;
   }
   .lp .note[data-p="3"] {
-    transform: translateY(300px);
+    transform: translateY(348px);
     opacity: 0;
   }
   .lp .note[data-p="4"] {
-    transform: translateY(-100px);
+    transform: translateY(-116px);
     opacity: 0;
     transition: none;
   }
@@ -663,6 +738,8 @@
     }
   }
   .lp .acts h2 {
+    font-family: var(--sans);
+    font-weight: 500;
     font-size: 1.25rem;
     line-height: 1.3;
     letter-spacing: 0;
@@ -672,7 +749,7 @@
     display: grid;
     font-size: clamp(2.4rem, 4.6vw, 3.8rem);
     line-height: 1.08;
-    letter-spacing: -0.015em;
+    letter-spacing: 0;
     margin-top: 24px;
   }
   .lp .ask > *,
@@ -786,6 +863,7 @@
   }
   .lp cite {
     display: block;
+    font-family: var(--sans);
     margin-top: 16px;
     font-style: normal;
     font-size: 1rem;
@@ -797,14 +875,37 @@
     padding: 20px 24px;
     margin-bottom: 12px;
   }
+  /* Purpose: prevent a jarring height jump when an answer appears. An
+   * occasional interaction gets a standard 240ms ease-out. Height is the one
+   * layout property an accordion may animate (no transform equivalent), and
+   * ::details-content with allow-discrete keeps it painted through the exit.
+   * Browsers without ::details-content keep the old instant behaviour. */
+  .lp .faq details::details-content {
+    block-size: 0;
+    overflow: clip;
+    opacity: 0;
+    transition:
+      block-size 240ms var(--ease-out),
+      opacity 200ms var(--ease-out),
+      content-visibility 240ms allow-discrete;
+  }
+  .lp .faq details[open]::details-content {
+    block-size: auto;
+    opacity: 1;
+  }
   .lp .faq summary {
     cursor: pointer;
+    min-height: 44px;
+    align-items: center;
+    line-height: 1.3;
     font-size: 1.3rem;
     list-style: none;
     display: flex;
     justify-content: space-between;
     gap: 24px;
-    transition: color 0.2s var(--ease-out);
+    transition:
+      color 0.2s ease,
+      transform 140ms var(--ease-out);
   }
   .lp .faq summary::-webkit-details-marker {
     display: none;
@@ -837,6 +938,14 @@
     text-decoration: underline;
     text-underline-offset: 3px;
   }
+  /* Touch: a 44px hit area around the footer links without moving them. */
+  @media (pointer: coarse) {
+    .lp footer a {
+      display: inline-block;
+      padding: 11px 4px;
+      margin: -11px -4px;
+    }
+  }
   .lp .foot {
     display: flex;
     flex-wrap: wrap;
@@ -845,13 +954,21 @@
   }
 
   /* ---- Scroll reveal ---- */
+  /* Visible by default. Landing.tsx adds .lp-reveal only when an
+   * IntersectionObserver can actually restore the elements, so a failed
+   * bundle cannot leave the prerendered page blank. The hidden state carries
+   * no transition; the reveal transition lives on the default rule, so the
+   * first .in-view change animates from hidden instead of fading out. */
   .lp .r {
-    opacity: 0;
-    transform: translateY(12px);
     transition:
       opacity 0.4s var(--ease-out),
       transform 0.4s var(--ease-out);
     transition-delay: calc(var(--d, 0) * 60ms);
+  }
+  .lp.lp-reveal .r:not(.in-view) {
+    opacity: 0;
+    transform: translateY(12px);
+    transition: none;
   }
   .lp .r.in-view {
     opacity: 1;
@@ -859,20 +976,43 @@
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .lp .r {
+    /* Reduced motion gets the end state, not a faster animation (DESIGN.md). */
+    .lp .r,
+    .lp.lp-reveal .r:not(.in-view) {
+      opacity: 1;
       transform: none;
-      transition: opacity 0.2s;
+      transition: none;
     }
     .lp .btn {
       transition: none;
+    }
+    /* Keep colour/opacity feedback, drop the movement. */
+    .lp .btn:active,
+    .lp .login:active,
+    .lp .burger:active,
+    .lp .stack:active,
+    .lp .move:active,
+    .lp .faq summary:active {
+      transform: none;
     }
     .lp .reveal span {
       opacity: 1;
       transition: none;
     }
+    .lp .panel,
+    .lp .panel.open,
+    .lp .panel a,
+    .lp .panel button,
+    .lp .panel.open a,
+    .lp .panel.open button {
+      transition: none;
+    }
     .lp .panel a,
     .lp .panel button {
       transform: none;
+    }
+    .lp .faq details::details-content {
+      transition: none;
     }
     .lp .acct,
     .lp .note {
@@ -883,7 +1023,9 @@
     }
   }
   @media (hover: hover) and (pointer: fine) {
-    .lp .btn:hover {
+    /* :not(:active) preserves the press feedback: this rule sits later in the
+     * file than .btn:active and has equal specificity, so it used to win. */
+    .lp .btn:hover:not(:active) {
       transform: translateY(-1px);
     }
     .lp .links a:hover,
@@ -907,7 +1049,8 @@
       max-width: none;
     }
   }
-  @media (max-width: 760px) {
+  /* The full bar (links, sign-in, CTA) needs ~800px; below that it wrapped. */
+  @media (max-width: 860px) {
     .lp .links {
       display: none;
     }
@@ -917,6 +1060,18 @@
     .lp .right .login {
       display: none;
     }
+  }
+  /* Logo + CTA + burger no longer fit on one line; the CTA moves into the
+   * menu panel and stays in the hero. */
+  @media (max-width: 520px) {
+    .lp .right .btn.small {
+      display: none;
+    }
+    .lp .btn {
+      padding-inline: 22px;
+    }
+  }
+  @media (max-width: 760px) {
     .lp .shot-nav .x {
       display: none;
     }
@@ -975,7 +1130,13 @@
   max-height: calc(100dvh - 32px);
   overflow-y: auto;
   width: 100%;
-  font-family: "Instrument Serif", Georgia, serif;
+  font-family:
+    "Geist",
+    "Geist Fallback",
+    system-ui,
+    -apple-system,
+    "Segoe UI",
+    sans-serif;
   font-size: 1.15rem;
   line-height: 1.4;
   color: #fff;
@@ -1014,11 +1175,12 @@
   }
 }
 .lp-signin-dialog h2 {
-  font-family: "Instrument Serif", Georgia, serif;
+  font-family: "Instrument Serif", "Instrument Serif Fallback", Georgia, serif;
   font-weight: 400;
+  font-synthesis: none;
   font-size: 2.2rem;
-  line-height: 1.05;
-  letter-spacing: -0.015em;
+  line-height: 1.08;
+  letter-spacing: 0;
   margin: 0 40px 12px 0;
   color: #fff;
 }
@@ -1027,7 +1189,7 @@
 .lp-signin-dialog input,
 .lp-signin-dialog button,
 .lp-signin-dialog span {
-  font-family: "Instrument Serif", Georgia, serif;
+  font-family: inherit;
 }
 .lp-signin-dialog p {
   margin: 0 0 16px;
@@ -1113,6 +1275,12 @@
   font-weight: 400;
   min-height: 48px;
   margin-top: 4px;
+  transition:
+    transform 140ms cubic-bezier(0.23, 1, 0.32, 1),
+    filter 140ms ease;
+}
+.lp-signin-dialog .bg-accent:active:enabled {
+  transform: scale(0.98);
 }
 .lp-signin-dialog .bg-accent:disabled {
   opacity: 0.4;
@@ -1151,11 +1319,17 @@
   background: #16222a;
   border: 0;
   border-radius: 999px;
-  font-family: "Instrument Serif", Georgia, serif;
+  font-family: inherit;
   font-size: 1.6rem;
   line-height: 1;
   color: #fff;
   cursor: pointer;
+  transition:
+    transform 140ms cubic-bezier(0.23, 1, 0.32, 1),
+    background-color 140ms ease;
+}
+.lp-signin-dialog-close:active {
+  transform: scale(0.96);
 }
 .lp-signin-dialog-close:hover {
   background: #22313b;
@@ -1167,6 +1341,10 @@
       opacity 250ms ease,
       overlay 250ms allow-discrete,
       display 250ms allow-discrete;
+  }
+  .lp-signin-dialog .bg-accent:active:enabled,
+  .lp-signin-dialog-close:active {
+    transform: none;
   }
   @starting-style {
     .lp-signin-dialog[open] {

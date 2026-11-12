@@ -7,6 +7,8 @@ import type {
   CategoryDecision,
   UnknownReason,
   AiCategorizeItem,
+  TransferPair,
+  TransferCandidate,
 } from "@lavega/core";
 import {
   enrichTxs,
@@ -21,7 +23,7 @@ import {
   isEurCurrency,
   toEur,
 } from "@lavega/core";
-import { formatEuroIn, formatCurrencyIn } from "../format";
+import { formatEuroIn, formatCurrencyIn, formatDate } from "../format";
 import { categorizeTxs } from "../api";
 import { useAppLocale, pick } from "../appLocale";
 import { moneyCopy, categoryLabel } from "../copy/money";
@@ -84,6 +86,14 @@ type TransactiesProps = {
   /** Apply confirmed AI-category decisions against the full tx + rules lists
    *  (App owns that + persistence). */
   onApplyCategories: (decisions: CategoryDecision[]) => Promise<void>;
+  /** Stored transfer decisions. A confirmed pair's two legs get the "Transfer"
+   *  badge; a rejected pair is the matcher's memory and is never proposed. */
+  transfers: TransferPair[];
+  /** Pairs DERIVED from the current ledger: suggestions, never decisions. The
+   *  panel below is the only place they become one. */
+  suggestions: TransferCandidate[];
+  onConfirmTransfer: (pair: TransferPair) => void;
+  onRejectTransfer: (pair: TransferPair) => void;
 };
 
 export default function Transacties({
@@ -109,9 +119,44 @@ export default function Transacties({
   onFCategoryChange,
   configured,
   onApplyCategories,
+  transfers,
+  suggestions,
+  onConfirmTransfer,
+  onRejectTransfer,
 }: TransactiesProps) {
   const [locale] = useAppLocale();
   const c = moneyCopy[locale];
+
+  // One row is at most one leg of one pair, so a map from leg id answers "does
+  // this row carry a badge" without scanning the pair list per row. Confirmed
+  // wins over suggested by construction (the matcher never re-proposes a
+  // decided leg), but the cell checks confirmed first anyway so a stale
+  // suggestion can never paint over a stored decision.
+  const confirmedByTxId = useMemo(() => {
+    const m = new Map<string, TransferPair>();
+    for (const p of transfers)
+      if (p.status === "confirmed") {
+        m.set(p.outflowTxId, p);
+        m.set(p.inflowTxId, p);
+      }
+    return m;
+  }, [transfers]);
+  const suggestedByTxId = useMemo(() => {
+    const m = new Map<string, TransferPair>();
+    for (const s of suggestions) {
+      m.set(s.pair.outflowTxId, s.pair);
+      m.set(s.pair.inflowTxId, s.pair);
+    }
+    return m;
+  }, [suggestions]);
+  // App scopes `suggestions` to pairs whose BOTH legs are in this half (naming
+  // an account from the other half would cross the line this switch draws), so
+  // the rows and accounts this view already has are the whole lookup.
+  const txById = useMemo(() => new Map(scopedTxs.map((t) => [t.id, t])), [scopedTxs]);
+  const accountNameByKey = useMemo(
+    () => new Map(accounts.map((a) => [a.key, a.name || a.key])),
+    [accounts],
+  );
 
   // Rows after the non-category filters — the category dropdown's options are
   // derived from these, so it always offers the categories actually present
@@ -239,20 +284,52 @@ export default function Transacties({
   /** The Categorie cell. For a placed row that is just the category; for an
    *  "onbekend" row it also names WHY — with the country code when the export
    *  gave us one, since that is the single most useful thing we already know
-   *  about a row we cannot place. */
+   *  about a row we cannot place.
+   *
+   *  A row that is one leg of a transfer pair carries the badge here too: the
+   *  category now reads "Eigen overboeking" because the pair SAYS so, and the
+   *  badge names the pair behind that. A suggestion stays visually quieter
+   *  ("Mogelijk") — it is not a decision yet, and it must not read as one. */
   function categoryCell(t: Tx) {
     const category = categorize(t, rules, own);
-    if (category !== "onbekend") return categoryLabel(locale, category);
-    const reason = unknownReason(t);
-    const reasonCopy = c.transacties.reason[REASON_KEY[reason]];
-    const cc = reason === "buitenland" ? foreignCode(t) : null;
+    const confirmed = confirmedByTxId.get(t.id);
+    const suggested = confirmed ? undefined : suggestedByTxId.get(t.id);
+    const transferBadge = confirmed ? (
+      <Badge data-testid="transfer-badge" title={c.transacties.transferKinds[confirmed.kind]}>
+        {c.transacties.transferBadge}
+      </Badge>
+    ) : suggested ? (
+      <Badge
+        data-testid="possible-transfer-badge"
+        className="opacity-70"
+        title={c.transacties.transferKinds[suggested.kind]}
+      >
+        {c.transacties.possibleTransferBadge}
+      </Badge>
+    ) : null;
+    const rest =
+      category !== "onbekend" ? (
+        categoryLabel(locale, category)
+      ) : (
+        <>
+          {c.transacties.onbekendLabel}{" "}
+          {(() => {
+            const reason = unknownReason(t);
+            const reasonCopy = c.transacties.reason[REASON_KEY[reason]];
+            const cc = reason === "buitenland" ? foreignCode(t) : null;
+            return (
+              <Badge title={reasonCopy.what}>
+                {reasonCopy.label}
+                {cc ? ` ${cc}` : ""}
+              </Badge>
+            );
+          })()}
+        </>
+      );
     return (
       <>
-        {c.transacties.onbekendLabel}{" "}
-        <Badge title={reasonCopy.what}>
-          {reasonCopy.label}
-          {cc ? ` ${cc}` : ""}
-        </Badge>
+        {rest}
+        {transferBadge ? <> {transferBadge}</> : null}
       </>
     );
   }
@@ -418,6 +495,87 @@ export default function Transacties({
           <Button onClick={cancelReview}>{c.transacties.annuleer}</Button>
         </div>
       )}
+      {/* --- Possible transfers. DERIVED, not stored: the matcher runs over the
+          current ledger every unlock, so a re-import can drop a candidate
+          instead of leaving a stale claim behind. This panel is the only place
+          a suggestion can become a decision, and nothing here happens by
+          itself — the footnote says so, because confirming CHANGES the spend
+          totals and the owner has to know that. --- */}
+      {suggestions.length > 0 && (
+        <div
+          className="ai-extract"
+          style={{ margin: "var(--sp-3) 0" }}
+          data-testid="possible-transfers"
+        >
+          <strong>{c.transacties.possibleTransfersHeading}</strong>
+          <p className="cell-sub">{c.transacties.possibleTransfersIntro}</p>
+          <ul style={{ listStyle: "none", padding: 0, margin: "var(--sp-3) 0 0" }}>
+            {suggestions.map(({ pair, ambiguous }) => {
+              const out = txById.get(pair.outflowTxId);
+              const inn = txById.get(pair.inflowTxId);
+              // The pair's own ids are the identity; a leg missing from the
+              // lookup can only happen for a stale row, so fall back to the id
+              // rather than hiding the candidate.
+              const from = out
+                ? (accountNameByKey.get(out.accountKey) ?? out.accountKey)
+                : pair.outflowTxId;
+              const to = inn
+                ? (accountNameByKey.get(inn.accountKey) ?? inn.accountKey)
+                : pair.inflowTxId;
+              return (
+                <li key={pair.id} style={{ marginBottom: "var(--sp-3)" }}>
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "baseline",
+                      gap: "var(--sp-2)",
+                      flexWrap: "wrap",
+                    }}
+                  >
+                    <span className="cell-sub">{out ? formatDate(locale, out.date) : ""}</span>
+                    <strong style={{ fontVariantNumeric: "tabular-nums" }}>
+                      {from} → {to}
+                    </strong>
+                    <span style={{ fontVariantNumeric: "tabular-nums" }}>
+                      {formatCurrencyIn(locale, pair.amountCents / 100, pair.currency)}
+                    </span>
+                    <span className="cell-sub">
+                      {c.transacties.possibleTransferDayGap(
+                        Math.abs(pair.evidence?.dateDiffDays ?? 0),
+                      )}
+                    </span>
+                    <Badge>{c.transacties.transferKinds[pair.kind]}</Badge>
+                    {ambiguous && (
+                      <Badge className="border-warn text-warn">
+                        {c.transacties.possibleTransferAmbiguous}
+                      </Badge>
+                    )}
+                  </div>
+                  <div style={{ display: "flex", gap: "var(--sp-2)", marginTop: "var(--sp-2)" }}>
+                    <Button
+                      variant="primary"
+                      data-testid="transfer-confirm"
+                      aria-label={c.transacties.possibleTransferConfirmAria(from, to)}
+                      onClick={() => onConfirmTransfer(pair)}
+                    >
+                      {c.transacties.possibleTransferConfirm}
+                    </Button>
+                    <Button
+                      data-testid="transfer-reject"
+                      aria-label={c.transacties.possibleTransferRejectAria(from, to)}
+                      onClick={() => onRejectTransfer(pair)}
+                    >
+                      {c.transacties.possibleTransferReject}
+                    </Button>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+          <p className="cell-sub">{c.transacties.possibleTransfersFootnote}</p>
+        </div>
+      )}
+
       {/* Task-1 scope fix: with a top-bar entity scope active, this dropdown
           used to list ALL entities — picking an out-of-scope one silently
           yielded 0 rows with no explanation. The scope pill already constrains

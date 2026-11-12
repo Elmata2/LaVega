@@ -245,11 +245,31 @@ function vercelCwd() {
   return common.status === 0 ? dirname(common.stdout.trim()) : repoRoot;
 }
 
+/* The CLI keeps its OAuth credentials in a global config dir: ~/Library/Application
+ * Support/com.vercel.cli on macOS, ~/.vercel on Linux. A sandbox that cannot write
+ * there breaks the CLI when it refreshes: it rotates the refresh token, fails to
+ * persist it, and every later call answers 403. Point the CLI at a writable dir
+ * with LAVEGA_VERCEL_GLOBAL_CONFIG and run `vercel login --global-config <dir>`
+ * there once. Unset keeps the CLI default. */
+function vercelGlobalConfigArgs() {
+  const dir = process.env.LAVEGA_VERCEL_GLOBAL_CONFIG;
+  return dir ? ["--global-config", dir] : [];
+}
+
 /** The newest READY preview deploy, optionally only for one git branch. */
 function latestPreview(branch) {
   const bin = process.env.LAVEGA_VERCEL_BIN || "vercel";
   const cwd = vercelCwd();
-  const args = ["ls", "--environment", "preview", "--status", "READY", "--format", "json"];
+  const args = [
+    ...vercelGlobalConfigArgs(),
+    "ls",
+    "--environment",
+    "preview",
+    "--status",
+    "READY",
+    "--format",
+    "json",
+  ];
   if (branch) args.push("--meta", `githubCommitRef=${branch}`);
   args.push("--cwd", cwd);
   const result = spawnSync(bin, args, { encoding: "utf8", timeout: 60_000 });
@@ -422,7 +442,17 @@ function pullVercelVerifyCredentials() {
       rmSync(file, { force: true });
       const result = spawnSync(
         bin,
-        ["env", "pull", file, "--environment", environment, "--yes", "--cwd", cwd],
+        [
+          ...vercelGlobalConfigArgs(),
+          "env",
+          "pull",
+          file,
+          "--environment",
+          environment,
+          "--yes",
+          "--cwd",
+          cwd,
+        ],
         { encoding: "utf8", timeout: 60_000 },
       );
       if (result.error) {

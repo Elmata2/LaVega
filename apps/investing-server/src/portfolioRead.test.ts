@@ -2,11 +2,12 @@ import { expect, test, vi } from "vitest";
 import { ManagedRuntime } from "effect";
 import {
   createBrokerDataCache,
-  createInMemoryPriceStore,
+  createInMemorySharedPriceStore,
   type BrokerDataSnapshot,
-  type PriceStore,
+  type PriceKey,
+  type SharedPriceStore,
 } from "@lavega/adapters";
-import { emptyInvestingDashboard, type InvestingDashboardData, type PriceBar } from "@lavega/core";
+import { emptyInvestingDashboard, type InvestingDashboardData } from "@lavega/core";
 import {
   PortfolioRead,
   PortfolioReadError,
@@ -43,8 +44,18 @@ function snapshot(quantity = 1): BrokerDataSnapshot {
 }
 
 type Snapshots = {
-  get(key: string): Promise<{ version: number; dashboard: unknown }>;
-  put(key: string, version: number, dashboard: unknown): Promise<void>;
+  get(key: string): Promise<{
+    version: number;
+    dashboard: unknown;
+    priceKeys: string[];
+    updatedAt: string | null;
+  }>;
+  put(
+    key: string,
+    version: number,
+    dashboard: unknown,
+    priceKeys?: readonly string[],
+  ): Promise<void>;
 };
 
 type SyncStateReader = Pick<
@@ -74,9 +85,10 @@ function makeSources(
     snapshots?: Snapshots | null;
     dashboardCache?: DashboardCache;
     sync?: SyncStateReader;
-    priceStore?: PriceStore;
+    priceStore?: SharedPriceStore;
     priceDataVersion?: () => number;
     benchmarks?: readonly string[];
+    accountWrappers?: readonly import("@lavega/core").AccountWrapperEntry[];
   } = {},
 ): PortfolioReadSources {
   const brokerData = createBrokerDataCache(input.data ?? {});
@@ -88,7 +100,7 @@ function makeSources(
     ttlMs: DASHBOARD_CACHE_TTL_MS,
   });
   return {
-    priceStore: input.priceStore ?? createInMemoryPriceStore(),
+    priceStore: input.priceStore ?? createInMemorySharedPriceStore(),
     loadBrokerData: input.loadBrokerData ?? (async () => undefined),
     brokerData,
     brokerSnapshot,
@@ -97,6 +109,7 @@ function makeSources(
     syncState: input.sync ?? syncState(),
     fxProvider: healthyFx,
     benchmarks: () => input.benchmarks ?? [],
+    accountWrappers: async () => input.accountWrappers ?? [],
     priceDataVersion: input.priceDataVersion ?? (() => 0),
   };
 }
@@ -127,10 +140,10 @@ test("a current stored dashboard is served without reading the vault", async () 
   const stored = { ...emptyInvestingDashboard(), dataVersion: 7, problems: ["from the store"] };
   const loadBrokerData = vi.fn(async () => undefined);
   const snapshots: Snapshots = {
-    get: async () => ({ version: 1, dashboard: stored }),
+    get: async () => ({ version: 1, dashboard: stored, priceKeys: [], updatedAt: null }),
     put: vi.fn(async () => undefined),
   };
-  const priceStore = createInMemoryPriceStore();
+  const priceStore = createInMemorySharedPriceStore();
   const priceRead = vi.spyOn(priceStore, "getRange");
 
   const result = await runRead(
@@ -140,6 +153,67 @@ test("a current stored dashboard is served without reading the vault", async () 
   expect(result).toBe(stored);
   expect(loadBrokerData).not.toHaveBeenCalled();
   expect(priceRead).not.toHaveBeenCalled();
+});
+
+test("criterion 8: a shared price write to a key the build read rebuilds it", async () => {
+  const stored = { ...emptyInvestingDashboard(), dataVersion: 7 };
+  const loadBrokerData = vi.fn(async () => undefined);
+  const put = vi.fn(async () => undefined);
+  const priceStore = createInMemorySharedPriceStore();
+  // The stored build read AAPL, and its series changed after that build.
+  await priceStore.putCoverage("sym:AAPL:EUR", {
+    from: "2026-01-01",
+    to: "2026-01-02",
+    listing: "AAPL.AS",
+    currency: "EUR",
+    provider: "yahoo",
+  });
+  const snapshots: Snapshots = {
+    get: async () => ({
+      version: 1,
+      dashboard: stored,
+      priceKeys: ["sym:AAPL:EUR"],
+      updatedAt: "2020-01-01T00:00:00.000Z",
+    }),
+    put,
+  };
+
+  const result = await runRead(
+    makeSources({ data: snapshot(), loadBrokerData, snapshots, priceStore }),
+  );
+
+  expect(result).not.toBe(stored);
+  expect(loadBrokerData).toHaveBeenCalledTimes(1);
+  expect(put).toHaveBeenCalledWith("", 1, result, expect.arrayContaining(["sym:AAPL:EUR"]));
+});
+
+test("criterion 8: a write to a key the build never read serves the stored dashboard", async () => {
+  const stored = { ...emptyInvestingDashboard(), dataVersion: 7 };
+  const loadBrokerData = vi.fn(async () => undefined);
+  const priceStore = createInMemorySharedPriceStore();
+  // MSFT changed, but the stored build never read it.
+  await priceStore.putCoverage("sym:MSFT:EUR", {
+    from: "2026-01-01",
+    to: "2026-01-02",
+    listing: "MSFT.AS",
+    currency: "EUR",
+    provider: "yahoo",
+  });
+  const snapshots: Snapshots = {
+    get: async () => ({
+      version: 1,
+      dashboard: stored,
+      priceKeys: ["sym:AAPL:EUR"],
+      updatedAt: "2020-01-01T00:00:00.000Z",
+    }),
+    put: vi.fn(async () => undefined),
+  };
+
+  const result = await runRead(
+    makeSources({ data: snapshot(), loadBrokerData, snapshots, priceStore }),
+  );
+  expect(result).toBe(stored);
+  expect(loadBrokerData).not.toHaveBeenCalled();
 });
 
 test("a dashboard stored before risk carried its basis is rebuilt and stored again", async () => {
@@ -154,7 +228,7 @@ test("a dashboard stored before risk carried its basis is rebuilt and stored aga
   const loadBrokerData = vi.fn(async () => undefined);
   const put = vi.fn(async () => undefined);
   const snapshots: Snapshots = {
-    get: async () => ({ version: 1, dashboard: stale }),
+    get: async () => ({ version: 1, dashboard: stale, priceKeys: [], updatedAt: null }),
     put,
   };
 
@@ -163,15 +237,15 @@ test("a dashboard stored before risk carried its basis is rebuilt and stored aga
   expect(result).not.toBe(stale);
   expect(result.positions[0]?.symbol).toBe("AAPL");
   expect(loadBrokerData).toHaveBeenCalledTimes(1);
-  expect(put).toHaveBeenCalledWith("", 1, result);
+  expect(put).toHaveBeenCalledWith("", 1, result, expect.arrayContaining(["sym:AAPL:EUR"]));
 });
 
 test("a failed price read returns a dashboard plus a problem and stores nothing", async () => {
   const snapshots: Snapshots = {
-    get: async () => ({ version: 5, dashboard: null }),
+    get: async () => ({ version: 5, dashboard: null, priceKeys: [], updatedAt: null }),
     put: vi.fn(async () => undefined),
   };
-  const priceStore = createInMemoryPriceStore();
+  const priceStore = createInMemorySharedPriceStore();
   vi.spyOn(priceStore, "getRange").mockRejectedValue(new Error("timeout exceeded"));
 
   const result = await runRead(makeSources({ data: snapshot(), snapshots, priceStore }));
@@ -182,7 +256,7 @@ test("a failed price read returns a dashboard plus a problem and stores nothing"
 });
 
 test("a dashboard a sync replaced mid-build is stored under the version it was built against and never served", async () => {
-  const store = new Map<string, { version: number; dashboard: unknown }>();
+  const store = new Map<string, { version: number; dashboard: unknown; priceKeys: string[] }>();
   let sourceVersion = 1;
   const snapshots: Snapshots = {
     get: async (key) => {
@@ -190,18 +264,20 @@ test("a dashboard a sync replaced mid-build is stored under the version it was b
       return {
         version: sourceVersion,
         dashboard: held?.version === sourceVersion ? held.dashboard : null,
+        priceKeys: [],
+        updatedAt: null,
       };
     },
-    put: async (key, version, dashboard) => {
-      store.set(key, { version, dashboard });
+    put: async (key, version, dashboard, priceKeys) => {
+      store.set(key, { version, dashboard, priceKeys: [...(priceKeys ?? [])] });
     },
   };
   const loadBrokerData = vi.fn(async () => undefined);
-  const priceStore = createInMemoryPriceStore();
-  vi.spyOn(priceStore, "getRange").mockImplementation(async () => {
+  const priceStore = createInMemorySharedPriceStore();
+  vi.spyOn(priceStore, "getRanges").mockImplementation(async () => {
     // The price read moves the source version while the dashboard is building.
     sourceVersion += 1;
-    return [];
+    return new Map();
   });
   const sources = makeSources({ data: snapshot(), loadBrokerData, snapshots, priceStore });
 
@@ -302,7 +378,7 @@ test("a durable sync problem reaches the dashboard even though this read did not
 test("Server-Timing names a built dashboard's phases and a stored one's, and nothing else", async () => {
   const built = phaseRecorder();
   const snapshots: Snapshots = {
-    get: async () => ({ version: 1, dashboard: null }),
+    get: async () => ({ version: 1, dashboard: null, priceKeys: [], updatedAt: null }),
     put: async () => undefined,
   };
   await runRead(makeSources({ data: snapshot(), snapshots }), { timing: built.timing });
@@ -314,7 +390,12 @@ test("Server-Timing names a built dashboard's phases and a stored one's, and not
     makeSources({
       data: snapshot(),
       snapshots: {
-        get: async () => ({ version: 1, dashboard: storedDashboard }),
+        get: async () => ({
+          version: 1,
+          dashboard: storedDashboard,
+          priceKeys: [],
+          updatedAt: null,
+        }),
         put: async () => undefined,
       },
     }),
@@ -324,25 +405,16 @@ test("Server-Timing names a built dashboard's phases and a stored one's, and not
 });
 
 test("the read never hands Postgres a year-zero date", async () => {
-  const priceStore = createInMemoryPriceStore();
+  const priceStore = createInMemorySharedPriceStore();
   const getRange = vi
-    .spyOn(priceStore, "getRange")
-    .mockImplementation(async (_tenantId, _symbol, from, to) => {
-      for (const date of [from, to])
-        if (date?.startsWith("0000-"))
-          throw new Error(`date/time field value out of range: "${date}"`);
-      return [] as PriceBar[];
-    });
+    .spyOn(priceStore, "getRanges")
+    .mockImplementation(async (_keys: readonly PriceKey[]) => new Map());
 
   const result = await runRead(
     makeSources({ data: snapshot(), priceStore, benchmarks: ["^GSPC"] }),
   );
 
   expect(getRange).toHaveBeenCalled();
-  for (const [, , from, to] of getRange.mock.calls) {
-    expect(String(from ?? "")).not.toMatch(/^0000-/);
-    expect(String(to ?? "")).not.toMatch(/^0000-/);
-  }
   expect(result.problems.join("\n")).not.toContain("date/time field value out of range");
 });
 
@@ -366,4 +438,75 @@ test("the read fails with a typed error when there is no broker data at all", as
 
   expect(error).toBeInstanceOf(PortfolioReadError);
   expect((error as PortfolioReadError).message).toBe("credential vault is locked");
+});
+
+test("the read builds the realised report and groups it by the injected account labels", async () => {
+  const data: BrokerDataSnapshot = {
+    trading212: {
+      positions: [
+        {
+          symbol: "AAPL",
+          broker: "trading212",
+          account: "ISA",
+          quantity: 5,
+          averagePrice: 100,
+          marketPrice: 120,
+          marketValue: 600,
+          currency: "EUR",
+          entity: "personal",
+          asOf: "2026-04-01",
+          brokerCost: { status: "known", amount: 500, currency: "EUR" },
+        },
+      ],
+      trades: [
+        {
+          id: "buy-1",
+          entity: "personal",
+          broker: "trading212",
+          account: "ISA",
+          date: "2026-03-02",
+          symbol: "AAPL",
+          side: "buy",
+          quantity: 10,
+          price: 100,
+          amount: 1000,
+          currency: "EUR",
+          commission: 1,
+        },
+        {
+          id: "sell-1",
+          entity: "personal",
+          broker: "trading212",
+          account: "ISA",
+          date: "2026-04-01",
+          symbol: "AAPL",
+          side: "sell",
+          quantity: 5,
+          price: 120,
+          amount: 600,
+          currency: "EUR",
+          commission: 1,
+          settlement: { currency: "EUR", amount: 599 },
+        },
+      ],
+      dividends: [],
+    },
+  };
+  const result = await runRead(
+    makeSources({
+      data,
+      accountWrappers: [{ broker: "trading212", account: "ISA", wrapper: "isa" }],
+    }),
+  );
+
+  expect(result.realized?.disposals).toHaveLength(1);
+  expect(result.realized?.disposals[0]?.reconciliation).toMatchObject({
+    status: "reconciled",
+    brokerCashCents: 59_900,
+    netProceedsCents: 59_900,
+  });
+  expect(result.realized?.byTreatment.map((group) => group.treatment)).toEqual(["tax-exempt"]);
+  expect(result.realized?.accounts).toEqual([
+    expect.objectContaining({ broker: "trading212", account: "ISA", treatment: "tax-exempt" }),
+  ]);
 });

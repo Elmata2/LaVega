@@ -1,5 +1,6 @@
 import { expect, test } from "vitest";
 import type { Tx, Rule } from "./model.js";
+import { ruleCategoryValue, ruleTextValue } from "./rules/parse.js";
 import {
   uncategorizedTxs,
   applyCategorizations,
@@ -51,10 +52,13 @@ test("applyCategorizations sets manual category on decided txs + builds deduped 
   expect(byId.t1).toMatchObject({ category: "Overboekingen", manual: true });
   expect(byId.t2).toMatchObject({ category: "Overboekingen", manual: true });
   expect(byId.t3.category).toBe(""); // invalid category ignored, tx untouched
-  // One deduped rule for "Jan Jansen priv" -> Overboekingen (not two)
-  const janRules = out.rules.filter((r) => r.match.toLowerCase().includes("jan jansen"));
+  // One deduped rule for "Jan Jansen priv" -> Overboekingen (not two). Read the
+  // shape through the helpers: generated rules are v2 (no .match/.category).
+  const janRules = out.rules.filter((r) =>
+    (ruleTextValue(r) ?? "").toLowerCase().includes("jan jansen"),
+  );
   expect(janRules).toHaveLength(1);
-  expect(janRules[0].category).toBe("Overboekingen");
+  expect(ruleCategoryValue(janRules[0]!)).toBe("Overboekingen");
 });
 
 test("applyCategorizations does not duplicate an existing rule and skips empty counterparty", () => {
@@ -64,8 +68,10 @@ test("applyCategorizations does not duplicate an existing rule and skips empty c
     { id: "t1", category: "Boodschappen" },
     { id: "t2", category: "Overboekingen" },
   ]);
-  expect(out.rules.filter((r) => r.match.toLowerCase() === "albert heijn")).toHaveLength(1); // no dup
-  expect(out.rules.some((r) => r.match === "")).toBe(false); // empty counterparty -> no rule
+  expect(
+    out.rules.filter((r) => (ruleTextValue(r) ?? "").toLowerCase() === "albert heijn"),
+  ).toHaveLength(1); // no dup
+  expect(out.rules.some((r) => (ruleTextValue(r) ?? "") === "")).toBe(false); // empty counterparty -> no rule
   expect(out.txs.find((t) => t.id === "t2")).toMatchObject({
     category: "Overboekingen",
     manual: true,

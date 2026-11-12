@@ -1,8 +1,9 @@
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { afterEach, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import {
   authorizedCronRequest,
+  CRON_MAX_HOPS,
   currentInvestingTenant,
   forwardInvesting,
   investingDist,
@@ -72,7 +73,7 @@ vi.mock("@lavega/investing-server/src/docker.js", () => ({
   createDockerFetch: createDockerFetchMock,
 }));
 vi.mock("@lavega/investing-server/src/filePriceStore.js", () => ({
-  createFilePriceStore: vi.fn(),
+  createFileSharedPriceStore: vi.fn(() => ({ clear: async () => undefined })),
   runtimePriceStoreFile: () => "/tmp/prices.json",
 }));
 vi.mock("@lavega/investing-server/src/fileBenchmarkSelectionStore.js", () => ({
@@ -84,11 +85,24 @@ vi.mock("@lavega/investing-server/src/fileMarketDataConsentStore.js", () => ({
   runtimeMarketDataConsentFile: () => "/tmp/consent.json",
 }));
 
+/* The hop chain calls its own deployment with global fetch. Tests record that
+ * request instead of sending it. */
+const continueFetch = vi.fn(async (_url: RequestInfo | URL, _init?: RequestInit) =>
+  Response.json({ ok: true }),
+);
+
+beforeEach(() => {
+  continueFetch.mockClear();
+  vi.stubGlobal("fetch", continueFetch);
+});
+
 afterEach(() => {
+  vi.unstubAllGlobals();
   vi.clearAllMocks();
   delete process.env.CRON_SECRET;
   delete process.env.INVESTING_SYNC_BUDGET_MS;
   delete process.env.INVESTING_PRICE_SYNC_BUDGET_MS;
+  delete process.env.INVESTING_SYNC_SCHEDULER;
   vi.useRealTimers();
   // clearAllMocks leaves unconsumed once-values queued for the next test.
   runtimeDatabaseMock.mockReset().mockReturnValue(null);
@@ -121,6 +135,26 @@ test("forwardInvesting builds an investing runtime per request", async () => {
     2,
     expect.objectContaining({ dashboardCache: dashboardCacheMock }),
   );
+});
+
+test("the runtime gets the Neon partner budget with a database, and one process-wide memory budget without", async () => {
+  const lastOptions = () =>
+    (createRuntimeAppMock.mock.calls.at(-1) as unknown as [Record<string, unknown>])[0];
+
+  runtimeDatabaseMock.mockReturnValue({});
+  await forwardInvesting(new Request("https://lavega.dev/investing/health"), "user-1");
+  expect(lastOptions().partnerBudget).toBeDefined();
+  expect(lastOptions()).not.toHaveProperty("partnerBudgetClient");
+
+  runtimeDatabaseMock.mockReturnValue(null);
+  await forwardInvesting(new Request("https://lavega.dev/investing/health"), "local");
+  const first = lastOptions().partnerBudgetClient;
+  expect(first).toBeDefined();
+  expect(lastOptions()).not.toHaveProperty("partnerBudget");
+
+  // The per-request runtime is rebuilt, the memory budget it is given is not.
+  await forwardInvesting(new Request("https://lavega.dev/investing/health"), "local");
+  expect(lastOptions().partnerBudgetClient).toBe(first);
 });
 
 test("shouldMountInvesting is false when dist is missing", () => {
@@ -197,8 +231,8 @@ test("cron requests require the configured secret", () => {
   );
 });
 
-const cronRequest = () =>
-  new Request("https://lavega.dev/api/cron/investing-sync", {
+const cronRequest = (query = "") =>
+  new Request(`https://lavega.dev/api/cron/investing-sync${query}`, {
     headers: { authorization: "Bearer cron-secret" },
   });
 
@@ -229,7 +263,7 @@ test("without authentication the cron syncs the one local tenant and never asks 
   const response = await mount.runInvestingCron(cronRequest());
 
   expect(response.status).toBe(200);
-  expect(seen).toEqual(["local:/api/brokers/sync", "local:/api/letters/ensure"]);
+  expect(seen).toEqual(["local:/api/sync/drive"]);
   expect(listBrokerSyncTenantsMock).not.toHaveBeenCalled();
 });
 
@@ -240,20 +274,19 @@ test("the cron syncs every tenant with a connected broker, with no allowlist env
 
   expect(response.status).toBe(200);
   expect(seen).toEqual([
-    "user-a:/api/brokers/sync",
-    "user-a:/api/letters/ensure",
-    "user-b:/api/brokers/sync",
-    "user-b:/api/letters/ensure",
-    "user-c:/api/brokers/sync",
-    "user-c:/api/letters/ensure",
+    "user-a:/api/sync/drive",
+    "user-b:/api/sync/drive",
+    "user-c:/api/sync/drive",
   ]);
   const body = (await response.json()) as {
-    tenants: Array<{ letterStatus: number }>;
+    tenants: Array<{ status: number }>;
     skipped: number;
+    continued: boolean;
   };
   expect(body.tenants).toHaveLength(3);
-  expect(body.tenants.map((tenant) => tenant.letterStatus)).toEqual([200, 200, 200]);
+  expect(body.tenants.map((tenant) => tenant.status)).toEqual([200, 200, 200]);
   expect(body.skipped).toBe(0);
+  expect(body.continued).toBe(false);
 });
 
 test("with no connected broker anywhere the cron succeeds and does nothing", async () => {
@@ -270,10 +303,10 @@ test("the cron keeps the order the database gave, least recently synced first", 
 
   await mount.runInvestingCron(cronRequest());
 
-  expect(seen.filter((entry) => entry.endsWith("/api/brokers/sync"))).toEqual([
-    "stale:/api/brokers/sync",
-    "newer:/api/brokers/sync",
-    "newest:/api/brokers/sync",
+  expect(seen).toEqual([
+    "stale:/api/sync/drive",
+    "newer:/api/sync/drive",
+    "newest:/api/sync/drive",
   ]);
 });
 
@@ -284,8 +317,8 @@ test("the cron stops before a tenant that no longer fits, counting from before t
   process.env.INVESTING_PRICE_SYNC_BUDGET_MS = "40000";
   const { mount, seen } = await cronMount(["user-a", "user-b", "user-c"], (_t, path) => {
     // a tenant's one request may spend a whole 40s slice
-    if (path === "/api/brokers/sync") vi.setSystemTime(Date.now() + 40_000);
-    return Response.json({ ok: true });
+    if (path === "/api/sync/drive") vi.setSystemTime(Date.now() + 40_000);
+    return Response.json({ result: "continue" });
   });
   // listing takes 20s: the 80s that remain (minus the 5s margin) fit one 40s slice, not two
   listBrokerSyncTenantsMock.mockReset().mockImplementationOnce(async () => {
@@ -302,26 +335,27 @@ test("the cron stops before a tenant that no longer fits, counting from before t
   expect(seen.some((entry) => entry.startsWith("user-b:"))).toBe(false);
 });
 
-test("the price slice runs inside /api/brokers/sync, with the letter asked for after it", async () => {
+test("one drive call is the whole tenant: lanes and letter run inside it", async () => {
   const { mount, seen } = await cronMount(["user-a"]);
 
   await mount.runInvestingCron(cronRequest());
 
   expect(seen).not.toContain("user-a:/api/prices/sync");
-  expect(seen).toEqual(["user-a:/api/brokers/sync", "user-a:/api/letters/ensure"]);
+  expect(seen).not.toContain("user-a:/api/letters/ensure");
+  expect(seen).toEqual(["user-a:/api/sync/drive"]);
 });
 
-test("a failing letter call leaves the sync result intact", async () => {
-  const { mount } = await cronMount(["user-a"], (_tenant, path) => {
-    if (path === "/api/letters/ensure") throw new Error("model down");
-    return Response.json({ ok: true });
-  });
+test("a drive call that answers a problem still counts the tenant as processed", async () => {
+  const { mount } = await cronMount(["user-a"], () =>
+    Response.json({ result: "failed" }, { status: 200 }),
+  );
 
   const response = await mount.runInvestingCron(cronRequest());
 
   expect(response.status).toBe(200);
   expect(await response.json()).toMatchObject({
-    tenants: [{ tenantId: "user-a", brokerStatus: 200, letterStatus: 0 }],
+    tenants: [{ tenantId: "user-a", status: 200, result: "failed" }],
+    skipped: 0,
   });
 });
 
@@ -350,7 +384,7 @@ test("the cron answers statuses only, never per-user symbols", async () => {
 test("one tenant that throws or answers 5xx does not stop the others, and the failure is logged", async () => {
   const log = vi.spyOn(console, "log").mockImplementation(() => {});
   const { mount, seen } = await cronMount(["user-a", "user-b", "user-c"], (tenant, path) => {
-    if (tenant === "user-a" && path === "/api/brokers/sync")
+    if (tenant === "user-a" && path === "/api/sync/drive")
       throw new Error("vault exploded: token=secret-token");
     if (tenant === "user-b") return Response.json({ problems: ["x"] }, { status: 503 });
     return Response.json({ ok: true });
@@ -359,7 +393,7 @@ test("one tenant that throws or answers 5xx does not stop the others, and the fa
   const response = await mount.runInvestingCron(cronRequest());
 
   expect(response.status).toBe(200);
-  expect(seen).toContain("user-c:/api/brokers/sync");
+  expect(seen).toContain("user-c:/api/sync/drive");
   const text = JSON.stringify(await response.json());
   expect(text).not.toContain("secret-token");
   expect(text).toContain("user-a");
@@ -390,6 +424,80 @@ test("a failing tenant listing is a 503 with a fixed message, not a leak", async
   log.mockRestore();
 });
 
+test("the cron hop chain visits 7 tenants in 3 hops, each exactly once, in list order", async () => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(0);
+  process.env.INVESTING_SYNC_CHAIN = "on";
+  process.env.INVESTING_SYNC_BUDGET_MS = "140000";
+  process.env.INVESTING_PRICE_SYNC_BUDGET_MS = "40000";
+  const tenants = ["a", "b", "c", "d", "e", "f", "g"];
+  const { mount, seen } = await cronMount(tenants, (_tenant, path) => {
+    // a tenant consumes one 40s slice; three fit in 140s minus the 5s margin
+    if (path === "/api/sync/drive") vi.setSystemTime(Date.now() + 40_000);
+    return Response.json({ result: "continue" });
+  });
+  listBrokerSyncTenantsMock.mockReset().mockResolvedValue(tenants);
+  runtimeDatabaseMock.mockReturnValue({});
+
+  const visited: string[] = [];
+  let request = cronRequest();
+  for (let hop = 0; hop <= 5; hop += 1) {
+    const body = (await (await mount.runInvestingCron(request)).json()) as {
+      tenants: Array<{ tenantId: string }>;
+      continued: boolean;
+    };
+    visited.push(...body.tenants.map((tenant) => tenant.tenantId));
+    if (!body.continued) break;
+    const next = new URL(String(continueFetch.mock.calls.at(-1)![0]));
+    request = cronRequest(
+      `?after=${next.searchParams.get("after")}&hop=${next.searchParams.get("hop")}`,
+    );
+  }
+
+  expect(visited).toEqual(tenants); // each exactly once, in list order
+  expect(seen).toEqual(tenants.map((tenant) => `${tenant}:/api/sync/drive`));
+  expect(continueFetch).toHaveBeenCalledTimes(2); // hop 1 and hop 2, not a third
+  const first = new URL(String(continueFetch.mock.calls[0]![0]));
+  expect(first.pathname).toBe("/api/cron/investing-sync");
+  expect(first.searchParams.get("after")).toBe("c");
+  expect(first.searchParams.get("hop")).toBe("1");
+  delete process.env.INVESTING_SYNC_CHAIN;
+});
+
+test("the cron chain is off by default: one pass leaves the rest for the next trigger", async () => {
+  process.env.INVESTING_SYNC_BUDGET_MS = "140000";
+  process.env.INVESTING_PRICE_SYNC_BUDGET_MS = "40000";
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(0);
+  const { mount } = await cronMount(["a", "b", "c", "d"], (_tenant, path) => {
+    if (path === "/api/sync/drive") vi.setSystemTime(Date.now() + 40_000);
+    return Response.json({ result: "continue" });
+  });
+
+  const response = await mount.runInvestingCron(cronRequest());
+  const body = (await response.json()) as { skipped: number; continued: boolean };
+
+  expect(body).toMatchObject({ skipped: 1, continued: false });
+  expect(continueFetch).not.toHaveBeenCalled();
+});
+
+test("a cron hop above the cap is a 400, not a silent restart", async () => {
+  const { mount } = await cronMount([]);
+
+  const response = await mount.runInvestingCron(cronRequest(`?hop=${CRON_MAX_HOPS + 1}`));
+
+  expect(response.status).toBe(400);
+});
+
+test("a cursor that is not in the tenant list starts the pass from the beginning", async () => {
+  const { mount, seen } = await cronMount(["a", "b"]);
+
+  const response = await mount.runInvestingCron(cronRequest("?after=gone&hop=1"));
+
+  expect(response.status).toBe(200);
+  expect(seen).toEqual(["a:/api/sync/drive", "b:/api/sync/drive"]);
+});
+
 test("forwardInvesting runs the forwarded request inside the caller's tenant scope", async () => {
   // A fresh module: forwardInvesting memoizes its runtime, and an earlier test
   // in this file has already built one.
@@ -418,4 +526,228 @@ test("the forwarded /api namespaces are read from the investing app's own routes
   expect(await investingOwnsApiPath("/api/agents/portfolio")).toBe(true);
   expect(await investingOwnsApiPath("/api/investing/dashboard")).toBe(true);
   expect(await investingOwnsApiPath("/api/vault/backup")).toBe(false);
+});
+
+/* --- external scheduler (issue #311) ---------------------------------------
+ *
+ * Vercel answers the fifth self-request with 508 (issue #306), so a run longer
+ * than one 240 s budget cannot continue itself. A scheduled runner outside the
+ * request chain calls the drain route instead: one call advances the queue by
+ * one invocation budget, and the durable run row resumes it on the next call.
+ * These tests pin that boundary: auth, one budget per tenant, no self-request,
+ * and a run that needs three budgets finishing across three calls. */
+
+const drainRequest = () =>
+  new Request("https://lavega.dev/api/cron/investing-drain", {
+    method: "POST",
+    headers: { authorization: "Bearer cron-secret", "content-type": "application/json" },
+    body: "{}",
+  });
+
+async function drainMount(
+  tenants: string[],
+  handle: (tenant: string, path: string) => Response | Promise<Response> = () =>
+    Response.json({ result: "done" }),
+) {
+  vi.resetModules();
+  const mount = await import("./investing-mount.js");
+  const seen: string[] = [];
+  const bodies: string[] = [];
+  createDockerFetchMock.mockImplementation(() => async (request: Request) => {
+    const path = new URL(request.url).pathname;
+    if (path === "/api/sync/drive") bodies.push(await request.text());
+    const entry = `${mount.currentInvestingTenant()}:${path}`;
+    seen.push(entry);
+    return handle(mount.currentInvestingTenant(), path);
+  });
+  process.env.CRON_SECRET = "cron-secret";
+  getAuthMock.mockReturnValue({});
+  /* Persistent, unlike the daily-cron helper: one test runs several drain
+   * invocations, and each one lists the tenants again. */
+  runtimeDatabaseMock.mockReturnValue({});
+  listBrokerSyncTenantsMock.mockResolvedValue(tenants);
+  return { mount, seen, bodies };
+}
+
+test("the drain refuses a request without the cron secret", async () => {
+  const { mount, seen } = await drainMount(["user-a"]);
+
+  const anonymous = await mount.runInvestingDrain(
+    new Request("https://lavega.dev/api/cron/investing-drain", { method: "POST" }),
+  );
+  const wrong = await mount.runInvestingDrain(
+    new Request("https://lavega.dev/api/cron/investing-drain", {
+      method: "POST",
+      headers: { authorization: "Bearer not-the-secret" },
+    }),
+  );
+
+  expect(anonymous.status).toBe(401);
+  expect(wrong.status).toBe(401);
+  expect(seen).toEqual([]);
+});
+
+test("one drain invocation gives the head tenant the whole 240 s budget and leaves the rest for the next trigger", async () => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(0);
+  process.env.INVESTING_SYNC_BUDGET_MS = "240000";
+  const { mount, seen, bodies } = await drainMount(
+    ["user-a", "user-b", "user-c"],
+    (_tenant, path) => {
+      if (path === "/api/sync/drive") {
+        // A tenant that spends its full budget ends this invocation.
+        vi.setSystemTime(Date.now() + 240_000);
+        return Response.json({ result: "continue" });
+      }
+      return Response.json({ result: "done" });
+    },
+  );
+
+  const response = await mount.runInvestingDrain(drainRequest());
+  const body = (await response.json()) as {
+    enabled: boolean;
+    driven: Array<{ tenantId: string; result: unknown }>;
+    pending: number;
+    deadlineReached: boolean;
+  };
+
+  expect(response.status).toBe(200);
+  expect(body.driven.map((entry) => entry.tenantId)).toEqual(["user-a"]);
+  expect(body.pending).toBe(2);
+  expect(body.deadlineReached).toBe(true);
+  expect(seen).toEqual(["user-a:/api/sync/drive"]);
+  expect((JSON.parse(bodies[0] ?? "{}") as { deadlineMs?: number }).deadlineMs).toBe(240_000);
+});
+
+test("a run needing three budgets completes across three drain invocations, with no self-request", async () => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(0);
+  process.env.INVESTING_SYNC_BUDGET_MS = "240000";
+  const results = ["continue", "continue", "done"];
+  let drive = 0;
+  const { mount, seen } = await drainMount(["user-a"], (_tenant, path) => {
+    if (path !== "/api/sync/drive") return Response.json({ result: "done" });
+    const result = results[drive] ?? "done";
+    drive += 1;
+    vi.setSystemTime(Date.now() + 240_000);
+    return Response.json({ result });
+  });
+
+  const answers: unknown[] = [];
+  for (let tick = 0; tick < 3; tick += 1) {
+    const response = await mount.runInvestingDrain(drainRequest());
+    const body = (await response.json()) as { driven: Array<{ result: unknown }> };
+    answers.push(body.driven[0]?.result);
+  }
+
+  expect(answers).toEqual(["continue", "continue", "done"]);
+  expect(seen).toEqual(Array(3).fill("user-a:/api/sync/drive"));
+  /* The point of the external scheduler: nothing in the server continues the
+   * run. Every hop is the runner's next call. */
+  expect(continueFetch).not.toHaveBeenCalled();
+});
+
+test("a drain keeps driving the queue while the pass budget lasts", async () => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(0);
+  process.env.INVESTING_SYNC_BUDGET_MS = "240000";
+  const { mount, seen } = await drainMount(["user-a", "user-b", "user-c"], (_tenant, path) => {
+    if (path === "/api/sync/drive") {
+      vi.setSystemTime(Date.now() + 10_000);
+      return Response.json({ result: "done" });
+    }
+    return Response.json({ result: "done" });
+  });
+
+  const body = (await (await mount.runInvestingDrain(drainRequest())).json()) as {
+    driven: Array<{ tenantId: string }>;
+    pending: number;
+    deadlineReached: boolean;
+  };
+
+  expect(body.driven.map((entry) => entry.tenantId)).toEqual(["user-a", "user-b", "user-c"]);
+  expect(body.pending).toBe(0);
+  expect(body.deadlineReached).toBe(false);
+  expect(seen).toEqual([
+    "user-a:/api/sync/drive",
+    "user-b:/api/sync/drive",
+    "user-c:/api/sync/drive",
+  ]);
+});
+
+test("the drain only ever posts the internal drive path, never the lanes or the letter directly", async () => {
+  const { mount, seen } = await drainMount(["user-a"]);
+
+  await mount.runInvestingDrain(drainRequest());
+
+  expect(seen).toEqual(["user-a:/api/sync/drive"]);
+  expect(seen).not.toContain("user-a:/api/prices/sync");
+  expect(seen).not.toContain("user-a:/api/letters/ensure");
+});
+
+test("the drain's kill switch drives nothing and says so", async () => {
+  process.env.INVESTING_SYNC_SCHEDULER = "off";
+  const { mount, seen } = await drainMount(["user-a"]);
+
+  const response = await mount.runInvestingDrain(drainRequest());
+
+  expect(response.status).toBe(200);
+  expect(await response.json()).toEqual({
+    enabled: false,
+    driven: [],
+    pending: 0,
+    deadlineReached: false,
+  });
+  expect(seen).toEqual([]);
+});
+
+test("a pass budget that cannot fit one tenant is a 500, not a quiet 200", async () => {
+  process.env.INVESTING_SYNC_BUDGET_MS = "20000";
+  const { mount, seen } = await drainMount(["user-a"]);
+
+  const response = await mount.runInvestingDrain(drainRequest());
+
+  expect(response.status).toBe(500);
+  expect(JSON.stringify(await response.json())).toContain("budget");
+  expect(seen).toEqual([]);
+});
+
+test("with no connected broker the drain succeeds and does nothing", async () => {
+  const { mount, seen } = await drainMount([]);
+
+  const response = await mount.runInvestingDrain(drainRequest());
+
+  expect(response.status).toBe(200);
+  expect(await response.json()).toMatchObject({ driven: [], pending: 0 });
+  expect(seen).toEqual([]);
+});
+
+test("one tenant that throws does not stop the drain, and the failure is logged without the secret", async () => {
+  const log = vi.spyOn(console, "log").mockImplementation(() => {});
+  const { mount, seen } = await drainMount(["user-a", "user-b"], (tenant) => {
+    if (tenant === "user-a") throw new Error("vault exploded: token=secret-token");
+    return Response.json({ result: "done" });
+  });
+
+  const response = await mount.runInvestingDrain(drainRequest());
+
+  expect(response.status).toBe(200);
+  expect(seen).toContain("user-b:/api/sync/drive");
+  const text = JSON.stringify(await response.json());
+  expect(text).not.toContain("secret-token");
+  expect(text).toContain("user-a");
+  const logged = log.mock.calls.map((call) => String(call[0])).join("\n");
+  expect(logged).toContain("vault exploded");
+  expect(logged).not.toContain("secret-token");
+  log.mockRestore();
+});
+
+test("the drain answers tenant ids and statuses only, never per-user symbols", async () => {
+  const { mount } = await drainMount(["user-a"], () =>
+    Response.json({ result: "continue", remainingSymbols: ["AAPL"], currentSymbol: "AAPL" }),
+  );
+
+  const text = JSON.stringify(await (await mount.runInvestingDrain(drainRequest())).json());
+
+  expect(text).not.toMatch(/AAPL|remainingSymbols|currentSymbol/);
 });

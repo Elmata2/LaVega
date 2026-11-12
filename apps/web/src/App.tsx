@@ -12,12 +12,32 @@ import type {
   EntityScope,
   AdvisorProfileStore,
   ProfileRead,
+  TransferPair,
+  Bill,
+  BillDecisions,
+  BillOccurrence,
+  Valuation,
+  VaultDocument,
+  ImportSession,
 } from "@lavega/core";
 import { capacityFor, computeRoom, emptyProfile, planProfileOf, resolveRoom } from "@lavega/core";
 import { fxNeedSignature, syncFxHistory } from "./fxHistory.js";
 import {
   ingest,
   reassignEntity,
+  accountIsLiability,
+  checkDocumentUpload,
+  detectStatementMetadata,
+  findDocumentBySha,
+  matchStatementAccount,
+  removeDocument,
+  upsertDocument,
+  applyGenericImport,
+  revertImport,
+  dropAccountValuations,
+  mergeValuations,
+  normalizeValuation,
+  valuationId,
   withCurrentBalances,
   isCardAccount,
   mergeImportedAccounts,
@@ -27,6 +47,11 @@ import {
   assignTxIds,
   scheduledFlowsForScope,
   scheduledInvoiceFlows,
+  generateBillOccurrences,
+  regenerateBillOccurrences,
+  scheduleChanged,
+  runBillMatcher,
+  EMPTY_BILL_DECISIONS,
   reconcileInvoices,
   applyCategorizations,
   findDuplicateAccounts,
@@ -43,6 +68,13 @@ import {
   TRAVEL_AGENT,
   NL_SAVINGS_RATES,
   RATES_AS_OF,
+  applyTransferDecisions,
+  autoConfirmTransfers,
+  confirmTransfer,
+  reconcileTransfers,
+  rejectTransfer,
+  suggestTransfers,
+  upgradeRules,
 } from "@lavega/core";
 import type { CategoryDecision } from "@lavega/core";
 import {
@@ -143,6 +175,9 @@ import Forecast from "./views/Forecast";
 import Optimalisatie from "./views/Optimalisatie";
 import Valuta from "./views/Valuta";
 import Belasting from "./views/Belasting";
+import Bills from "./views/Bills";
+import type { DocumentNotice } from "./components/documents/DocumentsCard.js";
+import type { GenericImportRequest } from "./components/import/GenericImportCard.js";
 import Facturen from "./views/Facturen";
 import Punten from "./views/Punten";
 import Koppelingen from "./views/Koppelingen";
@@ -151,6 +186,7 @@ import Profiel from "./views/Profiel";
 import type { N8nNotice, PendingInvoice } from "./n8n.js";
 import { useAppLocale } from "./appLocale.js";
 import { shellCopy } from "./copy/shell.js";
+import { importSessionCopy } from "./copy/importSession.js";
 import { importNotices, type ShellNotice } from "./shellNotice.js";
 
 export type { View } from "./appRoutes";
@@ -211,6 +247,14 @@ function statedOf(
   return read.store.current[key]?.value;
 }
 
+/** Replace-or-append one transfer decision by its content id. Confirming and
+ *  rejecting write the SAME row (a pair is in exactly one state), so a plain
+ *  append could leave a confirmed and a rejected copy of one pair behind — and
+ *  the matcher would then read the rejection memory AND the confirmed pair. */
+function upsertTransferPair(pairs: TransferPair[], pair: TransferPair): TransferPair[] {
+  return [...pairs.filter((p) => p.id !== pair.id), pair];
+}
+
 export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner }) {
   const [gate, setGate] = useState<GateState>("loading");
   const [openAttempt, setOpenAttempt] = useState(0);
@@ -231,7 +275,36 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
   const [entity, setEntity] = useState(() => getDefaultEntity(shellCopy[locale].scope.personal));
   const [problems, setProblems] = useState<ShellNotice[]>([]);
   const [rules, setRules] = useState<Rule[]>([]);
+  // Stored transfer decisions only (confirmed pairs + rejection memory); a
+  // suggestion is derived from the ledger on read, never kept here.
+  const [transfers, setTransfers] = useState<TransferPair[]>([]);
+  // Set when an account merge/delete dropped transfer pairs whose legs no
+  // longer both exist. Rekeningen shows the count under its duplicate banner —
+  // silently orphaning a pair is the failure this exists to prevent.
+  const [transferLinksDropped, setTransferLinksDropped] = useState<number | null>(null);
   const [scheduledFlows, setScheduledFlows] = useState<ScheduledFlow[]>([]);
+  // Bills + their materialized occurrences (#286). Occurrences are derived from
+  // the series and stored, because matching/second-half work keys on their
+  // identity; materialization runs lazily on unlock and writes ONE vault save.
+  const [bills, setBills] = useState<Bill[]>([]);
+  const [billOccurrences, setBillOccurrences] = useState<BillOccurrence[]>([]);
+  // Stored payment decisions only (allocations, marks, rejection memory, price
+  // history). Suggestions are derived from the ledger on read, exactly like
+  // transfer suggestions; only what the owner or the exact tier decided is kept.
+  const [billDecisions, setBillDecisions] = useState<BillDecisions>(EMPTY_BILL_DECISIONS);
+  // Dated absolute valuations (WS3.1, issue #291). Account-keyed absolute
+  // amounts; derived from them, never stored separately, is the daily series.
+  const [valuations, setValuations] = useState<Valuation[]>([]);
+  // Statement METADATA only (WS3.4/#293). The sealed bytes live in their own
+  // IndexedDB store, so an upload never rewrites the vault ciphertext.
+  const [documents, setDocuments] = useState<VaultDocument[]>([]);
+  const [documentNotice, setDocumentNotice] = useState<DocumentNotice | null>(null);
+  /** How many documents the last erase removed, for the card's one line. */
+  const [documentErased, setDocumentErased] = useState<number | null>(null);
+  // Generic import sessions (WS3.6, issue #294): which rows one import created,
+  // so a revert removes exactly those.
+  const [importSessions, setImportSessions] = useState<ImportSession[]>([]);
+  const [importNotice, setImportNotice] = useState<string | null>(null);
   const [vatSettings, setVatSettings] = useState<VatSettings[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [rewards, setRewards] = useState<RewardsBalance[]>([]);
@@ -489,6 +562,12 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
   // Built once at mount (empty deps — never re-reads the clock), so the
   // forecast stays deterministic for the lifetime of the session.
   const asOf = useMemo(() => new Date().toISOString().slice(0, 10), []);
+  /* The read model: a confirmed pair makes both legs "Eigen overboeking" for
+   * every spend aggregation downstream, because MOVED_CATEGORIES already
+   * excludes that one category. Derived on read and NEVER persisted — a
+   * rejected pair has to restore exactly what each row said before (a manual
+   * category, a rule's result), which a stored rewrite could not do. */
+  const ledgerTxs = useMemo(() => applyTransferDecisions(txs, transfers), [txs, transfers]);
   const [fEntity, setFEntity] = useState("");
   const [fAccount, setFAccount] = useState("");
   const [fSearch, setFSearch] = useState("");
@@ -523,8 +602,6 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
     setScope(next);
   }
 
-  const [ruleMatch, setRuleMatch] = useState("");
-  const [ruleCategory, setRuleCategory] = useState("");
   // Alert buffer (cents): warn when the forecast dips below this, so shortfalls
   // surface early instead of only at €0. Persisted as a local preference.
   const [bufferCents, setBufferCentsState] = useState<number>(() => getBufferCents());
@@ -598,6 +675,7 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
         loadedAccounts,
         loadedTxs,
         loadedRules,
+        loadedTransfers,
         loadedFlows,
         loadedVat,
         loadedInvoices,
@@ -607,10 +685,17 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
         loadedFxHistory,
         loadedPendingInvoices,
         loadedPendingNotices,
+        loadedBills,
+        loadedOccurrences,
+        loadedDecisions,
+        loadedValuations,
+        loadedDocuments,
+        loadedImportSessions,
       ] = await Promise.all([
         storage.getAccounts(),
         storage.getTxs(),
         storage.getRules(),
+        storage.getTransfers(),
         storage.getScheduledFlows(),
         storage.getVatSettings(),
         storage.getInvoices(),
@@ -620,11 +705,49 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
         storage.getFxHistory(),
         storage.getPendingInvoices(),
         storage.getPendingNotices(),
+        storage.getBills(),
+        storage.getBillOccurrences(),
+        storage.getBillDecisions(),
+        storage.getValuations(),
+        storage.getDocuments(),
+        storage.getImportSessions(),
       ]);
       setAccounts(loadedAccounts);
       setTxs(loadedTxs);
-      setRules(loadedRules);
+      // Rows are parsed and upgraded once, at the vault boundary. A row that
+      // cannot be used is counted in one warning, never dropped silently — and
+      // never allowed to block the rest of the vault from loading.
+      const storedRules = upgradeRules(loadedRules);
+      if (storedRules.problems.length > 0) {
+        console.warn(
+          `[regels] ${storedRules.problems.length} stored rule row(s) could not be read.`,
+        );
+      }
+      setRules(storedRules.rules);
+      setTransfers(loadedTransfers);
       setScheduledFlows(loadedFlows);
+      // Lazy materialization + matching, one vault write: the first unlock
+      // after a bill was added (or a schedule edited) fills the 90-day horizon;
+      // the exact matcher tier then writes the allocations it is sure of. A
+      // second unlock adds nothing and writes nothing.
+      const generated = generateBillOccurrences(loadedBills, loadedOccurrences, asOf);
+      const matched = runBillMatcher({
+        bills: loadedBills,
+        occurrences: generated.occurrences,
+        decisions: loadedDecisions,
+        txs: loadedTxs,
+        accounts: loadedAccounts,
+        asOf,
+      });
+      setBills(matched.bills);
+      setBillOccurrences(matched.occurrences);
+      setBillDecisions(matched.decisions);
+      setValuations(loadedValuations);
+      setDocuments(loadedDocuments);
+      setImportSessions(loadedImportSessions);
+      if (generated.added > 0 || matched.changed) {
+        await storage.putBillPlan(matched.bills, matched.occurrences, matched.decisions);
+      }
       setVatSettings(loadedVat);
       setInvoices(loadedInvoices);
       setRewards(loadedRewards);
@@ -650,7 +773,10 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
         .then(setFxHistoryState)
         .catch(() => {});
     })();
-  }, [gate]);
+    // `asOf` is mount-stable (useMemo above), so it cannot retrigger the load;
+    // it is listed because the lazy bill materialization needs the same day the
+    // rest of the screen renders.
+  }, [gate, asOf]);
 
   /* Which foreign currencies the ledger holds, and how far back each one
    * reaches. Connecting a bank mid-session adds pockets AFTER the unlock
@@ -955,7 +1081,17 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
     setAccounts([]);
     setTxs([]);
     setRules([]);
+    setTransfers([]);
+    setTransferLinksDropped(null);
     setScheduledFlows([]);
+    setBills([]);
+    setBillOccurrences([]);
+    setBillDecisions(EMPTY_BILL_DECISIONS);
+    setValuations([]);
+    setDocuments([]);
+    setDocumentNotice(null);
+    setImportSessions([]);
+    setImportNotice(null);
     setVatSettings([]);
     setInvoices([]);
     setRewards([]);
@@ -974,6 +1110,41 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
   async function saveRules(next: Rule[]) {
     setRules(next);
     await storage.putRules(next);
+  }
+
+  /* Transfer decisions are UI-owned as a whole list too (replace-all), and the
+   * core mutators keep one row per pair id — so this is the only write path.
+   * Projected rows are NEVER written: `applyTransferDecisions` is derived on
+   * read, or rejecting a pair could not restore what a row said before. */
+  async function saveTransfers(next: TransferPair[]) {
+    setTransfers(next);
+    await storage.putTransfers(next);
+  }
+
+  /* Promote the unambiguous exact two-leg proofs into stored pairs, so the
+   * owner is only ever asked about a pair the ledger does not already prove.
+   * Idempotent (the core contract): a second run over its own output adds
+   * nothing, which is what lets this depend on `transfers` without looping.
+   * The write is replace-all like saveRules — `pairs` is the full list. */
+  useEffect(() => {
+    if (gate !== "ready") return;
+    const auto = autoConfirmTransfers({ txs, accounts, pairs: transfers, fxHistory, asOf });
+    if (auto.added.length === 0) return;
+    // Background write: a lock mid-flight closes the vault, and the next unlock
+    // re-runs this same deterministic promotion, so there is nothing to report.
+    void saveTransfers(auto.pairs).catch(() => {});
+    // saveTransfers is read, not depended on: its identity changes per render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gate, txs, accounts, transfers, fxHistory, asOf]);
+
+  /** Confirm or reject one derived suggestion. Both write the same pair row
+   *  (one pair, one state) and persist the whole decision list. Rejection is
+   *  memory, not deletion: the matcher must never propose those two legs again. */
+  function handleConfirmTransfer(pair: TransferPair) {
+    void saveTransfers(upsertTransferPair(transfers, confirmTransfer(pair, asOf)));
+  }
+  function handleRejectTransfer(pair: TransferPair) {
+    void saveTransfers(upsertTransferPair(transfers, rejectTransfer(pair, asOf)));
   }
 
   // Per-BV VAT settings are UI-owned as a whole list (replace-all persistence),
@@ -1041,25 +1212,50 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
       freshAccounts,
       freshTxs,
       freshRules,
+      freshTransfers,
       freshFlows,
       freshVat,
       freshInvoices,
       freshRewards,
       freshProfiles,
+      freshBills,
+      freshOccurrences,
+      freshDocuments,
+      freshValuations,
+      freshImportSessions,
     ] = await Promise.all([
       storage.getAccounts(),
       storage.getTxs(),
       storage.getRules(),
+      storage.getTransfers(),
       storage.getScheduledFlows(),
       storage.getVatSettings(),
       storage.getInvoices(),
       storage.getRewards(),
       storage.getEntityProfiles(),
+      storage.getBills(),
+      storage.getBillOccurrences(),
+      storage.getDocuments(),
+      storage.getValuations(),
+      storage.getImportSessions(),
     ]);
+    // A restored vault carries its statement metadata AND its valuations; the
+    // document BYTES came back in the document store, so the card can show
+    // them immediately instead of after a reload.
+    setDocuments(freshDocuments);
+    setValuations(freshValuations);
+    setImportSessions(freshImportSessions);
     setAccounts(freshAccounts);
     setTxs(freshTxs);
-    setRules(freshRules);
+    const storedRules = upgradeRules(freshRules);
+    if (storedRules.problems.length > 0) {
+      console.warn(`[regels] ${storedRules.problems.length} stored rule row(s) could not be read.`);
+    }
+    setRules(storedRules.rules);
+    setTransfers(freshTransfers);
     setScheduledFlows(freshFlows);
+    setBills(freshBills);
+    setBillOccurrences(freshOccurrences);
     setVatSettings(freshVat);
     setInvoices(freshInvoices);
     setRewards(freshRewards);
@@ -1136,7 +1332,7 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
     if (view !== "overview" || profileRead === "loading" || profileRead === "error") return null;
     const profile = profileRead.kind === "ok" ? profileRead.store.current : emptyProfile();
     const computed = computeRoom({
-      txs,
+      txs: ledgerTxs,
       accounts,
       profiles: entityProfiles,
       rules,
@@ -1149,7 +1345,7 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
   }, [
     view,
     profileRead,
-    txs,
+    ledgerTxs,
     accounts,
     entityProfiles,
     rules,
@@ -1167,7 +1363,7 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
     if (view !== "about-you")
       return capacityFor(profile, { kind: "none", reason: "no-data" }, asOf);
     const computed = computeRoom({
-      txs,
+      txs: ledgerTxs,
       accounts,
       profiles: entityProfiles,
       rules,
@@ -1180,7 +1376,7 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
   }, [
     view,
     profileRead,
-    txs,
+    ledgerTxs,
     accounts,
     entityProfiles,
     rules,
@@ -1195,6 +1391,15 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
   // filed under the wrong BV); Rekeningen narrows the banner to the scope.
   const duplicateGroups = useMemo(() => findDuplicateAccounts(accounts), [accounts]);
 
+  /* Pairs the matcher derives on read. The input is the UNSCOPED ledger on
+   * purpose: a transfer between a personal and a business account is one pair,
+   * and scoping the matcher would give each half only one leg of it. Derived,
+   * never stored — a new import can invalidate a pending suggestion, so
+   * persisting one would leave a stale claim in the vault. */
+  const transferSuggestions = useMemo(
+    () => suggestTransfers({ txs, accounts, pairs: transfers, fxHistory, asOf }),
+    [txs, accounts, transfers, fxHistory, asOf],
+  );
   // Self-heal the Transacties entity filter and the top-bar entity scope: if
   // the selected entity no longer exists (e.g. its last account was
   // reassigned away in Rekeningen), reset to "Alle" so neither control keeps
@@ -1220,14 +1425,39 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
     [scopeAccounts, entityScope],
   );
   // A transaction follows its account's classification — it is never classified
-  // on its own, so the two can't disagree.
-  const scopedTxs = useMemo(() => txsForAccounts(scopedAccounts, txs), [txs, scopedAccounts]);
+  // on its own, so the two can't disagree. Built from the transfer-projected
+  // ledger: a confirmed pair must stop counting as spending everywhere that
+  // reads these rows (Overzicht, Top-uitgaven, Statistiek, Transacties itself),
+  // and deriving it once here is what keeps every one of them in step.
+  const scopedTxs = useMemo(
+    () => txsForAccounts(scopedAccounts, ledgerTxs),
+    [ledgerTxs, scopedAccounts],
+  );
+
+  /* Only suggestions whose BOTH legs are in the current half reach the view.
+   * Naming an account from the other half would cross the line the scope switch
+   * draws; an unambiguous exact cross-half pair is auto-confirmed anyway, so
+   * what stays hidden is only the ambiguous cross-half case — a gap, not a
+   * leak. */
+  const scopedTransferSuggestions = useMemo(() => {
+    const visible = new Set(scopedTxs.map((t) => t.id));
+    return transferSuggestions.filter(
+      (s) => visible.has(s.pair.outflowTxId) && visible.has(s.pair.inflowTxId),
+    );
+  }, [transferSuggestions, scopedTxs]);
 
   // A stored balance is only "as of" its balanceDate (no date => already
   // current); roll every account forward to `asOf` with its later txs so
   // Overzicht/Forecast always display/sum the current position. Rekeningen
   // still gets the RAW scopedAccounts below — it edits stored values, not
   // this derived view.
+  // Valuations follow the same entity scope as the accounts they belong to: a
+  // valuation for an account outside the scope is not shown (and not offered).
+  const scopedValuations = useMemo(() => {
+    const keys = new Set(scopedAccounts.map((a) => a.key));
+    return valuations.filter((v) => keys.has(v.accountKey));
+  }, [valuations, scopedAccounts]);
+
   const currentScopedAccounts = useMemo(
     () => withCurrentBalances(scopedAccounts, scopedTxs, asOf),
     [scopedAccounts, scopedTxs, asOf],
@@ -1268,6 +1498,30 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
     const merged = mergeScheduledFlows(scheduledFlows, scopedScheduledFlows, next, invoiceFlows);
     setScheduledFlows(merged);
     await storage.putScheduledFlows(merged);
+  }
+
+  // Bills: the view hands back the whole series list. A schedule edit rebuilds
+  // only that series' future rows (paid and closed rows are history and are
+  // never touched); adding a series or resuming one materializes what it is
+  // missing. The pair is saved in ONE vault write.
+  async function saveBillPlan(
+    nextBills: Bill[],
+    nextOccurrences: BillOccurrence[],
+    nextDecisions: BillDecisions = billDecisions,
+  ) {
+    let occurrences = nextOccurrences;
+    for (const next of nextBills) {
+      const previous = bills.find((b) => b.id === next.id);
+      if (previous != null && scheduleChanged(previous, next)) {
+        occurrences = regenerateBillOccurrences(nextBills, occurrences, next.id, asOf).occurrences;
+      }
+    }
+    occurrences = generateBillOccurrences(nextBills, occurrences, asOf).occurrences;
+    setBills(nextBills);
+    setBillOccurrences(occurrences);
+    setBillDecisions(nextDecisions);
+    // ONE save: a decision and the occurrence rows it closed cannot land apart.
+    await storage.putBillPlan(nextBills, occurrences, nextDecisions);
   }
 
   // NOTE: the per-tab chat context (agent/tabContext.ts) is not built here any
@@ -1313,6 +1567,19 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
       const reconciled = reconcileInvoices(curInvoices, freshTxs);
       if (JSON.stringify(reconciled) !== JSON.stringify(curInvoices))
         await saveInvoices(reconciled);
+      // A new statement can contain the payment a bill was waiting for: run the
+      // matcher over the fresh ledger and persist its decisions together with
+      // the rows they close (one save; nothing changes when nothing matched).
+      const matched = runBillMatcher({
+        bills,
+        occurrences: billOccurrences,
+        decisions: billDecisions,
+        txs: freshTxs,
+        accounts: freshAccounts,
+        asOf,
+      });
+      if (matched.changed)
+        await saveBillPlan(matched.bills, matched.occurrences, matched.decisions);
       // Nothing read = a file we could not use (the wizard shows
       // its own message; the page banner is not on screen there).
       return result.txs.length === 0
@@ -1407,6 +1674,276 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
     if (changed) await storage.putAccounts([changed]);
   }
 
+  // WS3.1: one half of the opening anchor. A liability owner types the amount
+  // OWED as a positive; it is stored as a negative like a credit-card balance.
+  async function handleOpeningCommit(
+    key: string,
+    field: "openingBalanceCents" | "openingDate",
+    value: string,
+  ) {
+    const account = accounts.find((a) => a.key === key);
+    if (account == null) return;
+    const patch: Partial<Account> = {};
+    if (field === "openingBalanceCents") {
+      const trimmed = value.trim().replace(",", ".");
+      const raw = trimmed === "" ? null : Number(trimmed);
+      if (raw !== null && !Number.isFinite(raw)) return;
+      patch.openingBalanceCents =
+        raw === null
+          ? undefined
+          : Math.round((accountIsLiability(account) ? -Math.abs(raw) : raw) * 100);
+    } else {
+      patch.openingDate = value.trim() === "" ? undefined : value;
+    }
+    const next = accounts.map((a) => (a.key === key ? { ...a, ...patch } : a));
+    setAccounts(next);
+    const changed = next.find((a) => a.key === key);
+    if (changed) await storage.putAccounts([changed]);
+  }
+
+  // WS3.1: add or replace the absolute valuation on one date. Identity is
+  // account + date, so typing the same day twice updates instead of doubling.
+  async function handleValuationCommit(accountKey: string, date: string, amountCents: number) {
+    const account = accounts.find((a) => a.key === accountKey);
+    if (account == null) return;
+    const id = valuationId(accountKey, date);
+    const entry = normalizeValuation({
+      id,
+      accountKey,
+      date,
+      amountCents,
+      currency: account.currency || "EUR",
+      kind: "reconciliation",
+      source: "manual",
+      createdAt: asOf,
+    });
+    const next = [...valuations.filter((v) => v.id !== id), entry].sort((a, b) =>
+      a.date.localeCompare(b.date),
+    );
+    setValuations(next);
+    await storage.putValuations(next);
+  }
+
+  async function handleValuationRemove(id: string) {
+    const next = valuations.filter((v) => v.id !== id);
+    setValuations(next);
+    await storage.putValuations(next);
+  }
+
+  /** SHA-256 of the bytes: the document's identity, so the same file uploaded
+   *  twice is ONE document. */
+  async function sha256Hex(bytes: Uint8Array): Promise<string> {
+    const digest = await globalThis.crypto.subtle.digest("SHA-256", bytes as BufferSource);
+    return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
+  }
+
+  async function saveDocuments(next: VaultDocument[]) {
+    setDocuments(next);
+    await storage.putDocuments(next);
+  }
+
+  // WS3.4/WS3.5: gate → hash → dedupe → seal the bytes into the document store
+  // → detect the metadata → suggest an account. The bytes go FIRST, so metadata
+  // never points at something the vault does not hold.
+  async function handleDocumentUpload(file: File) {
+    setBusy(true);
+    setDocumentNotice(null);
+    try {
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      const check = checkDocumentUpload({
+        filename: file.name,
+        mime: file.type,
+        byteSize: bytes.byteLength,
+      });
+      if (!check.ok) {
+        setDocumentNotice({ kind: "refused", filename: file.name, problem: check.problem });
+        return;
+      }
+      const sha256 = await sha256Hex(bytes);
+      if (findDocumentBySha(documents, sha256) != null) {
+        setDocumentNotice({ kind: "duplicate", filename: file.name });
+        return;
+      }
+      await storage.putDocumentBytes(sha256, bytes);
+      // A CSV is text we can read, so the detector's content tier works there
+      // exactly as Sure's does for an extracted PDF page.
+      const text =
+        check.extension === ".csv" || file.type.startsWith("text/")
+          ? new TextDecoder().decode(bytes.slice(0, 256 * 1024))
+          : null;
+      const detected = detectStatementMetadata({ filename: file.name, mime: file.type, text });
+      const match = matchStatementAccount(
+        {
+          institutionHint: detected.institutionHint,
+          accountNameHint: detected.accountNameHint,
+          accountLast4: detected.accountLast4,
+          currency: detected.currency,
+        },
+        accounts,
+      );
+      const doc: VaultDocument = {
+        id: sha256,
+        sha256,
+        filename: file.name,
+        mime: file.type || "application/octet-stream",
+        byteSize: bytes.byteLength,
+        kind: "statement",
+        source: "manual-upload",
+        uploadedAt: asOf,
+        periodFrom: detected.periodFrom,
+        periodTo: detected.periodTo,
+        currency: detected.currency ?? "EUR",
+        accountKey: null,
+        suggestedAccountKey: match.status === "matched" ? match.accountKey : null,
+        matchConfidence: match.status === "matched" ? match.confidence : null,
+        accountLast4: detected.accountLast4,
+        institutionHint: detected.institutionHint,
+        accountNameHint: detected.accountNameHint,
+        openingBalanceCents: null,
+        closingBalanceCents: null,
+        reviewStatus: "unmatched",
+        metadataSources: detected.metadataSources,
+      };
+      await saveDocuments(upsertDocument(documents, doc));
+      setDocumentNotice({ kind: "stored", filename: file.name });
+    } catch (err) {
+      setProblems([
+        { kind: "import-failed", detail: err instanceof Error ? err.message : String(err) },
+      ]);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleDocumentLink(id: string, accountKey: string) {
+    await saveDocuments(
+      documents.map((doc) =>
+        doc.id === id
+          ? {
+              ...doc,
+              accountKey,
+              reviewStatus: "linked" as const,
+              suggestedAccountKey: null,
+              matchConfidence: 1,
+            }
+          : doc,
+      ),
+    );
+  }
+
+  async function handleDocumentReject(id: string) {
+    await saveDocuments(
+      documents.map((doc) =>
+        doc.id === id ? { ...doc, accountKey: null, reviewStatus: "rejected" as const } : doc,
+      ),
+    );
+  }
+
+  // Removing a document removes BOTH halves: the sealed bytes and the metadata.
+  async function handleDocumentRemove(id: string) {
+    const doc = documents.find((d) => d.id === id);
+    if (doc == null) return;
+    await storage.deleteDocumentBytes(doc.sha256);
+    await saveDocuments(removeDocument(documents, id));
+    setDocumentNotice(null);
+  }
+
+  async function handleDocumentEraseAll() {
+    const erased = await storage.eraseDocuments();
+    setDocuments([]);
+    setDocumentNotice(null);
+    setDocumentErased(erased);
+  }
+
+  // WS3.6: confirm the dry run, write exactly its new rows, and remember the
+  // session so a revert is exact. The source file is retained in the #293
+  // document store under its SHA-256.
+  async function handleGenericImport(request: GenericImportRequest) {
+    setBusy(true);
+    setImportNotice(null);
+    try {
+      const sha256 = await sha256Hex(request.bytes);
+      const sessionId = `import-${sha256.slice(0, 12)}-${importSessions.length + 1}`;
+      const result = applyGenericImport({
+        existingTxs: txs,
+        plan: request.plan,
+        id: sessionId,
+        filename: request.filename,
+        asOf,
+        documentId: sha256,
+      });
+      const added = new Set(result.importedIds);
+      const newRows = result.txs.filter((tx) => added.has(tx.id));
+      if (newRows.length > 0) await storage.putTxs(newRows);
+      setTxs(result.txs);
+      const nextSessions = [...importSessions, result.session];
+      setImportSessions(nextSessions);
+      await storage.putImportSessions(nextSessions);
+
+      const dates = request.plan.parsed.map((row) => row.date).sort();
+      const mime =
+        request.format === "generic-xlsx"
+          ? "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+          : "text/csv";
+      const document: VaultDocument = {
+        id: sha256,
+        sha256,
+        filename: request.filename,
+        mime,
+        byteSize: request.bytes.byteLength,
+        kind: "statement",
+        source: "import",
+        uploadedAt: asOf,
+        periodFrom: dates[0] ?? null,
+        periodTo: dates[dates.length - 1] ?? null,
+        currency: "EUR",
+        accountKey: request.plan.accountKey,
+        suggestedAccountKey: null,
+        matchConfidence: 1,
+        accountLast4: null,
+        institutionHint: null,
+        accountNameHint: null,
+        openingBalanceCents: null,
+        closingBalanceCents: null,
+        reviewStatus: "linked",
+        metadataSources: ["import"],
+        txIds: result.importedIds,
+        importId: sessionId,
+      };
+      await storage.putDocumentBytes(sha256, request.bytes);
+      const nextDocuments = upsertDocument(documents, document);
+      setDocuments(nextDocuments);
+      await storage.putDocuments(nextDocuments);
+      setImportNotice(importSessionCopy[locale].imported(result.importedIds.length));
+    } catch (err) {
+      setProblems([
+        { kind: "import-failed", detail: err instanceof Error ? err.message : String(err) },
+      ]);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // Revert ONE import: exactly the rows its session recorded. The retained
+  // source document stays (it is the evidence) but is no longer linked.
+  async function handleRevertImport(sessionId: string) {
+    const reverted = revertImport({ txs, sessions: importSessions, sessionId });
+    if (reverted.session == null) return;
+    if (reverted.removedIds.length > 0) await storage.deleteTxs(reverted.removedIds);
+    setTxs(reverted.txs);
+    const nextSessions = importSessions.filter((session) => session.id !== sessionId);
+    setImportSessions(nextSessions);
+    await storage.putImportSessions(nextSessions);
+    if (reverted.documentId != null) {
+      const nextDocuments = documents.map((doc) =>
+        doc.id === reverted.documentId ? { ...doc, importId: undefined, txIds: [] } : doc,
+      );
+      setDocuments(nextDocuments);
+      await storage.putDocuments(nextDocuments);
+    }
+    setImportNotice(importSessionCopy[locale].reverted(reverted.removedIds.length));
+  }
+
   // Manually set/override an account's annual interest rate (%) for the
   // Optimisatie tab. Accepts a Dutch comma or dot (and a stray "%"); blank
   // clears the override back to auto (detected/assumed). Same persist pattern.
@@ -1433,6 +1970,23 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
       await storage.deleteAccount(key);
       setTxs(txs.filter((t) => t.accountKey !== key));
       setAccounts(accounts.filter((a) => a.key !== key));
+      // Every tx of that account is gone. A pair pointing at one would link to
+      // a row nothing can render, so it is explicitly dropped — and the count
+      // is reported on Rekeningen, never swallowed.
+      const reconciled = reconcileTransfers(
+        transfers,
+        new Map<string, string | null>(ids.map((id) => [id, null])),
+      );
+      if (JSON.stringify(reconciled.pairs) !== JSON.stringify(transfers))
+        await saveTransfers(reconciled.pairs);
+      setTransferLinksDropped(reconciled.dropped.length > 0 ? reconciled.dropped.length : null);
+      // A valuation for a deleted account would be an orphan: drop it in the
+      // same pass, and only write when something actually went.
+      const droppedValuations = dropAccountValuations(valuations, key);
+      if (droppedValuations.dropped > 0) {
+        setValuations(droppedValuations.valuations);
+        await storage.putValuations(droppedValuations.valuations);
+      }
     } finally {
       setBusy(false);
     }
@@ -1455,6 +2009,21 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
       await storage.deleteAccount(duplicateKey);
       setTxs(merged.txs);
       setAccounts(merged.accounts);
+      // The merge re-keys tx ids and collapses overlapping rows. Reconcile the
+      // stored pairs against that remap: a surviving pair follows its legs, a
+      // pair whose leg was absorbed is dropped and the count is reported.
+      const reconciled = reconcileTransfers(transfers, merged.txIdRemap);
+      if (JSON.stringify(reconciled.pairs) !== JSON.stringify(transfers))
+        await saveTransfers(reconciled.pairs);
+      setTransferLinksDropped(reconciled.dropped.length > 0 ? reconciled.dropped.length : null);
+      // Re-key the duplicate's valuations to the survivor; a same-day clash
+      // keeps the survivor's row and drops the duplicate's, so no orphan or
+      // double absolute amount survives the merge.
+      const mergedValuations = mergeValuations(valuations, survivorKey, duplicateKey);
+      if (mergedValuations.remapped > 0 || mergedValuations.dropped > 0) {
+        setValuations(mergedValuations.valuations);
+        await storage.putValuations(mergedValuations.valuations);
+      }
     } finally {
       setBusy(false);
     }
@@ -1738,6 +2307,7 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
 
           {view === "overview" && (
             <Overzicht
+              storage={storage}
               accounts={currentScopedAccounts}
               txs={scopedTxs}
               rules={rules}
@@ -1745,6 +2315,9 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
               asOf={asOf}
               bufferCents={bufferCents}
               scheduledFlows={scopedScheduledFlows}
+              bills={bills}
+              billOccurrences={billOccurrences}
+              billDecisions={billDecisions}
               /* LETTERLIJK DEZELFDE UITDRUKKING als bij <Belasting> hieronder,
                  en dat is de bedoeling: de btw-kaart op het overzicht en het
                  scherm Belasting moeten over dezelfde ondernemingen gaan. Wie
@@ -1811,6 +2384,10 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
               scopedTxs={scopedTxs}
               rules={rules}
               own={own}
+              transfers={transfers}
+              suggestions={scopedTransferSuggestions}
+              onConfirmTransfer={handleConfirmTransfer}
+              onRejectTransfer={handleRejectTransfer}
               fxHistory={fxHistory}
               mode={fxConversionMode}
               entityOptions={entityOptions}
@@ -1841,11 +2418,10 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
           {view === "transactions" && (
             <Regels
               rules={rules}
+              txs={txs}
+              accounts={accounts}
+              own={own}
               busy={busy}
-              ruleMatch={ruleMatch}
-              onRuleMatchChange={setRuleMatch}
-              ruleCategory={ruleCategory}
-              onRuleCategoryChange={setRuleCategory}
               onSaveRules={saveRules}
             />
           )}
@@ -1855,6 +2431,7 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
               accounts={scopedAccounts}
               txs={scopedTxs}
               busy={busy}
+              transferLinksDropped={transferLinksDropped ?? undefined}
               onEntityChange={handleEntityChange}
               onAccountCommit={handleAccountCommit}
               onAccountFieldChange={handleAccountFieldChange}
@@ -1866,6 +2443,11 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
               statedCredit={statedOf(profileRead, "statedCards")}
               statedDebit={statedOf(profileRead, "statedDebitCards")}
               onRefreshBank={() => void handleRefreshBank()}
+              valuations={scopedValuations}
+              asOf={asOf}
+              onOpeningCommit={handleOpeningCommit}
+              onValuationCommit={handleValuationCommit}
+              onValuationRemove={handleValuationRemove}
               onSelectAccount={(key) => {
                 // Show just this account's transactions — clear the other
                 // filters so the list isn't silently narrowed by a stale one.
@@ -1890,6 +2472,9 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
               scheduledFlows={scopedScheduledFlows}
               fxHistory={fxHistory}
               mode={fxConversionMode}
+              bills={bills}
+              billOccurrences={billOccurrences}
+              billDecisions={billDecisions}
             />
           )}
 
@@ -1910,6 +2495,19 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
           {/* Scoped like every other view: standing in Zakelijk and being offered a
               conversion out of a personal account is a leak across the very line
               the switch exists to draw. */}
+          {view === "bills" && !isArchivedView("bills") && (
+            <Bills
+              bills={bills}
+              occurrences={billOccurrences}
+              accounts={scopedAccounts}
+              txs={scopedTxs}
+              decisions={billDecisions}
+              asOf={asOf}
+              busy={busy}
+              onSavePlan={saveBillPlan}
+            />
+          )}
+
           {view === "valuta" && !isArchivedView("valuta") && <Valuta accounts={scopedAccounts} />}
 
           {view === "belasting" && !isArchivedView("belasting") && (
@@ -1977,7 +2575,12 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
           )}
 
           {view === "backup" && (
-            <Backup storage={storage} asOf={asOf} onRestored={handleRestored} />
+            <Backup
+              storage={storage}
+              asOf={asOf}
+              documentCount={documents.length}
+              onRestored={handleRestored}
+            />
           )}
 
           {view === "plan" && (
@@ -1991,7 +2594,7 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
               }
               storage={storage}
               accounts={accounts}
-              txs={txs}
+              txs={ledgerTxs}
               entityProfiles={entityProfiles}
               rules={rules}
               own={ownWithNames}
@@ -2002,6 +2605,7 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
               mode={fxConversionMode}
               fxHistory={fxHistory}
               vatSettings={vatSettings}
+              valuations={valuations}
               asOf={asOf}
               onSaveProfile={saveProfile}
               onNavigate={setView}
@@ -2056,6 +2660,21 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
               storage={storage}
               asOf={asOf}
               onRestored={handleRestored}
+              documents={documents}
+              documentNotice={documentNotice}
+              documentErased={documentErased}
+              accounts={accounts}
+              txs={txs}
+              valuations={valuations}
+              onDocumentUpload={(file) => void handleDocumentUpload(file)}
+              onDocumentLink={(id, key) => void handleDocumentLink(id, key)}
+              onDocumentReject={(id) => void handleDocumentReject(id)}
+              onDocumentRemove={(id) => void handleDocumentRemove(id)}
+              onDocumentEraseAll={() => void handleDocumentEraseAll()}
+              importSessions={importSessions}
+              importNotice={importNotice}
+              onGenericImport={(request) => void handleGenericImport(request)}
+              onGenericRevert={(id) => void handleRevertImport(id)}
             />
           )}
         </main>

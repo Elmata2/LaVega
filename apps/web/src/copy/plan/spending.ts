@@ -26,6 +26,9 @@ export type SpendingCopy = SectionCopy<
     trend: string;
     limit: string;
     percentile: string;
+    budget: string;
+    carriedIn: string;
+    remaining: string;
   };
   /** `category` arrives already translated by the caller. */
   rowLine: (category: string, row: SpendHistoryRow, fmt: PlanFmt) => string;
@@ -33,6 +36,10 @@ export type SpendingCopy = SectionCopy<
   percentileLine: (ratio: number, fmt: PlanFmt) => string;
   percentileReason: Record<NonNullable<SpendHistoryRow["percentileReason"]>, string>;
   limitLine: (category: string, limit: string, months: number) => string;
+  /** One line naming the month the envelope belongs to and its surplus. */
+  budgetLine: (month: string, budgeted: string, carriedIn: string) => string;
+  /** The surplus one category left for this month. */
+  carryLine: (category: string, cents: string) => string;
   /** Shown while there are too few months for a comparison. */
   needsSixMonths: string;
   /** Outside figures render only from a verified public fact. */
@@ -55,6 +62,9 @@ const nl: SpendingCopy = {
     trend: "Verloop per maand",
     limit: "Jouw grens",
     percentile: "Plaats binnen je eigen maanden",
+    budget: "Budget",
+    carriedIn: "Overgedragen",
+    remaining: "Resterend",
   },
   rowLine: (category, row, fmt) =>
     row.median12Cents === null
@@ -74,6 +84,9 @@ const nl: SpendingCopy = {
   },
   limitLine: (category, limit, months) =>
     `Bij ${category} lag je uitgave ${months} maand${months === 1 ? "" : "en"} achter elkaar boven je eigen grens van ${limit}.`,
+  budgetLine: (month, budgeted, carriedIn) =>
+    `Budget voor ${month}: ${budgeted}, waarvan ${carriedIn} overschot uit de maand ervoor.`,
+  carryLine: (category, cents) => `Bij ${category} ging ${cents} overschot mee naar deze maand.`,
   needsSixMonths: `Voor een vergelijking met je eigen geschiedenis zijn ${PLAN_NUMBERS.spendingMonths} volle maanden nodig. Tot dan staan hier alleen de maandtotalen.`,
   facts: { referenceBudget: (value, source) => `Referentiebudget: ${value} (${source})` },
   headline: (f, fmt) => {
@@ -147,6 +160,9 @@ const en: SpendingCopy = {
     trend: "Month by month",
     limit: "Your limit",
     percentile: "Position within your own months",
+    budget: "Budget",
+    carriedIn: "Carried in",
+    remaining: "Remaining",
   },
   rowLine: (category, row, fmt) =>
     row.median12Cents === null
@@ -165,6 +181,9 @@ const en: SpendingCopy = {
   },
   limitLine: (category, limit, months) =>
     `In ${category}, spending was above your own limit of ${limit} for ${months} month${months === 1 ? "" : "s"} in a row.`,
+  budgetLine: (month, budgeted, carriedIn) =>
+    `Budget for ${month}: ${budgeted}, of which ${carriedIn} is surplus from the month before.`,
+  carryLine: (category, cents) => `In ${category}, ${cents} of surplus moved into this month.`,
   needsSixMonths: `A comparison with your own history needs ${PLAN_NUMBERS.spendingMonths} full months. Until then only the monthly totals are shown.`,
   facts: { referenceBudget: (value, source) => `Reference budget: ${value} (${source})` },
   headline: (f, fmt) => {

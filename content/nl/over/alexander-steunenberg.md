@@ -33,5 +33,3 @@ Bij elke pagina staat wie hem heeft geschreven, wanneer hij voor het laatst is b
 - Meer over LaVega: [lavega.dev](https://www.lavega.dev/)
 
 Lees ook [Wat is een persoonlijke CFO?](/vragen/wat-is-een-persoonlijke-cfo).
-
-Dit is informatie, geen advies.

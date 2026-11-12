@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 import { renderToStaticMarkup } from "react-dom/server";
 import { expect, test } from "vitest";
-import type { Account } from "@lavega/core";
-import { forecastCashflow } from "@lavega/core";
+import type { Account, Bill } from "@lavega/core";
+import { forecastCashflow, makeBillOccurrence } from "@lavega/core";
 import Forecast from "./Forecast";
 
 /* App review 2, 20 August: "remove the Forecast explainer about the
@@ -73,4 +73,61 @@ test("a HUF balance shows its converted euro value in convert mode, and no posit
   );
   expect(separateHtml).toContain("Positie onbekend"); // excluded, not a raw or zero balance
   expect(separateHtml).not.toContain("€750");
+});
+
+test("a declared bill with no history is projected as a committed driver with its date and confidence", () => {
+  const bill: Bill = {
+    id: "zorg",
+    name: "Zorgverzekering",
+    type: "bill",
+    status: "active",
+    direction: "out",
+    amountCents: 14_250,
+    amountStrategy: "fixed",
+    currency: "EUR",
+    rules: [{ frequency: "monthly", interval: 1, dayOfMonth: 5 }],
+    anchorDate: "2026-09-05",
+    weekendAdjust: "none",
+    endMode: "never",
+    tags: [],
+    accountKey: "B1",
+    merchant: "Delta Zorgverzekering",
+  };
+  const accounts: Account[] = [
+    {
+      key: "B1",
+      iban: "B1",
+      name: "Betaalrekening",
+      bank: "ING",
+      entity: "Prive",
+      currency: "EUR",
+      balance: 5_000,
+    },
+  ];
+  const occurrences = [
+    makeBillOccurrence(bill, { originalDueOn: "2026-09-05", dueOn: "2026-09-05" }),
+    makeBillOccurrence(bill, { originalDueOn: "2026-10-05", dueOn: "2026-10-05" }),
+  ];
+  const html = renderToStaticMarkup(
+    <Forecast
+      txs={[]}
+      accounts={accounts}
+      entityScope=""
+      asOf="2026-09-01"
+      bufferCents={0}
+      scheduledFlows={[]}
+      fxHistory={{}}
+      mode="separate"
+      bills={[bill]}
+      billOccurrences={occurrences}
+      billDecisions={{ matches: [], marks: [], rejections: [], priceChanges: [] }}
+    />,
+  );
+  // The commitment driver carries the real occurrence dates, not a cadence
+  // guess, and says how observed the series is (this one has no history).
+  expect(html).toContain("Zorgverzekering");
+  expect(html).toContain("Vastgelegd:");
+  expect(html).toContain("5 sep 2026");
+  expect(html).toContain("5 okt 2026");
+  expect(html).toContain("nog niet gezien");
 });

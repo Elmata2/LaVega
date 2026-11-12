@@ -8,10 +8,12 @@ import {
   type SectorWeight,
   type SectorWeightSource,
 } from "@lavega/core";
+import { isPartnerBudgetStop } from "@lavega/adapters";
 import type {
   FundSectorProfile,
-  PriceStore,
+  PriceKey,
   SectorProfile,
+  SharedPriceStore,
   StockSectorProfile,
 } from "@lavega/adapters";
 import type { SectorProfileStore } from "./inMemorySectorProfileStore.js";
@@ -31,7 +33,19 @@ const SECTOR_DIVISION_LABEL_SET = new Set<string>(SECTOR_DIVISION_LABELS);
  *  re-fetched on this cadence. */
 export const FUND_PROFILE_REFRESH_DAYS = 90;
 
-export type SectorProfileLookup = (symbol: string) => Promise<SectorProfile | null>;
+/** A symbol the provider could not answer is not asked again for this long. */
+export const PROVIDER_RETRY_HOURS = 24;
+
+/** One read spends at most this long on provider fetches. After it, the
+ *  remaining symbols resolve from stored data only. */
+export const SECTOR_FETCH_BUDGET_MS = 8_000;
+
+/** `deadlineMs` is the read's own deadline: a provider slot after it must fail
+ *  instead of sleeping past the read's budget. */
+export type SectorProfileLookup = (
+  symbol: string,
+  options?: { deadlineMs?: number },
+) => Promise<SectorProfile | null>;
 export type SectorCorrectionLookup = (symbol: string) => Promise<string | null>;
 
 export type SectorResolutionOptions = {
@@ -76,7 +90,14 @@ export type SectorResolutionOptions = {
    *  pass on a read-only path too. Returns null when prices have never
    *  resolved a listing for this symbol, in which case every lookup stays
    *  keyed by the broker symbol, unchanged from before this option existed. */
-  resolveListing?: (symbol: string) => Promise<string | null>;
+  /** Resolves the listing a symbol's shared price series was stored under. It
+   *  gets the whole position because the series key includes its ISIN and
+   *  currency (issue #307), not just the broker's ticker. */
+  resolveListing?: (position: {
+    symbol: string;
+    isin?: string;
+    currency?: string;
+  }) => Promise<string | null>;
 };
 
 export type PortfolioSectors = {
@@ -100,11 +121,10 @@ export type PortfolioSectors = {
  *  never a provider call. Null when prices have never resolved a listing for
  *  this symbol. */
 export async function resolveSectorListing(
-  priceStore: PriceStore,
-  tenantId: string,
-  symbol: string,
+  priceStore: SharedPriceStore,
+  key: PriceKey,
 ): Promise<string | null> {
-  return (await priceStore.getCoverage(tenantId, symbol))?.listing ?? null;
+  return (await priceStore.getCoverage(key))?.listing ?? null;
 }
 
 /** Bounded fan-out to the sector-profile provider (a single upstream host,
@@ -118,26 +138,53 @@ const SECTOR_RESOLUTION_CONCURRENCY = 8;
  *  be classified two ways — they differ only in whether a missing or stale
  *  profile may be fetched. */
 export async function resolvePortfolioSectors(
-  positions: readonly { symbol: string; marketValue: number | null; description?: string }[],
+  positions: readonly {
+    symbol: string;
+    marketValue: number | null;
+    description?: string;
+    /** Carried through to the listing lookup: the shared series key holds the
+     *  ISIN and currency (issue #307). */
+    isin?: string;
+    currency?: string;
+  }[],
   options: SectorResolutionOptions,
 ): Promise<PortfolioSectors> {
   const sectorBySymbol = new Map<string, string>();
   const weightsBySymbol = new Map<string, SectorWeight[]>();
   const seen = new Set<string>();
-  const pending: { key: string; symbol: string; description?: string }[] = [];
+  const pending: {
+    key: string;
+    symbol: string;
+    description?: string;
+    isin?: string;
+    currency?: string;
+  }[] = [];
   for (const position of positions) {
     if (position.marketValue === null || position.marketValue <= 0) continue;
     const key = position.symbol.toUpperCase();
     if (seen.has(key)) continue;
     seen.add(key);
-    pending.push({ key, symbol: position.symbol, description: position.description });
+    pending.push({
+      key,
+      symbol: position.symbol,
+      description: position.description,
+      ...(position.isin ? { isin: position.isin } : {}),
+      ...(position.currency ? { currency: position.currency } : {}),
+    });
   }
   let next = 0;
+  const deadline = Date.now() + SECTOR_FETCH_BUDGET_MS;
+  const { fetchProfile: _noFetch, ...storedOnlyOptions } = options;
   await Promise.all(
     Array.from({ length: Math.min(SECTOR_RESOLUTION_CONCURRENCY, pending.length) }, async () => {
       while (next < pending.length) {
         const item = pending[next++]!;
-        const weights = await resolveWeights(item, options);
+        /* Past the budget: stored data only, no provider call. */
+        const weights = await resolveWeights(
+          item,
+          Date.now() >= deadline ? storedOnlyOptions : options,
+          deadline,
+        );
         weightsBySymbol.set(item.key, weights);
         sectorBySymbol.set(item.key, weights[0]?.sector ?? UNKNOWN_SECTOR);
       }
@@ -151,11 +198,49 @@ export async function resolvePortfolioSectors(
   };
 }
 
-function isStaleFundProfile(profile: FundSectorProfile): boolean {
+function isStaleFundProfile(profile: FundSectorProfile, now: number): boolean {
   if (profile.fetchedAt === undefined) return true;
   const fetchedAtMs = Date.parse(profile.fetchedAt);
   if (!Number.isFinite(fetchedAtMs)) return true;
-  return Date.now() - fetchedAtMs > FUND_PROFILE_REFRESH_DAYS * 24 * 60 * 60 * 1000;
+  return now - fetchedAtMs > FUND_PROFILE_REFRESH_DAYS * 24 * 60 * 60 * 1000;
+}
+
+/** The one rule that decides if a symbol needs a provider fetch. A fresh
+ *  provider profile never does. Anything else (no profile, an inferred
+ *  profile, or a provider fund older than its refresh window) does, unless
+ *  the provider already failed to answer within PROVIDER_RETRY_HOURS.
+ *  An unparseable `lastAttempt` counts as no attempt. */
+export function needsProviderFetch(
+  profile: SectorProfile | null,
+  lastAttempt: string | null,
+  now: number,
+): boolean {
+  if (
+    profile &&
+    profile.source === "provider" &&
+    !(profile.kind === "fund" && isStaleFundProfile(profile, now))
+  )
+    return false;
+  const attemptedAt = lastAttempt === null ? Number.NaN : Date.parse(lastAttempt);
+  if (!Number.isFinite(attemptedAt)) return true;
+  return now - attemptedAt >= PROVIDER_RETRY_HOURS * 60 * 60 * 1000;
+}
+
+/** Resolves to "timeout" after `ms`; the timer is cleared when `work` wins. */
+async function raceBudget<T>(work: Promise<T>, ms: number): Promise<T | "timeout"> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  /* The losing call is not awaited. Swallow its late rejection. */
+  work.catch(() => undefined);
+  try {
+    return await Promise.race([
+      work,
+      new Promise<"timeout">((resolve) => {
+        timer = setTimeout(() => resolve("timeout"), ms);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 /** Stamped only on a fund: that is the only kind sectorResolution ever
@@ -165,7 +250,7 @@ function stampFetchedAt(profile: SectorProfile): SectorProfile {
 }
 
 async function resolveWeights(
-  position: { symbol: string; description?: string },
+  position: { symbol: string; description?: string; isin?: string; currency?: string },
   {
     store,
     fetchProfile,
@@ -174,6 +259,7 @@ async function resolveWeights(
     showInferred,
     resolveListing,
   }: SectorResolutionOptions,
+  deadline: number,
 ): Promise<SectorWeight[]> {
   const { symbol } = position;
   /* The cache key for every profile read and write below. A broker symbol
@@ -181,7 +267,7 @@ async function resolveWeights(
    * or SPAC-era code) is looked up and cached under that listing instead of
    * itself, so it shares a cache entry with every other holding of the same
    * instrument. Unresolved, it falls back to the broker symbol as before. */
-  const lookupSymbol = (resolveListing ? await resolveListing(symbol) : null) ?? symbol;
+  const lookupSymbol = (resolveListing ? await resolveListing(position) : null) ?? symbol;
   /* Read the cache, and ask for the correction, before deciding anything —
    * store.get is a local/DB read, not a provider call, so this costs nothing
    * a read-only path couldn't already afford. The correction stays keyed by
@@ -190,16 +276,34 @@ async function resolveWeights(
   let profile = await store.get(lookupSymbol);
   const corrected = correction ? await correction(symbol) : null;
 
-  const fresh =
-    profile &&
-    profile.source === "provider" &&
-    !(profile.kind === "fund" && isStaleFundProfile(profile));
-  if (!fresh && fetchProfile) {
+  if (fetchProfile) {
     try {
-      const fetched = await fetchProfile(lookupSymbol);
-      if (fetched) {
-        profile = stampFetchedAt(fetched);
-        await store.set(lookupSymbol, profile);
+      const remaining = deadline - Date.now();
+      /* A fresh provider profile needs no fetch whatever the attempt time is,
+       * so the attempt is read only for a symbol that could need one. */
+      const candidate = remaining > 0 && needsProviderFetch(profile, null, Date.now());
+      const lastAttempt = candidate ? await store.lastProviderAttempt(lookupSymbol) : null;
+      if (candidate && needsProviderFetch(profile, lastAttempt, Date.now())) {
+        let fetched: SectorProfile | null | "timeout" | "threw";
+        try {
+          fetched = await raceBudget(
+            fetchProfile(lookupSymbol, { deadlineMs: deadline }),
+            remaining,
+          );
+        } catch (error) {
+          /* A budget stop sent no request, so it is no answer about the symbol,
+           * the same as a timeout. Recording it would hide the symbol from every
+           * tenant for 24 hours on the strength of a queue, not of Yahoo. */
+          fetched = isPartnerBudgetStop(error) ? "timeout" : "threw";
+        }
+        /* A timeout or budget stop is not an answer: nothing is stored or
+         * recorded, and the symbol resolves from what is already stored. */
+        if (fetched === null || fetched === "threw") {
+          await store.recordProviderAttempt(lookupSymbol, new Date().toISOString());
+        } else if (fetched !== "timeout") {
+          profile = stampFetchedAt(fetched);
+          await store.set(lookupSymbol, profile);
+        }
       }
     } catch {
       /* keep whatever was already stored, if anything */

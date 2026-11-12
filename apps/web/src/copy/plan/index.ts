@@ -11,6 +11,7 @@ import { subscriptionsCopy } from "./subscriptions.js";
 
 export * from "./shared.js";
 export { planShellCopy, type PlanShellCopy } from "./shell.js";
+export { reportsCopy, type ReportsCopy } from "./reports.js";
 export { assumptionsCopy, type AssumptionsCopy } from "./assumptions.js";
 export { monthCopy, type MonthCopy } from "./month.js";
 export { bufferCopy, type BufferCopy } from "./buffer.js";

@@ -5,8 +5,8 @@ import { cn } from "../../lib/utils";
 const cardVariants = cva("rounded-card border", {
   variants: {
     variant: {
-      default: "border-border bg-card shadow-md",
-      empty: "border-dashed border-border bg-transparent shadow-none",
+      default: "border-border bg-card",
+      empty: "border-dashed border-border bg-transparent",
     },
   },
   defaultVariants: { variant: "default" },
@@ -17,8 +17,13 @@ const cardHeaderVariants = cva("flex flex-col p-5 sm:p-6", {
   defaultVariants: { gap: "default" },
 });
 
-const cardTitleVariants = cva("font-display font-semibold tracking-tight", {
-  variants: { size: { default: "text-2xl", md: "text-xl" } },
+const cardTitleVariants = cva("", {
+  variants: {
+    size: {
+      default: "font-display text-3xl",
+      md: "font-sans text-xl font-semibold tracking-tight",
+    },
+  },
   defaultVariants: { size: "default" },
 });
 

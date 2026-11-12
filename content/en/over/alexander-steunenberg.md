@@ -33,5 +33,3 @@ Every page shows who wrote it, when it was last updated and which sources were u
 - More about LaVega: [lavega.dev](https://www.lavega.dev/en)
 
 Also read [What is a personal CFO?](/en/questions/what-is-a-personal-cfo).
-
-This is information, not advice.

@@ -61,3 +61,47 @@ test("totalCostCents: no usage at all costs nothing", () => {
     }),
   ).toBe(0);
 });
+
+/* Prompt-cache pricing (#300, WS5.7 leftover). The multiplier choice is
+ * deliberately pessimistic; these tests pin the arithmetic so a later,
+ * better-informed change is visible. */
+test("cache-write tokens add a 25% input-rate premium, cache-read tokens add a full input charge", () => {
+  // mistral-medium input is $1.50 per 1M, i.e. 150 USD cents per 1M tokens.
+  expect(priceTokensCents(MISTRAL_MEDIUM, 0, 0, { cacheWriteTokens: 1_000_000 })).toBeCloseTo(
+    37.5,
+    6,
+  );
+  expect(priceTokensCents(MISTRAL_MEDIUM, 0, 0, { cacheReadTokens: 1_000_000 })).toBeCloseTo(
+    150,
+    6,
+  );
+  expect(
+    priceTokensCents(MISTRAL_MEDIUM, 0, 0, {
+      cacheWriteTokens: 1_000_000,
+      cacheReadTokens: 1_000_000,
+    }),
+  ).toBeCloseTo(187.5, 6);
+});
+
+test("cache params are optional and an absent/zero count does not change the price", () => {
+  expect(priceTokensCents(MISTRAL_SMALL, 1_000_000, 1_000_000, {})).toBeCloseTo(75, 6);
+  expect(
+    priceTokensCents(MISTRAL_SMALL, 1_000_000, 1_000_000, {
+      cacheWriteTokens: 0,
+      cacheReadTokens: 0,
+    }),
+  ).toBeCloseTo(75, 6);
+});
+
+test("totalCostCents carries cache tokens through, in EUR cents like every other cost", () => {
+  const withCache = totalCostCents({
+    model: MISTRAL_MEDIUM,
+    inputTokens: 0,
+    outputTokens: 0,
+    pages: 0,
+    searches: 0,
+    cacheReadTokens: 1_000_000,
+  });
+  // 150 USD cents * 0.92 EUR rate = 138 EUR cents.
+  expect(withCache).toBe(138);
+});

@@ -2,6 +2,10 @@ import { LOCAL_TENANT_ID, type CredentialStore } from "@lavega/core";
 import { allSections, type BrokerAccessAdapter } from "./BrokerAccessAdapter.js";
 import { createIbkrFlexAdapter } from "./ibkr/flexAdapter.js";
 import { createTrading212Adapter, type Trading212DiagnosticEvent } from "./trading212/index.js";
+import {
+  createMemoryPartnerBudgetClient,
+  type PartnerBudgetClient,
+} from "../partnerBudget/PartnerBudget.js";
 
 export type ScheduledBrokerName = "ibkr" | "trading212";
 
@@ -11,6 +15,9 @@ export type CredentialsAwareBrokerAdaptersOptions = {
   /** Config override for tests; defaults to reading process.env. */
   environment?: (name: string) => string | undefined;
   onTrading212Diagnostic?: (event: Trading212DiagnosticEvent) => void;
+  /** Where partner request slots come from. Defaults to one budget shared by
+   *  both brokers and every sync of this set of adapters, not one per sync. */
+  partnerBudget?: PartnerBudgetClient;
 };
 
 function defaultEnvironment(name: string): string | undefined {
@@ -28,6 +35,7 @@ export function createCredentialsAwareBrokerAdapters(
 ): { broker: ScheduledBrokerName; adapter: BrokerAccessAdapter }[] {
   const tenantId = options.tenantId ?? LOCAL_TENANT_ID;
   const environment = options.environment ?? defaultEnvironment;
+  const partnerBudget = options.partnerBudget ?? createMemoryPartnerBudgetClient();
   return [
     {
       broker: "ibkr",
@@ -44,6 +52,7 @@ export function createCredentialsAwareBrokerAdapters(
             token: stored.token,
             queryId: stored.queryId,
             endpoint: environment("IBKR_FLEX_ENDPOINT"),
+            partnerBudget,
           }).sync(input);
         },
       },
@@ -64,6 +73,7 @@ export function createCredentialsAwareBrokerAdapters(
             secret: stored.secret,
             baseUrl: environment("TRADING212_BASE_URL") ?? "https://live.trading212.com",
             resume: input.resume,
+            partnerBudget,
             diagnostics: (details) => {
               console.log(JSON.stringify({ event: "investing.trading212.http", ...details }));
               options.onTrading212Diagnostic?.(details);

@@ -1,27 +1,40 @@
 import { Hono } from "hono";
-import { Schema } from "effect";
+import { Schema, type Layer } from "effect";
 import {
+  confirmCashFlowSuggestion,
   emptyInvestingDashboard,
   GICS_SECTOR_LABELS,
   InvestingDashboardDataSchema,
   InvestingLayoutSchema,
   LOCAL_TENANT_ID,
   PersonalNetWorthTotalsSchema,
+  validateAccountWrapperMap,
   validateBenchmarkSymbols,
   validateInvestingLayout,
+  RealizedIncomeReportSchema,
+  suggestionSignChange,
+  type CashFlowSuggestion,
+  emptyRealizedReport,
   type BenchmarkInstrument,
   type BenchmarkSelectionStore,
   type InvestingDashboardData,
   type InvestingLayout,
   type InvestingLayoutStore,
   type RiskRange,
+  type AccountWrapperStore,
 } from "@lavega/core";
 import { createProblemReporter, type ProblemReporter } from "./observability.js";
+import {
+  createMemoryCashFlowStore,
+  isRuleKind,
+  type CashFlowStore,
+} from "./cashFlowSuggestions.js";
+import { createMemorySyncRunStore, createSyncRun, MAX_HOPS, type SyncRunStore } from "./syncRun.js";
 import {
   LocalKeySource,
   createInMemoryBenchmarkSelectionStore,
   createInMemoryInvestingLayoutStore,
-  createInMemoryPriceStore,
+  createInMemorySharedPriceStore,
   createYahooPriceProvider,
   createFrankfurterFxProvider,
   createOpenFigiIdentifierProvider,
@@ -30,13 +43,16 @@ import {
   hasProblems,
   searchYahooBenchmarks,
   syncPrices,
-  type PriceStore,
+  type IdentifierCandidateSelector,
+  type SharedPriceStore,
   type ScheduledBroker,
   type YahooPriceRequest,
 } from "@lavega/adapters";
+import type { BrokerSyncLane } from "@lavega/adapters";
 import {
   createInMemoryPriceSyncProgressStore,
   createPriceOrchestrator,
+  instrumentKeys,
   priceSyncDeadlineMs,
   type PriceSyncProgress,
   type PriceSyncProgressStore,
@@ -51,7 +67,16 @@ import {
   createInMemoryPersonalNetWorthStore,
   type PersonalNetWorthStore,
 } from "./personalNetWorthStore.js";
-import { fetchYahooSectorProfile, YahooHttpClient, type SectorProfile } from "@lavega/adapters";
+import {
+  createPartnerBudgetClient,
+  isPartnerBudgetStop,
+  fetchYahooSectorProfile,
+  PartnerBudget,
+  YahooHttpClient,
+  type IdentifierRequest,
+  type PartnerBudgetClient,
+  type SectorProfile,
+} from "@lavega/adapters";
 import {
   createInMemorySectorProfileStore,
   type SectorProfileStore,
@@ -78,7 +103,17 @@ import {
 } from "./sectorInferenceSetting.js";
 import { createInMemorySectorRevisionStore, type SectorRevisionStore } from "./sectorRevision.js";
 import { createSectorReader, type SectorReader } from "./sectorRead.js";
+import { effectiveBenchmarkSymbols } from "./defaultBenchmark.js";
 import { createServerTiming, type ServerTiming } from "./serverTiming.js";
+import {
+  createInMemoryIdentifierOverrideStore,
+  createInMemoryIdentifierSelectionSettingStore,
+  validateIdentifierOverrides,
+  type IdentifierOverrideMap,
+  type IdentifierOverrideStore,
+  type IdentifierSelectionSettingStore,
+} from "./identifierSelectionStore.js";
+import { createInMemoryAccountWrapperStore } from "./accountWrapperStore.js";
 
 /** The read model crosses the wire through its shared schema, so a field the
  *  contract declares is always present in the response. */
@@ -144,26 +179,54 @@ export type InvestingHealth = {
 type BrokerVaultStatus = "empty" | "locked" | "unlocked";
 type BrokerReadability = Record<"ibkr" | "trading212", "empty" | "readable" | "unreadable">;
 type PriceDependencies = {
-  store: PriceStore;
+  /** The shared, instrument-keyed price store (issue #307). One series per
+   *  instrument for the whole installation. */
+  store: SharedPriceStore;
+  /** True when the store is the shared database one: one user must not be able
+   *  to delete prices every user reads, so the cache route answers 405. */
+  sharedPriceStore?: boolean;
+  /** Clears a local (file) shared store. Absent on the database store, where
+   *  the route answers 405 instead. */
+  clearPriceCache?: () => Promise<void>;
   provider: ReturnType<typeof createYahooPriceProvider>;
   fxProvider: ReturnType<typeof createFrankfurterFxProvider>;
   identifierProvider: ReturnType<typeof createOpenFigiIdentifierProvider>;
+  /** Build the Jev selector for one tenant, or undefined when the deployment
+   *  has no TypeSafe key. The provider only calls it on ambiguity and only
+   *  when the caller passed consent + the owner's enable setting (#136). */
+  identifierSelectorForTenant?: (tenantId: string) => IdentifierCandidateSelector | undefined;
+  identifierSelectionSettingStore: IdentifierSelectionSettingStore;
+  identifierOverrideStore: IdentifierOverrideStore;
   benchmarkSelectionStore: BenchmarkSelectionStore;
   investingLayoutStore: InvestingLayoutStore;
+  accountWrapperStore: AccountWrapperStore;
   benchmarkSearch: (
     query: string,
   ) => Promise<{ results: BenchmarkInstrument[]; fallback: boolean; problems: string[] }>;
   brokerSync: (
     force: boolean,
+    lanes: readonly BrokerSyncLane[],
     deadlineMs?: number,
     rebuildOrders?: boolean,
   ) => Promise<{ outcomes: unknown[]; problems: string[] }>;
   brokerSyncStatus: () => BrokerSyncProgress | Promise<BrokerSyncProgress>;
   priceSyncTargets: (tenantId: string) => Promise<PriceSyncTarget[]> | PriceSyncTarget[];
-  priceSyncPaceMs: number;
+  /** Where partner request slots come from; one runtime is built from it. Defaults to memory. */
+  partnerBudget: Layer.Layer<PartnerBudget>;
+  /** A budget the caller already bridged. Wins over `partnerBudget`, so a caller can
+   *  share one budget between the app and the broker adapters it builds. */
+  partnerBudgetClient: PartnerBudgetClient;
   priceSyncBenchmarkRecheckEveryMs: number;
   priceSyncProgressStore: PriceSyncProgressStore;
   priceSyncDeadline: () => number | undefined;
+  /** Owner-confirmed cash-flow rules and pending suggestions (issue #137). */
+  cashFlowStore?: CashFlowStore;
+  /** Durable row for the server-owned run (Neon on hosted, memory locally). */
+  syncRunStore?: SyncRunStore;
+  /** Registers the run as background work. Rejects on a host with no such port. */
+  syncRunBackground?: (work: Promise<unknown>) => Promise<void>;
+  syncRunContinue?: (hop: number, origin: string | undefined, runId: string) => Promise<void>;
+  syncRunNow?: () => number;
   configureBroker: (input: BrokerCredentialInput) => Promise<void>;
   credentialStatus: () => Promise<BrokerVaultStatus>;
   brokerReadability: () => Promise<BrokerReadability | undefined>;
@@ -171,9 +234,15 @@ type PriceDependencies = {
   problemReporter: ProblemReporter;
   dashboardReader: InvestingDashboardReader;
   onPriceDataChanged: () => void;
+  /** Raised when an account label changes: the report's grouping is part of
+   *  the read model, so the cached dashboard must be rebuilt. */
+  onAccountWrappersChanged?: () => void;
   marketDataConsentStore: MarketDataConsentStore;
   personalNetWorthStore: PersonalNetWorthStore;
-  sectorProfile: (symbol: string) => Promise<SectorProfile | null>;
+  sectorProfile: (
+    symbol: string,
+    options?: { deadlineMs?: number },
+  ) => Promise<SectorProfile | null>;
   sectorStore: SectorProfileStore;
   sectorCorrectionStore: SectorCorrectionStore;
   sectorInferenceSettingStore: SectorInferenceSettingStore;
@@ -188,26 +257,81 @@ type PriceDependencies = {
   passphraseMode: () => PassphraseMode;
   healthCheck: () => Promise<InvestingHealth>;
 };
+/** What a request-path Yahoo call may spend on partner slots. A slot after it
+ *  fails with `PartnerWait` instead of holding the request. */
+const REQUEST_PARTNER_BUDGET_MS = 10_000;
+
 export function createApp(dependencies: Partial<PriceDependencies> = {}) {
-  const store = dependencies.store ?? createInMemoryPriceStore();
-  const identifierProvider = dependencies.identifierProvider ?? createOpenFigiIdentifierProvider();
-  const provider =
+  const store = dependencies.store ?? createInMemorySharedPriceStore();
+  const sharedPriceStore = dependencies.sharedPriceStore ?? false;
+  const accountWrapperStore =
+    dependencies.accountWrapperStore ?? createInMemoryAccountWrapperStore();
+  /* One budget for every partner call this app makes. Hosted, it is Neon's, so
+   * the limit holds across invocations and users; elsewhere it is this process's. */
+  const partnerBudget =
+    dependencies.partnerBudgetClient ??
+    createPartnerBudgetClient(dependencies.partnerBudget ?? PartnerBudget.memoryLayer);
+  /* One provider per tenant when selection is possible: the selector needs the
+   * tenant for consent, the enable switch and usage billing, while the partner
+   * budget (rate limiting) stays shared. Without selection, one provider is
+   * enough and keeps the cache shared exactly as before. */
+  const identifierProvidersByTenant = new Map<
+    string,
+    ReturnType<typeof createOpenFigiIdentifierProvider>
+  >();
+  const identifierProviderFor = (tenantId: string) => {
+    if (dependencies.identifierProvider) return dependencies.identifierProvider;
+    const known = identifierProvidersByTenant.get(tenantId);
+    if (known) return known;
+    const selector = dependencies.identifierSelectorForTenant?.(tenantId);
+    const provider = createOpenFigiIdentifierProvider({
+      partnerBudget,
+      ...(selector ? { selector } : {}),
+    });
+    identifierProvidersByTenant.set(tenantId, provider);
+    return provider;
+  };
+  /* One client per app: its crumb and cookie are negotiated once and reused. A
+   * price run takes a view of it with the run's own deadline, so a slot after the
+   * deadline ends the slice instead of sleeping past it. */
+  const yahooClient = new YahooHttpClient(undefined, undefined, undefined, { partnerBudget });
+  const resolveMissingListing = async (
+    request: { isin?: string; ticker: string; currency?: string },
+    deadline: number | undefined,
+    tenantId: string,
+  ) => {
+    if (!request.isin || !request.ticker.endsWith("_EQ")) return null;
+    const isin = request.isin.trim().toUpperCase();
+    const identifier = await mapIdentifier(
+      {
+        isin,
+        deadlineMs: deadline,
+        instrument: {
+          name: request.ticker,
+          ...(request.currency ? { currency: request.currency } : {}),
+        },
+      },
+      tenantId,
+    ).then((resolved) => resolved?.value);
+    if (
+      !identifier ||
+      identifier.problems.length ||
+      identifier.match.isin.trim().toUpperCase() !== isin ||
+      !identifier.match.exchange
+    )
+      return null;
+    return getYahooSymbolForKnownExchange(identifier.match.ticker, identifier.match.exchange);
+  };
+  const priceProviderFor = (deadline: number | undefined, tenantId: string) =>
     dependencies.provider ??
     createYahooPriceProvider({
-      resolveMissingListing: async (request) => {
-        if (!request.isin || !request.ticker.endsWith("_EQ")) return null;
-        const isin = request.isin.trim().toUpperCase();
-        const identifier = await identifierProvider.get({ isin });
-        if (
-          !identifier ||
-          identifier.problems.length ||
-          identifier.match.isin.trim().toUpperCase() !== isin ||
-          !identifier.match.exchange
-        )
-          return null;
-        return getYahooSymbolForKnownExchange(identifier.match.ticker, identifier.match.exchange);
-      },
+      client: yahooClient.withDeadline(deadline),
+      resolveMissingListing: (request) => resolveMissingListing(request, deadline, tenantId),
     });
+  const identifierSelectionSettingStore =
+    dependencies.identifierSelectionSettingStore ?? createInMemoryIdentifierSelectionSettingStore();
+  const identifierOverrideStore =
+    dependencies.identifierOverrideStore ?? createInMemoryIdentifierOverrideStore();
   const fxProvider = dependencies.fxProvider ?? createFrankfurterFxProvider();
   const brokerSync = dependencies.brokerSync ?? (async () => ({ outcomes: [], problems: [] }));
   const configureBroker = dependencies.configureBroker;
@@ -218,18 +342,22 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
   const investingLayoutStore =
     dependencies.investingLayoutStore ?? createInMemoryInvestingLayoutStore();
   const benchmarkSearch =
-    dependencies.benchmarkSearch ?? ((query: string) => searchYahooBenchmarks(query));
+    dependencies.benchmarkSearch ??
+    ((query: string) =>
+      searchYahooBenchmarks(query, {
+        client: yahooClient.withDeadline(Date.now() + REQUEST_PARTNER_BUDGET_MS),
+      }));
   const marketDataConsentStore =
     dependencies.marketDataConsentStore ?? createInMemoryMarketDataConsentStore();
   const personalNetWorthStore =
     dependencies.personalNetWorthStore ?? createInMemoryPersonalNetWorthStore();
-  /* One client per running server process, not per symbol: its crumb and
-   * cookie are negotiated once (see YahooHttpClient.ensureCrumb) and reused,
-   * instead of every cache-miss symbol paying its own crumb negotiation. */
-  const sectorHttpClient = new YahooHttpClient();
+  /* Sector reads share the one client, and so its crumb (see
+   * YahooHttpClient.ensureCrumb) and its budget key: the pool of 8 concurrent
+   * reads queues on the same slots as a price run. */
   const sectorProfile =
     dependencies.sectorProfile ??
-    ((symbol: string) => fetchYahooSectorProfile(symbol, sectorHttpClient));
+    ((symbol: string, options?: { deadlineMs?: number }) =>
+      fetchYahooSectorProfile(symbol, yahooClient.withDeadline(options?.deadlineMs)));
   const sectorStore = dependencies.sectorStore ?? createInMemorySectorProfileStore();
   const sectorCorrectionStore =
     dependencies.sectorCorrectionStore ?? createInMemorySectorCorrectionStore();
@@ -241,11 +369,30 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
   /* The file vault derives its key from a passphrase, so it needs one. A vault
    * the server holds the key to has nothing to ask for. */
   const passphraseMode = dependencies.passphraseMode ?? (() => "required" as const);
-  const priceProviders = [provider];
   const fxProviders = [fxProvider];
-  const identifierProviders = [identifierProvider];
-  const mapIdentifier = (request: { isin: string }) =>
-    firstProviderResult(identifierProviders, request, undefined, hasProblems);
+  /* The identifier seam, per tenant: the owner's override wins, then the
+   * provider's answer, then a model selection when consent AND the enable
+   * setting allow it (issue #136). */
+  const mapIdentifier = async (request: IdentifierRequest, tenantId: string) => {
+    const isin = request.isin.trim().toUpperCase();
+    const [overrides, consent, selectionEnabled] = await Promise.all([
+      identifierOverrideStore.get(tenantId).catch((): IdentifierOverrideMap => ({})),
+      marketDataConsentStore.get(tenantId).catch(() => ({ accepted: false })),
+      identifierSelectionSettingStore.get(tenantId).catch(() => false),
+    ]);
+    const override = overrides[isin];
+    return firstProviderResult(
+      [identifierProviderFor(tenantId)],
+      {
+        ...request,
+        isin,
+        allowModelSelection: consent.accepted && selectionEnabled,
+        ...(override ? { override } : {}),
+      },
+      undefined,
+      hasProblems,
+    );
+  };
   /* One invocation's worth of time. Anchored where the request starts, so a
    * route that already spent the host budget on a broker sync hands the price
    * run a deadline that has passed and it pauses instead of overrunning. */
@@ -254,10 +401,10 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
     (() => priceSyncDeadlineMs((name) => process.env[name]?.trim() || undefined));
   const priceOrchestrator = createPriceOrchestrator({
     discover: dependencies.priceSyncTargets ?? (() => []),
-    paceMs: dependencies.priceSyncPaceMs,
     benchmarkRecheckEveryMs: dependencies.priceSyncBenchmarkRecheckEveryMs,
     progressStore: dependencies.priceSyncProgressStore ?? createInMemoryPriceSyncProgressStore(),
-    sync: async (target, tenantId) => {
+    sync: async (target, tenantId, { deadline, leaseId }) => {
+      const priceProviders = [priceProviderFor(deadline, tenantId)];
       let request: Omit<YahooPriceRequest, "from" | "to"> & {
         today?: string;
         backfillFrom?: string;
@@ -266,7 +413,17 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
       // Yahoo decodes Trading 212 tickers and uses their ISIN itself. An
       // arbitrary OpenFIGI listing would discard the broker's venue hint.
       if (target.isin && !target.ticker.endsWith("_EQ")) {
-        const identifier = await mapIdentifier({ isin: target.isin });
+        const identifier = await mapIdentifier(
+          {
+            isin: target.isin,
+            deadlineMs: deadline,
+            instrument: {
+              name: target.symbol,
+              ...(target.currency ? { currency: target.currency } : {}),
+            },
+          },
+          tenantId,
+        );
         if (
           identifier &&
           identifier.value.problems.length === 0 &&
@@ -282,7 +439,14 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
           identifierProblems = identifier?.value.problems ?? ["Could not resolve ISIN"];
         }
       }
-      const result = await syncPrices({ store, tenantId, priceProviders, request });
+      const result = await syncPrices({
+        store,
+        key: target.instrumentKey,
+        ...(target.instrumentAlias ? { alias: target.instrumentAlias } : {}),
+        owner: leaseId,
+        priceProviders,
+        request,
+      });
       if (result.fetched) dependencies.onPriceDataChanged?.();
       return result.problems.length === 0
         ? result
@@ -292,8 +456,38 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
   const investingApp = new Hono();
   const hasYahooConsent = async (tenantId: string) =>
     (await marketDataConsentStore.get(tenantId)).accepted;
-  const resolveSectorListingSymbol = (tenantId: string, symbol: string) =>
-    resolveSectorListing(store, tenantId, symbol);
+  /* The shared price series is keyed by instrument, not by the broker's
+   * ticker (issue #307): the position's ISIN and currency decide the key. */
+  const resolveSectorListingFor = (position: {
+    symbol: string;
+    isin?: string;
+    currency?: string;
+  }) => {
+    const keys = instrumentKeys({
+      symbol: position.symbol,
+      ...(position.isin ? { isin: position.isin } : {}),
+      currency: position.currency ?? "EUR",
+    });
+    return resolveSectorListing(store, { key: keys.key });
+  };
+  /* A per-symbol route has no position in hand; the sync targets are the one
+   * place that already knows this tenant's symbol-to-series mapping. A symbol
+   * with no target falls back to the `sym:` key, exactly what an ISIN-less
+   * series uses. */
+  const resolveSectorListingSymbol = async (tenantId: string, symbol: string) => {
+    try {
+      const targets = (await dependencies.priceSyncTargets?.(tenantId)) ?? [];
+      const match = targets.find((target) => target.symbol.toUpperCase() === symbol.toUpperCase());
+      if (match)
+        return resolveSectorListing(store, {
+          key: match.instrumentKey,
+          ...(match.instrumentAlias ? { alias: match.instrumentAlias } : {}),
+        });
+    } catch {
+      // Discovery is a convenience here, never a reason for the route to fail.
+    }
+    return resolveSectorListing(store, { key: instrumentKeys({ symbol, currency: "EUR" }).key });
+  };
   const sectorRevisionStore =
     dependencies.sectorRevisionStore ?? createInMemorySectorRevisionStore();
   /* The sector read is a sibling of the dashboard read (portfolioRead.ts):
@@ -309,11 +503,147 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
       inferenceSetting: sectorInferenceSettingStore,
       consent: marketDataConsentStore,
       revision: (tenantId) => sectorRevisionStore.get(tenantId),
-      resolveListing: resolveSectorListingSymbol,
+      resolveListing: (_tenantId, position) => resolveSectorListingFor(position),
     });
   const runPriceSyncIfConsented = async (tenantId: string, deadline: number | undefined) => {
     if (await hasYahooConsent(tenantId)) return priceOrchestrator.run(tenantId, deadline);
   };
+  const cashFlowStore = dependencies.cashFlowStore ?? createMemoryCashFlowStore();
+  const syncRunClock = dependencies.syncRunNow ?? (() => Date.now());
+  const brokerProgress = async () =>
+    dependencies.brokerSyncStatus
+      ? await dependencies.brokerSyncStatus()
+      : {
+          status: "idle" as const,
+          pages: 0,
+          ordersRead: 0,
+          positionsRead: 0,
+          waitUntil: null,
+          remaining: null,
+          updatedAt: null,
+          message: null,
+          history: null,
+        };
+  const laneStatus = (status: string): "idle" | "running" | "waiting" | "completed" | "problem" =>
+    status === "completed" || status === "problem" || status === "running" || status === "waiting"
+      ? status
+      : "idle";
+  const syncRun = createSyncRun({
+    store: dependencies.syncRunStore ?? createMemorySyncRunStore(),
+    now: syncRunClock,
+    lanes: {
+      holdings: async (deadlineMs) => {
+        const result = await brokerSync(false, ["holdings"], deadlineMs);
+        const progress = await brokerProgress();
+        return {
+          status: laneStatus(progress.status),
+          waitUntilMs: progress.waitUntil ? Date.parse(progress.waitUntil) : null,
+          pending: progress.status === "waiting",
+          problems: result.problems,
+        };
+      },
+      history: async (deadlineMs) => {
+        const result = await brokerSync(false, ["history"], deadlineMs);
+        const progress = await brokerProgress();
+        const pending = progress.status === "waiting" || progress.history != null;
+        return {
+          status: laneStatus(progress.status),
+          waitUntilMs: progress.waitUntil ? Date.parse(progress.waitUntil) : null,
+          pending,
+          problems: result.problems,
+        };
+      },
+      prices: async (deadlineMs) => {
+        const tenantId = await resolveTenantId();
+        if (!(await hasYahooConsent(tenantId))) return { status: "completed", pending: false };
+        const progress = await priceOrchestrator.run(tenantId, deadlineMs);
+        return {
+          status: laneStatus(progress.status),
+          waitUntilMs: progress.waitUntil ? Date.parse(progress.waitUntil) : null,
+          pending:
+            progress.status === "running" ||
+            progress.status === "waiting" ||
+            progress.status === "paused",
+          problems: progress.problems,
+        };
+      },
+      letter: async () => {
+        /* The letter is a side effect, never part of the run outcome. */
+      },
+    },
+    readLanes: async () => {
+      const [broker, price, vault] = await Promise.all([
+        brokerProgress(),
+        priceOrchestrator.status(await resolveTenantId()),
+        dependencies.credentialStatus
+          ? dependencies.credentialStatus()
+          : Promise.resolve({ status: "empty" as const }),
+      ]);
+      const brokerLane = (status: string, syncedAt: string | null) => ({
+        status: laneStatus(status),
+        syncedAt,
+        waitUntil: broker.waitUntil,
+        message: broker.message,
+      });
+      return {
+        vault:
+          (vault as { status?: string }).status === "unlocked"
+            ? "unlocked"
+            : (vault as { status?: string }).status === "locked"
+              ? "locked"
+              : "empty",
+        holdings: {
+          ...brokerLane(broker.status, broker.updatedAt),
+          positionsRead: broker.positionsRead,
+        },
+        history: {
+          ...brokerLane(broker.status, broker.updatedAt),
+          pages: broker.pages,
+          ordersRead: broker.ordersRead,
+          historyProgress: broker.history,
+        },
+        prices: {
+          status: laneStatus(price.status),
+          syncedAt: price.updatedAt,
+          waitUntil: price.waitUntil,
+          message: price.message,
+          total: price.total,
+          completed: price.completed,
+          currentSymbol: price.currentSymbol,
+          remainingSymbols: price.remainingSymbols ?? [],
+        },
+        problems: [...brokerProblems(await brokerProgress()), ...(price.problems ?? [])],
+      };
+    },
+    continueRun:
+      dependencies.syncRunContinue ??
+      (async (hop, origin, runId) => {
+        const secret = process.env.CRON_SECRET?.trim();
+        if (!origin || !secret) return;
+        await fetch(`${origin}/api/sync/continue`, {
+          method: "POST",
+          headers: { authorization: `Bearer ${secret}`, "content-type": "application/json" },
+          body: JSON.stringify({ tenantId: "local", runId, hop }),
+        });
+      }),
+    background:
+      dependencies.syncRunBackground ??
+      ((work) => {
+        void work.catch((error: unknown) =>
+          problemReporter({
+            source: "broker-sync",
+            problems: [error instanceof Error ? error.message : "Background sync run failed"],
+          }),
+        );
+        return Promise.resolve();
+      }),
+    reportProblem: (message, error) =>
+      problemReporter({
+        source: "broker-sync",
+        problems: [message, ...(error instanceof Error ? [error.message] : [])],
+      }),
+  });
+  const brokerProblems = (_progress: { message?: string | null }) => [];
   const visiblePriceProgress = (progress: PriceSyncProgress): PriceSyncProgress => {
     const visible = { ...progress };
     delete visible.leaseId;
@@ -329,7 +659,7 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
    * path the mount forwards, because everything outside /api/ belongs to the
    * SPA there and never reaches this app. */
   const health = (c: { json: (body: unknown) => Response }) =>
-    c.json({ ok: true, service: "investing-server" });
+    c.json({ ok: true, service: "investing-server", sharedPriceStore });
   investingApp.get("/health", health);
   investingApp.get("/api/investing/health", health);
   investingApp.get("/api/investing/health/detail", async (c) => {
@@ -367,13 +697,11 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
        * positions and the priced/missing/estimated counts ride the dashboard
        * snapshot, so this route never recomputes them. */
       const composition = data.composition;
-      /* Same classification rule as the portfolio-agent snapshot, which
-       * passes no fetchProfile. This route keeps the fetch-and-persist
-       * fallback; only the resolution itself is shared. Without consent,
-       * omit fetchProfile entirely: resolvePortfolioSectors still answers
-       * from cached profiles, it just never calls Yahoo for a fresh one.
-       * classifier is never passed here: classification runs off this
-       * critical path, only from POST /api/investing/sectors/infer. */
+      /* Same classification rule as the portfolio-agent snapshot: stored
+       * profiles only. This route never calls Yahoo (#309); fetching a
+       * missing profile belongs to GET /api/investing/sectors, which bounds
+       * it. classifier is never passed here either: classification runs off
+       * this critical path, only from POST /api/investing/sectors/infer. */
       const tenantId = await resolveTenantId();
       const consented = await hasYahooConsent(tenantId);
       /* A cached inferred profile is a global fact (no tenantId on
@@ -387,8 +715,7 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
         store: sectorStore,
         correction: async (symbol) => corrections[symbol.toUpperCase()] ?? null,
         showInferred: consented && inferenceEnabled,
-        resolveListing: (symbol) => resolveSectorListingSymbol(tenantId, symbol),
-        ...(consented ? { fetchProfile: sectorProfile } : {}),
+        resolveListing: (position) => resolveSectorListingFor(position),
       });
       return c.json({
         ...data.risk.byBenchmark[riskKey]?.[range],
@@ -486,6 +813,35 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
     await sectorRevisionStore.raise(await resolveTenantId());
     return c.json({ enabled: body.enabled });
   });
+  /* Identifier candidate selection (Jev-03, issue #136): the owner's switch
+   * for sending an instrument's identity to Jev on ambiguity, and the owner's
+   * own symbol choice per ISIN (the most trusted resolution tier). */
+  investingApp.get("/api/investing/identifier-selection", async (c) =>
+    c.json({
+      enabled: await identifierSelectionSettingStore.get(await resolveTenantId()),
+      available: dependencies.identifierSelectorForTenant !== undefined,
+    }),
+  );
+  investingApp.put("/api/investing/identifier-selection", async (c) => {
+    const body: { enabled?: unknown } = await c.req.json().catch(() => ({}));
+    if (typeof body.enabled !== "boolean")
+      return c.json({ message: "enabled must be boolean" }, 400);
+    const tenantId = await resolveTenantId();
+    await identifierSelectionSettingStore.set(tenantId, body.enabled);
+    return c.json({ enabled: body.enabled });
+  });
+  investingApp.get("/api/investing/identifier-overrides", async (c) =>
+    c.json({
+      overrides: await identifierOverrideStore.get(await resolveTenantId()),
+    }),
+  );
+  investingApp.put("/api/investing/identifier-overrides", async (c) => {
+    const body: { overrides?: unknown } = await c.req.json().catch(() => ({}));
+    const overrides = validateIdentifierOverrides(body.overrides);
+    const tenantId = await resolveTenantId();
+    await identifierOverrideStore.set(tenantId, overrides);
+    return c.json({ overrides });
+  });
   investingApp.post("/api/investing/sectors/infer", async (c) => {
     const tenantId = await resolveTenantId();
     if (!(await hasYahooConsent(tenantId)))
@@ -518,7 +874,7 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
         priced,
         exclude: excluded,
         corrections,
-        resolveListing: (symbol) => resolveSectorListingSymbol(tenantId, symbol),
+        resolveListing: (position) => resolveSectorListingFor(position),
         store: sectorStore,
         classifier: dependencies.sectorClassifier,
         batchSize: SECTOR_INFERENCE_BATCH_SIZE,
@@ -572,9 +928,199 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
       );
     }
   });
-  investingApp.get("/api/investing/benchmarks", async (c) =>
-    c.json(await benchmarkSelectionStore.get(await resolveTenantId())),
+  /* Realised-gain + income report (plan §3 WS4.3/WS4.4, #296). It rides the
+   * dashboard read model: the report is built from the same broker snapshot,
+   * FX rates and price bars, so this route only serves the section. A
+   * dashboard stored before the report existed answers with an empty report
+   * and a problem line rather than an error, so the surface still renders. */
+  investingApp.get("/api/investing/reports/realized", async (c) => {
+    const today = new Date().toISOString().slice(0, 10);
+    try {
+      const dashboard = await dashboardReader({});
+      const report =
+        dashboard.realized ??
+        emptyRealizedReport(dashboard.presentationCurrency, today, [
+          "The realised report is not built for this snapshot yet. Refresh the dashboard.",
+        ]);
+      return c.json(Schema.encodeSync(RealizedIncomeReportSchema)(report));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Report read failed";
+      problemReporter({ source: "realized-report-read", problems: [message] });
+      return c.json(
+        emptyRealizedReport("EUR", today, ["The realised report could not be loaded."]),
+      );
+    }
+  });
+  /* Account tax-treatment labels (WS4.4). The map is account metadata only:
+   * it decides which treatment bucket the report groups a row under. Unknown
+   * labels are dropped, exactly like the layout's unknown ids, so a stored
+   * map and a PUT body agree on what valid means. */
+  investingApp.get("/api/investing/account-wrappers", async (c) => {
+    const tenantId = await resolveTenantId();
+    return c.json({ tenantId, entries: await accountWrapperStore.get(tenantId) });
+  });
+  investingApp.put("/api/investing/account-wrappers", async (c) => {
+    const body: { entries?: unknown } = await c.req.json<{ entries?: unknown }>().catch(() => ({}));
+    if (!Array.isArray(body.entries))
+      return c.json({ problems: ["entries must be an array"] }, 400);
+    const tenantId = await resolveTenantId();
+    const selection = { tenantId, entries: validateAccountWrapperMap(body.entries) };
+    await accountWrapperStore.set(selection);
+    dependencies.onAccountWrappersChanged?.();
+    return c.json(selection);
+  });
+  /* Jev-04 (#137): cash-flow vocabulary suggestions and owner-confirmed rules.
+   *
+   * A suggestion has no effect on any figure until the owner confirms it; the
+   * confirmation creates a broker+type rule the sync applies at the same point
+   * as the adapter's switch. Sign is never suggested — a kind that would flip
+   * the observed sign must be acknowledged with the before/after first. */
+  const cashFlowKey = (broker: string, typeKey: string) =>
+    `${broker.trim().toLowerCase()}|${typeKey.trim().toUpperCase()}`;
+  const publicSuggestion = (suggestion: CashFlowSuggestion) => ({
+    broker: suggestion.broker,
+    typeKey: suggestion.typeKey,
+    rawType: suggestion.rawType,
+    kind: suggestion.kind,
+    confidence: suggestion.confidence,
+    amount: suggestion.amount,
+    sign: suggestion.sign,
+    currency: suggestion.currency,
+    description: suggestion.description,
+    createdAt: suggestion.createdAt,
+    signChange: suggestionSignChange(suggestion),
+  });
+
+  investingApp.get("/api/investing/cash-flow-suggestions", async (c) => {
+    const [enabled, suggestions] = await Promise.all([
+      cashFlowStore.suggestionsEnabled(),
+      cashFlowStore.listSuggestions(),
+    ]);
+    const pending = suggestions
+      .filter((suggestion) => suggestion.state === "pending")
+      .map(publicSuggestion);
+    return c.json({ enabled, count: pending.length, pending });
+  });
+
+  investingApp.post("/api/investing/cash-flow-suggestions/confirm", async (c) => {
+    const body = (await c.req.json().catch(() => null)) as {
+      broker?: unknown;
+      typeKey?: unknown;
+      kind?: unknown;
+      acknowledgeSignChange?: unknown;
+    } | null;
+    if (
+      !body ||
+      typeof body.broker !== "string" ||
+      typeof body.typeKey !== "string" ||
+      !isRuleKind(body.kind)
+    )
+      return c.json({ problems: ["Invalid confirmation"] }, 400);
+    const suggestions = await cashFlowStore.listSuggestions();
+    const decision = confirmCashFlowSuggestion({
+      suggestions,
+      broker: body.broker,
+      typeKey: body.typeKey,
+      kind: body.kind,
+      acknowledgeSignChange: body.acknowledgeSignChange === true,
+      confirmedAt: new Date().toISOString(),
+    });
+    if (!decision.ok) {
+      if (decision.reason === "not-found")
+        return c.json({ problems: ["No suggestion for that type"] }, 404);
+      return c.json(
+        { reason: "sign-change-unacknowledged", before: decision.before, after: decision.after },
+        409,
+      );
+    }
+    const key = cashFlowKey(decision.rule.broker, decision.rule.typeKey);
+    const rules = await cashFlowStore.listRules();
+    const nextRules = [
+      ...rules.filter((rule) => cashFlowKey(rule.broker, rule.typeKey) !== key),
+      decision.rule,
+    ];
+    await cashFlowStore.saveRules(nextRules);
+    await cashFlowStore.saveSuggestions(
+      suggestions.map((suggestion) =>
+        cashFlowKey(suggestion.broker, suggestion.typeKey) === key
+          ? { ...suggestion, state: "confirmed" as const, kind: decision.rule.kind }
+          : suggestion,
+      ),
+    );
+    return c.json({ rule: decision.rule, rules: nextRules });
+  });
+
+  investingApp.post("/api/investing/cash-flow-suggestions/reject", async (c) => {
+    const body = (await c.req.json().catch(() => null)) as {
+      broker?: unknown;
+      typeKey?: unknown;
+    } | null;
+    if (!body || typeof body.broker !== "string" || typeof body.typeKey !== "string")
+      return c.json({ problems: ["Invalid rejection"] }, 400);
+    const key = cashFlowKey(body.broker, body.typeKey);
+    const suggestions = await cashFlowStore.listSuggestions();
+    if (
+      !suggestions.some((suggestion) => cashFlowKey(suggestion.broker, suggestion.typeKey) === key)
+    )
+      return c.json({ problems: ["No suggestion for that type"] }, 404);
+    await cashFlowStore.saveSuggestions(
+      suggestions.map((suggestion) =>
+        cashFlowKey(suggestion.broker, suggestion.typeKey) === key
+          ? { ...suggestion, state: "rejected" as const }
+          : suggestion,
+      ),
+    );
+    return c.json({ ok: true });
+  });
+
+  /* Rules are owner data: this GET is the exportable shape. */
+  investingApp.get("/api/investing/cash-flow-rules", async (c) => {
+    const [enabled, rules] = await Promise.all([
+      cashFlowStore.suggestionsEnabled(),
+      cashFlowStore.listRules(),
+    ]);
+    return c.json({ enabled, rules });
+  });
+
+  investingApp.post("/api/investing/cash-flow-rules/remove", async (c) => {
+    const body = (await c.req.json().catch(() => null)) as {
+      broker?: unknown;
+      typeKey?: unknown;
+    } | null;
+    if (!body || typeof body.broker !== "string" || typeof body.typeKey !== "string")
+      return c.json({ problems: ["Invalid removal"] }, 400);
+    const key = cashFlowKey(body.broker, body.typeKey);
+    const rules = await cashFlowStore.listRules();
+    const nextRules = rules.filter((rule) => cashFlowKey(rule.broker, rule.typeKey) !== key);
+    await cashFlowStore.saveRules(nextRules);
+    /* Removing a rule re-opens its vocabulary word for a future suggestion. */
+    await cashFlowStore.saveSuggestions(
+      (await cashFlowStore.listSuggestions()).filter(
+        (suggestion) => cashFlowKey(suggestion.broker, suggestion.typeKey) !== key,
+      ),
+    );
+    return c.json({ rules: nextRules });
+  });
+
+  investingApp.get("/api/investing/cash-flow-suggestions/settings", async (c) =>
+    c.json({ enabled: await cashFlowStore.suggestionsEnabled() }),
   );
+
+  investingApp.put("/api/investing/cash-flow-suggestions/settings", async (c) => {
+    const body = (await c.req.json().catch(() => null)) as { enabled?: unknown } | null;
+    if (!body || typeof body.enabled !== "boolean")
+      return c.json({ problems: ["enabled must be a boolean"] }, 400);
+    await cashFlowStore.setSuggestionsEnabled(body.enabled);
+    return c.json({ enabled: body.enabled });
+  });
+
+  investingApp.get("/api/investing/benchmarks", async (c) => {
+    const tenantId = await resolveTenantId();
+    return c.json({
+      tenantId,
+      symbols: await effectiveBenchmarkSymbols(benchmarkSelectionStore, tenantId),
+    });
+  });
   investingApp.put("/api/investing/benchmarks", async (c) => {
     const body: { symbols?: unknown } = await c.req.json<{ symbols?: unknown }>().catch(() => ({}));
     const symbols = body.symbols;
@@ -652,19 +1198,108 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
       return c.json({ problems: ["Broker synchronization status is not available"] }, 503);
     return c.json(await dependencies.brokerSyncStatus());
   });
+  /* --- server-owned sync run (#306) ------------------------------------- */
+
+  const bearerIsCron = (c: { req: { header: (name: string) => string | undefined } }) => {
+    const secret = process.env.CRON_SECRET?.trim();
+    return secret !== undefined && c.req.header("authorization") === `Bearer ${secret}`;
+  };
+  const validContinueBody = (
+    body: unknown,
+  ): body is { tenantId: string; runId: string; hop: number } => {
+    if (!body || typeof body !== "object") return false;
+    const value = body as { tenantId?: unknown; runId?: unknown; hop?: unknown };
+    return (
+      typeof value.tenantId === "string" &&
+      value.tenantId.length > 0 &&
+      typeof value.runId === "string" &&
+      value.runId.length > 0 &&
+      typeof value.hop === "number" &&
+      Number.isInteger(value.hop) &&
+      value.hop >= 1 &&
+      value.hop <= MAX_HOPS
+    );
+  };
+
+  investingApp.post("/api/sync/refresh", async (c) => {
+    if (process.env.VERCEL !== undefined && !process.env.CRON_SECRET?.trim())
+      return c.json(
+        { problems: ["CRON_SECRET is not set; a server-owned run cannot continue"] },
+        500,
+      );
+    const body = (await c.req.json().catch(() => null)) as { force?: unknown } | null;
+    try {
+      const result = await syncRun.requestRefresh(body?.force === true, new URL(c.req.url).origin);
+      return c.json(result.state, 202);
+    } catch (error) {
+      // No background port (no request context): do not fake it with a
+      // detached promise that the host may freeze.
+      return c.json(
+        {
+          problems: [
+            error instanceof Error ? error.message : "Background execution is not available",
+          ],
+        },
+        500,
+      );
+    }
+  });
+
+  investingApp.get("/api/sync/state", async (c) => c.json(await syncRun.readState()));
+
+  investingApp.post("/api/sync/continue", async (c) => {
+    if (!bearerIsCron(c)) return c.json({ problems: ["Unauthorized"] }, 401);
+    const body: unknown = await c.req.json().catch(() => null);
+    if (!validContinueBody(body)) return c.json({ problems: ["Invalid continue request"] }, 400);
+    return c.json(
+      { accepted: await syncRun.acceptContinue({ runId: body.runId, hop: body.hop }) },
+      202,
+    );
+  });
+
+  /* The daily cron's worker: claim or resume the run and await it in this
+   * invocation. Bearer secret only; never reachable with a user session. */
+  investingApp.post("/api/sync/drive", async (c) => {
+    if (!bearerIsCron(c)) return c.json({ problems: ["Unauthorized"] }, 401);
+    const body = (await c.req.json().catch(() => null)) as {
+      force?: unknown;
+      deadlineMs?: unknown;
+    } | null;
+    const deadlineMs =
+      typeof body?.deadlineMs === "number" && Number.isFinite(body.deadlineMs)
+        ? body.deadlineMs
+        : undefined;
+    return c.json({ result: await syncRun.runNow(body?.force === true, deadlineMs) });
+  });
+
   investingApp.post("/api/brokers/sync", async (c) => {
+    const requestedLane = c.req.query("lane");
+    if (requestedLane !== undefined && requestedLane !== "holdings" && requestedLane !== "history")
+      return c.json({ problems: [`Unknown lane: ${requestedLane}`] }, 400);
+    // Absent lane = both, which is what a caller that predates lanes means.
+    const lanes: readonly BrokerSyncLane[] =
+      requestedLane === "holdings"
+        ? ["holdings"]
+        : requestedLane === "history"
+          ? ["history"]
+          : ["holdings", "history"];
     const deadline = priceSyncDeadline();
     try {
       const result = await brokerSync(
         c.req.query("force") === "true",
+        lanes,
         deadline,
         c.req.query("rebuildOrders") === "true",
       );
       problemReporter({ source: "broker-sync", problems: result.problems });
       /* Awaited, not detached. Work started after the response is not
        * guaranteed to run at all on a serverless host, which is how prices
-       * went months without a bar while every call looked successful. */
-      await runPriceSyncIfConsented(await resolveTenantId(), deadline);
+       * went months without a bar while every call looked successful. The
+       * holdings lane never starts it: two broker requests must answer in
+       * under the 5 s dashboard budget, and a price slice is not what the
+       * user opened the app for. */
+      if (lanes.includes("history"))
+        await runPriceSyncIfConsented(await resolveTenantId(), deadline);
       return c.json(result);
     } catch {
       const result = { outcomes: [], problems: ["Broker synchronization failed"] };
@@ -747,7 +1382,14 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
     }
   });
   investingApp.delete("/api/prices/cache", async (c) => {
-    await store.purgeAll();
+    /* Prices are public reference data now (issue #307): with a database one
+     * user must not delete what every user reads. A local file store serves one
+     * installation, so clearing it stays available there. */
+    if (sharedPriceStore)
+      return c.json({ problems: ["Shared price data cannot be cleared from one account"] }, 405);
+    if (!dependencies.clearPriceCache)
+      return c.json({ problems: ["Price cache cannot be cleared"] }, 405);
+    await dependencies.clearPriceCache();
     dependencies.onPriceDataChanged?.();
     return c.json({ deleted: true });
   });
@@ -766,7 +1408,31 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
   investingApp.get("/api/market-data/identifier", async (c) => {
     const isin = c.req.query("isin")?.trim().toUpperCase();
     if (!isin) return c.json({ match: null, problems: ["isin is required"] }, 400);
-    const result = await mapIdentifier({ isin });
+    const name = c.req.query("name")?.trim();
+    const currency = c.req.query("currency")?.trim().toUpperCase();
+    let result;
+    try {
+      result = await mapIdentifier(
+        {
+          isin,
+          ...(name || currency
+            ? {
+                instrument: {
+                  ...(name ? { name } : {}),
+                  ...(currency ? { currency } : {}),
+                },
+              }
+            : {}),
+        },
+        await resolveTenantId(),
+      );
+    } catch (error) {
+      if (!isPartnerBudgetStop(error)) throw error;
+      return c.json(
+        { match: null, problems: ["The request budget has no slot for OpenFIGI now"] },
+        503,
+      );
+    }
     if (!result)
       return c.json({ match: null, problems: ["No identifier provider returned data"] }, 503);
     return c.json({ ...result.value, source: result.sourceKey });

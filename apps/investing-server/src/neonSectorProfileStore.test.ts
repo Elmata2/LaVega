@@ -6,6 +6,7 @@ import { afterAll, beforeAll, expect, test } from "vitest";
 import type { Database } from "@lavega/database";
 import { singleConnectionDatabase } from "@lavega/database/testing";
 import { createNeonSectorProfileStore } from "./neonSectorProfileStore.js";
+import { describeSectorAttemptContract } from "./sectorProfileStoreContract.testing.js";
 
 const migrationsDir = join(dirname(fileURLToPath(import.meta.url)), "../../../db/migrations");
 let pglite: PGlite;
@@ -114,4 +115,58 @@ test("a provider write still replaces an existing provider profile", async () =>
   });
 
   expect(await store.get("MSFT")).toMatchObject({ sector: "Healthcare", source: "provider" });
+});
+
+describeSectorAttemptContract("neon store", () => createNeonSectorProfileStore(db));
+
+test("recordProviderAttempt on a new symbol stores a kind none row that reads as null", async () => {
+  const store = createNeonSectorProfileStore(db);
+  await store.recordProviderAttempt("NOROW", "2026-11-10T10:00:00.000Z");
+  const row = await pglite.query<{ profile: unknown }>(
+    "SELECT profile FROM investing.sector_profiles WHERE symbol = 'NOROW'",
+  );
+  expect(row.rows[0]?.profile).toEqual({
+    kind: "none",
+    providerAttemptedAt: "2026-11-10T10:00:00.000Z",
+  });
+  expect(await store.get("NOROW")).toBeNull();
+});
+
+test("recordProviderAttempt on an existing profile only adds the providerAttemptedAt key", async () => {
+  const store = createNeonSectorProfileStore(db);
+  await store.set("KEEP", { kind: "stock", sector: "Energy", industry: "Oil", source: "provider" });
+  await store.recordProviderAttempt("KEEP", "2026-11-10T10:00:00.000Z");
+  const row = await pglite.query<{ profile: unknown }>(
+    "SELECT profile FROM investing.sector_profiles WHERE symbol = 'KEEP'",
+  );
+  expect(row.rows[0]?.profile).toEqual({
+    kind: "stock",
+    sector: "Energy",
+    industry: "Oil",
+    source: "provider",
+    providerAttemptedAt: "2026-11-10T10:00:00.000Z",
+  });
+});
+
+test("an inferred write keeps providerAttemptedAt in the stored row; a provider write drops it", async () => {
+  const store = createNeonSectorProfileStore(db);
+  await store.recordProviderAttempt("INF", "2026-11-10T10:00:00.000Z");
+  await store.set("INF", {
+    kind: "stock",
+    sector: "Energy",
+    industry: "Unknown",
+    source: "inferred",
+    specificity: "sector",
+    confidence: 0.7,
+    inferredAt: "2026-11-10T11:00:00.000Z",
+  });
+  const kept = await pglite.query<{ profile: Record<string, unknown> }>(
+    "SELECT profile FROM investing.sector_profiles WHERE symbol = 'INF'",
+  );
+  expect(kept.rows[0]?.profile.providerAttemptedAt).toBe("2026-11-10T10:00:00.000Z");
+  await store.set("INF", { kind: "stock", sector: "Energy", industry: "Oil", source: "provider" });
+  const replaced = await pglite.query<{ profile: Record<string, unknown> }>(
+    "SELECT profile FROM investing.sector_profiles WHERE symbol = 'INF'",
+  );
+  expect(replaced.rows[0]?.profile).not.toHaveProperty("providerAttemptedAt");
 });

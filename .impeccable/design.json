@@ -1,0 +1,344 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-11-10T19:49:14.034979+00:00",
+  "title": "Design System: LaVega Investing",
+  "extensions": {
+    "colorMeta": {
+      "coral": {
+        "role": "primary",
+        "displayName": "Coral",
+        "canonical": "#fc734d",
+        "tonalRamp": [
+          "hsl(13 97% 15%)",
+          "hsl(13 97% 25%)",
+          "hsl(13 97% 35%)",
+          "hsl(13 97% 45%)",
+          "hsl(13 97% 60%)",
+          "hsl(13 97% 75%)",
+          "hsl(13 97% 88%)",
+          "hsl(13 97% 95%)"
+        ]
+      },
+      "signal-blue": {
+        "role": "secondary",
+        "displayName": "Signal Blue",
+        "canonical": "#0297de",
+        "tonalRamp": [
+          "hsl(199 98% 15%)",
+          "hsl(199 98% 25%)",
+          "hsl(199 98% 35%)",
+          "hsl(199 98% 45%)",
+          "hsl(199 98% 60%)",
+          "hsl(199 98% 75%)",
+          "hsl(199 98% 88%)",
+          "hsl(199 98% 95%)"
+        ]
+      },
+      "midnight": {
+        "role": "neutral",
+        "displayName": "Midnight",
+        "canonical": "#02070a",
+        "tonalRamp": [
+          "hsl(202 67% 15%)",
+          "hsl(202 67% 25%)",
+          "hsl(202 67% 35%)",
+          "hsl(202 67% 45%)",
+          "hsl(202 67% 60%)",
+          "hsl(202 67% 75%)",
+          "hsl(202 67% 88%)",
+          "hsl(202 67% 95%)"
+        ]
+      },
+      "surface": {
+        "role": "neutral",
+        "displayName": "Surface",
+        "canonical": "#0d171d",
+        "tonalRamp": [
+          "hsl(202 38% 15%)",
+          "hsl(202 38% 25%)",
+          "hsl(202 38% 35%)",
+          "hsl(202 38% 45%)",
+          "hsl(202 38% 60%)",
+          "hsl(202 38% 75%)",
+          "hsl(202 38% 88%)",
+          "hsl(202 38% 95%)"
+        ]
+      },
+      "surface-2": {
+        "role": "neutral",
+        "displayName": "Surface 2",
+        "canonical": "#16222a",
+        "tonalRamp": [
+          "hsl(204 31% 15%)",
+          "hsl(204 31% 25%)",
+          "hsl(204 31% 35%)",
+          "hsl(204 31% 45%)",
+          "hsl(204 31% 60%)",
+          "hsl(204 31% 75%)",
+          "hsl(204 31% 88%)",
+          "hsl(204 31% 95%)"
+        ]
+      },
+      "mist": {
+        "role": "neutral",
+        "displayName": "Mist",
+        "canonical": "#a9b4bb",
+        "tonalRamp": [
+          "hsl(203 12% 15%)",
+          "hsl(203 12% 25%)",
+          "hsl(203 12% 35%)",
+          "hsl(203 12% 45%)",
+          "hsl(203 12% 60%)",
+          "hsl(203 12% 75%)",
+          "hsl(203 12% 88%)",
+          "hsl(203 12% 95%)"
+        ]
+      },
+      "gain-green": {
+        "role": "semantic",
+        "displayName": "Gain Green",
+        "canonical": "#5fd38d",
+        "tonalRamp": [
+          "hsl(144 57% 15%)",
+          "hsl(144 57% 25%)",
+          "hsl(144 57% 35%)",
+          "hsl(144 57% 45%)",
+          "hsl(144 57% 60%)",
+          "hsl(144 57% 75%)",
+          "hsl(144 57% 88%)",
+          "hsl(144 57% 95%)"
+        ]
+      },
+      "loss-rose": {
+        "role": "semantic",
+        "displayName": "Loss Rose",
+        "canonical": "#ff8f8f",
+        "tonalRamp": [
+          "hsl(0 100% 15%)",
+          "hsl(0 100% 25%)",
+          "hsl(0 100% 35%)",
+          "hsl(0 100% 45%)",
+          "hsl(0 100% 60%)",
+          "hsl(0 100% 75%)",
+          "hsl(0 100% 88%)",
+          "hsl(0 100% 95%)"
+        ]
+      },
+      "caution-amber": {
+        "role": "semantic",
+        "displayName": "Caution Amber",
+        "canonical": "#f2b84b",
+        "tonalRamp": [
+          "hsl(39 87% 15%)",
+          "hsl(39 87% 25%)",
+          "hsl(39 87% 35%)",
+          "hsl(39 87% 45%)",
+          "hsl(39 87% 60%)",
+          "hsl(39 87% 75%)",
+          "hsl(39 87% 88%)",
+          "hsl(39 87% 95%)"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Display",
+        "purpose": "Instrument Serif 400; sign-in headline."
+      },
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "Card titles and wordmark; serif, size carries hierarchy."
+      },
+      "figure": {
+        "displayName": "Figure",
+        "purpose": "Inter 600 tabular numerals for every number."
+      }
+    },
+    "shadows": [
+      {
+        "name": "float",
+        "value": "0 24px 48px -16px rgba(0,0,0,0.7), 0 4px 12px -4px rgba(0,0,0,0.5)",
+        "purpose": "Floating layers only; resting panels use tone plus hairline."
+      },
+      {
+        "name": "scrim",
+        "value": "rgba(2, 7, 10, 0.72)",
+        "purpose": "Behind modal layers."
+      }
+    ],
+    "motion": [
+      {
+        "name": "auth-fade",
+        "value": "opacity 180ms cubic-bezier(0.23, 1, 0.32, 1)",
+        "purpose": "Sign-in and auth page entrance."
+      },
+      {
+        "name": "press",
+        "value": "transform 150ms ease-out; scale(.98) on active",
+        "purpose": "Tactile press on buttons."
+      },
+      {
+        "name": "menu-in",
+        "value": "120ms ease-out; translateY(4px) scale(.97) to rest",
+        "purpose": "Mention menu entrance."
+      },
+      {
+        "name": "axis-label",
+        "value": "opacity 160ms ease-out",
+        "purpose": "Chart axis label fade."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "sm",
+        "value": "640px"
+      },
+      {
+        "name": "md",
+        "value": "768px"
+      },
+      {
+        "name": "lg",
+        "value": "1024px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The only filled CTA; coral pill.",
+      "html": "<button class=\"ds-btn-primary\">Sync broker</button>",
+      "css": ".ds-btn-primary{background:#fc734d;color:#02070a;border:0;padding:10px 16px;font:600 14px Inter,system-ui,sans-serif;border-radius:999px;transition:transform 150ms ease-out,background-color .15s;cursor:pointer}.ds-btn-primary:hover{background:rgba(252,115,77,.9)}.ds-btn-primary:active{transform:scale(.98)}.ds-btn-primary:focus-visible{outline:0;box-shadow:0 0 0 2px #02070a,0 0 0 4px #0297de}"
+    },
+    {
+      "name": "Outline Button",
+      "kind": "button",
+      "refersTo": "button-outline",
+      "description": "Secondary action; hairline pill.",
+      "html": "<button class=\"ds-btn-outline\">Export</button>",
+      "css": ".ds-btn-outline{background:transparent;color:#fff;border:1px solid rgba(255,255,255,.12);padding:10px 16px;font:600 14px Inter,system-ui,sans-serif;border-radius:999px;transition:transform 150ms ease-out,background-color .15s;cursor:pointer}.ds-btn-outline:hover{background:#16222a}.ds-btn-outline:active{transform:scale(.98)}.ds-btn-outline:focus-visible{outline:0;box-shadow:0 0 0 2px #02070a,0 0 0 4px #0297de}"
+    },
+    {
+      "name": "Ghost Button",
+      "kind": "button",
+      "refersTo": "button-ghost",
+      "description": "Low-emphasis action.",
+      "html": "<button class=\"ds-btn-ghost\">Cancel</button>",
+      "css": ".ds-btn-ghost{background:transparent;color:#a9b4bb;border:0;padding:8px 12px;font:600 14px Inter,system-ui,sans-serif;border-radius:999px;transition:transform 150ms ease-out,background-color .15s;cursor:pointer}.ds-btn-ghost:hover{background:#16222a;color:#fff}.ds-btn-ghost:focus-visible{outline:0;box-shadow:0 0 0 2px #02070a,0 0 0 4px #0297de}"
+    },
+    {
+      "name": "Destructive Button",
+      "kind": "button",
+      "refersTo": "button-destructive",
+      "description": "Rose-tinted, never a solid red fill.",
+      "html": "<button class=\"ds-btn-destructive\">Disconnect</button>",
+      "css": ".ds-btn-destructive{background:rgba(255,143,143,.15);color:#ff8f8f;border:1px solid rgba(255,143,143,.4);padding:10px 16px;font:600 14px Inter,system-ui,sans-serif;border-radius:999px;transition:transform 150ms ease-out,background-color .15s;cursor:pointer}.ds-btn-destructive:hover{background:rgba(255,143,143,.25)}.ds-btn-destructive:active{transform:scale(.98)}.ds-btn-destructive:focus-visible{outline:0;box-shadow:0 0 0 2px #02070a,0 0 0 4px #0297de}"
+    },
+    {
+      "name": "Card",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "Surface panel, hairline, no shadow.",
+      "html": "<div class=\"ds-card\"><h3 class=\"ds-card-title\">Allocation</h3><p class=\"ds-card-muted\">Priced 12 of 12 positions</p></div>",
+      "css": ".ds-card{background:#0d171d;border:1px solid rgba(255,255,255,.12);border-radius:20px;padding:24px;color:#fff;font-family:Inter,system-ui,sans-serif}.ds-card-title{font:400 30px/1.18 'Instrument Serif',Georgia,serif;letter-spacing:.01em;margin:0}.ds-card-muted{font-size:14px;color:#a9b4bb;margin:6px 0 0}"
+    },
+    {
+      "name": "Input",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "Midnight-filled field, 14px radius.",
+      "html": "<input class=\"ds-input\" placeholder=\"Search positions\" />",
+      "css": ".ds-input{display:block;width:240px;background:#02070a;color:#fff;border:1px solid rgba(255,255,255,.12);border-radius:14px;padding:10px 12px;font:400 14px Inter,system-ui,sans-serif}.ds-input:focus-visible{outline:0;box-shadow:0 0 0 2px #02070a,0 0 0 4px #0297de}"
+    },
+    {
+      "name": "KPI Row",
+      "kind": "custom",
+      "refersTo": "card",
+      "description": "Headline figures between hairlines; unknown reads Unknown.",
+      "html": "<dl class=\"ds-kpi\"><div><dt>Portfolio value</dt><dd class=\"ds-kpi-big\">€ 48,210.55</dd></div><div><dt>Today</dt><dd class=\"ds-pos\">+€ 1,204.10</dd></div><div><dt>Total return</dt><dd class=\"ds-neg\">-3.2%</dd></div></dl>",
+      "css": ".ds-kpi{display:grid;grid-template-columns:2fr 1fr 1fr;margin:0;border-top:1px solid rgba(255,255,255,.12);border-bottom:1px solid rgba(255,255,255,.12);color:#fff;font-family:Inter,system-ui,sans-serif;font-variant-numeric:tabular-nums}.ds-kpi div{padding:20px 24px;border-right:1px solid rgba(255,255,255,.12)}.ds-kpi div:last-child{border-right:0}.ds-kpi dt{font-size:14px;color:#a9b4bb}.ds-kpi dd{margin:4px 0 0;font-size:28px;font-weight:600}.ds-kpi-big{font-size:44px!important}.ds-pos{color:#5fd38d}.ds-neg{color:#ff8f8f}"
+    },
+    {
+      "name": "Status Line",
+      "kind": "custom",
+      "refersTo": "card",
+      "description": "One alert line; rose for problems, amber for warnings.",
+      "html": "<div class=\"ds-status\"><span>3 data problems: broker sync failed</span><a href=\"#\">Details</a></div>",
+      "css": ".ds-status{display:flex;gap:12px;justify-content:space-between;border:1px solid rgba(255,143,143,.3);background:rgba(255,143,143,.05);border-radius:14px;padding:12px 16px;color:#fff;font:400 14px Inter,system-ui,sans-serif}.ds-status a{color:#0297de;font-weight:600}"
+    }
+  ],
+  "narrative": {
+    "northStar": "Midnight Ledger",
+    "overview": "The shared lavega.dev \"Midnight\" world, applied to investing: a near-black canvas, a serif voice for headings, and plain tabular figures. Investing-web and apps/web use the same palette; `apps/web/src/styles/tokens.css` is the palette source and `apps/investing-web/src/styles/tokens.css` re-expresses it as HSL triplets so Tailwind alpha modifiers (`bg-primary/10`) keep working. Do not switch investing to raw hex or var-to-var `@theme` values: alpha modifiers would then silently emit full opacity.\n\nDensity is calm and moderate. Panels are separated by tone (midnight, surface, surface-2) and a 12% white hairline, never by shadow. Color is rare and meaningful: coral means act, blue means link, active or focus, green and rose mean gain and loss, amber means caution. Numbers are the content: Inter, tabular, aligned, never decorated.\n\nVisual anti-references: neon crypto-trading dashboards (glow, gradient numbers, gamified color); a small uppercase kicker above a heading; coral used as a selected or active state.",
+    "keyCharacteristics": [
+      "Dark only (`color-scheme: dark`); there is no light theme.",
+      "Instrument Serif for the wordmark and headings, Inter with tabular numerals for everything else.",
+      "Tone-plus-hairline depth; only floating layers cast a shadow.",
+      "Coral is the one filled call to action; blue carries links, active state and focus.",
+      "Radii follow the lavega.dev scale: pill buttons, 20px cards, 14px tiles."
+    ],
+    "rules": [
+      {
+        "name": "The One Action Rule",
+        "body": "Coral is the only filled call to action. It is never a selected, active or hover state, a link, or a data series.",
+        "section": "colors"
+      },
+      {
+        "name": "The Blue Orientation Rule",
+        "body": "Blue (#0297de) marks links, the active item and keyboard focus. It is never a fill for a primary action.",
+        "section": "colors"
+      },
+      {
+        "name": "The Gain/Loss Rule",
+        "body": "Green and rose carry meaning only for gain, loss and problem. Chart series never use green, rose, or the coral hue.",
+        "section": "colors"
+      },
+      {
+        "name": "The Contrast Rule",
+        "body": "Every text and semantic token must reach 4.5:1 on midnight, surface and surface-2; `apps/investing-web/scripts/check-contrast.mjs` proves it. Lowest measured: signal blue on surface-2 at 5.00:1; foreground on midnight is 20.23:1, mist on surface-2 is 7.67:1, gain 8.65:1 and rose 7.39:1 on surface-2.",
+        "section": "colors"
+      },
+      {
+        "name": "The One Weight Rule",
+        "body": "Instrument Serif has one weight. Hierarchy comes from size. The face is declared over weight 100 to 900 so a stray `font-semibold` renders the real glyphs, not a faux bold; do not add bold to serif on purpose.",
+        "section": "typography"
+      },
+      {
+        "name": "The Serif Breathing Rule",
+        "body": "Instrument Serif is condensed with tall ascenders and long descenders, so serif text takes `line-height: 1.18`, `letter-spacing: 0.01em` and `padding-block: 0.04em`. This rule is unlayered in `tokens.css` so it beats Tailwind `text-*`, `leading-*` and `tracking-*` utilities, which otherwise crop headings. Never put `leading-none` or `tracking-tight` on serif.",
+        "section": "typography"
+      },
+      {
+        "name": "The Tabular Rule",
+        "body": "Instrument Serif has no tabular numerals. Every figure, table, input, small control and text under 14px is Inter with `tabular-nums` (set on `body`), so columns align and values do not jitter.",
+        "section": "typography"
+      },
+      {
+        "name": "The Tone-Not-Shadow Rule",
+        "body": "A resting panel is separated by tone and a 12% white hairline. A resting panel never gets a shadow, glow or gradient.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "Do use Inter with tabular numerals for every figure, table, input, control and text under 14px.",
+      "Do keep coral for the single filled CTA and blue for links, active state and focus.",
+      "Do separate panels with tone and the 12% white hairline.",
+      "Do show unknown figures as \"Unknown\" with a reason, never as zero.",
+      "Do keep serif headings at `line-height: 1.18` with `0.01em` tracking, and build hierarchy from size alone.",
+      "Do honor `prefers-reduced-motion` for all animation and transitions.",
+      "Do use the semantic radius tokens (card, tile, chip, pill, frame), not ad hoc values.",
+      "Do run `check-contrast.mjs` after any palette change; every text token stays at or above 4.5:1 on midnight, surface and surface-2."
+    ],
+    "donts": [
+      "Don't drift toward neon crypto-trading dashboards: no glow, no gradient numbers, no gamified color.",
+      "Don't put a small uppercase kicker or eyebrow above a heading.",
+      "Don't use coral as a selected, active or hover state, or as a chart series.",
+      "Don't use green or rose except for gain, loss and problem; chart series never use green, rose or coral hues.",
+      "Don't put a shadow on a resting panel; only floating layers lift.",
+      "Don't set `leading-none` or `tracking-tight` on serif text, or add bold to it.",
+      "Don't set figures, tables or inputs in Instrument Serif."
+    ]
+  }
+}

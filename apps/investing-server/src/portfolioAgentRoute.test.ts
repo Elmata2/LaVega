@@ -1,7 +1,7 @@
 import { simulateReadableStream } from "ai";
 import { MockLanguageModelV4 } from "ai/test";
 import { expect, test, vi } from "vitest";
-import { createInMemoryPriceStore } from "@lavega/adapters";
+import { createInMemorySharedPriceStore } from "@lavega/adapters";
 import { createRuntimeApp } from "./index.js";
 import type { AgentRunRecord, AgentRunStore } from "./fileAgentRunStore.js";
 
@@ -24,7 +24,7 @@ function agentRunStore(): AgentRunStore {
 test("portfolio route returns aggregate typed judgments", async () => {
   const runAgent = vi.fn(async () => run);
   const app = await createRuntimeApp({
-    priceStore: createInMemoryPriceStore(),
+    priceStore: createInMemorySharedPriceStore(),
     runAgent,
     agentRunStore: agentRunStore(),
   });
@@ -38,7 +38,7 @@ test("portfolio route returns aggregate typed judgments", async () => {
 
 test("portfolio catalog does not expose judgment instructions", async () => {
   const app = await createRuntimeApp({
-    priceStore: createInMemoryPriceStore(),
+    priceStore: createInMemorySharedPriceStore(),
     runAgent: async () => run,
     agentRunStore: agentRunStore(),
   });
@@ -51,7 +51,7 @@ test("portfolio catalog does not expose judgment instructions", async () => {
 
 test("provider error returns 502", async () => {
   const app = await createRuntimeApp({
-    priceStore: createInMemoryPriceStore(),
+    priceStore: createInMemorySharedPriceStore(),
     runAgent: async () => {
       throw new Error("provider unavailable");
     },
@@ -67,7 +67,7 @@ test("provider error returns 502", async () => {
 test("start storage failure returns 502 without model work", async () => {
   const runAgent = vi.fn(async () => run);
   const app = await createRuntimeApp({
-    priceStore: createInMemoryPriceStore(),
+    priceStore: createInMemorySharedPriceStore(),
     runAgent,
     agentRunStore: {
       ...agentRunStore(),
@@ -121,7 +121,7 @@ test("conversation streams one persona's answer without running the six-persona 
   const runAgent = vi.fn(async () => run);
   const chatModel = streamingModel("ASML is your largest position.");
   const app = await createRuntimeApp({
-    priceStore: createInMemoryPriceStore(),
+    priceStore: createInMemorySharedPriceStore(),
     runAgent,
     chatModel,
     agentRunStore: agentRunStore(),
@@ -151,7 +151,7 @@ test("conversation streams one persona's answer without running the six-persona 
 
 test("conversation rejects an unknown persona or a missing user message", async () => {
   const app = await createRuntimeApp({
-    priceStore: createInMemoryPriceStore(),
+    priceStore: createInMemorySharedPriceStore(),
     chatModel: streamingModel("unused"),
     agentRunStore: agentRunStore(),
   });
@@ -163,7 +163,7 @@ test("conversation rejects an unknown persona or a missing user message", async 
 test("a tagged agent answers in its own persona with the thread labelled by speaker", async () => {
   const chatModel = streamingModel("Price matters more than I hear from you.");
   const app = await createRuntimeApp({
-    priceStore: createInMemoryPriceStore(),
+    priceStore: createInMemorySharedPriceStore(),
     chatModel,
     agentRunStore: agentRunStore(),
   });
@@ -197,7 +197,7 @@ test("a tagged agent answers in its own persona with the thread labelled by spea
 test("a turn that tags nobody keeps the host's persona and an unlabelled thread", async () => {
   const chatModel = streamingModel("Fine.");
   const app = await createRuntimeApp({
-    priceStore: createInMemoryPriceStore(),
+    priceStore: createInMemorySharedPriceStore(),
     chatModel,
     agentRunStore: agentRunStore(),
   });

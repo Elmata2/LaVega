@@ -69,7 +69,7 @@ function harness(options?: {
     inferenceSetting,
     consent,
     revision: (tenantId) => revision.get(tenantId),
-    resolveListing: async (_tenantId, symbol) => symbol,
+    resolveListing: async (_tenantId, position) => position.symbol,
   });
   return {
     reader,
@@ -179,7 +179,7 @@ test("a broker sync that adds a holding resolves it, and one that does not keeps
 });
 
 test("an unconsented tenant sees no inferred sector, counting it as unknown", async () => {
-  const h = harness({ consented: false });
+  const h = harness({ consented: false, positions: [position("MYST", 100)] });
   await h.store.set("MYST", {
     kind: "stock",
     sector: "Healthcare",
@@ -197,7 +197,11 @@ test("an unconsented tenant sees no inferred sector, counting it as unknown", as
 });
 
 test("inference off hides a cached inferred sector even with consent", async () => {
-  const h = harness({ consented: true, inferenceEnabled: false });
+  const h = harness({
+    consented: true,
+    inferenceEnabled: false,
+    positions: [position("MYST", 100)],
+  });
   await h.store.set("MYST", {
     kind: "stock",
     sector: "Healthcare",
@@ -211,6 +215,28 @@ test("inference off hides a cached inferred sector even with consent", async () 
   const result = await h.reader({ tenantId: "local" });
 
   expect(result.sectors).toEqual([{ sector: "Unknown", weight: 1 }]);
+});
+
+test("consent and inference on shows the cached inferred sector", async () => {
+  const h = harness({
+    consented: true,
+    inferenceEnabled: true,
+    positions: [position("MYST", 100)],
+  });
+  await h.store.set("MYST", {
+    kind: "stock",
+    sector: "Healthcare",
+    industry: "Unknown",
+    source: "inferred",
+    specificity: "sector",
+    confidence: 0.82,
+    inferredAt: "2026-09-01T00:00:00.000Z",
+  });
+
+  const result = await h.reader({ tenantId: "local" });
+
+  expect(result.sectors).toEqual([{ sector: "Healthcare", weight: 1 }]);
+  expect(result.sectorCoverage).toEqual({ provider: 0, inferred: 1, correction: 0, unknown: 0 });
 });
 
 test("a correction outranks a provider profile", async () => {

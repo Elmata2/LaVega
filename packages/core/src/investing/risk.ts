@@ -15,13 +15,6 @@ export type RiskRange = "6M" | "1Y" | "All";
  *  measures only the invested holdings, used when cash history is unproven. */
 export type RiskBasis = "account" | "holdings";
 
-export function benchmarkCurrencyMismatchReason(
-  presentationCurrency: string,
-  benchmark: { symbol: string; currency: string },
-): string {
-  return `Beta and alpha need a ${presentationCurrency}-quoted benchmark; ${benchmark.symbol} is quoted in ${benchmark.currency}.`;
-}
-
 export type TrailingGap = "none" | "settling" | "incomplete" | "stale";
 
 /** How far behind the range's last date the last known date sits, in
@@ -138,7 +131,6 @@ export function buildHistoricalRisk(
   const negativeCashDays = knownPoints.filter(
     (point) => point.cashValue !== null && point.cashValue < -0.01,
   ).length;
-  const comparable = benchmark?.currency === data.presentationCurrency;
   const computed = computePortfolioMetrics({
     valuePoints: measured.map((point) => ({
       date: point.date,
@@ -146,7 +138,7 @@ export function buildHistoricalRisk(
       usable: known(point),
     })),
     externalCashFlows: flows,
-    benchmarkPoints: comparable ? benchmark?.points : undefined,
+    benchmarkPoints: benchmark?.points,
     minObservations: RISK_MINIMUM_OBSERVATIONS,
   });
   const drawdown = computePortfolioMetrics({
@@ -207,9 +199,7 @@ export function buildHistoricalRisk(
     reasons.push(`Measured through ${points[lastKnownIndex]!.date}; later dates are incomplete.`);
   if (computed.observationDays < RISK_MINIMUM_OBSERVATIONS)
     reasons.push(`At least ${RISK_MINIMUM_OBSERVATIONS} valid daily returns are required.`);
-  if (!benchmark) reasons.push("Add a benchmark with Compare above to calculate beta and alpha.");
-  else if (!comparable)
-    reasons.push(benchmarkCurrencyMismatchReason(data.presentationCurrency, benchmark));
+  if (!benchmark) reasons.push("Choose a benchmark to calculate beta and alpha.");
   else if (available && metrics.beta === null)
     reasons.push(
       "Beta and alpha need 60 matching return intervals and a benchmark with non-zero variance.",

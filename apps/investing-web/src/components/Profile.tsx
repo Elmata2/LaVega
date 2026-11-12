@@ -4,10 +4,10 @@ import { getSession, signOut, type SessionState } from "../lib/auth-client.js";
 import { useDashboard } from "../lib/dashboardResource.js";
 import { useInvestingLayout } from "../lib/layoutResource.js";
 import { PERSONAL_URL } from "../lib/personal.js";
-import type { PriceSyncProgress } from "../lib/priceSync.js";
-import { useSyncSession, type BrokerProgress } from "../lib/syncSession.js";
+import { useSyncSession, type BrokerProgress, type PriceSyncProgress } from "../lib/syncSession.js";
 import { AgentMemorySection } from "./AgentMemorySection.js";
 import { BrokerSettings } from "./BrokerSettings.js";
+import { CashFlowSuggestionsSection } from "./CashFlowSuggestionsSection.js";
 import { LayoutPicker, Switch } from "./LayoutPicker.js";
 import { Button } from "./ui/button.js";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card.js";
@@ -55,7 +55,7 @@ function AccountSection() {
               {PERSONAL_URL && (
                 <a
                   href={PERSONAL_URL}
-                  className="text-sm font-semibold text-primary hover:underline"
+                  className="text-sm font-semibold text-accent hover:underline"
                 >
                   Go to LaVega Personal
                 </a>
@@ -190,7 +190,7 @@ function StatusChip({
         : tone === "success"
           ? "border-positive/30 bg-positive/5"
           : tone === "active"
-            ? "border-primary/20 bg-secondary/40"
+            ? "border-accent/20 bg-secondary/40"
             : "border-border bg-secondary/20";
   const dotClass =
     tone === "problem"
@@ -200,7 +200,7 @@ function StatusChip({
         : tone === "success"
           ? "bg-positive"
           : tone === "active"
-            ? "bg-primary"
+            ? "bg-accent"
             : "bg-muted-foreground";
   return (
     <div className={`rounded-tile border px-3 py-2.5 ${toneClass}`}>
@@ -217,10 +217,30 @@ function StatusChip({
   );
 }
 
-function ClearPriceCache() {
+/** Clears the local price cache. Hidden when the server reports a shared
+ *  price store (issue #307): prices are public reference data then, so one
+ *  account must not delete what every account reads. `null` while the health
+ *  answer is in flight keeps the control hidden rather than flashing a button
+ *  that would answer 405. */
+export function ClearPriceCache() {
+  const [shared, setShared] = useState<boolean | null>(null);
   const [busy, setBusy] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  useEffect(() => {
+    let current = true;
+    void fetch("/api/investing/health")
+      .then((response) => (response.ok ? response.json() : null))
+      .then((body: { sharedPriceStore?: unknown } | null) => {
+        if (current) setShared(body?.sharedPriceStore === true);
+      })
+      .catch(() => {
+        if (current) setShared(false);
+      });
+    return () => {
+      current = false;
+    };
+  }, []);
   async function clear() {
     setBusy(true);
     setMessage(null);
@@ -234,6 +254,7 @@ function ClearPriceCache() {
       setBusy(false);
     }
   }
+  if (shared !== false) return null;
   if (confirming)
     return (
       <div className="flex flex-wrap items-center justify-end gap-3" role="alert">
@@ -463,6 +484,8 @@ export function Profile() {
       <StatusSection />
 
       <DataSection />
+
+      <CashFlowSuggestionsSection />
 
       <AgentMemorySection />
 

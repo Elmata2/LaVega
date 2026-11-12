@@ -10,9 +10,10 @@ import {
   YAxis,
 } from "recharts";
 import { EmptyState } from "./EmptyState";
-import { Swatch } from "./Swatch";
+import { LineSwatch, Swatch } from "./Swatch";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
-import { ChartContainer } from "./ui/chart";
+import { segmentedItem, segmentedTrack } from "./ui/segmented";
+import { axisTick, ChartContainer } from "./ui/chart";
 import { chartRanges, positionPointsForRange, useChartWindow } from "./useChartWindow";
 import { shortDate } from "../lib/dates.js";
 
@@ -68,7 +69,7 @@ function MarkerDetails({
     <section
       role="status"
       aria-live="polite"
-      className="rounded-xl border border-border bg-secondary/30 p-3 text-xs"
+      className="rounded-tile border border-border bg-secondary/30 p-3 text-xs"
     >
       <p className="font-semibold">
         {dateLabel(date)} · Close {priceLabel(close, currency)}
@@ -165,11 +166,7 @@ export function PositionPriceChart({
           <p className="text-sm font-medium text-muted-foreground">Price history</p>
           <CardTitle>{symbol}</CardTitle>
         </div>
-        <div
-          role="group"
-          aria-label="Choose period"
-          className="flex flex-wrap gap-1 rounded-pill bg-secondary p-1"
-        >
+        <div role="group" aria-label="Choose period" className={segmentedTrack}>
           {chartRanges.map((range) => (
             <button
               key={range.value}
@@ -179,7 +176,9 @@ export function PositionPriceChart({
                 chart.applyPreset(range.value);
                 setActiveEventDate(null);
               }}
-              className="pressable rounded-pill px-2.5 py-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground"
+              className={segmentedItem(
+                chart.window.kind === "preset" && chart.window.range === range.value,
+              )}
             >
               {range.label}
             </button>
@@ -253,7 +252,7 @@ export function PositionPriceChart({
               role="img"
               tabIndex={0}
               aria-label={`Price history of ${symbol}. Use arrow keys for exact values, Home and End for start and end, Escape to clear zoom.`}
-              className="touch-pan-y select-none rounded-xl outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
+              className="touch-pan-y select-none rounded-tile outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
               onKeyDown={(event) => {
                 chart.handlers.onKeyDown(event);
                 setActiveEventDate(null);
@@ -269,9 +268,9 @@ export function PositionPriceChart({
             >
               <ChartContainer className="h-[300px]" aria-hidden="true">
                 <LineChart data={plotPoints} margin={{ top: 12, right: 12, left: 0, bottom: 0 }}>
-                  <XAxis dataKey="date" tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
+                  <XAxis dataKey="date" tick={axisTick} tickLine={false} axisLine={false} />
                   <YAxis
-                    tick={{ fontSize: 11 }}
+                    tick={axisTick}
                     tickLine={false}
                     axisLine={false}
                     width={60}
@@ -282,7 +281,7 @@ export function PositionPriceChart({
                     dataKey="close"
                     name="Price"
                     stroke="hsl(var(--chart-blue))"
-                    strokeWidth={2}
+                    strokeWidth={2.5}
                     dot={false}
                     connectNulls={false}
                     isAnimationActive={false}
@@ -331,6 +330,12 @@ export function PositionPriceChart({
                 />
               </div>
             )}
+            <div aria-label="Chart series" className="mt-4 flex flex-wrap gap-2 text-xs">
+              <span className="inline-flex items-center gap-2 px-2 py-1 font-semibold text-foreground">
+                <LineSwatch thick color="hsl(var(--chart-blue))" />
+                {symbol} price
+              </span>
+            </div>
             <div aria-label="Price markers" className="mt-4 flex flex-wrap gap-2 text-xs">
               {markers.map(({ marker, pointIndex, markerIndex }) => (
                 <button

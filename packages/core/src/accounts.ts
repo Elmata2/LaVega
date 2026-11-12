@@ -107,16 +107,27 @@ export function findDuplicateAccounts(accounts: Account[]): DuplicateGroup[] {
  *  survivor's occurrence count (matches `assignTxIds`). The duplicate account is
  *  dropped; the survivor inherits the duplicate's IBAN only if it had none (all
  *  other survivor fields — entity/type/balance — are kept). Pure; returns fresh
- *  arrays. No-op if the keys are equal or either account is missing. */
+ *  arrays. No-op if the keys are equal or either account is missing.
+ *
+ *  `txIdRemap` is the SAME merge stated for records that point at txs — transfer
+ *  pairs (WS1.1) and, later, bill and document links. Each old id of the
+ *  duplicate account maps to the id it has after the merge, or to null when the
+ *  row was absorbed as an overlap. Without it a persisted pair keeps pointing at
+ *  an id that no longer exists and is silently orphaned (plan §2.2). The
+ *  survivor's own rows keep their ids and are deliberately absent from the map:
+ *  absence means "untouched", so a caller never has to remap what it did not
+ *  change. */
 export function mergeAccounts(
   accounts: Account[],
   txs: Tx[],
   survivorKey: string,
   duplicateKey: string,
-): { accounts: Account[]; txs: Tx[] } {
+): { accounts: Account[]; txs: Tx[]; txIdRemap: Map<string, string | null> } {
   const survivor = accounts.find((a) => a.key === survivorKey);
   const duplicate = accounts.find((a) => a.key === duplicateKey);
-  if (survivorKey === duplicateKey || !survivor || !duplicate) return { accounts, txs };
+  if (survivorKey === duplicateKey || !survivor || !duplicate) {
+    return { accounts, txs, txIdRemap: new Map() };
+  }
 
   const survivorTxs = txs.filter((t) => t.accountKey === survivorKey);
   const dupTxs = txs.filter((t) => t.accountKey === duplicateKey);
@@ -145,9 +156,18 @@ export function mergeAccounts(
   // Surplus copies get occurrences have+1..dupCount → ids that can't collide
   // with the survivor's existing 1..have.
   const added: Tx[] = [];
+  const txIdRemap = new Map<string, string | null>();
   for (const [base, group] of dupByBase) {
     const have = survivorCount.get(base) ?? 0;
-    for (let k = have; k < group.length; k++) added.push({ ...group[k], id: txId(base, k + 1) });
+    for (let k = 0; k < group.length; k++) {
+      if (k < have) {
+        txIdRemap.set(group[k].id, null); // absorbed: the survivor already has this movement
+      } else {
+        const id = txId(base, k + 1);
+        txIdRemap.set(group[k].id, id);
+        added.push({ ...group[k], id });
+      }
+    }
   }
 
   const nextTxs = [...untouched, ...survivorTxs, ...added];
@@ -155,7 +175,7 @@ export function mergeAccounts(
   const nextAccounts = accounts
     .filter((a) => a.key !== duplicateKey)
     .map((a) => (a.key === survivorKey ? mergedSurvivor : a));
-  return { accounts: nextAccounts, txs: nextTxs };
+  return { accounts: nextAccounts, txs: nextTxs, txIdRemap };
 }
 
 /** What an account still has not told us, and that a screen may ask for.
