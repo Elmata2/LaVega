@@ -1,6 +1,6 @@
 # DeGiro import — spec
 
-Status: spec, 2026-11-12. Supersedes the "Verified for #47/#49" claim in
+Status: spec, 2026-11-12. Epic [#329](https://github.com/Elmata2/lavega/issues/329). Supersedes the "Verified for #47/#49" claim in
 `CONNECTORS.md` (that claim was wrong, see [Current state](#current-state)).
 
 Goal: a DeGiro user puts their DeGiro exports into LaVega and sees the same
@@ -41,20 +41,20 @@ Datum,Tijd,Valutadatum,Product,ISIN,Omschrijving,FX,Mutatie,,Saldo,,Order Id
 
 Row kinds seen (`#` = number):
 
-| `Omschrijving`                                        | Product/ISIN | Order Id | Mutatie | Meaning                                       |
-| ----------------------------------------------------- | ------------ | -------- | ------- | --------------------------------------------- |
-| `Koop # @ # EUR` / `Koop # @ # USD`                   | yes          | yes      | yes     | Buy execution: quantity and price in the text |
-| `DEGIRO Transactiekosten en/of kosten van derden`     | yes          | yes      | yes     | Commission of that order                      |
-| `Valuta Creditering` / `Valuta Debitering`            | some         | some     | yes     | FX leg. With Order Id: AutoFX of that trade   |
-| `Dividend`                                            | yes          | no       | yes     | Gross dividend (EUR and USD seen)             |
-| `Dividendbelasting`                                   | yes          | no       | yes     | Withholding tax on a dividend                 |
-| `flatex Storting`, `iDEAL Deposit`                    | no           | no       | yes     | External deposit                              |
-| `Reservation iDEAL / Sofort Deposit`                  | no           | no       | yes     | Deposit reservation. May pair with a deposit  |
-| `Processed Flatex Withdrawal`, `flatex terugstorting` | no           | no       | yes     | External withdrawal                           |
-| `Degiro Cash Sweep Transfer`                          | yes (fund)   | no       | yes     | Internal move, broker cash ↔ flatex bank      |
-| `Overboeking van/naar uw geldrekening bij flatexDEGIRO Bank …` | no  | no       | **empty** | Information line. No cash moves            |
-| `Flatex Interest Income`, `Rente`                     | no           | no       | yes     | Interest (sign decides income or charge)      |
-| `DEGIRO Aansluitingskosten # (<exchange>)`            | no           | no       | yes     | Exchange connection fee                       |
+| `Omschrijving`                                                 | Product/ISIN | Order Id | Mutatie   | Meaning                                       |
+| -------------------------------------------------------------- | ------------ | -------- | --------- | --------------------------------------------- |
+| `Koop # @ # EUR` / `Koop # @ # USD`                            | yes          | yes      | yes       | Buy execution: quantity and price in the text |
+| `DEGIRO Transactiekosten en/of kosten van derden`              | yes          | yes      | yes       | Commission of that order                      |
+| `Valuta Creditering` / `Valuta Debitering`                     | some         | some     | yes       | FX leg. With Order Id: AutoFX of that trade   |
+| `Dividend`                                                     | yes          | no       | yes       | Gross dividend (EUR and USD seen)             |
+| `Dividendbelasting`                                            | yes          | no       | yes       | Withholding tax on a dividend                 |
+| `flatex Storting`, `iDEAL Deposit`                             | no           | no       | yes       | External deposit                              |
+| `Reservation iDEAL / Sofort Deposit`                           | no           | no       | yes       | Deposit reservation. May pair with a deposit  |
+| `Processed Flatex Withdrawal`, `flatex terugstorting`          | no           | no       | yes       | External withdrawal                           |
+| `Degiro Cash Sweep Transfer`                                   | yes (fund)   | no       | yes       | Internal move, broker cash ↔ flatex bank      |
+| `Overboeking van/naar uw geldrekening bij flatexDEGIRO Bank …` | no           | no       | **empty** | Information line. No cash moves               |
+| `Flatex Interest Income`, `Rente`                              | no           | no       | yes       | Interest (sign decides income or charge)      |
+| `DEGIRO Aansluitingskosten # (<exchange>)`                     | no           | no       | yes       | Exchange connection fee                       |
 
 Not seen in the sample and required in D1's fixture: a sell (`Verkoop`), a
 corporate action (split, ISIN change, merger), a transfer of shares in or out.
@@ -63,11 +63,11 @@ corporate action (split, ISIN change, merger), a transfer of shares in or out.
 
 ### One file set, three profiles
 
-| Profile          | DeGiro export                 | Produces                                                    | Status     |
-| ---------------- | ----------------------------- | ----------------------------------------------------------- | ---------- |
-| `account`        | Rekeningoverzicht / Account   | cash flows, dividends, cash balances, trades, cash coverage | verified   |
-| `transactions`   | Transacties / Transactions    | trades (venue, local value, FX rate, commission)            | unverified |
-| `portfolio`      | Portefeuille / Portfolio      | positions, cash balance                                     | unverified |
+| Profile        | DeGiro export               | Produces                                                    | Status     |
+| -------------- | --------------------------- | ----------------------------------------------------------- | ---------- |
+| `account`      | Rekeningoverzicht / Account | cash flows, dividends, cash balances, trades, cash coverage | verified   |
+| `transactions` | Transacties / Transactions  | trades (venue, local value, FX rate, commission)            | unverified |
+| `portfolio`    | Portefeuille / Portfolio    | positions, cash balance                                     | unverified |
 
 The account statement is the **primary** import. It alone proves cash history.
 Transactions and Portfolio enrich it; neither is required.
@@ -147,23 +147,23 @@ number and keep the Saldo walk consistent.
 
 ## Issues
 
-| ID  | Title                                                      | Blocked by     |
-| --- | ---------------------------------------------------------- | -------------- |
-| D1  | Real-format DeGiro fixtures (sanitized)                    | —              |
-| D2  | DeGiro CSV reader + header-signature profile detection     | D1 (account)   |
-| D3  | Account statement → cash flows + Saldo walk invariant      | D2             |
-| D4  | Account statement → dividends and withholding tax          | D2             |
-| D5  | Account statement → trades, commissions, balances, coverage | D3, D4        |
-| D6  | Transactions export → trades, deduped by Order Id          | D1, D5         |
-| D7  | Portfolio export → positions and cash balance              | D1, D2         |
-| D8  | One broker list with capabilities; add `degiro`            | —              |
-| D9  | Snapshot window replace for DeGiro re-imports              | D5, D8         |
-| D10 | ISIN as DeGiro instrument identity + price resolution      | D5             |
-| D11 | Upload route: dry run + commit                             | D8, D9         |
-| D12 | Web: DeGiro import tab                                     | D11            |
-| D13 | Import age and stale-data problem                          | D11            |
-| D14 | Quantity and cash reconciliation problems                  | D6, D7         |
-| D15 | Live verification + docs close-out                         | D12, D13, D14  |
-| D16 | Decision: extension export helper (optional)               | D15            |
+| ID                                                       | Title                                                       | Blocked by    |
+| -------------------------------------------------------- | ----------------------------------------------------------- | ------------- |
+| D1 [#313](https://github.com/Elmata2/lavega/issues/313)  | Real-format DeGiro fixtures (sanitized)                     | —             |
+| D2 [#314](https://github.com/Elmata2/lavega/issues/314)  | DeGiro CSV reader + header-signature profile detection      | D1 (account)  |
+| D3 [#315](https://github.com/Elmata2/lavega/issues/315)  | Account statement → cash flows + Saldo walk invariant       | D2            |
+| D4 [#316](https://github.com/Elmata2/lavega/issues/316)  | Account statement → dividends and withholding tax           | D2            |
+| D5 [#317](https://github.com/Elmata2/lavega/issues/317)  | Account statement → trades, commissions, balances, coverage | D3, D4        |
+| D6 [#318](https://github.com/Elmata2/lavega/issues/318)  | Transactions export → trades, deduped by Order Id           | D1, D5        |
+| D7 [#319](https://github.com/Elmata2/lavega/issues/319)  | Portfolio export → positions and cash balance               | D1, D2        |
+| D8 [#320](https://github.com/Elmata2/lavega/issues/320)  | One broker list with capabilities; add `degiro`             | —             |
+| D9 [#321](https://github.com/Elmata2/lavega/issues/321)  | Snapshot window replace for DeGiro re-imports               | D5, D8        |
+| D10 [#322](https://github.com/Elmata2/lavega/issues/322) | ISIN as DeGiro instrument identity + price resolution       | D5            |
+| D11 [#323](https://github.com/Elmata2/lavega/issues/323) | Upload route: dry run + commit                              | D8, D9        |
+| D12 [#324](https://github.com/Elmata2/lavega/issues/324) | Web: DeGiro import tab                                      | D11           |
+| D13 [#325](https://github.com/Elmata2/lavega/issues/325) | Import age and stale-data problem                           | D11           |
+| D14 [#326](https://github.com/Elmata2/lavega/issues/326) | Quantity and cash reconciliation problems                   | D6, D7        |
+| D15 [#327](https://github.com/Elmata2/lavega/issues/327) | Live verification + docs close-out                          | D12, D13, D14 |
+| D16 [#328](https://github.com/Elmata2/lavega/issues/328) | Decision: extension export helper (optional)                | D15           |
 
 Order: D1 and D8 start in parallel. D2 → D3/D4 → D5 is the critical path.
