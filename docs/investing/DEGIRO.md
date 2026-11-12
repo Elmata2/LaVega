@@ -17,12 +17,15 @@ file import, no credentials, no automation.
 ID`, semicolon). No real DeGiro export has that shape; D1 deleted them and
   checked in real-format fixtures.
 - Run against a real NL account statement (`Rekeningoverzicht`, the file DeGiro
-  calls `Account.csv`), the parser returns
-  `onbekend of leeg bestand — geen transacties of posities herkend`.
+  calls `Account.csv`), the pre-#314 parser returned
+  `onbekend of leeg bestand — geen transacties of posities herkend`. D2 (#314)
+  replaced that detection: the same file is now named `DeGiro account`. See
+  [Reader and detection](#reader-and-detection-d2-314).
+- Row mapping is **not** built yet. A recognised file reports one problem naming
+  the profile and returns no rows; #315–#319 add the mapping.
 - `Transactions.csv` and `Portfolio.csv` shapes were **unverified** until D1.
   They are now verified from real exports of 2026-11-12 (see the two sections
-  below). The parser still looks for the invented #47/#49 shape; #314 replaces
-  it, and the real-format fixtures are checked in.
+  below), and their headers are the ones D2 matches.
 
 ## Verified: the account statement (`Account.csv`)
 
@@ -121,6 +124,49 @@ recomputed so the walk above holds per currency. `degiroFixtures.test.ts`
 asserts the headers, the walk, the row kinds and the internal arithmetic.
 
 ## Design
+
+### Reader and detection (D2, #314)
+
+`packages/core/src/parsers/degiro/read.ts` and `profiles.ts`.
+
+- `readCsv(text)` — RFC 4180: comma delimiter, quoted fields with embedded
+  commas, embedded newlines and doubled quotes, optional UTF-8 BOM, CRLF / LF /
+  CR. Never throws; empty input yields an empty table. `CsvRow.line` is the
+  source line the record starts on, so a problem can name its row.
+- `detectLocale(table)` — the decimal convention is decided **once per file**,
+  never per cell. It only looks at cells outside the free-text columns
+  (`Product`, `Omschrijving`, `ISIN`, `Beurs`, …). The account statement writes
+  dot decimals while its quoted descriptions hold comma decimals, so a per-cell
+  guess reads `Koop 5 @ 19,648 USD` as an amount. Evidence wins, a tie or no
+  evidence means `dot`.
+- `parseDecimal(raw, locale)` — dot or comma decimals, thousands separators,
+  leading minus, `0` preserved; `null` for anything else.
+- `parseIsoDate(raw)` / `parseClockTime(raw)` — `DD-MM-YYYY` and `HH:MM` to ISO.
+  Impossible calendar dates (`31-02-2026`, `29-02-2023`) give `null`.
+  `dateProblems(table, column)` turns those into row-numbered problems
+  (`rij 7: onmogelijke datum "31-02-2026"`).
+- `currencyAmountAt(header, cells, labelIndex, locale)` — the two adjacent
+  columns that hold a currency and its amount, as `{ currency, amount }`. The
+  column order differs per export, so the code is found by content, not by
+  position:
+  - account: `Mutatie` / `Saldo` hold the currency, the unnamed column holds
+    the amount;
+  - transactions: `Koers` / `Lokale waarde` hold the amount, the unnamed column
+    holds the currency;
+  - portfolio: `Lokale waarde` holds the currency, the unnamed column holds the
+    amount.
+- `detectProfile(header)` — exact header signature per profile and language.
+  Five signatures are verified: account NL, transactions NL, transactions EN,
+  portfolio NL, portfolio EN. An account statement has been observed in NL only,
+  so there is deliberately no EN account signature. Unknown header gives
+  `{ known: false, problem: "onbekend DeGiro-formaat: <header>" }`. It never
+  throws, never guesses, and takes no filename.
+- `readDeGiroCsv(text)` — sync, never throws, at most one problem: empty file
+  (`leeg bestand — geen DeGiro-export gevonden`), unknown header, or a known
+  header with no data row (`DeGiro <profile>-export zonder rijen`).
+  `readDeGiro(text)` is the Effect wrapper; it fails with `DeGiroReadError`.
+- `parseBrokerFile(filename, text)` delegates to `readDeGiroCsv` and **ignores
+  `filename`**. No filename regex is left in the DeGiro path.
 
 ### One file set, three profiles
 
@@ -238,3 +284,6 @@ number and keep the Saldo walk consistent.
 | D16 [#328](https://github.com/Elmata2/lavega/issues/328) | Decision: extension export helper (optional)                | D15           |
 
 Order: D1 and D8 start in parallel. D2 → D3/D4 → D5 is the critical path.
+
+Landed: D1 (#313, fixtures), D8 (#320, one broker list), D2 (#314, reader and
+header-signature detection).

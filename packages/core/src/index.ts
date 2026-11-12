@@ -52,6 +52,8 @@ export * from "./parsers/invoiceUbl.js";
 export * from "./parsers/parseInvoiceFile.js";
 export * from "./parsers/mt940.js";
 export * from "./parsers/parseBankFile.js";
+export * from "./parsers/degiro/read.js";
+export * from "./parsers/degiro/profiles.js";
 export * from "./parsers/parseBrokerFile.js";
 export * from "./fxRoutes.js";
 export * from "./n8nSettings.js";
