@@ -84,7 +84,9 @@ header, never a guess.
 - **Coverage.** Account statement over `[first Datum, last Datum]` →
   `status: "complete"` only if the Saldo walk (below) holds for every currency.
   Otherwise `unknown` with the failing row named.
-- **Saldo walk invariant.** Sorted oldest first, per currency:
+- **Saldo walk invariant.** The file is newest first: reverse it, never re-sort
+  (a trade, its fee and its AutoFX legs share one `Datum`+`Tijd`; file order is
+  the only true order). Then per currency:
   `Saldo[n] = Saldo[n-1] + Mutatie[n]`. This test proves no row was dropped or
   double-counted. It decides the iDEAL reservation question with evidence.
 - **Cash flow kinds.** External money only is `deposit`/`withdrawal`. Cash
