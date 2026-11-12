@@ -274,13 +274,16 @@ drains those runs lives outside the request chain:
   dot. One call advances the queue by one invocation budget, and the durable
   `investing.sync_state` cursors resume it on the next call.
 - **Setup:** add repository secret `CRON_SECRET` with the same value as the
-  Vercel variable. When the deployment is not `https://www.lavega.dev`, add
-  repository variable `INVESTING_SYNC_URL` with the origin to call. The
-  workflow is enabled on the default branch; GitHub disables scheduled
-  workflows after 60 days without repository activity, so re-enable it in the
-  Actions tab if the cadence stops. Until `CRON_SECRET` exists a scheduled tick
-  warns and skips instead of failing every 15 minutes; a manual dispatch fails
-  so the missing setup is visible.
+  Vercel `CRON_SECRET`. Vercel stores that variable as a Secret, so an existing
+  value cannot be read or pulled; when it is unknown, rotate it: set a new
+  random value in Vercel (Production), redeploy production so the function
+  reads it, then save the same value as the repository secret. When the
+  deployment is not `https://www.lavega.dev`, add repository variable
+  `INVESTING_SYNC_URL` with the origin to call. The workflow is enabled on the
+  default branch; GitHub disables scheduled workflows after 60 days without
+  repository activity, so re-enable it in the Actions tab if the cadence stops.
+  Until `CRON_SECRET` exists a scheduled tick warns and skips instead of failing
+  every 15 minutes; a manual dispatch fails so the missing setup is visible.
 - **Kill switch:** repository variable `INVESTING_SYNC_SCHEDULER=off` stops the
   workflow without editing it; Vercel variable `INVESTING_SYNC_SCHEDULER=off`
   stops the drain route on the server. `INVESTING_SYNC_CHAIN` stays off and is
