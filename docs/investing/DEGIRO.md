@@ -122,11 +122,11 @@ overlapping account files). A re-import must not append duplicates.
 
 ### Server and web
 
-- Broker ids come from one list with capabilities
-  (`credentials`, `scheduled`, `fileImport`). `SCHEDULED_BROKERS` and
-  `CredentialBroker` stay without `degiro`. Today `"ibkr" | "trading212"` is
-  hand-written in `app.ts` (~129, 173–180, 893, 1320), `portfolioRead.ts`
-  (~340), `BrokerSettings.tsx`, `historyGate.ts`, `brokerSnapshot.ts`.
+- Broker ids come from one list with capabilities (`BROKERS` in
+  `packages/core/src/investing/brokers.ts`): `credentials`, `scheduled`,
+  `fileImport`. `SCHEDULED_BROKERS`, `CredentialBroker`, `BrokerDataSnapshot`
+  keys, readability maps and labels derive from it, so `degiro` is absent from
+  the scheduled-sync set and the credential APIs by construction (#320).
 - Upload route: tenant-bound, Effect 4, multipart, up to three files, total
   under 4.5 MB (Vercel body limit). Dry run returns a preview; commit writes the
   encrypted snapshot under the broker lease and invalidates the dashboard

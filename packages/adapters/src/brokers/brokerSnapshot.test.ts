@@ -683,3 +683,17 @@ describe("two freshness lanes", () => {
     expect(cache.read().trades).toHaveLength(3);
   });
 });
+
+/* Issue #320: snapshot keys come from the one broker table, so a broker that
+ * only has file imports keeps its rows through a save and restore instead of
+ * being dropped by a hand-written key check. */
+test("a snapshot keeps every broker the table declares, including import-only DeGiro", () => {
+  const stored: BrokerDataSnapshot = {
+    degiro: { positions: [], trades: [], dividends: [], cashBalances: [], cashFlows: [] },
+  };
+  const cache = createBrokerDataCache(stored);
+  expect(cache.snapshot().degiro).toBeDefined();
+  expect(createBrokerDataCache(structuredClone(cache.snapshot())).snapshot()).toEqual(
+    cache.snapshot(),
+  );
+});

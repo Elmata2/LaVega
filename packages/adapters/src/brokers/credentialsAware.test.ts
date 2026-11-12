@@ -1,6 +1,6 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { afterEach, expect, test, vi } from "vitest";
-import type { CredentialStore } from "@lavega/core";
+import type { CredentialBroker, CredentialStore } from "@lavega/core";
 import { createCredentialsAwareBrokerAdapters } from "./credentialsAware.js";
 import { createImmediatePartnerBudget } from "../partnerBudget/fakes.js";
 
@@ -31,9 +31,7 @@ function json(response: ServerResponse, status: number, body: unknown): void {
   response.end(JSON.stringify(body));
 }
 
-function memoryCredentials(
-  stored: Partial<Record<"ibkr" | "trading212", unknown>>,
-): CredentialStore {
+function memoryCredentials(stored: Partial<Record<CredentialBroker, unknown>>): CredentialStore {
   return {
     async getCredentials(_tenantId, broker) {
       return (stored[broker] ?? null) as never;

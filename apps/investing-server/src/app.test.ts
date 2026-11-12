@@ -953,6 +953,20 @@ test("broker credentials route stores validated IBKR credentials without returni
   });
 });
 
+test("degiro is not a credential broker and cannot reach the credentials route", async () => {
+  const configureBroker = vi.fn(async () => undefined);
+  const investingApp = createApp({ configureBroker });
+  const response = await investingApp.request("/api/brokers/credentials", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ broker: "degiro", token: "someone-elses-token" }),
+  });
+
+  expect(response.status).toBe(400);
+  expect(await response.json()).toEqual({ problems: ["broker must be ibkr or trading212"] });
+  expect(configureBroker).not.toHaveBeenCalled();
+});
+
 test("broker vault routes report status and unlock without returning passphrase", async () => {
   const credentialStatus = vi.fn(async () => "locked" as const);
   const unlockCredentials = vi.fn(async () => true);

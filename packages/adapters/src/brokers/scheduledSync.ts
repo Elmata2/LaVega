@@ -1,8 +1,8 @@
 import type {
   BrokerCredentials,
   CashFlowRule,
-  CredentialBroker,
   CredentialStore,
+  ScheduledBroker,
 } from "@lavega/core";
 import { applyCashFlowKindRules } from "@lavega/core";
 import {
@@ -22,13 +22,11 @@ import {
 import { TAIL_READ_STREAMS } from "./trading212/adapter.js";
 import { isBrokerLeaseStale } from "./brokerSyncLease.js";
 
-/** The brokers a scheduled sync knows how to drive. The type is derived from
- *  this list so a broker can only be added in one place. */
-export const SCHEDULED_BROKERS = [
-  "ibkr",
-  "trading212",
-] as const satisfies readonly CredentialBroker[];
-export type ScheduledBroker = (typeof SCHEDULED_BROKERS)[number];
+/** The brokers a scheduled sync knows how to drive. Both the list and its type
+ *  come from the one broker table (`BROKERS` in `@lavega/core`), so a broker
+ *  that is not declared `scheduled` there cannot be added to a sync by hand. */
+export { SCHEDULED_BROKERS } from "@lavega/core";
+export type { ScheduledBroker } from "@lavega/core";
 export type BrokerSyncState = {
   /** Kept: the last complete history run. Read by existing callers. */
   lastSyncedAt: string | null;

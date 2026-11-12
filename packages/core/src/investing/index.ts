@@ -4,6 +4,7 @@ export * from "./ownership.js";
 export * from "./quantity.js";
 export * from "./risk.js";
 export * from "./hash.js";
+export * from "./brokers.js";
 export * from "./credentials.js";
 export * from "./portfolio.js";
 export * from "./allocation.js";

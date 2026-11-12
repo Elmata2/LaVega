@@ -1,5 +1,6 @@
 import { carryForwardCostBasis } from "@lavega/core";
 import type {
+  BrokerId,
   CashBalance,
   CashFlow,
   CashHistoryCoverage,
@@ -7,6 +8,7 @@ import type {
   Position,
   Trade,
 } from "@lavega/core";
+import { isBrokerId } from "@lavega/core";
 import type { BrokerResult } from "./BrokerAccessAdapter.js";
 import type { ScheduledSyncResult } from "./scheduledSync.js";
 
@@ -33,7 +35,7 @@ export type BrokerAccountSnapshot = {
   cashFlows?: CashFlow[];
   cashHistory?: CashHistoryCoverage;
 };
-export type BrokerDataSnapshot = Partial<Record<"ibkr" | "trading212", BrokerAccountSnapshot>>;
+export type BrokerDataSnapshot = Partial<Record<BrokerId, BrokerAccountSnapshot>>;
 
 function mergeById<T extends { id: string }>(existing: T[], incoming: T[]): T[] {
   const byId = new Map(existing.map((item) => [item.id, item]));
@@ -410,7 +412,7 @@ export function createBrokerDataCache(initial: BrokerDataSnapshot = {}) {
         ...cashBalancesByBroker.keys(),
         ...cashFlowsByBroker.keys(),
       ])) {
-        if (broker !== "ibkr" && broker !== "trading212") continue;
+        if (!isBrokerId(broker)) continue;
         snapshot[broker] = {
           positions: structuredClone(positionsByBroker.get(broker) ?? []),
           trades: structuredClone(tradesByBroker.get(broker) ?? []),
