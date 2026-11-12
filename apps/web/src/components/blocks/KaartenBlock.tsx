@@ -9,6 +9,9 @@ import Module from "../Module.js";
 import CardLink from "../ui/CardLink.js";
 import { useAppLocale } from "../../appLocale.js";
 import { moneyCopy, type MoneyCopy } from "../../copy/money.js";
+import { wizardCopy } from "../../copy/wizard.js";
+import { CATALOGUE_ENTRIES } from "../../catalogue-rates";
+import { statedCardPlaceholders } from "../../plan/statedPlaceholders";
 
 /* Je kaarten — the card-art strip from `Modules for homescreen 5/7.png`.
  *
@@ -199,13 +202,36 @@ const CARD_STRIP_CLASS = "flex gap-4 overflow-x-auto pb-2 [scroll-snap-type:x_pr
 type KaartenBlockProps = {
   accounts: Account[];
   onNavigate: (view: View) => void;
+  /** Catalogue ids (or "other") from the wizard; each shows as a card that is
+   *  not connected yet until the bank data brings the real one. */
+  statedCredit?: readonly string[];
+  statedDebit?: readonly string[];
 };
 
-export default function KaartenBlock({ accounts, onNavigate }: KaartenBlockProps) {
+const NO_IDS: readonly string[] = [];
+
+export default function KaartenBlock({
+  accounts,
+  onNavigate,
+  statedCredit = NO_IDS,
+  statedDebit = NO_IDS,
+}: KaartenBlockProps) {
   const [locale] = useAppLocale();
   const c = moneyCopy[locale].kaarten;
   const typesCopy = moneyCopy[locale].accountTypes;
   const ramps = useBrandRamps();
+  const wc = wizardCopy[locale];
+  const placeholders = useMemo(
+    () =>
+      statedCardPlaceholders({
+        credit: statedCredit,
+        debit: statedDebit,
+        accounts,
+        entries: CATALOGUE_ENTRIES,
+        otherLabels: { credit: wc.otherCard, debit: wc.otherDebitCard },
+      }),
+    [statedCredit, statedDebit, accounts, wc.otherCard, wc.otherDebitCard],
+  );
   const cards = useMemo(
     () =>
       accounts
@@ -225,7 +251,7 @@ export default function KaartenBlock({ accounts, onNavigate }: KaartenBlockProps
       height="short"
       menu={<CardLink onClick={() => onNavigate("accounts")}>{c.rekeningenArrow}</CardLink>}
     >
-      {cards.length === 0 ? (
+      {cards.length === 0 && placeholders.length === 0 ? (
         <p className="block-empty">{c.geenRekeningenGekoppeld}</p>
       ) : (
         <div className={CARD_STRIP_CLASS}>
@@ -316,6 +342,63 @@ export default function KaartenBlock({ accounts, onNavigate }: KaartenBlockProps
                         : formatEuroIn(locale, account.balance)}
                     </div>
                   </div>
+                </footer>
+              </article>
+            );
+          })}
+          {placeholders.map((p) => {
+            const label = p.brand === null ? undefined : (wc.bankNames[p.brand] ?? p.brand);
+            const logo = label === undefined ? null : bankLogo(label);
+            return (
+              <article
+                className="bank-card"
+                key={`${p.kind}:${p.id}`}
+                style={{
+                  background: "var(--surface-2)",
+                  border: "1px dashed var(--line)",
+                  color: "var(--ink)",
+                }}
+                aria-label={c.placeholderAria(p.name)}
+              >
+                <header className="flex items-baseline justify-between gap-3">
+                  <span className="font-bold text-[0.95rem] overflow-hidden text-ellipsis whitespace-nowrap">
+                    {logo ? (
+                      <img
+                        src={logo.dataUri}
+                        alt=""
+                        width={16}
+                        height={16}
+                        style={{
+                          width: 16,
+                          height: 16,
+                          objectFit: "contain",
+                          background: "var(--card-text)",
+                          borderRadius: 3,
+                          padding: 1,
+                          marginRight: 6,
+                          verticalAlign: "-3px",
+                        }}
+                      />
+                    ) : null}
+                    {p.name}
+                  </span>
+                </header>
+                <div className="text-[0.85rem]" style={{ color: "var(--muted)" }}>
+                  {c.nietGekoppeld}
+                </div>
+                <footer className="flex">
+                  <button
+                    type="button"
+                    className="cursor-pointer rounded-sm px-3 py-1 text-[0.85rem] font-semibold"
+                    style={{
+                      background: "transparent",
+                      color: "var(--ink)",
+                      border: "1px solid var(--line)",
+                    }}
+                    onClick={() => onNavigate("accounts")}
+                  >
+                    {c.koppelen}
+                  </button>
                 </footer>
               </article>
             );

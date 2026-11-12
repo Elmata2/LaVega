@@ -238,6 +238,15 @@ function isN8nNoticeLike(v: unknown): v is N8nNotice {
   );
 }
 
+/** The stated card ids from the read profile; none while it is not readable. */
+function statedOf(
+  read: ProfileRead | "loading" | "error",
+  key: "statedCards" | "statedDebitCards",
+): readonly string[] | undefined {
+  if (read === "loading" || read === "error" || read.kind !== "ok") return undefined;
+  return read.store.current[key]?.value;
+}
+
 /** Replace-or-append one transfer decision by its content id. Confirming and
  *  rejecting write the SAME row (a pair is in exactly one state), so a plain
  *  append could leave a confirmed and a rejected copy of one pair behind — and
@@ -2431,6 +2440,9 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
               onDeleteAccount={handleDeleteAccount}
               duplicateGroups={duplicateGroups}
               onMergeDuplicates={handleMergeDuplicates}
+              statedCredit={statedOf(profileRead, "statedCards")}
+              statedDebit={statedOf(profileRead, "statedDebitCards")}
+              onRefreshBank={() => void handleRefreshBank()}
               valuations={scopedValuations}
               asOf={asOf}
               onOpeningCommit={handleOpeningCommit}
