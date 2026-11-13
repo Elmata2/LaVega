@@ -565,6 +565,19 @@ export default function Globe({ value, onPick, from = "EUR", supported }: GlobeP
     [],
   );
 
+  /* Het palet wordt één keer per doek gelezen, dus een themawissel (data-theme op
+   * <html>) moet het weggooien en opnieuw tekenen, anders blijft de bol in de
+   * kleuren van het vorige thema staan. */
+  useEffect(() => {
+    if (typeof MutationObserver !== "function") return;
+    const mo = new MutationObserver(() => {
+      paletteRef.current = null;
+      paintRef.current();
+    });
+    mo.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+    return () => mo.disconnect();
+  }, []);
+
   /* De maat van het doek volgt de kolom waarin hij staat. ResizeObserver en niet
    * een window-resize-luisteraar: de kolom kan ook smaller worden zonder dat het
    * venster verandert (het paneel ernaast dat uitklapt). Bestaat hij niet, dan

@@ -19,3 +19,14 @@ export function applyTheme(theme: Theme): void {
   else delete root.dataset.theme;
   root.style.colorScheme = theme === "mono" ? "light" : "dark";
 }
+
+/* Persist the choice. Returns false when storage is blocked; callers keep the
+ * choice in memory and show nothing. */
+export function storeTheme(theme: Theme): boolean {
+  try {
+    window.localStorage.setItem(THEME_KEY, theme);
+    return true;
+  } catch {
+    return false;
+  }
+}

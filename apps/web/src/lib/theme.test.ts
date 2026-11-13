@@ -2,12 +2,14 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { applyTheme, readStoredTheme, THEME_KEY } from "./theme";
+import { applyTheme, readStoredTheme, storeTheme, THEME_KEY } from "./theme";
+import { isAppPathname } from "../appRoutes";
 
 const root = document.documentElement;
 const initScript = readFileSync(resolve(process.cwd(), "public/theme-init.js"), "utf8");
 
 beforeEach(() => {
+  window.history.replaceState({}, "", "/app");
   window.localStorage.clear();
   delete root.dataset.theme;
   root.style.colorScheme = "";
@@ -92,4 +94,38 @@ test("index.html loads the init script synchronously before the module script", 
   expect(tag).toBeGreaterThan(-1);
   expect(tag).toBeLessThan(html.indexOf('type="module"'));
   expect(tag).toBeLessThan(html.indexOf("</head>"));
+});
+
+test("storeTheme persists and reports success", () => {
+  expect(storeTheme("mono")).toBe(true);
+  expect(window.localStorage.getItem(THEME_KEY)).toBe("mono");
+  expect(storeTheme("midnight")).toBe(true);
+  expect(readStoredTheme()).toBe("midnight");
+});
+
+test("storeTheme swallows blocked storage and returns false", () => {
+  vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+    throw new Error("quota");
+  });
+  expect(storeTheme("mono")).toBe(false);
+});
+
+const PATHS = [
+  "/",
+  "/en",
+  "/reset-password",
+  "/app",
+  "/app/",
+  "/app/profiel",
+  "/application",
+  "/en/app",
+];
+
+test.each(PATHS)("init script applies mono only on app paths: %s", (path) => {
+  window.history.replaceState({}, "", path);
+  window.localStorage.setItem(THEME_KEY, "mono");
+  runInit();
+  const wantMono = isAppPathname(path);
+  expect(root.dataset.theme).toBe(wantMono ? "mono" : undefined);
+  expect(root.style.colorScheme).toBe(wantMono ? "light" : "dark");
 });

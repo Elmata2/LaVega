@@ -23,6 +23,7 @@ import type { Account, LearnedFact } from "@lavega/core";
 import { entitySummaries, factId, TRAVEL_AGENT } from "@lavega/core";
 import type { VaultStorage } from "@lavega/adapters";
 import Profiel from "./Profiel";
+import { forgetMemoryTheme } from "../hooks/useTheme";
 import { WIDGETS, enabledModules } from "../components/moduleRegistry";
 import { COUNTRY_CODES } from "../countries";
 import { getHomeCountry } from "../settings";
@@ -38,6 +39,7 @@ let root: Root | null = null;
 let container: HTMLElement | null = null;
 
 beforeEach(() => {
+  forgetMemoryTheme();
   localStorage.clear();
   document.cookie = "lavega_locale=nl";
 });
@@ -45,9 +47,13 @@ beforeEach(() => {
 afterEach(() => {
   if (root) act(() => root!.unmount());
   container?.remove();
+  // Some tests render twice and orphan the first container; its radios would
+  // share a name with the next test's and uncheck them.
+  document.body.replaceChildren();
   root = null;
   container = null;
   vi.unstubAllGlobals();
+  vi.restoreAllMocks();
   document.cookie = "lavega_locale=; Max-Age=0; Path=/";
 });
 
@@ -846,4 +852,86 @@ test("a link card opens what LaVega knows about you", async () => {
   )!;
   act(() => open.click());
   expect(onNavigate).toHaveBeenCalledWith("about-you");
+});
+
+/* ══════ WEERGAVE — thema-keuze (Midnight / Zwart-wit) ═════════════════════ */
+
+/** Een radio aanklikken. Onder jsdom staat de `checked`-eigenschap van een
+ *  gecontroleerde radio pas goed na een tweede flush; de state en het attribuut
+ *  op <html> zijn al meteen goed. */
+async function pick(radio: HTMLInputElement) {
+  act(() => radio.click());
+  await act(async () => {});
+}
+
+test("Weergave: twee gelabelde radio's in een radiogroup, boven de modulekaart", async () => {
+  await render();
+  const card = section("Weergave");
+  const group = card.querySelector('[role="radiogroup"]');
+  expect(group).not.toBeNull();
+  expect(group!.getAttribute("aria-label")).toBe("Thema");
+  const radios = [...card.querySelectorAll<HTMLInputElement>('input[type="radio"]')];
+  expect(radios.map((r) => r.value)).toEqual(["midnight", "mono"]);
+  expect(card.textContent).toContain("Midnight");
+  expect(card.textContent).toContain("Zwart-wit");
+  for (const r of radios) expect(r.labels?.length).toBe(1);
+  const modules = section("Modules");
+  expect(card.compareDocumentPosition(modules) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+});
+
+test("Weergave: Engels gebruikt 'Black and white'", async () => {
+  document.cookie = "lavega_locale=en";
+  await render();
+  expect(container!.textContent).toContain("Black and white");
+});
+
+test("Weergave: de gekozen radio volgt het opgeslagen thema bij het laden", async () => {
+  localStorage.setItem("lavega.theme", "mono");
+  await render();
+  const radios = [...section("Weergave").querySelectorAll<HTMLInputElement>("input[type=radio]")];
+  expect(radios.find((r) => r.checked)?.value).toBe("mono");
+});
+
+test("Weergave: kiezen bewaart en past direct toe", async () => {
+  delete document.documentElement.dataset.theme;
+  await render();
+  const mono = section("Weergave").querySelector<HTMLInputElement>('input[value="mono"]')!;
+  await pick(mono);
+  expect(localStorage.getItem("lavega.theme")).toBe("mono");
+  expect(document.documentElement.dataset.theme).toBe("mono");
+  expect(mono.checked).toBe(true);
+  const mid = section("Weergave").querySelector<HTMLInputElement>('input[value="midnight"]')!;
+  await pick(mid);
+  expect(document.documentElement.hasAttribute("data-theme")).toBe(false);
+  expect(localStorage.getItem("lavega.theme")).toBe("midnight");
+});
+
+test("Weergave: geblokkeerde opslag wisselt toch, zonder foutmelding", async () => {
+  vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+    throw new Error("blocked");
+  });
+  await render();
+  const card = section("Weergave");
+  const before = card.textContent;
+  await pick(card.querySelector<HTMLInputElement>('input[value="mono"]')!);
+  expect(document.documentElement.dataset.theme).toBe("mono");
+  expect(card.querySelector<HTMLInputElement>('input[value="mono"]')!.checked).toBe(true);
+  expect(card.textContent).toBe(before);
+  expect(card.querySelector('[role="alert"]')).toBeNull();
+  vi.restoreAllMocks();
+  delete document.documentElement.dataset.theme;
+});
+
+test("Weergave: een storage-event van een ander tabblad werkt de keuze bij", async () => {
+  delete document.documentElement.dataset.theme;
+  await render();
+  localStorage.setItem("lavega.theme", "mono");
+  act(() => {
+    window.dispatchEvent(new StorageEvent("storage", { key: "lavega.theme", newValue: "mono" }));
+  });
+  expect(document.documentElement.dataset.theme).toBe("mono");
+  expect(section("Weergave").querySelector<HTMLInputElement>('input[value="mono"]')!.checked).toBe(
+    true,
+  );
+  delete document.documentElement.dataset.theme;
 });

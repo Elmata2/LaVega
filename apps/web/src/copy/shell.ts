@@ -98,6 +98,13 @@ export type ShellCopy = {
   notice: (n: ShellNotice) => string;
   profiel: {
     languageSwitch: { cardLabel: string; nl: string; en: string; ariaLabel: string };
+    appearance: {
+      ariaLabel: string;
+      heading: string;
+      groupLabel: string;
+      midnight: string;
+      mono: string;
+    };
     account: {
       ariaLabel: string;
       heading: string;
@@ -422,6 +429,13 @@ const nl: ShellCopy = {
       nl: "Nederlands",
       en: "English",
       ariaLabel: "Taal / Language",
+    },
+    appearance: {
+      ariaLabel: "Weergave",
+      heading: "Weergave",
+      groupLabel: "Thema",
+      midnight: "Midnight",
+      mono: "Zwart-wit",
     },
     account: {
       ariaLabel: "Account",
@@ -779,6 +793,13 @@ const en: ShellCopy = {
       nl: "Nederlands",
       en: "English",
       ariaLabel: "Taal / Language",
+    },
+    appearance: {
+      ariaLabel: "Appearance",
+      heading: "Appearance",
+      groupLabel: "Theme",
+      midnight: "Midnight",
+      mono: "Black and white",
     },
     account: {
       ariaLabel: "Account",

@@ -133,3 +133,27 @@ test("landing forces midnight while mounted and restores the stored theme on unm
   window.localStorage.clear();
   delete html.dataset.theme;
 });
+
+test("a legacy #app entry that normalises into /app gets the stored theme (init skipped it on /)", () => {
+  window.localStorage.setItem("lavega.theme", "mono");
+  delete document.documentElement.dataset.theme;
+  window.history.replaceState({}, "", "/#app");
+  vi.mocked(useAuthState).mockReturnValue({
+    state: { kind: "signed-in", id: "u1", email: "x@y.nl" },
+    refresh: vi.fn(),
+  });
+  render();
+  expect(document.documentElement.dataset.theme).toBe("mono");
+  window.localStorage.clear();
+  delete document.documentElement.dataset.theme;
+});
+
+test("signed-out /app with mono already applied by the init script is corrected to midnight", () => {
+  window.localStorage.setItem("lavega.theme", "mono");
+  document.documentElement.dataset.theme = "mono";
+  window.history.replaceState({}, "", "/app");
+  vi.mocked(useAuthState).mockReturnValue({ state: { kind: "signed-out" }, refresh: vi.fn() });
+  render();
+  expect(document.documentElement.hasAttribute("data-theme")).toBe(false);
+  window.localStorage.clear();
+});

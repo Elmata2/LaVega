@@ -43,6 +43,8 @@ import { signOut, useAuthState } from "../authClient.js";
 import posthog from "../posthog.js";
 import type { ShellNotice } from "../shellNotice.js";
 import { useAppLocale } from "../appLocale.js";
+import { useTheme } from "../hooks/useTheme.js";
+import type { Theme } from "../lib/theme.js";
 import { shellCopy } from "../copy/shell.js";
 import { intakeCopy } from "../copy/intake.js";
 import type { View } from "../appRoutes.js";
@@ -463,6 +465,8 @@ function CashbackCorrigeren({
   );
 }
 
+const THEME_OPTIONS: readonly Theme[] = ["midnight", "mono"];
+
 export default function Profiel({
   enabledModules,
   onModulesChange,
@@ -508,6 +512,7 @@ export default function Profiel({
   onNavigate,
 }: ProfielProps) {
   const [locale, setLocale] = useAppLocale();
+  const [theme, setTheme] = useTheme();
   const c = shellCopy[locale];
   const modulesRef = useRef<HTMLElement>(null);
   // The widget preference is read here rather than passed in: the switch lives
@@ -613,6 +618,32 @@ export default function Profiel({
               />
             </label>
           </div>
+        </div>
+      </Card>
+
+      <Card as="section" aria-label={c.profiel.appearance.ariaLabel}>
+        <h2>{c.profiel.appearance.heading}</h2>
+        <div
+          className="module-tabs theme-switch"
+          role="radiogroup"
+          aria-label={c.profiel.appearance.groupLabel}
+        >
+          {THEME_OPTIONS.map((option) => (
+            <label
+              key={option}
+              className={`module-tab theme-option${theme === option ? " module-tab-on" : ""}`}
+            >
+              <input
+                type="radio"
+                name="lavega-theme"
+                value={option}
+                checked={theme === option}
+                onChange={() => setTheme(option)}
+              />
+              <span className={`theme-swatch theme-swatch-${option}`} aria-hidden="true" />
+              {c.profiel.appearance[option]}
+            </label>
+          ))}
         </div>
       </Card>
 

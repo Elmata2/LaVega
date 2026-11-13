@@ -145,6 +145,47 @@
     color: var(--on-ink);
   }
 
+  /* Theme picker (Profiel > Weergave): .module-tabs / .module-tab with native
+ * radios inside the labels. The input is visually hidden but stays focusable,
+ * so arrow keys move the choice. No transition: the theme switch is instant. */
+  .theme-option {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    gap: var(--sp-2);
+    padding: 4px 12px 4px 4px;
+  }
+  .theme-option input {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    opacity: 0;
+    cursor: pointer;
+  }
+  .theme-option:has(input:focus-visible) {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+  .theme-swatch {
+    flex: none;
+    width: 24px;
+    height: 24px;
+    border-radius: var(--pill);
+    border: 1px solid var(--line);
+  }
+  .theme-swatch-midnight {
+    background: linear-gradient(
+      135deg,
+      var(--swatch-midnight-bg) 50%,
+      var(--swatch-midnight-ink) 50%
+    );
+  }
+  .theme-swatch-mono {
+    background: linear-gradient(135deg, var(--swatch-mono-bg) 50%, var(--swatch-mono-ink) 50%);
+  }
+
   /* ---------- SaldoBlock (Totale positie) ---------- */
 
   /* .figure-vs, .position-graph-empty, .position-compare(-item/-figure/-value/
