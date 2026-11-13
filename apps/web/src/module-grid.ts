@@ -27,19 +27,23 @@
 /* THE BREAKPOINTS ARE CONTAINER WIDTHS, measured on the wrapper inside main
  * (CONTENT_CONTAINER_CLASS), not on the viewport. Today's shell leaves the
  * wrapper narrower than the viewport, so the old 1200 / 900 viewport thresholds
- * are offset to switch at the same viewport widths as before:
- *   - viewport > 900: wrapper = viewport - 2 x 20 (frame gap) - 2 x 32 (content
- *     padding) = viewport - 104, so the old 1200 becomes 1096.
- *   - viewport <= 900: the frame is full-bleed and the padding is 2 x 16, so the
- *     wrapper = viewport - 32 and the old 900 becomes 868.
- * Exact at 1200 and for every phone width. In the 901-972 viewport band the
- * wrapper (797-868) is already <= 868, so it is one column there where the old
- * rule gave two; a single container threshold cannot be exact on both sides of
- * the shell's 900px frame change. A later shell (rail, sidebar) re-measures
- * main by itself, which is the point of this change; revisit these two numbers
- * then. They are repeated as literals in the class strings below because
- * Tailwind needs to see the whole string. */
-export const CONTAINER_TWO_COL_MAX = 1096;
+ * are offset to switch at the same viewport widths as before. Measured in a
+ * browser: .shell is full viewport width (its margin is `frame-gap auto`, so
+ * the 20px gap is top and bottom only) and .content pads 32px each side.
+ *   - viewport > 900: wrapper = viewport - 2 x 32 = viewport - 64, so the old
+ *     1200 becomes 1136.
+ *   - viewport <= 900: the content padding is 2 x 16, so wrapper = viewport - 32
+ *     and the old 900 becomes 868.
+ * Exact at 1200 and for every viewport <= 900. Mismatch band: viewports 901-932
+ * (wrapper 837-868) get one column where the old rule gave two; one container
+ * threshold cannot be exact on both sides of the 900px padding change. Above
+ * the shell's 1680px max-width the wrapper stops growing, which is still three
+ * columns. A classic always-visible scrollbar takes about its width from the
+ * wrapper and shifts the switch by that much (viewport queries include it).
+ * A later shell (rail, sidebar) re-measures main by itself, which is the point
+ * of this change; revisit these two numbers then. They are repeated as literals
+ * in the class strings below because Tailwind needs to see the whole string. */
+export const CONTAINER_TWO_COL_MAX = 1136;
 export const CONTAINER_ONE_COL_MAX = 868;
 
 /** The wrapper inside the scrolling main that the container queries measure
@@ -59,14 +63,14 @@ export type ModuleHeight = "short" | "tall";
 export const MODULE_GRID_CLASS = "module-grid";
 
 /** `grid-column`, by span. 2 clamps to the full row once the grid is down to
- *  two columns (container ≤1096px) — restated at ≤900px too, redundant in a real
- *  browser (≤868 already implies ≤1096) but needed so resolved()'s per-width
+ *  two columns (container ≤1136px) — restated at ≤900px too, redundant in a real
+ *  browser (≤868 already implies ≤1136) but needed so resolved()'s per-width
  *  lookup, which does not accumulate wider max-width blocks, finds it there.
  *  1 only clamps once the grid is down to one column (container ≤868px). 3 is always
  *  the full row, so it carries no breakpoint variant. */
 const SPAN_CLASS: Record<ModuleSpan, string> = {
   1: "[grid-column:span_1] [@container(max-width:868px)]:col-span-full",
-  2: "[grid-column:span_2] [@container(max-width:1096px)]:col-span-full [@container(max-width:868px)]:col-span-full",
+  2: "[grid-column:span_2] [@container(max-width:1136px)]:col-span-full [@container(max-width:868px)]:col-span-full",
   3: "col-span-full",
 };
 

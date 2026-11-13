@@ -179,12 +179,12 @@
     container-type: inline-size;
   }
 
-  @container (max-width: 1096px) {
+  @container (max-width: 1136px) {
     .module-grid {
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }
     /* span-2/span-3 clamping to the full row at this width is now the
-   * `[@container(max-width:1096px)]:col-span-full` variant on module-span-2 in
+   * `[@container(max-width:1136px)]:col-span-full` variant on module-span-2 in
    * module-grid.ts (span-3 is always the full row and carries no variant). */
   }
 
@@ -230,7 +230,7 @@
  * sleutel; een tweede `@container (max-width: 868px)` overschrijft daar het
  * bestaande blok en laat de gridtests slagen op de verkeerde regels. Het
  * onderdeel is vloeiend, dus het heeft er ook geen nodig — heb je er tóch een
- * nodig, kies dan een breedte die hierboven nog niet voorkomt (nu: 1096, 868).
+ * nodig, kies dan een breedte die hierboven nog niet voorkomt (nu: 1136, 868).
  *
  * En geen transition, geen animation, geen keyframes: open en dicht mogen
  * gewoon gebeuren. */

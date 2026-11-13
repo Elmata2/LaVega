@@ -74,7 +74,7 @@ test("moduleClass maps span + height onto the grid's classes", () => {
     "module [grid-column:span_1] [@container(max-width:868px)]:col-span-full min-h-[var(--module-h-short)]",
   );
   expect(moduleClass({ span: 2 })).toBe(
-    "module [grid-column:span_2] [@container(max-width:1096px)]:col-span-full [@container(max-width:868px)]:col-span-full min-h-[var(--module-h-short)]",
+    "module [grid-column:span_2] [@container(max-width:1136px)]:col-span-full [@container(max-width:868px)]:col-span-full min-h-[var(--module-h-short)]",
   );
   expect(moduleClass({ span: 3, height: "tall" })).toBe(
     "module col-span-full min-h-[var(--module-h-tall)] [@container(max-width:868px)]:min-h-[var(--module-h-short)]",
@@ -83,7 +83,7 @@ test("moduleClass maps span + height onto the grid's classes", () => {
 
 test("moduleClass keeps a caller's own class last", () => {
   expect(moduleClass({ span: 2, className: "overzicht-positie" })).toBe(
-    "module [grid-column:span_2] [@container(max-width:1096px)]:col-span-full [@container(max-width:868px)]:col-span-full min-h-[var(--module-h-short)] overzicht-positie",
+    "module [grid-column:span_2] [@container(max-width:1136px)]:col-span-full [@container(max-width:868px)]:col-span-full min-h-[var(--module-h-short)] overzicht-positie",
   );
 });
 
@@ -101,12 +101,21 @@ test("the grid shows MODULE_COLUMNS columns on desktop", () => {
   );
 });
 
-test("the breakpoints are container widths, offset from the old viewport 1200 / 900", () => {
-  // Wrapper width = viewport minus frame gutter (2 x 20) minus content padding
-  // (2 x 32): 1200 - 104 = 1096. At <= 900 the frame is full-bleed and the
-  // padding is 2 x 16: 900 - 32 = 868.
-  expect(CONTAINER_TWO_COL_MAX).toBe(1096);
-  expect(CONTAINER_ONE_COL_MAX).toBe(868);
+test("the container widths in the class strings are the exported constants", () => {
+  // Tailwind needs the literal in the class string, so a constant and a
+  // literal can drift apart; read the numbers back out and compare.
+  const widths = new Set<number>();
+  for (const span of [1, 2, 3] as const) {
+    for (const height of ["short", "tall"] as const) {
+      for (const m of moduleClass({ span, height }).matchAll(
+        /\[@container\(max-width:(\d+)px\)\]:/g,
+      )) {
+        widths.add(Number(m[1]));
+      }
+    }
+  }
+  expect([...widths].sort((a, b) => a - b)).toEqual([CONTAINER_ONE_COL_MAX, CONTAINER_TWO_COL_MAX]);
+  expect(CONTAINER_TWO_COL_MAX).toBeGreaterThan(CONTAINER_ONE_COL_MAX);
 });
 
 test("the content wrapper is a size container on the inline axis", () => {
@@ -154,7 +163,7 @@ test("on desktop a span occupies exactly that many columns", () => {
   expect(resolved(moduleClasses(3), "grid-column")).toBe("1/-1");
 });
 
-test("in a container <= 1096px the grid is 2 columns and wide spans clamp to the full row", () => {
+test("in a container <= 1136px the grid is 2 columns and wide spans clamp to the full row", () => {
   expect(resolvedInContainer(gridClasses(), "grid-template-columns", CONTAINER_TWO_COL_MAX)).toBe(
     "repeat(2,minmax(0,1fr))",
   );

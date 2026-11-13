@@ -250,3 +250,16 @@ test("another tab switching sharing off is picked up via the storage event — n
 
   expect(puts()).toHaveLength(1); // unchanged
 });
+
+test("the module grid renders inside the content container that the grid's container queries measure", async () => {
+  window.history.replaceState({}, "", "/");
+  mockAccounts = [
+    { key: "A", iban: "A", name: "", bank: "", entity: "BV1", currency: "EUR", balance: 1234.56 },
+  ];
+  const el = await renderApp();
+  const wrapper = el.querySelector("main.content > .content-container");
+  expect(wrapper, "main.content > .content-container is missing").not.toBeNull();
+  const grid = el.querySelector(".module-grid");
+  expect(grid, "no .module-grid rendered").not.toBeNull();
+  expect(grid!.closest(".content-container")).toBe(wrapper);
+});
