@@ -33,6 +33,7 @@ app for LaVega Personal. It is not an investing route.
 | Realised gains and income report                               | `/reports` (always on, not a layout module)                                                       | [realised-report.md](realised-report.md)               |
 | Net worth                                                      | `/net-worth`                                                                                      | [dashboard-overview.md](dashboard-overview.md)         |
 | Prices, benchmarks and market-data consent                     | `/` (Yahoo consent); chips on `/profile#status`                                                   | [prices-and-market-data.md](prices-and-market-data.md) |
+| DeGiro file import (API only until D12)                        | none yet; `POST /api/investing/brokers/degiro/import`                                             | [degiro-import.md](degiro-import.md)                   |
 
 Backing docs: `docs/investing/DASHBOARD.md` (layout, return definitions, chart modes),
 `docs/investing/CONNECTORS.md` (broker adapters, credentials, disclosure gates),
