@@ -78,6 +78,31 @@ test("position without trades backfills full history, not the snapshot date", ()
   expect(targets[0]!.backfillFrom).not.toBe("2026-08-20");
 });
 
+test("an ISIN-only holding carries the venue of its latest execution and says it has no ticker", () => {
+  const isin = "XS00PF000003";
+  const targets = discoverPriceSyncTargets({
+    positions: [{ ...position(isin), isin, description: "VOORBEELD GLOBAL EQUITY ETF" }],
+    trades: [
+      { ...trade(isin, "2024-01-02"), isin, venue: "XLON" },
+      { ...trade(isin, "2025-03-04"), isin, venue: "XAMS" },
+    ],
+  });
+
+  expect(targets).toHaveLength(1);
+  expect(targets[0]).toMatchObject({ symbol: isin, isin, venue: "XAMS", noTicker: true });
+});
+
+test("a broker ticker keeps its listing identity: venue is a hint, never a noTicker", () => {
+  const targets = discoverPriceSyncTargets({
+    positions: [position("ASML")],
+    trades: [trade("ASML", "2025-03-04")],
+  });
+
+  expect(targets[0]).toMatchObject({ symbol: "ASML", ticker: "ASML" });
+  expect(targets[0]!.venue).toBeUndefined();
+  expect(targets[0]!.noTicker).toBeUndefined();
+});
+
 test("concurrent tenant triggers join one orchestration", async () => {
   let release!: () => void;
   const pending = new Promise<void>((resolve) => {

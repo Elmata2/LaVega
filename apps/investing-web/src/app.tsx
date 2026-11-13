@@ -50,6 +50,7 @@ import { SectorAllocationCard } from "./components/SectorAllocationCard.js";
 import { PortfolioFigureNotes, PortfolioKpiRow } from "./components/PortfolioKpiRow.js";
 import { OverviewStatus, mergeStatusItems, type StatusItem } from "./components/OverviewStatus.js";
 import { formatMoney, formatSignedPercent, portfolioFigures } from "./lib/portfolioFigures.js";
+import { holdingIdentityLine } from "./lib/holdingIdentity.js";
 import { longDate, shortDate } from "./lib/dates.js";
 import { readDashboard, useDashboard } from "./lib/dashboardResource";
 import { HOME_MODULE, MODULES, investingModulePath } from "./lib/investingRegistry.js";
@@ -297,8 +298,7 @@ function PositionList({
                   {position.description ?? position.symbol}
                 </span>
                 <span className="block truncate text-xs text-muted-foreground">
-                  {position.symbol} · {position.entity} ·{" "}
-                  {position.quantity.toLocaleString("en-GB")} shares
+                  {holdingIdentityLine(position)}
                 </span>
               </div>
               <div role="cell" className="text-right text-sm tabular-nums">

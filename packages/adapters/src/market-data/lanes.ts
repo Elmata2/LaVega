@@ -11,6 +11,10 @@ export type IdentifierRequest = {
     name?: string;
     description?: string;
     currency?: string;
+    /** The venue MIC the broker printed for the instrument (DeGiro's
+     *  `Uitvoeringsplaats`, e.g. `XAMS`). A listing hint only: it may break a
+     *  tie between listings the provider returned, never invent a ticker. */
+    venue?: string;
   };
   /** The owner's own choice for this identifier, if any. Most trusted tier:
    *  it short-circuits the provider lookup and any stored model selection. */

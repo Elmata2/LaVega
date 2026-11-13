@@ -414,9 +414,14 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
         backfillFrom?: string;
       } = target;
       let identifierProblems: string[] = [];
+      /* An unresolved identity is not evidence about the listing. The run may
+       * report the problem, but it must not freeze the series as delisted: a
+       * rate-limited OpenFIGI lookup has to be retried on a later run. */
+      let identityResolved = true;
       // Yahoo decodes Trading 212 tickers and uses their ISIN itself. An
       // arbitrary OpenFIGI listing would discard the broker's venue hint.
       if (target.isin && !target.ticker.endsWith("_EQ")) {
+        identityResolved = false;
         const identifier = await mapIdentifier(
           {
             isin: target.isin,
@@ -424,6 +429,9 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
             instrument: {
               name: target.symbol,
               ...(target.currency ? { currency: target.currency } : {}),
+              /* DeGiro prints the venue it executed on. It chooses among
+               * OpenFIGI's listings; it never invents a ticker. */
+              ...(target.venue ? { venue: target.venue } : {}),
             },
           },
           tenantId,
@@ -439,6 +447,15 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
             ticker: identifier.value.match.ticker,
             exchange: identifier.value.match.exchange,
           };
+          identityResolved = true;
+          /* A broker with no ticker cannot settle which listing it meant. Say
+           * which one was used, so a wrong-price holding can be recognised. */
+          const listings = identifier.value.resolution?.candidates.length ?? 0;
+          if (target.noTicker && !target.venue && listings > 1) {
+            identifierProblems = [
+              `${listings} listings for this ISIN and no venue hint — used ${identifier.value.match.ticker} (${identifier.value.match.exchange})`,
+            ];
+          }
         } else {
           identifierProblems = identifier?.value.problems ?? ["Could not resolve ISIN"];
         }
@@ -450,9 +467,10 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
         owner: leaseId,
         priceProviders,
         request,
+        allowDelist: identityResolved,
       });
       if (result.fetched) dependencies.onPriceDataChanged?.();
-      return result.problems.length === 0
+      return result.problems.length === 0 && identifierProblems.length === 0
         ? result
         : { ...result, problems: [...identifierProblems, ...result.problems] };
     },

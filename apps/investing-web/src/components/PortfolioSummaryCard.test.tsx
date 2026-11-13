@@ -266,6 +266,40 @@ test("shows a position's name above its ticker, and just the ticker when there i
   expect(text).toContain("MYST");
 });
 
+test("an ISIN does not appear under the product name it identifies", () => {
+  const { container, root } = render();
+  act(() =>
+    root.render(
+      card({
+        state: {
+          status: "ready",
+          data: {
+            ...summary,
+            composition: {
+              ...summary.composition,
+              topPositions: [
+                {
+                  symbol: "XS00PF000003",
+                  weight: 0.6,
+                  description: "VOORBEELD GLOBAL EQUITY ETF",
+                },
+                { symbol: "AAPL", weight: 0.4, description: "Apple Inc." },
+              ],
+            },
+          },
+        },
+      }),
+    ),
+  );
+  const list = container.querySelector('[aria-label="Largest positions"]');
+  const text = list?.textContent ?? "";
+  expect(text).toContain("VOORBEELD GLOBAL EQUITY ETF");
+  expect(text).not.toContain("XS00PF000003");
+  // A ticker still identifies its holding, unchanged.
+  expect(text).toContain("Apple Inc.");
+  expect(text).toContain("AAPL");
+});
+
 test("shows incomplete-data reasons and asks for a new risk period through onRangeChange", () => {
   const onRangeChange = vi.fn();
   const { container, root } = render();

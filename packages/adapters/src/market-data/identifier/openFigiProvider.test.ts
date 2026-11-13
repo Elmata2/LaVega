@@ -411,3 +411,116 @@ test("an owner override outranks a stored model selection and asks nobody", asyn
   expect(fake.calls()).toHaveLength(1);
   expect(calls()).toBe(1);
 });
+
+/* D10 (issue #322): DeGiro prints the execution venue MIC on every row. The
+ * hint only breaks a tie between listings the provider already returned; it
+ * never adds a request and never invents a candidate. */
+
+const VENUE_CANDIDATES = [
+  { ticker: "ULVR", exchCode: "LN", name: "Unilever plc", currency: "GBP" },
+  { ticker: "UNA", exchCode: "NA", name: "Unilever NV", currency: "EUR" },
+];
+
+const venueProvider = (post: Post) =>
+  createOpenFigiIdentifierProvider({ client: { postJson: post }, ...instant() });
+
+test("a venue hint picks the one candidate on that MIC's exchange", async () => {
+  const { post, calls } = withCandidates(VENUE_CANDIDATES);
+  const fake = countingSelector({
+    kind: "selected",
+    ticker: "ULVR",
+    exchange: "LN",
+    confidence: 0.9,
+  });
+  const provider = createOpenFigiIdentifierProvider({
+    client: { postJson: post },
+    selector: fake.selector,
+    ...instant(),
+  });
+
+  const result = (await provider.get({
+    isin: "NL0010273215",
+    instrument: { name: "Unilever", venue: " xams " },
+  }))!;
+
+  expect(result.match).toEqual({
+    isin: "NL0010273215",
+    ticker: "UNA",
+    exchange: "NA",
+    name: "Unilever NV",
+    currency: "EUR",
+  });
+  expect(result.problems).toEqual([]);
+  expect(result.resolution).toEqual({
+    tier: "provider",
+    confidence: null,
+    candidates: [
+      { ticker: "ULVR", exchange: "LN", name: "Unilever plc", currency: "GBP" },
+      { ticker: "UNA", exchange: "NA", name: "Unilever NV", currency: "EUR" },
+    ],
+  });
+  // The printed venue is decisive, so the selector is not asked and adds no request.
+  expect(fake.calls()).toHaveLength(0);
+  expect(calls()).toBe(1);
+});
+
+test("a hinted resolution is cached", async () => {
+  const { post, calls } = withCandidates(VENUE_CANDIDATES);
+  const provider = venueProvider(post);
+
+  await provider.get({ isin: "NL0010273215", instrument: { venue: "XAMS" } });
+  const second = (await provider.get({
+    isin: "NL0010273215",
+    instrument: { venue: "XAMS" },
+  }))!;
+
+  expect(second.match).toMatchObject({ ticker: "UNA", exchange: "NA" });
+  expect(calls()).toBe(1);
+});
+
+test("an absent or unknown venue keeps today's first candidate", async () => {
+  const absent = venueProvider(withCandidates(VENUE_CANDIDATES).post);
+  const unknown = venueProvider(withCandidates(VENUE_CANDIDATES).post);
+
+  await expect(absent.get({ isin: "NL0010273215" })).resolves.toMatchObject({
+    match: { ticker: "ULVR", exchange: "LN" },
+    problems: [],
+    resolution: { tier: "provider", confidence: null },
+  });
+  await expect(
+    unknown.get({ isin: "NL0010273215", instrument: { venue: "ZZZZ" } }),
+  ).resolves.toMatchObject({
+    match: { ticker: "ULVR", exchange: "LN" },
+    problems: [],
+    resolution: { tier: "provider", confidence: null },
+  });
+});
+
+test("a venue that matches no candidate falls back to the first candidate", async () => {
+  const { post } = withCandidates(VENUE_CANDIDATES);
+  const provider = venueProvider(post);
+
+  const result = (await provider.get({
+    isin: "NL0010273215",
+    instrument: { venue: "XETR" },
+  }))!;
+
+  expect(result.match).toMatchObject({ ticker: "ULVR", exchange: "LN" });
+  expect(result.problems).toEqual([]);
+  expect(result.resolution).toMatchObject({ tier: "provider", confidence: null });
+  expect(result.resolution.candidates).toHaveLength(2);
+});
+
+test("a single candidate ignores the venue hint", async () => {
+  const { post, calls } = withCandidates([{ ticker: "ASML", exchCode: "GY" }]);
+  const provider = venueProvider(post);
+
+  const result = (await provider.get({
+    isin: "NL0010273215",
+    instrument: { venue: "XAMS" },
+  }))!;
+
+  expect(result.match).toMatchObject({ ticker: "ASML", exchange: "GY" });
+  expect(result.resolution).toMatchObject({ tier: "provider", confidence: null });
+  expect(calls()).toBe(1);
+});

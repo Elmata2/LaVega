@@ -97,6 +97,11 @@ export async function syncPrices(input: {
    *  gap is measured against, independent of `request.today`'s calendar date. */
   now?: () => Date;
   claimTtlMs?: number;
+  /** False when the run could not resolve the instrument's identity (for
+   *  instance OpenFIGI was rate-limited). A not-found answer then says nothing
+   *  final about the listing: record no delisting, report the problems, and let
+   *  the next run ask again. Default true. */
+  allowDelist?: boolean;
 }): Promise<PriceSyncResult> {
   const { store, key, request, owner } = input;
   const nowMs = (input.now ?? (() => new Date()))().getTime();
@@ -208,13 +213,21 @@ export async function syncPrices(input: {
       return { bars: withSymbol(cachedBars), problems: [], fetched: true };
     };
 
+    /* A closed series is only retired when the run could name its identity. An
+     * unresolved resolution (rate limit, provider outage) makes "not found"
+     * inconclusive, so it stays a retryable problem and is written nowhere. */
+    const delistOrReport = async (problems: string[]): Promise<PriceSyncResult> =>
+      input.allowDelist === false
+        ? { bars: withSymbol(cachedBars), problems, fetched: true }
+        : recordDelisted();
+
     /* Replaces the window's bars and coverage rather than widening them: nothing
      * cached before is trusted to match what the provider quotes now. */
     const refresh = async (from: string | undefined): Promise<PriceSyncResult> => {
       const answer = await ask({ from, to: today });
       if (!answer.ok)
         return isClosedNotFound(answer)
-          ? recordDelisted()
+          ? delistOrReport(answer.problems)
           : { bars: withSymbol(cachedBars), problems: answer.problems, fetched: true };
       const first = answer.bars[0];
       if (!first || !answer.provenance)
@@ -318,7 +331,10 @@ export async function syncPrices(input: {
 
     const before = prefix && (await resolveWindow(prefix));
     const after = suffix && (await resolveWindow(suffix));
-    if (isClosedNotFound(before) || isClosedNotFound(after)) return recordDelisted();
+    const closedNotFound = [before, after].find(
+      (answer): answer is Extract<Answer, { ok: false }> => isClosedNotFound(answer),
+    );
+    if (closedNotFound) return delistOrReport(closedNotFound.problems);
     /* A held listing quoting nothing for a while is not a holiday: unlike a
      * closed position, it is still owed forward price data. Give it the same
      * missed-days grace `isPriceFresh` already gives a stale value elsewhere,

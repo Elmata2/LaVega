@@ -19,6 +19,13 @@ selector's confidence and the provider's full candidate set.
 | `unresolved`     | No candidate, or the selector refused / failed           | maybe        |
 
 - **One candidate is taken as-is** with zero model calls.
+- **A broker venue chooses among listings.** A request may carry
+  `instrument.venue`, the execution venue a broker printed as a MIC (DeGiro's
+  `Uitvoeringsplaats`, e.g. `XAMS`). The provider maps it to OpenFIGI's exchange
+  code (`identifier/exchanges.ts`) and, when two or more candidates include
+  exactly one listing on that exchange, takes that candidate with no model call.
+  An unknown MIC or no matching candidate falls through to the ladder below. The
+  hint adds no OpenFIGI request; it only picks from an answer already in hand.
 - **Zero candidates** keeps the existing unresolved outcome and problem string.
 - **Two or more candidates** go to Jev only when selection is allowed (below).
   Jev receives the provider's candidate set plus the broker's instrument identity

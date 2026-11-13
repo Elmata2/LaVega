@@ -27,6 +27,49 @@ const deposit = (id: string, day: string) =>
 const A: [string, string] = ["20251001", "20261001"];
 const B: [string, string] = ["20241001", "20251001"];
 
+/* DeGiro names a product only inside an export; its identity is the ISIN
+ * (issue #322). A rename between two imports therefore replaces the row
+ * instead of adding a second holding for the same instrument. */
+describe("DeGiro import identity", () => {
+  const isin = "XS00PF000003";
+  const position = (description: string): Position => ({
+    entity: "personal",
+    broker: "degiro",
+    symbol: isin,
+    isin,
+    description,
+    quantity: 3,
+    averagePrice: null,
+    marketPrice: 41.66,
+    marketValue: 124.98,
+    currency: "USD",
+    asOf: "2026-11-12",
+  });
+  const snapshot = (description: string): BrokerDataSnapshot => ({
+    degiro: {
+      positions: [position(description)],
+      trades: [],
+      dividends: [],
+      cashBalances: [],
+      cashFlows: [],
+    },
+  });
+
+  test("a product renamed between two imports is one position, not two", () => {
+    const cache = createBrokerDataCache();
+    cache.restore(snapshot("VOORBEELD GLOBAL EQUITY ETF"));
+    cache.restore(snapshot("VOORBEELD GLOBAL EQUITY ETF (hernoemd)"));
+
+    const positions = cache.read().positions;
+    expect(positions).toHaveLength(1);
+    expect(positions[0]).toMatchObject({
+      symbol: isin,
+      isin,
+      description: "VOORBEELD GLOBAL EQUITY ETF (hernoemd)",
+    });
+  });
+});
+
 describe("IBKR history windows", () => {
   test("exposes the statement period", () => {
     expect(window("", "", A).period).toEqual({ from: "2025-10-01", to: "2026-10-01" });

@@ -722,6 +722,42 @@ test("a closed position Yahoo confirms gone is marked delisted, not a problem", 
   expect(get).not.toHaveBeenCalled();
 });
 
+test("an unresolved identifier never freezes a closed position as delisted", async () => {
+  const store = createInMemorySharedPriceStore();
+  const get = vi.fn(async () => ({
+    bars: [],
+    problems: ["No listing found on Yahoo Finance for XS00PF000003 (tried 1 symbol)"],
+    notFound: true,
+  }));
+  const priceProviders = [{ sourceKey: "yahoo", priority: 10, get }];
+  const sync = (today: string) =>
+    syncWith({
+      store,
+      priceProviders,
+      request: {
+        ...request,
+        symbol: "XS00PF000003",
+        ticker: "XS00PF000003",
+        kind: "closed" as const,
+        today,
+      },
+      // OpenFIGI was rate-limited: the not-found answer settles nothing.
+      allowDelist: false,
+    });
+
+  const result = await sync("2026-01-01");
+
+  expect(result.problems).toEqual([
+    "No listing found on Yahoo Finance for XS00PF000003 (tried 1 symbol)",
+  ]);
+  await expect(legacy(store).getCoverage("local", "XS00PF000003")).resolves.toBeNull();
+
+  /* Nothing was frozen, so the next run asks the provider again. */
+  get.mockClear();
+  await sync("2026-01-02");
+  expect(get).toHaveBeenCalled();
+});
+
 test("a held position Yahoo confirms gone still reports a problem", async () => {
   const store = createInMemorySharedPriceStore();
   const get = vi.fn(async () => ({

@@ -495,7 +495,14 @@ section would tell the snapshot the broker reported nothing and wipe stored rows
 - **Instrument identity.** DeGiro has a product name and an ISIN, no ticker.
   `Position.symbol` and `Trade.symbol` = ISIN; product name goes in a display
   field. A product rename then cannot break joins. Prices resolve through the
-  OpenFIGI ISIN path that Trading 212 already uses.
+  OpenFIGI ISIN path that Trading 212 already uses, and the returned
+  `PriceBar.symbol` stays the ISIN (D10, #322).
+- **Listing hint.** The execution venue from the transactions export
+  (`Uitvoeringsplaats`, a MIC such as `XLON`) travels with the price target as
+  `venue` and chooses among OpenFIGI's listings for one ISIN. A holding with no
+  ticker and several listings but no venue hint still resolves to the first
+  listing and reports which one it used. An unresolved lookup (rate limit,
+  outage) is never written as a delisting: the next price run asks again.
 - **Portfolio cash row.** A `CASH & CASH FUND …` row is a `CashBalance`, not a
   position (D7).
 - **Position `asOf`.** The portfolio export carries no date (confirmed 2026-11-12).
@@ -529,7 +536,8 @@ overlapping account files). A re-import must not append duplicates.
   cache. The raw file is never stored; only parsed rows and a SHA-256 per file.
 - Web: a DeGiro tab in broker settings with export steps, multi-file drop,
   preview, confirm. Status reads "Last imported <date>, covers <from>–<to>",
-  not fresh/stale/never.
+  not fresh/stale/never. The holdings table shows the product name; an ISIN
+  symbol is not repeated as the holding's identity line (D10, #322).
 
 ### Out of scope
 
@@ -573,4 +581,6 @@ account statement to trades, cash balances, coverage and period; the account
 profile now returns a full `BrokerResult` alone), D6 (#318, transaction export
 to trades merged by execution, and the multi-file seam `parseBrokerFiles`), D7
 (#319, portfolio export to positions keyed by ISIN and its cash balance, with the
-export date as a required input).
+export date as a required input), D10 (#322, ISIN-only identity priced through
+OpenFIGI with the execution venue as a listing hint, unresolved lookups retried
+rather than frozen, product name in the holdings table).
