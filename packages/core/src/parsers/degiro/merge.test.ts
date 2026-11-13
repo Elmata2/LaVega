@@ -17,6 +17,8 @@ const fixture = (path: string): string =>
 const account = fixture("nl/account.csv");
 const overlap = fixture("nl/transactions-overlap.csv");
 const transactions = fixture("nl/transactions.csv");
+const portfolio = fixture("nl/portfolio.csv");
+const AS_OF = "2026-11-12";
 
 test("the account statement and the transaction export merge by execution", () => {
   const parsed = parseBrokerFiles([
@@ -126,4 +128,65 @@ test("transactions alone yield trades but no cash-history claim", () => {
     reason: expect.stringMatching(/geen rekeningoverzicht/),
   });
   expect(parsed.sections).toEqual(["trades"]);
+});
+
+test("the account statement and the portfolio export merge, account balances winning", () => {
+  const parsed = parseBrokerFiles(
+    [
+      { filename: "Account.csv", text: account },
+      { filename: "Portfolio.csv", text: portfolio },
+    ],
+    { asOf: AS_OF },
+  );
+
+  expect(parsed.profile).toBe("account");
+  expect(parsed.source).toBe("DeGiro account + portfolio");
+  expect(parsed.problems).toEqual([]);
+  expect(parsed.positions).toHaveLength(12);
+  // The statement's Saldo walk proves both anchors; the portfolio has one cash row.
+  expect(parsed.cashBalances).toHaveLength(2);
+  expect(parsed.sections).toEqual([
+    "trades",
+    "dividends",
+    "cashFlows",
+    "cashBalances",
+    "positions",
+  ]);
+  expect(parsed.cashHistory).toEqual({
+    status: "complete",
+    from: "2026-01-05",
+    to: "2026-03-06",
+  });
+});
+
+test("transactions and the portfolio export merge, still with no cash history", () => {
+  const parsed = parseBrokerFiles(
+    [
+      { filename: "Transactions.csv", text: transactions },
+      { filename: "Portfolio.csv", text: portfolio },
+    ],
+    { asOf: AS_OF },
+  );
+
+  expect(parsed.profile).toBe("transactions");
+  expect(parsed.source).toBe("DeGiro transactions + portfolio");
+  expect(parsed.positions).toHaveLength(12);
+  expect(parsed.sections).toEqual(["trades", "cashBalances", "positions"]);
+  expect(parsed.cashHistory).toEqual({
+    status: "unknown",
+    reason: expect.stringMatching(/geen rekeningoverzicht/),
+  });
+});
+
+test("an undated portfolio export contributes its problem and no positions", () => {
+  const parsed = parseBrokerFiles([
+    { filename: "Account.csv", text: account },
+    { filename: "Portfolio.csv", text: portfolio },
+  ]);
+
+  expect(parsed.positions).toEqual([]);
+  expect(parsed.sections).toEqual(["trades", "dividends", "cashFlows", "cashBalances"]);
+  expect(parsed.problems).toHaveLength(1);
+  expect(parsed.problems[0]).toContain("Portfolio.csv: ");
+  expect(parsed.problems[0]).toMatch(/exportdatum/);
 });

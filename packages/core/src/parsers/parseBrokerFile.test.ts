@@ -13,8 +13,8 @@ import { DEGIRO_HEADERS, detectProfile } from "./degiro/profiles.js";
  *
  * The invented #47/#49 DeGiro fixtures are gone (#313). The account statement is
  * fully mapped (#315–#317), the transaction export maps to trades and an unknown
- * cash-history claim (#318), and the portfolio export still only names itself
- * (#319).
+ * cash-history claim (#318), and the portfolio export maps to dated positions
+ * and its cash row (#319).
  */
 
 const fixture = (path: string): string =>
@@ -66,21 +66,35 @@ test("a transactions export maps to trades but claims no cash history", () => {
   expect(parsed.sections).toEqual(["trades"]);
 });
 
-test("a portfolio export is recognised but its row mapping is still #319", () => {
-  // Reporting an empty complete section would look like a read that wipes
-  // stored rows, so the file still names itself and adds one problem.
+test("a portfolio export without an export date claims no sections and no rows", () => {
+  // The export carries no date column. Without one, the rows are undated and
+  // an empty complete positions section would look like "all sold".
   const parsed = parseBrokerFile("Portfolio.csv", portfolio);
   expect(parsed.profile).toBe("portfolio");
   expect(parsed.positions).toEqual([]);
   expect(parsed.trades).toEqual([]);
-  expect(parsed.dividends).toBeUndefined();
-  expect(parsed.cashFlows).toBeUndefined();
+  expect(parsed.sections).toEqual([]);
   expect(parsed.cashBalances).toBeUndefined();
-  expect(parsed.cashHistory).toBeUndefined();
   expect(parsed.period).toBeUndefined();
-  expect(parsed.problems).toEqual([
-    "DeGiro portfolio-export herkend, maar nog niet uitgelezen: de rij-mapping volgt in #319",
-  ]);
+  expect(parsed.problems).toHaveLength(1);
+  expect(parsed.problems[0]).toMatch(/exportdatum/);
+});
+
+test("a portfolio export with an export date maps 12 positions and the cash row", () => {
+  const parsed = parseBrokerFile("Portfolio.csv", portfolio, { asOf: "2026-11-12" });
+
+  expect(parsed.profile).toBe("portfolio");
+  expect(parsed.source).toBe("DeGiro portfolio");
+  expect(parsed.positions).toHaveLength(12);
+  expect(parsed.positions[0]).toMatchObject({ symbol: "XS00PF000003", asOf: "2026-11-12" });
+  expect(parsed.cashBalances).toEqual([{ currency: "EUR", amount: 201.76, asOf: "2026-11-12" }]);
+  expect(parsed.sections).toEqual(["positions", "cashBalances"]);
+  expect(parsed.cashHistory).toEqual({
+    status: "unknown",
+    reason: expect.stringMatching(/portfolio-export bewijst geen cashhistorie/),
+  });
+  expect(parsed.period).toBeUndefined();
+  expect(parsed.problems).toEqual([]);
 });
 
 test.each([

@@ -2,15 +2,24 @@ import type { Dividend } from "../investing/dividend.js";
 import type { CashBalance, CashFlow, Position, Trade } from "../investing/model.js";
 import { type AccountCoverage, readDeGiroAccount } from "./degiro/accountProfile.js";
 import { mergeDeGiroFiles } from "./degiro/merge.js";
+import {
+  NO_PORTFOLIO_HISTORY_REASON,
+  parsePortfolioAsOf,
+  readDeGiroPortfolio,
+} from "./degiro/portfolio.js";
 import { type DeGiroProfile, readDeGiroCsv } from "./degiro/profiles.js";
 import { NO_ACCOUNT_HISTORY_REASON, readDeGiroTransactions } from "./degiro/transactions.js";
 
 /** One export in an import: the name is kept for problem attribution only. */
 export type BrokerFileInput = { filename: string; text: string };
 
+/** Import-wide inputs the parser cannot read from any file. `asOf` is the
+ *  portfolio export's date: that export carries no date column. */
+export type BrokerFileOptions = { asOf?: string };
+
 /** The sections a parser actually read. A section not listed is unavailable,
  *  never an empty complete section: the snapshot would wipe stored rows. */
-export type BrokerFileSection = "trades" | "dividends" | "cashFlows" | "cashBalances";
+export type BrokerFileSection = "trades" | "dividends" | "cashFlows" | "cashBalances" | "positions";
 
 export type ParsedBrokerFile = {
   positions: Omit<Position, "entity" | "tenantId">[];
@@ -48,10 +57,15 @@ const ACCOUNT_SECTIONS: readonly BrokerFileSection[] = [
  * The account statement is the only profile that proves cash history: it alone
  * carries cash flows, dividends, cash balances, trades and coverage (#317).
  * The transaction export maps to trades and an unknown coverage claim (#318):
- * trades alone do not prove cash history. The portfolio export still only names
- * itself; its row mapping lands in #319.
+ * trades alone do not prove cash history. The portfolio export maps to dated
+ * positions and its cash row (#319); it proves no cash history either, and its
+ * positions are claimed only when the caller supplies the export date.
  */
-export function parseBrokerFile(filename: string, text: string): ParsedBrokerFile {
+export function parseBrokerFile(
+  filename: string,
+  text: string,
+  options: BrokerFileOptions = {},
+): ParsedBrokerFile {
   void filename;
 
   const read = readDeGiroCsv(text);
@@ -89,17 +103,27 @@ export function parseBrokerFile(filename: string, text: string): ParsedBrokerFil
     };
   }
 
+  const asOf = options.asOf ?? "";
+  const portfolio = readDeGiroPortfolio(text, asOf);
+  /* Withhold the sections when the export could not be read: no date means the
+   * rows are undated, and a header-only file is not an import. An empty
+   * `positions` section would tell the snapshot the broker reported zero
+   * holdings and wipe the stored ones. */
+  const readable = parsePortfolioAsOf(asOf) !== null && read.problems.length === 0;
+  const sections: BrokerFileSection[] = readable ? ["positions"] : [];
+  if (readable && portfolio.cashBalances.length > 0) sections.push("cashBalances");
+
   return {
     profile,
-    positions: [],
+    sections,
+    positions: readable ? portfolio.positions : [],
     trades: [],
-    source: `DeGiro ${profile}`,
-    problems:
-      read.problems.length > 0
-        ? read.problems
-        : [
-            "DeGiro portfolio-export herkend, maar nog niet uitgelezen: de rij-mapping volgt in #319",
-          ],
+    ...(readable && portfolio.cashBalances.length > 0
+      ? { cashBalances: portfolio.cashBalances }
+      : {}),
+    cashHistory: { status: "unknown", reason: NO_PORTFOLIO_HISTORY_REASON },
+    source: "DeGiro portfolio",
+    problems: portfolio.problems,
   };
 }
 
@@ -108,9 +132,12 @@ export function parseBrokerFile(filename: string, text: string): ParsedBrokerFil
  * result untouched; several files are merged into one result by
  * `mergeDeGiroFiles`, so the upload route (#323) has one seam to call.
  */
-export function parseBrokerFiles(files: readonly BrokerFileInput[]): ParsedBrokerFile {
+export function parseBrokerFiles(
+  files: readonly BrokerFileInput[],
+  options: BrokerFileOptions = {},
+): ParsedBrokerFile {
   const parsed = files.map((file) => ({
-    ...parseBrokerFile(file.filename, file.text),
+    ...parseBrokerFile(file.filename, file.text, options),
     filename: file.filename,
   }));
   const [only] = parsed;

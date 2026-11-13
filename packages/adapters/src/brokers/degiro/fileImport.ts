@@ -16,7 +16,12 @@ import {
 } from "../BrokerAccessAdapter.js";
 
 export type DeGiroFileImport = {
-  load(input: { files: readonly BrokerFileInput[]; entity: string }): Promise<BrokerResult>;
+  load(input: {
+    files: readonly BrokerFileInput[];
+    entity: string;
+    /** The portfolio export's date: that export carries no date column. */
+    asOf?: string;
+  }): Promise<BrokerResult>;
 };
 
 /**
@@ -32,8 +37,8 @@ export type DeGiroFileImport = {
  */
 export function createDeGiroFileImport(): DeGiroFileImport {
   return {
-    async load({ files, entity }) {
-      const parsed = parseBrokerFiles(files);
+    async load({ files, entity, asOf }) {
+      const parsed = parseBrokerFiles(files, { asOf });
       const status: BrokerSectionStatus = parsed.problems.length > 0 ? "partial" : "complete";
       const readSections = new Set<BrokerFileSection>(parsed.sections ?? []);
 
@@ -62,13 +67,15 @@ export function createDeGiroFileImport(): DeGiroFileImport {
       const cashHistory: CashHistoryCoverage | undefined = parsed.cashHistory
         ? { entity, broker: "degiro", tradeCash: "cash-flows", ...parsed.cashHistory }
         : undefined;
+      const positions: Position[] = parsed.positions.map((position) => ({
+        ...position,
+        entity,
+        broker: "degiro",
+      }));
 
       return {
         sections: {
-          /* No mapped DeGiro export carries holdings yet. Reporting the section
-           * `complete` with no rows would wipe the stored positions on every
-           * import; the portfolio export lands in #319. */
-          positions: { status: "unavailable", rows: [] as Position[] },
+          positions: section("positions", positions),
           trades: section("trades", trades),
           dividends: section("dividends", dividends),
           cashBalances: section("cashBalances", cashBalances),

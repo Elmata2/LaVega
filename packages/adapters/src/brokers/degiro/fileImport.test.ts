@@ -164,3 +164,69 @@ test("account and transactions in one import merge and stay complete", async () 
   expect(ids).toHaveLength(result.sections.trades.rows.length);
   expect(new Set(ids).size).toBe(ids.length);
 });
+
+test("a dated portfolio import reports positions and the cash row, stamped", async () => {
+  const result = await createDeGiroFileImport().load({
+    files: [{ filename: "Portfolio.csv", text: fixture("nl/portfolio.csv") }],
+    entity: "BV1",
+    asOf: "2026-11-12",
+  });
+
+  expect(result.source).toBe("DeGiro portfolio");
+  expect(result.problems).toEqual([]);
+  expect(result.sections.positions.status).toBe("complete");
+  expect(result.sections.positions.rows).toHaveLength(12);
+  for (const position of result.sections.positions.rows) {
+    expect(position.entity).toBe("BV1");
+    expect(position.broker).toBe("degiro");
+  }
+  expect(result.sections.cashBalances).toEqual({
+    status: "complete",
+    rows: [
+      { entity: "BV1", broker: "degiro", currency: "EUR", amount: 201.76, asOf: "2026-11-12" },
+    ],
+  });
+  // The portfolio export proves no cash history.
+  expect(result.cashHistory).toMatchObject({ status: "unknown" });
+});
+
+test("an undated portfolio import reports no positions and no cash-history claim", async () => {
+  const result = await createDeGiroFileImport().load({
+    files: [{ filename: "Portfolio.csv", text: fixture("nl/portfolio.csv") }],
+    entity: "BV1",
+  });
+
+  expect(result.source).toBe("DeGiro portfolio");
+  expect(result.problems).toHaveLength(1);
+  expect(result.problems[0]).toMatch(/exportdatum/);
+  expect(result.sections.positions).toEqual({ status: "unavailable", rows: [] });
+  expect(result.sections.cashBalances).toEqual({ status: "unavailable", rows: [] });
+  expect(result.cashHistory?.status).toBe("unknown");
+});
+
+test("account, transactions and portfolio in one import read every section", async () => {
+  const result = await createDeGiroFileImport().load({
+    files: [
+      { filename: "Account.csv", text: account() },
+      { filename: "Transactions.csv", text: fixture("nl/transactions-overlap.csv") },
+      { filename: "Portfolio.csv", text: fixture("nl/portfolio.csv") },
+    ],
+    entity: "BV1",
+    asOf: "2026-11-12",
+  });
+
+  expect(result.source).toBe("DeGiro account + transactions + portfolio");
+  expect(result.problems).toEqual([]);
+  expect(result.sections.trades.rows).toHaveLength(4);
+  expect(result.sections.positions.rows).toHaveLength(12);
+  for (const section of [
+    result.sections.positions,
+    result.sections.trades,
+    result.sections.dividends,
+    result.sections.cashFlows,
+    result.sections.cashBalances,
+  ]) {
+    expect(section.status).toBe("complete");
+  }
+  expect(result.cashHistory).toMatchObject({ status: "complete" });
+});

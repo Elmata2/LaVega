@@ -1,17 +1,30 @@
-import type { Trade } from "../../investing/model.js";
-import type { ParsedBrokerFile } from "../parseBrokerFile.js";
+import type { CashBalance, Trade } from "../../investing/model.js";
+import type { BrokerFileSection, ParsedBrokerFile } from "../parseBrokerFile.js";
+import { NO_PORTFOLIO_HISTORY_REASON } from "./portfolio.js";
 import { NO_ACCOUNT_HISTORY_REASON } from "./transactions.js";
 
-/* Issue #318: one import can hold the account statement and the transaction
- * export. The account statement stays the cash truth; the transaction export
- * only enriches the execution with venue, FX rate and its local value. Merging
- * here, not in the adapter, keeps that field precedence in one place and gives
- * the #323 upload route one seam.
+/* One import can hold the account statement, the transaction export and the
+ * portfolio export. The account statement stays the cash truth; the transaction
+ * export only enriches the execution with venue, FX rate and its local value,
+ * and the portfolio export supplies the dated holdings. Merging here, not in
+ * the adapter, keeps that field precedence in one place and gives the #323
+ * upload route one seam.
  *
  * The execution key is the account reader's own group key: Order Id + Datum +
  * Tijd. Partial fills share an Order Id but each has its own time, so the time
  * is part of the identity; matching on the Order Id alone would collapse them.
  */
+
+/** Stable result order, regardless of the order the files arrived in. A
+ *  portfolio-only import lists positions after cash balances, because the
+ *  account fields keep their existing order. */
+const SECTION_ORDER: readonly BrokerFileSection[] = [
+  "trades",
+  "dividends",
+  "cashFlows",
+  "cashBalances",
+  "positions",
+];
 
 type ParsedTrade = Omit<Trade, "entity" | "id">;
 
@@ -96,16 +109,21 @@ function mergeTrades(
 }
 
 /**
- * Merge every parsed DeGiro file of one import. The first account statement and
- * the first transaction export are the import; every other file, including a
- * portfolio export or an unknown header, contributes its problems only.
+ * Merge every parsed DeGiro file of one import. The first account statement, the
+ * first transaction export and the first portfolio export are the import; every
+ * other file, including an unknown header, contributes its problems only.
  *
- * Never throws. When the import holds neither an account statement nor a
- * transaction export, the first parsed result stands.
+ * Positions come from the portfolio export alone. Cash balances come from the
+ * account statement when it read them, because only its `Saldo` walk proves the
+ * anchors; otherwise the portfolio's current cash row stands in.
+ *
+ * Never throws. When the import holds no mapped file, the first parsed result
+ * stands.
  */
 export function mergeDeGiroFiles(parsed: readonly ParsedBrokerFile[]): ParsedBrokerFile {
   const account = parsed.find((file) => file.profile === "account");
   const transactions = parsed.find((file) => file.profile === "transactions");
+  const portfolio = parsed.find((file) => file.profile === "portfolio");
 
   /* A problem without its filename is unusable once one import holds more than
    * one file: the user cannot tell which export failed. */
@@ -115,7 +133,7 @@ export function mergeDeGiroFiles(parsed: readonly ParsedBrokerFile[]): ParsedBro
     for (const problem of file.problems) problems.push(`${prefix}${problem}`);
   }
 
-  if (account === undefined && transactions === undefined) {
+  if (account === undefined && transactions === undefined && portfolio === undefined) {
     const first = parsed[0];
     if (first === undefined) return { positions: [], trades: [], source: "", problems };
     return { ...first, problems };
@@ -129,32 +147,42 @@ export function mergeDeGiroFiles(parsed: readonly ParsedBrokerFile[]): ParsedBro
     tradeProblems.push(...merged.problems);
   }
 
-  const cashHistory =
-    account !== undefined
-      ? account.cashHistory
-      : { status: "unknown" as const, reason: NO_ACCOUNT_HISTORY_REASON };
-  const sections = account?.sections ?? transactions?.sections;
+  /* The portfolio export proves no cash history. A transaction export at least
+   * names the missing account statement, so its reason is the more specific one. */
+  const cashHistory: ParsedBrokerFile["cashHistory"] = account?.cashHistory ?? {
+    status: "unknown",
+    reason: transactions !== undefined ? NO_ACCOUNT_HISTORY_REASON : NO_PORTFOLIO_HISTORY_REASON,
+  };
+
+  const readSections = new Set<BrokerFileSection>();
+  for (const file of parsed) for (const section of file.sections ?? []) readSections.add(section);
+
+  /* The account statement keeps its `Saldo` anchors; the portfolio cash row is a
+   * current balance and only stands in when no statement read one. */
+  const cashBalances: Omit<CashBalance, "entity" | "broker">[] | undefined =
+    account?.cashBalances ?? portfolio?.cashBalances;
+  const positions = portfolio?.positions ?? [];
   const period = account?.period ?? transactions?.period;
-  const source =
-    account !== undefined
-      ? transactions !== undefined
-        ? "DeGiro account + transactions"
-        : "DeGiro account"
-      : "DeGiro transactions";
+
+  const parts: string[] = [];
+  if (account !== undefined) parts.push("account");
+  if (transactions !== undefined) parts.push("transactions");
+  if (portfolio !== undefined) parts.push("portfolio");
 
   return {
-    profile: account !== undefined ? "account" : "transactions",
-    positions: [],
+    profile:
+      account !== undefined ? "account" : transactions !== undefined ? "transactions" : "portfolio",
+    positions,
     trades,
     /* Cash flows, dividends and cash balances come from the account statement
-     * only; a transaction export has no ledger to prove them. */
+     * only; neither other export has a ledger to prove them. */
     ...(account?.dividends !== undefined ? { dividends: account.dividends } : {}),
     ...(account?.cashFlows !== undefined ? { cashFlows: account.cashFlows } : {}),
-    ...(account?.cashBalances !== undefined ? { cashBalances: account.cashBalances } : {}),
-    ...(cashHistory !== undefined ? { cashHistory } : {}),
-    ...(sections !== undefined ? { sections } : {}),
+    ...(cashBalances !== undefined ? { cashBalances } : {}),
+    cashHistory,
+    sections: SECTION_ORDER.filter((section) => readSections.has(section)),
     ...(period !== undefined ? { period } : {}),
-    source,
+    source: `DeGiro ${parts.join(" + ")}`,
     problems: [...problems, ...tradeProblems],
   };
 }
