@@ -4,7 +4,7 @@ import { createRoot } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, expect, test } from "vitest";
 import ModulePicker, { WidgetPicker } from "./components/ModulePicker";
-import TopBar from "./components/TopBar";
+import { TopBarActions } from "./components/TopBar";
 import { MODULES, WIDGETS } from "./components/moduleRegistry";
 import { shellCopy } from "./copy/shell";
 
@@ -23,9 +23,9 @@ function mount(node: React.ReactElement): HTMLElement {
   return container;
 }
 
-test("TopBar renders no scope switch", () => {
+test("TopBarActions renders no scope switch", () => {
   const html = renderToStaticMarkup(
-    <TopBar view="overview" scope="personal" onScopeChange={() => {}} onAddWidget={() => {}} />,
+    <TopBarActions scope="personal" onScopeChange={() => {}} onAddWidget={() => {}} />,
   );
   expect(html).not.toContain("scope-switch");
   expect(html).not.toContain(shellCopy.nl.topBar.scopeGroupLabel);

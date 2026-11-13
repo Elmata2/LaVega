@@ -419,164 +419,6 @@
     border: 1.5px solid var(--warn);
   }
 
-  /* App-bar nav item — a plain text tab with a rule under the active one, the
- * desktop reference's treatment. It replaced the round-edged dark tile once the
- * rail stopped showing the whole catalogue: with only the modules the owner
- * switched on, the nav needs no decoration to stay readable. */
-  .nav-item {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    flex: none;
-    padding: 6px 16px;
-    border: none;
-    border-radius: var(--pill);
-    background: transparent;
-    color: var(--muted);
-    font-size: 0.95rem;
-    font-weight: 500;
-    text-align: left;
-    text-decoration: none;
-    white-space: nowrap;
-    cursor: pointer;
-    transition:
-      color 0.12s ease,
-      background-color 0.12s ease;
-  }
-  .nav-item:hover:not(:disabled) {
-    color: var(--ink);
-  }
-  /* Active = the white pill with dark text, as on the marketing site. */
-  .nav-item.active,
-  .nav-item.active:hover {
-    color: var(--on-ink);
-    background: var(--ink);
-    font-weight: 600;
-  }
-  .nav-item:disabled {
-    opacity: 1;
-    cursor: pointer;
-  }
-  .nav-icon {
-    display: inline-flex;
-    width: 18px;
-    height: 18px;
-    flex: none;
-  }
-
-  /* App shell layout — one floating, rounded frame on the gutter, stacked:
- * app bar (brand + pill nav + lock) · greeting row · scrolling content. The
- * frame owns the viewport height and only .content scrolls, so the nav and the
- * greeting stay put like the desktop reference. Navigation moved from a left
- * column to the top rail so the module grid gets the full width. */
-  .shell {
-    display: flex;
-    flex-direction: column;
-    height: calc(100vh - 2 * var(--frame-gap));
-    max-width: 1680px;
-    margin: var(--frame-gap) auto;
-    background: var(--bg);
-    border-radius: var(--r-lg);
-    box-shadow: var(--shadow-float);
-    overflow: hidden;
-  }
-
-  .appbar {
-    display: flex;
-    align-items: center;
-    gap: var(--sp-4);
-    flex: none;
-    min-width: 0;
-    padding: var(--sp-4);
-    border-bottom: 1px solid var(--line);
-  }
-
-  .brand {
-    display: flex;
-    align-items: center;
-    gap: var(--sp-2);
-    flex: none;
-    font-family: var(--font-display);
-    font-weight: 400;
-    font-synthesis: none;
-    font-size: 1.5rem;
-    line-height: 1;
-    letter-spacing: 0.005em;
-    color: var(--ink);
-  }
-
-  /* The tab set: the owner's chosen modules as a row of text tabs. It still
- * scrolls rather than wraps, because a selection can still be long. */
-  .navrail {
-    display: flex;
-    align-items: center;
-    gap: var(--sp-5);
-    flex: 1;
-    min-width: 0;
-    padding: 0 var(--sp-2);
-    overflow-x: auto;
-    scrollbar-width: none;
-  }
-  .navrail::-webkit-scrollbar {
-    display: none;
-  }
-
-  .appbar-right {
-    display: flex;
-    align-items: center;
-    gap: var(--sp-3);
-    flex: none;
-  }
-
-  /* Profile entry — the reference's avatar position, top right. It holds the
- * module picker and everything that is a setting rather than a workspace. */
-  .appbar-profile {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--sp-2);
-    padding: 5px 14px 5px 5px;
-    border-radius: var(--pill);
-    border: 1px solid var(--line);
-    background: var(--surface);
-    color: var(--muted);
-    font-size: 0.85rem;
-    font-weight: 500;
-    text-decoration: none;
-    white-space: nowrap;
-    cursor: pointer;
-  }
-  .appbar-profile:hover {
-    color: var(--ink);
-    border-color: var(--accent);
-  }
-
-  /* Link out to the investing app — a separate deploy, not a route, so it gets
- * the same pill treatment as the profile entry beside it but never an
- * "active" state: leaving this app is never "where you are". */
-  .appbar-investing {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--sp-2);
-    padding: 5px 14px;
-    border-radius: var(--pill);
-    border: 1px solid var(--line);
-    background: var(--surface);
-    color: var(--muted);
-    font-size: 0.85rem;
-    font-weight: 500;
-    white-space: nowrap;
-    text-decoration: none;
-  }
-  .appbar-investing:hover {
-    color: var(--ink);
-    border-color: var(--accent);
-  }
-
-  .appbar-profile.active {
-    color: var(--on-ink);
-    background: var(--ink);
-    border-color: var(--ink);
-  }
   .profile-avatar {
     display: inline-flex;
     align-items: center;
@@ -588,47 +430,7 @@
     background: var(--surface-2);
     color: var(--ink);
   }
-  .appbar-profile.active .profile-avatar {
-    background: var(--on-ink);
-  }
 
-  .shell-body {
-    display: flex;
-    flex-direction: column;
-    flex: 1;
-    min-height: 0;
-    min-width: 0;
-  }
-
-  /* Greeting / title row — the page's own header, in the same language as every
- * section below it: the title, and a rule under it. */
-  .topbar {
-    display: flex;
-    align-items: flex-end;
-    justify-content: space-between;
-    gap: var(--sp-4);
-    /* No side padding: the margin insets it to the content column, so the rule
-   * starts and ends exactly where the content does. */
-    padding: var(--sp-5) 0 var(--sp-3);
-    margin: 0 var(--sp-6) var(--sp-4);
-    border-bottom: 1px solid var(--line);
-    background: transparent;
-    flex-wrap: wrap;
-    flex: none;
-  }
-  .topbar-title {
-    margin: var(--sp-1) 0 0;
-    font-size: 2.6rem;
-    line-height: 1.08;
-    letter-spacing: 0;
-  }
-  .topbar-right {
-    display: flex;
-    align-items: center;
-    gap: var(--sp-3);
-    flex-wrap: wrap;
-    padding-bottom: 6px;
-  }
   /* ---------- Persoonlijk | Zakelijk ----------
  *
  * Two words separated by a vertical rule — the same idea as the nav's tabs
@@ -698,16 +500,6 @@
     font-weight: 600;
     color: var(--ink);
   }
-  /* "Widget toevoegen" — the reference's Add widget, opening the same module
- * picker the profile holds. */
-  .topbar-add {
-    border-style: dashed;
-    color: var(--ink);
-  }
-  .topbar-add:hover {
-    border-color: var(--accent);
-  }
-
   /* Import / bank-link outcome shown outside the profile (where the Import block
  * itself lives). Same role="alert" text, one line above the content. */
   .shell-problems {
@@ -802,14 +594,6 @@
   .mp-toggle:disabled {
     cursor: default;
     opacity: 0.6;
-  }
-
-  .content {
-    padding: var(--sp-3) var(--sp-6) var(--sp-6);
-    overflow-y: auto;
-    flex: 1;
-    min-height: 0;
-    min-width: 0;
   }
 
   /* Filter row (Transacties). A wrapping flex row of label+control pairs: the
@@ -1023,53 +807,11 @@
   /* .vault-field/.vault-checkbox-field extracted to components/ui/Field.tsx
  * (docs/adr/0005). */
 
+  /* Phone-width content rules, one column of stacked cards. The old top bar's
+ * phone rules (pinned bar, nav rail row, frame full-bleed, .content padding)
+ * left with the old shell; the new shell's phone layout is in shell.css at
+ * 1024px. These are about the content itself and stay on the viewport. */
   @media (max-width: 900px) {
-    /* Phone: the frame goes full-bleed, the page scrolls normally, and the shell
-   * is one column of stacked cards. The app bar wraps to two rows so the nav
-   * rail keeps its full width and the lock control stays visible (the old
-   * sidebar hid it on phones). */
-    body {
-      overflow: auto;
-    }
-    .shell {
-      height: auto;
-      min-height: 100vh;
-      max-width: none;
-      margin: 0;
-      border-radius: 0;
-      box-shadow: none;
-      overflow: visible;
-    }
-    .appbar {
-      flex-wrap: wrap;
-      gap: var(--sp-2);
-      /* Tight: this bar is pinned, so every pixel it takes is a pixel the page
-     * never gets back. Measured 115px before, ~90px after. */
-      padding: var(--sp-2) var(--sp-3);
-      /* The rail is the only navigation on a phone, and the homescreen is about
-     * 4500px tall — without this, switching tabs means scrolling all the way
-     * back to the top. */
-      position: sticky;
-      top: 0;
-      z-index: 20;
-      background: var(--bg);
-    }
-    .appbar-profile {
-      padding: 4px 12px 4px 4px;
-    }
-    .appbar-investing {
-      padding: 4px 12px;
-    }
-    .profile-avatar {
-      width: 24px;
-      height: 24px;
-    }
-    .nav-item {
-      padding: 7px 0;
-    }
-    .navrail {
-      gap: var(--sp-4);
-    }
     /* A 96px thumbnail plus a switch leaves too little for the sentence on a
    * phone; the preview shrinks rather than the text wrapping to four lines. */
     .mp-preview,
@@ -1081,19 +823,6 @@
     }
     .mp-item {
       gap: var(--sp-3);
-    }
-    /* Anything scrolled into view (a module, a chat answer) clears the pinned
-   * bar instead of starting underneath it. */
-    .module,
-    .card {
-      scroll-margin-top: 7rem;
-    }
-    .navrail {
-      order: 3;
-      flex-basis: 100%;
-    }
-    .appbar-right {
-      margin-left: auto;
     }
     /* minmax(0,…) + min-width:0, or a tile whose min-content is wider than its
    * track (a long euro amount at 2.3rem) pushes the whole page sideways —
@@ -1111,24 +840,8 @@
     .card-grid {
       grid-template-columns: 1fr;
     }
-    .content {
-      padding: var(--sp-4);
-      overflow: visible;
-    }
     .card {
       padding: var(--sp-4);
-    }
-    .topbar {
-      align-items: flex-start;
-      padding: var(--sp-4) 0 var(--sp-3);
-      margin: 0 var(--sp-4) var(--sp-3);
-    }
-    /* The mobile reference leads with very large type, one column under it. */
-    .topbar-title {
-      font-size: 2.5rem;
-    }
-    .topbar-right {
-      padding-bottom: 0;
     }
 
     /* Native controls are the usual source of a sideways-scrolling phone page:

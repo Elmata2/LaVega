@@ -1,6 +1,5 @@
-/* The new app frame (components/Shell.tsx, behind SHELL_V2). Own class names,
- * `shell2-*`; the old `.shell` / `.appbar*` rules in base.css stay as they are
- * until the flag flips. Same layer as the other stylesheets. */
+/* The app frame (components/Shell.tsx). Own class names, `shell2-*`. Same
+ * layer as the other stylesheets. */
 @layer components {
   .shell2 {
     position: relative;
@@ -500,11 +499,32 @@
     gap: var(--sp-3);
   }
 
-  /* TopBarActions is shared with the old bar, whose rule adds bottom padding
-   * and wrapping for the big greeting title. */
-  .shell2-actions .topbar-right {
-    padding-bottom: 0;
-    flex-wrap: nowrap;
+  /* TopBarActions (components/TopBar.tsx): the scope switch (archived) and
+   * "Widget toevoegen". */
+  .topbar-right {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-3);
+  }
+  .topbar-add {
+    border-style: dashed;
+    color: var(--ink);
+  }
+  .topbar-add:hover {
+    border-color: var(--accent);
+  }
+
+  /* A module or card scrolled into view clears the sticky bar (56px top bar at
+   * >= 1024, 48px phone bar below) instead of starting under it. */
+  .module,
+  .card {
+    scroll-margin-top: 7rem;
+  }
+
+  /* The phone bar's avatar is smaller than the 28px base. */
+  .shell2-phonebar .profile-avatar {
+    width: 24px;
+    height: 24px;
   }
 
   .shell2-content {

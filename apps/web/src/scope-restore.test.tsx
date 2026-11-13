@@ -24,7 +24,7 @@ import type { Account, EntityProfile, Tx } from "@lavega/core";
 /* DE NAVIGATIE IS EEN <a href> GEWORDEN, geen <button> meer (commit edea871,
  * path-based personal views). Dat is een verbetering - er zijn nu echte URL's,
  * dus middenklik, "link kopiëren" en de terugknop werken - maar de selector hier
- * stond nog op button.nav-item en die vond niets meer. De test zei toen "geen
+ * stond nog op een button-selector en die vond niets meer. De test zei toen "geen
  * knop Rekeningen", wat klonk als een verdwenen knop terwijl hij er gewoon staat
  * als link.
  */
@@ -242,8 +242,8 @@ async function click(el: HTMLElement) {
   });
 }
 
-const title = () => container!.querySelector(".topbar-title")?.textContent ?? "";
-const screen = () => container!.querySelector("main.content")!.textContent ?? "";
+const title = () => container!.querySelector(".shell2-title")?.textContent ?? "";
+const screen = () => container!.querySelector("main#main")!.textContent ?? "";
 
 test("Persoonlijk → Zakelijk → Persoonlijk puts the same screen back", async () => {
   await mount();
@@ -284,11 +284,11 @@ test("you come back to the module you left the half on, not the one the other ha
 test("each half keeps its own module, so switching back and forth is a round trip", async () => {
   await mount();
 
-  await click(button("a.nav-item", "Rekeningen")); // Persoonlijk left on Rekeningen
+  await click(button("a.shell2-rail-item", "Rekeningen")); // Persoonlijk left on Rekeningen
   const personal = screen();
 
   await click(scopeButton("Zakelijk"));
-  await click(button("a.nav-item", "Optimalisatie")); // Zakelijk left on Optimalisatie
+  await click(button("a.shell2-rail-item", "Optimalisatie")); // Zakelijk left on Optimalisatie
   const business = screen();
 
   await click(scopeButton("Persoonlijk"));
@@ -305,7 +305,7 @@ test("a filter naming an account of one half never narrows the other half", asyn
 
   // Rekeningen → click the personal account's transaction count → Transacties,
   // filtered to that account.
-  await click(button("a.nav-item", "Rekeningen"));
+  await click(button("a.shell2-rail-item", "Rekeningen"));
   // Rekeningen groups per bank (B4): open the bank, then its account's count.
   await click(buttonLike("button[data-testid=bank-group-head]", "TEST"));
   await click(buttonLike('[data-testid="card-link"]', "4 transacties bekijken"));
@@ -330,7 +330,7 @@ test("an optional view that is not in the nav still opens by direct URL", async 
   try {
     await mount();
     expect(title()).toBe("Forecast");
-    expect([...container!.querySelectorAll("a.nav-item")].map((a) => a.textContent)).not.toContain(
+    expect([...container!.querySelectorAll("a.shell2-rail-item")].map((a) => a.textContent)).not.toContain(
       "Forecast",
     );
   } finally {

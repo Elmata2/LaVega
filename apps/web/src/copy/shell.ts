@@ -13,7 +13,7 @@ import type { ImportProblem } from "@lavega/core";
 import type { ShellNotice } from "../shellNotice.js";
 
 /**
- * Every word the vault app's chrome shows, in both languages: TopBar, NavBar,
+ * Every word the vault app's chrome shows, in both languages: the rail, the top bar,
  * VaultGate, Overzicht, Import, Profiel and ModulePicker — the files this
  * copy module belongs to.
  *
@@ -23,7 +23,7 @@ import type { ShellNotice } from "../shellNotice.js";
  * while keeping the Dutch/legal terms (BTW, zzp, DGA, IBAN, SEPA, iDEAL) that
  * do not translate.
  *
- * `nav.moduleLabels` exists so NavBar's own tab text can switch language
+ * `nav.moduleLabels` exists so the rail's own label text can switch language
  * without touching `moduleRegistry.tsx`'s `MODULES`/`WIDGETS`; `modulePicker`
  * does the same for `ModulePicker.tsx`'s Add-widget panel, which no longer
  * reads `label`/`what`/`note` off `MODULES`/`WIDGETS` directly. Those two

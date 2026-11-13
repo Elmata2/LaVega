@@ -94,8 +94,7 @@ import {
 import { CATALOGUE_ENTRIES, CATALOGUE_RATES } from "./catalogue-rates";
 import { API_BASE } from "./api.js";
 import { CONTENT_CONTAINER_CLASS } from "./module-grid.js";
-import { SHELL_V2 } from "./shellFlag.js";
-import { ShellSwitch } from "./components/Shell.js";
+import { Shell } from "./components/Shell.js";
 import { AccountSidebar } from "./components/AccountSidebar.js";
 import { SHOW_INVOICE_FORWARDING, initialScope, isArchivedView } from "./archive";
 import { pathForView, takePendingEbParams, viewFromPathname, type View } from "./appRoutes";
@@ -157,8 +156,7 @@ import {
   markBankConnected,
   markEbRefreshAttempted,
 } from "./ebAutoRefresh.js";
-import NavBar from "./components/NavBar";
-import TopBar, { TopBarActions } from "./components/TopBar";
+import { TopBarActions } from "./components/TopBar";
 import CardLink from "./components/ui/CardLink.js";
 import Button from "./components/ui/Button.js";
 import StatusLine from "./components/ui/StatusLine.js";
@@ -209,7 +207,7 @@ const RATES_URL: string | undefined =
 
 /* "rules" has NO nav entry: Regels is a setting, so it renders inline in
  * Profiel and nothing calls setView("rules"). Its branch below is gone. The
- * union still lists it only because components/TopBar.tsx types its page-title
+ * union still lists it only because copy/shell.ts types its page-title
  * table as Record<View, string> and still has a "Regels" entry — dropping the
  * member there is one line in a file this change does not own, and that title
  * map is a label lookup, not a way to reach the view. Path `/app/rules` still
@@ -2289,8 +2287,7 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
   }
 
   return (
-    <ShellSwitch
-      v2={SHELL_V2}
+    <Shell
       title={shell.topBar.viewTitles[view]}
       nav={{
         view,
@@ -2313,22 +2310,6 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
       )}
       actions={
         <TopBarActions
-          scope={scope}
-          onScopeChange={handleScopeChange}
-          onAddWidget={handleAddWidget}
-        />
-      }
-      legacyNav={
-        <NavBar
-          view={view}
-          modules={navModules(withoutLockedModules(modules, planUnlocked))}
-          onNavigate={setView}
-          onOpenProfile={() => setView("profiel")}
-        />
-      }
-      legacyTop={
-        <TopBar
-          view={view}
           scope={scope}
           onScopeChange={handleScopeChange}
           onAddWidget={handleAddWidget}
@@ -2731,6 +2712,6 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
           />
         )}
       </div>
-    </ShellSwitch>
+    </Shell>
   );
 }

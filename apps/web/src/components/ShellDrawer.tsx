@@ -6,7 +6,7 @@ import { shellCopy } from "../copy/shell.js";
 import type { ModuleDef } from "./moduleRegistry";
 import { InvestingGlyph, investingLinkProps, navClick } from "./Rail.js";
 
-/* The phone drawer (< 1024px, SHELL_V2): a left sheet with the module list on
+/* The phone drawer (< 1024px): a left sheet with the module list on
  * top (the rail is gone) and the account sidebar body below it. Shell-local on
  * purpose, not a general Drawer primitive.
  *

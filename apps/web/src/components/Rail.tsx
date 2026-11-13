@@ -6,9 +6,8 @@ import { INVESTING_URL } from "../investing.js";
 import { useAppLocale } from "../appLocale.js";
 import { shellCopy } from "../copy/shell.js";
 
-/* Navigation of the new shell (SHELL_V2): the 72px rail at >= 1024px. Takes the
- * same data NavBar gets. At < 1024 `BottomBar` and `PhoneTopBar` take over; Shell
- * picks one, so there is only ever one <nav>. */
+/* Navigation of the shell: the 84px rail at >= 1024px. At < 1024 `BottomBar` and
+ * `PhoneTopBar` take over; Shell picks one, so there is only ever one <nav>. */
 
 export type ShellNavProps = {
   view: View;

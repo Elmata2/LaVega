@@ -2,7 +2,7 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { Shell, ShellSwitch } from "./Shell";
+import { Shell } from "./Shell";
 import { forgetMemorySidebar } from "../lib/sidebar";
 
 (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -123,41 +123,6 @@ test("English copy", () => {
   expect(host.querySelector("button[aria-controls]")?.getAttribute("aria-label")).toBe(
     "Hide sidebar",
   );
-});
-
-test("ShellSwitch off renders the old shell and not the new one", () => {
-  render(
-    <ShellSwitch
-      v2={false}
-      title="Overzicht"
-      actions={null}
-      legacyNav={<nav>old-nav</nav>}
-      legacyTop={<div className="topbar">old-top</div>}
-    >
-      <div className="content-container">body</div>
-    </ShellSwitch>,
-  );
-  expect(host.querySelector(".shell > nav")?.textContent).toBe("old-nav");
-  expect(host.querySelector(".shell .shell-body > .topbar")).not.toBeNull();
-  expect(host.querySelector(".shell-body > main.content > .content-container")).not.toBeNull();
-  expect(host.querySelector(".shell2")).toBeNull();
-});
-
-test("ShellSwitch on renders the new shell and not the old chrome", () => {
-  render(
-    <ShellSwitch
-      v2
-      title="Overzicht"
-      actions={null}
-      legacyNav={<nav>old-nav</nav>}
-      legacyTop={<div className="topbar">old-top</div>}
-    >
-      <div className="content-container">body</div>
-    </ShellSwitch>,
-  );
-  expect(host.querySelector(".shell2 main#main .content-container")).not.toBeNull();
-  expect(host.textContent).not.toContain("old-nav");
-  expect(host.querySelector(".shell")).toBeNull();
 });
 
 const handle = () => host.querySelector<HTMLElement>('aside [role="separator"]')!;

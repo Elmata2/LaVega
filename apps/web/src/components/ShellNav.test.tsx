@@ -2,7 +2,7 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { Shell, ShellSwitch } from "./Shell";
+import { Shell } from "./Shell";
 import { MODULES, navModules, type ModuleId } from "./moduleRegistry";
 import { forgetMemorySidebar } from "../lib/sidebar";
 import type { View } from "../App";
@@ -236,21 +236,4 @@ test("English labels", () => {
   const bar = host.querySelector("nav")!;
   expect(labels(bar)).toEqual(["Overview", "Optimise", "Accounts", "More"]);
   expect(host.querySelector(".shell2-skip")?.textContent).toBe("Skip to content");
-});
-
-test("flag off: old shell, only the legacy nav, no skip link", () => {
-  render(
-    <ShellSwitch
-      v2={false}
-      title="Overzicht"
-      legacyNav={<nav>old-nav</nav>}
-      legacyTop={<div />}
-      nav={{ view: "overview", modules: navModules(CORE), onNavigate() {}, onOpenProfile() {} }}
-    >
-      <div>body</div>
-    </ShellSwitch>,
-  );
-  expect(host.querySelectorAll("nav")).toHaveLength(1);
-  expect(host.querySelector("nav")!.textContent).toBe("old-nav");
-  expect(host.querySelector(".shell2-skip")).toBeNull();
 });

@@ -1,54 +1,31 @@
 import { Fragment } from "react";
 import type { EntityScope } from "@lavega/core";
 import Pill from "./ui/Pill.js";
-import type { View } from "../App";
 import { SHOW_SCOPE_SWITCH } from "../archive";
 import { SCOPE_ORDER } from "../scope.js";
 import { useAppLocale } from "../appLocale.js";
 import { shellCopy } from "../copy/shell.js";
 
-/* The greeting/title row, straight from the desktop reference: one large line
- * naming where you are with a rule under it, a muted eyebrow above, and the
- * controls on the right — the Persoonlijk | Zakelijk switch plus the
- * reference's "Add widget", which opens the profile's module picker. Same
- * picker, reached from the other end: from here you are adding something to the
- * nav, from the profile you are curating it.
+/* The controls on the right of the shell's top bar: the Persoonlijk | Zakelijk
+ * switch (archived, `SHOW_SCOPE_SWITCH`) plus the reference's "Add widget", which
+ * opens the profile's module picker. Same picker, reached from the other end:
+ * from here you are adding something to the nav, from the profile you are
+ * curating it.
  *
  * The switch replaced the per-company pills. Per-company splitting is not
  * deleted — it moved to the places that need it (Transacties' filter,
  * Rekeningen, Belasting per BV); the chrome asks the question the owner
  * actually asks first: is this my money or the company's. */
 
-type TopBarProps = {
-  view: View;
+type TopBarActionsProps = {
   /** Which half of the owner's money is in view. */
   scope: EntityScope;
   onScopeChange: (scope: EntityScope) => void;
   onAddWidget: () => void;
 };
 
-export default function TopBar({ view, scope, onScopeChange, onAddWidget }: TopBarProps) {
-  const [locale] = useAppLocale();
-  const c = shellCopy[locale];
-  return (
-    <div className="topbar">
-      <div className="topbar-left">
-        <div className="eyebrow">LaVega{SHOW_SCOPE_SWITCH ? ` · ${c.scope[scope]}` : ""}</div>
-        <h1 className="topbar-title">{c.topBar.viewTitles[view]}</h1>
-      </div>
-
-      <TopBarActions scope={scope} onScopeChange={onScopeChange} onAddWidget={onAddWidget} />
-    </div>
-  );
-}
-
-/** The right-hand controls: the scope switch (while shown) and "Add widget".
- *  Shared by the old top bar and the new shell's top bar. */
-export function TopBarActions({
-  scope,
-  onScopeChange,
-  onAddWidget,
-}: Omit<TopBarProps, "view">) {
+/** The top bar's right-hand controls: the scope switch (while shown) and "Add widget". */
+export function TopBarActions({ scope, onScopeChange, onAddWidget }: TopBarActionsProps) {
   const [locale] = useAppLocale();
   const c = shellCopy[locale];
   return (

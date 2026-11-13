@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from "react";
 import type { View } from "../App";
 import { useAppLocale } from "../appLocale.js";
 import { shellCopy } from "../copy/shell.js";
@@ -10,7 +17,7 @@ import { Rail, type ShellNavProps } from "./Rail.js";
 import { ShellDrawer, type DrawerMode } from "./ShellDrawer.js";
 import { SidebarResizeHandle } from "./SidebarResizeHandle.js";
 
-/* The new app frame (SHELL_V2): full viewport, no margin, radius or shadow.
+/* The app frame: full viewport, no margin, radius or shadow.
  *
  *   rail (84)  |  account sidebar (296, 240..440, collapsible)  |  main
  *
@@ -161,9 +168,7 @@ export function Shell({ title, actions, nav, sidebar, children }: ShellProps) {
         </aside>
       )}
       <main id="main" className="shell2-main" tabIndex={-1} {...behind}>
-        {phoneNav && (
-          <PhoneTopBar {...phoneNav} expanded={drawerOpen && drawer.mode === "menu"} />
-        )}
+        {phoneNav && <PhoneTopBar {...phoneNav} expanded={drawerOpen && drawer.mode === "menu"} />}
         <header className="shell2-topbar">
           {wide && (
             <button
@@ -205,28 +210,6 @@ export function Shell({ title, actions, nav, sidebar, children }: ShellProps) {
           {(close) => (typeof sidebar === "function" ? sidebar(close) : sidebar)}
         </ShellDrawer>
       )}
-    </div>
-  );
-}
-
-export type ShellSwitchProps = ShellProps & {
-  /** The flag (`SHELL_V2`). Off renders the old shell unchanged. */
-  v2: boolean;
-  /** Old shell chrome, rendered only when `v2` is false. */
-  legacyNav: ReactNode;
-  legacyTop: ReactNode;
-};
-
-/** The one place the two shells differ. `children` is shared. */
-export function ShellSwitch({ v2, legacyNav, legacyTop, children, ...rest }: ShellSwitchProps) {
-  if (v2) return <Shell {...rest}>{children}</Shell>;
-  return (
-    <div className="shell">
-      {legacyNav}
-      <div className="shell-body">
-        {legacyTop}
-        <main className="content">{children}</main>
-      </div>
     </div>
   );
 }

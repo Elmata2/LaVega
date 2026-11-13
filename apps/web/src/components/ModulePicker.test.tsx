@@ -20,7 +20,7 @@ vi.mock("../archive", () => ({
     localStorage.getItem("lavega.defaultScope") === "business" ? "business" : "personal",
 }));
 import ModulePicker, { WidgetPicker } from "./ModulePicker";
-import NavBar from "./NavBar";
+import { Rail } from "./Rail";
 import {
   DEFAULT_MODULES,
   DEFAULT_WIDGETS,
@@ -71,7 +71,7 @@ function Shell() {
   const [modules, setModules] = useState<ModuleId[]>(() => enabledModules(getEnabledModules()));
   return (
     <>
-      <NavBar
+      <Rail
         view="overview"
         modules={navModules(modules)}
         onNavigate={() => {}}
@@ -97,7 +97,7 @@ function render() {
 }
 
 function navLabels(): string[] {
-  return [...container!.querySelectorAll(".navrail .nav-item")].map((n) =>
+  return [...container!.querySelectorAll(".shell2-rail-list a")].map((n) =>
     (n.textContent ?? "").trim(),
   );
 }
