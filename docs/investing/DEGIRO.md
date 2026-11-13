@@ -21,13 +21,14 @@ ID`, semicolon). No real DeGiro export has that shape; D1 deleted them and
   `onbekend of leeg bestand — geen transacties of posities herkend`. D2 (#314)
   replaced that detection: the same file is now named `DeGiro account`. See
   [Reader and detection](#reader-and-detection-d2-314).
-- The account statement maps to `CashFlow[]` with a completeness proof (D3,
-  #315): `readAccountStatement` classifies every row into one of four buckets
-  and walks the `Saldo` column. See
-  [Account statement → cash flows](#account-statement--cash-flows-d3-315).
-  It is not wired into the import path yet: dividends (#316), trades (#317) and
-  the adapter (#323) still have to consume it, so a recognised file still
-  reports one problem naming the profile.
+- The account statement maps to the whole import result: cash flows with the
+  `Saldo` walk (D3, #315), dividends (D4, #316) and trades, cash balances,
+  coverage and period (D5, #317). `parseBrokerFile` maps the `account` profile
+  and `createDeGiroFileImport` stamps entity/broker into a full `BrokerResult`.
+  See [Account statement → trades, balances, coverage](#account-statement--trades-balances-coverage-d5-317).
+  Nothing in `apps/` calls it yet: the upload route (#323) and the DeGiro tab
+  (#324) are the remaining path to a user. `Transactions.csv` and
+  `Portfolio.csv` are still only named, not mapped (#318, #319).
 - `Transactions.csv` and `Portfolio.csv` shapes were **unverified** until D1.
   They are now verified from real exports of 2026-11-12 (see the two sections
   below), and their headers are the ones D2 matches.
@@ -181,25 +182,34 @@ asserts the headers, the walk, the row kinds and the internal arithmetic.
 never throws. It first classifies every data row into exactly one bucket, so no
 row is dropped and no row is counted twice:
 
-| Bucket      | Rows                                                                                                 | Owner      |
-| ----------- | ---------------------------------------------------------------------------------------------------- | ---------- |
-| `cash-flow` | external money, interest, fees, sweep, FX legs without an Order Id, iDEAL reservations, unknown text | this issue |
-| `dividend`  | `Dividend`, `Dividendbelasting`                                                                      | #316       |
-| `trade`     | executions, their `DEGIRO Transactiekosten…` rows, and `Valuta …` AutoFX legs carrying an Order Id   | #317       |
-| `skipped`   | information lines and corporate actions: empty `Mutatie`                                             | —          |
+| Bucket      | Rows                                                                                           | Owner      |
+| ----------- | ---------------------------------------------------------------------------------------------- | ---------- |
+| `cash-flow` | external money, interest, fees, FX legs without an Order Id, iDEAL reservations, unknown text  | this issue |
+| `dividend`  | `Dividend`, `Dividendbelasting`                                                                | #316       |
+| `trade`     | executions, their `DEGIRO Transactiekosten…` rows, and `Valuta …` AutoFX legs with an Order Id | #317       |
+| `skipped`   | information lines and corporate actions (empty `Mutatie`), and the cash sweep                  | —          |
 
-`counts` sums to the number of data rows; the fixture gives 12 / 3 / 10 / 4 for
+`counts` sums to the number of data rows; the fixture gives 11 / 3 / 10 / 5 for
 29 rows. An unrecognised description still becomes a cash flow of kind `other`
 and adds a problem naming the text — it is never dropped.
 
 Cash-flow kinds follow the spec: external money only is `deposit` /
 `withdrawal`; interest keeps the signed `Mutatie`; `DEGIRO Aansluitingskosten`
-and a commission row without an Order Id are `fee`; the cash sweep, FX legs
-without an Order Id and the iDEAL reservations are `other` with their
-description. Ids are the same content hash the IBKR and Trading 212 paths use
+and a commission row without an Order Id are `fee`; FX legs without an Order Id
+and the iDEAL reservations are `other` with their description. Ids are the same
+content hash the IBKR and Trading 212 paths use
 (`degiro-cash-flow | date | currency | amount | kind | description`, plus an
 occurrence counter for identical rows), so re-parsing the same file yields the
 same ids and a merge cannot append duplicates.
+
+**Cash sweep correction (D5).** #315 first emitted the `Degiro Cash Sweep
+Transfer` row as a cash flow of kind `other`. D5's end-to-end walk (#317) proves
+that wrong: the sweep's `Saldo` reports the flatex-bank leg, so the -23.24 in the
+fixture never belonged to the balance the account's `Saldo` column shows.
+Emitting it as a `CashFlow` makes core's date-based cash walk wrong on every date
+before the row (the walk sums the events it is given). The row is now classified
+`skip`: no flow, no balance anchor, still counted in `counts.skipped`. The Saldo
+walk already ignored it; only the emitted flow changed.
 
 **Reservation finding (the open question in #315).** `Reservation iDEAL /
 Sofort Deposit` rows do _not_ double move cash with a later `iDEAL Deposit`.
@@ -227,8 +237,12 @@ returns `{ dividends, counts, problems }` and never throws. It reuses
   positive when the broker withheld it, negative when the statement refunded one.
   Gross = `amount + withholdingTax`. The field is absent when the statement holds
   no tax row; zero and absent are different facts. No conversion happens here.
-- **Date.** `Dividend.date` is `Valutadatum`, the cash date the tax row carries.
-  `Datum` is a fallback only for an empty or impossible value date.
+- **Date.** `Dividend.date` is `Datum`, the booking date the `Saldo` walk books
+  the cash on; `Valutadatum` is only the pairing key, with `Datum` as its
+  fallback. D5's end-to-end walk (#317) proves the booking date: core sums cash
+  events on their own dates, so a value-dated dividend misses the fixture
+  `Saldo` at every date between the two (the USD dividend is booked 07-01 and
+  value-dated 09-01, with the 08-01 FX debit in between).
 - **Corrections.** A negative `Dividend` row is a correction, never a second
   dividend. It nets into the most recent dividend for the same ISIN and currency,
   its own tax refund included, and adds no row.
@@ -254,13 +268,66 @@ own fee flow. So `amount` keeps its cash meaning and gross stays derivable as
 dividend appears there at its net cash, where IBKR fills the same field from its
 gross row.
 
-### One file set, three profiles
+### Account statement → trades, balances, coverage (D5, #317)
 
-| Profile        | DeGiro export               | Produces                                                    | Status   |
-| -------------- | --------------------------- | ----------------------------------------------------------- | -------- |
-| `account`      | Rekeningoverzicht / Account | cash flows, dividends, cash balances, trades, cash coverage | verified |
-| `transactions` | Transacties / Transactions  | trades (venue, local value, FX rate, commission)            | verified |
-| `portfolio`    | Portefeuille / Portfolio    | positions, cash balance                                     | verified |
+`packages/core/src/parsers/degiro/trades.ts` and `accountProfile.ts`.
+
+`readDeGiroAccount(text)` is the whole account import. It reuses
+`readAccountStatement`, `readAccountDividends` and `readAccountTrades`, joins
+their ledger rows under one id counter, and returns
+`{ trades, cashFlows, dividends, cashBalances, coverage, period, problems }`.
+`parseBrokerFile` maps the `account` profile to it, and
+`createDeGiroFileImport` stamps `entity` and `broker` and returns a full
+`BrokerResult`: the statement alone is enough for a DeGiro user.
+
+- **Trade rows are ledger rows.** `cashHistory.tradeCash = "cash-flows"`, so a
+  trade's cash is the statement row, never a `Trade.settlement`. Every
+  trade-bucket row becomes one `CashFlow`: the execution row (kind `other`), its
+  commission row (kind `fee`) and the AutoFX legs (kind `other`).
+  `brokerFlowId` carries the Order Id on the two AutoFX legs only: core's cash
+  walk dedupes flows by `(entity, broker, currency, brokerFlowId ?? id)`, so
+  stamping the shared Order Id on an execution and its fee would collapse two
+  same-currency events into one and under-count the cash.
+- **Trades.** `Koop|Verkoop|Buy|Sell <qty> @ <price> <ccy>` parses from
+  `Omschrijving`. Numbers in that free-text column are locale-free: the last
+  separator that appears is the decimal one, so `19,648` and `1.234,56` both
+  parse. `side` comes from the verb, never from the sign; `amount` is the signed
+  `Mutatie`; `brokerTradeId` is the Order Id; `symbol` is the ISIN (per #322),
+  with the product name only as a no-ISIN fallback plus a problem.
+  `executionAt` carries `Datum`+`Tijd`.
+- **Commission groups by Order Id + `Datum` + `Tijd`.** A trade, its fee and its
+  AutoFX legs share all three; partial fills share the Order Id but each has its
+  own time and its own fee row. Summing a whole Order Id would bill every fill
+  for every fee (the fixture's two fills would each report 1.42 instead of
+  0.71). An execution with no fee row in its group reports 0; a fee row with no
+  execution stays a cash flow and adds a problem.
+- **Cash balances** are the statement's own anchors: the latest `Saldo` per
+  currency, `asOf` = that row's `Datum`. Only rows that take part in the Saldo
+  walk can anchor (the sweep row's `Saldo` is the flatex-bank leg).
+- **Coverage** is `{ tradeCash: "cash-flows", status: "complete", from, to }`
+  when the Saldo walk holds for every row and the file has a period; otherwise
+  `unknown` with `reason` = the first walk problem, which names the row. Rows
+  are still returned: a broken walk withholds the claim, not the data.
+  `period` is min/max `Datum`, set only when a date parsed.
+- **Adapter statuses.** A section the file read is `complete` when the parse had
+  no problem, else `partial`; a section the file does not read (positions for
+  the account statement, every section of the still-unmapped transactions and
+  portfolio profiles) is `unavailable`. Reporting an empty section as `complete`
+  would tell the snapshot the broker reported nothing and wipe stored rows.
+
+Fixture result: 4 trades (a sell, a USD buy with AutoFX and fee, and two fills
+of one Order Id), 21 cash flows (11 statement rows + 10 trade rows), 2
+dividends, balances EUR 1467.64 @ 2026-03-06 and USD 0.00 @ 2026-01-16, coverage
+complete 2026-01-05..2026-03-06. `accountProfile.test.ts` drives core's own
+`computePortfolioValueSeries` per currency and matches the fixture `Saldo` at
+every date. Both the dividend booking date and the sweep skip are load-bearing
+for that test: reverting either makes it fail.
+
+| Profile        | DeGiro export               | Produces                                                    | Status                         |
+| -------------- | --------------------------- | ----------------------------------------------------------- | ------------------------------ |
+| `account`      | Rekeningoverzicht / Account | cash flows, dividends, cash balances, trades, cash coverage | mapped (D3–D5); transport #323 |
+| `transactions` | Transacties / Transactions  | trades (venue, local value, FX rate, commission)            | shape verified; mapping #318   |
+| `portfolio`    | Portefeuille / Portfolio    | positions, cash balance                                     | shape verified; mapping #319   |
 
 The account statement is the **primary** import. It alone proves cash history.
 Transactions and Portfolio enrich it; neither is required.
@@ -272,8 +339,15 @@ header, never a guess.
 ### Mapping rules
 
 - **Trade cash stream.** `cashHistory.tradeCash = "cash-flows"`. Trade cash is
-  the `Koop`/`Verkoop` ledger row; trades carry no second settlement. Same rule
-  as IBKR.
+  the execution ledger row, emitted as a `CashFlow`; trades carry no second
+  settlement. Same rule as IBKR.
+- **Trades from the account statement.** Quantity and price come from
+  `Koop|Verkoop|Buy|Sell <qty> @ <price> <ccy>` in `Omschrijving`; `amount` is
+  the row's `Mutatie`; `side` from the verb, never the sign; `commission` is the
+  sum of the fee rows in the same `Order Id`+`Datum`+`Tijd` group;
+  `brokerTradeId` is the Order Id. Every trade-bucket row is also a `CashFlow`
+  (execution `other`, commission `fee`, AutoFX `other` with `brokerFlowId` = the
+  Order Id). Partial fills share an Order Id and stay distinct trades.
 - **Coverage.** Account statement over `[first Datum, last Datum]` →
   `status: "complete"` only if the Saldo walk (below) holds for every currency.
   Otherwise `unknown` with the failing row named.
@@ -290,14 +364,10 @@ header, never a guess.
   to cents. The naive rule, which includes sweeps and information lines, breaks
   on every sweep and information row.
 
-- **Cash flow kinds.** External money only is `deposit`/`withdrawal`. Cash
-  sweep, FX legs and flatex transfer lines are `other` with the description.
-  Information lines with empty `Mutatie` emit nothing.
-- **Trades from the account statement.** Quantity and price parse from
-  `Koop|Verkoop|Buy|Sell <qty> @ <price> <ccy>`. `amount` = the row's
-  `Mutatie`. `commission` = sum of fee rows with the same Order Id.
-  `brokerTradeId` = Order Id. Partial fills share an Order Id; the existing
-  occurrence counter in `assignTradeIds` keeps them distinct.
+- **Cash flow kinds.** External money only is `deposit`/`withdrawal`. FX legs
+  and flatex transfer lines are `other` with the description. The cash sweep is
+  not emitted at all (its `Saldo` is the flatex-bank leg). Information lines
+  with an empty `Mutatie` emit nothing.
 - **Dedupe across files.** When the account statement and `Transactions.csv`
   both carry an Order Id, one trade survives. Transactions supplies venue and
   FX rate; the account row stays the cash stream.
@@ -316,9 +386,10 @@ header, never a guess.
 Users export overlapping windows (the sample machine already has three
 overlapping account files). A re-import must not append duplicates.
 
-- `brokerSnapshot.windowPeriod` returns a period only for `ibkr`. Extend it to
-  `degiro`: a complete account statement replaces stored rows inside
-  `[first Datum, last Datum]` and keeps rows outside it, via `replaceWindow`.
+- `brokerSnapshot.windowPeriod` returns a period only for `ibkr`; extending it
+  to `degiro` is D9 (#321). Until then a complete account import replaces the
+  stored DeGiro collections wholesale, so an overlapping window drops rows
+  outside it. Fix the window before the upload route (#323) exposes importing.
 - Importing the same file twice leaves the snapshot byte-identical.
 
 ### Server and web
@@ -373,4 +444,6 @@ Order: D1 and D8 start in parallel. D2 → D3/D4 → D5 is the critical path.
 
 Landed: D1 (#313, fixtures), D8 (#320, one broker list), D2 (#314, reader and
 header-signature detection), D3 (#315, account statement to cash flows plus the
-Saldo walk invariant).
+Saldo walk invariant), D4 (#316, dividends with withholding tax), D5 (#317,
+account statement to trades, cash balances, coverage and period; the account
+profile now returns a full `BrokerResult` alone).
