@@ -74,14 +74,14 @@ test("acceptance: every fixture row lands in exactly one bucket, and the four co
   };
   for (const { classification } of rows) counts[classification.bucket] += 1;
 
-  expect(counts).toEqual({ "cash-flow": 12, dividend: 3, trade: 10, skip: 4 });
+  expect(counts).toEqual({ "cash-flow": 11, dividend: 3, trade: 10, skip: 5 });
   expect(counts["cash-flow"] + counts.dividend + counts.trade + counts.skip).toBe(
     accountTable().rows.length,
   );
   expect(rows).toHaveLength(29);
 });
 
-test("acceptance: the fixture's cash-flow kinds are 3 deposits, 1 withdrawal, 2 interest, 1 fee, 5 other", () => {
+test("acceptance: the fixture's cash-flow kinds are 3 deposits, 1 withdrawal, 2 interest, 1 fee, 4 other", () => {
   const kinds: Record<CashFlowKind, number> = {
     deposit: 0,
     withdrawal: 0,
@@ -93,8 +93,8 @@ test("acceptance: the fixture's cash-flow kinds are 3 deposits, 1 withdrawal, 2 
     if (classification.kind !== null) kinds[classification.kind] += 1;
   }
 
-  expect(kinds).toEqual({ deposit: 3, withdrawal: 1, interest: 2, fee: 1, other: 5 });
-  expect(kinds.deposit + kinds.withdrawal + kinds.interest + kinds.fee + kinds.other).toBe(12);
+  expect(kinds).toEqual({ deposit: 3, withdrawal: 1, interest: 2, fee: 1, other: 4 });
+  expect(kinds.deposit + kinds.withdrawal + kinds.interest + kinds.fee + kinds.other).toBe(11);
 });
 
 test("invariant: kind is non-null exactly when the bucket is cash-flow", () => {
@@ -104,18 +104,24 @@ test("invariant: kind is non-null exactly when the bucket is cash-flow", () => {
   }
 });
 
-test("skip rows are exactly the four rows with an empty Mutatie", () => {
+test("skip rows are the cash sweep and the four rows with an empty Mutatie", () => {
   const rows = fixtureRows();
   const skipped = rows.filter((row) => row.classification.bucket === "skip");
 
   expect(skipped.map((row) => row.ref.description)).toEqual([
     "Overboeking naar uw geldrekening bij flatexDEGIRO Bank: 23,24 EUR",
+    "Degiro Cash Sweep Transfer",
     "Overboeking effecten",
     "Splitsing 2:1",
     "Overboeking van uw geldrekening bij flatexDEGIRO Bank 108,24 EUR",
   ]);
-  expect(skipped.every((row) => !row.ref.hasAmount)).toBe(true);
+  // The sweep does have a Mutatie; it is skipped because its Saldo reports the
+  // flatex-bank leg, not the imported account's cash.
+  expect(skipped.filter((row) => row.ref.hasAmount).map((row) => row.ref.description)).toEqual([
+    "Degiro Cash Sweep Transfer",
+  ]);
   expect(skipped.map((row) => row.classification)).toEqual([
+    informationLine(),
     informationLine(),
     informationLine(),
     informationLine(),
@@ -125,7 +131,7 @@ test("skip rows are exactly the four rows with an empty Mutatie", () => {
   // The converse: every empty-Mutatie row is a skip, not an unknown cash flow.
   const emptyMutation = rows.filter((row) => !row.ref.hasAmount);
   expect(emptyMutation.map((row) => row.ref.description)).toEqual(
-    skipped.map((row) => row.ref.description),
+    skipped.filter((row) => !row.ref.hasAmount).map((row) => row.ref.description),
   );
 
   // Rule 1 is first: an empty amount wins even over a non-empty Order Id.
@@ -324,13 +330,9 @@ test("EN smoke (unverified): deposit, withdrawal, currency legs and sweep", () =
   expect(classify("Withdrawal")).toEqual(cashFlow("withdrawal"));
   expect(classify("Currency Credit")).toEqual(cashFlow("other"));
   expect(classify("Currency Debit")).toEqual(cashFlow("other"));
-  expect(classify("Cash Sweep Transfer")).toEqual({
-    bucket: "cash-flow",
-    kind: "other",
-    dividendKind: null,
-    recognised: true,
-    saldoWalk: false,
-  });
+  // The sweep is a skip: the Saldo column reports the flatex-bank leg, so the
+  // row is not cash of the imported account and emits nothing.
+  expect(classify("Cash Sweep Transfer")).toEqual(informationLine());
 });
 
 test("guard: no sweep, FX leg or flatex transfer line is ever a deposit or a withdrawal", () => {

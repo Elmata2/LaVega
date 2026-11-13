@@ -26,6 +26,8 @@ import { type SaldoRow, type SaldoWalk, walkSaldo } from "./saldo.js";
  */
 export const ACCOUNT_COLUMNS = {
   date: 0,
+  /** `Tijd`: the clock time of the row, the same for a trade, its fee and its AutoFX legs. */
+  time: 1,
   valueDate: 2,
   product: 3,
   isin: 4,
@@ -70,7 +72,14 @@ function cashFlowBase(flow: Omit<CashFlow, "entity" | "id">): string {
   ].join("|");
 }
 
-function assignCashFlowIds(flows: Omit<CashFlow, "entity" | "id">[]): Omit<CashFlow, "entity">[] {
+/** Same content-hash identity the IBKR and Trading 212 paths use, so a re-parse
+ *  of the same file yields the same ids and a merge cannot append duplicates.
+ *  Exported because the whole-ledger mapper (`./accountProfile.ts`) concatenates
+ *  the statement flows and the trade flows before assigning ids once, so the
+ *  occurrence counter spans both readers. */
+export function assignCashFlowIds(
+  flows: Omit<CashFlow, "entity" | "id">[],
+): Omit<CashFlow, "entity">[] {
   const seen = new Map<string, number>();
   return flows.map((flow) => {
     const base = cashFlowBase(flow);

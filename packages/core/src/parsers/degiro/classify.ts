@@ -29,6 +29,13 @@ export type AccountClassification = {
   saldoWalk: boolean;
 };
 
+/* The description vocabulary #317 reads back out of the rows it receives. The
+ * table and `./trades.ts` must agree on it: one source of truth, so a wording
+ * change cannot make classification and the trade parser disagree. */
+export const EXECUTION_DESCRIPTION = /^(koop|verkoop|buy|sell)\b/i;
+export const COMMISSION_DESCRIPTION = /^degiro transactiekosten en\/of kosten van derden\b/i;
+export const FX_LEG_DESCRIPTION = /^valuta (?:creditering|debitering)\b/i;
+
 /**
  * One table entry: a description prefix and the bucket it belongs to.
  *
@@ -69,10 +76,7 @@ const CLASSIFICATION_TABLE: readonly ClassificationRule[] = [
 
   // #317 owns executions. Without an Order Id they are still trade rows, never
   // cash flows: the execution's cash is the trade's own settlement.
-  { description: /^koop\b/i, bucket: "trade", kind: null },
-  { description: /^verkoop\b/i, bucket: "trade", kind: null },
-  { description: /^buy\b/i, bucket: "trade", kind: null },
-  { description: /^sell\b/i, bucket: "trade", kind: null },
+  { description: EXECUTION_DESCRIPTION, bucket: "trade", kind: null },
 
   // External money: the only rows that are a deposit. The flatex deposit names
   // are written with the broker prefix as DeGiro emits it.
@@ -97,25 +101,28 @@ const CLASSIFICATION_TABLE: readonly ClassificationRule[] = [
   // A commission row without an Order Id cannot belong to a trade. With one, the
   // structural rule above has already taken it as that trade's commission.
   {
-    description: /^degiro transactiekosten en\/of kosten van derden\b/i,
+    description: COMMISSION_DESCRIPTION,
     bucket: "cash-flow",
     kind: "fee",
   },
 
-  // The sweep moves cash between the DeGiro account and the flatex bank. Its
-  // `Saldo` reports the flatex-bank leg, so the walk must not use it.
+  /* The sweep only moves cash between the DeGiro account and the flatex bank;
+   * its `Saldo` reports the flatex-bank leg, so it is not a movement of the
+   * imported account and must not be a cash flow. Emitting it as one would make
+   * core's date-based cash walk wrong on every date before it (the walk sums the
+   * cash-flow and dividend events it is given, and that -23.24 never belonged to
+   * the balance the `Saldo` column shows). It is a skip row: nothing to emit. */
   {
     description: /^(?:degiro )?cash sweep transfer\b/i,
-    bucket: "cash-flow",
-    kind: "other",
+    bucket: "skip",
+    kind: null,
     saldoWalk: false,
   },
 
   // An FX leg belongs to #317 only while it carries the trade's Order Id. A
   // standalone currency credit/debit is a real ledger movement, so it stays a
   // cash flow and keeps its description.
-  { description: /^valuta creditering\b/i, bucket: "cash-flow", kind: "other" },
-  { description: /^valuta debitering\b/i, bucket: "cash-flow", kind: "other" },
+  { description: FX_LEG_DESCRIPTION, bucket: "cash-flow", kind: "other" },
 
   // A reservation moves real cash but is not external money arriving: its
   // amount does not mirror a later deposit (the fixture holds +76.76 and later

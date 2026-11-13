@@ -22,7 +22,7 @@ test("every fixture row lands in exactly one bucket and the counts sum to the ro
   const text = fixture();
   const statement = readAccountStatement(text);
 
-  expect(statement.counts).toEqual({ cashFlow: 12, dividend: 3, trade: 10, skipped: 4 });
+  expect(statement.counts).toEqual({ cashFlow: 11, dividend: 3, trade: 10, skipped: 5 });
   const total =
     statement.counts.cashFlow +
     statement.counts.dividend +
@@ -39,7 +39,17 @@ test("the cash-flow kinds follow the spec table", () => {
     counts[flow.kind] = (counts[flow.kind] ?? 0) + 1;
     return counts;
   }, {});
-  expect(tally).toEqual({ deposit: 3, withdrawal: 1, interest: 2, fee: 1, other: 5 });
+  expect(tally).toEqual({ deposit: 3, withdrawal: 1, interest: 2, fee: 1, other: 4 });
+});
+
+test("the cash sweep is not a cash flow of the imported account", () => {
+  const { cashFlows } = readAccountStatement(fixture());
+
+  // The sweep moves cash between DeGiro and the flatex bank; its Saldo reports
+  // the bank leg, so emitting it as a flow would break core's date-based cash
+  // walk on every earlier date.
+  expect(cashFlows.some((flow) => /sweep/i.test(flow.description ?? ""))).toBe(false);
+  expect(cashFlows).toHaveLength(11);
 });
 
 test("sweep, FX and flatex transfer lines never count as deposit or withdrawal", () => {

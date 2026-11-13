@@ -15,6 +15,11 @@ import { type CsvTable, cellText, currencyAmountAt, detectLocale, parseIsoDate }
  * amount. `withholdingTax` stays present so a zero-tax event (field absent) is
  * distinct from a fully refunded one (field 0).
  *
+ * `Dividend.date` is `Datum`, the booking date the statement's `Saldo` walk
+ * books the cash on. `Valutadatum` is only the pairing key: it lags the booking
+ * date by days, and core's cash walk sums the events on their own dates, so a
+ * value-dated dividend misses the `Saldo` at every date between the two.
+ *
  * The statement is newest first and a tax row may sit above or below its gross
  * row. Tax is therefore summed per key before the gross rows are walked oldest
  * first: a negative gross row can only be netted into a dividend that has
@@ -57,8 +62,10 @@ const empty = (problems: string[]): AccountDividends => ({
 type DividendRow = {
   /** 1-based source line, for the problem text. */
   line: number;
-  /** The cash date: `Valutadatum` when valid, else `Datum`. */
+  /** `Datum`: the booking date the Saldo walk books the cash on. */
   date: string;
+  /** `Valutadatum`, the pairing key; `Datum` when the value date is unusable. */
+  valueDate: string;
   product: string;
   isin: string;
   description: string;
@@ -70,15 +77,15 @@ type DividendRow = {
 
 type PendingDividend = {
   dividend: Omit<Dividend, "entity" | "id">;
-  /* The origin row's own signed amount and cash date, before its tax was added
-   * and before a correction netted into it. Content-hash identity must use these:
-   * a re-parse of a newer file whose correction changes `amount` then keeps the
-   * same id, so a merge replaces instead of duplicating. */
+  /* The origin row's own signed amount and booking date, before its tax was
+   * added and before a correction netted into it. Content-hash identity must
+   * use these: a re-parse of a newer file whose correction changes `amount`
+   * then keeps the same id, so a merge replaces instead of duplicating. */
   originAmount: number;
   originDate: string;
 };
 
-const matchKey = (row: DividendRow): string => `${row.isin}|${row.currency}|${row.date}`;
+const matchKey = (row: DividendRow): string => `${row.isin}|${row.currency}|${row.valueDate}`;
 
 /** The dividend for one row. `withholdingTax` is null only when the row's key
  *  had no tax line at all; a fully refunded tax is 0, not absent. */
@@ -163,19 +170,22 @@ export function readAccountDividends(text: string): AccountDividends {
     }
 
     const rawDate = cellText(row.cells, ACCOUNT_COLUMNS.date);
-    const date = parseIsoDate(rawDate);
+    const bookingDate = parseIsoDate(rawDate);
     const valueDate = parseIsoDate(cellText(row.cells, ACCOUNT_COLUMNS.valueDate));
-    /* Valutadatum is the cash date the tax row is matched on, so it wins when it
-     * parses; Datum is only a fallback. A row with neither cannot be placed. */
-    const cashDate = valueDate ?? date;
-    if (cashDate === null) {
+    /* `Datum` is the booking date the Saldo walk books the cash on; the value
+     * date is only the pairing key, with `Datum` as its fallback. A row with
+     * neither cannot be placed. */
+    const date = bookingDate ?? valueDate;
+    const pairingDate = valueDate ?? bookingDate;
+    if (date === null || pairingDate === null) {
       problems.push(`rij ${row.line}: onmogelijke datum "${rawDate}"`);
       continue;
     }
 
     rows.push({
       line: row.line,
-      date: cashDate,
+      date,
+      valueDate: pairingDate,
       product: cellText(row.cells, ACCOUNT_COLUMNS.product),
       isin: cellText(row.cells, ACCOUNT_COLUMNS.isin),
       description,

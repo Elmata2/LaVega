@@ -58,7 +58,10 @@ test("the fixture yields two dividends: an EUR gross one and a USD one net of a 
   expect(dividends).toHaveLength(2);
 
   const eur = dividends.find((dividend) => dividend.currency === "EUR")!;
-  expect(eur.date).toBe("2026-01-12");
+  // `Datum` (09-01), the booking date the Saldo walk books the cash on, not the
+  // 12-01 Valutadatum: core's date-based cash walk would otherwise miss the
+  // fixture's Saldo at every date in between.
+  expect(eur.date).toBe("2026-01-09");
   expect(eur.symbol).toBe("NL0VORB00045");
   expect(eur.isin).toBe("NL0VORB00045");
   expect(eur.amount).toBeCloseTo(5.76, 6);
@@ -66,7 +69,8 @@ test("the fixture yields two dividends: an EUR gross one and a USD one net of a 
   expect("withholdingTax" in eur).toBe(false);
 
   const usd = dividends.find((dividend) => dividend.currency === "USD")!;
-  expect(usd.date).toBe("2026-01-09");
+  // Same rule: 07-01 `Datum`, not the 09-01 value date the tax row is paired on.
+  expect(usd.date).toBe("2026-01-07");
   expect(usd.symbol).toBe("NL0VORB00011");
   expect(usd.isin).toBe("NL0VORB00011");
   expect(usd.amount).toBeCloseTo(8.39, 6);
