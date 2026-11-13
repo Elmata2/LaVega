@@ -514,13 +514,23 @@ section would tell the snapshot the broker reported nothing and wipe stored rows
 Users export overlapping windows (the sample machine already has three
 overlapping account files). A re-import must not append duplicates.
 
-- `brokerSnapshot.windowPeriod` returns a period only for `ibkr`; extending it
-  to `degiro` is D9 (#321). Until then a complete account import replaces the
-  stored DeGiro collections wholesale, so an overlapping window drops rows
-  outside it. Fix the window before the upload route (#323) exposes importing.
+- DeGiro window replace (D9, #321). A complete account or transactions import
+  carries a period (the span of its dated rows), so the snapshot replaces only
+  the stored trades, cash flows and dividends dated inside that window; rows
+  outside it stay. An overlapping re-import drops what its window no longer
+  reports and keeps the rest.
+- Backfill. An import whose window ends before the stored latest date (from
+  positions, cash balances or coverage) adds history only: it never overwrites
+  the stored cash balances. Coverage is one union while windows touch or
+  overlap; across a gap the stored span cannot vouch for the days between, so a
+  forward import replaces it.
+- Portfolio `asOf` rule. A portfolio import replaces positions and its cash row
+  only when its `asOf` is not older than the stored positions' latest `asOf`.
+  An older portfolio is a holdings backfill: positions, cash row and stored
+  coverage all stay. The comparison uses the stored positions' own date, not
+  the cross-source latest date.
 - All files of one import must arrive in one request: `parseBrokerFiles` merges
-  them. A separate transactions import replaces the stored trade collection
-  until #321.
+  them.
 - Importing the same file twice leaves the snapshot byte-identical.
 
 ### Server and web
@@ -583,4 +593,7 @@ to trades merged by execution, and the multi-file seam `parseBrokerFiles`), D7
 (#319, portfolio export to positions keyed by ISIN and its cash balance, with the
 export date as a required input), D10 (#322, ISIN-only identity priced through
 OpenFIGI with the execution venue as a listing hint, unresolved lookups retried
-rather than frozen, product name in the holdings table).
+rather than frozen, product name in the holdings table), D9 (#321, DeGiro
+account and transactions imports replace only their own window, an older import
+is a backfill, and a portfolio export older than the stored holdings leaves
+positions and cash alone).
