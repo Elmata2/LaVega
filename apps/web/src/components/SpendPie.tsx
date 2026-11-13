@@ -131,22 +131,27 @@ export default function SpendPie({
 
   // Build the gradient as cumulative stops. Rounding each boundary to two
   // decimals keeps the string short without a visible seam. Between arcs sits a
-  // --bg gap (GAP percent of the ring, about 2px on the ring's mid radius): in
-  // the black-and-white theme the slice greys alone cannot tell neighbours
-  // apart, so the gap is what draws the edge. One slice is a whole ring and
-  // needs none.
+  // --bg gap of SLICE_GAP percent of the ring: about 2.6px at the mid radius of
+  // the 168px ring and about 2px on the 132px ring (wider toward the outer
+  // edge). In the black-and-white theme the slice greys alone cannot tell
+  // neighbours apart, so the gap is what draws the edge. One slice is a whole
+  // ring and needs none. Each slice gives up at most a quarter of its own arc
+  // per side, so a tiny slice stays a visible sliver instead of vanishing.
   const r2 = (n: number) => Math.round(n * 100) / 100;
-  const gap = shown.length > 1 ? SLICE_GAP : 0;
+  const half = (share: number) => (shown.length > 1 ? Math.min(SLICE_GAP / 2, share * 25) : 0);
   const stops: string[] = [];
-  if (gap > 0) stops.push(`var(--bg) 0% ${r2(gap / 2)}%`);
+  if (shown.length > 1) stops.push(`var(--bg) 0% ${r2(half(shown[0].share))}%`);
   shown.forEach((s, i) => {
     const from = shown.slice(0, i).reduce((sum, slice) => sum + slice.share * 100, 0);
-    const at = from + s.share * 100;
     const last = i === shown.length - 1;
-    const to = last ? 100 : r2(at);
+    const to = last ? 100 : r2(from + s.share * 100);
+    const h = half(s.share);
     const colour = reading === null || i === active ? sliceColor(i) : dimmed(sliceColor(i));
-    stops.push(`${colour} ${r2(from + gap / 2)}% ${r2(to - gap / 2)}%`);
-    if (gap > 0) stops.push(`var(--bg) ${r2(to - gap / 2)}% ${last ? 100 : r2(to + gap / 2)}%`);
+    stops.push(`${colour} ${r2(from + h)}% ${r2(to - h)}%`);
+    if (shown.length > 1) {
+      const next = last ? 0 : half(shown[i + 1].share);
+      stops.push(`var(--bg) ${r2(to - h)}% ${last ? 100 : r2(to + next)}%`);
+    }
   });
 
   /** Which arc a pointer event landed on, or null for the hole and the corners. */

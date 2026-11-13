@@ -247,3 +247,15 @@ test("the legend carries a figure for every slice (more than 3 series)", () => {
     expect(r.textContent).toContain("%");
   });
 });
+
+test("a slice thinner than the gap keeps a visible arc", () => {
+  const tiny = [
+    { category: "Groot", cents: 99_800, share: 0.998 },
+    { category: "Klein", cents: 200, share: 0.002 },
+  ];
+  const el = mount(<SpendPie slices={tiny} totalCents={100_000} euro={euro} />);
+  const bg = el.querySelector<HTMLElement>(".spend-pie-ring")?.style.background ?? "";
+  const m = bg.match(/var\(--slice-2\) ([\d.]+)% ([\d.]+)%/);
+  expect(m).not.toBeNull();
+  expect(Number(m![2])).toBeGreaterThan(Number(m![1]));
+});

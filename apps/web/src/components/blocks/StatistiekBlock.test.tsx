@@ -208,4 +208,11 @@ test("the category legend prints a figure beside every name (4 series)", () => {
     expect(b).toContain("stat-legend-figure");
     expect(b).toMatch(/€/);
   }
+  // Figures are the window's per-category sums from the fixture, not just any euro.
+  const text = buttons.map((b) => b.replace(/<[^>]+>/g, " "));
+  const has = (name: string, euros: number) =>
+    text.some((t) => t.includes(name) && t.includes(formatEuro(euros)));
+  expect(has("Inkoop", 1_880 + 1_100)).toBe(true);
+  expect(has("Boodschappen", 420.5)).toBe(true);
+  expect(has("Energie", 250)).toBe(true);
 });
