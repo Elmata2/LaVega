@@ -3,6 +3,7 @@ import { act } from "react";
 import { createRoot, type Root as ReactRoot } from "react-dom/client";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import Root from "./Root";
+import { rememberTheme } from "./lib/theme";
 import { useAuthState } from "./authClient.js";
 import { resetAuthLinkFailure, takePendingEbParams } from "./appRoutes.js";
 
@@ -156,4 +157,29 @@ test("signed-out /app with mono already applied by the init script is corrected 
   render();
   expect(document.documentElement.hasAttribute("data-theme")).toBe(false);
   window.localStorage.clear();
+});
+
+test("blocked storage: the in-memory choice survives leaving and re-entering the app", () => {
+  vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+    throw new Error("blocked");
+  });
+  vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
+    throw new Error("blocked");
+  });
+  rememberTheme("mono");
+  window.history.replaceState({}, "", "/");
+  vi.mocked(useAuthState).mockReturnValue({
+    state: { kind: "signed-in", id: "u1", email: "x@y.nl" },
+    refresh: vi.fn(),
+  });
+  render();
+  expect(document.documentElement.hasAttribute("data-theme")).toBe(false); // landing
+  act(() => {
+    window.history.pushState({}, "", "/app");
+    window.dispatchEvent(new PopStateEvent("popstate"));
+  });
+  expect(document.documentElement.dataset.theme).toBe("mono");
+  rememberTheme(null);
+  vi.restoreAllMocks();
+  delete document.documentElement.dataset.theme;
 });

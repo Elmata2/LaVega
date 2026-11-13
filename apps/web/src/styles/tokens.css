@@ -91,9 +91,10 @@
    * purpose: each swatch shows its own theme's real ground and ink, whichever
    * theme is active. Same four values in the mono block (contrast script). */
   --swatch-midnight-bg: #02070a;
-  --swatch-midnight-ink: #ffffff;
+  --swatch-midnight-cta: #fc734d;
   --swatch-mono-bg: #ffffff;
   --swatch-mono-ink: #000000;
+  --swatch-ring: #8a8a8a; /* mid-grey: visible on a white and on a black pill */
   --gutter: #02070a; /* ground the app frame sits on */
   --bg: #02070a; /* app surface inside the frame */
   --surface: #0d171d; /* raised panels */
@@ -282,9 +283,10 @@
    * purpose: each swatch shows its own theme's real ground and ink, whichever
    * theme is active. Same four values as in :root. */
   --swatch-midnight-bg: #02070a;
-  --swatch-midnight-ink: #ffffff;
+  --swatch-midnight-cta: #fc734d;
   --swatch-mono-bg: #ffffff;
   --swatch-mono-ink: #000000;
+  --swatch-ring: #8a8a8a; /* mid-grey: visible on a white and on a black pill */
 }
 
 /* Tailwind's namespace, pointed at the variables above. Adding a token means

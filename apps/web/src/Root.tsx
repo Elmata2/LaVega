@@ -5,7 +5,7 @@ import { APP_BASE, authLinkFailed, isAppPathname, normalizeAppLocation } from ".
 import { localeForPath, type Locale } from "./locale";
 import { useAuthState } from "./authClient";
 import posthog from "./posthog";
-import { applyTheme, readStoredTheme } from "./lib/theme";
+import { applyTheme, currentTheme } from "./lib/theme";
 
 /** The landing page is midnight in every theme (its CSS has its own palette).
  *  Forces it while mounted and puts the stored theme back on unmount. A layout
@@ -13,7 +13,7 @@ import { applyTheme, readStoredTheme } from "./lib/theme";
 function MidnightScope({ children }: { children: ReactNode }) {
   useLayoutEffect(() => {
     applyTheme("midnight");
-    return () => applyTheme(readStoredTheme());
+    return () => applyTheme(currentTheme());
   }, []);
   return children;
 }
@@ -74,7 +74,7 @@ export default function Root() {
   const appShown =
     route === "app" && (authState.kind === "unconfigured" || authState.kind === "signed-in");
   useLayoutEffect(() => {
-    if (appShown) applyTheme(readStoredTheme());
+    if (appShown) applyTheme(currentTheme());
   }, [appShown]);
 
   if (route === "app") {

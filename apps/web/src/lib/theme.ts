@@ -30,3 +30,16 @@ export function storeTheme(theme: Theme): boolean {
     return false;
   }
 }
+
+/* What this page view chose, for when storage is blocked: the choice must still
+ * win over the (unreadable) stored value everywhere, not only in Profiel. */
+let chosenInMemory: Theme | null = null;
+
+export function rememberTheme(theme: Theme | null): void {
+  chosenInMemory = theme;
+}
+
+/** The theme this page view should show: the in-memory choice, else storage. */
+export function currentTheme(): Theme {
+  return chosenInMemory ?? readStoredTheme();
+}
