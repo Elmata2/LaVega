@@ -453,7 +453,7 @@ test("a run that lost its lease stores neither its data nor its cursor", async (
   const held = new Promise<void>((resolve) => (release = resolve));
   const slow = vi.fn(async () => {
     await held;
-    return empty({ positions: [{ id: "p1" } as unknown as Position] });
+    return empty({ positions: [{ id: "p1", asOf: "2026-08-19" } as unknown as Position] });
   });
 
   const evicted = run(slow, state, new Date("2026-08-19T12:00:00.000Z"));

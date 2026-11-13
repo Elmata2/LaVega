@@ -1,7 +1,9 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, test } from "vitest";
 import { computePortfolioValueSeries, type Position } from "@lavega/core";
 import type { BrokerResult } from "./BrokerAccessAdapter.js";
 import { createBrokerDataCache, type BrokerDataSnapshot } from "./brokerSnapshot.js";
+import { createDeGiroFileImport } from "./degiro/fileImport.js";
 import { parseFlexStatement } from "./ibkr/flexParser.js";
 
 function window(trades: string, funds = "", period?: [string, string]): BrokerResult {
@@ -759,4 +761,319 @@ test("a snapshot keeps every broker the table declares, including import-only De
   expect(createBrokerDataCache(structuredClone(cache.snapshot())).snapshot()).toEqual(
     cache.snapshot(),
   );
+});
+
+/* Issue #321: a DeGiro re-import replaces its own window, like IBKR. The path
+ * under test is the real one: the file import builds the `BrokerResult` from
+ * CSV bytes, then the cache applies it with `broker: "degiro"`. Only the
+ * outcome wrapper is hand-written. */
+describe("DeGiro re-import windows", () => {
+  const fixture = (path: string): string =>
+    readFileSync(
+      new URL(`../../../core/src/parsers/__fixtures__/degiro/${path}`, import.meta.url),
+      "utf8",
+    );
+  const degiroOutcome = (result: BrokerResult) => ({
+    outcomes: [
+      { broker: "degiro" as const, status: "synced" as const, lastSyncedAt: null, result },
+    ],
+    problems: [],
+  });
+  const importFile = (filename: string, text: string, asOf?: string) =>
+    createDeGiroFileImport().load({
+      files: [{ filename, text }],
+      entity: "personal",
+      ...(asOf ? { asOf } : {}),
+    });
+
+  test("the same account file imported twice leaves the snapshot deep-equal", async () => {
+    const cache = createBrokerDataCache();
+    const account = fixture("nl/account.csv");
+    cache.apply(degiroOutcome(await importFile("Account.csv", account)));
+    const first = cache.snapshot();
+    cache.apply(degiroOutcome(await importFile("Account.csv", account)));
+    expect(cache.snapshot()).toEqual(first);
+  });
+
+  /* One synthetic EUR-only ledger. Every window is derived from the same
+   * rendered rows, so a row two windows share is byte-identical in both, and
+   * every window's `Saldo` is the full-ledger running balance. */
+  type LedgerRow = {
+    date: string;
+    time: string;
+    product: string;
+    isin: string;
+    description: string;
+    /** Signed `Mutatie` in EUR. */
+    amount: number;
+    orderId?: string;
+  };
+  const LEDGER: readonly LedgerRow[] = [
+    {
+      date: "2026-01-02",
+      time: "09:00",
+      product: "",
+      isin: "",
+      description: "flatex Storting",
+      amount: 500,
+    },
+    {
+      date: "2026-01-10",
+      time: "11:00",
+      product: "VOORBEELD DIVIDEND AANDEEL",
+      isin: "NL0VORB00029",
+      description: "Dividend",
+      amount: 5,
+    },
+    {
+      date: "2026-01-20",
+      time: "09:00",
+      product: "",
+      isin: "",
+      description: "flatex Storting",
+      amount: 100,
+    },
+    {
+      date: "2026-01-25",
+      time: "13:00",
+      product: "VOORBEELD GLOBAL EQUITY ETF",
+      isin: "NL0VORB00011",
+      description: "Koop 2 @ 50.00 EUR",
+      amount: -100,
+      orderId: "ORDER-2",
+    },
+    {
+      date: "2026-02-02",
+      time: "09:00",
+      product: "",
+      isin: "",
+      description: "flatex Storting",
+      amount: 50,
+    },
+    {
+      date: "2026-02-20",
+      time: "10:00",
+      product: "VOORBEELD GLOBAL EQUITY ETF",
+      isin: "NL0VORB00011",
+      description: "Koop 1 @ 100.00 EUR",
+      amount: -100,
+      orderId: "ORDER-1",
+    },
+    {
+      date: "2026-02-20",
+      time: "14:30",
+      product: "VOORBEELD GLOBAL EQUITY ETF",
+      isin: "NL0VORB00011",
+      description: "Koop 1 @ 101.00 EUR",
+      amount: -101,
+      orderId: "ORDER-1",
+    },
+    {
+      date: "2026-02-25",
+      time: "11:00",
+      product: "VOORBEELD DIVIDEND AANDEEL",
+      isin: "NL0VORB00029",
+      description: "Dividend",
+      amount: 7.5,
+    },
+    {
+      date: "2026-03-15",
+      time: "15:00",
+      product: "VOORBEELD EURO OBLIGATIE ETF",
+      isin: "NL0VORB00045",
+      description: "Koop 3 @ 20.00 EUR",
+      amount: -60,
+      orderId: "ORDER-3",
+    },
+    {
+      date: "2026-03-20",
+      time: "09:00",
+      product: "",
+      isin: "",
+      description: "flatex Storting",
+      amount: 200,
+    },
+    {
+      date: "2026-04-01",
+      time: "09:00",
+      product: "",
+      isin: "",
+      description: "flatex Storting",
+      amount: 25,
+    },
+    {
+      date: "2026-04-15",
+      time: "11:00",
+      product: "VOORBEELD EURO OBLIGATIE ETF",
+      isin: "NL0VORB00045",
+      description: "Dividend",
+      amount: 9,
+    },
+    {
+      date: "2026-04-20",
+      time: "09:00",
+      product: "",
+      isin: "",
+      description: "flatex Storting",
+      amount: 30,
+    },
+    {
+      date: "2026-05-01",
+      time: "12:00",
+      product: "VOORBEELD GLOBAL EQUITY ETF",
+      isin: "NL0VORB00011",
+      description: "Koop 4 @ 10.00 EUR",
+      amount: -40,
+      orderId: "ORDER-4",
+    },
+    {
+      date: "2026-05-10",
+      time: "09:00",
+      product: "",
+      isin: "",
+      description: "flatex Storting",
+      amount: 40,
+    },
+  ];
+  const ACCOUNT_HEADER =
+    "Datum,Tijd,Valutadatum,Product,ISIN,Omschrijving,FX,Mutatie,,Saldo,,Order Id";
+  const ddMmYyyy = (day: string): string =>
+    `${day.slice(8, 10)}-${day.slice(5, 7)}-${day.slice(0, 4)}`;
+  const renderedLedger = (): { date: string; line: string }[] => {
+    let running = 0;
+    const rows = LEDGER.map((row) => {
+      running += row.amount;
+      return {
+        date: row.date,
+        line: [
+          ddMmYyyy(row.date),
+          row.time,
+          ddMmYyyy(row.date),
+          row.product,
+          row.isin,
+          row.description,
+          "",
+          row.amount.toFixed(2),
+          "EUR",
+          running.toFixed(2),
+          "EUR",
+          row.orderId ?? "",
+        ].join(","),
+      };
+    });
+    return rows.reverse();
+  };
+  const windowCsv = (from: string, to: string): string =>
+    [
+      ACCOUNT_HEADER,
+      ...renderedLedger()
+        .filter((row) => row.date >= from && row.date <= to)
+        .map((row) => row.line),
+    ].join("\n") + "\n";
+  const closingBalance = LEDGER.reduce((sum, row) => sum + row.amount, 0);
+
+  test("three overlapping account windows in every order give one ledger", async () => {
+    const windows: Record<"A" | "B" | "C", string> = {
+      A: windowCsv("2026-01-02", "2026-02-20"),
+      B: windowCsv("2026-01-20", "2026-04-01"),
+      C: windowCsv("2026-02-20", "2026-05-10"),
+    };
+    const orders: ReadonlyArray<readonly ("A" | "B" | "C")[]> = [
+      ["A", "B", "C"],
+      ["A", "C", "B"],
+      ["B", "A", "C"],
+      ["B", "C", "A"],
+      ["C", "A", "B"],
+      ["C", "B", "A"],
+    ];
+    const summaries = [];
+    for (const order of orders) {
+      const cache = createBrokerDataCache();
+      for (const key of order)
+        cache.apply(degiroOutcome(await importFile("Account.csv", windows[key])));
+      const data = cache.read();
+      // Array order is arrival order; the assertion is over the row set.
+      summaries.push({
+        trades: data.trades.map((row) => row.id).sort(),
+        dividends: data.dividends.map((row) => row.id).sort(),
+        cashFlows: data.cashFlows.map((row) => row.id).sort(),
+        cashBalances: data.cashBalances,
+        cashCoverage: data.cashCoverage,
+      });
+    }
+
+    const expected = summaries[0]!;
+    expect(expected.trades).toHaveLength(5);
+    expect(expected.dividends).toHaveLength(3);
+    expect(expected.cashFlows).toHaveLength(12);
+    expect(new Set(expected.trades).size).toBe(5);
+    expect(new Set(expected.dividends).size).toBe(3);
+    expect(new Set(expected.cashFlows).size).toBe(12);
+    expect(expected.cashBalances).toEqual([
+      {
+        entity: "personal",
+        broker: "degiro",
+        currency: "EUR",
+        amount: closingBalance,
+        asOf: "2026-05-10",
+      },
+    ]);
+    expect(expected.cashCoverage).toEqual([
+      {
+        entity: "personal",
+        broker: "degiro",
+        tradeCash: "cash-flows",
+        status: "complete",
+        from: "2026-01-02",
+        to: "2026-05-10",
+      },
+    ]);
+    for (const summary of summaries.slice(1)) expect(summary).toEqual(expected);
+  });
+
+  test("a newer portfolio survives an older one, in either order", async () => {
+    const portfolio = fixture("nl/portfolio.csv");
+    const loadPortfolio = (asOf: string) => importFile("Portfolio.csv", portfolio, asOf);
+
+    const newerFirst = createBrokerDataCache();
+    newerFirst.apply(degiroOutcome(await loadPortfolio("2026-11-12")));
+    const newer = newerFirst.snapshot().degiro!;
+    newerFirst.apply(degiroOutcome(await loadPortfolio("2026-10-01")));
+    const afterOlder = newerFirst.snapshot().degiro!;
+    expect(afterOlder.positions).toEqual(newer.positions);
+    expect(afterOlder.cashBalances).toEqual(newer.cashBalances);
+    expect(afterOlder.positions.every((row) => row.asOf === "2026-11-12")).toBe(true);
+
+    const olderFirst = createBrokerDataCache();
+    olderFirst.apply(degiroOutcome(await loadPortfolio("2026-10-01")));
+    olderFirst.apply(degiroOutcome(await loadPortfolio("2026-11-12")));
+    const afterNewer = olderFirst.snapshot().degiro!;
+    expect(afterNewer.positions).toEqual(newer.positions);
+    expect(afterNewer.cashBalances).toEqual(newer.cashBalances);
+  });
+
+  test("two non-touching windows leave the gap uncovered and keep earlier trades", async () => {
+    const a = windowCsv("2026-01-02", "2026-02-20");
+    const late = windowCsv("2026-04-20", "2026-05-10");
+    for (const order of [
+      [a, late],
+      [late, a],
+    ]) {
+      const cache = createBrokerDataCache();
+      for (const text of order) cache.apply(degiroOutcome(await importFile("Account.csv", text)));
+      const data = cache.read();
+      expect(data.cashCoverage).toHaveLength(1);
+      expect(data.cashCoverage[0]).toMatchObject({
+        status: "complete",
+        from: "2026-04-20",
+        to: "2026-05-10",
+      });
+      expect(data.trades.map((row) => row.id).sort()).toEqual([
+        "degiro:ORDER-1",
+        "degiro:ORDER-1#2",
+        "degiro:ORDER-2",
+        "degiro:ORDER-4",
+      ]);
+    }
+  });
 });

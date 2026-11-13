@@ -10,7 +10,6 @@ import type {
 } from "@lavega/core";
 import { isBrokerId } from "@lavega/core";
 import type { BrokerResult } from "./BrokerAccessAdapter.js";
-import type { ScheduledSyncResult } from "./scheduledSync.js";
 
 /* What a broker knows about an account, as this runtime keeps it.
  *
@@ -36,6 +35,16 @@ export type BrokerAccountSnapshot = {
   cashHistory?: CashHistoryCoverage;
 };
 export type BrokerDataSnapshot = Partial<Record<BrokerId, BrokerAccountSnapshot>>;
+
+/** One broker's result as the cache applies it. A file import applies its
+ *  result here too, so the broker is any id the table declares, not only a
+ *  scheduled one. */
+type AppliedOutcome = {
+  broker: BrokerId;
+  status: "synced" | "skipped" | "problem";
+  lastSyncedAt: string | null;
+  result: BrokerResult | null;
+};
 
 function mergeById<T extends { id: string }>(existing: T[], incoming: T[]): T[] {
   const byId = new Map(existing.map((item) => [item.id, item]));
@@ -66,17 +75,18 @@ function inPeriod(row: { date: string }, period: Period): boolean {
   return day >= period.from && day <= period.to;
 }
 
-/* IBKR Flex statements each cover a fixed period. A complete section replaces
- * the stored rows inside that period and keeps the rest, so an older window
- * adds history and a re-read drops what the broker no longer reports. Cash
- * flow and dividend ids are content hashes, so distinct identical lines must
- * never be merged by id. */
+/* IBKR Flex statements each cover a fixed period, and a DeGiro account or
+ * transaction export covers the span of its own rows. A complete section
+ * replaces the stored rows inside that period and keeps the rest, so an older
+ * window adds history and a re-read drops what the broker no longer reports.
+ * Cash flow and dividend ids are content hashes, so distinct identical lines
+ * must never be merged by id. */
 function windowPeriod(
   broker: string,
   status: string,
   period: Period | undefined,
 ): Period | undefined {
-  return broker === "ibkr" && status === "complete" ? period : undefined;
+  return (broker === "ibkr" || broker === "degiro") && status === "complete" ? period : undefined;
 }
 
 /* Drops the stored rows a window re-reads: those dated inside it for the
@@ -125,12 +135,26 @@ function latestStoredDate(
   return dates.reduce<string | undefined>((a, b) => (a !== undefined && a >= b ? a : b), undefined);
 }
 
+/* The newest date the rows state. A DeGiro portfolio export carries its date on
+ * every position and cash row instead of naming a period, so comparing it with
+ * the stored rows keeps an older export from moving holdings and cash
+ * backwards. */
+function latestDay(rows: readonly { asOf: string }[] | undefined): string | undefined {
+  let latest: string | undefined;
+  for (const row of rows ?? []) {
+    const day = row.asOf.slice(0, 10);
+    if (latest === undefined || day > latest) latest = day;
+  }
+  return latest;
+}
+
 /* Coverage only ever grows by union with what the stored proof already
- * spans. A backfill keeps the stored end; a forward sync takes the incoming
- * end. Anything that touches or overlaps the stored span is joined to it, so
- * a normal sync after a backfill cannot shrink the coverage; across a gap the
- * stored span cannot vouch for the days between, so a forward sync replaces
- * it and a backfill leaves it alone. */
+ * spans. A backfill, or a stale portfolio that proves no coverage, keeps the
+ * stored end; a forward sync takes the incoming end. Anything that touches or
+ * overlaps the stored span is joined to it, so a normal sync after a backfill
+ * cannot shrink the coverage; across a gap the stored span cannot vouch for
+ * the days between, so a forward sync replaces it and a backfill leaves it
+ * alone. */
 function mergedCoverage(
   stored: CashHistoryCoverage | undefined,
   incoming: CashHistoryCoverage,
@@ -286,7 +310,7 @@ export function createBrokerDataCache(initial: BrokerDataSnapshot = {}) {
   restore(initial);
 
   return {
-    apply(result: Pick<ScheduledSyncResult, "outcomes" | "problems">) {
+    apply(result: { outcomes: readonly AppliedOutcome[]; problems: string[] }) {
       for (const outcome of result.outcomes) {
         // Partial results with problems still carry fresh broker data; discarding
         // them left the vault stale while the UI showed only the problem.
@@ -300,11 +324,23 @@ export function createBrokerDataCache(initial: BrokerDataSnapshot = {}) {
         );
         const statementEnd = incoming.statementTo ?? incoming.period?.to;
         const backfill =
-          outcome.broker === "ibkr" &&
+          (outcome.broker === "ibkr" || outcome.broker === "degiro") &&
           statementEnd !== undefined &&
           storedLatest !== undefined &&
           statementEnd < storedLatest;
-        if (sections.positions.status === "complete" && !backfill) {
+        /* DeGiro dates a portfolio export on its rows rather than naming a
+         * period. Older holdings are a backfill: they must not move the
+         * positions, the cash row or the stored coverage backwards. */
+        const today = new Date().toISOString().slice(0, 10);
+        const storedPositionDay = latestDay(positionsByBroker.get(outcome.broker));
+        const incomingPositionDay = latestDay(sections.positions.rows);
+        const stalePortfolio =
+          outcome.broker === "degiro" &&
+          incomingPositionDay !== undefined &&
+          storedPositionDay !== undefined &&
+          storedPositionDay <= today &&
+          incomingPositionDay < storedPositionDay;
+        if (sections.positions.status === "complete" && !backfill && !stalePortfolio) {
           // A provider sync has no authority over a user-entered basis and its
           // lock, and an unchanged row may carry a basis forward (WS4.2).
           const stored = positionsByBroker.get(outcome.broker) ?? [];
@@ -370,7 +406,7 @@ export function createBrokerDataCache(initial: BrokerDataSnapshot = {}) {
             outcome.broker,
             mergeById(dividendsByBroker.get(outcome.broker) ?? [], incomingDividends),
           );
-        if (sections.cashBalances.status === "complete" && !backfill)
+        if (sections.cashBalances.status === "complete" && !backfill && !stalePortfolio)
           cashBalancesByBroker.set(
             outcome.broker,
             withBroker(outcome.broker, sections.cashBalances.rows),
@@ -403,7 +439,7 @@ export function createBrokerDataCache(initial: BrokerDataSnapshot = {}) {
           const merged = mergedCoverage(
             cashHistoryByBroker.get(outcome.broker),
             incoming.cashHistory,
-            backfill,
+            backfill || stalePortfolio,
           );
           if (merged) cashHistoryByBroker.set(outcome.broker, merged);
         } else if (!backfill && readCash) cashHistoryByBroker.delete(outcome.broker);
