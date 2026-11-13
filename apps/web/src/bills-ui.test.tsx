@@ -476,11 +476,14 @@ test("an incoming bill row carries + and the remaining figure a real minus when 
   expect(signed.some((t) => /^\+€\s3\.000,00$/.test(t))).toBe(true);
   // The shortfall (EUR 285,50 short) is a coloured euro figure: real minus first.
   expect(byTestId("bills-shortfall-value").textContent).toMatch(/^\u2212€\s285,50$/);
-  // The remaining figure in the period line carries a sign too.
-  const remaining = [...container!.querySelectorAll(".text-neg, .text-pos")]
-    .map((e) => e.textContent ?? "")
-    .find((t) => /^\S+: .*\d/.test(t) && /[+\u2212]€/.test(t));
-  expect(remaining).toMatch(/[+\u2212]€\s/);
+  // The remaining figure of the short period (text-neg) carries a real minus
+  // first; a plus would pass a loose sign check, so pin the exact text.
+  const shortRemaining = [
+    ...container!.querySelectorAll('[data-testid^="bills-period-"] .text-neg'),
+  ].map((e) => e.textContent ?? "");
+  expect(shortRemaining).toHaveLength(1);
+  expect(shortRemaining[0]).toMatch(/^Over: \u2212€\s985,50$/);
+  for (const t of shortRemaining) expect(t).toMatch(/^Over: \u2212€\s/);
 });
 
 test("a paid occurrence's status badge carries the check icon and border, not only a tint", () => {
