@@ -212,6 +212,48 @@ is `other` with its description and **never** `deposit`, so counting deposits in
 `flatex Storting` / `iDEAL Deposit` alone cannot double count. Encoded in
 `classify.test.ts` and `account.test.ts`.
 
+### Account statement → dividends (D4, #316)
+
+`packages/core/src/parsers/degiro/dividends.ts`. `readAccountDividends(text)`
+returns `{ dividends, counts, problems }` and never throws. It reuses
+`classify.ts`, where `dividendKind` separates a gross `Dividend` row from a
+`Dividendbelasting` (NL) or `Dividend tax` (EN) row.
+
+- **Pairing.** A tax row carries no Order Id, so the only link is ISIN +
+  currency + `Valutadatum`. The tax amounts are summed per that key first, then
+  each gross row carries its key's tax; file order cannot orphan a pair.
+- **Amounts.** `Dividend.amount` is the cash the pair moved, so the withholding
+  is already netted out. `Dividend.withholdingTax` carries the tax itself:
+  positive when the broker withheld it, negative when the statement refunded one.
+  Gross = `amount + withholdingTax`. The field is absent when the statement holds
+  no tax row; zero and absent are different facts. No conversion happens here.
+- **Date.** `Dividend.date` is `Valutadatum`, the cash date the tax row carries.
+  `Datum` is a fallback only for an empty or impossible value date.
+- **Corrections.** A negative `Dividend` row is a correction, never a second
+  dividend. It nets into the most recent dividend for the same ISIN and currency,
+  its own tax refund included, and adds no row.
+- **Unmatched rows.** A tax row without a gross row is still emitted as a
+  dividend, with a problem naming its line. So is a correction with no original.
+  Nothing is dropped silently. `counts` gives `grossRows`, `taxRows`,
+  `corrections` and `unmatched`.
+- **Not cash flows.** A dividend and its tax emit no `CashFlow`; the Saldo walk
+  already counts their cash. Same rule as IBKR.
+- **Identity.** The id is the content hash of the origin `Dividend` row
+  (`degiro-dividend | date | currency | gross | symbol | description`, plus an
+  occurrence counter for identical rows), so a re-parse yields the same ids. A
+  correction in a newer file changes the amount, not the id, so a merge replaces
+  that row instead of appending one.
+
+**Why `amount` is net and not gross** (a deliberate deviation from the issue
+text). The core cash walk files every dividend as a cash event in its wallet
+(`portfolio.ts`). A gross `amount` there would add the withholding as cash that
+never arrived, because DeGiro emits no tax cash flow to cancel it. Trading 212
+already reports a net amount; IBKR keeps gross because it books the tax as its
+own fee flow. So `amount` keeps its cash meaning and gross stays derivable as
+`amount + withholdingTax`. Income surfaces sum `amount` unchanged, so a DeGiro
+dividend appears there at its net cash, where IBKR fills the same field from its
+gross row.
+
 ### One file set, three profiles
 
 | Profile        | DeGiro export               | Produces                                                    | Status   |
