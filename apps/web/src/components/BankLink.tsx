@@ -193,7 +193,7 @@ export default function BankLink({
         </span>
       )}
       {error && (
-        <StatusLine tone="problem"  role="alert">
+        <StatusLine tone="problem" role="alert">
           {c.bankLink.bankkoppelingError(error)}
         </StatusLine>
       )}

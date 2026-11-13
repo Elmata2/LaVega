@@ -130,7 +130,11 @@ test("plan row is not current on other views", () => {
 test("clicking a row calls the shared handler with the account key", () => {
   const onSelectAccount = vi.fn();
   render({ onSelectAccount });
-  act(() => rows().find((r) => r.textContent!.includes("Spaar"))!.click());
+  act(() =>
+    rows()
+      .find((r) => r.textContent!.includes("Spaar"))!
+      .click(),
+  );
   expect(onSelectAccount).toHaveBeenCalledWith("ing-s");
 });
 

@@ -260,6 +260,13 @@
   :root[data-theme="mono"] .shell2-resize:focus-visible::after {
     background: var(--ink);
   }
+  /* Windows High Contrast drops backgrounds: the handle needs a real outline. */
+  @media (forced-colors: active) {
+    .shell2-resize:focus-visible {
+      outline: 2px solid Highlight;
+      outline-offset: -2px;
+    }
+  }
   .shell2-dragging {
     cursor: col-resize;
     user-select: none;

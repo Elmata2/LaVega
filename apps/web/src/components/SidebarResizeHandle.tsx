@@ -1,4 +1,9 @@
-import { useEffect, useRef, type KeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
+import {
+  useEffect,
+  useRef,
+  type KeyboardEvent,
+  type PointerEvent as ReactPointerEvent,
+} from "react";
 import { useAppLocale } from "../appLocale.js";
 import { shellCopy } from "../copy/shell.js";
 
@@ -15,6 +20,8 @@ export type SidebarResizeHandleProps = {
   /** Final width: pointer-up or a key press. This is the storage write. */
   onCommit: (width: number) => void;
   onReset: () => void;
+  /** Id of the sidebar element this handle resizes (aria-controls). */
+  controls: string;
 };
 
 /** The sidebar's right-edge drag handle (a WAI-ARIA window splitter). */
@@ -25,6 +32,7 @@ export function SidebarResizeHandle({
   onDrag,
   onCommit,
   onReset,
+  controls,
 }: SidebarResizeHandleProps) {
   const [locale] = useAppLocale();
   const drag = useRef<{ x: number; width: number; last: number } | null>(null);
@@ -90,6 +98,7 @@ export function SidebarResizeHandle({
     <div
       role="separator"
       aria-orientation="vertical"
+      aria-controls={controls}
       aria-label={shellCopy[locale].accountSidebar.resizeLabel}
       aria-valuenow={width}
       aria-valuemin={min}

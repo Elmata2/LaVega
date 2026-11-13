@@ -9,7 +9,12 @@ import { shellCopy } from "../copy/shell.js";
  * sits behind "Meer". Both openers take their drawer state from Shell. */
 
 /** Registry order decides the sequence; "plan" is only in `modules` when unlocked. */
-export const BAR_IDS: ReadonlySet<ModuleId> = new Set(["overview", "optimalisatie", "accounts", "plan"]);
+export const BAR_IDS: ReadonlySet<ModuleId> = new Set([
+  "overview",
+  "optimalisatie",
+  "accounts",
+  "plan",
+]);
 
 export function PhoneTopBar({
   view,

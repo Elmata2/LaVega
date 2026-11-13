@@ -142,10 +142,10 @@ Delta pills use `--pos-tint` / `--neg-tint`, built with `color-mix` in srgb. Do 
 ## Layout
 
 - **Frame.** `.shell2` is `100dvh`, full width, no margin, radius or shadow. Rail (84px), account sidebar (296px, 240-440, collapsible), then main; only main scrolls, with a sticky 56px top bar. Below 1024px the rail and sidebar give way to a phone top bar, bottom bar and drawer.
-- **App bar.** Brand, then the owner's chosen modules as text tabs, then lock/actions. Tabs scroll horizontally instead of wrapping, because a selection can be long.
+- **Navigation.** The 84px rail (>= 1024px) or the phone bottom bar carries the owner's chosen modules; the rail and bar are described in the Personal app shell section below. The sticky 56px main top bar holds the sidebar toggle, title and actions.
 - **Module grid.** `--grid-gap: 24px`, modules 200px (short) or 360px (tall), placed by `span` (1/2/3 columns). Adding a module is one `<Module span=…>` line, never a layout rewrite.
 - **Spacing** is a 4px scale (`--sp-1` … `--sp-6`). Panels use 24px padding; main uses 32 / 24 / 16px side gutters at >= 1280 / 1024-1279 / < 1024.
-- **Breakpoints.** The grid collapses 3 → 2 → 1 columns; the nav rail keeps scrolling rather than wrapping at any width.
+- **Breakpoints.** The grid collapses 3 → 2 → 1 columns. At 1024px the rail and sidebar give way to the phone top bar, bottom bar and drawer.
 
 ## Personal app shell
 
@@ -204,7 +204,7 @@ Behaviour rules (they also hold in midnight, because they help colour-blind user
 | Dot shapes: positive filled circle, warning hollow ring, negative diamond                                                                  | `.dot-pos`, `.dot-warn`, `.dot-neg` in `base.css`                                      |
 | Charts with more than 3 series carry a legend with figures or direct labels. Adjacent segments are parted by a 2px `--bg` line             | `SpendPie` legend and arc gap, `.proportion-bar span + span` in `base.css`             |
 | Bank logos are greyscale                                                                                                                   | `:root[data-theme="mono"] .bank-logo` in `base.css`                                    |
-| Focus ring 2px `--accent` (black in mono, Signal Blue in midnight)                                                                         | `base.css`                                                                             |
+| Focus ring 2px `--accent` (black in mono, Signal Blue in midnight). Shell controls draw it inset (offset -2px); the resize handle uses a grip colour change and a `forced-colors` outline | `base.css`; `styles/shell.css`                                                                         |
 | Selected segmented option and the primary button: black pill, white label                                                                  | `--cta`, `--on-cta`                                                                    |
 | The landing page stays midnight in both themes                                                                                             | `MidnightScope` in `Root.tsx`; `theme-init.js` applies mono on `/app` paths only       |
 

@@ -226,7 +226,8 @@ test("menu mode has an Investing row below the modules; Meer mode does not", () 
   const row = dialog().querySelector<HTMLAnchorElement>("a.shell2-drawer-investing")!;
   expect(row.textContent).toBe("Investing");
   expect(row.getAttribute("href")).toBe(INVESTING_URL);
-  if (INVESTING_URL!.startsWith("http")) expect(row.getAttribute("rel")).toBe("noopener noreferrer");
+  if (INVESTING_URL!.startsWith("http"))
+    expect(row.getAttribute("rel")).toBe("noopener noreferrer");
   const list = dialog().querySelector(".shell2-drawer-modules")!;
   expect(list.compareDocumentPosition(row) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   expect(list.contains(row)).toBe(false);
@@ -260,9 +261,7 @@ test("crossing to desktop while open does not move focus", () => {
 test("Tab wraps inside the drawer (both ends)", () => {
   render(frame());
   click(menuBtn());
-  const tabbables = [
-    ...dialog().querySelectorAll<HTMLElement>("a[href], button:not([disabled])"),
-  ];
+  const tabbables = [...dialog().querySelectorAll<HTMLElement>("a[href], button:not([disabled])")];
   const first = tabbables[0]!;
   const last = tabbables[tabbables.length - 1]!;
   last.focus();

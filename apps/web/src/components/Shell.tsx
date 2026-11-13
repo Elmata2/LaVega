@@ -152,6 +152,7 @@ export function Shell({ title, actions, nav, sidebar, children }: ShellProps) {
             {typeof sidebar === "function" ? sidebar() : sidebar}
           </div>
           <SidebarResizeHandle
+            controls={SIDEBAR_ID}
             width={shownWidth}
             min={SIDEBAR_MIN_WIDTH}
             max={maxWidth}

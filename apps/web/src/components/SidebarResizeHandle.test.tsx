@@ -25,6 +25,7 @@ function render(width = 296, max = 440) {
         onDrag={onDrag}
         onCommit={onCommit}
         onReset={onReset}
+        controls="shell2-sidebar"
       />,
     ),
   );
@@ -127,4 +128,9 @@ test("unmounting mid-drag removes the window listeners and commits nothing", () 
   ptr(window, "pointerup", 400);
   expect(onDrag).not.toHaveBeenCalled();
   expect(onCommit).not.toHaveBeenCalled();
+});
+
+test("the separator names the sidebar it controls", () => {
+  render();
+  expect(handle().getAttribute("aria-controls")).toBe("shell2-sidebar");
 });
