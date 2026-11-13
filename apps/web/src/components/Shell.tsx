@@ -1,11 +1,12 @@
-import type { CSSProperties, ReactNode } from "react";
+import { useState, type CSSProperties, type ReactNode } from "react";
 import { useAppLocale } from "../appLocale.js";
 import { shellCopy } from "../copy/shell.js";
 import { useMediaQuery } from "../hooks/useMediaQuery.js";
 import { useSidebar } from "../hooks/useSidebar.js";
-import { RAIL_WIDTH, SHELL_MIN_VIEWPORT } from "../lib/sidebar.js";
+import { RAIL_WIDTH, SHELL_MIN_VIEWPORT, SIDEBAR_MIN_WIDTH } from "../lib/sidebar.js";
 import { BottomBar, PhoneTopBar } from "./BottomBar.js";
 import { Rail, type ShellNavProps } from "./Rail.js";
+import { SidebarResizeHandle } from "./SidebarResizeHandle.js";
 
 /* The new app frame (SHELL_V2): full viewport, no margin, radius or shadow.
  *
@@ -17,7 +18,9 @@ import { Rail, type ShellNavProps } from "./Rail.js";
  * the sticky bar.
  *
  * `nav` feeds the rail (>= 1024) or the phone top bar + bottom bar (< 1024), one
- * <nav> at a time. Slot for step 9a: `sidebar`. The drawer arrives in step 9b. */
+ * <nav> at a time. `sidebar` is the account sidebar body (AccountSidebar); this
+ * frame owns its width, collapse and resize handle, so the toggle and the handle
+ * share one `useSidebar()` state. The drawer arrives in step 9b. */
 
 export type ShellProps = {
   /** Page title, the one h1. */
@@ -26,7 +29,7 @@ export type ShellProps = {
   actions?: ReactNode;
   /** Navigation data. Without it the rail placeholder renders (tests). */
   nav?: ShellNavProps;
-  /** Account sidebar content (step 9a). Empty until then. */
+  /** Account sidebar body (AccountSidebar). */
   sidebar?: ReactNode;
   children: ReactNode;
 };
@@ -56,19 +59,25 @@ export function Shell({ title, actions, nav, sidebar, children }: ShellProps) {
   const [locale] = useAppLocale();
   const c = shellCopy[locale].frame;
   const wide = useMediaQuery(`(min-width: ${SHELL_MIN_VIEWPORT}px)`);
-  const { open, width, toggle } = useSidebar();
+  const { open, width, maxWidth, toggle, setWidth, reset } = useSidebar();
+  /* Width while a drag is in progress; null otherwise. Not persisted. */
+  const [dragWidth, setDragWidth] = useState<number | null>(null);
+  const shownWidth = dragWidth ?? width;
 
   /* `inert` is not in React 18's types; an empty string renders the attribute. */
   const inertProps = (open ? {} : { inert: "" }) as Record<string, string>;
   const phoneNav = wide ? undefined : nav;
   const narrow = phoneNav !== undefined;
   const style = {
-    "--shell2-sidebar-w": `${width}px`,
+    "--shell2-sidebar-w": `${shownWidth}px`,
     "--shell2-rail-w": `${RAIL_WIDTH}px`,
   } as CSSProperties;
 
   return (
-    <div className={`shell2${narrow ? " shell2-narrow" : ""}`} style={style}>
+    <div
+      className={`shell2${narrow ? " shell2-narrow" : ""}${dragWidth === null ? "" : " shell2-dragging"}`}
+      style={style}
+    >
       <a
         href="#main"
         className="shell2-skip"
@@ -88,6 +97,20 @@ export function Shell({ title, actions, nav, sidebar, children }: ShellProps) {
           {...inertProps}
         >
           <div className="shell2-sidebar-inner">{sidebar}</div>
+          <SidebarResizeHandle
+            width={shownWidth}
+            min={SIDEBAR_MIN_WIDTH}
+            max={maxWidth}
+            onDrag={setDragWidth}
+            onCommit={(w) => {
+              setDragWidth(null);
+              if (w !== width) setWidth(w);
+            }}
+            onReset={() => {
+              setDragWidth(null);
+              reset();
+            }}
+          />
         </aside>
       )}
       <main id="main" className="shell2-main" tabIndex={-1}>

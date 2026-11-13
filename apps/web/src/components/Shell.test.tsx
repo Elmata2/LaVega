@@ -159,3 +159,54 @@ test("ShellSwitch on renders the new shell and not the old chrome", () => {
   expect(host.textContent).not.toContain("old-nav");
   expect(host.querySelector(".shell")).toBeNull();
 });
+
+const handle = () => host.querySelector<HTMLElement>('aside [role="separator"]')!;
+const shellRoot = () => host.querySelector<HTMLElement>(".shell2")!;
+
+test("resize handle sits in the sidebar and shares state with the toggle", () => {
+  render(frame);
+  expect(handle().getAttribute("aria-valuenow")).toBe("296");
+  act(() => {
+    handle().dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }));
+  });
+  expect(shellRoot().style.getPropertyValue("--shell2-sidebar-w")).toBe("312px");
+  expect(handle().getAttribute("aria-valuenow")).toBe("312");
+  expect(JSON.parse(window.localStorage.getItem("lavega.sidebar")!)).toEqual({
+    open: true,
+    width: 312,
+  });
+  const btn = host.querySelector<HTMLButtonElement>("main header button[aria-controls]")!;
+  act(() => btn.click());
+  expect(host.querySelector("aside")!.hasAttribute("inert")).toBe(true);
+  expect(JSON.parse(window.localStorage.getItem("lavega.sidebar")!)).toEqual({
+    open: false,
+    width: 312,
+  });
+});
+
+test("dragging moves the width live, no class change leaks, storage only on pointer-up", () => {
+  render(frame);
+  const ptr = (target: EventTarget, type: string, clientX: number) =>
+    act(() => {
+      target.dispatchEvent(new MouseEvent(type, { clientX, bubbles: true, button: 0 }));
+    });
+  ptr(handle(), "pointerdown", 300);
+  expect(shellRoot().classList.contains("shell2-dragging")).toBe(true);
+  ptr(window, "pointermove", 340);
+  expect(shellRoot().style.getPropertyValue("--shell2-sidebar-w")).toBe("336px");
+  expect(window.localStorage.getItem("lavega.sidebar")).toBeNull();
+  ptr(window, "pointerup", 340);
+  expect(shellRoot().classList.contains("shell2-dragging")).toBe(false);
+  expect(JSON.parse(window.localStorage.getItem("lavega.sidebar")!).width).toBe(336);
+  expect(shellRoot().style.getPropertyValue("--shell2-sidebar-w")).toBe("336px");
+});
+
+test("double-click on the handle resets to 296", () => {
+  window.localStorage.setItem("lavega.sidebar", '{"open":true,"width":400}');
+  render(frame);
+  expect(handle().getAttribute("aria-valuenow")).toBe("400");
+  act(() => {
+    handle().dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
+  });
+  expect(handle().getAttribute("aria-valuenow")).toBe("296");
+});

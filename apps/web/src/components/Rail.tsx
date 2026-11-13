@@ -90,7 +90,7 @@ export function Rail({ view, modules, onNavigate, onOpenProfile }: ShellNavProps
             <span className="shell2-rail-icon" aria-hidden="true">
               <LineIcon>
                 <path d="M4 19h16" />
-                <path d="M7 19V10M12 19V5M17 19v7" />
+                <path d="M7 19V10M12 19V5M17 19v-7" />
               </LineIcon>
             </span>
             <span className="shell2-rail-label">{c.nav.investing}</span>

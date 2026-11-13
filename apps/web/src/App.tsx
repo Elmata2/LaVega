@@ -96,6 +96,7 @@ import { API_BASE } from "./api.js";
 import { CONTENT_CONTAINER_CLASS } from "./module-grid.js";
 import { SHELL_V2 } from "./shellFlag.js";
 import { ShellSwitch } from "./components/Shell.js";
+import { AccountSidebar } from "./components/AccountSidebar.js";
 import { SHOW_INVOICE_FORWARDING, initialScope, isArchivedView } from "./archive";
 import { pathForView, takePendingEbParams, viewFromPathname, type View } from "./appRoutes";
 import { gateState } from "./vault-gate.js";
@@ -1328,6 +1329,22 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
     profileRead !== "error" &&
     profileRead.kind === "ok" &&
     planProfileOf(profileRead.store).intakeBlocksDone >= 1;
+
+  // Show just this account's transactions: clear the other filters so the list
+  // isn't silently narrowed by a stale one. Rekeningen and the account sidebar
+  // share this one handler.
+  const openAccountTransactions = useCallback(
+    (key: string) => {
+      setFAccount(key);
+      setFEntity("");
+      setFSearch("");
+      setFCategory("");
+      setFFrom("");
+      setFTo("");
+      setView("transactions");
+    },
+    [setView],
+  );
   // Capacity for "what LaVega knows about you": the same room and the same
   // profile inputs the intake uses, worked out here and never stored.
   // The home screen's room card: computed once per data change, and only while
@@ -2281,6 +2298,18 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
         onNavigate: setView,
         onOpenProfile: () => setView("profiel"),
       }}
+      sidebar={
+        <AccountSidebar
+          accounts={scopedAccounts}
+          view={view}
+          planUnlocked={planUnlocked}
+          activeAccountKey={view === "transactions" ? fAccount : ""}
+          onSelectAccount={openAccountTransactions}
+          onOpenPlan={() => setView("plan")}
+          // Import lives in Profiel; Rekeningen's empty state points there too.
+          onAddAccount={() => setView("profiel")}
+        />
+      }
       actions={
         <TopBarActions
           scope={scope}
@@ -2476,17 +2505,7 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
             onOpeningCommit={handleOpeningCommit}
             onValuationCommit={handleValuationCommit}
             onValuationRemove={handleValuationRemove}
-            onSelectAccount={(key) => {
-              // Show just this account's transactions — clear the other
-              // filters so the list isn't silently narrowed by a stale one.
-              setFAccount(key);
-              setFEntity("");
-              setFSearch("");
-              setFCategory("");
-              setFFrom("");
-              setFTo("");
-              setView("transactions");
-            }}
+            onSelectAccount={openAccountTransactions}
           />
         )}
 

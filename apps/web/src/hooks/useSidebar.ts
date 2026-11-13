@@ -3,6 +3,7 @@ import {
   SIDEBAR_DEFAULT_WIDTH,
   clampStoredWidth,
   clampWidth,
+  maxWidthFor,
   readSidebar,
   writeSidebar,
   type SidebarPrefs,
@@ -12,6 +13,8 @@ export type SidebarApi = {
   open: boolean;
   /** Width to render: the stored choice clamped to the live viewport. */
   width: number;
+  /** Widest the sidebar may be in this viewport (for the resize handle). */
+  maxWidth: number;
   toggle: () => void;
   /** Keep a new width (clamped 240..440). Call on pointer-up, not per move. */
   setWidth: (width: number) => void;
@@ -53,5 +56,11 @@ export function useSidebar(): SidebarApi {
     [update],
   );
 
-  return { open: prefs.open, width: clampWidth(prefs.width, viewport), toggle, setWidth, reset };
+  return {
+    open: prefs.open,
+    width: clampWidth(prefs.width, viewport),
+    maxWidth: maxWidthFor(viewport),
+    toggle,     setWidth,
+    reset,
+  };
 }

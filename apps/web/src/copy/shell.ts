@@ -63,6 +63,18 @@ export type ShellCopy = {
     openMenu: string;
     more: string;
   };
+  /** The account sidebar (components/AccountSidebar.tsx). */
+  accountSidebar: {
+    tabsLabel: string;
+    tabAll: string;
+    tabAssets: string;
+    tabDebts: string;
+    add: string;
+    empty: string;
+    emptyAssets: string;
+    emptyDebts: string;
+    resizeLabel: string;
+  };
   modulePicker: {
     homeNote: string;
     moduleSwitchLabel: (label: string) => string;
@@ -301,6 +313,17 @@ const nl: ShellCopy = {
     skipLink: "Naar inhoud",
     openMenu: "Menu openen",
     more: "Meer",
+  },
+  accountSidebar: {
+    tabsLabel: "Filter rekeningen",
+    tabAll: "Alle",
+    tabAssets: "Activa",
+    tabDebts: "Schulden",
+    add: "+ Rekening toevoegen",
+    empty: "Nog geen rekeningen.",
+    emptyAssets: "Geen activa.",
+    emptyDebts: "Geen schulden.",
+    resizeLabel: "Breedte zijbalk",
   },
   nav: {
     ariaLabel: "Weergaven",
@@ -674,6 +697,17 @@ const en: ShellCopy = {
     skipLink: "Skip to content",
     openMenu: "Open menu",
     more: "More",
+  },
+  accountSidebar: {
+    tabsLabel: "Filter accounts",
+    tabAll: "All",
+    tabAssets: "Assets",
+    tabDebts: "Debts",
+    add: "+ Add account",
+    empty: "No accounts yet.",
+    emptyAssets: "No assets.",
+    emptyDebts: "No debts.",
+    resizeLabel: "Sidebar width",
   },
   nav: {
     ariaLabel: "Views",
