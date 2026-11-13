@@ -51,7 +51,7 @@ typography:
     fontWeight: 400
     letterSpacing: "0.02em"
 rounded:
-  frame: "32px"
+  frame: "0px"
   card: "28px"
   panel: "20px"
   control: "14px"
@@ -96,7 +96,7 @@ The working product behind app.lavega.dev, and the reference the content site an
 
 - Two faces, each with one job: Instrument Serif for display (28px and up, 400 only), Geist for everything else. Self-hosted from `src/assets/fonts/` with the OFL licenses.
 - Dark by default with an opt-in light theme; radius, type, spacing and motion are shared between the two.
-- The app is a single floating frame on the gutter, not a full-bleed page. Only the content inside scrolls.
+- The app is a full-viewport frame (`100dvh`): icon rail, account sidebar, main. No margin, radius or shadow. Only main scrolls.
 - Depth is tone plus a 12% hairline. Only floating layers (dialogs, menus) cast a shadow.
 - Cantaloupe is the one filled call to action; signal blue carries links, active state and focus.
 
@@ -104,7 +104,7 @@ The working product behind app.lavega.dev, and the reference the content site an
 
 `color-scheme: dark` on `:root`. The light theme is `:root[data-theme="light"]` and changes colour only.
 
-- **Midnight `#02070a`** — gutter and app surface. The app frame and its ground are the same value, so the frame reads as a cut-out, not a card.
+- **Midnight `#02070a`** — app surface. The frame fills the viewport, so there is no separate gutter ground.
 - **Surface `#0d171d` / Surface-2 `#16222a`** — raised panels, then nested rows and inputs.
 - **Ink `#ffffff`, Ink-soft `#e3e9ec`, Muted `#a9b4bb`** — primary text, the hover state of the active nav pill, secondary text.
 - **Hairline `rgba(255,255,255,0.12)`** — every border. Never a second grey.
@@ -141,10 +141,10 @@ Delta pills use `--pos-tint` / `--neg-tint`, built with `color-mix` in srgb. Do 
 
 ## Layout
 
-- **Frame.** `.shell` is `calc(100vh - 2 * 20px)` tall, max 1680px, 32px radius, `--shadow-float`. The app bar, greeting and content stack inside it; only `.content` scrolls.
+- **Frame.** `.shell2` is `100dvh`, full width, no margin, radius or shadow. Rail (84px), account sidebar (296px, 240-440, collapsible), then main; only main scrolls, with a sticky 56px top bar. Below 1024px the rail and sidebar give way to a phone top bar, bottom bar and drawer.
 - **App bar.** Brand, then the owner's chosen modules as text tabs, then lock/actions. Tabs scroll horizontally instead of wrapping, because a selection can be long.
 - **Module grid.** `--grid-gap: 24px`, modules 200px (short) or 360px (tall), placed by `span` (1/2/3 columns). Adding a module is one `<Module span=…>` line, never a layout rewrite.
-- **Spacing** is a 4px scale (`--sp-1` … `--sp-6`). Panels use 24px padding; the frame uses 20px gutter.
+- **Spacing** is a 4px scale (`--sp-1` … `--sp-6`). Panels use 24px padding; main uses 32 / 24 / 16px side gutters at >= 1280 / 1024-1279 / < 1024.
 - **Breakpoints.** The grid collapses 3 → 2 → 1 columns; the nav rail keeps scrolling rather than wrapping at any width.
 
 ## Components
