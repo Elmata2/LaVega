@@ -177,7 +177,7 @@ test("a group with some unknown balances marks its total as partial", () => {
   });
   const total = host.querySelector(".shell2-acc-total")!;
   expect(total.textContent).toContain("100,00");
-  expect(total.querySelector(".shell2-acc-partial")!.textContent).toContain("van 1 van 2");
+  expect(total.querySelector(".shell2-acc-partial")!.textContent).toContain("1 van 2 bekend");
 });
 
 test("a fully known group has no partial marker", () => {

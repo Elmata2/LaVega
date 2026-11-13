@@ -710,7 +710,7 @@ const nl: MoneyCopy = {
     transactieWoord: (n) => (n === 1 ? "transactie" : "transacties"),
     rekeningenBijBankAria: (bankLabel) => `Rekeningen bij ${bankLabel}`,
     zonderBank: "Zonder bank",
-    vanKnownVanTotal: (known, total) => `van ${known} van ${total}`,
+    vanKnownVanTotal: (known, total) => `${known} van ${total} bekend`,
     transactiesBekijken: (n) => `${n} ${n === 1 ? "transactie" : "transacties"} bekijken`,
     deleteQuestion: (naam, txCount) =>
       txCount === 0
