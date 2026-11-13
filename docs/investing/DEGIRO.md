@@ -27,10 +27,10 @@ ID`, semicolon). No real DeGiro export has that shape; D1 deleted them and
   and `createDeGiroFileImport` stamps entity/broker into a full `BrokerResult`.
   See [Account statement → trades, balances, coverage](#account-statement--trades-balances-coverage-d5-317).
 - The transaction export maps to trades and merges with the account statement
-  by execution (#318, D6). `parseBrokerFiles` is the multi-file seam; the
-  transaction export alone proves no cash history. `Portfolio.csv` is still only
-  named, not mapped (#319). Nothing in `apps/` calls any of it yet: the upload
-  route (#323) and the DeGiro tab (#324) are the remaining path to a user.
+  by execution (#318, D6). The portfolio export maps to dated positions and its
+  cash row (#319, D7). `parseBrokerFiles` is the multi-file seam; neither export
+  proves cash history on its own. Nothing in `apps/` calls any of it yet: the
+  upload route (#323) and the DeGiro tab (#324) are the remaining path to a user.
 - `Transactions.csv` and `Portfolio.csv` shapes were **unverified** until D1.
   They are now verified from real exports of 2026-11-12 (see the two sections
   below), and their headers are the ones D2 matches.
@@ -336,7 +336,7 @@ for that test: reverting either makes it fail.
 | -------------- | --------------------------- | ----------------------------------------------------------- | ------------------------------ |
 | `account`      | Rekeningoverzicht / Account | cash flows, dividends, cash balances, trades, cash coverage | mapped (D3–D5); transport #323 |
 | `transactions` | Transacties / Transactions  | trades (venue, local value, FX rate, commission)            | mapped (D6); transport #323    |
-| `portfolio`    | Portefeuille / Portfolio    | positions, cash balance                                     | shape verified; mapping #319   |
+| `portfolio`    | Portefeuille / Portfolio    | positions (ISIN key), cash balance                          | mapped (D7); transport #323    |
 
 The account statement is the **primary** import. It alone proves cash history.
 Transactions and Portfolio enrich it; neither is required.
@@ -399,11 +399,60 @@ under. One transaction row consumes one account row, and only when `side` and
 A side or quantity disagreement keeps both rows and reports one problem naming
 the Order Id and both quantities. A transactions Order Id seen in the account
 under another execution is appended with a problem. A trade without an Order Id
-never merges and is appended silently. Cash flows, dividends and cash balances
-come from the account statement only; positions stay `[]`.
+never merges and is appended silently. Cash flows and dividends come from the
+account statement only; positions come from the portfolio export (D7).
+
+### Portfolio export → positions and cash balance (D7, #319)
+
+`packages/core/src/parsers/degiro/portfolio.ts`.
+
+`readDeGiroPortfolio(text, asOf)` reads the 7-column export into positions and
+balances and never throws. The verified NL and EN headers have the same column
+order: product 0, ISIN 1, quantity 2, closing 3, local value 4 and its unnamed
+neighbour 5, EUR value 6. `Lokale waarde` labels the currency and the blank
+neighbour holds the amount, the opposite pairing from the transaction export, so
+`currencyAmountAt` finds the pair by the blank header.
+
+- **`asOf` is an input, never a guess.** The export has no date column, so the
+  reader takes the export date as a required argument and validates it as an ISO
+  `YYYY-MM-DD` calendar date. Missing or malformed input yields zero rows and one
+  problem; no row is ever written with an invented date.
+- **Identity.** `symbol` and `isin` are the ISIN and `description` is the product
+  name, so a product rename cannot split one holding into two. A position without
+  an ISIN is skipped with a row-numbered problem; no symbol is invented.
+- **Cost stays unknown.** The export carries a closing price, not a cost basis.
+  `averagePrice` is `null` and `brokerCost` is `unknown`/`not-reported`. Nothing
+  is derived from quantity × price.
+- **Values from the export.** `quantity` is `Aantal`/`Amount`, `marketPrice` is
+  `Slotkoers`/`Closing`, `marketValue` is the local value, and `currency` is the
+  local currency. The EUR value column is not used: the position keeps the
+  currency it was quoted in.
+- **The cash row is a balance.** A product name that starts with
+  `CASH & CASH FUND` becomes a `CashBalance` dated with `asOf`. It is never a
+  position: it carries no ISIN or quantity, and booking it as one would invent an
+  identity-less holding.
+- **Empty positions are a real answer.** With a valid date, a portfolio whose
+  holdings are all sold reads as zero positions and is complete. A header-only
+  file is not an import and reports `geen posities` instead of an empty result.
+- **Sections.** A dated portfolio read owns `positions` and, when the cash row
+  was read, `cashBalances`. An undated or header-only file owns neither: an empty
+  complete section would tell the snapshot the broker reported nothing and wipe
+  stored rows. The export proves no cash history, so coverage is `unknown`.
+
+Fixture result: 12 positions keyed by ISIN (USD and EUR) and one EUR 201.76 cash
+balance, all dated 2026-11-12. `portfolio.test.ts` pins three positions exactly,
+the ISIN identity and the cash row.
+
+Multi-file precedence (`mergeDeGiroFiles`): the first portfolio export supplies
+the positions, and the account statement's `Saldo` anchors win the cash balances
+when it read them; the portfolio cash row stands in otherwise. The account
+statement stays the cash truth, the transaction export only enriches executions,
+and the portfolio export supplies holdings. A merged source reads
+`DeGiro account + transactions + portfolio`.
 
 The parser owns which sections it read: account = `trades`, `dividends`,
-`cashFlows`, `cashBalances`; transactions = `trades`; portfolio = none. The
+`cashFlows`, `cashBalances`; transactions = `trades`; portfolio = `positions` and
+`cashBalances` when the export date was supplied and the file was read. The
 adapter reports a listed section `complete`, or `partial` when the parse had a
 problem, and an unlisted section `unavailable` with no rows. An empty `complete`
 section would tell the snapshot the broker reported nothing and wipe stored rows.
@@ -447,11 +496,11 @@ section would tell the snapshot the broker reported nothing and wipe stored rows
   `Position.symbol` and `Trade.symbol` = ISIN; product name goes in a display
   field. A product rename then cannot break joins. Prices resolve through the
   OpenFIGI ISIN path that Trading 212 already uses.
-- **Portfolio cash row.** A `CASH & CASH FUND …` row (if D1 confirms it) is a
-  `CashBalance`, not a position.
+- **Portfolio cash row.** A `CASH & CASH FUND …` row is a `CashBalance`, not a
+  position (D7).
 - **Position `asOf`.** The portfolio export carries no date (confirmed 2026-11-12).
-  The upload form asks for the export date, default today. Never invent one
-  silently.
+  `readDeGiroPortfolio` requires the export date as an argument and the upload
+  form asks for it (#323), default today. Never invent one silently.
 
 ### Re-import
 
@@ -522,4 +571,6 @@ header-signature detection), D3 (#315, account statement to cash flows plus the
 Saldo walk invariant), D4 (#316, dividends with withholding tax), D5 (#317,
 account statement to trades, cash balances, coverage and period; the account
 profile now returns a full `BrokerResult` alone), D6 (#318, transaction export
-to trades merged by execution, and the multi-file seam `parseBrokerFiles`).
+to trades merged by execution, and the multi-file seam `parseBrokerFiles`), D7
+(#319, portfolio export to positions keyed by ISIN and its cash balance, with the
+export date as a required input).
