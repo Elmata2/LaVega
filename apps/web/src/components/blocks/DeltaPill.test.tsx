@@ -3,7 +3,12 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { expect, test } from "vitest";
 import DeltaPill from "./DeltaPill";
 
-const text = (html: string) => html.replace(/<[^>]+>/g, "").replace(/<!-- -->/g, "");
+/* Read the rendered text through the DOM, not by stripping tags with a regex. */
+const text = (html: string) => {
+  const host = document.createElement("div");
+  host.innerHTML = html;
+  return host.textContent ?? "";
+};
 
 test("a rise carries + and a fall carries a real minus, next to the arrow", () => {
   expect(text(renderToStaticMarkup(<DeltaPill pct={3.2} upIsGood={true} />))).toBe("▲ +3%");
