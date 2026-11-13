@@ -26,9 +26,11 @@ ID`, semicolon). No real DeGiro export has that shape; D1 deleted them and
   coverage and period (D5, #317). `parseBrokerFile` maps the `account` profile
   and `createDeGiroFileImport` stamps entity/broker into a full `BrokerResult`.
   See [Account statement → trades, balances, coverage](#account-statement--trades-balances-coverage-d5-317).
-  Nothing in `apps/` calls it yet: the upload route (#323) and the DeGiro tab
-  (#324) are the remaining path to a user. `Transactions.csv` and
-  `Portfolio.csv` are still only named, not mapped (#318, #319).
+- The transaction export maps to trades and merges with the account statement
+  by execution (#318, D6). `parseBrokerFiles` is the multi-file seam; the
+  transaction export alone proves no cash history. `Portfolio.csv` is still only
+  named, not mapped (#319). Nothing in `apps/` calls any of it yet: the upload
+  route (#323) and the DeGiro tab (#324) are the remaining path to a user.
 - `Transactions.csv` and `Portfolio.csv` shapes were **unverified** until D1.
   They are now verified from real exports of 2026-11-12 (see the two sections
   below), and their headers are the ones D2 matches.
@@ -117,13 +119,14 @@ Product,Symbol/ISIN,Amount,Closing,Local value,,Value in EUR
 
 `packages/core/src/parsers/__fixtures__/degiro/{nl,en}/`
 
-| File                  | Source                            | Rows | Notes                                                                                               |
-| --------------------- | --------------------------------- | ---- | --------------------------------------------------------------------------------------------------- |
-| `nl/account.csv`      | real 109-row NL account statement | 29   | header byte-identical; sell, partial fill, split, transfer-in and a full AutoFX group added by hand |
-| `nl/transactions.csv` | real 25-row NL transaction export | 25   | header byte-identical; partial-fill Order Id kept                                                   |
-| `en/transactions.csv` | real 25-row EN transaction export | 25   | same rows; EN header                                                                                |
-| `nl/portfolio.csv`    | real 13-row NL portfolio export   | 13   | header byte-identical; cash row kept                                                                |
-| `en/portfolio.csv`    | real 13-row EN portfolio export   | 13   | same rows; EN header                                                                                |
+| File                          | Source                                 | Rows | Notes                                                                                                                |
+| ----------------------------- | -------------------------------------- | ---- | -------------------------------------------------------------------------------------------------------------------- |
+| `nl/account.csv`              | real 109-row NL account statement      | 29   | header byte-identical; sell, partial fill, split, transfer-in and a full AutoFX group added by hand                  |
+| `nl/transactions.csv`         | real 25-row NL transaction export      | 25   | header byte-identical; partial-fill Order Id kept                                                                    |
+| `en/transactions.csv`         | real 25-row EN transaction export      | 25   | same rows; EN header                                                                                                 |
+| `nl/transactions-overlap.csv` | hand-built against the account fixture | 4    | header byte-identical to `nl/transactions.csv`; every execution overlaps `nl/account.csv` by Order Id + Datum + Tijd |
+| `nl/portfolio.csv`            | real 13-row NL portfolio export        | 13   | header byte-identical; cash row kept                                                                                 |
+| `en/portfolio.csv`            | real 13-row EN portfolio export        | 13   | same rows; EN header                                                                                                 |
 
 Every amount, balance, Order Id, ISIN and product is synthetic. `Saldo` was
 recomputed so the walk above holds per currency. `degiroFixtures.test.ts`
@@ -332,7 +335,7 @@ for that test: reverting either makes it fail.
 | Profile        | DeGiro export               | Produces                                                    | Status                         |
 | -------------- | --------------------------- | ----------------------------------------------------------- | ------------------------------ |
 | `account`      | Rekeningoverzicht / Account | cash flows, dividends, cash balances, trades, cash coverage | mapped (D3–D5); transport #323 |
-| `transactions` | Transacties / Transactions  | trades (venue, local value, FX rate, commission)            | shape verified; mapping #318   |
+| `transactions` | Transacties / Transactions  | trades (venue, local value, FX rate, commission)            | mapped (D6); transport #323    |
 | `portfolio`    | Portefeuille / Portfolio    | positions, cash balance                                     | shape verified; mapping #319   |
 
 The account statement is the **primary** import. It alone proves cash history.
@@ -341,6 +344,69 @@ Transactions and Portfolio enrich it; neither is required.
 Detection is by exact header signature per profile and language (NL, EN). The
 filename is never trusted. An unknown header returns a problem naming the
 header, never a guess.
+
+### Transactions export → trades (D6, #318)
+
+`packages/core/src/parsers/degiro/transactions.ts` and `merge.ts`.
+
+`readDeGiroTransactions(text)` reads the 17-column export into trades and never
+throws. The verified NL and EN headers have identical column order, so one fixed
+table serves both: date 0, time 1, product 2, ISIN 3, reference exchange 4, venue
+5, quantity 6, price 7, local value 9, EUR value 11, FX rate 12, AutoFX fee 13,
+transaction fee 14, total EUR 15, Order Id 16. Two money fields are a label plus
+its blank neighbour: `Koers`/`Price` holds the amount and the blank column holds
+its currency; `Lokale waarde`/`Local value` is the same pair.
+
+- **Side from the cash sign.** The export has no verb. A negative local value is
+  a buy and a positive one a sell; zero is not a trade. The verified sample holds
+  buys only, so a real sell row is still unverified.
+- **Amount and currency** are the signed local value and its own currency, never
+  the EUR value. `price` is the magnitude of `Koers`.
+- **Venue and FX rate** are provenance only: `venue` is `Uitvoeringsplaats` when
+  non-empty, `fxRate` is `Wisselkoers` when it parses. Neither changes a
+  valuation.
+- **Commission** is the absolute transaction fee only. `AutoFX Kosten` is a
+  currency conversion the account statement books as its own ledger legs; folding
+  it in would make `commission` mean two things for one trade.
+- **Zero-price guard.** A row with a quantity but no price (or price 0) is a
+  corporate action or a share transfer, not a trade. It is skipped with a problem
+  and belongs to #326.
+- **No settlement.** A transaction trade carries no `settlement`; trade cash is
+  always the account ledger row.
+- **Coverage stays unknown.** A trade list proves no cash history: `cashHistory`
+  is `unknown` with a reason that names the missing account statement. Only the
+  account statement can claim a window.
+
+`parseBrokerFiles(files)` is the multi-file seam for #323. It parses every file
+with `parseBrokerFile` and, when an import holds more than one, hands them to
+`mergeDeGiroFiles`. The first account statement and the first transaction export
+are the import; extra files, unknown headers and portfolio exports contribute
+their problems only, and with more than one file every problem is prefixed with
+its filename.
+
+Dedupe is by execution, not by Order Id alone: `(Order Id, Datum, Tijd)`, the
+same key the account reader groups a trade, its commission and its AutoFX rows
+under. One transaction row consumes one account row, and only when `side` and
+`quantity` agree.
+
+| Field after a match                                                                          | Source                                                                    |
+| -------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| date, executionAt, amount, currency, commission, quantity, side, brokerTradeId, symbol, isin | account statement                                                         |
+| price                                                                                        | transactions export                                                       |
+| venue, fxRate                                                                                | transactions export                                                       |
+| description                                                                                  | account statement; transactions export only when the account row has none |
+
+A side or quantity disagreement keeps both rows and reports one problem naming
+the Order Id and both quantities. A transactions Order Id seen in the account
+under another execution is appended with a problem. A trade without an Order Id
+never merges and is appended silently. Cash flows, dividends and cash balances
+come from the account statement only; positions stay `[]`.
+
+The parser owns which sections it read: account = `trades`, `dividends`,
+`cashFlows`, `cashBalances`; transactions = `trades`; portfolio = none. The
+adapter reports a listed section `complete`, or `partial` when the parse had a
+problem, and an unlisted section `unavailable` with no rows. An empty `complete`
+section would tell the snapshot the broker reported nothing and wipe stored rows.
 
 ### Mapping rules
 
@@ -374,9 +440,9 @@ header, never a guess.
   and flatex transfer lines are `other` with the description. The cash sweep is
   not emitted at all (its `Saldo` is the flatex-bank leg). Information lines
   with an empty `Mutatie` emit nothing.
-- **Dedupe across files.** When the account statement and `Transactions.csv`
-  both carry an Order Id, one trade survives. Transactions supplies venue and
-  FX rate; the account row stays the cash stream.
+- **Dedupe across files.** One transaction row consumes one account row only
+  when `(Order Id, Datum, Tijd)` matches and `side` and `quantity` agree.
+  Transactions supplies venue and FX rate; the account row stays the cash stream.
 - **Instrument identity.** DeGiro has a product name and an ISIN, no ticker.
   `Position.symbol` and `Trade.symbol` = ISIN; product name goes in a display
   field. A product rename then cannot break joins. Prices resolve through the
@@ -396,6 +462,9 @@ overlapping account files). A re-import must not append duplicates.
   to `degiro` is D9 (#321). Until then a complete account import replaces the
   stored DeGiro collections wholesale, so an overlapping window drops rows
   outside it. Fix the window before the upload route (#323) exposes importing.
+- All files of one import must arrive in one request: `parseBrokerFiles` merges
+  them. A separate transactions import replaces the stored trade collection
+  until #321.
 - Importing the same file twice leaves the snapshot byte-identical.
 
 ### Server and web
@@ -452,4 +521,5 @@ Landed: D1 (#313, fixtures), D8 (#320, one broker list), D2 (#314, reader and
 header-signature detection), D3 (#315, account statement to cash flows plus the
 Saldo walk invariant), D4 (#316, dividends with withholding tax), D5 (#317,
 account statement to trades, cash balances, coverage and period; the account
-profile now returns a full `BrokerResult` alone).
+profile now returns a full `BrokerResult` alone), D6 (#318, transaction export
+to trades merged by execution, and the multi-file seam `parseBrokerFiles`).
