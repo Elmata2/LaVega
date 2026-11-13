@@ -130,7 +130,9 @@ function saveWizardDebt(
   }
   return {
     ...p,
-    debts: debts.map((x) => (x.id === WIZARD_DEBT ? { ...x, ...d, at: asOf } : x)),
+    debts: debts.map((x) =>
+      x.id === WIZARD_DEBT ? { ...x, ...d, at: asOf } : x,
+    ),
   };
 }
 
@@ -202,8 +204,7 @@ export default function IntakeWizard(props: IntakeWizardProps) {
       const marked = markDone(apply(p), id);
       if (!keepLast) return marked;
       const { lastScreen: _l, ...intake } = marked.intake;
-      const last =
-        run !== null && returnTo === null && id === "summary" ? "upload" : p.intake.lastScreen;
+      const last = run !== null && returnTo === null && id === "summary" ? "upload" : p.intake.lastScreen;
       return new AdvisorProfile({
         ...marked,
         intake: last === undefined ? intake : { ...intake, lastScreen: last },
@@ -222,11 +223,7 @@ export default function IntakeWizard(props: IntakeWizardProps) {
         (x) => x !== id && isAnswered(profile, x) && !isAnswered(changed, x),
       );
       const queue = [
-        ...new Set([
-          ...pending.filter((x) => after.includes(x) && !isAnswered(changed, x)),
-          ...fresh,
-          ...lost,
-        ]),
+        ...new Set([...pending.filter((x) => after.includes(x) && !isAnswered(changed, x)), ...fresh, ...lost]),
       ];
       const [head, ...rest] = queue;
       setPending(rest);
@@ -288,7 +285,11 @@ export default function IntakeWizard(props: IntakeWizardProps) {
       sel,
       (kind) =>
         void save((p) =>
-          applyHousehold(p, { kind, partnerIncomeInScope: kind === "together" }, asOf),
+          applyHousehold(
+            p,
+            { kind, partnerIncomeInScope: kind === "together" },
+            asOf,
+          ),
         ),
     );
   } else if (screen === "money-sharing") {
@@ -465,7 +466,10 @@ export default function IntakeWizard(props: IntakeWizardProps) {
         { value: "no", label: w.no },
       ],
       sel,
-      (v) => void save((p) => (v === "no" ? answerNoChildren(p, asOf) : answerHasChildren(p))),
+      (v) =>
+        void save((p) =>
+          v === "no" ? answerNoChildren(p, asOf) : answerHasChildren(p),
+        ),
     );
   } else if (screen === "child-years") {
     question = q.childYears;
@@ -512,7 +516,9 @@ export default function IntakeWizard(props: IntakeWizardProps) {
         label={question}
         stored={stored}
         onExact={(c) =>
-          void save((p) => applyStatedRange(p, "spend", { lowCents: c, highCents: c }, asOf))
+          void save((p) =>
+            applyStatedRange(p, "spend", { lowCents: c, highCents: c }, asOf),
+          )
         }
         onBand={(range) => void save((p) => applyStatedRange(p, "spend", range, asOf))}
       />
@@ -528,7 +534,9 @@ export default function IntakeWizard(props: IntakeWizardProps) {
         initialCents={stored}
         allowZero={false}
         onSubmit={(c) =>
-          void save((p) => applyStatedRange(p, "income", { lowCents: c, highCents: c }, asOf))
+          void save((p) =>
+            applyStatedRange(p, "income", { lowCents: c, highCents: c }, asOf),
+          )
         }
       />
     );
@@ -541,7 +549,9 @@ export default function IntakeWizard(props: IntakeWizardProps) {
         busy={busy}
         label={question}
         initialCents={h?.monthlyCents ?? null}
-        onSubmit={(c) => void save((p) => applyStatedHousing(p, h?.kind ?? "other", c, asOf))}
+        onSubmit={(c) =>
+          void save((p) => applyStatedHousing(p, h?.kind ?? "other", c, asOf))
+        }
       />
     );
   } else if (screen === "savings") {
@@ -575,10 +585,15 @@ export default function IntakeWizard(props: IntakeWizardProps) {
               priority: "important",
               accountRefs: [],
             };
-            const others = (p.goals ?? []).filter((x) => x.value.id !== WIZARD_GOAL);
+            const others = (p.goals ?? []).filter(
+              (x) => x.value.id !== WIZARD_GOAL,
+            );
             return {
               ...p,
-              goals: [...others, { value: goal, source: "stated" as const, at: asOf }],
+              goals: [
+                ...others,
+                { value: goal, source: "stated" as const, at: asOf },
+              ],
             };
           })
         }
@@ -601,7 +616,9 @@ export default function IntakeWizard(props: IntakeWizardProps) {
       sel,
       (v) =>
         void save((p) =>
-          v === "yes" ? answerDebts(p, true) : answerDebts(dropWizardDebt(p), false),
+          v === "yes"
+            ? answerDebts(p, true)
+            : answerDebts(dropWizardDebt(p), false),
         ),
     );
   } else if (screen === "debt-details") {
@@ -611,8 +628,12 @@ export default function IntakeWizard(props: IntakeWizardProps) {
       <DebtScreen
         copy={w}
         busy={busy}
-        initial={mine ? { lender: mine.lender, monthlyCents: mine.monthlyCents } : null}
-        onSubmit={(d) => void save((p) => saveWizardDebt(p, d, asOf))}
+        initial={
+          mine ? { lender: mine.lender, monthlyCents: mine.monthlyCents } : null
+        }
+        onSubmit={(d) =>
+          void save((p) => saveWizardDebt(p, d, asOf))
+        }
       />
     );
   } else if (screen === "debit-cards") {
@@ -703,7 +724,14 @@ export default function IntakeWizard(props: IntakeWizardProps) {
       ],
       stored === undefined ? null : stored ? "yes" : "no",
       (v) =>
-        void save((p) => applyKnowledge(p, p.knowledge?.value.answers ?? {}, v === "yes", asOf)),
+        void save((p) =>
+          applyKnowledge(
+            p,
+            p.knowledge?.value.answers ?? {},
+            v === "yes",
+            asOf,
+          ),
+        ),
     );
   } else if (screen === "upload") {
     question = q.upload;
@@ -728,7 +756,10 @@ export default function IntakeWizard(props: IntakeWizardProps) {
         label: item?.options[o.id] ?? o.id,
       })),
       stored,
-      (v) => void save((p) => applyRiskAnswers(p, { ...p.risk?.answers, [itemId]: v }, asOf)),
+      (v) =>
+        void save((p) =>
+          applyRiskAnswers(p, { ...p.risk?.answers, [itemId]: v }, asOf),
+        ),
     );
   }
 
@@ -742,7 +773,12 @@ export default function IntakeWizard(props: IntakeWizardProps) {
       onBack={back}
       backLabel={w.back}
       topRight={
-        <button type="button" className="wz-close" aria-label={w.close} onClick={props.onExit}>
+        <button
+          type="button"
+          className="wz-close"
+          aria-label={w.close}
+          onClick={props.onExit}
+        >
           ×
         </button>
       }
