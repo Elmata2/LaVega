@@ -160,6 +160,6 @@ test("a coloured transaction amount carries an explicit sign, + or a real minus"
       ])}
     />,
   ).replace(/<!-- -->/g, "");
-  expect(html).toMatch(/text-neg">€\s\u221225,00/);
-  expect(html).toMatch(/text-pos">€\s\+1\.000,00/);
+  expect(html).toMatch(/text-neg">\u2212€\s25,00/);
+  expect(html).toMatch(/text-pos">\+€\s1\.000,00/);
 });

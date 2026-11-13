@@ -473,5 +473,12 @@ test("an incoming bill row carries + and the remaining figure a real minus when 
   const occurrences = generateBillOccurrences(bills, [], AS_OF).occurrences;
   render(bills, occurrences, [account(700)]);
   const signed = [...container!.querySelectorAll(".text-pos")].map((e) => e.textContent ?? "");
-  expect(signed.some((t) => /^€\s\+3\.000,00$/.test(t))).toBe(true);
+  expect(signed.some((t) => /^\+€\s3\.000,00$/.test(t))).toBe(true);
+  // The shortfall (EUR 285,50 short) is a coloured euro figure: real minus first.
+  expect(byTestId("bills-shortfall-value").textContent).toMatch(/^\u2212€\s285,50$/);
+  // The remaining figure in the period line carries a sign too.
+  const remaining = [...container!.querySelectorAll(".text-neg, .text-pos")]
+    .map((e) => e.textContent ?? "")
+    .find((t) => /^\S+: .*\d/.test(t) && /[+\u2212]€/.test(t));
+  expect(remaining).toMatch(/[+\u2212]€\s/);
 });

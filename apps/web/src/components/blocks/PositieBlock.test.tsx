@@ -157,6 +157,7 @@ test("PositieBlock: convert mode folds a converted HUF balance into the entity's
   );
   // 300.000 HUF at 400 HUF/EUR is € 750, so Prive's total is 4.500 + 750.
   expect(html).toContain(formatSignedEuroIn("nl", 5_250));
+  expect(html).toMatch(/text-pos">\+€\s5\.250,00/);
   expect(html).not.toContain("vreemde valuta");
   expect(html).not.toContain("onbekend");
   expect(html).toContain("Omgerekend via ECB.");

@@ -595,7 +595,7 @@ function Productkosten({
           </span>
           <span className="text-pos">
             {alsoMonthly
-              ? pc.netLine.alsoMonthlyPrefix(euro(locale, Math.round(net.netCents / 12)))
+              ? pc.netLine.alsoMonthlyPrefix(signedEuro(locale, Math.round(net.netCents / 12)))
               : ""}
             {signedEuro(locale, net.netCents)} {per}
           </span>

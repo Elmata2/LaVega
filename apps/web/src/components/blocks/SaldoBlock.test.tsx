@@ -381,6 +381,7 @@ test("SaldoBlock: convert mode folds a converted HUF balance into the figure and
     />,
   );
   expect(html).toContain(formatSignedEuroIn("nl", 5_250));
+  expect(html).toMatch(/module-figure-value text-pos">\+€\s5\.250,00/);
   expect(html).not.toContain("vreemde valuta");
   expect(html).toContain("Omgerekend via ECB.");
 });

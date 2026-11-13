@@ -166,7 +166,7 @@ test("een gewone positie: bedrag, periode, richting en de eerstvolgende deadline
   });
 
   expect(html).toContain(formatSignedEuroIn("nl", -1_680));
-  expect(html).toMatch(/text-neg">€\s\u22121\.680,00/); // 2.100 af te dragen − 420 voorbelasting
+  expect(html).toMatch(/text-neg">\u2212€\s1\.680,00/); // 2.100 af te dragen − 420 voorbelasting
   expect(html).toContain("te betalen");
   expect(html).toContain("Q3 2026");
   expect(html).toContain("uiterlijk 2026-10-31");
@@ -185,7 +185,7 @@ test("meer voorbelasting dan afdracht is terug te vragen, niet een absentie", ()
     ],
   });
   expect(html).toContain(formatSignedEuroIn("nl", 700));
-  expect(html).toMatch(/text-pos">€\s\+700,00/);
+  expect(html).toMatch(/text-pos">\+€\s700,00/);
   expect(html).toContain("terug te vragen");
 });
 

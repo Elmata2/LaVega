@@ -499,5 +499,5 @@ test("a bank group's saldo carries + or a real minus, as its colour does", () =>
     .map((n) => n.textContent ?? "")
     .filter((t) => /\d/.test(t));
   expect(totals.length).toBeGreaterThan(0);
-  for (const t of totals) expect(t).toMatch(/^€\s[+−]/);
+  for (const t of totals) expect(t).toMatch(/^[+−]€\s/);
 });

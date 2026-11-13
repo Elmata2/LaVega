@@ -32,49 +32,64 @@ export function formatEuroIn(locale: Locale, n: number): string {
   return new Intl.NumberFormat(tag(locale), { style: "currency", currency: "EUR" }).format(n);
 }
 
-/* Intl writes a negative sign as ASCII hyphen-minus (and some locales already
- * use U+2212). A sign that carries meaning without colour must read as a real
- * minus, so every signed helper normalises to U+2212. */
-const toRealMinus = (s: string): string => s.replace(/-/g, "\u2212");
+/* Intl writes a negative sign as ASCII hyphen-minus, and nl puts the sign after
+ * the symbol ("€ -5,00"). A sign that carries meaning without colour must read
+ * as a real minus (U+2212) and come first in every locale ("−€ 5,00", "+€5.00"),
+ * so the signed helpers rebuild the string from parts. */
+function signFirst(fmt: Intl.NumberFormat, n: number): string {
+  const parts = fmt.formatToParts(n);
+  const sign = parts
+    .filter((p) => p.type === "minusSign" || p.type === "plusSign")
+    .map((p) => (p.type === "minusSign" ? "\u2212" : p.value))
+    .join("");
+  return (
+    sign +
+    parts
+      .filter((p) => p.type !== "minusSign" && p.type !== "plusSign")
+      .map((p) => p.value)
+      .join("")
+  );
+}
 
 /** formatEuroIn with an explicit sign: "+" for positive, a real minus for
  *  negative, none for zero. For amounts coloured by sign, so the sign still
  *  tells income from spending when colour cannot (monochrome, colour-blind). */
 export function formatSignedEuroIn(locale: Locale, n: number): string {
-  return toRealMinus(
+  return signFirst(
     new Intl.NumberFormat(tag(locale), {
       style: "currency",
       currency: "EUR",
       signDisplay: "exceptZero",
-    }).format(n),
+    }),
+    n,
   );
 }
 
 /** formatCurrencyIn with the same explicit sign as formatSignedEuroIn. */
 export function formatSignedCurrencyIn(locale: Locale, n: number, currency: string): string {
   try {
-    return toRealMinus(
+    return signFirst(
       new Intl.NumberFormat(tag(locale), {
         style: "currency",
         currency,
         signDisplay: "exceptZero",
-      }).format(n),
+      }),
+      n,
     );
   } catch {
-    return `${currency} ${toRealMinus(
-      new Intl.NumberFormat(tag(locale), { signDisplay: "exceptZero" }).format(n),
-    )}`;
+    return `${currency} ${signFirst(new Intl.NumberFormat(tag(locale), { signDisplay: "exceptZero" }), n)}`;
   }
 }
 
 /** A whole-number percent change with an explicit sign ("+3%", "\u221212%"). */
 export function formatSignedPercentIn(locale: Locale, pct: number): string {
-  return toRealMinus(
+  return signFirst(
     new Intl.NumberFormat(tag(locale), {
       style: "percent",
       maximumFractionDigits: 0,
       signDisplay: "exceptZero",
-    }).format(pct / 100),
+    }),
+    pct / 100,
   );
 }
 

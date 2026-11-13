@@ -24,7 +24,13 @@ import {
   toCents,
   withCurrentBalances,
 } from "@lavega/core";
-import { formatDate, formatEuroIn, formatSignedEuroIn, monthLabel, weekdayLabel } from "../format.js";
+import {
+  formatDate,
+  formatEuroIn,
+  formatSignedEuroIn,
+  monthLabel,
+  weekdayLabel,
+} from "../format.js";
 import { useAppLocale } from "../appLocale.js";
 import { billsCopy, type BillsCopy } from "../copy/bills.js";
 import type { Locale } from "../locale.js";
@@ -572,7 +578,7 @@ export default function Bills({
           <div data-testid="bills-shortfall">
             <p className="m-0 text-muted">{c.summary.shortfall}</p>
             <p className={`m-0 text-2xl ${shortfallTone}`} data-testid="bills-shortfall-value">
-              {preview.shortfallCents != null ? money(preview.shortfallCents) : "—"}
+              {preview.shortfallCents != null ? signedMoney(-preview.shortfallCents) : "—"}
             </p>
             <p className="m-0 text-muted">{shortfallNote}</p>
           </div>
@@ -698,7 +704,9 @@ export default function Bills({
                     </span>
                     <Badge className={statusTone(row.status)}>{c.rowStatus[row.status]}</Badge>
                     <span className={row.direction === "in" ? "text-pos" : ""}>
-                      {row.direction === "in" ? signedMoney(row.amountCents) : money(row.amountCents)}
+                      {row.direction === "in"
+                        ? signedMoney(row.amountCents)
+                        : money(row.amountCents)}
                     </span>
                   </div>
                   {settlement?.state === "partial" && (

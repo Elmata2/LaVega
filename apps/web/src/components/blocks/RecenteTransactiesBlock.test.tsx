@@ -37,7 +37,7 @@ test("RecenteTransactiesBlock renders the reference's row: name, date, chip, amo
   expect(html).toContain(" · Holding BV · ING");
   expect(html).toContain(formatSignedEuroIn("nl", -1_100));
   // A real minus, never the ASCII hyphen, on a coloured amount.
-  expect(html).toMatch(/tx-amount text-neg">€\s\u22121\.100,00/);
+  expect(html).toMatch(/tx-amount text-neg">\u2212€\s1\.100,00/);
   expect(html).toContain(">Inkoop<");
   expect(html).toContain(">Energie<");
   expect(html).toContain('data-testid="tx-chip"');

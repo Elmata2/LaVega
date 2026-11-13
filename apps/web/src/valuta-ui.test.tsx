@@ -574,6 +574,7 @@ test("op een groter bedrag verdient diezelfde maandprijs zich terug, en dan pas 
   expect(order).toEqual(["N26", "ING"]);
   expect(text("goedkoper")).toContain("Goedkoper kan");
   expect(text("valuta-goedkoper-kosten-netto")).toContain(formatSignedEuroIn("nl", 53.1));
+  expect(text("valuta-goedkoper-kosten-netto")).toMatch(/\+€\s53,10/);
   expect(text("valuta-goedkoper-kosten-netto")).toContain(
     `${eur(70)} voordeel min ${eur(16.9)} kaartkosten`,
   );

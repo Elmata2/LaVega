@@ -960,6 +960,7 @@ test("de aanbevolen kaart toont zijn eigen prijs, de periode en wat er netto ove
   // staat erbij zodat hij hem kan navolgen.
   const netto = el.querySelector('[data-testid="travel-pay-kosten-netto"]')!;
   expect(netto.textContent).toContain(formatSignedEuroIn("nl", 9));
+  expect(netto.textContent).toMatch(/Netto: \+€\s9,00/);
   expect(netto.textContent).toContain(formatEuro(10));
   expect(netto.textContent).toContain(formatEuro(1));
 });

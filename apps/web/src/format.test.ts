@@ -18,10 +18,10 @@ test("weekdayShort: same index, short form", () => {
 const MINUS = "\u2212";
 
 test("formatSignedEuroIn: nl carries + and a real minus, zero has no sign", () => {
-  expect(formatSignedEuroIn("nl", 5)).toMatch(/^€\s\+5,00$/);
-  expect(formatSignedEuroIn("nl", -5)).toMatch(new RegExp(`^€\\s${MINUS}5,00$`));
+  expect(formatSignedEuroIn("nl", 5)).toMatch(/^\+€\s5,00$/);
+  expect(formatSignedEuroIn("nl", -5)).toMatch(new RegExp(`^${MINUS}€\\s5,00$`));
   expect(formatSignedEuroIn("nl", 0)).toMatch(/^€\s0,00$/);
-  expect(formatSignedEuroIn("nl", 1234.5)).toMatch(/^€\s\+1\.234,50$/);
+  expect(formatSignedEuroIn("nl", 1234.5)).toMatch(/^\+€\s1\.234,50$/);
   expect(formatSignedEuroIn("nl", -1234.5)).not.toContain("-");
 });
 
