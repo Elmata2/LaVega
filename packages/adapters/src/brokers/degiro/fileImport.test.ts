@@ -1,23 +1,27 @@
 import { readFileSync } from "node:fs";
 import { expect, test } from "vitest";
+import { brokerTradeRowIds } from "../brokerSnapshot.js";
 import { createDeGiroFileImport } from "./fileImport.js";
 
-/* The adapter turns the core account statement into a `BrokerResult`: one
- * `Account.csv` alone must yield trades, dividends, cash balances, the cash
- * flows that fund them, a complete cash-history claim and the period, with the
- * entity and broker stamped. The fixture is core's sanitized real NL statement
- * (#313/#317), so the adapter is exercised on the same bytes core tests. */
+/* The adapter turns the core import result into a `BrokerResult`: the account
+ * statement alone must yield trades, dividends, cash balances, the cash flows
+ * that fund them, a complete cash-history claim and the period, with the entity
+ * and broker stamped. With a transaction export in the same import, its
+ * provenance is merged in and the trade section stays complete. The fixtures are
+ * core's sanitized real exports (#313/#317/#318), so the adapter is exercised on
+ * the same bytes core tests. */
 
-const account = (): string =>
+const fixture = (path: string): string =>
   readFileSync(
-    new URL("../../../../core/src/parsers/__fixtures__/degiro/nl/account.csv", import.meta.url),
+    new URL(`../../../../core/src/parsers/__fixtures__/degiro/${path}`, import.meta.url),
     "utf8",
   );
 
+const account = (): string => fixture("nl/account.csv");
+
 test("one account statement yields the full result, entity and broker stamped", async () => {
   const result = await createDeGiroFileImport().load({
-    filename: "Account.csv",
-    text: account(),
+    files: [{ filename: "Account.csv", text: account() }],
     entity: "BV1",
   });
 
@@ -70,8 +74,7 @@ test("one account statement yields the full result, entity and broker stamped", 
 
 test("DeGiro file import returns problems for empty input and never throws", async () => {
   const result = await createDeGiroFileImport().load({
-    filename: "empty.csv",
-    text: "",
+    files: [{ filename: "empty.csv", text: "" }],
     entity: "BV1",
   });
 
@@ -89,8 +92,12 @@ test("DeGiro file import returns problems for empty input and never throws", asy
 
 test("DeGiro file import reports an unknown header instead of guessing", async () => {
   const result = await createDeGiroFileImport().load({
-    filename: "portfolio.csv",
-    text: "Product;ISIN;Symbol;Amount;Price;Value;Currency;Date\nETF;IE00TEST;VUAA;2;10;20;EUR;2026-08-18",
+    files: [
+      {
+        filename: "portfolio.csv",
+        text: "Product;ISIN;Symbol;Amount;Price;Value;Currency;Date\nETF;IE00TEST;VUAA;2;10;20;EUR;2026-08-18",
+      },
+    ],
     entity: "BV2",
   });
 
@@ -103,34 +110,57 @@ test("DeGiro file import reports an unknown header instead of guessing", async (
   expect(result.sections.trades.rows).toEqual([]);
 });
 
-test("a recognised transactions export is named but not mapped yet", async () => {
-  const transactions = readFileSync(
-    new URL(
-      "../../../../core/src/parsers/__fixtures__/degiro/nl/transactions.csv",
-      import.meta.url,
-    ),
-    "utf8",
-  );
+test("a transactions-only import reports trades and no cash-history claim", async () => {
   const result = await createDeGiroFileImport().load({
-    filename: "Transactions.csv",
-    text: transactions,
+    files: [{ filename: "Transactions.csv", text: fixture("nl/transactions.csv") }],
     entity: "BV1",
   });
 
   expect(result.source).toBe("DeGiro transactions");
-  expect(result.problems).toEqual([
-    "DeGiro transactions-export herkend, maar nog niet uitgelezen: de rij-mapping volgt in #315–#319",
-  ]);
-  // No section was read: an empty complete section would wipe stored rows.
+  expect(result.problems).toEqual([]);
+  expect(result.sections.trades.status).toBe("complete");
+  expect(result.sections.trades.rows).toHaveLength(25);
+  for (const trade of result.sections.trades.rows) {
+    expect(trade.entity).toBe("BV1");
+    expect(trade.broker).toBe("degiro");
+  }
+  // The transaction export reads trades only; every other section is unread.
   for (const section of [
     result.sections.positions,
-    result.sections.trades,
     result.sections.dividends,
-    result.sections.cashBalances,
     result.sections.cashFlows,
+    result.sections.cashBalances,
   ]) {
-    expect(section.status).toBe("unavailable");
-    expect(section.rows).toEqual([]);
+    expect(section).toEqual({ status: "unavailable", rows: [] });
   }
-  expect(result.cashHistory).toBeUndefined();
+  expect(result.cashHistory).toEqual({
+    entity: "BV1",
+    broker: "degiro",
+    tradeCash: "cash-flows",
+    status: "unknown",
+    reason: expect.stringMatching(/geen rekeningoverzicht/),
+  });
+});
+
+test("account and transactions in one import merge and stay complete", async () => {
+  const result = await createDeGiroFileImport().load({
+    files: [
+      { filename: "Account.csv", text: account() },
+      { filename: "Transactions.csv", text: fixture("nl/transactions-overlap.csv") },
+    ],
+    entity: "BV1",
+  });
+
+  expect(result.source).toBe("DeGiro account + transactions");
+  expect(result.problems).toEqual([]);
+  expect(result.sections.trades.status).toBe("complete");
+  expect(result.sections.trades.rows).toHaveLength(4);
+  expect(result.cashHistory).toMatchObject({
+    status: "complete",
+    tradeCash: "cash-flows",
+  });
+  // Two fills share one Order Id; the snapshot ids must still be distinct.
+  const ids = brokerTradeRowIds("degiro", result.sections.trades.rows);
+  expect(ids).toHaveLength(result.sections.trades.rows.length);
+  expect(new Set(ids).size).toBe(ids.length);
 });

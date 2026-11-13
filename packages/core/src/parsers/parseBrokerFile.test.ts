@@ -11,9 +11,10 @@ import { DEGIRO_HEADERS, detectProfile } from "./degiro/profiles.js";
  * "Current state"). These tests pin the replacement: the header alone decides
  * the profile, and the filename is never consulted.
  *
- * The invented #47/#49 DeGiro fixtures are gone (#313). Row mapping is not part
- * of this issue; it lands in #315–#319, so a recognised file still reports one
- * problem instead of returning rows.
+ * The invented #47/#49 DeGiro fixtures are gone (#313). The account statement is
+ * fully mapped (#315–#317), the transaction export maps to trades and an unknown
+ * cash-history claim (#318), and the portfolio export still only names itself
+ * (#319).
  */
 
 const fixture = (path: string): string =>
@@ -49,26 +50,37 @@ test("the real-format account statement is detected and mapped as `account`, not
   expect(parsed.period).toEqual({ from: "2026-01-05", to: "2026-03-06" });
 });
 
-test("transactions and portfolio still only name themselves", () => {
-  // Their row mapping lands in #318/#319. Returning empty sections without a
-  // problem would look like a complete read that wipes stored rows.
-  for (const [text, profile] of [
-    [transactions, "transactions"],
-    [portfolio, "portfolio"],
-  ] as const) {
-    const parsed = parseBrokerFile("export.csv", text);
-    expect(parsed.profile).toBe(profile);
-    expect(parsed.positions).toEqual([]);
-    expect(parsed.trades).toEqual([]);
-    expect(parsed.dividends).toBeUndefined();
-    expect(parsed.cashFlows).toBeUndefined();
-    expect(parsed.cashBalances).toBeUndefined();
-    expect(parsed.cashHistory).toBeUndefined();
-    expect(parsed.period).toBeUndefined();
-    expect(parsed.problems).toEqual([
-      `DeGiro ${profile}-export herkend, maar nog niet uitgelezen: de rij-mapping volgt in #315–#319`,
-    ]);
-  }
+test("a transactions export maps to trades but claims no cash history", () => {
+  const parsed = parseBrokerFile("Transactions.csv", transactions);
+  expect(parsed.profile).toBe("transactions");
+  expect(parsed.source).toBe("DeGiro transactions");
+  expect(parsed.positions).toEqual([]);
+  expect(parsed.trades).toHaveLength(25);
+  expect(parsed.dividends).toBeUndefined();
+  expect(parsed.cashFlows).toBeUndefined();
+  expect(parsed.cashBalances).toBeUndefined();
+  // Only the account statement proves cash history; a trade list does not.
+  expect(parsed.cashHistory).toMatchObject({ status: "unknown" });
+  expect(parsed.period).toEqual({ from: "2022-03-30", to: "2025-02-06" });
+  expect(parsed.problems).toEqual([]);
+  expect(parsed.sections).toEqual(["trades"]);
+});
+
+test("a portfolio export is recognised but its row mapping is still #319", () => {
+  // Reporting an empty complete section would look like a read that wipes
+  // stored rows, so the file still names itself and adds one problem.
+  const parsed = parseBrokerFile("Portfolio.csv", portfolio);
+  expect(parsed.profile).toBe("portfolio");
+  expect(parsed.positions).toEqual([]);
+  expect(parsed.trades).toEqual([]);
+  expect(parsed.dividends).toBeUndefined();
+  expect(parsed.cashFlows).toBeUndefined();
+  expect(parsed.cashBalances).toBeUndefined();
+  expect(parsed.cashHistory).toBeUndefined();
+  expect(parsed.period).toBeUndefined();
+  expect(parsed.problems).toEqual([
+    "DeGiro portfolio-export herkend, maar nog niet uitgelezen: de rij-mapping volgt in #319",
+  ]);
 });
 
 test.each([

@@ -1,11 +1,13 @@
 import {
+  type BrokerFileInput,
+  type BrokerFileSection,
   type CashBalance,
   type CashFlow,
   type CashHistoryCoverage,
   type Dividend,
   type Position,
   type TradeWithoutId,
-  parseBrokerFile,
+  parseBrokerFiles,
 } from "@lavega/core";
 import {
   type BrokerResult,
@@ -14,30 +16,29 @@ import {
 } from "../BrokerAccessAdapter.js";
 
 export type DeGiroFileImport = {
-  load(input: { filename: string; text: string; entity: string }): Promise<BrokerResult>;
+  load(input: { files: readonly BrokerFileInput[]; entity: string }): Promise<BrokerResult>;
 };
 
 /**
- * DeGiro file import: one `Account.csv` is a complete result.
+ * DeGiro file import: one import can hold the account statement, the
+ * transaction export and the portfolio export.
  *
  * The adapter stamps `entity` and `broker` on every row and adds the two facts
  * the parser cannot know: the result's `tradeCash` stream and, per section,
- * whether the file read it at all. A section the file did not read is reported
+ * whether a parsed file read it at all. A section no file read is reported
  * `unavailable`, never `complete` with no rows: the snapshot merge would treat
  * an empty complete section as a broker that reported nothing and wipe the
  * rows already stored.
  */
 export function createDeGiroFileImport(): DeGiroFileImport {
   return {
-    async load({ filename, text, entity }) {
-      const parsed = parseBrokerFile(filename, text);
+    async load({ files, entity }) {
+      const parsed = parseBrokerFiles(files);
       const status: BrokerSectionStatus = parsed.problems.length > 0 ? "partial" : "complete";
-      // Only the account statement is mapped so far; the other profiles still
-      // name themselves and read no rows.
-      const mapped = parsed.profile === "account";
+      const readSections = new Set<BrokerFileSection>(parsed.sections ?? []);
 
-      const section = <T>(rows: T[]): BrokerSection<T> =>
-        mapped ? { status, rows } : { status: "unavailable", rows: [] };
+      const section = <T>(name: BrokerFileSection, rows: T[]): BrokerSection<T> =>
+        readSections.has(name) ? { status, rows } : { status: "unavailable", rows: [] };
 
       const trades: TradeWithoutId[] = parsed.trades.map((trade) => ({
         ...trade,
@@ -64,13 +65,14 @@ export function createDeGiroFileImport(): DeGiroFileImport {
 
       return {
         sections: {
-          /* The account statement carries no holdings. Reporting it `complete`
-           * with no rows would wipe the stored positions on every import. */
+          /* No mapped DeGiro export carries holdings yet. Reporting the section
+           * `complete` with no rows would wipe the stored positions on every
+           * import; the portfolio export lands in #319. */
           positions: { status: "unavailable", rows: [] as Position[] },
-          trades: section(trades),
-          dividends: section(dividends),
-          cashBalances: section(cashBalances),
-          cashFlows: section(cashFlows),
+          trades: section("trades", trades),
+          dividends: section("dividends", dividends),
+          cashBalances: section("cashBalances", cashBalances),
+          cashFlows: section("cashFlows", cashFlows),
         },
         ...(cashHistory ? { cashHistory } : {}),
         ...(parsed.period ? { period: parsed.period } : {}),
