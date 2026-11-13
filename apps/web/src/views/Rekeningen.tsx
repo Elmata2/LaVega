@@ -3,6 +3,7 @@ import type { Account, AccountSummary, Tx, DuplicateGroup, Valuation } from "@la
 import {
   accountSummaries,
   accountIsLiability,
+  isEurCurrency,
   accountType,
   accountTypeKind,
   accountTypeKindOf,
@@ -95,8 +96,9 @@ export type BankGroup = {
   /** False for the "Zonder bank" group. */
   named: boolean;
   rows: AccountSummary[];
-  /** Sum of the balances we actually hold, in euros. **Null when not one
-   *  account in the group has a balance** — an unknown saldo is never summed as
+  /** Sum of the EUR balances we actually hold, in euros; a balance in another
+   *  currency is not summed and counts as unknown. **Null when not one
+   *  account in the group has a EUR balance** — an unknown saldo is never summed as
    *  a zero, so a bank with nothing known shows no figure at all. */
   total: number | null;
   knownCount: number;
@@ -141,7 +143,9 @@ export function groupAccountsByBank(
     let txCount = 0;
     for (const r of sorted) {
       txCount += r.txCount;
-      if (r.account.balance !== null) {
+      // A non-EUR balance is not euros: it never enters the euro total and counts
+      // as unknown for it (same rule as totalePositie / core ingest).
+      if (r.account.balance !== null && isEurCurrency(r.account.currency)) {
         cents += Math.round(r.account.balance * 100);
         knownCount += 1;
         if (!r.account.balanceDate) undatedCount += 1;

@@ -181,7 +181,12 @@ test("a group with some unknown balances marks its total as partial", () => {
 });
 
 test("a fully known group has no partial marker", () => {
-  render({ accounts: [acct({ key: "a", balance: 100 }), acct({ key: "b", balance: 5 })] });
+  render({
+    accounts: [
+      acct({ key: "a", balance: 100, balanceDate: "2026-11-01" }),
+      acct({ key: "b", balance: 5, balanceDate: "2026-11-01" }),
+    ],
+  });
   expect(host.querySelector(".shell2-acc-partial")).toBeNull();
 });
 
@@ -208,4 +213,44 @@ test("onNavigate is not called for a modifier-click on the plan link", () => {
   });
   document.removeEventListener("click", swallow);
   expect(onNavigate).not.toHaveBeenCalled();
+});
+
+test("a USD row shows its own currency, never a euro sign, and the head is partial", () => {
+  render({
+    accounts: [
+      acct({ key: "e", name: "Eur", bank: "ING", balance: 100 }),
+      acct({ key: "u", name: "Dollar", bank: "ING", balance: 500, currency: "USD" }),
+    ],
+  });
+  const usd = rows().find((r) => r.textContent!.includes("Dollar"))!;
+  const bal = usd.querySelector(".shell2-acc-bal")!.textContent!;
+  expect(bal).toContain("500,00");
+  expect(bal).toContain("US$");
+  expect(bal).not.toContain("€");
+  const total = host.querySelector(".shell2-acc-total")!.textContent!;
+  expect(total).toContain("100,00");
+  expect(total).not.toContain("600");
+  expect(total).toContain("1 van 2");
+});
+
+test("a group of only USD accounts reads saldo onbekend", () => {
+  render({ accounts: [acct({ key: "u", name: "Dollar", balance: 500, currency: "USD" })] });
+  expect(host.querySelector(".shell2-acc-total")!.textContent).toBe("saldo onbekend");
+});
+
+test("head carries the dag onbekend marker when a summed balance has no date", () => {
+  render({
+    accounts: [
+      acct({ key: "d", name: "Dated", bank: "ING", balance: 100, balanceDate: "2026-11-01" }),
+      acct({ key: "n", name: "Undated", bank: "ING", balance: 50 }),
+    ],
+  });
+  expect(host.querySelector(".shell2-acc-total")!.textContent).toContain("dag onbekend");
+});
+
+test("head has no dag onbekend marker when every summed balance is dated", () => {
+  render({
+    accounts: [acct({ key: "d", bank: "ING", balance: 100, balanceDate: "2026-11-01" })],
+  });
+  expect(host.querySelector(".shell2-acc-total")!.textContent).not.toContain("dag onbekend");
 });

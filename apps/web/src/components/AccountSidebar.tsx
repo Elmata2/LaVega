@@ -1,11 +1,11 @@
 import { useMemo, useState, type MouseEvent } from "react";
-import { accountIsLiability, type Account } from "@lavega/core";
+import { accountIsLiability, isEurCurrency, type Account } from "@lavega/core";
 import type { View } from "../App";
 import { useAppLocale } from "../appLocale.js";
 import { pathForView } from "../appRoutes";
 import { shellCopy } from "../copy/shell.js";
 import { moneyCopy } from "../copy/money.js";
-import { formatSignedEuroIn } from "../format.js";
+import { formatSignedCurrencyIn, formatSignedEuroIn } from "../format.js";
 import { groupAccountsByBank } from "../views/Rekeningen";
 import { LineIcon, navClick } from "./Rail.js";
 
@@ -68,17 +68,24 @@ export function AccountSidebar({
         ? c.accountSidebar.emptyDebts
         : c.accountSidebar.emptyAssets;
 
-  const balance = (b: number | null) =>
-    b === null ? (
+  const balance = (account: Account) => {
+    const b = account.balance;
+    return b === null ? (
       <span className="shell2-acc-bal shell2-acc-unknown">{money.saldoOnbekend}</span>
     ) : (
       <span className={`shell2-acc-bal ${b >= 0 ? "text-pos" : "text-neg"}`}>
-        {formatSignedEuroIn(locale, b)}
+        {isEurCurrency(account.currency)
+          ? formatSignedEuroIn(locale, b)
+          : formatSignedCurrencyIn(locale, b, account.currency)}
       </span>
     );
+  };
 
   const addRow = (
-    <button type="button" className="shell2-acc-add" onClick={() => {
+    <button
+      type="button"
+      className="shell2-acc-add"
+      onClick={() => {
         onAddAccount();
         onNavigate?.();
       }}
@@ -94,10 +101,12 @@ export function AccountSidebar({
           href={pathForView("plan")}
           className="shell2-acc-plan"
           aria-current={view === "plan" ? "page" : undefined}
-          onClick={(e: MouseEvent) => navClick(e, () => {
+          onClick={(e: MouseEvent) =>
+            navClick(e, () => {
               onOpenPlan();
               onNavigate?.();
-            })}
+            })
+          }
         >
           <LineIcon>
             <path d="M5 4h14v16H5z" />
@@ -157,6 +166,9 @@ export function AccountSidebar({
                     {money.vanKnownVanTotal(g.knownCount, g.rows.length)}
                   </span>
                 )}
+                {g.undatedCount > 0 && (
+                  <span className="shell2-acc-partial"> {money.dagOnbekend}</span>
+                )}
               </span>
             </summary>
             <ul className="shell2-acc-list">
@@ -172,7 +184,7 @@ export function AccountSidebar({
                     }}
                   >
                     <span className="shell2-acc-name">{account.name || account.key}</span>
-                    {balance(account.balance)}
+                    {balance(account)}
                   </button>
                 </li>
               ))}

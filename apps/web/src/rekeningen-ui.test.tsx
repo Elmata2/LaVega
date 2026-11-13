@@ -111,6 +111,29 @@ test("a partly-known bank reports how many of its accounts the total covers", ()
   expect(mixed.unknownCount).toBe(1);
 });
 
+test("a non-EUR balance never enters the euro total; it counts as unknown", () => {
+  const g = groupAccountsByBank(
+    accountSummaries(
+      [
+        acc({ key: "A", bank: "ING", balance: 100 }),
+        acc({ key: "B", bank: "ING", balance: 500, currency: "USD" }),
+      ],
+      [],
+    ),
+  )[0];
+  expect(g.total).toBe(100);
+  expect(g.knownCount).toBe(1);
+  expect(g.unknownCount).toBe(1);
+});
+
+test("a bank whose only known balances are non-EUR has no total", () => {
+  const g = groupAccountsByBank(
+    accountSummaries([acc({ key: "B", bank: "ING", balance: 500, currency: "USD" })], []),
+  )[0];
+  expect(g.total).toBeNull();
+  expect(g.knownCount).toBe(0);
+});
+
 test("banks typed with different casing are one group", () => {
   const groups = groupAccountsByBank(
     accountSummaries([acc({ key: "A", bank: "ING" }), acc({ key: "B", bank: "ing" })], []),
@@ -500,4 +523,18 @@ test("a bank group's saldo carries + or a real minus, as its colour does", () =>
     .filter((t) => /\d/.test(t));
   expect(totals.length).toBeGreaterThan(0);
   for (const t of totals) expect(t).toMatch(/^[+−]€\s/);
+});
+
+test("a bank group with a USD account shows a partial euro total, never the USD as euros", () => {
+  render({
+    accounts: [
+      acc({ key: "A", bank: "ING", balance: 100 }),
+      acc({ key: "B", bank: "ING", balance: 500, currency: "USD" }),
+    ],
+    txs: [],
+  });
+  const head = container!.querySelector('[data-testid="bank-group-saldo"]')!;
+  expect(head.textContent).toContain("100,00");
+  expect(head.textContent).not.toContain("600");
+  expect(head.textContent).toContain("1 van 2");
 });
