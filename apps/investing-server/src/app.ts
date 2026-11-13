@@ -235,6 +235,8 @@ type PriceDependencies = {
   credentialStatus: () => Promise<BrokerVaultStatus>;
   brokerReadability: () => Promise<BrokerReadability | undefined>;
   unlockCredentials: (passphrase: string) => Promise<boolean>;
+  /** One tenant's DeGiro file import. Absent when the server has no vault. */
+  deGiroImportRequest?: (request: Request) => Promise<Response>;
   problemReporter: ProblemReporter;
   dashboardReader: InvestingDashboardReader;
   onPriceDataChanged: () => void;
@@ -1404,6 +1406,14 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
     } catch {
       return c.json({ problems: ["Vault could not be unlocked"] }, 500);
     }
+  });
+  /* DeGiro is imported from the user's own export files (issue #323): preview
+   * parses and returns counts, commit merges under the broker lease. The
+   * runtime handler is bound to one tenant, so the path carries no tenant. */
+  investingApp.post("/api/investing/brokers/degiro/import", async (c) => {
+    if (!dependencies.deGiroImportRequest)
+      return c.json({ problems: ["DeGiro import is not available in this server mode"] }, 503);
+    return dependencies.deGiroImportRequest(c.req.raw);
   });
   investingApp.delete("/api/prices/cache", async (c) => {
     /* Prices are public reference data now (issue #307): with a database one

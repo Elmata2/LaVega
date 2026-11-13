@@ -1,12 +1,11 @@
-import { CREDENTIAL_BROKERS } from "@lavega/core";
-import type { BrokerCredentials, CredentialBroker, CredentialStore } from "@lavega/core";
+import { BROKER_IDS, CREDENTIAL_BROKERS, isCredentialBroker } from "@lavega/core";
+import type { BrokerCredentials, BrokerId, CredentialBroker, CredentialStore } from "@lavega/core";
+import type { BrokerAccountSnapshot } from "@lavega/adapters";
 import { UnreadableBrokerCredentialsError, type EncryptedBrokerRepository } from "@lavega/database";
 import type { RuntimeBrokerDataSnapshot } from "./runtimeBrokerData.js";
 import type { ServerVaultStatus } from "./fileCredentialStore.js";
 
-const BROKERS = CREDENTIAL_BROKERS;
-
-type BrokerSnapshot = NonNullable<RuntimeBrokerDataSnapshot[CredentialBroker]>;
+type BrokerSnapshot = NonNullable<RuntimeBrokerDataSnapshot[BrokerId]>;
 export type BrokerReadability = Record<CredentialBroker, "empty" | "readable" | "unreadable">;
 
 /**
@@ -34,6 +33,7 @@ export function createNeonCredentialStore(
   lock(): void;
   getBrokerData(): Promise<RuntimeBrokerDataSnapshot | null>;
   putBrokerData(snapshot: RuntimeBrokerDataSnapshot): Promise<void>;
+  putBrokerSnapshot(broker: BrokerId, snapshot: BrokerAccountSnapshot): Promise<void>;
   brokerReadability(): Promise<BrokerReadability>;
 } {
   /* The repository is already bound to one user and RLS enforces that boundary
@@ -44,7 +44,7 @@ export function createNeonCredentialStore(
   };
   const brokerReadability = async (): Promise<BrokerReadability> => {
     const brokers = {} as BrokerReadability;
-    for (const broker of BROKERS) {
+    for (const broker of CREDENTIAL_BROKERS) {
       try {
         brokers[broker] = (await repository.get(broker)) ? "readable" : "empty";
       } catch (error) {
@@ -83,16 +83,21 @@ export function createNeonCredentialStore(
       const stored = await repository.snapshots();
       if (!stored) return null;
       const snapshot: RuntimeBrokerDataSnapshot = {};
-      for (const broker of BROKERS)
+      for (const broker of BROKER_IDS)
         if (stored[broker]) snapshot[broker] = stored[broker] as BrokerSnapshot;
       return snapshot;
     },
     async putBrokerData(snapshot: RuntimeBrokerDataSnapshot) {
-      for (const broker of BROKERS) {
+      for (const broker of BROKER_IDS) {
         const brokerSnapshot = snapshot[broker];
         if (!brokerSnapshot) continue;
-        /* A snapshot row cannot exist without credentials — the table requires
-         * them. Broker data without a configured broker is stale state from a
+        if (!isCredentialBroker(broker)) {
+          /* An import-only broker has no connection to read a generation from;
+           * its snapshot-only row is the whole record. */
+          await repository.putSnapshotOnly(broker, brokerSnapshot);
+          continue;
+        }
+        /* Broker data without a configured broker is stale state from a
          * removed connection, so it is dropped rather than resurrected. */
         const row = await repository.get(broker);
         if (!row) continue;
@@ -101,6 +106,12 @@ export function createNeonCredentialStore(
          * reconnect that landed while the sync was running. */
         await repository.putSnapshot(broker, brokerSnapshot, row.credentialGeneration);
       }
+    },
+    async putBrokerSnapshot(broker, snapshot) {
+      if (isCredentialBroker(broker))
+        throw new Error("A credential broker's snapshot is written by its sync");
+      if (!(await repository.putSnapshotOnly(broker, snapshot)))
+        throw new Error("The credential vault row changed while the import was running");
     },
   };
 }

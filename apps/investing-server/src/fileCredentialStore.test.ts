@@ -2,6 +2,7 @@ import { mkdir, mkdtemp, readFile, rename, rm, writeFile } from "node:fs/promise
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test } from "vitest";
+import type { BrokerAccountSnapshot } from "@lavega/adapters";
 import { createFileCredentialStore, runtimeCredentialFile } from "./fileCredentialStore.js";
 
 test("runtime credential file prefers LAVEGA_VAULT_FILE", () => {
@@ -119,6 +120,38 @@ test("encrypted vault restores broker data after process restart", async () => {
     const second = createFileCredentialStore(filePath);
     expect(await second.unlock("vault-passphrase")).toBe(true);
     expect(await second.getBrokerData()).toEqual(brokerData);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("a per-broker snapshot write persists one broker and leaves the other", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "lavega-broker-snapshot-"));
+  const filePath = join(directory, "credentials.json");
+  const importSnapshot: BrokerAccountSnapshot = {
+    positions: [],
+    trades: [],
+    dividends: [],
+    lastImport: {
+      importedAt: "2026-11-13T12:00:00.000Z",
+      files: [{ filename: "Account.csv", sha256: "a".repeat(64) }],
+    },
+  };
+  try {
+    const vault = createFileCredentialStore(filePath);
+    await vault.setup("passphrase");
+    await vault.putBrokerData({ ibkr: { positions: [], trades: [], dividends: [] } });
+
+    await vault.putBrokerSnapshot("degiro", importSnapshot);
+
+    const expected = {
+      ibkr: { positions: [], trades: [], dividends: [] },
+      degiro: importSnapshot,
+    };
+    expect(await vault.getBrokerData()).toEqual(expected);
+    const reopened = createFileCredentialStore(filePath);
+    expect(await reopened.unlock("passphrase")).toBe(true);
+    expect(await reopened.getBrokerData()).toEqual(expected);
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

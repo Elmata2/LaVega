@@ -985,6 +985,36 @@ test("broker vault routes report status and unlock without returning passphrase"
   expect(unlockCredentials).toHaveBeenCalledWith("vault-passphrase");
 });
 
+test("DeGiro import route is 503 when the server has no import handler", async () => {
+  const response = await createApp().request("/api/investing/brokers/degiro/import", {
+    method: "POST",
+  });
+  expect(response.status).toBe(503);
+  expect(await response.json()).toEqual({
+    problems: ["DeGiro import is not available in this server mode"],
+  });
+});
+
+test("DeGiro import route forwards the raw request", async () => {
+  const deGiroImportRequest = vi.fn(
+    async (_request: Request) =>
+      new Response(JSON.stringify({ mode: "preview", files: [] }), { status: 200 }),
+  );
+  const investingApp = createApp({ deGiroImportRequest });
+
+  const response = await investingApp.request("/api/investing/brokers/degiro/import?mode=preview", {
+    method: "POST",
+    body: "not-multipart",
+  });
+
+  expect(response.status).toBe(200);
+  expect(deGiroImportRequest).toHaveBeenCalledOnce();
+  const forwarded = deGiroImportRequest.mock.calls[0]![0];
+  expect(forwarded).toBeInstanceOf(Request);
+  expect(new URL(forwarded.url).pathname).toBe("/api/investing/brokers/degiro/import");
+  expect(new URL(forwarded.url).search).toBe("?mode=preview");
+});
+
 test("broker vault unlock rejects wrong passphrase without leaking details", async () => {
   const investingApp = createApp({ unlockCredentials: vi.fn(async () => false) });
   const response = await investingApp.request("/api/brokers/credentials/unlock", {

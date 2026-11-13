@@ -142,8 +142,9 @@ import { createStoredFxProvider } from "./storedFxProvider.js";
 import { effectiveBenchmarkSymbols } from "./defaultBenchmark.js";
 import { untimed } from "./serverTiming.js";
 import { createBrokerSnapshotReader } from "./brokerSnapshotReader.js";
+import { createDeGiroImportHandler } from "./degiroImport.js";
 import { PortfolioRead, portfolioReadLayer } from "./portfolioRead.js";
-import { ManagedRuntime, type Layer } from "effect";
+import { DateTime, ManagedRuntime, type Layer } from "effect";
 import { createAgentRunController } from "./agentRun.js";
 
 export { app };
@@ -506,6 +507,30 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
           },
           write: (snapshot) => credentials.putBrokerData(snapshot),
         });
+    /* DeGiro files land in the same encrypted vault an API sync writes. The
+     * handler is built per tenant, so its lease, snapshot write and cache
+     * invalidation can never reach another user. */
+    const deGiroImportRequest = createDeGiroImportHandler({
+      vault: {
+        getBrokerData: () => credentials.getBrokerData(),
+        putBrokerSnapshot: (broker, snapshot) => credentials.putBrokerSnapshot(broker, snapshot),
+        ensureWritable: async () => {
+          if (credentialsArePerTenant()) return;
+          const status = await credentials.status();
+          if (status === "empty") await credentials.setup("");
+          else if (status === "locked") throw new Error("credential vault is locked");
+        },
+      },
+      operations: syncStateStore,
+      entity: environment("LAVEGA_INVESTING_ENTITY") ?? "personal",
+      now: () => DateTime.formatIso(DateTime.nowUnsafe()),
+      onCommitted: async (snapshot) => {
+        await loadBrokerData().catch(() => undefined);
+        brokerData.restore({ ...brokerData.snapshot(), degiro: snapshot });
+        brokerSnapshot.markCurrent();
+        dashboardCache.invalidate(tenantId);
+      },
+    });
     const readHistoryProgress = async (): Promise<BrokerHistoryProgress> => {
       const entries = await Promise.all(
         SCHEDULED_BROKERS.map(async (broker) => {
@@ -831,6 +856,7 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
         return unlocked;
       },
       dashboardReader,
+      deGiroImportRequest,
       healthCheck,
       priceSyncTargets: async () => {
         await loadBrokerData();
@@ -890,6 +916,8 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
   };
   const dashboardReader: InvestingDashboardReader = async ({ symbol, timing = untimed }) =>
     (await timing.measure("runtime", currentRuntime)).dashboardReader({ symbol, timing });
+  const deGiroImportRequest = async (request: Request): Promise<Response> =>
+    (await currentRuntime()).deGiroImportRequest(request);
   const runPortfolioAgentOnce = async (model?: string): Promise<AgentRunRecord> =>
     (await currentRuntime()).runPortfolioAgentOnce(model);
   const freshFundamentals =
@@ -1187,6 +1215,7 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
         marketDataConsentStore,
         personalNetWorthStore,
         dashboardReader,
+        deGiroImportRequest,
         onPriceDataChanged,
         onAccountWrappersChanged: onPriceDataChanged,
         priceSyncProgressStore,
@@ -1252,6 +1281,7 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
       marketDataConsentStore,
       personalNetWorthStore,
       dashboardReader,
+      deGiroImportRequest,
       onPriceDataChanged,
       onAccountWrappersChanged: onPriceDataChanged,
       priceSyncProgressStore,

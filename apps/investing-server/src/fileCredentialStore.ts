@@ -1,6 +1,7 @@
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
-import type { BrokerCredentials, CredentialBroker, CredentialStore } from "@lavega/core";
+import type { BrokerCredentials, BrokerId, CredentialBroker, CredentialStore } from "@lavega/core";
+import type { BrokerAccountSnapshot } from "@lavega/adapters";
 import type { RuntimeBrokerDataSnapshot } from "./runtimeBrokerData.js";
 import {
   decryptJSON,
@@ -50,6 +51,7 @@ export function createFileCredentialStore(
   /** Null when the vault holds nothing it can read: empty, or still locked. */
   getBrokerData(): Promise<RuntimeBrokerDataSnapshot | null>;
   putBrokerData(snapshot: RuntimeBrokerDataSnapshot): Promise<void>;
+  putBrokerSnapshot(broker: BrokerId, snapshot: BrokerAccountSnapshot): Promise<void>;
   getAgentRun(): Promise<AgentRunRecord | null>;
   startAgentRun(record: AgentRunRecord): Promise<boolean>;
   finishAgentRun(record: AgentRunRecord): Promise<boolean>;
@@ -176,6 +178,17 @@ export function createFileCredentialStore(
         if (!key || !salt || !data) throw new Error("credential vault is locked");
         const generation = lockGeneration;
         const next = { ...data, brokerData: structuredClone(snapshot) };
+        await writeBlob(await encryptJSON(key, salt, PBKDF2_ITERATIONS, next));
+        if (generation === lockGeneration) data = next;
+      });
+    },
+    putBrokerSnapshot(broker, snapshot) {
+      return queue(async () => {
+        if (!key || !salt || !data) throw new Error("credential vault is locked");
+        const generation = lockGeneration;
+        const brokerData = structuredClone(data.brokerData ?? {});
+        brokerData[broker] = structuredClone(snapshot);
+        const next = { ...data, brokerData };
         await writeBlob(await encryptJSON(key, salt, PBKDF2_ITERATIONS, next));
         if (generation === lockGeneration) data = next;
       });

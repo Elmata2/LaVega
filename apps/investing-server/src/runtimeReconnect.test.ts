@@ -62,6 +62,9 @@ function repository(unreadable: string[]): EncryptedBrokerRepository {
         credentialGeneration: (rows.get(broker)?.credentialGeneration ?? 0) + 1,
       });
     },
+    async putSnapshotOnly() {
+      return false;
+    },
     async putSnapshot(broker, snapshot, generation) {
       const row = rows.get(broker);
       if (!row || row.credentialGeneration !== generation) return false;

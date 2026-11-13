@@ -1,5 +1,6 @@
 import { expect, test, vi } from "vitest";
 import { createNeonCredentialStore } from "./neonCredentialStore.js";
+import type { BrokerAccountSnapshot } from "@lavega/adapters";
 import type { EncryptedBrokerRepository } from "@lavega/database";
 import { UnreadableBrokerCredentialsError } from "@lavega/database";
 
@@ -30,6 +31,16 @@ function fakeRepository(): EncryptedBrokerRepository & { rows: Map<string, Row> 
         snapshot: snapshot === undefined ? (existing?.snapshot ?? null) : snapshot,
         credentialGeneration: (existing?.credentialGeneration ?? 0) + 1,
       });
+    },
+    async putSnapshotOnly(broker: string, snapshot: unknown) {
+      const existing = rows.get(broker);
+      if (existing?.credentials != null) return false;
+      rows.set(broker, {
+        credentials: null,
+        snapshot,
+        credentialGeneration: existing?.credentialGeneration ?? 1,
+      });
+      return true;
     },
     async putSnapshot(broker: string, snapshot: unknown, credentialGeneration: number) {
       const existing = rows.get(broker);
@@ -157,4 +168,35 @@ test("database errors remain availability errors", async () => {
 
   await expect(store.status()).rejects.toThrow("database unavailable");
   await expect(store.getBrokerData()).rejects.toThrow("database unavailable");
+});
+
+const importSnapshot: BrokerAccountSnapshot = {
+  positions: [],
+  trades: [],
+  dividends: [],
+  lastImport: {
+    importedAt: "2026-11-13T12:00:00.000Z",
+    files: [{ filename: "Account.csv", sha256: "0".repeat(64) }],
+  },
+};
+
+test("an import-only broker's snapshot is stored without credentials and read back", async () => {
+  const repository = fakeRepository();
+  const store = createNeonCredentialStore(repository, "user-123");
+
+  await store.putBrokerData({ degiro: importSnapshot });
+
+  expect(repository.rows.get("degiro")?.credentials).toBeNull();
+  expect(await store.getBrokerData()).toEqual({ degiro: importSnapshot });
+});
+
+test("a direct import write refuses a credential broker and stores an import-only one", async () => {
+  const repository = fakeRepository();
+  const store = createNeonCredentialStore(repository, "user-123");
+  await store.putCredentials(trading212);
+
+  await expect(store.putBrokerSnapshot("trading212", importSnapshot)).rejects.toThrow(/sync/i);
+
+  await store.putBrokerSnapshot("degiro", importSnapshot);
+  expect(await store.getBrokerData()).toEqual({ degiro: importSnapshot });
 });

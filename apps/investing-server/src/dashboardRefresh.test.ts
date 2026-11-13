@@ -56,6 +56,12 @@ vi.mock("./credentialStore.js", () => ({
     putBrokerData: async (snapshot) => {
       persistence.snapshots.set(tenantId, structuredClone(snapshot));
     },
+    putBrokerSnapshot: async (broker, snapshot) => {
+      persistence.snapshots.set(tenantId, {
+        ...persistence.snapshots.get(tenantId),
+        [broker]: structuredClone(snapshot),
+      });
+    },
   }),
 }));
 
