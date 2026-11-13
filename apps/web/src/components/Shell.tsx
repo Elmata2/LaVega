@@ -1,11 +1,13 @@
-import { useState, type CSSProperties, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import type { View } from "../App";
 import { useAppLocale } from "../appLocale.js";
 import { shellCopy } from "../copy/shell.js";
 import { useMediaQuery } from "../hooks/useMediaQuery.js";
 import { useSidebar } from "../hooks/useSidebar.js";
 import { RAIL_WIDTH, SHELL_MIN_VIEWPORT, SIDEBAR_MIN_WIDTH } from "../lib/sidebar.js";
-import { BottomBar, PhoneTopBar } from "./BottomBar.js";
+import { BAR_IDS, BottomBar, PhoneTopBar } from "./BottomBar.js";
 import { Rail, type ShellNavProps } from "./Rail.js";
+import { ShellDrawer, type DrawerMode } from "./ShellDrawer.js";
 import { SidebarResizeHandle } from "./SidebarResizeHandle.js";
 
 /* The new app frame (SHELL_V2): full viewport, no margin, radius or shadow.
@@ -20,7 +22,8 @@ import { SidebarResizeHandle } from "./SidebarResizeHandle.js";
  * `nav` feeds the rail (>= 1024) or the phone top bar + bottom bar (< 1024), one
  * <nav> at a time. `sidebar` is the account sidebar body (AccountSidebar); this
  * frame owns its width, collapse and resize handle, so the toggle and the handle
- * share one `useSidebar()` state. The drawer arrives in step 9b. */
+ * share one `useSidebar()` state. Below 1024 `ShellDrawer` holds the module list and
+ * the same sidebar body; while it is open everything else is `inert`. */
 
 export type ShellProps = {
   /** Page title, the one h1. */
@@ -66,8 +69,46 @@ export function Shell({ title, actions, nav, sidebar, children }: ShellProps) {
 
   /* `inert` is not in React 18's types; an empty string renders the attribute. */
   const inertProps = (open ? {} : { inert: "" }) as Record<string, string>;
-  const phoneNav = wide ? undefined : nav;
+  const rootRef = useRef<HTMLDivElement>(null);
+  /* `view` is the view the drawer was opened on: any other view closes it, so
+   * there is no effect that closes on navigation. */
+  const [drawer, setDrawer] = useState<{ open: boolean; mode: DrawerMode; view?: View }>({
+    open: false,
+    mode: "menu",
+  });
+  if (wide && drawer.open) setDrawer({ ...drawer, open: false });
+  const drawerOpen = drawer.open && !wide && drawer.view === nav?.view;
+  const closeDrawer = useCallback(() => setDrawer((d) => ({ ...d, open: false })), []);
+  const openMenu = nav?.onOpenMenu;
+  const openMore = nav?.onOpenMore;
+  const phoneNav = wide
+    ? undefined
+    : nav && {
+        ...nav,
+        onOpenMenu: () => {
+          openMenu?.();
+          setDrawer({ open: true, mode: "menu", view: nav.view });
+        },
+        onOpenMore: () => {
+          openMore?.();
+          setDrawer({ open: true, mode: "more", view: nav.view });
+        },
+      };
   const narrow = phoneNav !== undefined;
+  /* Focus goes back to the opener by class: Safari does not focus a button on
+   * click, so `document.activeElement` at open time is unreliable. */
+  const wasOpen = useRef(false);
+  const mode = drawer.mode;
+  useEffect(() => {
+    if (wasOpen.current && !drawerOpen) {
+      const opener = rootRef.current?.querySelector<HTMLElement>(
+        mode === "more" ? ".shell2-bar-more" : ".shell2-phonebar-menu",
+      );
+      (opener ?? document.getElementById("main"))?.focus();
+    }
+    wasOpen.current = drawerOpen;
+  }, [drawerOpen, mode]);
+  const behind = (drawerOpen ? { inert: "" } : {}) as Record<string, string>;
   const style = {
     "--shell2-sidebar-w": `${shownWidth}px`,
     "--shell2-rail-w": `${RAIL_WIDTH}px`,
@@ -75,12 +116,14 @@ export function Shell({ title, actions, nav, sidebar, children }: ShellProps) {
 
   return (
     <div
+      ref={rootRef}
       className={`shell2${narrow ? " shell2-narrow" : ""}${dragWidth === null ? "" : " shell2-dragging"}`}
       style={style}
     >
       <a
         href="#main"
         className="shell2-skip"
+        {...behind}
         onClick={(e) => {
           e.preventDefault();
           document.getElementById("main")?.focus();
@@ -113,8 +156,10 @@ export function Shell({ title, actions, nav, sidebar, children }: ShellProps) {
           />
         </aside>
       )}
-      <main id="main" className="shell2-main" tabIndex={-1}>
-        {phoneNav && <PhoneTopBar {...phoneNav} />}
+      <main id="main" className="shell2-main" tabIndex={-1} {...behind}>
+        {phoneNav && (
+          <PhoneTopBar {...phoneNav} expanded={drawerOpen && drawer.mode === "menu"} />
+        )}
         <header className="shell2-topbar">
           {wide && (
             <button
@@ -133,7 +178,29 @@ export function Shell({ title, actions, nav, sidebar, children }: ShellProps) {
         </header>
         <div className="shell2-content">{children}</div>
       </main>
-      {phoneNav && <BottomBar {...phoneNav} />}
+      {phoneNav && (
+        <BottomBar
+          {...phoneNav}
+          expanded={drawerOpen && drawer.mode === "more"}
+          behind={drawerOpen}
+        />
+      )}
+      {phoneNav && (
+        <ShellDrawer
+          open={drawerOpen}
+          mode={drawer.mode}
+          modules={
+            drawer.mode === "more"
+              ? phoneNav.modules.filter((m) => !BAR_IDS.has(m.id))
+              : phoneNav.modules
+          }
+          view={phoneNav.view}
+          onNavigate={phoneNav.onNavigate}
+          onClose={closeDrawer}
+        >
+          {sidebar}
+        </ShellDrawer>
+      )}
     </div>
   );
 }

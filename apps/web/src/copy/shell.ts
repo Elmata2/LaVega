@@ -63,6 +63,13 @@ export type ShellCopy = {
     openMenu: string;
     more: string;
   };
+  /** The phone drawer (components/ShellDrawer.tsx). */
+  drawer: {
+    menuTitle: string;
+    moreTitle: string;
+    close: string;
+    modulesLabel: string;
+  };
   /** The account sidebar (components/AccountSidebar.tsx). */
   accountSidebar: {
     tabsLabel: string;
@@ -313,6 +320,12 @@ const nl: ShellCopy = {
     skipLink: "Naar inhoud",
     openMenu: "Menu openen",
     more: "Meer",
+  },
+  drawer: {
+    menuTitle: "Menu",
+    moreTitle: "Meer",
+    close: "Menu sluiten",
+    modulesLabel: "Modules",
   },
   accountSidebar: {
     tabsLabel: "Filter rekeningen",
@@ -697,6 +710,12 @@ const en: ShellCopy = {
     skipLink: "Skip to content",
     openMenu: "Open menu",
     more: "More",
+  },
+  drawer: {
+    menuTitle: "Menu",
+    moreTitle: "More",
+    close: "Close menu",
+    modulesLabel: "Modules",
   },
   accountSidebar: {
     tabsLabel: "Filter accounts",

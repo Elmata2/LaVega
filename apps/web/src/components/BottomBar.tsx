@@ -6,12 +6,17 @@ import { shellCopy } from "../copy/shell.js";
 
 /* Below 1024px: a sticky 48px top bar (menu, brand, Profiel) and a fixed bottom
  * tab bar. The bar holds exactly the core modules; every other enabled module
- * sits behind "Meer". Both drawer openers are callbacks until step 9b. */
+ * sits behind "Meer". Both openers take their drawer state from Shell. */
 
 /** Registry order decides the sequence; "plan" is only in `modules` when unlocked. */
-const BAR_IDS: ReadonlySet<ModuleId> = new Set(["overview", "optimalisatie", "accounts", "plan"]);
+export const BAR_IDS: ReadonlySet<ModuleId> = new Set(["overview", "optimalisatie", "accounts", "plan"]);
 
-export function PhoneTopBar({ view, onOpenProfile, onOpenMenu }: ShellNavProps) {
+export function PhoneTopBar({
+  view,
+  onOpenProfile,
+  onOpenMenu,
+  expanded = false,
+}: ShellNavProps & { expanded?: boolean }) {
   const [locale] = useAppLocale();
   const c = shellCopy[locale];
   return (
@@ -20,6 +25,8 @@ export function PhoneTopBar({ view, onOpenProfile, onOpenMenu }: ShellNavProps) 
         type="button"
         className="shell2-phonebar-menu"
         aria-label={c.frame.openMenu}
+        aria-haspopup="dialog"
+        aria-expanded={expanded}
         onClick={() => onOpenMenu?.()}
       >
         <svg
@@ -54,13 +61,24 @@ export function PhoneTopBar({ view, onOpenProfile, onOpenMenu }: ShellNavProps) 
   );
 }
 
-export function BottomBar({ view, modules, onNavigate, onOpenMore }: ShellNavProps) {
+export function BottomBar({
+  view,
+  modules,
+  onNavigate,
+  onOpenMore,
+  expanded = false,
+  behind = false,
+}: ShellNavProps & { expanded?: boolean; behind?: boolean }) {
   const [locale] = useAppLocale();
   const c = shellCopy[locale];
   const items = modules.filter((m) => BAR_IDS.has(m.id));
   const hasMore = modules.some((m) => !BAR_IDS.has(m.id));
   return (
-    <nav className="shell2-bottombar" aria-label={c.nav.ariaLabel}>
+    <nav
+      className="shell2-bottombar"
+      aria-label={c.nav.ariaLabel}
+      {...((behind ? { inert: "" } : {}) as Record<string, string>)}
+    >
       {items.map((m) => (
         <a
           key={m.id}
@@ -76,7 +94,13 @@ export function BottomBar({ view, modules, onNavigate, onOpenMore }: ShellNavPro
         </a>
       ))}
       {hasMore && (
-        <button type="button" className="shell2-bar-item" onClick={() => onOpenMore?.()}>
+        <button
+          type="button"
+          className="shell2-bar-item shell2-bar-more"
+          aria-haspopup="dialog"
+          aria-expanded={expanded}
+          onClick={() => onOpenMore?.()}
+        >
           <span className="shell2-rail-icon" aria-hidden="true">
             <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true">
               <circle cx="5.5" cy="12" r="1.6" />

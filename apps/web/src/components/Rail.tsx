@@ -16,9 +16,9 @@ export type ShellNavProps = {
   modules: ModuleDef[];
   onNavigate: (view: View) => void;
   onOpenProfile: () => void;
-  /** Phone menu button. The drawer arrives in step 9b. */
+  /** Phone menu button; Shell opens the drawer and also calls this. */
   onOpenMenu?: () => void;
-  /** Phone "Meer" slot. The drawer arrives in step 9b. */
+  /** Phone "Meer" slot; Shell opens the drawer and also calls this. */
   onOpenMore?: () => void;
 };
 
