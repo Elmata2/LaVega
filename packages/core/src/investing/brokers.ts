@@ -1,10 +1,10 @@
 /* ONE LIST OF BROKERS AND WHAT EACH SUPPORTS.
  *
- * Every union of broker ids in the app used to be hand-written:
- * `"ibkr" | "trading212"` appeared in the server routes, the snapshot map, the
- * credential store and the web settings form. Adding a broker meant finding all
- * of them, and a forgotten one failed quietly — a broker the snapshot dropped,
- * or one the credential form still offered.
+ * Every union of broker ids in the app used to be hand-written: the credential
+ * brokers were spelled out one by one in the server routes, the snapshot map,
+ * the credential store and the web settings form. Adding a broker meant finding
+ * all of them, and a forgotten one failed quietly — a broker the snapshot
+ * dropped, or one the credential form still offered.
  *
  * This table is the only place a broker is declared. The capability flags are
  * `as const`, so the derived types below turn a capability into a closed set:
