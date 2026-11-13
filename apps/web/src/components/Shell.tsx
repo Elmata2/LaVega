@@ -32,8 +32,10 @@ export type ShellProps = {
   actions?: ReactNode;
   /** Navigation data. Without it the rail placeholder renders (tests). */
   nav?: ShellNavProps;
-  /** Account sidebar body (AccountSidebar). */
-  sidebar?: ReactNode;
+  /** Account sidebar body (AccountSidebar). A function receives the drawer's
+   *  close seam (pass it as `onNavigate`); the inline sidebar calls it with
+   *  nothing to close. */
+  sidebar?: ReactNode | ((onNavigate?: () => void) => ReactNode);
   children: ReactNode;
 };
 
@@ -76,8 +78,8 @@ export function Shell({ title, actions, nav, sidebar, children }: ShellProps) {
     open: false,
     mode: "menu",
   });
-  if (wide && drawer.open) setDrawer({ ...drawer, open: false });
-  const drawerOpen = drawer.open && !wide && drawer.view === nav?.view;
+  if (drawer.open && (wide || drawer.view !== nav?.view)) setDrawer({ ...drawer, open: false });
+  const drawerOpen = drawer.open && !wide;
   const closeDrawer = useCallback(() => setDrawer((d) => ({ ...d, open: false })), []);
   const openMenu = nav?.onOpenMenu;
   const openMore = nav?.onOpenMore;
@@ -100,14 +102,14 @@ export function Shell({ title, actions, nav, sidebar, children }: ShellProps) {
   const wasOpen = useRef(false);
   const mode = drawer.mode;
   useEffect(() => {
-    if (wasOpen.current && !drawerOpen) {
+    if (wasOpen.current && !drawerOpen && !wide) {
       const opener = rootRef.current?.querySelector<HTMLElement>(
         mode === "more" ? ".shell2-bar-more" : ".shell2-phonebar-menu",
       );
       (opener ?? document.getElementById("main"))?.focus();
     }
     wasOpen.current = drawerOpen;
-  }, [drawerOpen, mode]);
+  }, [drawerOpen, mode, wide]);
   const behind = (drawerOpen ? { inert: "" } : {}) as Record<string, string>;
   const style = {
     "--shell2-sidebar-w": `${shownWidth}px`,
@@ -139,7 +141,9 @@ export function Shell({ title, actions, nav, sidebar, children }: ShellProps) {
           aria-label={c.sidebarLabel}
           {...inertProps}
         >
-          <div className="shell2-sidebar-inner">{sidebar}</div>
+          <div className="shell2-sidebar-inner">
+            {typeof sidebar === "function" ? sidebar() : sidebar}
+          </div>
           <SidebarResizeHandle
             width={shownWidth}
             min={SIDEBAR_MIN_WIDTH}
@@ -198,7 +202,7 @@ export function Shell({ title, actions, nav, sidebar, children }: ShellProps) {
           onNavigate={phoneNav.onNavigate}
           onClose={closeDrawer}
         >
-          {sidebar}
+          {(close) => (typeof sidebar === "function" ? sidebar(close) : sidebar)}
         </ShellDrawer>
       )}
     </div>

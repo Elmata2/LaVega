@@ -4,7 +4,7 @@ import { pathForView } from "../appRoutes";
 import { useAppLocale } from "../appLocale.js";
 import { shellCopy } from "../copy/shell.js";
 import type { ModuleDef } from "./moduleRegistry";
-import { navClick } from "./Rail.js";
+import { InvestingGlyph, investingLinkProps, navClick } from "./Rail.js";
 
 /* The phone drawer (< 1024px, SHELL_V2): a left sheet with the module list on
  * top (the rail is gone) and the account sidebar body below it. Shell-local on
@@ -29,8 +29,9 @@ export type ShellDrawerProps = {
   view: View;
   onNavigate: (view: View) => void;
   onClose: () => void;
-  /** Account sidebar body (AccountSidebar). */
-  children?: ReactNode;
+  /** Account sidebar body (AccountSidebar), given the close seam to call after
+   *  it navigates. */
+  children?: (onNavigate: () => void) => ReactNode;
 };
 
 const TABBABLE = "a[href], button:not([disabled]), summary, input, select, textarea, [tabindex]";
@@ -56,6 +57,7 @@ export function ShellDrawer({
   const [locale] = useAppLocale();
   const c = shellCopy[locale];
   const titleId = useId();
+  const investing = investingLinkProps();
   const panelRef = useRef<HTMLDivElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
   const listRef = useRef<HTMLUListElement>(null);
@@ -135,17 +137,7 @@ export function ShellDrawer({
             </svg>
           </button>
         </div>
-        {/* A click on a link or an account row means "go there": close. Tabs
-         *  and the group heads stay open. Capture-free, so the handler of the
-         *  target runs first. */}
-        <div
-          className="shell2-drawer-body"
-          onClick={(e) => {
-            if ((e.target as HTMLElement).closest("a[href], .shell2-acc-row, .shell2-acc-add")) {
-              onClose();
-            }
-          }}
-        >
+        <div className="shell2-drawer-body">
           <ul ref={listRef} className="shell2-drawer-modules" aria-label={c.drawer.modulesLabel}>
             {modules.map((m) => (
               <li key={m.id}>
@@ -153,7 +145,12 @@ export function ShellDrawer({
                   href={pathForView(m.id)}
                   className="shell2-drawer-item"
                   aria-current={view === m.id ? "page" : undefined}
-                  onClick={(e) => navClick(e, () => onNavigate(m.id))}
+                  onClick={(e) =>
+                    navClick(e, () => {
+                      onNavigate(m.id);
+                      onClose();
+                    })
+                  }
                 >
                   <span className="shell2-rail-icon" aria-hidden="true">
                     {m.icon}
@@ -163,7 +160,17 @@ export function ShellDrawer({
               </li>
             ))}
           </ul>
-          <div className="shell2-drawer-accounts">{children}</div>
+          {mode === "menu" && investing && (
+            <div className="shell2-drawer-out">
+              <a {...investing} className="shell2-drawer-item shell2-drawer-investing">
+                <span className="shell2-rail-icon" aria-hidden="true">
+                  <InvestingGlyph />
+                </span>
+                <span>{c.nav.investing}</span>
+              </a>
+            </div>
+          )}
+          <div className="shell2-drawer-accounts">{children?.(onClose)}</div>
         </div>
       </div>
     </div>

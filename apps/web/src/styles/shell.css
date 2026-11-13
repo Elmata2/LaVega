@@ -613,6 +613,10 @@
     padding: var(--sp-2);
     border-bottom: 1px solid var(--line);
   }
+  .shell2-drawer-out {
+    padding: var(--sp-2);
+    border-bottom: 1px solid var(--line);
+  }
   .shell2-drawer-item {
     display: flex;
     align-items: center;

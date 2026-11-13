@@ -26,6 +26,9 @@ export type AccountSidebarProps = {
   onSelectAccount: (accountKey: string) => void;
   onOpenPlan: () => void;
   onAddAccount: () => void;
+  /** Called after any of the three actions above runs (not for tabs or group
+   *  heads). The phone drawer closes itself with it. */
+  onNavigate?: () => void;
 };
 
 type Tab = "all" | "assets" | "debts";
@@ -38,6 +41,7 @@ export function AccountSidebar({
   onSelectAccount,
   onOpenPlan,
   onAddAccount,
+  onNavigate,
 }: AccountSidebarProps) {
   const [locale] = useAppLocale();
   const c = shellCopy[locale];
@@ -74,7 +78,11 @@ export function AccountSidebar({
     );
 
   const addRow = (
-    <button type="button" className="shell2-acc-add" onClick={onAddAccount}>
+    <button type="button" className="shell2-acc-add" onClick={() => {
+        onAddAccount();
+        onNavigate?.();
+      }}
+    >
       {c.accountSidebar.add}
     </button>
   );
@@ -86,7 +94,10 @@ export function AccountSidebar({
           href={pathForView("plan")}
           className="shell2-acc-plan"
           aria-current={view === "plan" ? "page" : undefined}
-          onClick={(e: MouseEvent) => navClick(e, onOpenPlan)}
+          onClick={(e: MouseEvent) => navClick(e, () => {
+              onOpenPlan();
+              onNavigate?.();
+            })}
         >
           <LineIcon>
             <path d="M5 4h14v16H5z" />
@@ -155,7 +166,10 @@ export function AccountSidebar({
                     type="button"
                     className="shell2-acc-row"
                     aria-current={account.key === activeAccountKey ? "true" : undefined}
-                    onClick={() => onSelectAccount(account.key)}
+                    onClick={() => {
+                      onSelectAccount(account.key);
+                      onNavigate?.();
+                    }}
                   >
                     <span className="shell2-acc-name">{account.name || account.key}</span>
                     {balance(account.balance)}

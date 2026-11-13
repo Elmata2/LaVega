@@ -2298,8 +2298,9 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
         onNavigate: setView,
         onOpenProfile: () => setView("profiel"),
       }}
-      sidebar={
+      sidebar={(onNavigate) => (
         <AccountSidebar
+          onNavigate={onNavigate}
           accounts={scopedAccounts}
           view={view}
           planUnlocked={planUnlocked}
@@ -2309,7 +2310,7 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
           // Import lives in Profiel; Rekeningen's empty state points there too.
           onAddAccount={() => setView("profiel")}
         />
-      }
+      )}
       actions={
         <TopBarActions
           scope={scope}

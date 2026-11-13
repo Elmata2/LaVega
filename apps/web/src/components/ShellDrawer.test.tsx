@@ -7,6 +7,7 @@ import { MODULES, navModules, type ModuleId } from "./moduleRegistry";
 import { forgetMemorySidebar } from "../lib/sidebar";
 import type { View } from "../App";
 import { pathForView } from "../appRoutes";
+import { INVESTING_URL } from "../investing";
 
 (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -44,16 +45,16 @@ function frame(opts: { onNavigate?: (v: View) => void; view?: View } = {}) {
         onNavigate: opts.onNavigate ?? (() => {}),
         onOpenProfile: () => {},
       }}
-      sidebar={
+      sidebar={(onNavigate) => (
         <div>
-          <button type="button" className="shell2-acc-row">
+          <button type="button" className="go" onClick={onNavigate}>
             rij
           </button>
-          <button type="button" className="shell2-acc-tab">
+          <button type="button" className="stay">
             tab
           </button>
         </div>
-      }
+      )}
     >
       <div className="content-container">body</div>
     </Shell>
@@ -123,7 +124,7 @@ test("menu lists all enabled modules, then the sidebar body", () => {
   );
   expect(items).toHaveLength(ALL.length);
   expect(items.slice(0, 3)).toEqual(["Overzicht", "Optimalisatie", "Rekeningen"]);
-  expect(dialog().querySelector(".shell2-acc-row")).not.toBeNull();
+  expect(dialog().querySelector(".go")).not.toBeNull();
 });
 
 test("Meer lists exactly the enabled modules not in the bar, focus on the first", () => {
@@ -187,20 +188,73 @@ test("choosing a module navigates and closes", () => {
   expect(drawerRoot().hasAttribute("inert")).toBe(true);
 });
 
-test("choosing an account row closes; a tab does not", () => {
+test("the sidebar's onNavigate seam closes; other controls do not", () => {
   render(frame());
   click(menuBtn());
-  click(dialog().querySelector(".shell2-acc-tab")!);
+  click(dialog().querySelector(".stay")!);
   expect(drawerRoot().hasAttribute("inert")).toBe(false);
-  click(dialog().querySelector(".shell2-acc-row")!);
+  click(dialog().querySelector(".go")!);
   expect(drawerRoot().hasAttribute("inert")).toBe(true);
 });
 
-test("view change from outside closes", () => {
+test("view change from outside closes for real: going back does not reopen", () => {
   render(frame());
   click(menuBtn());
   act(() => root!.render(frame({ view: "optimalisatie" })));
   expect(drawerRoot().hasAttribute("inert")).toBe(true);
+  act(() => root!.render(frame({ view: "overview" })));
+  expect(drawerRoot().hasAttribute("inert")).toBe(true);
+  expect(host.querySelector("main")!.hasAttribute("inert")).toBe(false);
+});
+
+test("modifier-click on a module link does not close", () => {
+  render(frame());
+  click(menuBtn());
+  const link = dialog().querySelectorAll<HTMLAnchorElement>(".shell2-drawer-modules a")[1]!;
+  const swallow = (e: Event) => e.preventDefault();
+  document.addEventListener("click", swallow);
+  act(() => {
+    link.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, ctrlKey: true }));
+  });
+  document.removeEventListener("click", swallow);
+  expect(drawerRoot().hasAttribute("inert")).toBe(false);
+});
+
+test("menu mode has an Investing row below the modules; Meer mode does not", () => {
+  render(frame());
+  click(menuBtn());
+  const row = dialog().querySelector<HTMLAnchorElement>("a.shell2-drawer-investing")!;
+  expect(row.textContent).toBe("Investing");
+  expect(row.getAttribute("href")).toBe(INVESTING_URL);
+  if (INVESTING_URL!.startsWith("http")) expect(row.getAttribute("rel")).toBe("noopener noreferrer");
+  const list = dialog().querySelector(".shell2-drawer-modules")!;
+  expect(list.compareDocumentPosition(row) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(list.contains(row)).toBe(false);
+  key("Escape");
+  click(moreBtn());
+  expect(dialog().querySelector(".shell2-drawer-investing")).toBeNull();
+});
+
+test("crossing to desktop while open does not move focus", () => {
+  let fire: (() => void) | null = null;
+  let desktop = false;
+  window.matchMedia = ((q: string) => ({
+    get matches() {
+      return desktop;
+    },
+    media: q,
+    addEventListener: (_: string, fn: () => void) => {
+      fire = fn;
+    },
+    removeEventListener: () => {},
+  })) as unknown as typeof window.matchMedia;
+  render(frame());
+  click(menuBtn());
+  const focus = vi.spyOn(HTMLElement.prototype, "focus");
+  desktop = true;
+  act(() => fire!());
+  expect(host.querySelector(".shell2-drawer-root")).toBeNull();
+  expect(focus).not.toHaveBeenCalled();
 });
 
 test("Tab wraps inside the drawer (both ends)", () => {

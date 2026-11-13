@@ -56,9 +56,32 @@ export function ProfileGlyph() {
   );
 }
 
+/** Props of the link out to the investing app (a separate deploy, not a view),
+ *  or null when no URL resolves. Shared by the rail and the phone drawer. */
+export function investingLinkProps(): {
+  href: string;
+  target?: string;
+  rel?: string;
+} | null {
+  if (!INVESTING_URL) return null;
+  return INVESTING_URL.startsWith("http")
+    ? { href: INVESTING_URL, target: "_blank", rel: "noopener noreferrer" }
+    : { href: INVESTING_URL };
+}
+
+export function InvestingGlyph() {
+  return (
+    <LineIcon>
+      <path d="M4 19h16" />
+      <path d="M7 19V10M12 19V5M17 19v-7" />
+    </LineIcon>
+  );
+}
+
 export function Rail({ view, modules, onNavigate, onOpenProfile }: ShellNavProps) {
   const [locale] = useAppLocale();
   const c = shellCopy[locale];
+  const investing = investingLinkProps();
   return (
     <nav className="shell2-rail" aria-label={c.nav.ariaLabel}>
       <span className="shell2-rail-brand dot dot-pos" role="img" aria-label="LaVega" />
@@ -79,19 +102,10 @@ export function Rail({ view, modules, onNavigate, onOpenProfile }: ShellNavProps
         ))}
       </div>
       <div className="shell2-rail-bottom">
-        {INVESTING_URL && (
-          <a
-            href={INVESTING_URL}
-            {...(INVESTING_URL.startsWith("http")
-              ? { target: "_blank", rel: "noopener noreferrer" }
-              : {})}
-            className="shell2-rail-item"
-          >
+        {investing && (
+          <a {...investing} className="shell2-rail-item">
             <span className="shell2-rail-icon" aria-hidden="true">
-              <LineIcon>
-                <path d="M4 19h16" />
-                <path d="M7 19V10M12 19V5M17 19v-7" />
-              </LineIcon>
+              <InvestingGlyph />
             </span>
             <span className="shell2-rail-label">{c.nav.investing}</span>
           </a>

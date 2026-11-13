@@ -184,3 +184,28 @@ test("a fully known group has no partial marker", () => {
   render({ accounts: [acct({ key: "a", balance: 100 }), acct({ key: "b", balance: 5 })] });
   expect(host.querySelector(".shell2-acc-partial")).toBeNull();
 });
+
+test("onNavigate runs after the plan link, an account row and the add row; not for tabs", () => {
+  const onNavigate = vi.fn();
+  render({ planUnlocked: true, onNavigate });
+  act(() => tab("Activa").click());
+  expect(onNavigate).not.toHaveBeenCalled();
+  act(() => host.querySelector<HTMLElement>(".shell2-acc-plan")!.click());
+  act(() => rows()[0]!.click());
+  act(() => host.querySelector<HTMLElement>(".shell2-acc-add")!.click());
+  expect(onNavigate).toHaveBeenCalledTimes(3);
+});
+
+test("onNavigate is not called for a modifier-click on the plan link", () => {
+  const onNavigate = vi.fn();
+  render({ planUnlocked: true, onNavigate });
+  const swallow = (e: Event) => e.preventDefault();
+  document.addEventListener("click", swallow);
+  act(() => {
+    host
+      .querySelector<HTMLElement>(".shell2-acc-plan")!
+      .dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, metaKey: true }));
+  });
+  document.removeEventListener("click", swallow);
+  expect(onNavigate).not.toHaveBeenCalled();
+});
