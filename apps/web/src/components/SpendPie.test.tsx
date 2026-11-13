@@ -124,8 +124,10 @@ test("the arc answers where it is pointed, and the rest of the ring steps back",
   // The slice being read is the only one at full strength; dimming the others is
   // what connects the number in the hole to one arc rather than to the ring.
   // Slice colours are theme tokens; the 20% mix is the dimming.
-  expect(ring?.style.background).toContain("var(--slice-1) 0% 50%");
-  expect(ring?.style.background).toContain("color-mix(in srgb, var(--slice-2) 20%, transparent)");
+  expect(ring?.style.background).toContain("var(--slice-1) 0.3% 49.7%");
+  expect(ring?.style.background).toContain(
+    "color-mix(in srgb, var(--slice-2) 20%, transparent) 50.3% 79.7%",
+  );
   expect(ring?.getAttribute("data-active")).toBe("0");
 
   // Six o'clock is 180°, the second slice (180–288°).
@@ -207,4 +209,53 @@ test("sliceAtPoint reads the angle the way the ring is drawn: clockwise from twe
   // Shares that do not quite sum to 1 (rounded upstream) still map the tail to
   // the last slice, because that is what the gradient draws there.
   expect(sliceAtPoint([0.5, 0.49], 0.1, 0.5)).toBe(1);
+});
+
+test("adjacent arcs are parted by a --bg gap, so grey steps never have to carry identity", () => {
+  const el = mount(<SpendPie slices={slices} totalCents={TOTAL} euro={euro} />);
+  const bg = el.querySelector<HTMLElement>(".spend-pie-ring")?.style.background ?? "";
+  // One gap at each of the three boundaries (50%, 80%, and the 100%/0% seam).
+  expect(bg).toContain("var(--bg) 49.7% 50.3%");
+  expect(bg).toContain("var(--bg) 79.7% 80.3%");
+  expect(bg).toContain("var(--bg) 99.7% 100%");
+  expect(bg.startsWith("conic-gradient(var(--bg) 0% 0.3%")).toBe(true);
+});
+
+test("a single slice is a full ring with no gap to draw", () => {
+  const el = mount(
+    <SpendPie
+      slices={[{ category: "Boodschappen", cents: 90_000, share: 1 }]}
+      totalCents={TOTAL}
+      euro={euro}
+    />,
+  );
+  const bg = el.querySelector<HTMLElement>(".spend-pie-ring")?.style.background ?? "";
+  expect(bg).not.toContain("var(--bg)");
+});
+
+test("the legend carries a figure for every slice (more than 3 series)", () => {
+  const many = Array.from({ length: 5 }, (_, i) => ({
+    category: `Cat${i}`,
+    cents: 10_000 * (i + 1),
+    share: (i + 1) / 15,
+  }));
+  const el = mount(<SpendPie slices={many} totalCents={150_000} euro={euro} />);
+  const rows = [...el.querySelectorAll("button.spend-pie-item")];
+  expect(rows).toHaveLength(5);
+  rows.forEach((r, i) => {
+    expect(r.textContent).toContain(`€${(i + 1) * 100}`);
+    expect(r.textContent).toContain("%");
+  });
+});
+
+test("a slice thinner than the gap keeps a visible arc", () => {
+  const tiny = [
+    { category: "Groot", cents: 99_800, share: 0.998 },
+    { category: "Klein", cents: 200, share: 0.002 },
+  ];
+  const el = mount(<SpendPie slices={tiny} totalCents={100_000} euro={euro} />);
+  const bg = el.querySelector<HTMLElement>(".spend-pie-ring")?.style.background ?? "";
+  const m = bg.match(/var\(--slice-2\) ([\d.]+)% ([\d.]+)%/);
+  expect(m).not.toBeNull();
+  expect(Number(m![2])).toBeGreaterThan(Number(m![1]));
 });

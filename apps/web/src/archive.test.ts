@@ -17,6 +17,7 @@ import {
   isArchivedView,
   isArchivedWidget,
 } from "./archive";
+import { getEnabledModules } from "./settings";
 
 test("switch on archives facturen, belasting, valuta", () => {
   expect(ARCHIVED_VIEWS).toEqual(["facturen", "belasting", "valuta"]);
@@ -61,4 +62,25 @@ test("stored default business + switch hidden opens personal and leaves storage 
   // Flipping the switch on restores the stored default.
   expect(initialScope(true)).toBe("business");
   localStorage.clear();
+});
+
+test("never chosen (or garbage stored) gives the four-item default in registry order", () => {
+  const four = ["overview", "optimalisatie", "accounts", "plan"];
+  expect(DEFAULT_MODULES).toEqual(four);
+  expect(enabledModules(null)).toEqual(four);
+  for (const raw of ["{not json", '{"a":1}', "42"]) {
+    localStorage.setItem("lavega.navModules", raw);
+    expect(enabledModules(getEnabledModules())).toEqual(four);
+  }
+  localStorage.clear();
+});
+
+test("a legacy stored list with plan first and forecast resolves in the new order", () => {
+  expect(enabledModules(["plan", "overview", "accounts", "optimalisatie", "forecast"])).toEqual([
+    "overview",
+    "optimalisatie",
+    "accounts",
+    "plan",
+    "forecast",
+  ]);
 });

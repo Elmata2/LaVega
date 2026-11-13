@@ -4,6 +4,7 @@ import { formatEuroIn, formatEuroAxisIn } from "../../format.js";
 import Module from "../Module.js";
 import TrendChart, { type TrendPoint } from "../TrendChart.js";
 import CardLink from "../ui/CardLink.js";
+import { StatusIcon } from "../ui/StatusLine.js";
 import { useAppLocale } from "../../appLocale.js";
 import { moneyCopy } from "../../copy/money.js";
 
@@ -74,6 +75,7 @@ export default function CashflowBlock({ forecast, bufferCents, onNavigate }: Cas
             <>
               {c.krapsteWeekLabel}{" "}
               <strong className="text-warn">
+                <StatusIcon tone="warning" />
                 {c.krapsteWeekDetail(
                   shortfallWeek,
                   formatEuroIn(locale, forecast.shortfall.balanceCents / 100),

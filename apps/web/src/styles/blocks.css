@@ -301,6 +301,13 @@
     color: var(--muted);
     cursor: pointer;
   }
+  /* The window's total for the category, so a legend of four series is read by
+   * its figures and not by swatch colour alone. */
+  .stat-legend-figure {
+    color: var(--ink);
+    letter-spacing: 0;
+    text-transform: none;
+  }
   .stat-legend-button:hover {
     color: var(--ink);
     border-color: var(--line);

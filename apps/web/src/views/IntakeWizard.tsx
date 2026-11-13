@@ -82,6 +82,7 @@ import {
   UploadScreen,
   WorkScreen,
 } from "../intake/wizard/screenViews.js";
+import StatusLine from "../components/ui/StatusLine.js";
 
 export type IntakeWizardProps = {
   store: AdvisorProfileStore | null;
@@ -789,9 +790,9 @@ export default function IntakeWizard(props: IntakeWizardProps) {
       ) : null}
       {body}
       {saveFailed ? (
-        <p role="alert" className="wz-error">
+        <StatusLine tone="problem" role="alert" className="wz-error">
           {w.saveFailed}
-        </p>
+        </StatusLine>
       ) : null}
     </WizardFrame>
   );

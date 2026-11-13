@@ -91,8 +91,8 @@ basename, not the path.
 `ModuleGrid` and `Module` were **excluded for a second reason too**: their
 breakpoints were desktop-first (`max-width`) while Tailwind is mobile-first
 (`min-width`). They have since moved to desktop-first container queries on the
-`.content-container` wrapper in main (`[@container(max-width:1136px)]:` and
-`868px`, see `src/module-grid.ts`), no longer the 1200 / 900 viewport media
+`.content-container` wrapper in main (`[@container(max-width:1200px)]:` and
+`900px`, see `src/module-grid.ts`), no longer the 1200 / 900 viewport media
 queries. The arbitrary at-rule form keeps the `max-width` direction, so nothing
 was inverted.
 

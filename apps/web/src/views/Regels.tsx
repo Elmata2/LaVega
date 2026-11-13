@@ -17,11 +17,12 @@ import { CATEGORY_OPTIONS, dryRunRuleChanges, isRuleV2, toCents } from "@lavega/
 import { useAppLocale } from "../appLocale.js";
 import { adminCopy, type RegelsCopy } from "../copy/admin.js";
 import { categoryLabel } from "../copy/money.js";
-import { formatDate, formatEuroIn } from "../format.js";
+import { formatDate, formatSignedEuroIn } from "../format.js";
 import Badge from "../components/ui/Badge.js";
 import Button from "../components/ui/Button.js";
 import Card from "../components/ui/Card.js";
 import { Table, TableWrap, Th, Td } from "../components/ui/Table.js";
+import StatusLine from "../components/ui/StatusLine.js";
 
 /* The rules editor for the v2 engine.
  *
@@ -827,9 +828,9 @@ function RuleEditor({
       </label>
 
       {error !== null && (
-        <p role="alert" className="text-warn">
+        <StatusLine tone="problem" role="alert">
           {error}
-        </p>
+        </StatusLine>
       )}
       <div className="mt-[var(--sp-3)] flex gap-[var(--sp-2)]">
         <Button variant="primary" disabled={busy} onClick={onSave}>
@@ -1134,7 +1135,7 @@ export default function Regels({ rules, txs, accounts, own, busy, onSaveRules }:
                                 <Td>{formatDate(locale, sample.date)}</Td>
                                 <Td>{sample.counterparty}</Td>
                                 <Td className={sample.amountCents >= 0 ? "text-pos" : "text-neg"}>
-                                  {formatEuroIn(locale, sample.amountCents / 100)}
+                                  {formatSignedEuroIn(locale, sample.amountCents / 100)}
                                 </Td>
                                 <Td>
                                   {categoryLabel(locale, sample.currentCategory || "onbekend")}
@@ -1142,9 +1143,7 @@ export default function Regels({ rules, txs, accounts, own, busy, onSaveRules }:
                                 <Td>{categoryLabel(locale, sample.decision.category)}</Td>
                                 <Td>
                                   {sample.decision.locked ? (
-                                    <Badge className="border-warn text-warn">
-                                      {c.preview.lockedBadge}
-                                    </Badge>
+                                    <Badge tone="warning">{c.preview.lockedBadge}</Badge>
                                   ) : rule !== undefined ? (
                                     ruleSummary(rule, locale, c)
                                   ) : (

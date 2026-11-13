@@ -32,6 +32,67 @@ export function formatEuroIn(locale: Locale, n: number): string {
   return new Intl.NumberFormat(tag(locale), { style: "currency", currency: "EUR" }).format(n);
 }
 
+/* Intl writes a negative sign as ASCII hyphen-minus, and nl puts the sign after
+ * the symbol ("€ -5,00"). A sign that carries meaning without colour must read
+ * as a real minus (U+2212) and come first in every locale ("−€ 5,00", "+€5.00"),
+ * so the signed helpers rebuild the string from parts. */
+function signFirst(fmt: Intl.NumberFormat, n: number): string {
+  const parts = fmt.formatToParts(n);
+  const sign = parts
+    .filter((p) => p.type === "minusSign" || p.type === "plusSign")
+    .map((p) => (p.type === "minusSign" ? "\u2212" : p.value))
+    .join("");
+  return (
+    sign +
+    parts
+      .filter((p) => p.type !== "minusSign" && p.type !== "plusSign")
+      .map((p) => p.value)
+      .join("")
+  );
+}
+
+/** formatEuroIn with an explicit sign: "+" for positive, a real minus for
+ *  negative, none for zero. For amounts coloured by sign, so the sign still
+ *  tells income from spending when colour cannot (monochrome, colour-blind). */
+export function formatSignedEuroIn(locale: Locale, n: number): string {
+  return signFirst(
+    new Intl.NumberFormat(tag(locale), {
+      style: "currency",
+      currency: "EUR",
+      signDisplay: "exceptZero",
+    }),
+    n,
+  );
+}
+
+/** formatCurrencyIn with the same explicit sign as formatSignedEuroIn. */
+export function formatSignedCurrencyIn(locale: Locale, n: number, currency: string): string {
+  try {
+    return signFirst(
+      new Intl.NumberFormat(tag(locale), {
+        style: "currency",
+        currency,
+        signDisplay: "exceptZero",
+      }),
+      n,
+    );
+  } catch {
+    return `${currency} ${signFirst(new Intl.NumberFormat(tag(locale), { signDisplay: "exceptZero" }), n)}`;
+  }
+}
+
+/** A whole-number percent change with an explicit sign ("+3%", "\u221212%"). */
+export function formatSignedPercentIn(locale: Locale, pct: number): string {
+  return signFirst(
+    new Intl.NumberFormat(tag(locale), {
+      style: "percent",
+      maximumFractionDigits: 0,
+      signDisplay: "exceptZero",
+    }),
+    pct / 100,
+  );
+}
+
 /** Whole euros with the symbol and no cents. Inside a sentence the cents are
  *  noise: "€250" reads through, where formatEuroIn's "€ 250,00" interrupts. */
 export function formatWholeEuroIn(locale: Locale, n: number): string {

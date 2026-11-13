@@ -12,6 +12,7 @@ import posthog from "../posthog.js";
 import Button from "./ui/Button.js";
 import { Field } from "./ui/Field.js";
 import PasswordInput from "./ui/PasswordInput.js";
+import StatusLine from "./ui/StatusLine.js";
 
 type MailFailure = Extract<MailResult, { ok: false }>["kind"];
 
@@ -84,9 +85,9 @@ export function RequestResetForm({
           />
         </Field>
         {failure !== null && (
-          <p role="alert" className="text-warn">
+          <StatusLine tone="problem" role="alert">
             {c.mailError[failure]}
-          </p>
+          </StatusLine>
         )}
         <Button type="submit" variant="primary" disabled={busy || !email.trim()}>
           {c.reset.requestSubmit}
@@ -172,9 +173,9 @@ export function NewPasswordForm({
         </span>
       </Field>
       {failure !== null && (
-        <p role="alert" className="text-warn">
+        <StatusLine tone="problem" role="alert">
           {c.reset.error[failure]}
-        </p>
+        </StatusLine>
       )}
       <Button type="submit" variant="primary" disabled={busy || password.length === 0}>
         {c.reset.save}

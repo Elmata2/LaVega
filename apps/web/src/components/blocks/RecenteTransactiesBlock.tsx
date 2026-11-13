@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import type { Account, OwnAccounts, Rule, Tx } from "@lavega/core";
 import { categorize, enrichTxs } from "@lavega/core";
 import type { View } from "../../App";
-import { formatEuroIn } from "../../format.js";
+import { formatSignedEuroIn } from "../../format.js";
 import Module from "../Module.js";
 import CardLink from "../ui/CardLink.js";
 import { useAppLocale } from "../../appLocale.js";
@@ -129,7 +129,7 @@ export default function RecenteTransactiesBlock({
                     {categoryLabel(locale, category)}
                   </button>
                   <span className={`tx-amount ${tx.amount >= 0 ? "text-pos" : "text-neg"}`}>
-                    {formatEuroIn(locale, tx.amount)}
+                    {formatSignedEuroIn(locale, tx.amount)}
                   </span>
                 </div>
               </div>

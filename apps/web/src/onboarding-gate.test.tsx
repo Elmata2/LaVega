@@ -107,7 +107,7 @@ test("a fresh vault opens the wizard on question 1, full-screen, with no scope q
   const el = await renderApp();
   expect(window.location.pathname).toBe("/app/intake");
   expect(el.querySelector(".wz-root")).not.toBeNull();
-  expect(el.querySelector("nav, .shell")).toBeNull();
+  expect(el.querySelector("nav, .shell2")).toBeNull();
   expect(el.querySelector("#ob-scope")).toBeNull();
   expect(localStorage.getItem("lavega.defaultScope")).toBeNull();
   expect(localStorage.getItem("lavega.onboardingSeen")).toBe("1");

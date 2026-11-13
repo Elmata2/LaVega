@@ -133,7 +133,7 @@ export default function TrendChart({
           {active.label}
         </span>
         <span
-          className="lv-chart-readout-value text-[1.6rem] font-bold leading-[1.1] tracking-[-0.02em] tabular-nums [@container(max-width:868px)]:text-[1.9rem]"
+          className="lv-chart-readout-value text-[1.6rem] font-bold leading-[1.1] tracking-[-0.02em] tabular-nums [@container(max-width:900px)]:text-[1.9rem]"
           style={{ color }}
         >
           {format(active.value)}

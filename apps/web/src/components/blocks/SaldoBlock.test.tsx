@@ -2,7 +2,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { expect, test } from "vitest";
 import type { Account, Tx } from "@lavega/core";
-import { formatEuro } from "../../format.js";
+import { formatEuro, formatSignedEuroIn } from "../../format.js";
 import SaldoBlock, { changePct, POSITION_WINDOW_DAYS, positionSeries } from "./SaldoBlock";
 import { accounts, ASOF, freshAccounts, freshTxs, scheduledFlows, txs } from "./fixtures";
 
@@ -188,7 +188,7 @@ test("SaldoBlock names the foreign-currency account it left out, separately from
       {...SEPARATE}
     />,
   );
-  expect(html).toContain(formatEuro(4_500));
+  expect(html).toContain(formatSignedEuroIn("nl", 4_500));
   expect(html).not.toContain(formatEuro(384_500));
   expect(html).toContain("vreemde valuta");
   expect(html).toContain("Revolut");
@@ -380,7 +380,8 @@ test("SaldoBlock: convert mode folds a converted HUF balance into the figure and
       {...CONVERT}
     />,
   );
-  expect(html).toContain(formatEuro(5_250));
+  expect(html).toContain(formatSignedEuroIn("nl", 5_250));
+  expect(html).toMatch(/module-figure-value text-pos">\+€\s5\.250,00/);
   expect(html).not.toContain("vreemde valuta");
   expect(html).toContain("Omgerekend via ECB.");
 });
@@ -400,7 +401,7 @@ test("SaldoBlock: convert mode with no rate keeps the account out, worded 'nog g
       {...CONVERT}
     />,
   );
-  expect(html).toContain(formatEuro(4_500));
+  expect(html).toContain(formatSignedEuroIn("nl", 4_500));
   expect(html).toContain("vreemde valuta");
   expect(html).toContain("nog geen koers.");
   expect(html).not.toContain("LaVega rekent nog niet om naar euro");

@@ -5,6 +5,7 @@ import { SpeedInsights } from "@vercel/speed-insights/react";
 import "./styles/tokens.css";
 import "./styles/base.css";
 import "./styles/modules.css";
+import "./styles/shell.css";
 import "./styles/charts.css";
 import "./styles/blocks.css";
 import "./styles/worldmap.css";

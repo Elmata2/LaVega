@@ -8,6 +8,7 @@ import CardDetailsForm from "../../intake/wizard/CardDetailsForm.js";
 import { upsertBalance } from "../../views/Punten.js";
 import { saveProfile } from "./profileEdits.js";
 import type { PlanCtx } from "./types.js";
+import StatusLine from "../../components/ui/StatusLine.js";
 
 /** The balance, paid-in-full, rate and points of the stated credit cards, edited
  *  with the same form the intake uses. Saved to the profile (balances) and the
@@ -66,13 +67,14 @@ export default function CardBalancesEditor({ ctx }: { ctx: PlanCtx }) {
         }}
         footer={
           status === "idle" ? null : (
-            <p
+            <StatusLine
+              tone={status === "failed" ? "problem" : "success"}
               role={status === "failed" ? "alert" : "status"}
               data-testid="plan-card-details-status"
-              className={status === "failed" ? "wz-error" : "wz-hint"}
+              className={status === "failed" ? "wz-error" : "wz-hint border-line text-muted"}
             >
               {status === "failed" ? c.editFailed : c.editSaved}
-            </p>
+            </StatusLine>
           )
         }
       />

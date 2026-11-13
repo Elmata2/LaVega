@@ -107,8 +107,16 @@ Stable handles (from source, not guessed):
   the `lavega_locale` cookie, Dutch or English. With no cookie and a non-Dutch browser the
   app renders ENGLISH, so set the cookie before asserting on Dutch text. See
   `features/vault-gate.md`.
-- Import: `section#import[aria-label="Importeren"]`, file input
-  `aria-label="Kies een bankbestand om te importeren"`.
+- Import: in Profiel (`/app/profiel`), `section#import[aria-label="Importeren"]`, file input
+  `aria-label="Kies een bankbestand om te importeren"`. Not on Overzicht.
+- Shell (apps/web/src/components/Shell.tsx, classes `shell2-*`): rail `nav.shell2-rail` and
+  account sidebar `aside` at >= 1024px; below 1024px the bottom bar `nav.shell2-bottombar`,
+  phone menu button `.shell2-phonebar-menu` and drawer `.shell2-drawer`. One `<nav>` exists at a time.
+- Theme: `localStorage["lavega.theme"]` (`"mono"` or `"midnight"`), set from the Weergave card in
+  Profiel. Sidebar prefs: `localStorage["lavega.sidebar"]`.
+- Gotcha: the Chrome extension tab can be stuck at a narrow width, so you get the < 1024px
+  layout even when you expect the rail. Layout checks at >= 1024px need a real desktop-width
+  browser window; confirm `window.innerWidth` first.
 - Views are URL-addressable: `/app` (Overzicht), `/app/transactions`, `/app/accounts`,
   `/app/forecast`, `/app/optimalisatie`, `/app/valuta`, `/app/belasting`, `/app/facturen`,
   `/app/punten`, `/app/koppelingen`, `/app/backup`, `/app/profiel`

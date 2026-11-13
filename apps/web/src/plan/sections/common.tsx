@@ -5,6 +5,7 @@ import { useAppLocale } from "../../appLocale.js";
 import Button from "../../components/ui/Button.js";
 import CardLink from "../../components/ui/CardLink.js";
 import Field from "../../components/ui/Field.js";
+import StatusLine from "../../components/ui/StatusLine.js";
 import { DASH, assumptionsCopy, planFmt, planShellCopy } from "../../copy/plan/index.js";
 import { frameCopyOf } from "../sectionCopy.js";
 import type { Parsed } from "./parse.js";
@@ -229,14 +230,15 @@ export function ValueInput<T>({
           {hint}
         </p>
       )}
-      <p
+      <StatusLine
+        tone="problem"
         id={`${id}-err`}
         role={error === null ? undefined : "alert"}
         data-testid={`plan-error-${name}`}
-        className="m-0 text-warn text-[0.85rem]"
+        className="m-0 text-[0.85rem]"
       >
         {error}
-      </p>
+      </StatusLine>
     </form>
   );
 }

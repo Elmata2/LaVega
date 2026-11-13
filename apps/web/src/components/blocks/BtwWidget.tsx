@@ -3,7 +3,7 @@ import type { Account, Invoice, Tx, VatPosition, VatSettings } from "@lavega/cor
 import { resolveVatSettings, txsForEntity, vatPosition } from "@lavega/core";
 import type { View } from "../../App";
 import type { ModuleSpan } from "../../module-grid.js";
-import { formatEuroIn } from "../../format.js";
+import { formatSignedEuroIn } from "../../format.js";
 import Module from "../Module.js";
 import CardLink from "../ui/CardLink.js";
 import { useWidgetEnabled } from "../moduleRegistry";
@@ -236,7 +236,10 @@ export function BtwBlock({
           className={`module-figure-value ${!row.amountShown ? "" : p.direction === "terugvragen" ? "text-pos" : "text-neg"}`}
         >
           {row.amountShown
-            ? formatEuroIn(locale, Math.abs(p.netCents as number) / 100)
+            ? formatSignedEuroIn(
+                locale,
+                (p.direction === "terugvragen" ? 1 : -1) * (Math.abs(p.netCents as number) / 100),
+              )
             : c.geenBedrag}
         </span>
         {row.amountShown && (

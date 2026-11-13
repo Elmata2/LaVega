@@ -20,7 +20,7 @@ vi.mock("../archive", () => ({
     localStorage.getItem("lavega.defaultScope") === "business" ? "business" : "personal",
 }));
 import ModulePicker, { WidgetPicker } from "./ModulePicker";
-import NavBar from "./NavBar";
+import { Rail } from "./Rail";
 import {
   DEFAULT_MODULES,
   DEFAULT_WIDGETS,
@@ -71,7 +71,7 @@ function Shell() {
   const [modules, setModules] = useState<ModuleId[]>(() => enabledModules(getEnabledModules()));
   return (
     <>
-      <NavBar
+      <Rail
         view="overview"
         modules={navModules(modules)}
         onNavigate={() => {}}
@@ -97,7 +97,7 @@ function render() {
 }
 
 function navLabels(): string[] {
-  return [...container!.querySelectorAll(".navrail .nav-item")].map((n) =>
+  return [...container!.querySelectorAll(".shell2-rail-list a")].map((n) =>
     (n.textContent ?? "").trim(),
   );
 }
@@ -158,8 +158,10 @@ test("Overzicht cannot be switched off — an app with no home is a broken app",
   expect(enabledModules([])).toEqual(["overview"]);
 });
 
-test("the default nav is plan, overview, accounts, optimalisatie; the rest is optional but in the picker", () => {
-  expect(DEFAULT_MODULES).toEqual(expect.arrayContaining(["overview", "accounts", "optimalisatie"]));
+test("the default nav is overview, optimalisatie, accounts, plan; the rest is optional but in the picker", () => {
+  expect(DEFAULT_MODULES).toEqual(
+    expect.arrayContaining(["overview", "accounts", "optimalisatie"]),
+  );
   for (const id of ["forecast", "bills", "punten", "transactions"] as const) {
     expect(DEFAULT_MODULES).not.toContain(id);
   }
@@ -272,8 +274,20 @@ test("een verse installatie toont alleen de kaarten die standaard aan staan", ()
   // dezelfde zin met de tegenovergestelde opdracht ("als de gebruiker dat wilt")
   // en begint daarom uit.
   expect(getEnabledWidgets()).toBeNull();
-  expect(DEFAULT_WIDGETS).toEqual(["intake-invite", "room-card", "connect-checklist", "betaalagenda", "btw-stand"]);
-  expect(enabledWidgets(null)).toEqual(["intake-invite", "room-card", "connect-checklist", "betaalagenda", "btw-stand"]);
+  expect(DEFAULT_WIDGETS).toEqual([
+    "intake-invite",
+    "room-card",
+    "connect-checklist",
+    "betaalagenda",
+    "btw-stand",
+  ]);
+  expect(enabledWidgets(null)).toEqual([
+    "intake-invite",
+    "room-card",
+    "connect-checklist",
+    "betaalagenda",
+    "btw-stand",
+  ]);
   expect(DEFAULT_WIDGETS).not.toContain("facturen-open");
 });
 
@@ -292,7 +306,13 @@ test("een oude opgeslagen lijst zet alleen uit waar hij toen over ging", () => {
     "betaalagenda",
     "btw-stand",
   ]);
-  expect(enabledWidgets([])).toEqual(["intake-invite", "room-card", "connect-checklist", "betaalagenda", "btw-stand"]);
+  expect(enabledWidgets([])).toEqual([
+    "intake-invite",
+    "room-card",
+    "connect-checklist",
+    "betaalagenda",
+    "btw-stand",
+  ]);
   // Een nav-lijst die per ongeluk hier belandt levert geen enkele widget op
   // behalve de standaard: geen van die ids is een widget.
   expect(enabledWidgets(["overview", "valuta", "punten"])).toEqual(DEFAULT_WIDGETS);
@@ -471,7 +491,14 @@ test("a widget he switched on survives a reload; one he never touched stays off"
    * meenemen. En `seen` is de hele registerlijst, want de picker toont ze
    * allemaal tegelijk: wie er één omzet heeft de rest ook voor zich gehad. */
   expect(JSON.parse(localStorage.getItem("lavega.overviewWidgets") ?? "null")).toEqual({
-    on: ["aandacht", "intake-invite", "room-card", "connect-checklist", "betaalagenda", "btw-stand"],
+    on: [
+      "aandacht",
+      "intake-invite",
+      "room-card",
+      "connect-checklist",
+      "betaalagenda",
+      "btw-stand",
+    ],
     seen: WIDGETS.map((w) => w.id),
   });
 
@@ -557,9 +584,9 @@ test("every widget entry carries what the picker shows: label, one line, preview
   ).toBeGreaterThanOrEqual(WIDGETS.length);
 });
 
-test("plan is the first nav item and overview the second; both are on by default and no widget id is 'plan'", () => {
+test("the core four lead the nav (Overzicht, Optimalisatie, Rekeningen, Jouw plan); plan is on by default and no widget id is 'plan'", () => {
   const ids = navModules(enabledModules(null)).map((m) => m.id);
-  expect(ids.slice(0, 2)).toEqual(["plan", "overview"]);
+  expect(ids.slice(0, 4)).toEqual(["overview", "optimalisatie", "accounts", "plan"]);
   expect(DEFAULT_MODULES).toContain("plan");
   expect(HOME_MODULE).toBe("overview");
   expect(WIDGETS.map((w) => w.id as string)).not.toContain("plan");
@@ -570,4 +597,56 @@ test("the plan stays out of the nav until a first intake block is done", () => {
   expect(withoutLockedModules(all, false)).not.toContain("plan");
   expect(withoutLockedModules(all, false)).toContain("overview");
   expect(withoutLockedModules(all, true)).toEqual(all);
+});
+
+const CORE_LABELS = ["Overzicht", "Optimalisatie", "Rekeningen", "Jouw plan"];
+
+test("a never-chosen preference renders the default set, core four first", () => {
+  render();
+  /* This file mocks the business archive off, so the default also holds the
+   * three business modules; archive.test.ts pins the real four-item default. */
+  expect(navLabels().slice(0, 4)).toEqual(CORE_LABELS);
+  expect(navLabels()).toEqual(navModules(DEFAULT_MODULES).map((m) => m.label));
+});
+
+test("garbage in the stored preference renders like never chosen", () => {
+  for (const raw of ["{not json", '{"a":1}', '"plan"', "42"]) {
+    localStorage.setItem("lavega.navModules", raw);
+    expect(getEnabledModules()).toBeNull();
+    render();
+    expect(navLabels(), raw).toEqual(navModules(DEFAULT_MODULES).map((m) => m.label));
+    act(() => root!.unmount());
+    container!.remove();
+    root = null;
+  }
+});
+
+test("a legacy stored list (plan first, with forecast) keeps its members in the new order", () => {
+  const legacy = ["plan", "overview", "accounts", "optimalisatie", "forecast"];
+  localStorage.setItem("lavega.navModules", JSON.stringify(legacy));
+  render();
+  expect(navLabels()).toEqual([...CORE_LABELS, "Forecast"]);
+  expect([...navLabels()].sort()).toEqual(
+    navModules(enabledModules(legacy))
+      .map((m) => m.label)
+      .sort(),
+  );
+  expect(new Set(enabledModules(legacy))).toEqual(new Set(legacy));
+});
+
+test("optional modules keep their current relative order after the core four", () => {
+  const all = navModules(enabledModules(MODULES.map((m) => m.id))).map((m) => m.id);
+  expect(all).toEqual([
+    "overview",
+    "optimalisatie",
+    "accounts",
+    "plan",
+    "transactions",
+    "bills",
+    "forecast",
+    "valuta",
+    "punten",
+    "belasting",
+    "facturen",
+  ]);
 });

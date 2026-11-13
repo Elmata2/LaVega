@@ -2,8 +2,10 @@ import { useState } from "react";
 import type { Alert, AlertSeverity } from "@lavega/core";
 import Module from "../Module.js";
 import { useWidgetEnabled } from "../moduleRegistry";
+import Badge from "../ui/Badge.js";
 import CardLink from "../ui/CardLink.js";
 import SaldoInput from "../ui/SaldoInput.js";
+import StatusLine, { StatusIcon } from "../ui/StatusLine.js";
 import { useAppLocale } from "../../appLocale.js";
 import { moneyCopy } from "../../copy/money.js";
 
@@ -45,27 +47,16 @@ type AandachtBlockProps = {
   onBufferChange: (cents: number) => void;
 };
 
-type Tier = { severity: AlertSeverity; icon: string };
+type Tier = { severity: AlertSeverity };
 
 /** Ranked hardest-first, the same order core sorts in. The word is the label;
- *  the circle only reinforces it, so it stays aria-hidden. */
-const TIERS: Tier[] = [
-  { severity: "critical", icon: "🔴" },
-  { severity: "warning", icon: "🟠" },
-  { severity: "info", icon: "🟡" },
-];
+ *  the icon shape (cross, triangle, "i") and the border style (solid, dashed,
+ *  none) reinforce it where the tints cannot, e.g. in the black-and-white theme. */
+const TIERS: Tier[] = [{ severity: "critical" }, { severity: "warning" }, { severity: "info" }];
 
 /** Below this, folding costs more than it saves: the "Toon 2 ter info" button
  *  takes the same line the two rows would have. */
 const INFO_FOLD_MIN = 3;
-
-/* The tier's own colour on the WORD only (see blocks.css history): "info" gets
- * no override and inherits the head's muted colour. */
-const TIER_TEXT_COLOR: Record<AlertSeverity, string> = {
-  critical: "text-neg",
-  warning: "text-warn",
-  info: "",
-};
 
 export default function AandachtBlock({ alerts, bufferCents, onBufferChange }: AandachtBlockProps) {
   const [locale] = useAppLocale();
@@ -138,7 +129,9 @@ export default function AandachtBlock({ alerts, bufferCents, onBufferChange }: A
         /* Not "alles is in orde" — that is a claim about the data, and an empty
          * vault produces exactly this same empty list. State the scope instead. */
         <div className="flex flex-col gap-2">
-          <p className="block-empty text-pos m-0 leading-[1.5]">{c.nietsGevondenOmJeOpTeWijzen}</p>
+          <StatusLine tone="success" className="block-empty m-0 leading-[1.5]">
+            {c.nietsGevondenOmJeOpTeWijzen}
+          </StatusLine>
           <p className="cell-sub m-0 leading-[1.5]">{c.lavegaKeekNaar(c.checks.join(", "))}</p>
         </div>
       ) : (
@@ -153,11 +146,17 @@ export default function AandachtBlock({ alerts, bufferCents, onBufferChange }: A
                 key={tier.severity}
                 aria-label={`${tierLabel[tier.severity]} (${rows.length})`}
               >
-                <h3
-                  className={`flex items-center gap-2 m-0 font-mono text-[0.72rem] font-semibold tracking-[0.06em] uppercase text-muted ${TIER_TEXT_COLOR[tier.severity]}`}
-                >
-                  <span aria-hidden="true">{tier.icon}</span>
-                  {tierLabel[tier.severity]}
+                <h3 className="flex items-center gap-2 m-0 font-mono text-[0.72rem] font-semibold tracking-[0.06em] uppercase text-muted">
+                  {tier.severity === "info" ? (
+                    <span className="inline-flex items-center">
+                      <StatusIcon tone="info" />
+                      {tierLabel.info}
+                    </span>
+                  ) : (
+                    <Badge tone={tier.severity === "critical" ? "problem" : "warning"}>
+                      {tierLabel[tier.severity]}
+                    </Badge>
+                  )}
                   <span className="inline-flex items-center justify-center min-w-[1.25rem] py-0 px-[5px] rounded-pill border border-line bg-surface-2 text-muted text-[0.7rem] tabular-nums">
                     {rows.length}
                   </span>

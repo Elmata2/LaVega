@@ -17,6 +17,7 @@ import { ConnectChecklist } from "../components/blocks/ConnectChecklist.js";
 import { inviteState } from "../components/blocks/IntakeInviteCard.js";
 import Button from "../components/ui/Button.js";
 import Card from "../components/ui/Card.js";
+import StatusLine from "../components/ui/StatusLine.js";
 import { intakeCopy } from "../copy/intake.js";
 import { useProfileCommit } from "../intake/useProfileCommit.js";
 import { planFmt, planShellCopy } from "../copy/plan/index.js";
@@ -109,9 +110,9 @@ export default function Plan({
 
   if (profileRead.kind === "corrupt") {
     return (
-      <p role="status" className="text-warn" data-testid="plan-corrupt">
+      <StatusLine tone="warning" role="status" data-testid="plan-corrupt">
         {intakeCopy[locale].aboutYou.corruptNotice}
-      </p>
+      </StatusLine>
     );
   }
   if (planProfileOf(store).intakeBlocksDone < 1) {
@@ -175,14 +176,24 @@ export default function Plan({
     <div role="region" aria-label={shell.title} className="max-w-[48rem]" data-testid="plan-page">
       <PlanHeader result={plan.result} onOpenAboutYou={() => onNavigate("about-you")} />
       {plan.stateError && (
-        <p role="alert" className="text-warn" data-testid="plan-error-state">
+        <StatusLine
+          tone="problem"
+          role="alert"
+          
+          data-testid="plan-error-state"
+        >
           {shell.errors.state}
-        </p>
+        </StatusLine>
       )}
       {plan.writeError && (
-        <p role="alert" className="text-warn" data-testid="plan-error-write">
+        <StatusLine
+          tone="problem"
+          role="alert"
+          
+          data-testid="plan-error-write"
+        >
           {shell.errors.write}
-        </p>
+        </StatusLine>
       )}
       <FromAnswers
         store={profile.store}
@@ -214,9 +225,14 @@ export default function Plan({
           {shell.footer.recompute}
         </Button>
         {recomputeFailed && (
-          <p role="alert" className="text-warn" data-testid="plan-error-recompute">
+          <StatusLine
+            tone="problem"
+            role="alert"
+            
+            data-testid="plan-error-recompute"
+          >
             {shell.errors.recompute}
-          </p>
+          </StatusLine>
         )}
       </footer>
     </div>

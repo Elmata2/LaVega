@@ -2,7 +2,8 @@ import type { PlanStatus } from "@lavega/core";
 import Badge from "../components/ui/Badge.js";
 import type { PlanShellCopy } from "../copy/plan/index.js";
 
-/** Word plus symbol, never colour alone. The symbol is decoration; the word
+/** Word plus symbol (the icon), plus a dashed border for "attention", never
+ *  colour alone. The symbol is decoration; the word
  *  is the text a screen reader gets. */
 export default function StatusChip({
   status,
@@ -18,7 +19,7 @@ export default function StatusChip({
     <Badge
       data-testid={testId ?? "plan-status-chip"}
       data-status={status}
-      className={status === "attention" ? "border-warn text-warn" : undefined}
+      className={status === "attention" ? "border-dashed border-warn text-warn" : undefined}
     >
       <span aria-hidden="true" className="mr-1">
         {s.symbol}

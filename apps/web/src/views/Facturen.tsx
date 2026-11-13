@@ -8,7 +8,7 @@ import {
 } from "@lavega/core";
 import type { VaultStorage } from "@lavega/adapters";
 import type { View } from "../App";
-import { formatEuroIn } from "../format.js";
+import { formatEuroIn, formatSignedEuroIn } from "../format.js";
 import { useAppLocale } from "../appLocale.js";
 import { adminCopy, type AdminCopy } from "../copy/admin.js";
 import { apiErrorText } from "../copy/apiErrors.js";
@@ -23,6 +23,7 @@ import SaldoInput from "../components/ui/SaldoInput.js";
 import ToonMeer from "../components/ToonMeer.js";
 import { resolveInvoiceParties } from "../invoiceParty.js";
 import { Table, TableWrap, Th, Td } from "../components/ui/Table.js";
+import StatusLine from "../components/ui/StatusLine.js";
 import {
   addHandledInvoiceMessageIds,
   getAiExtractionEnabled,
@@ -1039,7 +1040,12 @@ export default function Facturen({
             </>
           )}
           {pending.length > 0 && (
-            <p className="cell-sub text-warn">{c.forms.auto.pendingWarning(pending.length)}</p>
+            <StatusLine
+              tone="warning"
+              className="cell-sub"
+            >
+              {c.forms.auto.pendingWarning(pending.length)}
+            </StatusLine>
           )}
         </Module>
 
@@ -1260,7 +1266,11 @@ export default function Facturen({
                 </Button>
               )}
             </div>
-            {manualError && <p className="cell-sub text-neg">{manualError}</p>}
+            {manualError && (
+              <StatusLine tone="problem" className="cell-sub">
+                {manualError}
+              </StatusLine>
+            )}
           </div>
         </Module>
       </ModuleGrid>
@@ -1272,10 +1282,10 @@ export default function Facturen({
             <h2>{c.queue.heading}</h2>
             <span className="eyebrow">{c.queue.eyebrow(pending.length)}</span>
           </CardHeader>
-          <p className="cell-sub text-neg">
+          <StatusLine tone="problem" className="cell-sub">
             <strong>{c.queue.warningLead}</strong>
             {c.queue.warningBody(pending.length)}
-          </p>
+          </StatusLine>
           <div className="n8n-rows">
             {pending.map((p) => (
               <div className="n8n-row" data-messageid={p.messageId} key={p.messageId}>
@@ -1287,7 +1297,12 @@ export default function Facturen({
                     hem zelf" een opdracht zonder reden — en de reden is het
                     enige waarmee hij kan beoordelen of hij hem wíl boeken. */}
                 {p.waitReason && (
-                  <p className="cell-sub text-warn">{c.queue.waitReason(p.waitReason)}</p>
+                  <StatusLine
+                    tone="warning"
+                    className="cell-sub"
+                  >
+                    {c.queue.waitReason(p.waitReason)}
+                  </StatusLine>
                 )}
                 <div className="facturen-form">
                   {hasEntities && (
@@ -1401,7 +1416,12 @@ export default function Facturen({
                 {!p.currency && <p className="cell-sub">{c.queue.missingCurrencyNote}</p>}
                 {p.vat === "" && <p className="cell-sub">{c.queue.missingVatNote}</p>}
                 {rowErrors[p.messageId] && (
-                  <p className="cell-sub text-neg">{rowErrors[p.messageId]}</p>
+                  <StatusLine
+                    tone="problem"
+                    className="cell-sub"
+                  >
+                    {rowErrors[p.messageId]}
+                  </StatusLine>
                 )}
               </div>
             ))}
@@ -1460,7 +1480,7 @@ export default function Facturen({
         <span className="eyebrow flex-none">
           {c.list.eyebrowCount(flows.length)}
           <span className={netCents >= 0 ? "text-pos" : "text-neg"}>
-            {formatEuroIn(locale, netCents / 100)}
+            {formatSignedEuroIn(locale, netCents / 100)}
           </span>
         </span>
       </div>
@@ -1518,7 +1538,7 @@ export default function Facturen({
                         className={signed >= 0 ? "text-pos" : "text-neg"}
                         data-label={c.list.columns.amount}
                       >
-                        {formatEuroIn(locale, signed)}
+                        {formatSignedEuroIn(locale, signed)}
                       </Td>
                       <Td data-label={c.list.columns.dueDate}>{inv.dueDate}</Td>
                       <Td data-label={c.list.columns.status}>

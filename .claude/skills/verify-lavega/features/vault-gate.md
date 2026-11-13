@@ -22,7 +22,7 @@ Preconditions:
 - Local instance up with a database and auth configured, and a verified test account. Do not use the user's own account.
 - A fresh browser origin (new `--port`) so no old vault exists there.
 
-- **Open.** Sign in, `navigate` to `/app`. Page text has no `Kluiswachtwoord` field; the nav rail `aria-label="Weergaven"` is visible. Screenshot `vault-gate-00-open.png`.
+- **Open.** Sign in, `navigate` to `/app`. Page text has no `Kluiswachtwoord` field; the nav rail `nav.shell2-rail` (`aria-label="Weergaven"`; at < 1024px the bottom bar `nav.shell2-bottombar`) is visible. Screenshot `vault-gate-00-open.png`.
 - **Key route.** `control-lavega` `GET /api/vault/key` with the session: 200, a `key`, and `cache-control: private, no-store`. Without the session: 401.
 - **Persist.** Import a bank file, reload. The same accounts show; no gate. Screenshot `vault-gate-01-reload.png`.
 - **Sign out.** Profiel → `Uitloggen`. The landing page shows; `/app` redirects to `/`.

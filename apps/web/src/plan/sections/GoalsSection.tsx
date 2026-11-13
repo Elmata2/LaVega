@@ -8,6 +8,7 @@ import {
   type GoalsFigures,
 } from "@lavega/core";
 import Button from "../../components/ui/Button.js";
+import StatusLine from "../../components/ui/StatusLine.js";
 import { goalsCopy, learnShortHorizonText } from "../../copy/plan/index.js";
 import { nowIso } from "../clock.js";
 import SectionCard from "../SectionCard.js";
@@ -114,9 +115,9 @@ function GoalEditor({
         </p>
       )}
       {linkError && (
-        <p role="alert" className="m-0 mb-2 text-warn text-[0.85rem]">
+        <StatusLine tone="problem" role="alert" className="m-0 mb-2 text-[0.85rem]">
           {a.saveFailed}
-        </p>
+        </StatusLine>
       )}
       <ValueInput
         name={`goal-saved-${goal.id}`}
@@ -273,13 +274,14 @@ function StudyForm({ ctx }: { ctx: PlanCtx }) {
           </Button>
         )}
       </div>
-      <p
+      <StatusLine
+        tone="problem"
         role={error === null ? undefined : "alert"}
         data-testid="plan-error-study"
-        className="m-0 text-warn text-[0.85rem]"
+        className="m-0 text-[0.85rem]"
       >
         {error}
-      </p>
+      </StatusLine>
     </form>
   );
 }

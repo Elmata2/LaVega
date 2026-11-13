@@ -13,7 +13,7 @@ import type { ImportProblem } from "@lavega/core";
 import type { ShellNotice } from "../shellNotice.js";
 
 /**
- * Every word the vault app's chrome shows, in both languages: TopBar, NavBar,
+ * Every word the vault app's chrome shows, in both languages: the rail, the top bar,
  * VaultGate, Overzicht, Import, Profiel and ModulePicker — the files this
  * copy module belongs to.
  *
@@ -23,7 +23,7 @@ import type { ShellNotice } from "../shellNotice.js";
  * while keeping the Dutch/legal terms (BTW, zzp, DGA, IBAN, SEPA, iDEAL) that
  * do not translate.
  *
- * `nav.moduleLabels` exists so NavBar's own tab text can switch language
+ * `nav.moduleLabels` exists so the rail's own label text can switch language
  * without touching `moduleRegistry.tsx`'s `MODULES`/`WIDGETS`; `modulePicker`
  * does the same for `ModulePicker.tsx`'s Add-widget panel, which no longer
  * reads `label`/`what`/`note` off `MODULES`/`WIDGETS` directly. Those two
@@ -53,6 +53,34 @@ export type ShellCopy = {
     investing: string;
     profile: string;
     moduleLabels: Record<ModuleId, string>;
+  };
+  /** The full-width frame (components/Shell.tsx). */
+  frame: {
+    sidebarLabel: string;
+    sidebarOpen: string;
+    sidebarClose: string;
+    skipLink: string;
+    openMenu: string;
+    more: string;
+  };
+  /** The phone drawer (components/ShellDrawer.tsx). */
+  drawer: {
+    menuTitle: string;
+    moreTitle: string;
+    close: string;
+    modulesLabel: string;
+  };
+  /** The account sidebar (components/AccountSidebar.tsx). */
+  accountSidebar: {
+    tabsLabel: string;
+    tabAll: string;
+    tabAssets: string;
+    tabDebts: string;
+    add: string;
+    empty: string;
+    emptyAssets: string;
+    emptyDebts: string;
+    resizeLabel: string;
   };
   modulePicker: {
     homeNote: string;
@@ -284,6 +312,31 @@ const nl: ShellCopy = {
     },
     scopeGroupLabel: "Persoonlijk of zakelijk",
     addWidget: "Widget toevoegen",
+  },
+  frame: {
+    sidebarLabel: "Rekeningen",
+    sidebarOpen: "Zijbalk openen",
+    sidebarClose: "Zijbalk sluiten",
+    skipLink: "Naar inhoud",
+    openMenu: "Menu openen",
+    more: "Meer",
+  },
+  drawer: {
+    menuTitle: "Menu",
+    moreTitle: "Meer",
+    close: "Menu sluiten",
+    modulesLabel: "Modules",
+  },
+  accountSidebar: {
+    tabsLabel: "Filter rekeningen",
+    tabAll: "Alle",
+    tabAssets: "Activa",
+    tabDebts: "Schulden",
+    add: "+ Rekening toevoegen",
+    empty: "Nog geen rekeningen.",
+    emptyAssets: "Geen activa.",
+    emptyDebts: "Geen schulden.",
+    resizeLabel: "Breedte zijbalk",
   },
   nav: {
     ariaLabel: "Weergaven",
@@ -649,6 +702,31 @@ const en: ShellCopy = {
     },
     scopeGroupLabel: "Personal or business",
     addWidget: "Add widget",
+  },
+  frame: {
+    sidebarLabel: "Accounts",
+    sidebarOpen: "Show sidebar",
+    sidebarClose: "Hide sidebar",
+    skipLink: "Skip to content",
+    openMenu: "Open menu",
+    more: "More",
+  },
+  drawer: {
+    menuTitle: "Menu",
+    moreTitle: "More",
+    close: "Close menu",
+    modulesLabel: "Modules",
+  },
+  accountSidebar: {
+    tabsLabel: "Filter accounts",
+    tabAll: "All",
+    tabAssets: "Assets",
+    tabDebts: "Debts",
+    add: "+ Add account",
+    empty: "No accounts yet.",
+    emptyAssets: "No assets.",
+    emptyDebts: "No debts.",
+    resizeLabel: "Sidebar width",
   },
   nav: {
     ariaLabel: "Views",

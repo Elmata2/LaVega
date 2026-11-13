@@ -457,3 +457,47 @@ test("the series shows a recorded price change", () => {
   });
   expect(container!.textContent).toContain("Prijs gewijzigd");
 });
+
+test("an incoming bill row carries + and the remaining figure a real minus when short", () => {
+  const salary: Bill = {
+    ...rent(),
+    id: "salaris",
+    name: "Salaris",
+    type: "income",
+    direction: "in",
+    amountCents: 300_000,
+    rules: [{ frequency: "monthly", interval: 1, dayOfMonth: 25 }],
+    anchorDate: "2026-10-25",
+  };
+  const bills = [rent(), salary];
+  const occurrences = generateBillOccurrences(bills, [], AS_OF).occurrences;
+  render(bills, occurrences, [account(700)]);
+  const signed = [...container!.querySelectorAll(".text-pos")].map((e) => e.textContent ?? "");
+  expect(signed.some((t) => /^\+€\s3\.000,00$/.test(t))).toBe(true);
+  // The shortfall (EUR 285,50 short) is a coloured euro figure: real minus first.
+  expect(byTestId("bills-shortfall-value").textContent).toMatch(/^\u2212€\s285,50$/);
+  // The remaining figure of the short period (text-neg) carries a real minus
+  // first; a plus would pass a loose sign check, so pin the exact text.
+  const shortRemaining = [
+    ...container!.querySelectorAll('[data-testid^="bills-period-"] .text-neg'),
+  ].map((e) => e.textContent ?? "");
+  expect(shortRemaining).toHaveLength(1);
+  expect(shortRemaining[0]).toMatch(/^Over: \u2212€\s985,50$/);
+  for (const t of shortRemaining) expect(t).toMatch(/^Over: \u2212€\s/);
+});
+
+test("a paid occurrence's status badge carries the check icon and border, not only a tint", () => {
+  const bill = rent();
+  const occurrences = generateBillOccurrences([bill], [], AS_OF).occurrences.map((o) =>
+    o.id === "huur|2026-11-20"
+      ? { ...o, status: "paid" as const, paidOn: "2026-11-20", paidAmountCents: 98_550 }
+      : o,
+  );
+  render([bill], occurrences, [account(5_000)], [rentTx()], {
+    ...EMPTY_BILL_DECISIONS,
+    matches: [matchDecision()],
+  });
+  const badge = container!.querySelector('[data-testid="badge"] [data-status-icon="success"]');
+  expect(badge).not.toBeNull();
+  expect(badge!.closest('[data-testid="badge"]')!.className).toContain("border-pos");
+});

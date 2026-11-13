@@ -94,6 +94,8 @@ import {
 import { CATALOGUE_ENTRIES, CATALOGUE_RATES } from "./catalogue-rates";
 import { API_BASE } from "./api.js";
 import { CONTENT_CONTAINER_CLASS } from "./module-grid.js";
+import { Shell } from "./components/Shell.js";
+import { AccountSidebar } from "./components/AccountSidebar.js";
 import { SHOW_INVOICE_FORWARDING, initialScope, isArchivedView } from "./archive";
 import { pathForView, takePendingEbParams, viewFromPathname, type View } from "./appRoutes";
 import { gateState } from "./vault-gate.js";
@@ -154,10 +156,10 @@ import {
   markBankConnected,
   markEbRefreshAttempted,
 } from "./ebAutoRefresh.js";
-import NavBar from "./components/NavBar";
-import TopBar from "./components/TopBar";
+import { TopBarActions } from "./components/TopBar";
 import CardLink from "./components/ui/CardLink.js";
 import Button from "./components/ui/Button.js";
+import StatusLine from "./components/ui/StatusLine.js";
 import {
   enabledModules as resolveModules,
   navModules,
@@ -205,7 +207,7 @@ const RATES_URL: string | undefined =
 
 /* "rules" has NO nav entry: Regels is a setting, so it renders inline in
  * Profiel and nothing calls setView("rules"). Its branch below is gone. The
- * union still lists it only because components/TopBar.tsx types its page-title
+ * union still lists it only because copy/shell.ts types its page-title
  * table as Record<View, string> and still has a "Regels" entry — dropping the
  * member there is one line in a file this change does not own, and that title
  * map is a label lookup, not a way to reach the view. Path `/app/rules` still
@@ -1325,6 +1327,22 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
     profileRead !== "error" &&
     profileRead.kind === "ok" &&
     planProfileOf(profileRead.store).intakeBlocksDone >= 1;
+
+  // Show just this account's transactions: clear the other filters so the list
+  // isn't silently narrowed by a stale one. Rekeningen and the account sidebar
+  // share this one handler.
+  const openAccountTransactions = useCallback(
+    (key: string) => {
+      setFAccount(key);
+      setFEntity("");
+      setFSearch("");
+      setFCategory("");
+      setFFrom("");
+      setFTo("");
+      setView("transactions");
+    },
+    [setView],
+  );
   // Capacity for "what LaVega knows about you": the same room and the same
   // profile inputs the intake uses, worked out here and never stored.
   // The home screen's room card: computed once per data change, and only while
@@ -2239,7 +2257,9 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
           <p role="status">{intakeCopy[locale].loading}</p>
         ) : profileRead === "error" ? (
           <div role="alert">
-            <p className="text-warn">{intakeCopy[locale].loadError}</p>
+            <StatusLine tone="problem">
+              {intakeCopy[locale].loadError}
+            </StatusLine>
             <Button onClick={() => void retryProfileRead()}>{intakeCopy[locale].retry}</Button>
           </div>
         ) : (
@@ -2267,429 +2287,431 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
   }
 
   return (
-    <div className="shell">
-      <NavBar
-        view={view}
-        modules={navModules(withoutLockedModules(modules, planUnlocked))}
-        onNavigate={setView}
-        onOpenProfile={() => setView("profiel")}
-      />
-
-      <div className="shell-body">
-        <TopBar
+    <Shell
+      title={shell.topBar.viewTitles[view]}
+      nav={{
+        view,
+        modules: navModules(withoutLockedModules(modules, planUnlocked)),
+        onNavigate: setView,
+        onOpenProfile: () => setView("profiel"),
+      }}
+      sidebar={(onNavigate) => (
+        <AccountSidebar
+          onNavigate={onNavigate}
+          accounts={scopedAccounts}
           view={view}
+          planUnlocked={planUnlocked}
+          activeAccountKey={view === "transactions" ? fAccount : ""}
+          onSelectAccount={openAccountTransactions}
+          onOpenPlan={() => setView("plan")}
+          // Import lives in Profiel; Rekeningen's empty state points there too.
+          onAddAccount={() => setView("profiel")}
+        />
+      )}
+      actions={
+        <TopBarActions
           scope={scope}
           onScopeChange={handleScopeChange}
           onAddWidget={handleAddWidget}
         />
+      }
+    >
+      <div className={CONTENT_CONTAINER_CLASS}>
+        {/* Import moved into the profile, so import/bank-link messages would
+          otherwise only be visible on that page. They are the outcome of
+          something the user just did (a file import, a bank return), so
+          they follow him: the profile's own Import block shows them there,
+          this banner shows them anywhere else. */}
+        {problems.length > 0 && view !== "profiel" && (
+          <StatusLine tone="warning" role="alert" className="shell-problems">
+            {problems.map((n) => shell.notice(n)).join(" ")}
+          </StatusLine>
+        )}
 
-        <main className="content">
-          <div className={CONTENT_CONTAINER_CLASS}>
-            {/* Import moved into the profile, so import/bank-link messages would
-              otherwise only be visible on that page. They are the outcome of
-              something the user just did (a file import, a bank return), so
-              they follow him: the profile's own Import block shows them there,
-              this banner shows them anywhere else. */}
-            {problems.length > 0 && view !== "profiel" && (
-              <p role="alert" className="text-warn shell-problems">
-                {problems.map((n) => shell.notice(n)).join(" ")}
-              </p>
-            )}
+        {/* An entity with no classification counts as Persoonlijk, so on a
+          vault where nothing has been classified yet, Zakelijk is empty.
+          Empty is a legitimate answer, but an empty app reads as a broken
+          one — say which it is, and where to fix it. */}
+        {scopedAccounts.length === 0 && accounts.length > 0 && view !== "profiel" && (
+          <p className="text-muted shell-problems">
+            {shell.emptyScope.before}
+            <strong>{shell.scope[scope]}</strong>
+            {shell.emptyScope.after}
+            <CardLink onClick={() => setView("accounts")}>
+              {shell.emptyScope.linkLabel}
+            </CardLink>
+            .
+          </p>
+        )}
 
-            {/* An entity with no classification counts as Persoonlijk, so on a
-              vault where nothing has been classified yet, Zakelijk is empty.
-              Empty is a legitimate answer, but an empty app reads as a broken
-              one — say which it is, and where to fix it. */}
-            {scopedAccounts.length === 0 && accounts.length > 0 && view !== "profiel" && (
-              <p className="text-muted shell-problems">
-                {shell.emptyScope.before}
-                <strong>{shell.scope[scope]}</strong>
-                {shell.emptyScope.after}
-                <CardLink onClick={() => setView("accounts")}>
-                  {shell.emptyScope.linkLabel}
-                </CardLink>
-                .
-              </p>
-            )}
-
-            {view === "overview" && (
-              <Overzicht
-                storage={storage}
-                accounts={currentScopedAccounts}
-                txs={scopedTxs}
-                rules={rules}
-                own={own}
-                asOf={asOf}
-                bufferCents={bufferCents}
-                scheduledFlows={scopedScheduledFlows}
-                bills={bills}
-                billOccurrences={billOccurrences}
-                billDecisions={billDecisions}
-                /* LETTERLIJK DEZELFDE UITDRUKKING als bij <Belasting> hieronder,
-                 en dat is de bedoeling: de btw-kaart op het overzicht en het
-                 scherm Belasting moeten over dezelfde ondernemingen gaan. Wie
-                 hier iets anders neerzet, laat de twee schermen op dezelfde dag
-                 een ander bedrag noemen. */
-                entities={entityScope ? [entityScope] : entityOptions}
-                vatSettings={vatSettings}
-                invoices={invoices}
-                country={homeCountry}
-                fxHistory={fxHistory}
-                mode={fxConversionMode}
-                onBufferChange={handleBufferChange}
-                onNavigate={setView}
-                {...(homeRoom && profileRead !== "loading" && profileRead !== "error"
-                  ? {
-                      intake: {
-                        store: profileRead.kind === "ok" ? profileRead.store : null,
-                        room: homeRoom.room,
-                        ...(homeRoom.statedInputs ? { statedInputs: homeRoom.statedInputs } : {}),
-                        onSave: saveProfile,
-                        onOpenRound2: () => {
-                          setIntakeRound(2);
-                          setView("intake");
-                        },
-                      },
-                    }
-                  : {})}
-                travel={{
-                  accounts: scopedAccounts,
-                  txs: scopedTxs,
-                  rates: rates.rates,
-                  facts,
-                  asOf,
-                  homeCountry,
-                  homeCountryChosen,
-                  onNavigate: setView,
-                  busy,
-                  aiAvailable: llmConfigured,
-                  onRefreshTerms: handleRefreshTravelTerms,
-                  pendingTerms,
-                  termsAsked,
-                  termsGaveUp,
-                  onRecheckAi: () => void recheckLlm(),
-                  onCorrectFact: (fact) => void saveFacts([fact]),
-                }}
-                onSelectCategory={(c) => {
-                  // Match exactly what the Per-categorie totals showed: only the
-                  // category filter (plus any active top-bar entity scope); clear
-                  // the per-view filters so the list isn't silently over-narrowed.
-                  setFCategory(c);
-                  setFEntity("");
-                  setFAccount("");
-                  setFSearch("");
-                  setFFrom("");
-                  setFTo("");
-                  setView("transactions");
-                }}
-              />
-            )}
-
-            {view === "transactions" && (
-              <Transacties
-                accounts={scopedAccounts}
-                scopedTxs={scopedTxs}
-                rules={rules}
-                own={own}
-                transfers={transfers}
-                suggestions={scopedTransferSuggestions}
-                onConfirmTransfer={handleConfirmTransfer}
-                onRejectTransfer={handleRejectTransfer}
-                fxHistory={fxHistory}
-                mode={fxConversionMode}
-                entityOptions={entityOptions}
-                entityScope={entityScope}
-                fEntity={fEntity}
-                onFEntityChange={setFEntity}
-                fAccount={fAccount}
-                onFAccountChange={setFAccount}
-                fSearch={fSearch}
-                onFSearchChange={setFSearch}
-                fFrom={fFrom}
-                onFFromChange={setFFrom}
-                fTo={fTo}
-                onFToChange={setFTo}
-                fCategory={fCategory}
-                onFCategoryChange={setFCategory}
-                configured={llmConfigured}
-                onApplyCategories={handleApplyCategories}
-              />
-            )}
-
-            {/* DE REGELS STAAN BIJ DE TRANSACTIES, niet in de instellingenkaart.
-              Zijn verzoek, en de reden staat in het scherm zelf: een regel is
-              een antwoord op een transactie die verkeerd is ingedeeld, dus hij
-              hoort op de plek waar je dat ziet gebeuren. In Profiel stond hij
-              twee klikken verderop, losgekoppeld van het ding waar hij over
-              gaat. */}
-            {view === "transactions" && (
-              <Regels
-                rules={rules}
-                txs={txs}
-                accounts={accounts}
-                own={own}
-                busy={busy}
-                onSaveRules={saveRules}
-              />
-            )}
-
-            {view === "accounts" && (
-              <Rekeningen
-                accounts={scopedAccounts}
-                txs={scopedTxs}
-                busy={busy}
-                transferLinksDropped={transferLinksDropped ?? undefined}
-                onEntityChange={handleEntityChange}
-                onAccountCommit={handleAccountCommit}
-                onAccountFieldChange={handleAccountFieldChange}
-                onSaldoCommit={handleSaldoCommit}
-                onTypeCommit={handleTypeCommit}
-                onDeleteAccount={handleDeleteAccount}
-                duplicateGroups={duplicateGroups}
-                onMergeDuplicates={handleMergeDuplicates}
-                statedCredit={statedOf(profileRead, "statedCards")}
-                statedDebit={statedOf(profileRead, "statedDebitCards")}
-                onRefreshBank={() => void handleRefreshBank()}
-                valuations={scopedValuations}
-                asOf={asOf}
-                onOpeningCommit={handleOpeningCommit}
-                onValuationCommit={handleValuationCommit}
-                onValuationRemove={handleValuationRemove}
-                onSelectAccount={(key) => {
-                  // Show just this account's transactions — clear the other
-                  // filters so the list isn't silently narrowed by a stale one.
-                  setFAccount(key);
-                  setFEntity("");
-                  setFSearch("");
-                  setFCategory("");
-                  setFFrom("");
-                  setFTo("");
-                  setView("transactions");
-                }}
-              />
-            )}
-
-            {view === "forecast" && (
-              <Forecast
-                txs={scopedTxs}
-                accounts={currentScopedAccounts}
-                entityScope={entityScope}
-                asOf={asOf}
-                bufferCents={bufferCents}
-                scheduledFlows={scopedScheduledFlows}
-                fxHistory={fxHistory}
-                mode={fxConversionMode}
-                bills={bills}
-                billOccurrences={billOccurrences}
-                billDecisions={billDecisions}
-              />
-            )}
-
-            {view === "optimalisatie" && (
-              <Optimalisatie
-                txs={scopedTxs}
-                entityScope={scope}
-                accounts={currentScopedAccounts}
-                rules={rules}
-                own={own}
-                asOf={asOf}
-                busy={busy}
-                facts={facts}
-                onRateCommit={handleRateCommit}
-              />
-            )}
-
-            {/* Scoped like every other view: standing in Zakelijk and being offered a
-              conversion out of a personal account is a leak across the very line
-              the switch exists to draw. */}
-            {view === "bills" && !isArchivedView("bills") && (
-              <Bills
-                bills={bills}
-                occurrences={billOccurrences}
-                accounts={scopedAccounts}
-                txs={scopedTxs}
-                decisions={billDecisions}
-                asOf={asOf}
-                busy={busy}
-                onSavePlan={saveBillPlan}
-              />
-            )}
-
-            {view === "valuta" && !isArchivedView("valuta") && <Valuta accounts={scopedAccounts} />}
-
-            {view === "belasting" && !isArchivedView("belasting") && (
-              <Belasting
-                entities={entityScope ? [entityScope] : entityOptions}
-                txs={scopedTxs}
-                accounts={scopedAccounts}
-                asOf={asOf}
-                vatSettings={vatSettings}
-                scheduledFlows={scopedScheduledFlows}
-                invoices={invoices}
-                /* DE VOLLEDIGE LIJSTEN, met opzet en precies hier. De btw-module
-                 blijft op `scopedTxs`/`scopedAccounts` rekenen; de grensmodule
-                 kan dat per definitie niet, want die meet wat er TUSSEN de twee
-                 helften bewoog en zou vanuit één helft de tegenboeking nooit
-                 zien. Dit is de ene plek in de app waar de
-                 persoonlijk/zakelijk-schakelaar bewust niet doorwerkt, en de
-                 reden staat uitgeschreven bij `crossScopeTransfers` in core en
-                 bij `allAccounts` in Belasting.tsx. */
-                allAccounts={accounts}
-                allTxs={txs}
-                entityProfiles={entityProfiles}
-                ownNames={ownNamesForMatching}
-                busy={busy}
-                onSaveVatSettings={saveVatSettings}
-                onSaveScheduledFlows={saveScheduledFlows}
-              />
-            )}
-
-            {view === "facturen" && !isArchivedView("facturen") && (
-              <Facturen
-                storage={storage}
-                entities={entityOptions}
-                ownIbans={ownIbans}
-                invoices={invoices}
-                txs={txs}
-                asOf={asOf}
-                busy={busy}
-                defaultEntity={entity}
-                onSaveInvoices={saveInvoices}
-                pending={pendingInvoices}
-                onPendingChange={setPendingInvoices}
-                notices={pendingNotices}
-                onNoticesChange={setPendingNotices}
-                onNavigate={setView}
-              />
-            )}
-
-            {view === "punten" && (
-              <Punten
-                balances={rewards}
-                asOf={asOf}
-                busy={busy}
-                onSave={saveRewards}
-                statedPrograms={
-                  profileRead !== "loading" && profileRead !== "error" && profileRead.kind === "ok"
-                    ? profileRead.store.current.statedPrograms?.value
-                    : undefined
+        {view === "overview" && (
+          <Overzicht
+            storage={storage}
+            accounts={currentScopedAccounts}
+            txs={scopedTxs}
+            rules={rules}
+            own={own}
+            asOf={asOf}
+            bufferCents={bufferCents}
+            scheduledFlows={scopedScheduledFlows}
+            bills={bills}
+            billOccurrences={billOccurrences}
+            billDecisions={billDecisions}
+            /* LETTERLIJK DEZELFDE UITDRUKKING als bij <Belasting> hieronder,
+             en dat is de bedoeling: de btw-kaart op het overzicht en het
+             scherm Belasting moeten over dezelfde ondernemingen gaan. Wie
+             hier iets anders neerzet, laat de twee schermen op dezelfde dag
+             een ander bedrag noemen. */
+            entities={entityScope ? [entityScope] : entityOptions}
+            vatSettings={vatSettings}
+            invoices={invoices}
+            country={homeCountry}
+            fxHistory={fxHistory}
+            mode={fxConversionMode}
+            onBufferChange={handleBufferChange}
+            onNavigate={setView}
+            {...(homeRoom && profileRead !== "loading" && profileRead !== "error"
+              ? {
+                  intake: {
+                    store: profileRead.kind === "ok" ? profileRead.store : null,
+                    room: homeRoom.room,
+                    ...(homeRoom.statedInputs ? { statedInputs: homeRoom.statedInputs } : {}),
+                    onSave: saveProfile,
+                    onOpenRound2: () => {
+                      setIntakeRound(2);
+                      setView("intake");
+                    },
+                  },
                 }
-              />
-            )}
+              : {})}
+            travel={{
+              accounts: scopedAccounts,
+              txs: scopedTxs,
+              rates: rates.rates,
+              facts,
+              asOf,
+              homeCountry,
+              homeCountryChosen,
+              onNavigate: setView,
+              busy,
+              aiAvailable: llmConfigured,
+              onRefreshTerms: handleRefreshTravelTerms,
+              pendingTerms,
+              termsAsked,
+              termsGaveUp,
+              onRecheckAi: () => void recheckLlm(),
+              onCorrectFact: (fact) => void saveFacts([fact]),
+            }}
+            onSelectCategory={(c) => {
+              // Match exactly what the Per-categorie totals showed: only the
+              // category filter (plus any active top-bar entity scope); clear
+              // the per-view filters so the list isn't silently over-narrowed.
+              setFCategory(c);
+              setFEntity("");
+              setFAccount("");
+              setFSearch("");
+              setFFrom("");
+              setFTo("");
+              setView("transactions");
+            }}
+          />
+        )}
 
-            {view === "koppelingen" && SHOW_INVOICE_FORWARDING && (
-              <Koppelingen onNavigate={setView} />
-            )}
+        {view === "transactions" && (
+          <Transacties
+            accounts={scopedAccounts}
+            scopedTxs={scopedTxs}
+            rules={rules}
+            own={own}
+            transfers={transfers}
+            suggestions={scopedTransferSuggestions}
+            onConfirmTransfer={handleConfirmTransfer}
+            onRejectTransfer={handleRejectTransfer}
+            fxHistory={fxHistory}
+            mode={fxConversionMode}
+            entityOptions={entityOptions}
+            entityScope={entityScope}
+            fEntity={fEntity}
+            onFEntityChange={setFEntity}
+            fAccount={fAccount}
+            onFAccountChange={setFAccount}
+            fSearch={fSearch}
+            onFSearchChange={setFSearch}
+            fFrom={fFrom}
+            onFFromChange={setFFrom}
+            fTo={fTo}
+            onFToChange={setFTo}
+            fCategory={fCategory}
+            onFCategoryChange={setFCategory}
+            configured={llmConfigured}
+            onApplyCategories={handleApplyCategories}
+          />
+        )}
 
-            {view === "backup" && (
-              <Backup
-                storage={storage}
-                asOf={asOf}
-                documentCount={documents.length}
-                onRestored={handleRestored}
-              />
-            )}
+        {/* DE REGELS STAAN BIJ DE TRANSACTIES, niet in de instellingenkaart.
+          Zijn verzoek, en de reden staat in het scherm zelf: een regel is
+          een antwoord op een transactie die verkeerd is ingedeeld, dus hij
+          hoort op de plek waar je dat ziet gebeuren. In Profiel stond hij
+          twee klikken verderop, losgekoppeld van het ding waar hij over
+          gaat. */}
+        {view === "transactions" && (
+          <Regels
+            rules={rules}
+            txs={txs}
+            accounts={accounts}
+            own={own}
+            busy={busy}
+            onSaveRules={saveRules}
+          />
+        )}
 
-            {view === "plan" && (
-              <PlanRoute
-                profileRead={profileRead}
-                onRetry={() => void retryProfileRead()}
-                store={
-                  profileRead === "loading" || profileRead === "error" || profileRead.kind !== "ok"
-                    ? null
-                    : profileRead.store
-                }
-                storage={storage}
-                accounts={accounts}
-                txs={ledgerTxs}
-                entityProfiles={entityProfiles}
-                rules={rules}
-                own={ownWithNames}
-                rewards={rewards}
-                facts={facts}
-                catalogue={CATALOGUE_ENTRIES}
-                rates={rates.rates}
-                mode={fxConversionMode}
-                fxHistory={fxHistory}
-                vatSettings={vatSettings}
-                valuations={valuations}
-                asOf={asOf}
-                onSaveProfile={saveProfile}
-                onSaveRewards={saveRewards}
-                onNavigate={setView}
-              />
-            )}
+        {view === "accounts" && (
+          <Rekeningen
+            accounts={scopedAccounts}
+            txs={scopedTxs}
+            busy={busy}
+            transferLinksDropped={transferLinksDropped ?? undefined}
+            onEntityChange={handleEntityChange}
+            onAccountCommit={handleAccountCommit}
+            onAccountFieldChange={handleAccountFieldChange}
+            onSaldoCommit={handleSaldoCommit}
+            onTypeCommit={handleTypeCommit}
+            onDeleteAccount={handleDeleteAccount}
+            duplicateGroups={duplicateGroups}
+            onMergeDuplicates={handleMergeDuplicates}
+            statedCredit={statedOf(profileRead, "statedCards")}
+            statedDebit={statedOf(profileRead, "statedDebitCards")}
+            onRefreshBank={() => void handleRefreshBank()}
+            valuations={scopedValuations}
+            asOf={asOf}
+            onOpeningCommit={handleOpeningCommit}
+            onValuationCommit={handleValuationCommit}
+            onValuationRemove={handleValuationRemove}
+            onSelectAccount={openAccountTransactions}
+          />
+        )}
 
-            {view === "about-you" &&
-              (profileRead === "loading" ? (
-                <p role="status">{intakeCopy[locale].loading}</p>
-              ) : profileRead === "error" ? (
-                <div role="alert">
-                  <p className="text-warn">{intakeCopy[locale].loadError}</p>
-                  <Button onClick={() => void retryProfileRead()}>
-                    {intakeCopy[locale].retry}
-                  </Button>
-                </div>
-              ) : (
-                <AboutYou
-                  store={profileRead.kind === "ok" ? profileRead.store : null}
-                  corrupt={profileRead.kind === "corrupt"}
-                  capacity={aboutYouCapacity}
-                  asOf={asOf}
-                  onSave={saveProfile}
-                  onNavigate={setView}
-                />
-              ))}
+        {view === "forecast" && (
+          <Forecast
+            txs={scopedTxs}
+            accounts={currentScopedAccounts}
+            entityScope={entityScope}
+            asOf={asOf}
+            bufferCents={bufferCents}
+            scheduledFlows={scopedScheduledFlows}
+            fxHistory={fxHistory}
+            mode={fxConversionMode}
+            bills={bills}
+            billOccurrences={billOccurrences}
+            billDecisions={billDecisions}
+          />
+        )}
 
-            {view === "profiel" && (
-              <Profiel
-                onNavigate={setView}
-                enabledModules={modules}
-                onModulesChange={handleModulesChange}
-                focusModules={addWidget}
-                entities={entitySummaryRows}
-                onClassifyEntity={handleClassifyEntity}
-                homeCountry={homeCountry}
-                onHomeCountryChange={handleHomeCountryChange}
-                homeRegion={homeRegion}
-                onHomeRegionChange={handleHomeRegionChange}
-                fxConversionMode={fxConversionMode}
-                onFxConversionModeChange={handleFxConversionModeChange}
-                shareNetWorthEnabled={shareNetWorthEnabled}
-                onShareNetWorthEnabledChange={handleShareNetWorthEnabledChange}
-                shareNetWorthPendingDelete={shareNetWorthPendingDelete}
-                ownerName={ownerName}
-                onOwnerNameChange={handleOwnerNameChange}
-                onLock={handleLock}
-                entity={entity}
-                onEntityChange={setEntity}
-                busy={busy}
-                problems={problems}
-                onImport={handleImport}
-                onRefreshBank={() => void handleRefreshBank()}
-                storage={storage}
-                asOf={asOf}
-                onRestored={handleRestored}
-                documents={documents}
-                documentNotice={documentNotice}
-                documentErased={documentErased}
-                accounts={accounts}
-                txs={txs}
-                valuations={valuations}
-                onDocumentUpload={(file) => void handleDocumentUpload(file)}
-                onDocumentLink={(id, key) => void handleDocumentLink(id, key)}
-                onDocumentReject={(id) => void handleDocumentReject(id)}
-                onDocumentRemove={(id) => void handleDocumentRemove(id)}
-                onDocumentEraseAll={() => void handleDocumentEraseAll()}
-                importSessions={importSessions}
-                importNotice={importNotice}
-                onGenericImport={(request) => void handleGenericImport(request)}
-                onGenericRevert={(id) => void handleRevertImport(id)}
-              />
-            )}
-          </div>
-        </main>
+        {view === "optimalisatie" && (
+          <Optimalisatie
+            txs={scopedTxs}
+            entityScope={scope}
+            accounts={currentScopedAccounts}
+            rules={rules}
+            own={own}
+            asOf={asOf}
+            busy={busy}
+            facts={facts}
+            onRateCommit={handleRateCommit}
+          />
+        )}
+
+        {/* Scoped like every other view: standing in Zakelijk and being offered a
+          conversion out of a personal account is a leak across the very line
+          the switch exists to draw. */}
+        {view === "bills" && !isArchivedView("bills") && (
+          <Bills
+            bills={bills}
+            occurrences={billOccurrences}
+            accounts={scopedAccounts}
+            txs={scopedTxs}
+            decisions={billDecisions}
+            asOf={asOf}
+            busy={busy}
+            onSavePlan={saveBillPlan}
+          />
+        )}
+
+        {view === "valuta" && !isArchivedView("valuta") && <Valuta accounts={scopedAccounts} />}
+
+        {view === "belasting" && !isArchivedView("belasting") && (
+          <Belasting
+            entities={entityScope ? [entityScope] : entityOptions}
+            txs={scopedTxs}
+            accounts={scopedAccounts}
+            asOf={asOf}
+            vatSettings={vatSettings}
+            scheduledFlows={scopedScheduledFlows}
+            invoices={invoices}
+            /* DE VOLLEDIGE LIJSTEN, met opzet en precies hier. De btw-module
+             blijft op `scopedTxs`/`scopedAccounts` rekenen; de grensmodule
+             kan dat per definitie niet, want die meet wat er TUSSEN de twee
+             helften bewoog en zou vanuit één helft de tegenboeking nooit
+             zien. Dit is de ene plek in de app waar de
+             persoonlijk/zakelijk-schakelaar bewust niet doorwerkt, en de
+             reden staat uitgeschreven bij `crossScopeTransfers` in core en
+             bij `allAccounts` in Belasting.tsx. */
+            allAccounts={accounts}
+            allTxs={txs}
+            entityProfiles={entityProfiles}
+            ownNames={ownNamesForMatching}
+            busy={busy}
+            onSaveVatSettings={saveVatSettings}
+            onSaveScheduledFlows={saveScheduledFlows}
+          />
+        )}
+
+        {view === "facturen" && !isArchivedView("facturen") && (
+          <Facturen
+            storage={storage}
+            entities={entityOptions}
+            ownIbans={ownIbans}
+            invoices={invoices}
+            txs={txs}
+            asOf={asOf}
+            busy={busy}
+            defaultEntity={entity}
+            onSaveInvoices={saveInvoices}
+            pending={pendingInvoices}
+            onPendingChange={setPendingInvoices}
+            notices={pendingNotices}
+            onNoticesChange={setPendingNotices}
+            onNavigate={setView}
+          />
+        )}
+
+        {view === "punten" && (
+          <Punten
+            balances={rewards}
+            asOf={asOf}
+            busy={busy}
+            onSave={saveRewards}
+            statedPrograms={
+              profileRead !== "loading" && profileRead !== "error" && profileRead.kind === "ok"
+                ? profileRead.store.current.statedPrograms?.value
+                : undefined
+            }
+          />
+        )}
+
+        {view === "koppelingen" && SHOW_INVOICE_FORWARDING && (
+          <Koppelingen onNavigate={setView} />
+        )}
+
+        {view === "backup" && (
+          <Backup
+            storage={storage}
+            asOf={asOf}
+            documentCount={documents.length}
+            onRestored={handleRestored}
+          />
+        )}
+
+        {view === "plan" && (
+          <PlanRoute
+            profileRead={profileRead}
+            onRetry={() => void retryProfileRead()}
+            store={
+              profileRead === "loading" || profileRead === "error" || profileRead.kind !== "ok"
+                ? null
+                : profileRead.store
+            }
+            storage={storage}
+            accounts={accounts}
+            txs={ledgerTxs}
+            entityProfiles={entityProfiles}
+            rules={rules}
+            own={ownWithNames}
+            rewards={rewards}
+            facts={facts}
+            catalogue={CATALOGUE_ENTRIES}
+            rates={rates.rates}
+            mode={fxConversionMode}
+            fxHistory={fxHistory}
+            vatSettings={vatSettings}
+            valuations={valuations}
+            asOf={asOf}
+            onSaveProfile={saveProfile}
+            onSaveRewards={saveRewards}
+            onNavigate={setView}
+          />
+        )}
+
+        {view === "about-you" &&
+          (profileRead === "loading" ? (
+            <p role="status">{intakeCopy[locale].loading}</p>
+          ) : profileRead === "error" ? (
+            <div role="alert">
+              <StatusLine tone="problem">
+                {intakeCopy[locale].loadError}
+              </StatusLine>
+              <Button onClick={() => void retryProfileRead()}>
+                {intakeCopy[locale].retry}
+              </Button>
+            </div>
+          ) : (
+            <AboutYou
+              store={profileRead.kind === "ok" ? profileRead.store : null}
+              corrupt={profileRead.kind === "corrupt"}
+              capacity={aboutYouCapacity}
+              asOf={asOf}
+              onSave={saveProfile}
+              onNavigate={setView}
+            />
+          ))}
+
+        {view === "profiel" && (
+          <Profiel
+            onNavigate={setView}
+            enabledModules={modules}
+            onModulesChange={handleModulesChange}
+            focusModules={addWidget}
+            entities={entitySummaryRows}
+            onClassifyEntity={handleClassifyEntity}
+            homeCountry={homeCountry}
+            onHomeCountryChange={handleHomeCountryChange}
+            homeRegion={homeRegion}
+            onHomeRegionChange={handleHomeRegionChange}
+            fxConversionMode={fxConversionMode}
+            onFxConversionModeChange={handleFxConversionModeChange}
+            shareNetWorthEnabled={shareNetWorthEnabled}
+            onShareNetWorthEnabledChange={handleShareNetWorthEnabledChange}
+            shareNetWorthPendingDelete={shareNetWorthPendingDelete}
+            ownerName={ownerName}
+            onOwnerNameChange={handleOwnerNameChange}
+            onLock={handleLock}
+            entity={entity}
+            onEntityChange={setEntity}
+            busy={busy}
+            problems={problems}
+            onImport={handleImport}
+            onRefreshBank={() => void handleRefreshBank()}
+            storage={storage}
+            asOf={asOf}
+            onRestored={handleRestored}
+            documents={documents}
+            documentNotice={documentNotice}
+            documentErased={documentErased}
+            accounts={accounts}
+            txs={txs}
+            valuations={valuations}
+            onDocumentUpload={(file) => void handleDocumentUpload(file)}
+            onDocumentLink={(id, key) => void handleDocumentLink(id, key)}
+            onDocumentReject={(id) => void handleDocumentReject(id)}
+            onDocumentRemove={(id) => void handleDocumentRemove(id)}
+            onDocumentEraseAll={() => void handleDocumentEraseAll()}
+            importSessions={importSessions}
+            importNotice={importNotice}
+            onGenericImport={(request) => void handleGenericImport(request)}
+            onGenericRevert={(id) => void handleRevertImport(id)}
+          />
+        )}
       </div>
-    </div>
+    </Shell>
   );
 }

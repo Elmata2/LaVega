@@ -6,6 +6,9 @@
  * figure to compare against, and printing "0%" would claim a measured "no
  * change" that was never measured. */
 
+import { formatSignedPercentIn } from "../../format.js";
+import { useAppLocale } from "../../appLocale.js";
+
 /* First component on Tailwind (see docs/adr/0005). The 3px/10px padding and the
  * 0.78rem size have no token, so they stay literal rather than being rounded to
  * the nearest one and quietly resizing. The tints come from --pos-tint and
@@ -26,6 +29,7 @@ type DeltaPillProps = {
 };
 
 export default function DeltaPill({ pct, upIsGood }: DeltaPillProps) {
+  const [locale] = useAppLocale();
   if (pct === null) return null;
   const rounded = Math.round(pct);
   if (rounded === 0)
@@ -48,7 +52,7 @@ export default function DeltaPill({ pct, upIsGood }: DeltaPillProps) {
       data-delta={good ? "good" : "bad"}
       className={`${BASE} ${good ? "bg-pos-tint text-pos" : "bg-neg-tint text-neg"}`}
     >
-      {up ? "▲" : "▼"} {Math.abs(rounded)}%
+      {up ? "▲" : "▼"} {formatSignedPercentIn(locale, rounded)}
     </span>
   );
 }

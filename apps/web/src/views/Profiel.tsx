@@ -59,6 +59,7 @@ import Backup from "./Backup";
 import Button from "../components/ui/Button.js";
 import Card, { CardHeader } from "../components/ui/Card.js";
 import SaldoInput from "../components/ui/SaldoInput.js";
+import StatusLine from "../components/ui/StatusLine.js";
 import SignInForm from "../components/SignInForm.js";
 
 /* Profiel — everything that is a setting rather than a place you work.
@@ -375,11 +376,11 @@ function CashbackCorrigeren({
       </p>
 
       {loadProblem !== null ? (
-        <p role="alert" className="text-warn">
+        <StatusLine tone="problem" role="alert">
           {c.profiel.cashback.loadProblemPrefix}
           {loadProblem}
           {c.profiel.cashback.loadProblemSuffix}
-        </p>
+        </StatusLine>
       ) : cards === null ? (
         <p className="text-muted">{c.profiel.cashback.loading}</p>
       ) : rows.length === 0 ? (
@@ -451,9 +452,9 @@ function CashbackCorrigeren({
       )}
 
       {problem !== null && (
-        <p role="alert" className="text-warn">
+        <StatusLine tone="problem" role="alert">
           {problem}
-        </p>
+        </StatusLine>
       )}
       {saved !== null && (
         <p data-testid="cashback-opgeslagen">
@@ -827,9 +828,9 @@ export default function Profiel({
             : c.profiel.netWorthShare.offStatus}
         </p>
         {shareNetWorthPendingDelete && (
-          <p role="alert" className="text-warn">
+          <StatusLine tone="warning" role="alert">
             {c.profiel.netWorthShare.pendingDeleteStatus}
-          </p>
+          </StatusLine>
         )}
       </Card>
 

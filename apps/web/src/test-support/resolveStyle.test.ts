@@ -16,10 +16,10 @@ test("resolves a hand-written rule", () => {
 test("resolves inside each max-width block", () => {
   expect(resolved([MODULE_GRID_CLASS], "grid-template-columns")).toBe("repeat(3,minmax(0,1fr))");
   // The module grid's breakpoints are container queries now (see module-grid.ts).
-  expect(resolvedInContainer([MODULE_GRID_CLASS], "grid-template-columns", 1136)).toBe(
+  expect(resolvedInContainer([MODULE_GRID_CLASS], "grid-template-columns", 1200)).toBe(
     "repeat(2,minmax(0,1fr))",
   );
-  expect(resolvedInContainer([MODULE_GRID_CLASS], "grid-template-columns", 868)).toBe(
+  expect(resolvedInContainer([MODULE_GRID_CLASS], "grid-template-columns", 900)).toBe(
     "minmax(0,1fr)",
   );
 });
@@ -27,10 +27,10 @@ test("resolves inside each max-width block", () => {
 test("keeps @media and @container blocks apart", () => {
   // .module-grid has no viewport rule at 1200 any more; a media lookup must not
   // pick up the container block of the same width, and vice versa.
-  expect(resolved([MODULE_GRID_CLASS], "grid-template-columns", 1136)).toBe(
+  expect(resolved([MODULE_GRID_CLASS], "grid-template-columns", 1200)).toBe(
     "repeat(3,minmax(0,1fr))",
   );
-  expect(resolvedInContainer([MODULE_GRID_CLASS], "grid-template-columns", 1200)).toBe(
+  expect(resolvedInContainer([MODULE_GRID_CLASS], "grid-template-columns", 1201)).toBe(
     "repeat(3,minmax(0,1fr))",
   );
 });

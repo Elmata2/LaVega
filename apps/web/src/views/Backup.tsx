@@ -10,6 +10,7 @@ import posthog from "../posthog.js";
 import Button from "../components/ui/Button.js";
 import Card from "../components/ui/Card.js";
 import { Field, CheckboxField } from "../components/ui/Field.js";
+import StatusLine from "../components/ui/StatusLine.js";
 
 type BackupProps = {
   storage: VaultStorage;
@@ -218,9 +219,9 @@ function ServerBackup({
       </Button>
       {conflict && (
         <>
-          <p role="alert" className="text-warn">
+          <StatusLine tone="problem" role="alert">
             {c.server.conflict.message(formatDateTime(locale, conflict))}
-          </p>
+          </StatusLine>
           <Button disabled={busy || erasing} onClick={() => void upload(true)}>
             {c.server.conflict.overwriteButton}
           </Button>
@@ -228,9 +229,9 @@ function ServerBackup({
       )}
       {message && <p>{message}</p>}
       {error && (
-        <p role="alert" className="text-warn">
+        <StatusLine tone="problem" role="alert">
           {error}
-        </p>
+        </StatusLine>
       )}
       {serverBlob && (
         <p>
@@ -267,9 +268,9 @@ function ServerBackup({
       )}
       {confirmErase && (
         <>
-          <p role="alert" className="text-warn">
+          <StatusLine tone="warning" role="alert">
             {c.server.erase.warning}
-          </p>
+          </StatusLine>
           <Button disabled={busy || erasing} onClick={() => void eraseData()}>
             {erasing ? c.common.busy : c.server.erase.confirmButton}
           </Button>{" "}
@@ -280,9 +281,9 @@ function ServerBackup({
       )}
       {eraseMessage && <p>{eraseMessage}</p>}
       {eraseError && (
-        <p role="alert" className="text-warn">
+        <StatusLine tone="problem" role="alert">
           {eraseError}
-        </p>
+        </StatusLine>
       )}
     </>
   );
@@ -356,7 +357,7 @@ export default function Backup({ storage, asOf, documentCount = 0, onRestored }:
       <ServerBackup storage={storage} documentCount={documentCount} />
 
       <h3>{c.restore.title}</h3>
-      <p className="text-warn">{c.restore.warning}</p>
+      <StatusLine tone="warning">{c.restore.warning}</StatusLine>
       <form onSubmit={handleRestore}>
         <Field>
           <label htmlFor="backup-restore-file">{c.restore.fileLabel}</label>
@@ -388,9 +389,9 @@ export default function Backup({ storage, asOf, documentCount = 0, onRestored }:
           {c.restore.confirmLabel}
         </CheckboxField>
         {error && (
-          <p role="alert" className="text-warn">
+          <StatusLine tone="problem" role="alert">
             {error}
-          </p>
+          </StatusLine>
         )}
         {restored && <p>{c.restore.success}</p>}
         <Button type="submit" variant="primary" disabled={busy || !file || !confirmed}>

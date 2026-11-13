@@ -121,32 +121,6 @@ function Line({ x, y, w, strong }: { x: number; y: number; w: number; strong?: b
 
 export const MODULES: ModuleDef[] = [
   {
-    id: "plan",
-    /* Nav order is registry order, so this is the first item. The words come
-     * from the shell copy (the nav and picker read them from there too). */
-    label: shellCopy.nl.nav.moduleLabels.plan,
-    what: shellCopy.nl.modulePicker.modules.plan,
-    icon: (
-      <Icon>
-        <path d="M5 4h14v16H5z" />
-        <path d="M9 9h6M9 13h6M9 17h3" />
-      </Icon>
-    ),
-    preview: (
-      <Thumb>
-        <Tile x={8} y={8} w={80} h={14} />
-        <Line x={12} y={12} w={24} strong />
-        <Line x={12} y={17} w={50} />
-        <Tile x={8} y={26} w={38} h={26} />
-        <Line x={12} y={32} w={16} strong />
-        <Line x={12} y={39} w={26} />
-        <Tile x={50} y={26} w={38} h={26} />
-        <Line x={54} y={32} w={16} strong />
-        <Line x={54} y={39} w={26} />
-      </Thumb>
-    ),
-  },
-  {
     id: "overview",
     label: "Overzicht",
     what: "Je startpagina: totaalpositie, cashflow, aandachtspunten en statistieken.",
@@ -169,6 +143,34 @@ export const MODULES: ModuleDef[] = [
         <Tile x={8} y={34} w={80} h={18} />
         <Line x={12} y={40} w={20} strong />
         <Line x={12} y={47} w={60} />
+      </Thumb>
+    ),
+  },
+  {
+    id: "optimalisatie",
+    label: "Optimalisatie",
+    what: "Abonnementen die je kunt opzeggen en spaarrentes die meer opleveren.",
+    icon: (
+      <Icon>
+        <path d="M9 18h6" />
+        <path d="M10 21h4" />
+        <path d="M12 3a6 6 0 0 0-4 10.5c.6.6 1 1.3 1 2.5h6c0-1.2.4-1.9 1-2.5A6 6 0 0 0 12 3z" />
+      </Icon>
+    ),
+    preview: (
+      <Thumb>
+        <Line x={8} y={8} w={28} strong />
+        <rect x="8" y="20" width="18" height="28" rx="3" fill="var(--muted)" opacity="0.35" />
+        <rect x="32" y="30" width="18" height="18" rx="3" fill="var(--muted)" opacity="0.35" />
+        <rect x="56" y="14" width="18" height="34" rx="3" fill="var(--pos)" opacity="0.75" />
+        <path
+          d="M78 26 L84 18 L90 26"
+          fill="none"
+          stroke="var(--pos)"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
       </Thumb>
     ),
   },
@@ -197,6 +199,33 @@ export const MODULES: ModuleDef[] = [
         <circle cx="16" cy="46.5" r="3.5" fill="var(--accent)" opacity="0.5" />
         <Line x={24} y={44.5} w={30} strong />
         <Line x={70} y={45} w={12} />
+      </Thumb>
+    ),
+  },
+  {
+    id: "plan",
+    /* Nav order is registry order: Overzicht, Optimalisatie, Rekeningen, then
+     * this. The words come from the shell copy (the nav and picker read them
+     * from there too). */
+    label: shellCopy.nl.nav.moduleLabels.plan,
+    what: shellCopy.nl.modulePicker.modules.plan,
+    icon: (
+      <Icon>
+        <path d="M5 4h14v16H5z" />
+        <path d="M9 9h6M9 13h6M9 17h3" />
+      </Icon>
+    ),
+    preview: (
+      <Thumb>
+        <Tile x={8} y={8} w={80} h={14} />
+        <Line x={12} y={12} w={24} strong />
+        <Line x={12} y={17} w={50} />
+        <Tile x={8} y={26} w={38} h={26} />
+        <Line x={12} y={32} w={16} strong />
+        <Line x={12} y={39} w={26} />
+        <Tile x={50} y={26} w={38} h={26} />
+        <Line x={54} y={32} w={16} strong />
+        <Line x={54} y={39} w={26} />
       </Thumb>
     ),
   },
@@ -287,34 +316,6 @@ export const MODULES: ModuleDef[] = [
         />
         <circle cx="80" cy="16" r="3" fill="var(--accent)" />
         <Line x={8} y={8} w={24} strong />
-      </Thumb>
-    ),
-  },
-  {
-    id: "optimalisatie",
-    label: "Optimalisatie",
-    what: "Abonnementen die je kunt opzeggen en spaarrentes die meer opleveren.",
-    icon: (
-      <Icon>
-        <path d="M9 18h6" />
-        <path d="M10 21h4" />
-        <path d="M12 3a6 6 0 0 0-4 10.5c.6.6 1 1.3 1 2.5h6c0-1.2.4-1.9 1-2.5A6 6 0 0 0 12 3z" />
-      </Icon>
-    ),
-    preview: (
-      <Thumb>
-        <Line x={8} y={8} w={28} strong />
-        <rect x="8" y="20" width="18" height="28" rx="3" fill="var(--muted)" opacity="0.35" />
-        <rect x="32" y="30" width="18" height="18" rx="3" fill="var(--muted)" opacity="0.35" />
-        <rect x="56" y="14" width="18" height="34" rx="3" fill="var(--pos)" opacity="0.75" />
-        <path
-          d="M78 26 L84 18 L90 26"
-          fill="none"
-          stroke="var(--pos)"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
       </Thumb>
     ),
   },

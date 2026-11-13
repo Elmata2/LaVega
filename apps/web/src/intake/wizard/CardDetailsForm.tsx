@@ -10,6 +10,7 @@ import {
   type DetailsResult,
   type RowState,
 } from "./cardDetails.js";
+import StatusLine from "../../components/ui/StatusLine.js";
 
 export type CardDetailsFormProps = {
   copy: WizardCopy;
@@ -73,9 +74,9 @@ export default function CardDetailsForm(p: CardDetailsFormProps) {
                   onChange={(e) => patch(k, { balance: e.target.value })}
                 />
                 {show("balance") ? (
-                  <p role="alert" className="wz-error">
+                  <StatusLine tone="problem" role="alert" className="wz-error">
                     {t.errors.balance}
-                  </p>
+                  </StatusLine>
                 ) : null}
               </div>
               {hasBalance ? (
@@ -92,9 +93,9 @@ export default function CardDetailsForm(p: CardDetailsFormProps) {
                     disabled={p.busy}
                   />
                   {show("pays-in-full") ? (
-                    <p role="alert" className="wz-error">
+                    <StatusLine tone="problem" role="alert" className="wz-error">
                       {t.errors.paysInFull}
-                    </p>
+                    </StatusLine>
                   ) : null}
                 </div>
               ) : null}
@@ -114,9 +115,9 @@ export default function CardDetailsForm(p: CardDetailsFormProps) {
                   />
                   <p className="wz-hint">{t.rateHint}</p>
                   {show("rate") ? (
-                    <p role="alert" className="wz-error">
+                    <StatusLine tone="problem" role="alert" className="wz-error">
                       {t.errors.rate}
-                    </p>
+                    </StatusLine>
                   ) : null}
                 </div>
               ) : null}
@@ -135,9 +136,9 @@ export default function CardDetailsForm(p: CardDetailsFormProps) {
                   />
                   <p className="wz-hint">{t.pointsHint}</p>
                   {show("points") ? (
-                    <p role="alert" className="wz-error">
+                    <StatusLine tone="problem" role="alert" className="wz-error">
                       {t.errors.points}
-                    </p>
+                    </StatusLine>
                   ) : null}
                 </div>
               ) : null}

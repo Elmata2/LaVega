@@ -7,6 +7,7 @@ import CardPicker, { orderedCardIds } from "./CardPicker.js";
 import type { CardKind } from "./cardOptions.js";
 import { WORK_ORDER } from "./screens.js";
 import MultiTiles from "./MultiTiles.js";
+import StatusLine from "../../components/ui/StatusLine.js";
 
 type Busy = { busy: boolean };
 
@@ -605,9 +606,9 @@ export function UploadScreen(
               </label>
             </div>
             {state.kind === "failed" ? (
-              <p role="alert" className="wz-error">
+              <StatusLine tone="problem" role="alert" className="wz-error">
                 {u.failed}
-              </p>
+              </StatusLine>
             ) : null}
             <div>
               <button

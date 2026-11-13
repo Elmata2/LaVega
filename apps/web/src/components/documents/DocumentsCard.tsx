@@ -13,6 +13,7 @@ import { formatEuroIn } from "../../format.js";
 import Button from "../ui/Button.js";
 import Card from "../ui/Card.js";
 import CardLink from "../ui/CardLink.js";
+import StatusLine from "../ui/StatusLine.js";
 
 /** What the last upload did, so the card can say WHY a file was refused or was
  *  already there instead of leaving the owner guessing. */
@@ -103,15 +104,16 @@ export default function DocumentsCard({
           {c.erased(erased)}
         </p>
       )}
-      {noticeText != null && (
-        <p
-          role={notice?.kind === "refused" ? "alert" : "status"}
-          className={notice?.kind === "refused" ? "text-warn" : ""}
-          data-testid="documents-notice"
-        >
-          {noticeText}
-        </p>
-      )}
+      {noticeText != null &&
+        (notice?.kind === "refused" ? (
+          <StatusLine tone="warning" role="alert" data-testid="documents-notice">
+            {noticeText}
+          </StatusLine>
+        ) : (
+          <p role="status" data-testid="documents-notice">
+            {noticeText}
+          </p>
+        ))}
 
       <h3 className="mt-4">{c.review}</h3>
       {queue.length === 0 ? (
@@ -258,7 +260,9 @@ export default function DocumentsCard({
         <div className="mt-3 flex flex-wrap items-center gap-2">
           {confirmErase ? (
             <>
-              <span className="text-warn">{c.eraseAllConfirm}</span>
+              <StatusLine tone="warning" as="span">
+                {c.eraseAllConfirm}
+              </StatusLine>
               <Button
                 variant="primary"
                 data-testid="documents-erase-confirm"

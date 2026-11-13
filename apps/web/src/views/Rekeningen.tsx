@@ -3,6 +3,7 @@ import type { Account, AccountSummary, Tx, DuplicateGroup, Valuation } from "@la
 import {
   accountSummaries,
   accountIsLiability,
+  isEurCurrency,
   accountType,
   accountTypeKind,
   accountTypeKindOf,
@@ -11,7 +12,7 @@ import {
   valuationsForAccount,
   type AccountTypeKind,
 } from "@lavega/core";
-import { formatEuroIn } from "../format";
+import { formatEuroIn, formatSignedEuroIn } from "../format";
 import { useAppLocale } from "../appLocale";
 import { moneyCopy } from "../copy/money";
 import type { MoneyCopy } from "../copy/money";
@@ -27,6 +28,7 @@ import { CATALOGUE_ENTRIES } from "../catalogue-rates";
 import { wizardCopy } from "../copy/wizard";
 import { statedCardPlaceholders } from "../plan/statedPlaceholders";
 import { Table, TableWrap, Th, Td } from "../components/ui/Table.js";
+import StatusLine, { StatusIcon } from "../components/ui/StatusLine.js";
 import "../styles/views.css";
 
 type RekeningenProps = {
@@ -94,8 +96,9 @@ export type BankGroup = {
   /** False for the "Zonder bank" group. */
   named: boolean;
   rows: AccountSummary[];
-  /** Sum of the balances we actually hold, in euros. **Null when not one
-   *  account in the group has a balance** — an unknown saldo is never summed as
+  /** Sum of the EUR balances we actually hold, in euros; a balance in another
+   *  currency is not summed and counts as unknown. **Null when not one
+   *  account in the group has a EUR balance** — an unknown saldo is never summed as
    *  a zero, so a bank with nothing known shows no figure at all. */
   total: number | null;
   knownCount: number;
@@ -140,7 +143,9 @@ export function groupAccountsByBank(
     let txCount = 0;
     for (const r of sorted) {
       txCount += r.txCount;
-      if (r.account.balance !== null) {
+      // A non-EUR balance is not euros: it never enters the euro total and counts
+      // as unknown for it (same rule as totalePositie / core ingest).
+      if (r.account.balance !== null && isEurCurrency(r.account.currency)) {
         cents += Math.round(r.account.balance * 100);
         knownCount += 1;
         if (!r.account.balanceDate) undatedCount += 1;
@@ -565,9 +570,9 @@ function ValuationsEditor({
         </Button>
       </div>
       {invalid && (
-        <p className="m-0 mt-1 text-neg" role="alert">
+        <StatusLine tone="problem" className="m-0 mt-1" role="alert">
           {c.waarderingOngeldig}
-        </p>
+        </StatusLine>
       )}
     </div>
   );
@@ -1095,7 +1100,7 @@ function GroupSaldo({ group, locale }: { group: BankGroup; locale: Locale }) {
       data-testid="bank-group-saldo"
     >
       <span className={group.total >= 0 ? "text-pos" : "text-neg"}>
-        {formatEuroIn(locale, group.total)}
+        {formatSignedEuroIn(locale, group.total)}
       </span>
       {group.unknownCount > 0 && (
         <Badge>{c.vanKnownVanTotal(group.knownCount, group.rows.length)}</Badge>
@@ -1198,6 +1203,7 @@ export default function Rekeningen({
           <div className="dup-banner" key={group.canonicalId}>
             <div>
               <p className="dup-banner-title">
+                <StatusIcon tone="warning" />
                 {c.dupBannerTitle(group.accounts.map(accountLabel).join(", "))}
               </p>
               <p className="dup-banner-sub">

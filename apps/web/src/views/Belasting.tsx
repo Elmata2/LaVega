@@ -32,7 +32,7 @@ import {
   txsForEntity,
   vatPosition,
 } from "@lavega/core";
-import { formatEuroIn } from "../format.js";
+import { formatEuroIn, formatSignedEuroIn } from "../format.js";
 import { useAppLocale } from "../appLocale.js";
 import { adminCopy, type BelastingCopy } from "../copy/admin.js";
 import type { Locale } from "../locale.js";
@@ -45,6 +45,7 @@ import Grens, { type GrensAnswerRow } from "./Grens";
 import Badge from "../components/ui/Badge.js";
 import Button from "../components/ui/Button.js";
 import Card from "../components/ui/Card.js";
+import StatusLine from "../components/ui/StatusLine.js";
 import "../styles/views.css";
 import { moneyCopy } from "../copy/money.js";
 
@@ -452,14 +453,14 @@ export default function Belasting({
         </select>
         <p className="mp-what">{c.header.taxSystemHint}</p>
         {taxCountry.unsupportedHome && (
-          <p className="text-warn">
+          <StatusLine tone="warning">
             {c.header.unsupportedCountry(countryNameIn(locale, taxCountry.unsupportedHome))}
-          </p>
+          </StatusLine>
         )}
       </Card>
 
       <ModuleGrid
-        className="grid-2 grid-cols-2 [@container(max-width:868px)]:grid-cols-1"
+        className="grid-2 grid-cols-2 [@container(max-width:900px)]:grid-cols-1"
         label={c.header.gridLabel}
       >
         {/* ── Module 1: de omzetbelasting van dit land ──────────────────── */}
@@ -497,7 +498,12 @@ export default function Belasting({
                   <span
                     className={`font-body text-[1.2rem] font-semibold tabular-nums ${!known ? "" : direction === "terugvragen" ? "text-pos" : "text-neg"}`}
                   >
-                    {known ? formatEuroIn(locale, Math.abs(netCents) / 100) : c.vat.noAmount}
+                    {known
+                      ? formatSignedEuroIn(
+                          locale,
+                          (direction === "terugvragen" ? 1 : -1) * (Math.abs(netCents) / 100),
+                        )
+                      : c.vat.noAmount}
                   </span>
                 </div>
 
@@ -720,7 +726,7 @@ export default function Belasting({
                     <span
                       className={`font-body text-[1.2rem] font-semibold tabular-nums ${total > 0 ? "text-neg" : ""}`}
                     >
-                      {flows.length > 0 ? formatEuroIn(locale, total / 100) : c.profitTax.noAmount}
+                      {flows.length > 0 ? formatSignedEuroIn(locale, -total / 100) : c.profitTax.noAmount}
                     </span>
                   </div>
                   {flows.length === 0 ? (
@@ -740,7 +746,7 @@ export default function Belasting({
                             {f.status === "expected" && <Badge>{c.profitTax.estimateBadge}</Badge>}
                           </span>
                           <span className="text-neg">
-                            {formatEuroIn(locale, f.amountCents / 100)}
+                            {formatSignedEuroIn(locale, -f.amountCents / 100)}
                           </span>
                         </div>
                       ))}

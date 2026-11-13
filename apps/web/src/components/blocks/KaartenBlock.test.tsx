@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
 import { renderToStaticMarkup } from "react-dom/server";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { expect, test } from "vitest";
 import type { Account } from "@lavega/core";
 import { formatEuro } from "../../format.js";
@@ -209,4 +211,17 @@ test("een Knab-betaalpas als placeholder krijgt het banklabel, en het logo als K
   );
   expect(html).toContain("nog niet gekoppeld");
   expect(html.includes("<img")).toBe(bankLogo("Knab") !== null);
+});
+
+test("bank logos carry the class the mono grayscale rule targets", () => {
+  const html = renderToStaticMarkup(<KaartenBlock accounts={accounts} onNavigate={() => {}} />);
+  const imgs = [...html.matchAll(/<img[^>]*>/g)].map((m) => m[0]);
+  expect(imgs.length).toBeGreaterThan(0);
+  for (const img of imgs) expect(img).toContain('class="bank-logo"');
+  const css = readFileSync(resolve(__dirname, "../../styles/base.css"), "utf8");
+  expect(css).toMatch(/:root\[data-theme="mono"\]\s+\.bank-logo\s*\{[^}]*grayscale\(1\)/);
+  const placeholder = renderToStaticMarkup(
+    <KaartenBlock accounts={[]} statedCredit={[]} statedDebit={["knab-betaalpas"]} onNavigate={() => {}} />,
+  );
+  for (const m of placeholder.matchAll(/<img[^>]*>/g)) expect(m[0]).toContain('class="bank-logo"');
 });

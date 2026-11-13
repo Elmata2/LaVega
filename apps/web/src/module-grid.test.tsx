@@ -71,19 +71,19 @@ function gridClasses(): string[] {
 
 test("moduleClass maps span + height onto the grid's classes", () => {
   expect(moduleClass()).toBe(
-    "module [grid-column:span_1] [@container(max-width:868px)]:col-span-full min-h-[var(--module-h-short)]",
+    "module [grid-column:span_1] [@container(max-width:900px)]:col-span-full min-h-[var(--module-h-short)]",
   );
   expect(moduleClass({ span: 2 })).toBe(
-    "module [grid-column:span_2] [@container(max-width:1136px)]:col-span-full [@container(max-width:868px)]:col-span-full min-h-[var(--module-h-short)]",
+    "module [grid-column:span_2] [@container(max-width:1200px)]:col-span-full [@container(max-width:900px)]:col-span-full min-h-[var(--module-h-short)]",
   );
   expect(moduleClass({ span: 3, height: "tall" })).toBe(
-    "module col-span-full min-h-[var(--module-h-tall)] [@container(max-width:868px)]:min-h-[var(--module-h-short)]",
+    "module col-span-full min-h-[var(--module-h-tall)] [@container(max-width:900px)]:min-h-[var(--module-h-short)]",
   );
 });
 
 test("moduleClass keeps a caller's own class last", () => {
   expect(moduleClass({ span: 2, className: "overzicht-positie" })).toBe(
-    "module [grid-column:span_2] [@container(max-width:1136px)]:col-span-full [@container(max-width:868px)]:col-span-full min-h-[var(--module-h-short)] overzicht-positie",
+    "module [grid-column:span_2] [@container(max-width:1200px)]:col-span-full [@container(max-width:900px)]:col-span-full min-h-[var(--module-h-short)] overzicht-positie",
   );
 });
 
@@ -163,7 +163,7 @@ test("on desktop a span occupies exactly that many columns", () => {
   expect(resolved(moduleClasses(3), "grid-column")).toBe("1/-1");
 });
 
-test("in a container <= 1136px the grid is 2 columns and wide spans clamp to the full row", () => {
+test("in a container <= 1200px the grid is 2 columns and wide spans clamp to the full row", () => {
   expect(resolvedInContainer(gridClasses(), "grid-template-columns", CONTAINER_TWO_COL_MAX)).toBe(
     "repeat(2,minmax(0,1fr))",
   );
@@ -171,7 +171,7 @@ test("in a container <= 1136px the grid is 2 columns and wide spans clamp to the
   expect(resolvedInContainer(moduleClasses(3), "grid-column", CONTAINER_TWO_COL_MAX)).toBe("1/-1");
 });
 
-test("in a container <= 868px the grid is one column: every span is the full row", () => {
+test("in a container <= 900px the grid is one column: every span is the full row", () => {
   expect(resolvedInContainer(gridClasses(), "grid-template-columns", CONTAINER_ONE_COL_MAX)).toBe(
     "minmax(0,1fr)",
   );

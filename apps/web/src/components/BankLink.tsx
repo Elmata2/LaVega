@@ -3,6 +3,7 @@ import { API_BASE, apiErrorMessageIn } from "../api";
 import { useAppLocale } from "../appLocale";
 import { moneyCopy } from "../copy/money";
 import Button from "./ui/Button.js";
+import StatusLine from "./ui/StatusLine.js";
 
 /* "Koppel bank" via Enable Banking (AIS, read-only). Fetches the bank list,
  * lets the user pick one, and redirects the browser to the bank to authorise.
@@ -192,9 +193,9 @@ export default function BankLink({
         </span>
       )}
       {error && (
-        <p className="text-warn" role="alert">
+        <StatusLine tone="problem" role="alert">
           {c.bankLink.bankkoppelingError(error)}
-        </p>
+        </StatusLine>
       )}
       <p className="eyebrow" style={{ marginTop: "var(--sp-2)" }}>
         {c.bankLink.alleenLezenToegang}

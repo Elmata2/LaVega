@@ -135,7 +135,7 @@ function shareTotalCalls() {
 }
 
 function openProfiel(el: HTMLElement) {
-  const profileLink = el.querySelector<HTMLAnchorElement>("a.appbar-profile");
+  const profileLink = el.querySelector<HTMLAnchorElement>(".shell2-rail-bottom a:last-child");
   expect(profileLink).not.toBeNull();
   act(() => {
     profileLink!.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
@@ -257,8 +257,8 @@ test("the module grid renders inside the content container that the grid's conta
     { key: "A", iban: "A", name: "", bank: "", entity: "BV1", currency: "EUR", balance: 1234.56 },
   ];
   const el = await renderApp();
-  const wrapper = el.querySelector("main.content > .content-container");
-  expect(wrapper, "main.content > .content-container is missing").not.toBeNull();
+  const wrapper = el.querySelector("main#main > .shell2-content > .content-container");
+  expect(wrapper, "main#main > .shell2-content > .content-container is missing").not.toBeNull();
   const grid = el.querySelector(".module-grid");
   expect(grid, "no .module-grid rendered").not.toBeNull();
   expect(grid!.closest(".content-container")).toBe(wrapper);
