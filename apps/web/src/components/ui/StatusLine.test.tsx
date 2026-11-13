@@ -47,6 +47,17 @@ describe("StatusLine", () => {
     expect(html.startsWith("<p ")).toBe(true);
   });
 
+  test("an empty slot keeps its element but draws no box and no icon", () => {
+    const html = renderToStaticMarkup(
+      <StatusLine tone="problem" id="e-err" data-testid="slot">
+        {null}
+      </StatusLine>,
+    );
+    expect(html).toContain('id="e-err"');
+    expect(html).not.toContain("data-status-icon");
+    expect(html).not.toContain("border");
+  });
+
   test("renders another element when asked", () => {
     const html = renderToStaticMarkup(
       <StatusLine tone="warning" as="div">

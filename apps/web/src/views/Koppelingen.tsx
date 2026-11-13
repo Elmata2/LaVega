@@ -1,3 +1,4 @@
+import StatusLine from "../components/ui/StatusLine.js";
 import { useEffect, useRef, useState } from "react";
 import { useAppLocale } from "../appLocale.js";
 import { adminCopy } from "../copy/admin.js";
@@ -253,9 +254,14 @@ export default function Koppelingen({ fetchImpl, onNavigate }: KoppelingenProps)
             )}
           </div>
           {forwardError && (
-            <p className="text-warn" role="alert" style={{ margin: "0 0 var(--sp-3)" }}>
+            <StatusLine
+              tone="problem"
+              className="border-warn text-warn"
+              role="alert"
+              style={{ margin: "0 0 var(--sp-3)" }}
+            >
               {c.forwardAddress.invalidError}
-            </p>
+            </StatusLine>
           )}
         </>
       )}
@@ -290,9 +296,9 @@ export default function Koppelingen({ fetchImpl, onNavigate }: KoppelingenProps)
             </p>
           )}
           {createNote && (
-            <p className="cell-sub text-warn" role="alert">
+            <StatusLine tone="warning" className="cell-sub" role="alert">
               {createNote}
-            </p>
+            </StatusLine>
           )}
         </div>
       )}
@@ -331,12 +337,12 @@ export default function Koppelingen({ fetchImpl, onNavigate }: KoppelingenProps)
        * klikt en dat bevestigt. Zie doRecord: alleen die klik schrijft. */}
       {serverState === "loading" && <p className="cell-sub">{c.forwardAddress.server.loading}</p>}
       {serverState === "error" && (
-        <p className="cell-sub text-neg" role="status">
+        <StatusLine tone="problem" className="cell-sub" role="status">
           {c.forwardAddress.server.readFailed}{" "}
           <Button onClick={() => setReadAttempt((n) => n + 1)}>
             {c.forwardAddress.server.retryButton}
           </Button>
-        </p>
+        </StatusLine>
       )}
       {serverState === "ok" && (
         <p className="cell-sub">
@@ -354,9 +360,9 @@ export default function Koppelingen({ fetchImpl, onNavigate }: KoppelingenProps)
       )}
       {forwardAddress && confirmRecord && (
         <>
-          <p role="alert" className="text-warn">
+          <StatusLine tone="warning" role="alert">
             {c.forwardAddress.server.confirmWarning(forwardAddress)}
-          </p>
+          </StatusLine>
           <p>
             <Button variant="primary" disabled={recording} onClick={() => void doRecord()}>
               {recording

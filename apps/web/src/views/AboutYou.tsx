@@ -1,3 +1,4 @@
+import StatusLine from "../components/ui/StatusLine.js";
 import { useState } from "react";
 import type { AdvisorProfile, AdvisorProfileStore, scoreCapacity } from "@lavega/core";
 import Button from "../components/ui/Button.js";
@@ -57,14 +58,14 @@ export default function AboutYou(props: AboutYouProps) {
   return (
     <div aria-label={c.ariaLabel} role="region" className="max-w-[48rem]">
       {props.corrupt && (
-        <p role="status" className="text-warn">
+        <StatusLine tone="warning" role="status">
           {c.corruptNotice}
-        </p>
+        </StatusLine>
       )}
       {saveFailed && (
-        <p role="alert" className="text-warn">
+        <StatusLine tone="problem" role="alert" className="border-warn text-warn">
           {c.saveFailed}
-        </p>
+        </StatusLine>
       )}
 
       <Card as="section" aria-label={c.title}>

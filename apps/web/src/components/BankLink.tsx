@@ -1,3 +1,4 @@
+import StatusLine from "./ui/StatusLine.js";
 import { Fragment, useCallback, useState } from "react";
 import { API_BASE, apiErrorMessageIn } from "../api";
 import { useAppLocale } from "../appLocale";
@@ -192,9 +193,9 @@ export default function BankLink({
         </span>
       )}
       {error && (
-        <p className="text-warn" role="alert">
+        <StatusLine tone="problem" className="border-warn text-warn" role="alert">
           {c.bankLink.bankkoppelingError(error)}
-        </p>
+        </StatusLine>
       )}
       <p className="eyebrow" style={{ marginTop: "var(--sp-2)" }}>
         {c.bankLink.alleenLezenToegang}

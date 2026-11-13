@@ -1,3 +1,4 @@
+import StatusLine from "./components/ui/StatusLine.js";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   Account,
@@ -2239,7 +2240,9 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
           <p role="status">{intakeCopy[locale].loading}</p>
         ) : profileRead === "error" ? (
           <div role="alert">
-            <p className="text-warn">{intakeCopy[locale].loadError}</p>
+            <StatusLine tone="problem" className="border-warn text-warn">
+              {intakeCopy[locale].loadError}
+            </StatusLine>
             <Button onClick={() => void retryProfileRead()}>{intakeCopy[locale].retry}</Button>
           </div>
         ) : (
@@ -2291,9 +2294,9 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
               they follow him: the profile's own Import block shows them there,
               this banner shows them anywhere else. */}
             {problems.length > 0 && view !== "profiel" && (
-              <p role="alert" className="text-warn shell-problems">
+              <StatusLine tone="warning" role="alert" className="shell-problems">
                 {problems.map((n) => shell.notice(n)).join(" ")}
-              </p>
+              </StatusLine>
             )}
 
             {/* An entity with no classification counts as Persoonlijk, so on a
@@ -2625,7 +2628,9 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
                 <p role="status">{intakeCopy[locale].loading}</p>
               ) : profileRead === "error" ? (
                 <div role="alert">
-                  <p className="text-warn">{intakeCopy[locale].loadError}</p>
+                  <StatusLine tone="problem" className="border-warn text-warn">
+                    {intakeCopy[locale].loadError}
+                  </StatusLine>
                   <Button onClick={() => void retryProfileRead()}>
                     {intakeCopy[locale].retry}
                   </Button>

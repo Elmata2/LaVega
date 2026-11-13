@@ -1,3 +1,4 @@
+import StatusLine from "./ui/StatusLine.js";
 import { useState } from "react";
 import type { FormEvent } from "react";
 import type { Locale } from "../locale.js";
@@ -84,9 +85,9 @@ export function RequestResetForm({
           />
         </Field>
         {failure !== null && (
-          <p role="alert" className="text-warn">
+          <StatusLine tone="problem" role="alert" className="border-warn text-warn">
             {c.mailError[failure]}
-          </p>
+          </StatusLine>
         )}
         <Button type="submit" variant="primary" disabled={busy || !email.trim()}>
           {c.reset.requestSubmit}
@@ -172,9 +173,9 @@ export function NewPasswordForm({
         </span>
       </Field>
       {failure !== null && (
-        <p role="alert" className="text-warn">
+        <StatusLine tone="problem" role="alert" className="border-warn text-warn">
           {c.reset.error[failure]}
-        </p>
+        </StatusLine>
       )}
       <Button type="submit" variant="primary" disabled={busy || password.length === 0}>
         {c.reset.save}

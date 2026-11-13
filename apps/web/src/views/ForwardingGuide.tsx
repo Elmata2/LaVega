@@ -1,3 +1,4 @@
+import StatusLine from "../components/ui/StatusLine.js";
 import { useEffect, useRef, useState } from "react";
 import { useAppLocale } from "../appLocale.js";
 import { adminCopy } from "../copy/admin.js";
@@ -211,10 +212,16 @@ export default function ForwardingGuide({
         <Button type="button" ref={openerRef} aria-haspopup="dialog" onClick={() => setOpen(true)}>
           {c.openButton}
         </Button>
-        <p className={`cell-sub m-0${state.setupUnreadable > 0 ? " text-warn" : ""}`} role="status">
-          {rowText}
-          {state.setupUnreadable > 0 && ` ${c.setupUnreadable.message}`}
-        </p>
+        {state.setupUnreadable > 0 ? (
+          <StatusLine tone="warning" className="cell-sub m-0" role="status">
+            {rowText}
+            {` ${c.setupUnreadable.message}`}
+          </StatusLine>
+        ) : (
+          <p className="cell-sub m-0" role="status">
+            {rowText}
+          </p>
+        )}
       </div>
       <dialog
         ref={dialogRef}
@@ -241,12 +248,12 @@ export default function ForwardingGuide({
           {open && (
             <>
               {state.setupUnreadable > 0 && (
-                <p className="cell-sub text-warn" role="status">
+                <StatusLine tone="warning" className="cell-sub" role="status">
                   {c.setupUnreadable.message}{" "}
                   <Button type="button" onClick={() => onChange(dismissUnreadable)}>
                     {c.setupUnreadable.dismiss}
                   </Button>
-                </p>
+                </StatusLine>
               )}
               {!hasAddress ? (
                 <>
@@ -402,9 +409,9 @@ export default function ForwardingGuide({
                   )}
                   {status === "timed-out" && (
                     <>
-                      <p className="cell-sub text-warn" role="status">
+                      <StatusLine tone="warning" className="cell-sub" role="status">
                         {c.test.timedOut}
-                      </p>
+                      </StatusLine>
                       <ul>
                         {c.test.checklist.map((item) => (
                           <li key={item}>{item}</li>

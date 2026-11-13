@@ -15,7 +15,16 @@ export const STATUS_TONE_CLASS: Record<StatusTone, string> = {
   success: "border border-solid border-pos text-pos",
 };
 
-const ICON_PATH: Record<StatusTone, JSX.Element> = {
+/** The icon alone also knows "info" (a neutral note: no border style, no tint). */
+export type StatusIconKind = StatusTone | "info";
+
+const ICON_PATH: Record<StatusIconKind, JSX.Element> = {
+  info: (
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 11v5M12 7.9v.1" />
+    </>
+  ),
   warning: (
     <>
       <path d="M12 4 21 20H3Z" />
@@ -37,7 +46,7 @@ const ICON_PATH: Record<StatusTone, JSX.Element> = {
 };
 
 /** Decoration only: the line's own words are what a screen reader gets. */
-export function StatusIcon({ tone, className }: { tone: StatusTone; className?: string }) {
+export function StatusIcon({ tone, className }: { tone: StatusIconKind; className?: string }) {
   return (
     <svg
       data-status-icon={tone}
@@ -75,6 +84,11 @@ export default function StatusLine({
   children,
   ...props
 }: StatusLineProps) {
+  /* A status slot that is always mounted (stable id for aria-describedby, a
+   * live region that fills later) must not draw an empty bordered box. */
+  if (children === null || children === undefined || children === false || children === "") {
+    return <Tag className={className} {...props} />;
+  }
   return (
     <Tag
       className={cn("rounded-[8px] px-[10px] py-[6px]", STATUS_TONE_CLASS[tone], className)}

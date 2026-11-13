@@ -1,3 +1,4 @@
+import StatusLine from "../../components/ui/StatusLine.js";
 import { useState } from "react";
 import {
   hash,
@@ -102,9 +103,13 @@ function SubRowView({ row, ctx, group }: { row: SubRow; ctx: PlanCtx; group: Sub
         </Button>
       </div>
       {failed && (
-        <p role="alert" className="m-0 text-warn text-[0.85rem]">
+        <StatusLine
+          tone="problem"
+          role="alert"
+          className="m-0 text-[0.85rem] border-warn text-warn"
+        >
           {a.saveFailed}
-        </p>
+        </StatusLine>
       )}
     </li>
   );

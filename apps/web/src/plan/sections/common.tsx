@@ -1,3 +1,4 @@
+import StatusLine from "../../components/ui/StatusLine.js";
 import { useId, useState, type FormEvent, type ReactNode } from "react";
 import type { Missing, SectionId, SectionResult } from "@lavega/core";
 import type { View } from "../../App";
@@ -229,14 +230,15 @@ export function ValueInput<T>({
           {hint}
         </p>
       )}
-      <p
+      <StatusLine
+        tone="problem"
         id={`${id}-err`}
         role={error === null ? undefined : "alert"}
         data-testid={`plan-error-${name}`}
-        className="m-0 text-warn text-[0.85rem]"
+        className="m-0 text-[0.85rem] border-warn text-warn"
       >
         {error}
-      </p>
+      </StatusLine>
     </form>
   );
 }

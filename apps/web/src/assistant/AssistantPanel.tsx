@@ -1,3 +1,4 @@
+import StatusLine from "../components/ui/StatusLine.js";
 import { useEffect, useMemo, useState } from "react";
 import type { VaultStorage } from "@lavega/adapters";
 import {
@@ -291,11 +292,11 @@ export function AssistantPanel({
       </form>
 
       {saveError && (
-        <p role="status" className="mt-2 text-sm text-warn">
+        <StatusLine tone="problem" role="status" className="mt-2 text-sm border-warn text-warn">
           {locale === "nl"
             ? "Je beslissing kon niet worden opgeslagen. Probeer het nog eens."
             : "Your decision could not be saved. Try again."}
-        </p>
+        </StatusLine>
       )}
 
       {decisions.length > 0 && (

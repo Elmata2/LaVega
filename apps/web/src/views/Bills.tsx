@@ -1,3 +1,4 @@
+import StatusLine, { type StatusTone } from "../components/ui/StatusLine.js";
 import { useMemo, useState } from "react";
 import type {
   Account,
@@ -212,12 +213,14 @@ function billFromDraft(draft: Draft): Bill {
   };
 }
 
-function statusTone(status: string): string {
-  if (status === "overdue" || status === "missed") return "border-neg text-neg";
-  if (status === "due") return "border-warn text-warn";
-  if (status === "paid") return "border-pos text-pos";
-  if (status === "paused" || status === "ended") return "opacity-60";
-  return "";
+/* Overdue and missed are problems (solid border), due is a warning (dashed),
+ * paid is a success (check): the shape carries it, the tint only adds to it. */
+function statusBadge(status: string): { tone?: StatusTone; className?: string } {
+  if (status === "overdue" || status === "missed") return { tone: "problem" };
+  if (status === "due") return { tone: "warning" };
+  if (status === "paid") return { tone: "success" };
+  if (status === "paused" || status === "ended") return { className: "opacity-60" };
+  return {};
 }
 
 export default function Bills({
@@ -534,9 +537,9 @@ export default function Bills({
             )}
           </form>
           {problems.length > 0 && (
-            <p className="text-neg" role="alert">
+            <StatusLine tone="problem" role="alert">
               {c.form.problems[problems[0]]}
-            </p>
+            </StatusLine>
           )}
           <div className="mt-[var(--sp-3)] flex gap-3">
             <Button variant="primary" data-testid="bills-save" disabled={busy} onClick={submit}>
@@ -702,7 +705,7 @@ export default function Bills({
                         {cadenceText(row.bill, locale, c)}
                       </span>
                     </span>
-                    <Badge className={statusTone(row.status)}>{c.rowStatus[row.status]}</Badge>
+                    <Badge {...statusBadge(row.status)}>{c.rowStatus[row.status]}</Badge>
                     <span className={row.direction === "in" ? "text-pos" : ""}>
                       {row.direction === "in"
                         ? signedMoney(row.amountCents)
@@ -736,11 +739,9 @@ export default function Bills({
                         {c.match.score(`${Math.round(suggestion.confidence * 100)}%`)}
                       </span>
                       {suggestion.evidence.pending && (
-                        <Badge className="border-neg text-neg">{c.match.pending}</Badge>
+                        <Badge tone="problem">{c.match.pending}</Badge>
                       )}
-                      {suggestion.ambiguous && (
-                        <Badge className="border-neg text-neg">{c.match.ambiguous}</Badge>
-                      )}
+                      {suggestion.ambiguous && <Badge tone="problem">{c.match.ambiguous}</Badge>}
                       <Button
                         data-testid={`bills-confirm-${row.occurrence.id}`}
                         variant="primary"
@@ -844,8 +845,7 @@ export default function Bills({
               >
                 <span className="flex min-w-[14rem] flex-col">
                   <span className="font-medium">
-                    {bill.name}{" "}
-                    <Badge className={statusTone(bill.status)}>{c.status[bill.status]}</Badge>
+                    {bill.name} <Badge {...statusBadge(bill.status)}>{c.status[bill.status]}</Badge>
                   </span>
                   <span className="text-muted">
                     {formatEuroIn(locale, resolveBillAmountCents(bill) / 100)} ·{" "}
@@ -932,7 +932,7 @@ export default function Bills({
                     {source !== "" && <span className="block text-muted">{source}</span>}
                   </span>
                   <span className="flex gap-3">
-                    <Badge className={statusTone(occurrence.status)}>
+                    <Badge {...statusBadge(occurrence.status)}>
                       {c.rowStatus[occurrence.status as keyof BillsCopy["rowStatus"]]}
                     </Badge>
                     <span>{formatEuroIn(locale, amountCents / 100)}</span>

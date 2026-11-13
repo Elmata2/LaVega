@@ -1,3 +1,4 @@
+import StatusLine from "../components/ui/StatusLine.js";
 import { useMemo, useState } from "react";
 import type {
   Account,
@@ -827,9 +828,9 @@ function RuleEditor({
       </label>
 
       {error !== null && (
-        <p role="alert" className="text-warn">
+        <StatusLine tone="problem" role="alert" className="border-warn text-warn">
           {error}
-        </p>
+        </StatusLine>
       )}
       <div className="mt-[var(--sp-3)] flex gap-[var(--sp-2)]">
         <Button variant="primary" disabled={busy} onClick={onSave}>
@@ -1142,9 +1143,7 @@ export default function Regels({ rules, txs, accounts, own, busy, onSaveRules }:
                                 <Td>{categoryLabel(locale, sample.decision.category)}</Td>
                                 <Td>
                                   {sample.decision.locked ? (
-                                    <Badge className="border-warn text-warn">
-                                      {c.preview.lockedBadge}
-                                    </Badge>
+                                    <Badge tone="warning">{c.preview.lockedBadge}</Badge>
                                   ) : rule !== undefined ? (
                                     ruleSummary(rule, locale, c)
                                   ) : (

@@ -407,11 +407,15 @@
   .dot-pos {
     background: var(--pos);
   }
+  /* Never colour alone: positive is a filled dot, negative a hollow ring,
+   * warning a dashed ring, so the three differ in shape in every theme. */
   .dot-neg {
-    background: var(--neg);
+    background: transparent;
+    box-shadow: inset 0 0 0 2px var(--neg);
   }
   .dot-warn {
-    background: var(--warn);
+    background: transparent;
+    border: 1.5px dashed var(--warn);
   }
 
   /* App-bar nav item — a plain text tab with a rule under the active one, the
@@ -876,8 +880,8 @@
     flex-wrap: wrap;
     padding: var(--sp-3) var(--sp-4);
     margin-bottom: var(--sp-4);
-    border: 1px solid var(--line);
-    border-left: 4px solid var(--warn);
+    border: 1px dashed var(--line);
+    border-left: 4px dashed var(--warn);
     border-radius: var(--r);
     background: var(--surface-2);
   }

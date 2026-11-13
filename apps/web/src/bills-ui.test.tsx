@@ -482,3 +482,19 @@ test("an incoming bill row carries + and the remaining figure a real minus when 
     .find((t) => /^\S+: .*\d/.test(t) && /[+\u2212]€/.test(t));
   expect(remaining).toMatch(/[+\u2212]€\s/);
 });
+
+test("a paid occurrence's status badge carries the check icon and border, not only a tint", () => {
+  const bill = rent();
+  const occurrences = generateBillOccurrences([bill], [], AS_OF).occurrences.map((o) =>
+    o.id === "huur|2026-11-20"
+      ? { ...o, status: "paid" as const, paidOn: "2026-11-20", paidAmountCents: 98_550 }
+      : o,
+  );
+  render([bill], occurrences, [account(5_000)], [rentTx()], {
+    ...EMPTY_BILL_DECISIONS,
+    matches: [matchDecision()],
+  });
+  const badge = container!.querySelector('[data-testid="badge"] [data-status-icon="success"]');
+  expect(badge).not.toBeNull();
+  expect(badge!.closest('[data-testid="badge"]')!.className).toContain("border-pos");
+});

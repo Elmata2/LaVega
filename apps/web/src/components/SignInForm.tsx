@@ -1,3 +1,4 @@
+import StatusLine from "./ui/StatusLine.js";
 import { useState } from "react";
 import type { FormEvent } from "react";
 import type { Locale } from "../locale.js";
@@ -105,9 +106,9 @@ export default function SignInForm({
           </p>
         )}
         {failure !== null && (
-          <p role="alert" className="text-warn">
+          <StatusLine tone="problem" role="alert" className="border-warn text-warn">
             {c.profiel.account.signInError[failure]}
-          </p>
+          </StatusLine>
         )}
         <Button type="submit" variant="primary" disabled={busy || !email || !password}>
           {c.profiel.account.signIn}

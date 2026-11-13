@@ -1,3 +1,4 @@
+import StatusLine from "./ui/StatusLine.js";
 import { useState } from "react";
 import type { FormEvent } from "react";
 import type { VaultStorage } from "@lavega/adapters";
@@ -109,9 +110,9 @@ function AdoptScreen({
           />
         </Field>
         {error && (
-          <p role="alert" className="text-warn">
+          <StatusLine tone="problem" role="alert" className="border-warn text-warn">
             {error}
-          </p>
+          </StatusLine>
         )}
         <Button type="submit" variant="primary" disabled={busy || pass.length === 0}>
           {busy ? g.adopt.busy : g.adopt.submit}

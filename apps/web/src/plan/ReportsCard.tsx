@@ -1,3 +1,4 @@
+import StatusLine from "../components/ui/StatusLine.js";
 import type { AccountTypeKind, BalanceSheet, IncomeStatement, Reports } from "@lavega/core";
 import Card from "../components/ui/Card.js";
 import { moneyCopy } from "../copy/money.js";
@@ -110,7 +111,7 @@ function BalanceSheetBody({
       <h3 className="m-0">{copy.balanceSheet.title}</h3>
       <p className="m-0 text-muted">{copy.balanceSheet.intro}</p>
       {sheet.unknownAccounts.length > 0 && (
-        <p className="m-0 text-warn" data-testid="reports-gap">
+        <StatusLine tone="warning" className="m-0" data-testid="reports-gap">
           {copy.balanceSheet.gap(
             sheet.unknownAccounts.length,
             sheet.assets
@@ -120,7 +121,7 @@ function BalanceSheetBody({
               .map((a) => a.name)
               .join(", "),
           )}
-        </p>
+        </StatusLine>
       )}
       <div className="grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(16rem,1fr))]">
         {side(sheet.assets, "asset")}

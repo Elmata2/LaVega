@@ -1,3 +1,4 @@
+import StatusLine from "../components/ui/StatusLine.js";
 import { useAppLocale } from "../appLocale.js";
 import Button from "../components/ui/Button.js";
 import { intakeCopy } from "../copy/intake.js";
@@ -30,7 +31,9 @@ export default function PlanRoute({
   if (profileRead === "error") {
     return (
       <div role="alert">
-        <p className="text-warn">{c.loadError}</p>
+        <StatusLine tone="problem" className="border-warn text-warn">
+          {c.loadError}
+        </StatusLine>
         <Button onClick={onRetry}>{c.retry}</Button>
       </div>
     );

@@ -1,3 +1,4 @@
+import StatusLine, { type StatusTone } from "../components/ui/StatusLine.js";
 import { useState } from "react";
 import type { RewardProgram, RewardsBalance, TrackedStatus, TrackingState } from "@lavega/core";
 import {
@@ -397,18 +398,20 @@ const INTERVAL_DAYS = [30, 90, 180, 365] as const;
 
 /** Left-edge accent on a punt-card: only a figure that is actually over its
  *  term or due gets the attention colour (was `.punt-overdue`/`.punt-due` in
- *  views.css); every other state keeps the plain hairline. */
+ *  views.css); every other state keeps the plain hairline. Due is dashed so it
+ *  differs from overdue by shape, not only by tint. */
 function puntCardBorderClass(state: TrackingState): string {
   if (state === "overdue") return "border-l-warn";
-  if (state === "due") return "border-l-accent";
+  if (state === "due") return "border-l-accent border-dashed";
   return "border-l-line";
 }
 
-/** Same rule for the status badge (was `.punt-badge-overdue`/`.punt-badge-due`). */
-function puntBadgeClass(state: TrackingState): string {
-  if (state === "overdue") return "border-warn text-warn";
-  if (state === "due") return "border-accent text-accent";
-  return "";
+/** Same rule for the status badge (was `.punt-badge-overdue`/`.punt-badge-due`):
+ *  overdue is a problem (solid border + cross), due a warning (dashed + triangle). */
+function puntBadgeProps(state: TrackingState): { tone?: StatusTone; className?: string } {
+  if (state === "overdue") return { tone: "problem", className: "border-warn text-warn" };
+  if (state === "due") return { tone: "warning", className: "border-accent text-accent" };
+  return {};
 }
 
 export default function Punten({
@@ -640,9 +643,13 @@ export default function Punten({
                 </Button>
               </div>
               {statedError[norm(name)] ? (
-                <p className="mt-2 mb-0 text-[0.82rem] text-neg" data-testid="punt-error">
+                <StatusLine
+                  tone="problem"
+                  className="mt-2 mb-0 text-[0.82rem]"
+                  data-testid="punt-error"
+                >
                   {statedError[norm(name)]}
-                </p>
+                </StatusLine>
               ) : null}
             </article>
           ))}
@@ -666,9 +673,7 @@ export default function Punten({
                       {category ?? c.card.ownProgramCategory}
                     </div>
                   </div>
-                  <Badge className={puntBadgeClass(status.state)}>
-                    {c.card.stateLabel[status.state]}
-                  </Badge>
+                  <Badge {...puntBadgeProps(status.state)}>{c.card.stateLabel[status.state]}</Badge>
                 </header>
 
                 <div className="flex items-baseline gap-2 mt-3">
@@ -723,9 +728,13 @@ export default function Punten({
                       </Button>
                     </div>
                     {asking.error ? (
-                      <p className="mt-2 mb-0 text-[0.82rem] text-neg" data-testid="punt-error">
+                      <StatusLine
+                        tone="problem"
+                        className="mt-2 mb-0 text-[0.82rem]"
+                        data-testid="punt-error"
+                      >
                         {asking.error}
-                      </p>
+                      </StatusLine>
                     ) : null}
                   </div>
                 ) : null}
@@ -884,9 +893,9 @@ export default function Punten({
           </Button>
         </div>
         {addError ? (
-          <p className="mt-2 text-[0.82rem] text-neg" data-testid="punt-error">
+          <StatusLine tone="problem" className="mt-2 text-[0.82rem]" data-testid="punt-error">
             {addError}
-          </p>
+          </StatusLine>
         ) : null}
       </div>
     </Card>

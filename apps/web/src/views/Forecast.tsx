@@ -7,6 +7,7 @@ import type {
   Tx,
   ScheduledFlow,
 } from "@lavega/core";
+import { StatusIcon } from "../components/ui/StatusLine.js";
 import { billForecastProjection, forecastCashflow } from "@lavega/core";
 import type { ConversionMode } from "../settings.js";
 import { formatDate, formatEuroIn } from "../format";
@@ -126,6 +127,8 @@ function ForecastBanner({
     >
       <div>
         <p className={`forecast-banner-title ${titleClass}`}>
+          {state === "shortfall" && <StatusIcon tone="problem" />}
+          {state === "none" && <StatusIcon tone="success" />}
           {state === "shortfall" &&
             f.shortfall &&
             c.shortfallSentence(

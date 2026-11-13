@@ -1,3 +1,4 @@
+import StatusLine from "./ui/StatusLine.js";
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import type { Locale } from "../locale.js";
@@ -135,9 +136,9 @@ export default function SignUpForm({
           </span>
         </label>
         {failure !== null && (
-          <p role="alert" className="text-warn">
+          <StatusLine tone="problem" role="alert" className="border-warn text-warn">
             {c.signUp.error[failure]}
-          </p>
+          </StatusLine>
         )}
         <Button type="submit" variant="primary" disabled={busy || !complete}>
           {busy ? c.signUp.busy : c.signUp.submit}
@@ -197,9 +198,9 @@ function CheckEmail({
       <p className={introClassName}>{c.signUp.doneBody(email)}</p>
       {resent && <p className={introClassName}>{c.signUp.resent}</p>}
       {failure !== null && (
-        <p role="alert" className="text-warn">
+        <StatusLine tone="problem" role="alert" className="border-warn text-warn">
           {c.mailError[failure]}
-        </p>
+        </StatusLine>
       )}
       <Button
         type="button"

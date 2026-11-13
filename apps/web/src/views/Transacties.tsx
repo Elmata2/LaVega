@@ -552,9 +552,7 @@ export default function Transacties({
                     </span>
                     <Badge>{c.transacties.transferKinds[pair.kind]}</Badge>
                     {ambiguous && (
-                      <Badge className="border-warn text-warn">
-                        {c.transacties.possibleTransferAmbiguous}
-                      </Badge>
+                      <Badge tone="warning">{c.transacties.possibleTransferAmbiguous}</Badge>
                     )}
                   </div>
                   <div style={{ display: "flex", gap: "var(--sp-2)", marginTop: "var(--sp-2)" }}>

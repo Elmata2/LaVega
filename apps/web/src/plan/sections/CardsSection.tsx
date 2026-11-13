@@ -1,3 +1,4 @@
+import StatusLine from "../../components/ui/StatusLine.js";
 import { useMemo, useState, type FormEvent } from "react";
 import {
   STATED_CARD_PREFIX,
@@ -451,13 +452,14 @@ function Redemption({
           {a.add}
         </Button>
       </form>
-      <p
+      <StatusLine
+        tone="problem"
         role={error === null ? undefined : "alert"}
         data-testid="plan-error-redeem"
-        className="m-0 text-warn text-[0.85rem]"
+        className="m-0 text-[0.85rem] border-warn text-warn"
       >
         {error}
-      </p>
+      </StatusLine>
     </div>
   );
 }

@@ -1,3 +1,4 @@
+import StatusLine from "../components/ui/StatusLine.js";
 import BankLink from "../components/BankLink";
 import { useAppLocale } from "../appLocale.js";
 import { shellCopy } from "../copy/shell.js";
@@ -57,9 +58,9 @@ export default function Import({
         />
       </div>
       {problems.length > 0 && (
-        <p role="alert" className="text-warn">
+        <StatusLine tone="problem" role="alert" className="border-warn text-warn">
           {problems.map((n) => c.notice(n)).join(" ")}
-        </p>
+        </StatusLine>
       )}
       <BankLink
         busy={busy}

@@ -1,3 +1,4 @@
+import StatusLine from "../components/ui/StatusLine.js";
 import { useMemo, useState } from "react";
 import type {
   Account,
@@ -452,9 +453,9 @@ export default function Belasting({
         </select>
         <p className="mp-what">{c.header.taxSystemHint}</p>
         {taxCountry.unsupportedHome && (
-          <p className="text-warn">
+          <StatusLine tone="warning">
             {c.header.unsupportedCountry(countryNameIn(locale, taxCountry.unsupportedHome))}
-          </p>
+          </StatusLine>
         )}
       </Card>
 

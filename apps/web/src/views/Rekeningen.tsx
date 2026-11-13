@@ -1,3 +1,4 @@
+import StatusLine, { StatusIcon } from "../components/ui/StatusLine.js";
 import { useState } from "react";
 import type { Account, AccountSummary, Tx, DuplicateGroup, Valuation } from "@lavega/core";
 import {
@@ -565,9 +566,9 @@ function ValuationsEditor({
         </Button>
       </div>
       {invalid && (
-        <p className="m-0 mt-1 text-neg" role="alert">
+        <StatusLine tone="problem" className="m-0 mt-1" role="alert">
           {c.waarderingOngeldig}
-        </p>
+        </StatusLine>
       )}
     </div>
   );
@@ -1198,6 +1199,7 @@ export default function Rekeningen({
           <div className="dup-banner" key={group.canonicalId}>
             <div>
               <p className="dup-banner-title">
+                <StatusIcon tone="warning" />
                 {c.dupBannerTitle(group.accounts.map(accountLabel).join(", "))}
               </p>
               <p className="dup-banner-sub">
