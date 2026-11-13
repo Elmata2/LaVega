@@ -197,3 +197,15 @@ test("the category chart prints one legend, and it is the clickable one", () => 
   expect(html).toContain("stat-legend-button");
   expect(html).not.toContain("lv-chart-legend");
 });
+
+test("the category legend prints a figure beside every name (4 series)", () => {
+  const html = render();
+  const buttons = [
+    ...html.matchAll(/<button[^>]*class="stat-legend-button"[^>]*>(.*?)<\/button>/g),
+  ].map((m) => m[1]);
+  expect(buttons.length).toBeGreaterThan(0);
+  for (const b of buttons) {
+    expect(b).toContain("stat-legend-figure");
+    expect(b).toMatch(/€/);
+  }
+});

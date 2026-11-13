@@ -270,6 +270,20 @@
   .proportion-bar span {
     height: 100%;
   }
+  /* Neighbouring segments are parted by a 2px --bg line. In the black-and-white
+   * theme grey steps alone cannot name a segment, so the edge has to be drawn.
+   * The border sits inside the segment's own width (border-box), so the bar's
+   * proportions stay exact. */
+  .proportion-bar span + span {
+    box-sizing: border-box;
+    border-left: 2px solid var(--bg);
+  }
+
+  /* Third-party bank marks are greyscaled in the black-and-white theme. The
+   * class is set in KaartenBlock; midnight keeps the logo's own colours. */
+  :root[data-theme="mono"] .bank-logo {
+    filter: grayscale(1);
+  }
 
   /* Recente transacties */
   .tx-list {

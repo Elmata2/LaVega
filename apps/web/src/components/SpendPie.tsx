@@ -96,6 +96,9 @@ export type SpendPieProps = {
   onSelect?: (category: string) => void;
 };
 
+/** Width of the --bg gap between arcs, in percent of the ring. */
+const SLICE_GAP = 0.6;
+
 export default function SpendPie({
   slices,
   totalCents,
@@ -127,13 +130,23 @@ export default function SpendPie({
   const reading = active !== null ? (shown[active] ?? null) : null;
 
   // Build the gradient as cumulative stops. Rounding each boundary to two
-  // decimals keeps the string short without a visible seam.
-  const stops = shown.map((s, i) => {
+  // decimals keeps the string short without a visible seam. Between arcs sits a
+  // --bg gap (GAP percent of the ring, about 2px on the ring's mid radius): in
+  // the black-and-white theme the slice greys alone cannot tell neighbours
+  // apart, so the gap is what draws the edge. One slice is a whole ring and
+  // needs none.
+  const r2 = (n: number) => Math.round(n * 100) / 100;
+  const gap = shown.length > 1 ? SLICE_GAP : 0;
+  const stops: string[] = [];
+  if (gap > 0) stops.push(`var(--bg) 0% ${r2(gap / 2)}%`);
+  shown.forEach((s, i) => {
     const from = shown.slice(0, i).reduce((sum, slice) => sum + slice.share * 100, 0);
     const at = from + s.share * 100;
-    const to = i === shown.length - 1 ? 100 : Math.round(at * 100) / 100;
+    const last = i === shown.length - 1;
+    const to = last ? 100 : r2(at);
     const colour = reading === null || i === active ? sliceColor(i) : dimmed(sliceColor(i));
-    return `${colour} ${Math.round(from * 100) / 100}% ${to}%`;
+    stops.push(`${colour} ${r2(from + gap / 2)}% ${r2(to - gap / 2)}%`);
+    if (gap > 0) stops.push(`var(--bg) ${r2(to - gap / 2)}% ${last ? 100 : r2(to + gap / 2)}%`);
   });
 
   /** Which arc a pointer event landed on, or null for the hole and the corners. */

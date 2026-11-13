@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
 import { renderToStaticMarkup } from "react-dom/server";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { expect, test } from "vitest";
 import type { Account } from "@lavega/core";
 import { formatEuro } from "../../format.js";
@@ -282,4 +284,22 @@ test("PositieBlock: convert mode with zero priceable accounts in an entity still
   );
   expect(html).toContain("onbekend");
   expect(html).not.toContain(formatEuro(0));
+});
+
+test("proportion-bar parts its segments with a --bg gap (CSS rule)", () => {
+  const css = readFileSync(resolve(__dirname, "../../styles/base.css"), "utf8");
+  const rule = css.match(/\.proportion-bar span \+ span\s*\{([^}]*)\}/)?.[1] ?? "";
+  expect(rule).toContain("var(--bg)");
+  expect(rule).toMatch(/2px/);
+});
+
+test("PositieBlock rows carry the balance figure next to every segment's dot", () => {
+  const html = renderToStaticMarkup(
+    <PositieBlock accounts={accounts} onNavigate={() => {}} asOf={ASOF} {...SEPARATE} />,
+  );
+  const segments = (html.match(/<span style="width:/g) ?? []).length;
+  const dots = (html.match(/class="dot"/g) ?? []).length;
+  expect(segments).toBeGreaterThan(0);
+  expect(dots).toBeGreaterThanOrEqual(segments);
+  expect(html).toContain(formatEuro(182_310));
 });

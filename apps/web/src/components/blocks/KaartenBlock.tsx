@@ -290,6 +290,7 @@ export default function KaartenBlock({
                       <img
                         src={logo.dataUri}
                         alt=""
+                        className="bank-logo"
                         width={16}
                         height={16}
                         style={{
@@ -367,6 +368,7 @@ export default function KaartenBlock({
                       <img
                         src={logo.dataUri}
                         alt=""
+                        className="bank-logo"
                         width={16}
                         height={16}
                         style={{

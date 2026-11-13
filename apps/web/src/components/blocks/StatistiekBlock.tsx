@@ -737,6 +737,12 @@ export default function StatistiekBlock({
                         aria-hidden="true"
                       />
                       {categoryLabel(locale, cat)}
+                      <span className="stat-legend-figure tabular-nums">
+                        {formatEuroIn(
+                          locale,
+                          perCategory.values.reduce((sum, row) => sum + (row[i] ?? 0), 0),
+                        )}
+                      </span>
                     </button>
                   ))}
                 </div>
