@@ -11,5 +11,9 @@ export type Dividend = {
   description?: string;
   amount: number;
   currency: string;
+  /** Tax the broker withheld on this dividend, in `currency` and already netted out of `amount`.
+   *  Positive means tax was taken, negative means it was refunded. Gross = amount + withholdingTax.
+   *  Absent when the broker reported no tax line: zero and absent are different facts. */
+  withholdingTax?: number;
   brokerDividendId?: string;
 };

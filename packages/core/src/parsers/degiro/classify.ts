@@ -17,6 +17,9 @@ export type AccountClassification = {
   bucket: AccountBucket;
   /** The cash-flow kind; non-null exactly when bucket is "cash-flow". */
   kind: CashFlowKind | null;
+  /** Which dividend line this is; non-null exactly when bucket is "dividend".
+   *  `tax` is the withholding line, `gross` the dividend it belongs to. */
+  dividendKind: "gross" | "tax" | null;
   /** False when the description matched nothing known. Such a row is still a
    *  cash flow of kind "other" — never dropped — and the caller reports a
    *  problem naming the text. */
@@ -36,6 +39,8 @@ type ClassificationRule = {
   readonly description: RegExp;
   readonly bucket: AccountBucket;
   readonly kind: CashFlowKind | null;
+  /** Only dividend rules carry it; the caller requires it on a dividend row. */
+  readonly dividendKind?: "gross" | "tax";
   readonly saldoWalk?: boolean;
 };
 
@@ -52,12 +57,15 @@ type ClassificationRule = {
  * description cannot accidentally capture a trade's commission row.
  */
 const CLASSIFICATION_TABLE: readonly ClassificationRule[] = [
-  // #316 owns dividends. The tax line is first because "Dividendbelasting"
-  // starts with "Dividend": the looser gross-dividend rule must never see it.
+  // #316 owns dividends. Both tax rules sit before the gross rule: the wording
+  // starts with "Dividend"/"dividend", so the looser gross rule must never see
+  // it. The EN rule is forward-looking for the day an English statement appears
+  // (no EN account signature exists yet).
   // Both carry no Order Id; the structural rule keeps them a dividend even if
   // one ever did.
-  { description: /^dividendbelasting\b/i, bucket: "dividend", kind: null },
-  { description: /^dividend\b/i, bucket: "dividend", kind: null },
+  { description: /^dividendbelasting\b/i, bucket: "dividend", kind: null, dividendKind: "tax" },
+  { description: /^dividend tax\b/i, bucket: "dividend", kind: null, dividendKind: "tax" },
+  { description: /^dividend\b/i, bucket: "dividend", kind: null, dividendKind: "gross" },
 
   // #317 owns executions. Without an Order Id they are still trade rows, never
   // cash flows: the execution's cash is the trade's own settlement.
@@ -152,7 +160,7 @@ export function classifyAccountRow(row: AccountRowRef): AccountClassification {
   // 1. An empty `Mutatie` means no cash moved, whatever the row says. This is
   // the `Overboeking … flatexDEGIRO Bank` and `Splitsing` shape.
   if (!row.hasAmount) {
-    return { bucket: "skip", kind: null, recognised: true, saldoWalk: false };
+    return { bucket: "skip", kind: null, dividendKind: null, recognised: true, saldoWalk: false };
   }
 
   const description = row.description.trim();
@@ -164,22 +172,37 @@ export function classifyAccountRow(row: AccountRowRef): AccountClassification {
   // reports its own problem if the text does not parse.
   if (row.orderId.trim() !== "") {
     if (rule?.bucket === "dividend") {
-      return { bucket: "dividend", kind: null, recognised: true, saldoWalk: true };
+      return {
+        bucket: "dividend",
+        kind: null,
+        dividendKind: rule.dividendKind ?? "gross",
+        recognised: true,
+        saldoWalk: true,
+      };
     }
-    return { bucket: "trade", kind: null, recognised: true, saldoWalk: true };
+    return { bucket: "trade", kind: null, dividendKind: null, recognised: true, saldoWalk: true };
   }
 
   // No table rule matched: never drop an unknown movement — it still moves cash,
   // so it walks. The caller reports the unrecognised text, which is why this is
   // not a throw and not a guessed kind.
   if (rule === undefined) {
-    return { bucket: "cash-flow", kind: "other", recognised: false, saldoWalk: true };
+    return {
+      bucket: "cash-flow",
+      kind: "other",
+      dividendKind: null,
+      recognised: false,
+      saldoWalk: true,
+    };
   }
 
-  // The table matched: its bucket, kind and walk flag win.
+  // The table matched: its bucket, kind and walk flag win. A dividend rule that
+  // forgot its kind falls back to "gross", so `dividendKind` stays non-null for
+  // every dividend row.
   return {
     bucket: rule.bucket,
     kind: rule.kind,
+    dividendKind: rule.bucket === "dividend" ? (rule.dividendKind ?? "gross") : null,
     recognised: true,
     saldoWalk: rule.saldoWalk ?? true,
   };

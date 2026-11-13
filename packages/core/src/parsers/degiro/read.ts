@@ -34,6 +34,12 @@ export type DeGiroLocale = "dot" | "comma";
 
 const BOM = "\uFEFF";
 
+/** Trimmed text at a column index, "" when the row is shorter than the header.
+ *  Readers read every cell through this, so a short row cannot leak `undefined`
+ *  into a problem sentence or a content hash. */
+export const cellText = (cells: readonly string[], index: number): string =>
+  String(index >= 0 && index < cells.length ? cells[index] : "").trim();
+
 /**
  * Parse comma-delimited, RFC 4180 CSV text. Never throws: an unterminated quote
  * simply runs to end of input, and the caller's profile detection rejects the

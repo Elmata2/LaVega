@@ -64,6 +64,7 @@ export {
 export type { AccountClassification as DeGiroRowClassification } from "./parsers/degiro/classify.js";
 export * from "./parsers/degiro/saldo.js";
 export * from "./parsers/degiro/account.js";
+export * from "./parsers/degiro/dividends.js";
 export * from "./parsers/parseBrokerFile.js";
 export * from "./fxRoutes.js";
 export * from "./n8nSettings.js";

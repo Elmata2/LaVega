@@ -2,7 +2,7 @@ import { hash, norm } from "../../hash.js";
 import type { CashFlow } from "../../investing/model.js";
 import { classifyAccountRow } from "./classify.js";
 import { readDeGiroCsv } from "./profiles.js";
-import { type CsvTable, currencyAmountAt, detectLocale, parseIsoDate } from "./read.js";
+import { type CsvTable, cellText, currencyAmountAt, detectLocale, parseIsoDate } from "./read.js";
 import { type SaldoRow, type SaldoWalk, walkSaldo } from "./saldo.js";
 
 /* Issue #315: turn an account statement into `CashFlow[]` and prove the window
@@ -20,8 +20,20 @@ import { type SaldoRow, type SaldoWalk, walkSaldo } from "./saldo.js";
  * `docs/investing/DEGIRO.md`. Only the NL header passes profile detection today,
  * so these positions are guaranteed; a future EN export has to add its own
  * signature and then these names can be resolved by label instead.
+ *
+ * Exported because the dividend mapper (#316) reads the same verified layout;
+ * keeping one table means a future EN header has one place to change.
  */
-const COLUMN = { date: 0, description: 5, change: 7, balance: 9, orderId: 11 } as const;
+export const ACCOUNT_COLUMNS = {
+  date: 0,
+  valueDate: 2,
+  product: 3,
+  isin: 4,
+  description: 5,
+  change: 7,
+  balance: 9,
+  orderId: 11,
+} as const;
 
 /** How many rows fell into each owner. Sums to the number of data rows. */
 export type AccountCounts = {
@@ -44,9 +56,6 @@ export type AccountStatement = {
 };
 
 const EMPTY_COUNTS = (): AccountCounts => ({ cashFlow: 0, dividend: 0, trade: 0, skipped: 0 });
-
-const cellText = (cells: readonly string[], index: number): string =>
-  String(cells[index] ?? "").trim();
 
 /** Same content-hash identity the IBKR and Trading 212 paths use, so a re-parse
  *  of the same file yields the same ids and a merge cannot append duplicates. */
@@ -100,12 +109,12 @@ export function readAccountStatement(text: string): AccountStatement {
   const saldoRows: SaldoRow[] = [];
 
   for (const row of table.rows) {
-    const description = cellText(row.cells, COLUMN.description);
-    const orderId = cellText(row.cells, COLUMN.orderId);
-    const hasAmount = cellText(row.cells, COLUMN.change + 1) !== "";
+    const description = cellText(row.cells, ACCOUNT_COLUMNS.description);
+    const orderId = cellText(row.cells, ACCOUNT_COLUMNS.orderId);
+    const hasAmount = cellText(row.cells, ACCOUNT_COLUMNS.change + 1) !== "";
     const classification = classifyAccountRow({ description, hasAmount, orderId });
-    const change = currencyAmountAt(table.header, row.cells, COLUMN.change, locale);
-    const balance = currencyAmountAt(table.header, row.cells, COLUMN.balance, locale);
+    const change = currencyAmountAt(table.header, row.cells, ACCOUNT_COLUMNS.change, locale);
+    const balance = currencyAmountAt(table.header, row.cells, ACCOUNT_COLUMNS.balance, locale);
 
     /* The walk spans every row that moves cash, not only this issue's flows:
      * dividends (#316) and trades (#317) move it too. The walk is the only true
@@ -139,7 +148,7 @@ export function readAccountStatement(text: string): AccountStatement {
         `rij ${row.line}: onbekende omschrijving "${description}" — als "overig" geboekt`,
       );
 
-    const rawDate = cellText(row.cells, COLUMN.date);
+    const rawDate = cellText(row.cells, ACCOUNT_COLUMNS.date);
     const date = parseIsoDate(rawDate);
     if (date === null) {
       problems.push(`rij ${row.line}: onmogelijke datum "${rawDate}"`);

@@ -35,6 +35,7 @@ const fixtureRows = (): FixtureRow[] =>
 const cashFlow = (kind: CashFlowKind): AccountClassification => ({
   bucket: "cash-flow",
   kind,
+  dividendKind: null,
   recognised: true,
   saldoWalk: true,
 });
@@ -42,13 +43,15 @@ const cashFlow = (kind: CashFlowKind): AccountClassification => ({
 const trade = (): AccountClassification => ({
   bucket: "trade",
   kind: null,
+  dividendKind: null,
   recognised: true,
   saldoWalk: true,
 });
 
-const dividend = (): AccountClassification => ({
+const dividend = (kind: "gross" | "tax"): AccountClassification => ({
   bucket: "dividend",
   kind: null,
+  dividendKind: kind,
   recognised: true,
   saldoWalk: true,
 });
@@ -56,6 +59,7 @@ const dividend = (): AccountClassification => ({
 const informationLine = (): AccountClassification => ({
   bucket: "skip",
   kind: null,
+  dividendKind: null,
   recognised: true,
   saldoWalk: false,
 });
@@ -96,6 +100,7 @@ test("acceptance: the fixture's cash-flow kinds are 3 deposits, 1 withdrawal, 2 
 test("invariant: kind is non-null exactly when the bucket is cash-flow", () => {
   for (const { classification } of fixtureRows()) {
     expect(classification.kind !== null).toBe(classification.bucket === "cash-flow");
+    expect(classification.dividendKind !== null).toBe(classification.bucket === "dividend");
   }
 });
 
@@ -154,7 +159,9 @@ test("#317: every trade row carries an Order Id, and every dividend row does not
   expect(dividends).toHaveLength(3);
   for (const { ref, classification } of dividends) {
     expect(ref.orderId).toBe("");
-    expect(classification).toEqual(dividend());
+    expect(classification).toEqual(
+      dividend(/^dividendbelasting/i.test(ref.description) ? "tax" : "gross"),
+    );
   }
 });
 
@@ -164,7 +171,7 @@ test("#316: `Dividendbelasting` is a dividend; the tax rule wins over the gross-
     orderId: "",
     hasAmount: true,
   });
-  expect(tax).toEqual(dividend());
+  expect(tax).toEqual(dividend("tax"));
 
   // Still a dividend when the text carries a suffix: the rule is a prefix, and a
   // looser `Dividend` rule must not label the tax as gross income by accident.
@@ -186,10 +193,24 @@ test("a dividend stays a dividend even if it ever carried an Order Id", () => {
       orderId: "00000000-0000-4000-8000-000000000009",
       hasAmount: true,
     }),
-  ).toEqual(dividend());
+  ).toEqual(dividend("gross"));
   expect(
     classifyAccountRow({ description: "Dividendbelasting", orderId: "0000", hasAmount: true }),
-  ).toEqual(dividend());
+  ).toEqual(dividend("tax"));
+});
+
+test("#316: EN `Dividend tax` is a tax row, and non-dividend rows carry no dividend kind", () => {
+  expect(classifyAccountRow({ description: "Dividend tax", orderId: "", hasAmount: true })).toEqual(
+    dividend("tax"),
+  );
+
+  for (const row of [
+    { description: "flatex Storting", orderId: "", hasAmount: true },
+    { description: "Koop 1 @ 10,00 EUR", orderId: "", hasAmount: true },
+    { description: "Overboeking effecten", orderId: "", hasAmount: false },
+  ]) {
+    expect(classifyAccountRow(row).dividendKind).toBeNull();
+  }
 });
 
 test("reservation rows move real cash as kind other — never as a deposit", () => {
@@ -229,6 +250,7 @@ test("an unknown description is a cash flow of kind other and never dropped", ()
   expect(unknown).toEqual({
     bucket: "cash-flow",
     kind: "other",
+    dividendKind: null,
     recognised: false,
     saldoWalk: true,
   });
@@ -305,6 +327,7 @@ test("EN smoke (unverified): deposit, withdrawal, currency legs and sweep", () =
   expect(classify("Cash Sweep Transfer")).toEqual({
     bucket: "cash-flow",
     kind: "other",
+    dividendKind: null,
     recognised: true,
     saldoWalk: false,
   });
