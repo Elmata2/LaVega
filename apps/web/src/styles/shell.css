@@ -1,0 +1,134 @@
+/* The new app frame (components/Shell.tsx, behind SHELL_V2). Own class names,
+ * `shell2-*`; the old `.shell` / `.appbar*` rules in base.css stay as they are
+ * until the flag flips. Same layer as the other stylesheets. */
+@layer components {
+  .shell2 {
+    display: flex;
+    height: 100dvh;
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    overflow: hidden;
+  }
+
+  .shell2-rail {
+    flex: none;
+    width: 72px;
+    background: var(--surface);
+    border-right: 1px solid var(--line);
+  }
+
+  /* One width transition. The inner box keeps the open width so the content
+   * does not reflow while the outer width moves. */
+  .shell2-sidebar {
+    flex: none;
+    width: var(--shell2-sidebar-w, 296px);
+    overflow: hidden;
+    background: var(--bg);
+    border-right: 1px solid var(--line);
+    transition:
+      width 200ms var(--ease-emphasized),
+      visibility 0s linear 0s;
+  }
+  .shell2-sidebar-closed {
+    width: 0;
+    border-right-width: 0;
+    visibility: hidden;
+    transition:
+      width 200ms var(--ease-emphasized),
+      visibility 0s linear 200ms;
+  }
+  .shell2-sidebar-inner {
+    width: var(--shell2-sidebar-w, 296px);
+    height: 100%;
+    overflow-y: auto;
+  }
+
+  .shell2-main {
+    flex: 1 1 0;
+    min-width: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+  }
+
+  .shell2-topbar {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    gap: var(--sp-3);
+    height: 56px;
+    padding: 0 var(--shell2-gutter);
+    background: var(--bg);
+    border-bottom: 1px solid var(--line);
+  }
+  .shell2-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: none;
+    width: 44px;
+    height: 44px;
+    margin-left: -10px;
+    padding: 0;
+    background: none;
+    border: 0;
+    border-radius: var(--r-sm);
+    color: var(--muted);
+    cursor: pointer;
+  }
+  .shell2-toggle:hover {
+    color: var(--ink);
+    background: var(--surface-2);
+  }
+  .shell2-title {
+    flex: 1 1 auto;
+    min-width: 0;
+    margin: 0;
+    overflow: hidden;
+    font-size: 1.75rem;
+    line-height: 1.2;
+    letter-spacing: 0;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+  .shell2-actions {
+    display: flex;
+    align-items: center;
+    flex: none;
+    gap: var(--sp-3);
+  }
+
+  /* TopBarActions is shared with the old bar, whose rule adds bottom padding
+   * and wrapping for the big greeting title. */
+  .shell2-actions .topbar-right {
+    padding-bottom: 0;
+    flex-wrap: nowrap;
+  }
+
+  .shell2-content {
+    padding: var(--sp-5) var(--shell2-gutter);
+  }
+
+  .shell2 {
+    --shell2-gutter: 16px;
+  }
+  @media (min-width: 1024px) {
+    .shell2 {
+      --shell2-gutter: 24px;
+    }
+  }
+  @media (min-width: 1280px) {
+    .shell2 {
+      --shell2-gutter: 32px;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .shell2-sidebar,
+    .shell2-sidebar-closed {
+      transition: none;
+    }
+  }
+}

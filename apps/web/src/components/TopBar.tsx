@@ -37,30 +37,44 @@ export default function TopBar({ view, scope, onScopeChange, onAddWidget }: TopB
         <h1 className="topbar-title">{c.topBar.viewTitles[view]}</h1>
       </div>
 
-      <div className="topbar-right">
-        {SHOW_SCOPE_SWITCH && (
-          <div className="scope-switch" role="group" aria-label={c.topBar.scopeGroupLabel}>
-            {SCOPE_ORDER.map((s, i) => (
-              <Fragment key={s}>
-                {i > 0 && <span className="scope-rule" aria-hidden="true" />}
-                <button
-                  type="button"
-                  className={`scope-option${scope === s ? " scope-on" : ""}`}
-                  aria-pressed={scope === s}
-                  onClick={() => onScopeChange(s)}
-                >
-                  {c.scope[s]}
-                </button>
-              </Fragment>
-            ))}
-          </div>
-        )}
+      <TopBarActions scope={scope} onScopeChange={onScopeChange} onAddWidget={onAddWidget} />
+    </div>
+  );
+}
 
-        <Pill className="topbar-add" onClick={onAddWidget}>
-          <span aria-hidden="true">+</span>
-          <span>{c.topBar.addWidget}</span>
-        </Pill>
-      </div>
+/** The right-hand controls: the scope switch (while shown) and "Add widget".
+ *  Shared by the old top bar and the new shell's top bar. */
+export function TopBarActions({
+  scope,
+  onScopeChange,
+  onAddWidget,
+}: Omit<TopBarProps, "view">) {
+  const [locale] = useAppLocale();
+  const c = shellCopy[locale];
+  return (
+    <div className="topbar-right">
+      {SHOW_SCOPE_SWITCH && (
+        <div className="scope-switch" role="group" aria-label={c.topBar.scopeGroupLabel}>
+          {SCOPE_ORDER.map((s, i) => (
+            <Fragment key={s}>
+              {i > 0 && <span className="scope-rule" aria-hidden="true" />}
+              <button
+                type="button"
+                className={`scope-option${scope === s ? " scope-on" : ""}`}
+                aria-pressed={scope === s}
+                onClick={() => onScopeChange(s)}
+              >
+                {c.scope[s]}
+              </button>
+            </Fragment>
+          ))}
+        </div>
+      )}
+
+      <Pill className="topbar-add" onClick={onAddWidget}>
+        <span aria-hidden="true">+</span>
+        <span>{c.topBar.addWidget}</span>
+      </Pill>
     </div>
   );
 }

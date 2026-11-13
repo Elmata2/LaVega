@@ -54,6 +54,8 @@ export type ShellCopy = {
     profile: string;
     moduleLabels: Record<ModuleId, string>;
   };
+  /** The full-width frame (components/Shell.tsx). */
+  frame: { sidebarLabel: string; sidebarOpen: string; sidebarClose: string };
   modulePicker: {
     homeNote: string;
     moduleSwitchLabel: (label: string) => string;
@@ -284,6 +286,11 @@ const nl: ShellCopy = {
     },
     scopeGroupLabel: "Persoonlijk of zakelijk",
     addWidget: "Widget toevoegen",
+  },
+  frame: {
+    sidebarLabel: "Rekeningen",
+    sidebarOpen: "Zijbalk openen",
+    sidebarClose: "Zijbalk sluiten",
   },
   nav: {
     ariaLabel: "Weergaven",
@@ -649,6 +656,11 @@ const en: ShellCopy = {
     },
     scopeGroupLabel: "Personal or business",
     addWidget: "Add widget",
+  },
+  frame: {
+    sidebarLabel: "Accounts",
+    sidebarOpen: "Show sidebar",
+    sidebarClose: "Hide sidebar",
   },
   nav: {
     ariaLabel: "Views",
