@@ -169,6 +169,11 @@
   /* Layout */
   --frame-gap: 20px; /* gutter around the floating app */
 
+  /* Wizard card-details block: hairline between cards and the card legend ink.
+   * Fixed values (the wizard sits on a light panel in every theme). */
+  --wz-cardrow-line: #e4e7ec;
+  --wz-cardrow-ink: #14161a;
+
   /* Motion */
   --ease-emphasized: cubic-bezier(0.23, 1, 0.32, 1); /* fast out, gentle settle */
 
