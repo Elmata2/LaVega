@@ -9,6 +9,7 @@ import {
 } from "@lavega/adapters";
 import {
   parseBrokerFile,
+  redactProblem,
   type BrokerFileInput,
   type CashHistoryCoverage,
   type ParsedBrokerFile,
@@ -331,7 +332,14 @@ export class DeGiroImport extends Context.Service<
                 leaseId,
               },
             }),
-          catch: () => failedError("The broker lease could not be claimed"),
+          catch: (cause) => {
+            console.error(
+              redactProblem(
+                `DeGiro import: lease claim failed: ${cause instanceof Error ? cause.message : String(cause)}`,
+              ),
+            );
+            return failedError("The broker lease could not be claimed");
+          },
         });
         if (!claim.claimed)
           return yield* conflictError(
