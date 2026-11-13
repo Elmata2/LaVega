@@ -62,6 +62,10 @@ export type ModuleDef = {
    *  gewone lijst zetten zou die verwijdering stilletjes terugdraaien bij
    *  iedereen die nooit iets koos. */
   defaultOn?: boolean;
+  /** `false`: the view stays routable but is in no nav list (rail, bottom bar,
+   *  drawer) and not in the module picker. Only Jouw plan: it is reached from a
+   *  card in Profiel. A stored `lavega.navModules` that names it is ignored. */
+  nav?: false;
 };
 
 /** The home module. An app with no home is a broken app, so this one is always
@@ -204,9 +208,9 @@ export const MODULES: ModuleDef[] = [
   },
   {
     id: "plan",
-    /* Nav order is registry order: Overzicht, Optimalisatie, Rekeningen, then
-     * this. The words come from the shell copy (the nav and picker read them
-     * from there too). */
+    nav: false,
+    /* Not in the nav: Profiel's "Jouw plan" card opens it. The words come from
+     * the shell copy (Profiel and the page title read them from there). */
     label: shellCopy.nl.nav.moduleLabels.plan,
     what: shellCopy.nl.modulePicker.modules.plan,
     icon: (
@@ -440,6 +444,11 @@ export const MODULES: ModuleDef[] = [
   },
 ];
 
+/** A module that can sit in the nav: not archived, not `nav: false`. */
+function inNav(m: ModuleDef): boolean {
+  return m.nav !== false && !isArchivedView(m.id);
+}
+
 /** What the nav holds before the owner has picked anything: everything that was
  *  already there.
  *
@@ -455,10 +464,10 @@ export const MODULES: ModuleDef[] = [
  *  module die eerder WEGGEHAALD is er niet vanzelf weer bij komt: dat zou net zo
  *  goed een verandering zijn die niemand vroeg. */
 export const DEFAULT_MODULES: ModuleId[] = MODULES.filter(
-  (m) => m.defaultOn !== false && !isArchivedView(m.id),
+  (m) => m.defaultOn !== false && inNav(m),
 ).map((m) => m.id);
 
-const KNOWN = new Set<string>(MODULES.filter((m) => !isArchivedView(m.id)).map((m) => m.id));
+const KNOWN = new Set<string>(MODULES.filter(inNav).map((m) => m.id));
 
 /** Resolve the STORED preference into the modules that belong in the nav.
  *
@@ -472,7 +481,7 @@ export function enabledModules(stored: string[] | null): ModuleId[] {
     stored === null ? DEFAULT_MODULES : stored.filter((id): id is ModuleId => KNOWN.has(id));
   const set = new Set<ModuleId>(chosen);
   set.add(HOME_MODULE);
-  return MODULES.filter((m) => set.has(m.id) && !isArchivedView(m.id)).map((m) => m.id);
+  return MODULES.filter((m) => set.has(m.id) && inNav(m)).map((m) => m.id);
 }
 
 /** Switch one module on or off. The home module is never removable — an app
@@ -485,17 +494,10 @@ export function toggleModule(enabled: ModuleId[], id: ModuleId, on: boolean): Mo
   return enabledModules([...set]);
 }
 
-/** The plan module stays out of the nav until the intake has produced
- *  something to plan with (at least one block done). The route itself stays
- *  reachable and shows the invitation. */
-export function withoutLockedModules(enabled: ModuleId[], planUnlocked: boolean): ModuleId[] {
-  return planUnlocked ? enabled : enabled.filter((id) => id !== "plan");
-}
-
 /** The definitions behind the enabled ids, in registry order — what the nav renders. */
 export function navModules(enabled: ModuleId[]): ModuleDef[] {
   const set = new Set<ModuleId>(enabled);
-  return MODULES.filter((m) => set.has(m.id) && !isArchivedView(m.id));
+  return MODULES.filter((m) => set.has(m.id) && inNav(m));
 }
 
 /* ====================================================================== *

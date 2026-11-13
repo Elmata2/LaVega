@@ -64,8 +64,8 @@ test("stored default business + switch hidden opens personal and leaves storage 
   localStorage.clear();
 });
 
-test("never chosen (or garbage stored) gives the four-item default in registry order", () => {
-  const four = ["overview", "optimalisatie", "accounts", "plan"];
+test("never chosen (or garbage stored) gives the three-item default in registry order", () => {
+  const four = ["overview", "optimalisatie", "accounts"];
   expect(DEFAULT_MODULES).toEqual(four);
   expect(enabledModules(null)).toEqual(four);
   for (const raw of ["{not json", '{"a":1}', "42"]) {
@@ -75,12 +75,11 @@ test("never chosen (or garbage stored) gives the four-item default in registry o
   localStorage.clear();
 });
 
-test("a legacy stored list with plan first and forecast resolves in the new order", () => {
+test("a legacy stored list naming plan keeps working: plan is ignored, the rest resolves in order", () => {
   expect(enabledModules(["plan", "overview", "accounts", "optimalisatie", "forecast"])).toEqual([
     "overview",
     "optimalisatie",
     "accounts",
-    "plan",
     "forecast",
   ]);
 });

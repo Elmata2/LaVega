@@ -92,12 +92,7 @@ test("phone: exactly one nav, the bottom bar, no rail, no sidebar", () => {
 test("rail: items are links with href and a visible label; active has aria-current", () => {
   render(frame({ ids: [...CORE, "plan"], view: "accounts" }));
   const items = [...host.querySelectorAll<HTMLAnchorElement>(".shell2-rail-list a")];
-  expect(items.map((a) => a.textContent)).toEqual([
-    "Overzicht",
-    "Optimalisatie",
-    "Rekeningen",
-    "Jouw plan",
-  ]);
+  expect(items.map((a) => a.textContent)).toEqual(["Overzicht", "Optimalisatie", "Rekeningen"]);
   for (const a of items) expect(a.getAttribute("href")).toMatch(/^\//);
   const current = host.querySelectorAll('[aria-current="page"]');
   expect(current).toHaveLength(1);
@@ -152,15 +147,19 @@ test("bottom bar: exactly the three core items, no Meer when nothing else is on"
   expect(labels(bar)).toEqual(["Overzicht", "Optimalisatie", "Rekeningen"]);
 });
 
-test("bottom bar: Jouw plan joins when unlocked, in registry order", () => {
+test("bottom bar: Jouw plan is never an item, even when the id is passed in", () => {
   stubDesktop(false);
   render(frame({ ids: [...CORE, "plan"] }));
-  expect(labels(host.querySelector("nav")!)).toEqual([
-    "Overzicht",
-    "Optimalisatie",
-    "Rekeningen",
-    "Jouw plan",
-  ]);
+  expect(labels(host.querySelector("nav")!)).toEqual(["Overzicht", "Optimalisatie", "Rekeningen"]);
+});
+
+test("on the plan view the bottom bar and phone top bar mark Profiel current", () => {
+  stubDesktop(false);
+  render(frame({ ids: CORE, view: "plan" }));
+  expect(host.querySelector(".shell2-bottombar [aria-current]")).toBeNull();
+  const current = host.querySelectorAll('[aria-current="page"]');
+  expect(current).toHaveLength(1);
+  expect(current[0]!.classList.contains("shell2-phonebar-profile")).toBe(true);
 });
 
 test("bottom bar: Meer appears only with another module on, and calls onOpenMore", () => {
@@ -169,7 +168,7 @@ test("bottom bar: Meer appears only with another module on, and calls onOpenMore
   const other = MODULES.find((m) => !CORE.includes(m.id) && m.id !== "plan")!.id;
   render(frame({ ids: [...CORE, "plan", other], onOpenMore }));
   const bar = host.querySelector("nav")!;
-  expect(labels(bar)).toEqual(["Overzicht", "Optimalisatie", "Rekeningen", "Jouw plan", "Meer"]);
+  expect(labels(bar)).toEqual(["Overzicht", "Optimalisatie", "Rekeningen", "Meer"]);
   const more = bar.querySelector<HTMLButtonElement>("button")!;
   expect(more.textContent).toBe("Meer");
   act(() => more.click());

@@ -77,6 +77,9 @@ import SignInForm from "../components/SignInForm.js";
 type ProfielProps = {
   /** Opens "what LaVega knows about you". Absent: the card is not shown. */
   onNavigate?: (view: View) => void;
+  /** The intake has produced something to plan with (App's rule, unchanged).
+   *  Unlocked, the top card opens the plan; locked, it starts the intake. */
+  planUnlocked: boolean;
   /** Module picker. */
   enabledModules: ModuleId[];
   onModulesChange: (next: ModuleId[]) => void;
@@ -469,6 +472,7 @@ function CashbackCorrigeren({
 const THEME_OPTIONS: readonly Theme[] = ["midnight", "mono"];
 
 export default function Profiel({
+  planUnlocked,
   enabledModules,
   onModulesChange,
   focusModules,
@@ -539,8 +543,19 @@ export default function Profiel({
     modulesRef.current?.scrollIntoView?.({ block: "start" });
   }, [focusModules]);
 
+  const invite = intakeCopy[locale].home.invite;
   return (
     <>
+      <Card as="section" aria-label={c.nav.moduleLabels.plan} className="profiel-plan">
+        <h2>{c.nav.moduleLabels.plan}</h2>
+        <p>{planUnlocked ? c.profiel.plan.line : invite.intro}</p>
+        <Button
+          variant="primary"
+          onClick={() => onNavigate?.(planUnlocked ? "plan" : "intake")}
+        >
+          {planUnlocked ? c.profiel.plan.open : invite.start}
+        </Button>
+      </Card>
       <Card as="section" aria-label={c.profiel.languageSwitch.ariaLabel}>
         <h2>{c.profiel.languageSwitch.cardLabel}</h2>
         <div className="scope-switch" role="group" aria-label={c.profiel.languageSwitch.ariaLabel}>

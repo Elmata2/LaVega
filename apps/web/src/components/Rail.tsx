@@ -21,6 +21,11 @@ export type ShellNavProps = {
   onOpenMore?: () => void;
 };
 
+/** Jouw plan has no nav item; Profiel's card opens it, so Profiel stays current there. */
+export function isProfileView(view: View): boolean {
+  return view === "profiel" || view === "plan";
+}
+
 /** SPA navigation that still exposes a real href for open-in-new-tab / share. */
 export function navClick(e: MouseEvent, go: () => void) {
   if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
@@ -83,7 +88,9 @@ export function Rail({ view, modules, onNavigate, onOpenProfile }: ShellNavProps
   const investing = investingLinkProps();
   return (
     <nav className="shell2-rail" aria-label={c.nav.ariaLabel}>
-      <span className="shell2-rail-brand dot dot-pos" role="img" aria-label="LaVega" />
+      <span className="shell2-rail-brand" role="img" aria-label="LaVega">
+        LV
+      </span>
       <div className="shell2-rail-list">
         {modules.map((m) => (
           <a
@@ -112,7 +119,7 @@ export function Rail({ view, modules, onNavigate, onOpenProfile }: ShellNavProps
         <a
           href={pathForView("profiel")}
           className="shell2-rail-item"
-          aria-current={view === "profiel" ? "page" : undefined}
+          aria-current={isProfileView(view) ? "page" : undefined}
           onClick={(e) => navClick(e, onOpenProfile)}
         >
           <span className="shell2-rail-icon" aria-hidden="true">

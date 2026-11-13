@@ -7,7 +7,7 @@ import { useAppLocale } from "../appLocale.js";
 import { shellCopy } from "../copy/shell.js";
 
 /* The controls on the right of the shell's top bar: the Persoonlijk | Zakelijk
- * switch (archived, `SHOW_SCOPE_SWITCH`) plus the reference's "Add widget", which
+ * switch (archived, `SHOW_SCOPE_SWITCH`) plus the reference's "Add widget" (Overzicht only), which
  * opens the profile's module picker. Same picker, reached from the other end:
  * from here you are adding something to the nav, from the profile you are
  * curating it.
@@ -22,12 +22,20 @@ type TopBarActionsProps = {
   scope: EntityScope;
   onScopeChange: (scope: EntityScope) => void;
   onAddWidget: () => void;
+  /** "Widget toevoegen" belongs to Overzicht only; every other view hides it. */
+  showAddWidget: boolean;
 };
 
 /** The top bar's right-hand controls: the scope switch (while shown) and "Add widget". */
-export function TopBarActions({ scope, onScopeChange, onAddWidget }: TopBarActionsProps) {
+export function TopBarActions({
+  scope,
+  onScopeChange,
+  onAddWidget,
+  showAddWidget,
+}: TopBarActionsProps) {
   const [locale] = useAppLocale();
   const c = shellCopy[locale];
+  if (!SHOW_SCOPE_SWITCH && !showAddWidget) return null;
   return (
     <div className="topbar-right">
       {SHOW_SCOPE_SWITCH && (
@@ -48,10 +56,12 @@ export function TopBarActions({ scope, onScopeChange, onAddWidget }: TopBarActio
         </div>
       )}
 
-      <Pill className="topbar-add" onClick={onAddWidget}>
-        <span aria-hidden="true">+</span>
-        <span>{c.topBar.addWidget}</span>
-      </Pill>
+      {showAddWidget && (
+        <Pill className="topbar-add" onClick={onAddWidget}>
+          <span aria-hidden="true">+</span>
+          <span>{c.topBar.addWidget}</span>
+        </Pill>
+      )}
     </div>
   );
 }

@@ -14,7 +14,7 @@ vi.mock("../archive", () => ({
   initialScope: () => "personal",
 }));
 import { Rail, investingLinkProps } from "./Rail";
-import { enabledModules, navModules, withoutLockedModules } from "./moduleRegistry";
+import { enabledModules, navModules } from "./moduleRegistry";
 import { INVESTING_URL } from "../investing";
 import { shellCopy } from "../copy/shell.js";
 
@@ -40,7 +40,7 @@ afterEach(() => {
 
 function rail(
   ids: Parameters<typeof enabledModules>[0],
-  view: "overview" | "profiel" = "overview",
+  view: "overview" | "profiel" | "plan" = "overview",
 ) {
   return renderToStaticMarkup(
     <Rail
@@ -66,29 +66,34 @@ test("the rail renders exactly the enabled modules, and nothing else", () => {
   expect(html).not.toContain("Belasting");
 });
 
-test("the rail lists the core four in order, then optional modules", () => {
-  inOrder(rail(["plan", "forecast", "accounts", "optimalisatie"]), [
+test("the rail lists the core three in order, then optional modules", () => {
+  inOrder(rail(["forecast", "accounts", "optimalisatie"]), [
     "Overzicht",
     "Optimalisatie",
     "Rekeningen",
-    "Jouw plan",
     "Forecast",
   ]);
 });
 
-test("the plan lock hides Jouw plan until the plan is unlocked", () => {
-  const all = enabledModules(["overview", "optimalisatie", "accounts", "plan"]);
-  const html = (unlocked: boolean) =>
-    renderToStaticMarkup(
-      <Rail
-        view="overview"
-        modules={navModules(withoutLockedModules(all, unlocked))}
-        onNavigate={() => {}}
-        onOpenProfile={() => {}}
-      />,
-    );
-  expect(html(false)).not.toContain("Jouw plan");
-  expect(html(true)).toContain("Jouw plan");
+test("Jouw plan is in no nav list, even when a stored list still names plan", () => {
+  const html = rail(["overview", "optimalisatie", "accounts", "plan"]);
+  expect(html).not.toContain("Jouw plan");
+  expect(html).not.toContain("/app/plan");
+});
+
+test("the brand is an LV monogram labelled LaVega, not a bare dot", () => {
+  const html = rail(["overview"]);
+  const brand = html.match(/<span[^>]*shell2-rail-brand[^>]*>[^<]*<\/span>/)?.[0] ?? "";
+  expect(brand).toContain('aria-label="LaVega"');
+  expect(brand).toContain(">LV<");
+  expect(brand).not.toContain("dot");
+});
+
+test("on the plan view the rail marks Profiel as the current item, not a module", () => {
+  const html = rail(["overview", "optimalisatie", "accounts"], "plan");
+  const current = (html.match(/<a [^>]*>/g) ?? []).filter((t) => t.includes('aria-current="page"'));
+  expect(current).toHaveLength(1);
+  expect(current[0]).toContain("profiel");
 });
 
 test("the active view carries aria-current, and Profiel does when it is the view", () => {
@@ -111,15 +116,12 @@ test("English labels under the en locale cookie, Dutch ones are gone", () => {
   expect(html).not.toContain(shellCopy.nl.nav.moduleLabels.valuta);
 });
 
-test("the English rail follows the same order: Overview, Optimization, Accounts, Your plan", () => {
+test("the English rail follows the same order: Overview, Optimization, Accounts", () => {
   setCookie("en");
   const l = shellCopy.en.nav.moduleLabels;
-  inOrder(rail(["plan", "accounts", "optimalisatie"]), [
-    l.overview,
-    l.optimalisatie,
-    l.accounts,
-    l.plan,
-  ]);
+  const html = rail(["plan", "accounts", "optimalisatie"]);
+  inOrder(html, [l.overview, l.optimalisatie, l.accounts]);
+  expect(html).not.toContain(l.plan);
 });
 
 test("the investing link is a link out in the bottom group, not a view change", () => {

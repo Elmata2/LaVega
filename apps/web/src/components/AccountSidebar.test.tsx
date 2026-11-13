@@ -30,11 +30,8 @@ const ACCOUNTS: Account[] = [
 function render(over: Partial<AccountSidebarProps> = {}) {
   const props: AccountSidebarProps = {
     accounts: ACCOUNTS,
-    view: "accounts",
-    planUnlocked: false,
     activeAccountKey: "",
     onSelectAccount: () => {},
-    onOpenPlan: () => {},
     onAddAccount: () => {},
     ...over,
   };
@@ -107,24 +104,11 @@ test("a tab with nothing says so, instead of an empty list", () => {
   expect(host.textContent).toContain("Geen schulden.");
 });
 
-test("plan row only when unlocked; links to the plan, active on the plan view", () => {
+test("there is no plan row: Jouw plan lives in Profiel", () => {
   render();
   expect(host.querySelector(".shell2-acc-plan")).toBeNull();
-  act(() => root!.unmount());
-  host.remove();
-  const onOpenPlan = vi.fn();
-  render({ planUnlocked: true, view: "plan", onOpenPlan });
-  const plan = host.querySelector<HTMLAnchorElement>("a.shell2-acc-plan")!;
-  expect(plan.textContent).toContain("Jouw plan");
-  expect(plan.getAttribute("href")).toBe("/app/plan");
-  expect(plan.getAttribute("aria-current")).toBe("page");
-  act(() => plan.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true })));
-  expect(onOpenPlan).toHaveBeenCalledTimes(1);
-});
-
-test("plan row is not current on other views", () => {
-  render({ planUnlocked: true, view: "overview" });
-  expect(host.querySelector("a.shell2-acc-plan")!.hasAttribute("aria-current")).toBe(false);
+  expect(host.querySelector('a[href="/app/plan"]')).toBeNull();
+  expect(host.textContent).not.toContain("Jouw plan");
 });
 
 test("clicking a row calls the shared handler with the account key", () => {
@@ -139,7 +123,7 @@ test("clicking a row calls the shared handler with the account key", () => {
 });
 
 test("the active row is the current transaction filter, marked beyond colour", () => {
-  render({ activeAccountKey: "rabo-c", view: "transactions" });
+  render({ activeAccountKey: "rabo-c" });
   const active = host.querySelectorAll(".shell2-acc-row[aria-current]");
   expect(active).toHaveLength(1);
   expect(active[0]!.textContent).toContain("Visa");
@@ -195,29 +179,14 @@ test("a fully known group has no partial marker", () => {
   expect(host.querySelector(".shell2-acc-partial")).toBeNull();
 });
 
-test("onNavigate runs after the plan link, an account row and the add row; not for tabs", () => {
+test("onNavigate runs after an account row and the add row; not for tabs", () => {
   const onNavigate = vi.fn();
-  render({ planUnlocked: true, onNavigate });
+  render({ onNavigate });
   act(() => tab("Activa").click());
   expect(onNavigate).not.toHaveBeenCalled();
-  act(() => host.querySelector<HTMLElement>(".shell2-acc-plan")!.click());
   act(() => rows()[0]!.click());
   act(() => host.querySelector<HTMLElement>(".shell2-acc-add")!.click());
-  expect(onNavigate).toHaveBeenCalledTimes(3);
-});
-
-test("onNavigate is not called for a modifier-click on the plan link", () => {
-  const onNavigate = vi.fn();
-  render({ planUnlocked: true, onNavigate });
-  const swallow = (e: Event) => e.preventDefault();
-  document.addEventListener("click", swallow);
-  act(() => {
-    host
-      .querySelector<HTMLElement>(".shell2-acc-plan")!
-      .dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, metaKey: true }));
-  });
-  document.removeEventListener("click", swallow);
-  expect(onNavigate).not.toHaveBeenCalled();
+  expect(onNavigate).toHaveBeenCalledTimes(2);
 });
 
 test("a USD row shows its own currency, never a euro sign, and the head is partial", () => {

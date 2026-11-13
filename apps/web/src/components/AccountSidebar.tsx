@@ -1,13 +1,10 @@
-import { useMemo, useState, type MouseEvent } from "react";
+import { useMemo, useState } from "react";
 import { accountIsLiability, isEurCurrency, type Account } from "@lavega/core";
-import type { View } from "../App";
 import { useAppLocale } from "../appLocale.js";
-import { pathForView } from "../appRoutes";
 import { shellCopy } from "../copy/shell.js";
 import { moneyCopy } from "../copy/money.js";
 import { formatSignedCurrencyIn, formatSignedEuroIn } from "../format.js";
 import { groupAccountsByBank } from "../views/Rekeningen";
-import { LineIcon, navClick } from "./Rail.js";
 
 /* The account sidebar BODY (spec 5.2). Pure content: no width, no collapse, no
  * resize handle, so the phone drawer (step 9b) can render the same component.
@@ -16,17 +13,13 @@ import { LineIcon, navClick } from "./Rail.js";
 export type AccountSidebarProps = {
   /** The list Rekeningen gets: `scopedAccounts`. */
   accounts: Account[];
-  view: View;
-  /** Same predicate as the rail: the plan row exists only when true. */
-  planUnlocked: boolean;
   /** The account the transaction list is filtered to; "" for none. The caller
    *  passes "" when the transaction view is not showing. */
   activeAccountKey: string;
   /** The ONE account-click handler Rekeningen uses too. */
   onSelectAccount: (accountKey: string) => void;
-  onOpenPlan: () => void;
   onAddAccount: () => void;
-  /** Called after any of the three actions above runs (not for tabs or group
+  /** Called after any of the actions above runs (not for tabs or group
    *  heads). The phone drawer closes itself with it. */
   onNavigate?: () => void;
 };
@@ -35,11 +28,8 @@ type Tab = "all" | "assets" | "debts";
 
 export function AccountSidebar({
   accounts,
-  view,
-  planUnlocked,
   activeAccountKey,
   onSelectAccount,
-  onOpenPlan,
   onAddAccount,
   onNavigate,
 }: AccountSidebarProps) {
@@ -96,26 +86,6 @@ export function AccountSidebar({
 
   return (
     <div className="shell2-acc">
-      {planUnlocked && (
-        <a
-          href={pathForView("plan")}
-          className="shell2-acc-plan"
-          aria-current={view === "plan" ? "page" : undefined}
-          onClick={(e: MouseEvent) =>
-            navClick(e, () => {
-              onOpenPlan();
-              onNavigate?.();
-            })
-          }
-        >
-          <LineIcon>
-            <path d="M5 4h14v16H5z" />
-            <path d="M9 9h6M9 13h6M9 17h3" />
-          </LineIcon>
-          <span>{c.nav.moduleLabels.plan}</span>
-        </a>
-      )}
-
       {accounts.length > 0 && (
         <div className="shell2-acc-tabs" role="group" aria-label={c.accountSidebar.tabsLabel}>
           {tabs.map((t) => (

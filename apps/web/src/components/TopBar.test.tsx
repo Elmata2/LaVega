@@ -27,9 +27,14 @@ afterEach(() => {
   delete (globalThis as { document?: unknown }).document;
 });
 
-const render = () =>
+const render = (showAddWidget = true) =>
   renderToStaticMarkup(
-    <TopBarActions scope="personal" onScopeChange={() => {}} onAddWidget={() => {}} />,
+    <TopBarActions
+      scope="personal"
+      onScopeChange={() => {}}
+      onAddWidget={() => {}}
+      showAddWidget={showAddWidget}
+    />,
   );
 
 test("the scope switch and the add-widget pill are Dutch by default", () => {
@@ -45,4 +50,11 @@ test("the scope switch is English under the en locale cookie", () => {
   expect(html).toContain("Personal");
   expect(html).toContain("Business");
   expect(html).not.toContain("Persoonlijk");
+});
+
+test("the add-widget pill is absent when the view is not Overzicht", () => {
+  const html = render(false);
+  expect(html).not.toContain("Widget toevoegen");
+  expect(html).not.toContain("topbar-add");
+  expect(html).toContain("Persoonlijk");
 });

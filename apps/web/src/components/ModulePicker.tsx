@@ -92,7 +92,7 @@ export default function ModulePicker({ enabled, onChange }: ModulePickerProps) {
 
   return (
     <ul className="module-picker">
-      {MODULES.filter((m) => !isArchivedView(m.id)).map((m) => {
+      {MODULES.filter((m) => m.nav !== false && !isArchivedView(m.id)).map((m) => {
         const isOn = on.has(m.id);
         const locked = m.id === HOME_MODULE;
         const label = c.nav.moduleLabels[m.id];

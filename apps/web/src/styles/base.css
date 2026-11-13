@@ -54,9 +54,8 @@
     text-rendering: optimizeLegibility;
   }
 
-  /* h1 is the only base heading large enough for the display serif. It has
-   * one drawn weight, so it stays at 400 and `font-synthesis: none` stops the
-   * browser smearing a faux bold. h2/h3 are Geist, where weight carries rank. */
+  /* One family in the app: Geist, where weight carries rank. The landing page
+   * keeps its own serif under `.lp`; nothing here uses it. */
   h1,
   h2,
   h3 {
@@ -67,12 +66,8 @@
     color: var(--ink);
   }
   h1 {
-    font-family: var(--font-display);
-    font-weight: 400;
-    font-synthesis: none;
-    font-size: 1.75rem;
-    line-height: 1.1;
-    letter-spacing: 0;
+    font-size: 1.5rem;
+    line-height: 1.2;
   }
   h2 {
     font-size: 1.25rem;

@@ -1,5 +1,5 @@
 import type { ModuleId } from "./moduleRegistry";
-import { navClick, ProfileGlyph, type ShellNavProps } from "./Rail";
+import { isProfileView, navClick, ProfileGlyph, type ShellNavProps } from "./Rail";
 import { pathForView } from "../appRoutes";
 import { useAppLocale } from "../appLocale.js";
 import { shellCopy } from "../copy/shell.js";
@@ -8,12 +8,11 @@ import { shellCopy } from "../copy/shell.js";
  * tab bar. The bar holds exactly the core modules; every other enabled module
  * sits behind "Meer". Both openers take their drawer state from Shell. */
 
-/** Registry order decides the sequence; "plan" is only in `modules` when unlocked. */
+/** Registry order decides the sequence. */
 export const BAR_IDS: ReadonlySet<ModuleId> = new Set([
   "overview",
   "optimalisatie",
   "accounts",
-  "plan",
 ]);
 
 export function PhoneTopBar({
@@ -55,7 +54,7 @@ export function PhoneTopBar({
         href={pathForView("profiel")}
         className="shell2-phonebar-profile"
         aria-label={c.nav.profile}
-        aria-current={view === "profiel" ? "page" : undefined}
+        aria-current={isProfileView(view) ? "page" : undefined}
         onClick={(e) => navClick(e, onOpenProfile)}
       >
         <span className="profile-avatar" aria-hidden="true">

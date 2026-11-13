@@ -1,6 +1,6 @@
 ---
 name: LaVega App
-description: The product surface at app.lavega.dev. The lavega.dev "Midnight" world as a working dashboard: near-black ground, a display serif over Geist, honest tabular figures, cantaloupe for the one primary action.
+description: The product surface at app.lavega.dev. The lavega.dev "Midnight" world as a working dashboard: near-black ground, Geist throughout (the landing keeps a display serif), honest tabular figures, cantaloupe for the one primary action.
 colors:
   midnight: "#02070a"
   surface: "#0d171d"
@@ -18,11 +18,11 @@ colors:
   chart-teal: "#4fd1c0"
 typography:
   display:
-    fontFamily: "Instrument Serif, Georgia, Times New Roman, serif"
-    fontSize: "2.6rem"
-    fontWeight: 400
-    lineHeight: 1.08
-    letterSpacing: "0"
+    fontFamily: "Geist, system-ui, sans-serif"
+    fontSize: "1.5rem"
+    fontWeight: 600
+    lineHeight: 1.2
+    letterSpacing: "-0.01em"
   headline:
     fontFamily: "Geist, system-ui, sans-serif"
     fontSize: "1.25rem"
@@ -94,7 +94,7 @@ The working product behind app.lavega.dev, and the reference the content site an
 
 **Key characteristics**
 
-- Two faces, each with one job: Instrument Serif for display (28px and up, 400 only), Geist for everything else. Self-hosted from `src/assets/fonts/` with the OFL licenses.
+- One face in the app: Geist, page titles included. Only the landing page keeps Instrument Serif (its own `--serif` under `.lp`). Self-hosted from `src/assets/fonts/` with the OFL licenses.
 - Two themes: midnight (dark, default) and mono (black and white, chosen in Profiel). Radius, type, spacing and motion are shared. See "Monochrome theme".
 - The app is a full-viewport frame (`100dvh`): icon rail, account sidebar, main. No margin, radius or shadow. Only main scrolls.
 - Depth is tone plus a 12% hairline. Only floating layers (dialogs, menus) cast a shadow.
@@ -117,19 +117,17 @@ Delta pills use `--pos-tint` / `--neg-tint`, built with `color-mix` in srgb. Do 
 
 ## Typography
 
-**Two families, one job each** (2026-11-11, replacing Libron). `--font-display` is Instrument Serif; `--font-body` and `--font-mono` are Geist.
+**One family in the app** (2026-11-13; was two families, 2026-11-11). `--font-body` and `--font-mono` are Geist, and every app heading is Geist too. `--font-display` is gone. Instrument Serif is declared in `tokens.css` only for the landing page, which sets it through its own `--serif` under `.lp`; nothing in the app references it.
 
-**The size floor.** Instrument Serif is a condensed face with thin strokes and ONE drawn weight. It reads at 28px and up and nowhere else: the page title (`.topbar-title`, 2.6rem), base `h1` (1.75rem), the `.brand` wordmark, and on the landing page `h1`/`h2`, the scroll-lit sentence, the chat question and the quote. Every heading under that (base `h2`/`h3`, module titles, dialog and chat titles, the `font-body` section titles in the views) is Geist 600. The last time this serif ran the whole app it was faux-bolded and set at label sizes, and headings were hard to read; the floor is what prevents that.
+**Page title.** `.shell2-title` and base `h1`: Geist 600, 1.5rem, line-height 1.2, `-0.01em`. One line, truncates. A sans at the old 1.75rem / 400 serif size reads too loud.
 
-**No faux bold.** The serif is declared at 400 only and every display role sets `font-synthesis: none` and `font-weight: 400`. Tracking stays at 0 or above, never negative: the face is already condensed.
-
-**Figures are Geist.** Instrument Serif has no `tnum`. Geist does, and the app sets `font-variant-numeric: tabular-nums` on numeric cells and big figures (`Valuta`, `Punten`, `Belasting` amounts carry `tabular-nums` on the element).
+**Figures are Geist.** Geist has real `tnum`, and the app sets `font-variant-numeric: tabular-nums` on numeric cells and big figures (`Valuta`, `Punten`, `Belasting` amounts carry `tabular-nums` on the element).
 
 **Missing glyphs.** Neither latin subset has arrows or checks (`→ ← ✓`). The stacks end in a system face, so those glyphs fall back per glyph.
 
-**Loading.** `* Fallback` `@font-face` rules scale Times New Roman / Arial to the webfont metrics, so the swap does not reflow (CLS 0 measured on throttled 3G). `vite.config.ts` preloads the three hero faces (serif upright + italic, Geist upright) and fails the build if their hashed names are not found.
+**Loading.** `* Fallback` `@font-face` rules scale Times New Roman / Arial to the webfont metrics, so the swap does not reflow (CLS 0 measured on throttled 3G). `vite.config.ts` preloads the three hero faces (serif upright + italic for the landing, Geist upright) and fails the build if their hashed names are not found.
 
-**Scale.** `html` is 17px. The page title is 2.6rem serif at 400, line-height 1.08. Base `h1` 1.75rem serif; `h2` 1.25rem and `h3` 1rem are Geist 600 (`h3` in mist). Body is Geist 1rem at 1.5. A module figure is Geist 2.1rem at 700, `-0.02em`, tabular. Eyebrows are 0.75rem at 400 with `0.02em` tracking.
+**Scale.** `html` is 17px. The page title and base `h1` are 1.5rem Geist 600; `h2` 1.25rem and `h3` 1rem are Geist 600 (`h3` in mist). Body is Geist 1rem at 1.5. A module figure is Geist 2.1rem at 700, `-0.02em`, tabular. Eyebrows are 0.75rem at 400 with `0.02em` tracking.
 
 **Landing page.** Body is Geist 18px / 1.55. Headlines are Instrument Serif: `h1` clamp(3.3rem, 8.4vw, 6.8rem) at line-height 1.02 and `-0.005em`, `h2` at 1.06 and 0. `h3`, the quote's `cite` and the small `.acts h2` are Geist.
 
@@ -160,8 +158,10 @@ Scope: the personal app (`apps/web`, `/app`). Code: `components/Shell.tsx`, `Rai
 | Main                      | Fluid, no max-width. Sticky 56px top bar: toggle, title, actions                     | Gutters 32 / 24 / 16px at >= 1280 / 1024-1279 / < 1024. Vertical padding 24px                                                                                                    |
 | Module grid               | Container queries on `.content-container`, 1200 and 900px                            | Measured on main, not the viewport, so the rail and sidebar do not make 3 columns appear too early                                                                               |
 | Phone (< 1024)            | 48px top bar (menu, brand, Profiel), fixed bottom bar 56px + safe-area inset, drawer | No rail, no inline sidebar. The 48px bar is the only sticky bar                                                                                                                  |
-| Bottom bar                | Overzicht, Optimalisatie, Rekeningen, Jouw plan when unlocked, then "Meer"           | "Meer" opens the drawer for the remaining modules                                                                                                                                |
+| Bottom bar                | Overzicht, Optimalisatie, Rekeningen, then "Meer" when other modules are on         | "Meer" opens the drawer for the remaining modules                                                                                                                                |
 | Drawer                    | `min(88vw, 360px)`, left sheet, scrim `--scrim`                                      | Lists all modules, then the account sidebar body. Closes on scrim, Escape and navigation                                                                                         |
+
+**Brand and Jouw plan.** The rail brand is a text "LV" monogram (`.shell2-rail-brand`, Geist 600, 15px, `--ink`, `aria-label="LaVega"`); the phone bar keeps the "LaVega" wordmark. Jouw plan is in no nav list (registry `nav: false`: rail, bottom bar, drawer, module picker): it is reached from the "Jouw plan" card at the top of Profiel, and Profiel is the current item while `/app/plan` is open. "Widget toevoegen" shows on Overzicht only.
 
 Storage: `localStorage["lavega.sidebar"]` = `{"open": boolean, "width": number}`. Read in try/catch, width clamped, defaults on anything invalid. Written on pointer-up, not while dragging.
 
@@ -233,7 +233,7 @@ Reduced motion removes all three and shows the end state. Unlit words in the scr
 
 ## Rules
 
-- **Do** keep the two faces to their jobs: serif only at 28px and up at 400, Geist for everything else. A third face is a design change, not a component decision.
+- **Do** keep the app on Geist. The serif belongs to the landing page. A second face in the app is a design change, not a component decision.
 - **Do** put every number in tabular figures, and keep the `tnum` feature on.
 - **Do** separate panels with tone and the hairline.
 - **Do** keep cantaloupe for the one primary action per screen.
@@ -241,5 +241,5 @@ Reduced motion removes all three and shows the end state. Unlit words in the scr
 - **Don't** use green or rose outside gain, loss and problem.
 - **Don't** add a shadow to a resting panel.
 - **Don't** introduce a grey outside the token list; use the hairline or a surface step.
-- **Don't** hard-code a font stack; use `--font-display` / `--font-body`, which carry the metric fallbacks and the system tail for `→` and `✓`.
-- **Don't** put the serif on a number, a label, or anything under 28px.
+- **Don't** hard-code a font stack; use `--font-body`, which carry the metric fallbacks and the system tail for `→` and `✓`.
+- **Don't** put the serif anywhere in the app.
