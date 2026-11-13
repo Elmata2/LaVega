@@ -3,7 +3,7 @@ import { act, useEffect } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { useSidebar, type SidebarApi } from "./useSidebar";
-import { SIDEBAR_KEY, forgetMemorySidebar } from "../lib/sidebar";
+import { RAIL_WIDTH, SIDEBAR_KEY, forgetMemorySidebar } from "../lib/sidebar";
 
 (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -82,7 +82,7 @@ test("the shown width follows the viewport rule; the stored choice is not shrunk
   window.localStorage.setItem(SIDEBAR_KEY, JSON.stringify({ open: true, width: 440 }));
   setViewport(900);
   mount();
-  expect(api().width).toBe(900 - 72 - 480);
+  expect(api().width).toBe(900 - RAIL_WIDTH - 480);
   act(() => {
     setViewport(1600);
     window.dispatchEvent(new Event("resize"));

@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import {
+  RAIL_WIDTH,
   SIDEBAR_DEFAULT_WIDTH,
   SIDEBAR_KEY,
   clampWidth,
@@ -22,8 +23,8 @@ test("clamps to 240 and 440", () => {
   expect(clampWidth(300, 1600)).toBe(300);
 });
 
-test("main keeps 480: cap is viewport - 72 - 480", () => {
-  expect(clampWidth(440, 900)).toBe(900 - 72 - 480);
+test("main keeps 480: cap is viewport - rail - 480", () => {
+  expect(clampWidth(440, 900)).toBe(900 - RAIL_WIDTH - 480);
   expect(clampWidth(296, 900)).toBe(296);
   expect(clampWidth(440, 1031)).toBe(440);
 });

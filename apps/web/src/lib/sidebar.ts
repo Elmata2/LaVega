@@ -2,7 +2,7 @@ export const SIDEBAR_KEY = "lavega.sidebar";
 export const SIDEBAR_DEFAULT_WIDTH = 296;
 export const SIDEBAR_MIN_WIDTH = 240;
 export const SIDEBAR_MAX_WIDTH = 440;
-export const RAIL_WIDTH = 72;
+export const RAIL_WIDTH = 84;
 /* Main never gets narrower than this; the sidebar gives way first. */
 export const MAIN_MIN_WIDTH = 480;
 

@@ -3,13 +3,13 @@ import { useAppLocale } from "../appLocale.js";
 import { shellCopy } from "../copy/shell.js";
 import { useMediaQuery } from "../hooks/useMediaQuery.js";
 import { useSidebar } from "../hooks/useSidebar.js";
-import { SHELL_MIN_VIEWPORT } from "../lib/sidebar.js";
+import { RAIL_WIDTH, SHELL_MIN_VIEWPORT } from "../lib/sidebar.js";
 import { BottomBar, PhoneTopBar } from "./BottomBar.js";
 import { Rail, type ShellNavProps } from "./Rail.js";
 
 /* The new app frame (SHELL_V2): full viewport, no margin, radius or shadow.
  *
- *   rail (72)  |  account sidebar (296, 240..440, collapsible)  |  main
+ *   rail (84)  |  account sidebar (296, 240..440, collapsible)  |  main
  *
  * Main owns the scroll. Its top bar is sticky inside it; the content below is
  * `children`, which App.tsx passes already wrapped in the module-grid container
@@ -24,7 +24,7 @@ export type ShellProps = {
   title: string;
   /** Right side of the top bar. */
   actions?: ReactNode;
-  /** Navigation data. Without it the 72px rail placeholder renders (tests). */
+  /** Navigation data. Without it the rail placeholder renders (tests). */
   nav?: ShellNavProps;
   /** Account sidebar content (step 9a). Empty until then. */
   sidebar?: ReactNode;
@@ -62,7 +62,10 @@ export function Shell({ title, actions, nav, sidebar, children }: ShellProps) {
   const inertProps = (open ? {} : { inert: "" }) as Record<string, string>;
   const phoneNav = wide ? undefined : nav;
   const narrow = phoneNav !== undefined;
-  const style = { "--shell2-sidebar-w": `${width}px` } as CSSProperties;
+  const style = {
+    "--shell2-sidebar-w": `${width}px`,
+    "--shell2-rail-w": `${RAIL_WIDTH}px`,
+  } as CSSProperties;
 
   return (
     <div className={`shell2${narrow ? " shell2-narrow" : ""}`} style={style}>
