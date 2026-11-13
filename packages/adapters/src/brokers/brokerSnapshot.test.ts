@@ -76,6 +76,26 @@ describe("IBKR history windows", () => {
         .sort(),
     ).toEqual(["ibkr:t-1", "ibkr:t-2"]);
   });
+
+  test("partial fills sharing a broker trade id keep distinct ids across resyncs", () => {
+    /* A broker trade id names the order, not the execution: DeGiro's partial
+     * fills all carry one Order Id, and IBKR reports one transactionID per fill
+     * group. With the bare id as row id, a merge keeps one fill and drops the
+     * other. The first row keeps the bare id; the rest get an occurrence
+     * suffix, so re-importing the same window neither duplicates nor renumbers. */
+    const fills =
+      `<Trade accountId="U1" symbol="VUSA" transactionID="p1" tradeDate="20260301" buySell="BUY" quantity="1" tradePrice="10" proceeds="-10" currency="EUR" />` +
+      `<Trade accountId="U1" symbol="VUSA" transactionID="p1" tradeDate="20260302" buySell="BUY" quantity="2" tradePrice="10" proceeds="-20" currency="EUR" />`;
+    const cache = createBrokerDataCache();
+
+    cache.apply(outcome(window(fills, "", A)));
+    expect(cache.read().trades.map((trade) => trade.id)).toEqual(["ibkr:p1", "ibkr:p1#2"]);
+
+    cache.apply(outcome(window(fills, "", A)));
+    const data = cache.read();
+    expect(data.trades.map((trade) => trade.id)).toEqual(["ibkr:p1", "ibkr:p1#2"]);
+    expect(data.trades.map((trade) => trade.quantity)).toEqual([1, 2]);
+  });
 });
 
 describe("IBKR backfill and multi-account windows", () => {

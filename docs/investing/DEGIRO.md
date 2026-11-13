@@ -314,11 +314,12 @@ their ledger rows under one id counter, and returns
   the account statement, every section of the still-unmapped transactions and
   portfolio profiles) is `unavailable`. Reporting an empty section as `complete`
   would tell the snapshot the broker reported nothing and wipe stored rows.
-- **Snapshot trade identity.** `brokerSnapshot` re-ids every trade as
-  `<broker>:<brokerTradeId>`, so the two partial fills of one Order Id share one
-  stored id even though both rows survive the import (4 rows, 3 ids). Core's
-  `assignTradeIds` occurrence counter is not on the snapshot path.
-  Disambiguating belongs to the snapshot window work (#321).
+- **Snapshot trade identity.** `brokerSnapshot` re-ids trades as
+  `<broker>:<brokerTradeId>`. A broker trade id names the order, not the
+  execution, so repeated ids (the partial fills of one Order Id) get an
+  occurrence suffix on the second and later rows: 4 rows, 4 ids, and the first
+  fill keeps the bare id. Same file re-imports do not renumber; an appended
+  older window adds rows after the ones already seen.
 
 Fixture result: 4 trades (a sell, a USD buy with AutoFX and fee, and two fills
 of one Order Id), 21 cash flows (11 statement rows + 10 trade rows), 2

@@ -232,6 +232,26 @@ export function stableTradeId(trade: Omit<Trade, "id">): string {
   return `anonymous-${value >>> 0}`;
 }
 
+/**
+ * Snapshot ids for one broker's incoming trades. A broker trade id is unique
+ * per order, not per execution: DeGiro gives every partial fill of one order
+ * the same Order Id. Returning that id as the row id would collapse the fills
+ * on a merge and lose executions. The first row keeps the bare id, so existing
+ * stored trades keep their id; later rows with the same base id get an
+ * occurrence suffix. Incoming order is the file order, and an appended older
+ * window only adds rows after the ones already seen, so the suffix is stable
+ * across overlapping re-imports.
+ */
+export function brokerTradeRowIds(broker: string, trades: readonly Omit<Trade, "id">[]): string[] {
+  const seen = new Map<string, number>();
+  return trades.map((trade) => {
+    const base = `${broker}:${stableTradeId(trade)}`;
+    const occurrence = (seen.get(base) ?? 0) + 1;
+    seen.set(base, occurrence);
+    return occurrence === 1 ? base : `${base}#${occurrence}`;
+  });
+}
+
 export function createBrokerDataCache(initial: BrokerDataSnapshot = {}) {
   const positionsByBroker = new Map<string, Position[]>();
   const tradesByBroker = new Map<string, Trade[]>();
@@ -296,9 +316,10 @@ export function createBrokerDataCache(initial: BrokerDataSnapshot = {}) {
             ),
           );
         }
-        const mappedTrades = sections.trades.rows.map((trade) => ({
+        const tradeIds = brokerTradeRowIds(outcome.broker, sections.trades.rows);
+        const mappedTrades = sections.trades.rows.map((trade, index) => ({
           ...withBroker(outcome.broker, [trade])[0],
-          id: `${outcome.broker}:${stableTradeId(trade)}`,
+          id: tradeIds[index]!,
         }));
         const tradeWindow = windowPeriod(outcome.broker, sections.trades.status, incoming.period);
         if (tradeWindow)
