@@ -122,7 +122,8 @@ test("menu lists all enabled modules, then the sidebar body", () => {
   const items = [...dialog().querySelectorAll(".shell2-drawer-modules a")].map((a) =>
     a.textContent?.trim(),
   );
-  expect(items).toHaveLength(ALL.length);
+  expect(items).toHaveLength(ALL.length - 1);
+  expect(items).not.toContain("Jouw plan");
   expect(items.slice(0, 3)).toEqual(["Overzicht", "Optimalisatie", "Rekeningen"]);
   expect(dialog().querySelector(".go")).not.toBeNull();
 });

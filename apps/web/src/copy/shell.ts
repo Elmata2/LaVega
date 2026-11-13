@@ -125,6 +125,10 @@ export type ShellCopy = {
   /** De meldingsbalk bovenin, uit `shellNotice.ts`. */
   notice: (n: ShellNotice) => string;
   profiel: {
+    /** The card at the top of Profiel: the only way into the plan view. The
+     *  title is `nav.moduleLabels.plan`; locked, the card reuses the intake
+     *  invitation's own copy. */
+    plan: { line: string; open: string };
     languageSwitch: { cardLabel: string; nl: string; en: string; ariaLabel: string };
     appearance: {
       ariaLabel: string;
@@ -477,6 +481,10 @@ const nl: ShellCopy = {
     }
   },
   profiel: {
+    plan: {
+      line: "Je maand, buffer, schulden en doelen, met de uitleg erbij.",
+      open: "Open je plan",
+    },
     languageSwitch: {
       cardLabel: "Taal / Language",
       nl: "Nederlands",
@@ -866,6 +874,10 @@ const en: ShellCopy = {
     }
   },
   profiel: {
+    plan: {
+      line: "Your month, buffer, debts and goals, with the explanation next to each.",
+      open: "Open your plan",
+    },
     languageSwitch: {
       cardLabel: "Taal / Language",
       nl: "Nederlands",

@@ -25,7 +25,12 @@ function mount(node: React.ReactElement): HTMLElement {
 
 test("TopBarActions renders no scope switch", () => {
   const html = renderToStaticMarkup(
-    <TopBarActions scope="personal" onScopeChange={() => {}} onAddWidget={() => {}} />,
+    <TopBarActions
+      scope="personal"
+      onScopeChange={() => {}}
+      onAddWidget={() => {}}
+      showAddWidget
+    />,
   );
   expect(html).not.toContain("scope-switch");
   expect(html).not.toContain(shellCopy.nl.topBar.scopeGroupLabel);

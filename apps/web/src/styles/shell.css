@@ -25,6 +25,12 @@
     flex: none;
     align-self: center;
     margin: var(--sp-5) 0 var(--sp-4);
+    font-family: var(--font-body);
+    font-size: 15px;
+    font-weight: 600;
+    line-height: 1;
+    letter-spacing: -0.02em;
+    color: var(--ink);
   }
   /* The list scrolls when it overflows; brand and bottom group stay put. */
   .shell2-rail-list {
@@ -282,7 +288,6 @@
     padding: var(--sp-3);
     padding-right: calc(var(--sp-3) + 6px);
   }
-  .shell2-acc-plan,
   .shell2-acc-add,
   .shell2-acc-row,
   .shell2-acc-head,
@@ -291,7 +296,6 @@
       background-color 120ms ease-out,
       color 120ms ease-out;
   }
-  .shell2-acc-plan,
   .shell2-acc-add,
   .shell2-acc-row {
     position: relative;
@@ -311,16 +315,13 @@
     text-decoration: none;
     cursor: pointer;
   }
-  .shell2-acc-plan:hover,
   .shell2-acc-row:hover,
   .shell2-acc-head:hover {
     background: var(--surface-2);
   }
-  .shell2-acc-plan[aria-current="page"],
   .shell2-acc-row[aria-current] {
     background: var(--surface-2);
   }
-  .shell2-acc-plan[aria-current="page"]::before,
   .shell2-acc-row[aria-current]::before {
     content: "";
     position: absolute;
@@ -331,11 +332,6 @@
     border-radius: 2px;
     background: var(--ink);
   }
-  .shell2-acc-plan svg {
-    flex: none;
-    width: 20px;
-    height: 20px;
-  }
   .shell2-acc-add {
     color: var(--muted);
   }
@@ -343,7 +339,6 @@
     color: var(--ink);
     background: var(--surface-2);
   }
-  .shell2-acc-plan:focus-visible,
   .shell2-acc-add:focus-visible,
   .shell2-acc-row:focus-visible,
   .shell2-acc-head:focus-visible,
@@ -507,9 +502,10 @@
     min-width: 0;
     margin: 0;
     overflow: hidden;
-    font-size: 1.75rem;
+    font-size: 1.5rem;
+    font-weight: 600;
     line-height: 1.2;
-    letter-spacing: 0;
+    letter-spacing: -0.01em;
     white-space: nowrap;
     text-overflow: ellipsis;
   }
@@ -700,8 +696,7 @@
     }
     .shell2-sidebar,
     .shell2-sidebar-closed,
-    .shell2-acc-plan,
-    .shell2-acc-add,
+      .shell2-acc-add,
     .shell2-acc-row,
     .shell2-acc-head,
     .shell2-acc-tab,

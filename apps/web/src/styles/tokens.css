@@ -22,18 +22,15 @@
 
 /* LaVega design-system tokens. "Midnight" palette matching the marketing site:
  * near-black ground, two raised panel tones, hairline borders, cantaloupe for the
- * primary action and blue for links and active states. Instrument Serif for
- * display, Geist for everything else (self-hosted, see the @font-face block below). The app is a full-viewport
+ * primary action and blue for links and active states. Geist for everything in
+ * the app (self-hosted, see the @font-face block below). The app is a full-viewport
  * frame on --bg (no gutter, no radius). Everything references these
  * variables, so the whole theme lives here. */
 
-/* Two families, each with one job (2026-11-11):
- * - Instrument Serif: display only. A condensed serif with ONE drawn weight
- *   (400) and no tabular figures, so it is set only at 28px and up, always at
- *   400 with `font-synthesis: none`. Smaller headings, labels and every
- *   number use Geist. That rule is what keeps headings readable: the last time
- *   this face ran the whole app, it was faux-bolded and set at label sizes.
- * - Geist: body, UI, figures. A variable face (100-900) with real `tnum`.
+/* One family in the app (2026-11-13): Geist, a variable face (100-900) with
+ * real `tnum`, for body, UI, figures and page titles. Instrument Serif is
+ * declared below ONLY for the landing page (`--serif` in landing.css, scope
+ * `.lp`); nothing in the app references it.
  * Neither latin subset has arrows or checks (`→ ← ✓`), so every stack ends in
  * a system face and the browser falls back per glyph. The `* Fallback` faces
  * scale a local font to the webfont's metrics so the swap does not reflow.
@@ -159,11 +156,9 @@
   --sp-5: 24px;
   --sp-6: 32px;
 
-  /* Type: two families. --font-display is for headings at 28px and up only;
-   * --font-body and --font-mono are Geist, which has real `tnum`, so numeric
-   * cells with `font-variant-numeric: tabular-nums` align by digit width. */
-  --font-display:
-    "Instrument Serif", "Instrument Serif Fallback", Georgia, "Times New Roman", serif;
+  /* Type: one family in the app. --font-body and --font-mono are Geist, which
+   * has real `tnum`, so numeric cells with `font-variant-numeric: tabular-nums`
+   * align by digit width. The landing's serif is `--serif` under `.lp`. */
   --font-body: "Geist", "Geist Fallback", system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-mono: "Geist", "Geist Fallback", system-ui, -apple-system, "Segoe UI", sans-serif;
 
@@ -329,7 +324,6 @@
    * The app's own tokens remain available where they carry meaning the scale
    * does not, as var(--sp-5) or an explicit p-[24px]. */
 
-  --font-display: var(--font-display);
   --font-body: var(--font-body);
   --font-mono: var(--font-mono);
 

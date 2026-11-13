@@ -24,6 +24,7 @@ import { entitySummaries, factId, TRAVEL_AGENT } from "@lavega/core";
 import type { VaultStorage } from "@lavega/adapters";
 import Profiel from "./Profiel";
 import { forgetMemoryTheme } from "../hooks/useTheme";
+import { intakeCopy } from "../copy/intake.js";
 import { WIDGETS, enabledModules } from "../components/moduleRegistry";
 import { COUNTRY_CODES } from "../countries";
 import { getHomeCountry } from "../settings";
@@ -114,6 +115,7 @@ async function render(overrides: Partial<Parameters<typeof Profiel>[0]> = {}) {
     storage,
     asOf: "2026-08-16",
     onRestored: () => {},
+    planUnlocked: false,
     ...overrides,
   };
   container = document.createElement("div");
@@ -934,4 +936,33 @@ test("Weergave: een storage-event van een ander tabblad werkt de keuze bij", asy
     true,
   );
   delete document.documentElement.dataset.theme;
+});
+
+
+/* ══════ JOUW PLAN — the only way in now that the nav no longer lists it ═══════ */
+
+test("Jouw plan card is the first card; unlocked it opens the plan view", async () => {
+  const onNavigate = vi.fn();
+  await render({ planUnlocked: true, onNavigate });
+  const first = container!.querySelector("section")!;
+  expect(first.getAttribute("aria-label")).toBe("Jouw plan");
+  expect(first.textContent).toContain("Jouw plan");
+  const open = [...first.querySelectorAll("button, a")].find(
+    (b) => b.textContent === "Open je plan",
+  ) as HTMLElement;
+  expect(open).toBeTruthy();
+  act(() => open.click());
+  expect(onNavigate).toHaveBeenCalledWith("plan");
+});
+
+test("Jouw plan card, locked: the intake prompt and a Begin button that opens the intake", async () => {
+  const onNavigate = vi.fn();
+  await render({ planUnlocked: false, onNavigate });
+  const first = container!.querySelector("section")!;
+  expect(first.getAttribute("aria-label")).toBe("Jouw plan");
+  expect(first.textContent).toContain(intakeCopy.nl.home.invite.intro);
+  expect(first.textContent).not.toContain("Open je plan");
+  const begin = [...first.querySelectorAll("button")].find((b) => b.textContent === "Begin")!;
+  act(() => begin.click());
+  expect(onNavigate).toHaveBeenCalledWith("intake");
 });

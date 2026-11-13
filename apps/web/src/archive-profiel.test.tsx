@@ -49,6 +49,7 @@ const storage = fakeStorage().storage;
 
 async function render(overrides: Partial<Parameters<typeof Profiel>[0]> = {}) {
   const props: Parameters<typeof Profiel>[0] = {
+    planUnlocked: false,
     enabledModules: enabledModules(null),
     onModulesChange: () => {},
     focusModules: 0,

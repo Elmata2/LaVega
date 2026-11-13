@@ -163,7 +163,6 @@ import StatusLine from "./components/ui/StatusLine.js";
 import {
   enabledModules as resolveModules,
   navModules,
-  withoutLockedModules,
   type ModuleId,
 } from "./components/moduleRegistry";
 import IntakeWizard from "./views/IntakeWizard";
@@ -1321,7 +1320,7 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
     () => ({ ...own, names: ownNamesForMatching }),
     [own, ownNamesForMatching],
   );
-  // The plan joins the nav once the intake has produced something to plan with.
+  // Profiel's "Jouw plan" card opens the plan once the intake has produced something to plan with.
   const planUnlocked =
     profileRead !== "loading" &&
     profileRead !== "error" &&
@@ -2291,7 +2290,7 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
       title={shell.topBar.viewTitles[view]}
       nav={{
         view,
-        modules: navModules(withoutLockedModules(modules, planUnlocked)),
+        modules: navModules(modules),
         onNavigate: setView,
         onOpenProfile: () => setView("profiel"),
       }}
@@ -2299,11 +2298,8 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
         <AccountSidebar
           onNavigate={onNavigate}
           accounts={scopedAccounts}
-          view={view}
-          planUnlocked={planUnlocked}
           activeAccountKey={view === "transactions" ? fAccount : ""}
           onSelectAccount={openAccountTransactions}
-          onOpenPlan={() => setView("plan")}
           // Import lives in Profiel; Rekeningen's empty state points there too.
           onAddAccount={() => setView("profiel")}
         />
@@ -2313,6 +2309,7 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
           scope={scope}
           onScopeChange={handleScopeChange}
           onAddWidget={handleAddWidget}
+          showAddWidget={view === "overview"}
         />
       }
     >
@@ -2668,6 +2665,7 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
         {view === "profiel" && (
           <Profiel
             onNavigate={setView}
+            planUnlocked={planUnlocked}
             enabledModules={modules}
             onModulesChange={handleModulesChange}
             focusModules={addWidget}

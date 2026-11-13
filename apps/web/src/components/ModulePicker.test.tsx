@@ -34,7 +34,6 @@ import {
   normaliseWidgets,
   toggleModule,
   toggleWidget,
-  withoutLockedModules,
   useOverviewWidgets,
   type ModuleId,
 } from "./moduleRegistry";
@@ -216,7 +215,8 @@ test("Transacties is een module die je kunt aanzetten, en die uit begint", () =>
 
 test("every registry entry carries what the picker shows: label, one line, icon, preview", () => {
   render();
-  for (const m of MODULES) {
+  const offered = MODULES.filter((m) => m.nav !== false);
+  for (const m of offered) {
     expect(m.label.length, `${m.id} needs a Dutch label`).toBeGreaterThan(0);
     expect(m.what.length, `${m.id} needs a line of what it does`).toBeGreaterThan(0);
     expect(m.icon).toBeTruthy();
@@ -225,7 +225,7 @@ test("every registry entry carries what the picker shows: label, one line, icon,
     expect(container!.textContent).toContain(m.what);
   }
   // One preview thumbnail per module, drawn (not screenshotted).
-  expect(container!.querySelectorAll(".mp-preview svg.mp-thumb").length).toBe(MODULES.length);
+  expect(container!.querySelectorAll(".mp-preview svg.mp-thumb").length).toBe(offered.length);
 });
 
 test("the picker renders in English when the locale cookie says en", () => {
@@ -584,28 +584,29 @@ test("every widget entry carries what the picker shows: label, one line, preview
   ).toBeGreaterThanOrEqual(WIDGETS.length);
 });
 
-test("the core four lead the nav (Overzicht, Optimalisatie, Rekeningen, Jouw plan); plan is on by default and no widget id is 'plan'", () => {
+test("the core three lead the nav (Overzicht, Optimalisatie, Rekeningen); plan is in neither the default nor the nav, and no widget id is 'plan'", () => {
   const ids = navModules(enabledModules(null)).map((m) => m.id);
-  expect(ids.slice(0, 4)).toEqual(["overview", "optimalisatie", "accounts", "plan"]);
-  expect(DEFAULT_MODULES).toContain("plan");
+  expect(ids.slice(0, 3)).toEqual(["overview", "optimalisatie", "accounts"]);
+  expect(ids).not.toContain("plan");
+  expect(DEFAULT_MODULES).not.toContain("plan");
+  expect(navModules(MODULES.map((m) => m.id)).map((m) => m.id)).not.toContain("plan");
   expect(HOME_MODULE).toBe("overview");
   expect(WIDGETS.map((w) => w.id as string)).not.toContain("plan");
 });
 
-test("the plan stays out of the nav until a first intake block is done", () => {
-  const all = enabledModules(null);
-  expect(withoutLockedModules(all, false)).not.toContain("plan");
-  expect(withoutLockedModules(all, false)).toContain("overview");
-  expect(withoutLockedModules(all, true)).toEqual(all);
+test("the module picker never offers Jouw plan as a toggle", () => {
+  render();
+  expect(container!.textContent).not.toContain("Jouw plan");
+  expect(container!.querySelector('[aria-label*="Jouw plan"]')).toBeNull();
 });
 
-const CORE_LABELS = ["Overzicht", "Optimalisatie", "Rekeningen", "Jouw plan"];
+const CORE_LABELS = ["Overzicht", "Optimalisatie", "Rekeningen"];
 
 test("a never-chosen preference renders the default set, core four first", () => {
   render();
   /* This file mocks the business archive off, so the default also holds the
    * three business modules; archive.test.ts pins the real four-item default. */
-  expect(navLabels().slice(0, 4)).toEqual(CORE_LABELS);
+  expect(navLabels().slice(0, 3)).toEqual(CORE_LABELS);
   expect(navLabels()).toEqual(navModules(DEFAULT_MODULES).map((m) => m.label));
 });
 
@@ -621,7 +622,7 @@ test("garbage in the stored preference renders like never chosen", () => {
   }
 });
 
-test("a legacy stored list (plan first, with forecast) keeps its members in the new order", () => {
+test("a legacy stored list naming plan keeps working: plan is ignored for navigation", () => {
   const legacy = ["plan", "overview", "accounts", "optimalisatie", "forecast"];
   localStorage.setItem("lavega.navModules", JSON.stringify(legacy));
   render();
@@ -631,7 +632,7 @@ test("a legacy stored list (plan first, with forecast) keeps its members in the 
       .map((m) => m.label)
       .sort(),
   );
-  expect(new Set(enabledModules(legacy))).toEqual(new Set(legacy));
+  expect(new Set(enabledModules(legacy))).toEqual(new Set(legacy.filter((id) => id !== "plan")));
 });
 
 test("optional modules keep their current relative order after the core four", () => {
@@ -640,7 +641,6 @@ test("optional modules keep their current relative order after the core four", (
     "overview",
     "optimalisatie",
     "accounts",
-    "plan",
     "transactions",
     "bills",
     "forecast",
