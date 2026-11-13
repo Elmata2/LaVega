@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import type { CategoryComparison, OwnAccounts, Rule, Tx } from "@lavega/core";
 import { categoryComparison } from "@lavega/core";
-import { formatEuroIn, monthLabel } from "../../format.js";
+import { formatEuroIn, formatSignedPercentIn, monthLabel } from "../../format.js";
 import Module from "../Module.js";
 import CardLink from "../ui/CardLink.js";
 import { useAppLocale } from "../../appLocale.js";
@@ -46,7 +46,7 @@ function CategoryDelta({ changePct }: { changePct: number | null }) {
   const up = rounded > 0;
   return (
     <span className={`cat-delta ${up ? "up" : "down"}`}>
-      {up ? "▲" : "▼"} {Math.abs(rounded)}%
+      {up ? "▲" : "▼"} {formatSignedPercentIn(locale, rounded)}
     </span>
   );
 }

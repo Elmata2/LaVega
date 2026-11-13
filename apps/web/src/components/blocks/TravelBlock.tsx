@@ -44,7 +44,7 @@ import {
   splitProductName,
 } from "@lavega/core";
 import catalogueFile from "../../../../../docs/catalog/catalog.json";
-import { formatEuroIn, formatDate } from "../../format.js";
+import { formatEuroIn, formatSignedEuroIn, formatDate } from "../../format.js";
 import { useAppLocale, pick, readAppLocale } from "../../appLocale.js";
 import { optimiseCopy, formatPercentIn, type TravelCopy } from "../../copy/optimise.js";
 import type { Locale } from "../../locale.js";
@@ -869,7 +869,7 @@ export function Kaartkosten({
       {benefit.kind === "net" ? (
         <p className="cell-sub travel-note" data-testid={`${testId}-netto`}>
           <strong>{c.cardCost.netLabel}</strong>{" "}
-          <span className="text-pos">{formatEuroIn(locale, benefit.netCents / 100)}</span> —{" "}
+          <span className="text-pos">{formatSignedEuroIn(locale, benefit.netCents / 100)}</span> —{" "}
           {fill(c.cardCost.netBreakdown, {
             gross: formatEuroIn(locale, benefit.grossCents / 100),
             cost: formatEuroIn(locale, benefit.costCents / 100),

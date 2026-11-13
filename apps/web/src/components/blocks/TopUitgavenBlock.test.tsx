@@ -144,3 +144,8 @@ test("TopUitgavenBlock renders an empty state with no transactions at all", () =
   expect(html).not.toContain("cat-bar");
   expect(html).not.toContain("cat-nocompare");
 });
+
+test("the category delta carries a real minus next to its arrow", () => {
+  const html = block(txs).replace(/<!-- -->/g, "");
+  expect(html).toMatch(/cat-delta down">▼ \u2212\d+%/);
+});

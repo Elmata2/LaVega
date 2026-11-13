@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import type { PaycheckPreview, ScheduledFlow, Tx } from "@lavega/core";
 import { detectScheduleStreams } from "@lavega/core";
-import { formatDate, formatEuroIn, monthShort } from "../../format.js";
+import { formatDate, formatEuroIn, formatSignedEuroIn, monthShort } from "../../format.js";
 import Module from "../Module.js";
 import { useWidgetEnabled } from "../moduleRegistry";
 import { daysBetween, shiftDate } from "./dates.js";
@@ -274,7 +274,7 @@ export function BetaalschemaBlock({ scheduledFlows, txs, asOf, paycheck }: Betaa
                 <span
                   className={`flex-none font-semibold tabular-nums ${r.amount >= 0 ? "text-pos" : "text-neg"}`}
                 >
-                  {formatEuroIn(locale, r.amount)}
+                  {formatSignedEuroIn(locale, r.amount)}
                 </span>
               </button>
             );

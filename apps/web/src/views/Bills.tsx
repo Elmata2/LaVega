@@ -24,7 +24,7 @@ import {
   toCents,
   withCurrentBalances,
 } from "@lavega/core";
-import { formatDate, formatEuroIn, monthLabel, weekdayLabel } from "../format.js";
+import { formatDate, formatEuroIn, formatSignedEuroIn, monthLabel, weekdayLabel } from "../format.js";
 import { useAppLocale } from "../appLocale.js";
 import { billsCopy, type BillsCopy } from "../copy/bills.js";
 import type { Locale } from "../locale.js";
@@ -335,6 +335,7 @@ export default function Bills({
   }
 
   const money = (cents: number) => formatEuroIn(locale, cents / 100);
+  const signedMoney = (cents: number) => formatSignedEuroIn(locale, cents / 100);
   const shortfallTone =
     preview.shortfallCents == null
       ? "text-muted"
@@ -632,7 +633,7 @@ export default function Bills({
                             negative remainder there is arithmetic, not a gap.
                             Only a short window is alarming (measured against
                             cash on hand). */}
-                        {c.paycheck.remaining}: {money(period.remainingCents)}
+                        {c.paycheck.remaining}: {signedMoney(period.remainingCents)}
                       </span>
                     </span>
                   </div>
@@ -697,7 +698,7 @@ export default function Bills({
                     </span>
                     <Badge className={statusTone(row.status)}>{c.rowStatus[row.status]}</Badge>
                     <span className={row.direction === "in" ? "text-pos" : ""}>
-                      {money(row.amountCents)}
+                      {row.direction === "in" ? signedMoney(row.amountCents) : money(row.amountCents)}
                     </span>
                   </div>
                   {settlement?.state === "partial" && (

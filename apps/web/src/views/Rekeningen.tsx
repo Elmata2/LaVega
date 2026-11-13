@@ -11,7 +11,7 @@ import {
   valuationsForAccount,
   type AccountTypeKind,
 } from "@lavega/core";
-import { formatEuroIn } from "../format";
+import { formatEuroIn, formatSignedEuroIn } from "../format";
 import { useAppLocale } from "../appLocale";
 import { moneyCopy } from "../copy/money";
 import type { MoneyCopy } from "../copy/money";
@@ -1095,7 +1095,7 @@ function GroupSaldo({ group, locale }: { group: BankGroup; locale: Locale }) {
       data-testid="bank-group-saldo"
     >
       <span className={group.total >= 0 ? "text-pos" : "text-neg"}>
-        {formatEuroIn(locale, group.total)}
+        {formatSignedEuroIn(locale, group.total)}
       </span>
       {group.unknownCount > 0 && (
         <Badge>{c.vanKnownVanTotal(group.knownCount, group.rows.length)}</Badge>

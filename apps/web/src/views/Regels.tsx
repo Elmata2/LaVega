@@ -17,7 +17,7 @@ import { CATEGORY_OPTIONS, dryRunRuleChanges, isRuleV2, toCents } from "@lavega/
 import { useAppLocale } from "../appLocale.js";
 import { adminCopy, type RegelsCopy } from "../copy/admin.js";
 import { categoryLabel } from "../copy/money.js";
-import { formatDate, formatEuroIn } from "../format.js";
+import { formatDate, formatSignedEuroIn } from "../format.js";
 import Badge from "../components/ui/Badge.js";
 import Button from "../components/ui/Button.js";
 import Card from "../components/ui/Card.js";
@@ -1134,7 +1134,7 @@ export default function Regels({ rules, txs, accounts, own, busy, onSaveRules }:
                                 <Td>{formatDate(locale, sample.date)}</Td>
                                 <Td>{sample.counterparty}</Td>
                                 <Td className={sample.amountCents >= 0 ? "text-pos" : "text-neg"}>
-                                  {formatEuroIn(locale, sample.amountCents / 100)}
+                                  {formatSignedEuroIn(locale, sample.amountCents / 100)}
                                 </Td>
                                 <Td>
                                   {categoryLabel(locale, sample.currentCategory || "onbekend")}

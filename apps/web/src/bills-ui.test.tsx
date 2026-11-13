@@ -457,3 +457,21 @@ test("the series shows a recorded price change", () => {
   });
   expect(container!.textContent).toContain("Prijs gewijzigd");
 });
+
+test("an incoming bill row carries + and the remaining figure a real minus when short", () => {
+  const salary: Bill = {
+    ...rent(),
+    id: "salaris",
+    name: "Salaris",
+    type: "income",
+    direction: "in",
+    amountCents: 300_000,
+    rules: [{ frequency: "monthly", interval: 1, dayOfMonth: 25 }],
+    anchorDate: "2026-10-25",
+  };
+  const bills = [rent(), salary];
+  const occurrences = generateBillOccurrences(bills, [], AS_OF).occurrences;
+  render(bills, occurrences, [account(700)]);
+  const signed = [...container!.querySelectorAll(".text-pos")].map((e) => e.textContent ?? "");
+  expect(signed.some((t) => /^€\s\+3\.000,00$/.test(t))).toBe(true);
+});

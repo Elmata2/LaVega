@@ -23,7 +23,13 @@ import {
   isEurCurrency,
   toEur,
 } from "@lavega/core";
-import { formatEuroIn, formatCurrencyIn, formatDate } from "../format";
+import {
+  formatEuroIn,
+  formatCurrencyIn,
+  formatSignedCurrencyIn,
+  formatSignedEuroIn,
+  formatDate,
+} from "../format";
 import { categorizeTxs } from "../api";
 import { useAppLocale, pick } from "../appLocale";
 import { moneyCopy, categoryLabel } from "../copy/money";
@@ -360,7 +366,7 @@ export default function Transacties({
               <strong style={{ fontVariantNumeric: "tabular-nums" }}>
                 {unknown.count} {c.rekeningen.transactieWoord(unknown.count)} ·{" "}
                 <span className={unknown.amount >= 0 ? "text-pos" : "text-neg"}>
-                  {formatEuroIn(locale, unknown.amount)}
+                  {formatSignedEuroIn(locale, unknown.amount)}
                 </span>
               </strong>
             </div>
@@ -457,7 +463,7 @@ export default function Transacties({
                     <Td data-label={c.transacties.omschrijving}>{p.tx.description}</Td>
                     <Td data-label={c.transacties.bedrag}>
                       <span className={p.tx.amount >= 0 ? "text-pos" : "text-neg"}>
-                        {formatEuroIn(locale, p.tx.amount)}
+                        {formatSignedEuroIn(locale, p.tx.amount)}
                       </span>
                     </Td>
                     <Td data-label={c.transacties.categorie}>
@@ -674,8 +680,8 @@ export default function Transacties({
                   <Td data-label={c.transacties.tableBedrag}>
                     <span className={t.amount >= 0 ? "text-pos" : "text-neg"}>
                       {isEurCurrency(t.currency)
-                        ? formatEuroIn(locale, t.amount)
-                        : formatCurrencyIn(locale, t.amount, t.currency)}
+                        ? formatSignedEuroIn(locale, t.amount)
+                        : formatSignedCurrencyIn(locale, t.amount, t.currency)}
                     </span>
                     {!isEurCurrency(t.currency) &&
                       mode === "convert" &&

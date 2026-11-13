@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { expect, test } from "vitest";
 import type { Account } from "@lavega/core";
-import { formatEuro } from "../../format.js";
+import { formatEuro, formatSignedEuroIn } from "../../format.js";
 import PositieBlock from "./PositieBlock";
 import { accounts, ASOF } from "./fixtures";
 
@@ -20,8 +20,8 @@ test("PositieBlock renders one compact row per entity in a small card", () => {
   expect(html).toContain("Holding BV");
   expect(html).toContain("Café BV");
   expect(html).toContain("Webshop BV");
-  expect(html).toContain(formatEuro(182_310));
-  expect(html).toContain(formatEuro(21_900));
+  expect(html).toContain(formatSignedEuroIn("nl", 182_310));
+  expect(html).toContain(formatSignedEuroIn("nl", 21_900));
   expect(html).toContain("proportion-bar");
   // Shrunk: the per-entity sparkline is gone, and so is the tall card. The
   // height utility string is pinned once, in module-grid.ts / .test.ts.
@@ -156,7 +156,7 @@ test("PositieBlock: convert mode folds a converted HUF balance into the entity's
     />,
   );
   // 300.000 HUF at 400 HUF/EUR is € 750, so Prive's total is 4.500 + 750.
-  expect(html).toContain(formatEuro(5_250));
+  expect(html).toContain(formatSignedEuroIn("nl", 5_250));
   expect(html).not.toContain("vreemde valuta");
   expect(html).not.toContain("onbekend");
   expect(html).toContain("Omgerekend via ECB.");
@@ -175,7 +175,7 @@ test("PositieBlock: convert mode with no rate for the balance's date sums what i
       mode="convert"
     />,
   );
-  expect(html).toContain(formatEuro(4_500));
+  expect(html).toContain(formatSignedEuroIn("nl", 4_500));
   expect(html).not.toContain("onbekend");
   expect(html).toContain("vreemde valuta");
   expect(html).toContain("Revolut");
@@ -255,7 +255,7 @@ test("PositieBlock: convert mode sums every priceable account in an entity and n
     />,
   );
   // € 5.000 + (1.000 USD / 1.25) = € 5.800 — the GBP 200 stays out, named.
-  expect(html).toContain(formatEuro(5_800));
+  expect(html).toContain(formatSignedEuroIn("nl", 5_800));
   expect(html).not.toContain("onbekend");
   expect(html).toContain("GBP");
   expect(html).toContain("nog geen koers.");
@@ -301,5 +301,5 @@ test("PositieBlock rows carry the balance figure next to every segment's dot", (
   const dots = (html.match(/class="dot"/g) ?? []).length;
   expect(segments).toBeGreaterThan(0);
   expect(dots).toBeGreaterThanOrEqual(segments);
-  expect(html).toContain(formatEuro(182_310));
+  expect(html).toContain(formatSignedEuroIn("nl", 182_310));
 });

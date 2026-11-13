@@ -2,7 +2,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { expect, test } from "vitest";
 import type { Account, Invoice, Tx, VatSettings } from "@lavega/core";
-import { formatEuro } from "../../format.js";
+import { formatEuro, formatSignedEuroIn } from "../../format.js";
 import { BtwBlock, btwRows } from "./BtwWidget";
 
 /* De btw-kaart op het overzicht, in de volgorde van eerlijkheid die hij zelf
@@ -152,7 +152,7 @@ test("onvolledige dekking zegt hoeveel facturen geen btw-bedrag noemen", () => {
   // De facturen zijn dan niet de basis; wat er staat is de marge-benadering, en
   // de kaart noemt die bron in plaats van hem te verzwijgen.
   expect(html).toContain("een marge-benadering uit je banktransacties");
-  expect(html).toContain(formatEuro(PROXY_HOLDING));
+  expect(html).toContain(formatSignedEuroIn("nl", -PROXY_HOLDING));
 });
 
 test("een gewone positie: bedrag, periode, richting en de eerstvolgende deadline", () => {
@@ -165,7 +165,8 @@ test("een gewone positie: bedrag, periode, richting en de eerstvolgende deadline
     ],
   });
 
-  expect(html).toContain(formatEuro(1_680)); // 2.100 af te dragen − 420 voorbelasting
+  expect(html).toContain(formatSignedEuroIn("nl", -1_680));
+  expect(html).toMatch(/text-neg">€\s\u22121\.680,00/); // 2.100 af te dragen − 420 voorbelasting
   expect(html).toContain("te betalen");
   expect(html).toContain("Q3 2026");
   expect(html).toContain("uiterlijk 2026-10-31");
@@ -183,7 +184,8 @@ test("meer voorbelasting dan afdracht is terug te vragen, niet een absentie", ()
       invoice({ id: "i2", direction: "out", amount: 5_000, vatAmount: 900 }),
     ],
   });
-  expect(html).toContain(formatEuro(700));
+  expect(html).toContain(formatSignedEuroIn("nl", 700));
+  expect(html).toMatch(/text-pos">€\s\+700,00/);
   expect(html).toContain("terug te vragen");
 });
 

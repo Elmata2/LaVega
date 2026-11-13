@@ -492,3 +492,12 @@ test("with no accounts the view says to import first, and offers no view switch"
   expect(container!.textContent).toContain("Nog geen rekeningen");
   expect(container!.querySelectorAll("[data-testid=bank-modes]")).toHaveLength(0);
 });
+
+test("a bank group's saldo carries + or a real minus, as its colour does", () => {
+  render();
+  const totals = [...container!.querySelectorAll('[data-testid="bank-group-saldo"] > span')]
+    .map((n) => n.textContent ?? "")
+    .filter((t) => /\d/.test(t));
+  expect(totals.length).toBeGreaterThan(0);
+  for (const t of totals) expect(t).toMatch(/^€\s[+−]/);
+});

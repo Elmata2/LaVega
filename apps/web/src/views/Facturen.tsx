@@ -8,7 +8,7 @@ import {
 } from "@lavega/core";
 import type { VaultStorage } from "@lavega/adapters";
 import type { View } from "../App";
-import { formatEuroIn } from "../format.js";
+import { formatEuroIn, formatSignedEuroIn } from "../format.js";
 import { useAppLocale } from "../appLocale.js";
 import { adminCopy, type AdminCopy } from "../copy/admin.js";
 import { apiErrorText } from "../copy/apiErrors.js";
@@ -1460,7 +1460,7 @@ export default function Facturen({
         <span className="eyebrow flex-none">
           {c.list.eyebrowCount(flows.length)}
           <span className={netCents >= 0 ? "text-pos" : "text-neg"}>
-            {formatEuroIn(locale, netCents / 100)}
+            {formatSignedEuroIn(locale, netCents / 100)}
           </span>
         </span>
       </div>
@@ -1518,7 +1518,7 @@ export default function Facturen({
                         className={signed >= 0 ? "text-pos" : "text-neg"}
                         data-label={c.list.columns.amount}
                       >
-                        {formatEuroIn(locale, signed)}
+                        {formatSignedEuroIn(locale, signed)}
                       </Td>
                       <Td data-label={c.list.columns.dueDate}>{inv.dueDate}</Td>
                       <Td data-label={c.list.columns.status}>

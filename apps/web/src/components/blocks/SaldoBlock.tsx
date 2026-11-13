@@ -8,7 +8,7 @@ import {
   type ConversionMode,
 } from "@lavega/core";
 import type { View } from "../../App";
-import { formatEuroIn } from "../../format.js";
+import { formatEuroIn, formatSignedEuroIn } from "../../format.js";
 import Module from "../Module.js";
 import TrendChart from "../TrendChart.js";
 import CardLink from "../ui/CardLink.js";
@@ -162,7 +162,7 @@ export default function SaldoBlock({
         <span
           className={`module-figure-value ${accounts.length === 0 ? "" : knownSum >= 0 ? "text-pos" : "text-neg"}`}
         >
-          {accounts.length === 0 ? "—" : formatEuroIn(locale, knownSum)}
+          {accounts.length === 0 ? "—" : formatSignedEuroIn(locale, knownSum)}
         </span>
         <DeltaPill pct={weekPct} upIsGood={true} />
         {/* A bare "▲ 3%" is unreadable: three percent since WHEN? The pill is

@@ -150,3 +150,16 @@ test("a placed row shows its category and no reason badge", () => {
   expect(html).toContain("Boodschappen");
   expect(html).not.toContain("Onbekend</div>");
 });
+
+test("a coloured transaction amount carries an explicit sign, + or a real minus", () => {
+  const html = renderToStaticMarkup(
+    <Transacties
+      {...props([
+        tx("t1", "Albert Heijn", "Rotterdam", -25),
+        tx("t2", "Werkgever BV", "salaris", 1_000),
+      ])}
+    />,
+  ).replace(/<!-- -->/g, "");
+  expect(html).toMatch(/text-neg">€\s\u221225,00/);
+  expect(html).toMatch(/text-pos">€\s\+1\.000,00/);
+});

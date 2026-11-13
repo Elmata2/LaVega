@@ -32,7 +32,7 @@ import {
   txsForEntity,
   vatPosition,
 } from "@lavega/core";
-import { formatEuroIn } from "../format.js";
+import { formatEuroIn, formatSignedEuroIn } from "../format.js";
 import { useAppLocale } from "../appLocale.js";
 import { adminCopy, type BelastingCopy } from "../copy/admin.js";
 import type { Locale } from "../locale.js";
@@ -497,7 +497,12 @@ export default function Belasting({
                   <span
                     className={`font-body text-[1.2rem] font-semibold tabular-nums ${!known ? "" : direction === "terugvragen" ? "text-pos" : "text-neg"}`}
                   >
-                    {known ? formatEuroIn(locale, Math.abs(netCents) / 100) : c.vat.noAmount}
+                    {known
+                      ? formatSignedEuroIn(
+                          locale,
+                          (direction === "terugvragen" ? 1 : -1) * (Math.abs(netCents) / 100),
+                        )
+                      : c.vat.noAmount}
                   </span>
                 </div>
 
@@ -720,7 +725,7 @@ export default function Belasting({
                     <span
                       className={`font-body text-[1.2rem] font-semibold tabular-nums ${total > 0 ? "text-neg" : ""}`}
                     >
-                      {flows.length > 0 ? formatEuroIn(locale, total / 100) : c.profitTax.noAmount}
+                      {flows.length > 0 ? formatSignedEuroIn(locale, -total / 100) : c.profitTax.noAmount}
                     </span>
                   </div>
                   {flows.length === 0 ? (
@@ -740,7 +745,7 @@ export default function Belasting({
                             {f.status === "expected" && <Badge>{c.profitTax.estimateBadge}</Badge>}
                           </span>
                           <span className="text-neg">
-                            {formatEuroIn(locale, f.amountCents / 100)}
+                            {formatSignedEuroIn(locale, -f.amountCents / 100)}
                           </span>
                         </div>
                       ))}

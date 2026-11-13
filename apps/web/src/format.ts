@@ -32,6 +32,52 @@ export function formatEuroIn(locale: Locale, n: number): string {
   return new Intl.NumberFormat(tag(locale), { style: "currency", currency: "EUR" }).format(n);
 }
 
+/* Intl writes a negative sign as ASCII hyphen-minus (and some locales already
+ * use U+2212). A sign that carries meaning without colour must read as a real
+ * minus, so every signed helper normalises to U+2212. */
+const toRealMinus = (s: string): string => s.replace(/-/g, "\u2212");
+
+/** formatEuroIn with an explicit sign: "+" for positive, a real minus for
+ *  negative, none for zero. For amounts coloured by sign, so the sign still
+ *  tells income from spending when colour cannot (monochrome, colour-blind). */
+export function formatSignedEuroIn(locale: Locale, n: number): string {
+  return toRealMinus(
+    new Intl.NumberFormat(tag(locale), {
+      style: "currency",
+      currency: "EUR",
+      signDisplay: "exceptZero",
+    }).format(n),
+  );
+}
+
+/** formatCurrencyIn with the same explicit sign as formatSignedEuroIn. */
+export function formatSignedCurrencyIn(locale: Locale, n: number, currency: string): string {
+  try {
+    return toRealMinus(
+      new Intl.NumberFormat(tag(locale), {
+        style: "currency",
+        currency,
+        signDisplay: "exceptZero",
+      }).format(n),
+    );
+  } catch {
+    return `${currency} ${toRealMinus(
+      new Intl.NumberFormat(tag(locale), { signDisplay: "exceptZero" }).format(n),
+    )}`;
+  }
+}
+
+/** A whole-number percent change with an explicit sign ("+3%", "\u221212%"). */
+export function formatSignedPercentIn(locale: Locale, pct: number): string {
+  return toRealMinus(
+    new Intl.NumberFormat(tag(locale), {
+      style: "percent",
+      maximumFractionDigits: 0,
+      signDisplay: "exceptZero",
+    }).format(pct / 100),
+  );
+}
+
 /** Whole euros with the symbol and no cents. Inside a sentence the cents are
  *  noise: "€250" reads through, where formatEuroIn's "€ 250,00" interrupts. */
 export function formatWholeEuroIn(locale: Locale, n: number): string {

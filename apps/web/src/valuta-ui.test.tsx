@@ -6,6 +6,7 @@ import type { Account, CatalogueEntryLike, LearnedFact } from "@lavega/core";
 import { FX_RATE_FALLBACK, TRAVEL_AGENT, makeFact, productOf } from "@lavega/core";
 import Valuta from "./views/Valuta";
 import { TOONMEER_CLASS } from "./components/ToonMeer";
+import { formatSignedEuroIn } from "./format";
 
 /* Valuta as the 20 August review asked for it.
  *
@@ -572,7 +573,7 @@ test("op een groter bedrag verdient diezelfde maandprijs zich terug, en dan pas 
   );
   expect(order).toEqual(["N26", "ING"]);
   expect(text("goedkoper")).toContain("Goedkoper kan");
-  expect(text("valuta-goedkoper-kosten-netto")).toContain(eur(53.1));
+  expect(text("valuta-goedkoper-kosten-netto")).toContain(formatSignedEuroIn("nl", 53.1));
   expect(text("valuta-goedkoper-kosten-netto")).toContain(
     `${eur(70)} voordeel min ${eur(16.9)} kaartkosten`,
   );
