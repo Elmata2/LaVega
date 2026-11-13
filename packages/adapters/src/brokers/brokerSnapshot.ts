@@ -33,6 +33,12 @@ export type BrokerAccountSnapshot = {
   cashBalances?: CashBalance[];
   cashFlows?: CashFlow[];
   cashHistory?: CashHistoryCoverage;
+  /** Which files produced this snapshot, and when. The raw file is never
+   *  stored; a later read compares an import's age and provenance from this. */
+  lastImport?: {
+    importedAt: string;
+    files: { filename: string; sha256: string }[];
+  };
 };
 export type BrokerDataSnapshot = Partial<Record<BrokerId, BrokerAccountSnapshot>>;
 
@@ -283,6 +289,7 @@ export function createBrokerDataCache(initial: BrokerDataSnapshot = {}) {
   const cashBalancesByBroker = new Map<string, CashBalance[]>();
   const cashFlowsByBroker = new Map<string, CashFlow[]>();
   const cashHistoryByBroker = new Map<string, CashHistoryCoverage>();
+  const lastImportByBroker = new Map<string, NonNullable<BrokerAccountSnapshot["lastImport"]>>();
   let problems: string[] = [];
   let dataVersion = 0;
 
@@ -293,6 +300,7 @@ export function createBrokerDataCache(initial: BrokerDataSnapshot = {}) {
     cashBalancesByBroker.clear();
     cashFlowsByBroker.clear();
     cashHistoryByBroker.clear();
+    lastImportByBroker.clear();
     for (const [broker, data] of Object.entries(snapshot)) {
       if (!data) continue;
       positionsByBroker.set(broker, structuredClone(restorePositions(broker, data.positions)));
@@ -304,6 +312,7 @@ export function createBrokerDataCache(initial: BrokerDataSnapshot = {}) {
       );
       cashFlowsByBroker.set(broker, structuredClone(withBroker(broker, data.cashFlows ?? [])));
       if (data.cashHistory) cashHistoryByBroker.set(broker, structuredClone(data.cashHistory));
+      if (data.lastImport) lastImportByBroker.set(broker, structuredClone(data.lastImport));
     }
     dataVersion += 1;
   };
@@ -468,6 +477,7 @@ export function createBrokerDataCache(initial: BrokerDataSnapshot = {}) {
         ...dividendsByBroker.keys(),
         ...cashBalancesByBroker.keys(),
         ...cashFlowsByBroker.keys(),
+        ...lastImportByBroker.keys(),
       ])) {
         if (!isBrokerId(broker)) continue;
         snapshot[broker] = {
@@ -478,6 +488,9 @@ export function createBrokerDataCache(initial: BrokerDataSnapshot = {}) {
           cashFlows: structuredClone(cashFlowsByBroker.get(broker) ?? []),
           ...(cashHistoryByBroker.has(broker)
             ? { cashHistory: structuredClone(cashHistoryByBroker.get(broker)!) }
+            : {}),
+          ...(lastImportByBroker.has(broker)
+            ? { lastImport: structuredClone(lastImportByBroker.get(broker)!) }
             : {}),
         };
       }

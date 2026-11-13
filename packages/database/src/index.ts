@@ -162,6 +162,10 @@ export type EncryptedBrokerRepository = {
    *  reconnect that lands mid-sync is not reverted by the snapshot write that
    *  follows it. False means the credentials moved on and the data was dropped. */
   putSnapshot(broker: string, snapshot: unknown, credentialGeneration: number): Promise<boolean>;
+  /** Creates a snapshot-only row for a broker the vault stores no credentials
+   *  for (a file import). False when the row carries credentials: that broker's
+   *  sync owns its snapshot. */
+  putSnapshotOnly(broker: string, snapshot: unknown): Promise<boolean>;
 };
 
 export class UnreadableBrokerCredentialsError extends Error {
@@ -231,6 +235,19 @@ export function createBrokerRepository(
         const result = await client.query(
           "UPDATE investing.broker_vaults SET snapshot_blob = $2, updated_at = CURRENT_TIMESTAMP WHERE broker = $1 AND credential_generation = $3 RETURNING broker",
           [broker, snapshotBlob, credentialGeneration],
+        );
+        return result.rows.length > 0;
+      });
+    },
+    async putSnapshotOnly(broker: string, snapshot: unknown) {
+      const snapshotBlob = encryptBlob(snapshot);
+      return withTenantStatement(db, userId, async (client) => {
+        /* The WHERE on the conflict update is the guard: a row that carries
+         * credentials belongs to a broker with an API, whose sync alone may
+         * write its snapshot. */
+        const result = await client.query(
+          "INSERT INTO investing.broker_vaults (user_id, broker, credentials_blob, snapshot_blob) VALUES (current_setting('app.user_id'), $1, NULL, $2) ON CONFLICT (user_id, broker) DO UPDATE SET snapshot_blob = EXCLUDED.snapshot_blob, updated_at = CURRENT_TIMESTAMP WHERE investing.broker_vaults.credentials_blob IS NULL RETURNING broker",
+          [broker, snapshotBlob],
         );
         return result.rows.length > 0;
       });

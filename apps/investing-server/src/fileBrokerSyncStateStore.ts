@@ -6,6 +6,7 @@ import type {
   BrokerSyncState,
   ScheduledBroker,
 } from "@lavega/adapters";
+import type { BrokerId } from "@lavega/core";
 import { isBrokerLeaseStale } from "@lavega/adapters";
 import { createJsonFileStore, runtimeDataFile } from "./jsonFileStore.js";
 
@@ -20,7 +21,7 @@ type StoredOperation = {
   lease?: { id: string; heartbeatAt: string } | null;
   progress?: BrokerSyncProgressRecord | null;
 };
-type StoredOperations = Partial<Record<ScheduledBroker, StoredOperation>>;
+type StoredOperations = Partial<Record<BrokerId, StoredOperation>>;
 
 const EMPTY: BrokerSyncState = { lastSyncedAt: null, retryAfter: null };
 
@@ -74,7 +75,7 @@ export function createFileBrokerSyncStateStore(
       }
     },
   });
-  const held = async (broker: ScheduledBroker, leaseId: string) =>
+  const held = async (broker: BrokerId, leaseId: string) =>
     (await store.read())[broker]?.lease?.id === leaseId;
 
   return {

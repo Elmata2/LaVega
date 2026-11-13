@@ -72,6 +72,25 @@ describe("DeGiro import identity", () => {
   });
 });
 
+test("a restored snapshot keeps its import metadata", () => {
+  const lastImport = {
+    importedAt: "2026-11-13T12:00:00.000Z",
+    files: [{ filename: "Account.csv", sha256: "0".repeat(64) }],
+  };
+  const cache = createBrokerDataCache({
+    degiro: {
+      positions: [],
+      trades: [],
+      dividends: [],
+      cashBalances: [],
+      cashFlows: [],
+      lastImport,
+    },
+  });
+  const restored = createBrokerDataCache(cache.snapshot());
+  expect(restored.snapshot().degiro?.lastImport).toEqual(lastImport);
+});
+
 describe("IBKR history windows", () => {
   test("exposes the statement period", () => {
     expect(window("", "", A).period).toEqual({ from: "2025-10-01", to: "2026-10-01" });
