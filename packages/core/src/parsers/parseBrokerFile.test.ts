@@ -23,7 +23,7 @@ const account = fixture("nl/account.csv");
 const transactions = fixture("nl/transactions.csv");
 const portfolio = fixture("nl/portfolio.csv");
 
-test("the real-format account statement is detected as `account`, not rejected", () => {
+test("the real-format account statement is detected and mapped as `account`, not rejected", () => {
   // The whole point of the issue: the pre-#314 parser rejected this file.
   expect(detectProfile(account.split("\n")[0]!.split(","))).toMatchObject({
     known: true,
@@ -32,10 +32,43 @@ test("the real-format account statement is detected as `account`, not rejected",
   });
 
   const parsed = parseBrokerFile("Account.csv", account);
+  expect(parsed.profile).toBe("account");
   expect(parsed.source).toBe("DeGiro account");
-  expect(parsed.problems.join(" ")).not.toMatch(/onbekend/);
+  expect(parsed.problems).toEqual([]);
+  // The statement itself is the import (#317): no other file is needed.
   expect(parsed.positions).toEqual([]);
-  expect(parsed.trades).toEqual([]);
+  expect(parsed.trades).toHaveLength(4);
+  expect(parsed.dividends).toHaveLength(2);
+  expect(parsed.cashFlows).toHaveLength(21);
+  expect(parsed.cashBalances).toHaveLength(2);
+  expect(parsed.cashHistory).toEqual({
+    status: "complete",
+    from: "2026-01-05",
+    to: "2026-03-06",
+  });
+  expect(parsed.period).toEqual({ from: "2026-01-05", to: "2026-03-06" });
+});
+
+test("transactions and portfolio still only name themselves", () => {
+  // Their row mapping lands in #318/#319. Returning empty sections without a
+  // problem would look like a complete read that wipes stored rows.
+  for (const [text, profile] of [
+    [transactions, "transactions"],
+    [portfolio, "portfolio"],
+  ] as const) {
+    const parsed = parseBrokerFile("export.csv", text);
+    expect(parsed.profile).toBe(profile);
+    expect(parsed.positions).toEqual([]);
+    expect(parsed.trades).toEqual([]);
+    expect(parsed.dividends).toBeUndefined();
+    expect(parsed.cashFlows).toBeUndefined();
+    expect(parsed.cashBalances).toBeUndefined();
+    expect(parsed.cashHistory).toBeUndefined();
+    expect(parsed.period).toBeUndefined();
+    expect(parsed.problems).toEqual([
+      `DeGiro ${profile}-export herkend, maar nog niet uitgelezen: de rij-mapping volgt in #315–#319`,
+    ]);
+  }
 });
 
 test.each([
