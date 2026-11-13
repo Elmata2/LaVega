@@ -540,10 +540,27 @@ overlapping account files). A re-import must not append duplicates.
   `fileImport`. `SCHEDULED_BROKERS`, `CredentialBroker`, `BrokerDataSnapshot`
   keys, readability maps and labels derive from it, so `degiro` is absent from
   the scheduled-sync set and the credential APIs by construction (#320).
-- Upload route: tenant-bound, Effect 4, multipart, up to three files, total
-  under 4.5 MB (Vercel body limit). Dry run returns a preview; commit writes the
-  encrypted snapshot under the broker lease and invalidates the dashboard
-  cache. The raw file is never stored; only parsed rows and a SHA-256 per file.
+- Upload route (D11, #323): `POST /api/investing/brokers/degiro/import`.
+  Tenant bound: the signed-in user reaches the vault, the snapshot write and the
+  cache invalidation, and the mounted app never falls back to `local`. Multipart,
+  field `files` repeated 1–3 times, optional field `asOf` (`YYYY-MM-DD`), total
+  at most 4 MB; a larger body answers 413. `?mode=preview` (default) parses only
+  and returns per file
+  `{ filename, sha256, profile, period, rows: { trades, cashFlows, dividends, positions, cashBalances }, problems }`
+  with the parsed rows, without touching the vault or the lease. `?mode=commit` merges the parsed
+  result into the encrypted `degiro` snapshot under the broker sync lease, then
+  releases the lease, invalidates the dashboard cache and refreshes the
+  in-process cache. A portfolio export requires `asOf`; an older overlapping
+  import replaces only its window (#321). A commit whose files are all unknown
+  headers answers 200 with `committed: false` and writes nothing. Errors are
+  tagged: 400 invalid request, 413 too large, 409 lease busy or vault locked,
+  500 failed. The raw file is never stored; only parsed rows and a SHA-256 per
+  file.
+- Import metadata. The encrypted snapshot carries
+  `lastImport: { importedAt, files: [{ filename, sha256 }] }`, which D13 (#325)
+  reads for the import age. A file-import broker's vault row holds a snapshot and
+  no credentials (`credentials_blob IS NULL`); `broker_vaults_material_not_empty`
+  still requires credentials or a snapshot, never neither.
 - Web: a DeGiro tab in broker settings with export steps, multi-file drop,
   preview, confirm. Status reads "Last imported <date>, covers <from>–<to>",
   not fresh/stale/never. The holdings table shows the product name; an ISIN
@@ -596,4 +613,6 @@ OpenFIGI with the execution venue as a listing hint, unresolved lookups retried
 rather than frozen, product name in the holdings table), D9 (#321, DeGiro
 account and transactions imports replace only their own window, an older import
 is a backfill, and a portfolio export older than the stored holdings leaves
-positions and cash alone).
+positions and cash alone), D11 (#323, the tenant-bound upload route with a
+preview that writes nothing and a commit that merges under the broker lease and
+records `lastImport` inside the encrypted snapshot).
