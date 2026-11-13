@@ -2275,6 +2275,12 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
     <ShellSwitch
       v2={SHELL_V2}
       title={shell.topBar.viewTitles[view]}
+      nav={{
+        view,
+        modules: navModules(withoutLockedModules(modules, planUnlocked)),
+        onNavigate: setView,
+        onOpenProfile: () => setView("profiel"),
+      }}
       actions={
         <TopBarActions
           scope={scope}

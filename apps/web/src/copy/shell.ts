@@ -55,7 +55,14 @@ export type ShellCopy = {
     moduleLabels: Record<ModuleId, string>;
   };
   /** The full-width frame (components/Shell.tsx). */
-  frame: { sidebarLabel: string; sidebarOpen: string; sidebarClose: string };
+  frame: {
+    sidebarLabel: string;
+    sidebarOpen: string;
+    sidebarClose: string;
+    skipLink: string;
+    openMenu: string;
+    more: string;
+  };
   modulePicker: {
     homeNote: string;
     moduleSwitchLabel: (label: string) => string;
@@ -291,6 +298,9 @@ const nl: ShellCopy = {
     sidebarLabel: "Rekeningen",
     sidebarOpen: "Zijbalk openen",
     sidebarClose: "Zijbalk sluiten",
+    skipLink: "Naar inhoud",
+    openMenu: "Menu openen",
+    more: "Meer",
   },
   nav: {
     ariaLabel: "Weergaven",
@@ -661,6 +671,9 @@ const en: ShellCopy = {
     sidebarLabel: "Accounts",
     sidebarOpen: "Show sidebar",
     sidebarClose: "Hide sidebar",
+    skipLink: "Skip to content",
+    openMenu: "Open menu",
+    more: "More",
   },
   nav: {
     ariaLabel: "Views",

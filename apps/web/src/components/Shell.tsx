@@ -4,6 +4,8 @@ import { shellCopy } from "../copy/shell.js";
 import { useMediaQuery } from "../hooks/useMediaQuery.js";
 import { useSidebar } from "../hooks/useSidebar.js";
 import { SHELL_MIN_VIEWPORT } from "../lib/sidebar.js";
+import { BottomBar, PhoneTopBar } from "./BottomBar.js";
+import { Rail, type ShellNavProps } from "./Rail.js";
 
 /* The new app frame (SHELL_V2): full viewport, no margin, radius or shadow.
  *
@@ -14,16 +16,16 @@ import { SHELL_MIN_VIEWPORT } from "../lib/sidebar.js";
  * (CONTENT_CONTAINER_CLASS), so the wrapper stays off the scroll element and off
  * the sticky bar.
  *
- * Slots for later steps: `rail` (step 8, a <nav>), `sidebar` (step 9a). Below
- * 1024px only main renders; the bottom bar and drawer arrive in steps 8 and 9b. */
+ * `nav` feeds the rail (>= 1024) or the phone top bar + bottom bar (< 1024), one
+ * <nav> at a time. Slot for step 9a: `sidebar`. The drawer arrives in step 9b. */
 
 export type ShellProps = {
   /** Page title, the one h1. */
   title: string;
   /** Right side of the top bar. */
   actions?: ReactNode;
-  /** Replaces the rail placeholder (step 8). */
-  rail?: ReactNode;
+  /** Navigation data. Without it the 72px rail placeholder renders (tests). */
+  nav?: ShellNavProps;
   /** Account sidebar content (step 9a). Empty until then. */
   sidebar?: ReactNode;
   children: ReactNode;
@@ -50,7 +52,7 @@ function SidebarIcon() {
   );
 }
 
-export function Shell({ title, actions, rail, sidebar, children }: ShellProps) {
+export function Shell({ title, actions, nav, sidebar, children }: ShellProps) {
   const [locale] = useAppLocale();
   const c = shellCopy[locale].frame;
   const wide = useMediaQuery(`(min-width: ${SHELL_MIN_VIEWPORT}px)`);
@@ -58,11 +60,23 @@ export function Shell({ title, actions, rail, sidebar, children }: ShellProps) {
 
   /* `inert` is not in React 18's types; an empty string renders the attribute. */
   const inertProps = (open ? {} : { inert: "" }) as Record<string, string>;
+  const phoneNav = wide ? undefined : nav;
+  const narrow = phoneNav !== undefined;
   const style = { "--shell2-sidebar-w": `${width}px` } as CSSProperties;
 
   return (
-    <div className="shell2" style={style}>
-      {wide && (rail ?? <div className="shell2-rail" aria-hidden="true" />)}
+    <div className={`shell2${narrow ? " shell2-narrow" : ""}`} style={style}>
+      <a
+        href="#main"
+        className="shell2-skip"
+        onClick={(e) => {
+          e.preventDefault();
+          document.getElementById("main")?.focus();
+        }}
+      >
+        {c.skipLink}
+      </a>
+      {wide && (nav ? <Rail {...nav} /> : <div className="shell2-rail" aria-hidden="true" />)}
       {wide && (
         <aside
           id={SIDEBAR_ID}
@@ -73,7 +87,8 @@ export function Shell({ title, actions, rail, sidebar, children }: ShellProps) {
           <div className="shell2-sidebar-inner">{sidebar}</div>
         </aside>
       )}
-      <main id="main" className="shell2-main">
+      <main id="main" className="shell2-main" tabIndex={-1}>
+        {phoneNav && <PhoneTopBar {...phoneNav} />}
         <header className="shell2-topbar">
           {wide && (
             <button
@@ -92,6 +107,7 @@ export function Shell({ title, actions, rail, sidebar, children }: ShellProps) {
         </header>
         <div className="shell2-content">{children}</div>
       </main>
+      {phoneNav && <BottomBar {...phoneNav} />}
     </div>
   );
 }
