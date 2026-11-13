@@ -1,4 +1,3 @@
-import StatusLine from "../../components/ui/StatusLine.js";
 import { useMemo, useState, type FormEvent } from "react";
 import {
   STATED_CARD_PREFIX,
@@ -10,6 +9,7 @@ import {
 import Button from "../../components/ui/Button.js";
 import CardLink from "../../components/ui/CardLink.js";
 import { Table, TableWrap, Td, Th } from "../../components/ui/Table.js";
+import StatusLine from "../../components/ui/StatusLine.js";
 import { cardsCopy, factLine } from "../../copy/plan/index.js";
 import { CATALOGUE_ENTRIES } from "../../catalogue-rates.js";
 import { heldCatalogueIds } from "../heldCards.js";
@@ -456,7 +456,7 @@ function Redemption({
         tone="problem"
         role={error === null ? undefined : "alert"}
         data-testid="plan-error-redeem"
-        className="m-0 text-[0.85rem] border-warn text-warn"
+        className="m-0 text-[0.85rem]"
       >
         {error}
       </StatusLine>

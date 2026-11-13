@@ -1,4 +1,3 @@
-import StatusLine from "../components/ui/StatusLine.js";
 import { useMemo, useState } from "react";
 import type {
   Account,
@@ -46,6 +45,7 @@ import Grens, { type GrensAnswerRow } from "./Grens";
 import Badge from "../components/ui/Badge.js";
 import Button from "../components/ui/Button.js";
 import Card from "../components/ui/Card.js";
+import StatusLine from "../components/ui/StatusLine.js";
 import "../styles/views.css";
 import { moneyCopy } from "../copy/money.js";
 

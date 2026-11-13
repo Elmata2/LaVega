@@ -1,8 +1,8 @@
-import StatusLine from "../components/ui/StatusLine.js";
 import { useEffect, useRef, useState } from "react";
 import { useAppLocale } from "../appLocale.js";
 import { adminCopy } from "../copy/admin.js";
 import Button from "../components/ui/Button.js";
+import StatusLine from "../components/ui/StatusLine.js";
 import {
   GMAIL_FILTER_QUERY,
   GMAIL_FILTERS_URL,

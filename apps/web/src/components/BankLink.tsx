@@ -1,9 +1,9 @@
-import StatusLine from "./ui/StatusLine.js";
 import { Fragment, useCallback, useState } from "react";
 import { API_BASE, apiErrorMessageIn } from "../api";
 import { useAppLocale } from "../appLocale";
 import { moneyCopy } from "../copy/money";
 import Button from "./ui/Button.js";
+import StatusLine from "./ui/StatusLine.js";
 
 /* "Koppel bank" via Enable Banking (AIS, read-only). Fetches the bank list,
  * lets the user pick one, and redirects the browser to the bank to authorise.
@@ -193,7 +193,7 @@ export default function BankLink({
         </span>
       )}
       {error && (
-        <StatusLine tone="problem" className="border-warn text-warn" role="alert">
+        <StatusLine tone="problem"  role="alert">
           {c.bankLink.bankkoppelingError(error)}
         </StatusLine>
       )}

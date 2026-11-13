@@ -1,4 +1,3 @@
-import StatusLine from "../components/ui/StatusLine.js";
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import type {
   Account,
@@ -60,6 +59,7 @@ import Backup from "./Backup";
 import Button from "../components/ui/Button.js";
 import Card, { CardHeader } from "../components/ui/Card.js";
 import SaldoInput from "../components/ui/SaldoInput.js";
+import StatusLine from "../components/ui/StatusLine.js";
 import SignInForm from "../components/SignInForm.js";
 
 /* Profiel — everything that is a setting rather than a place you work.
@@ -376,7 +376,7 @@ function CashbackCorrigeren({
       </p>
 
       {loadProblem !== null ? (
-        <StatusLine tone="problem" role="alert" className="border-warn text-warn">
+        <StatusLine tone="problem" role="alert">
           {c.profiel.cashback.loadProblemPrefix}
           {loadProblem}
           {c.profiel.cashback.loadProblemSuffix}
@@ -452,7 +452,7 @@ function CashbackCorrigeren({
       )}
 
       {problem !== null && (
-        <StatusLine tone="problem" role="alert" className="border-warn text-warn">
+        <StatusLine tone="problem" role="alert">
           {problem}
         </StatusLine>
       )}

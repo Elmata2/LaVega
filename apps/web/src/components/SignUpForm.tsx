@@ -1,4 +1,3 @@
-import StatusLine from "./ui/StatusLine.js";
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import type { Locale } from "../locale.js";
@@ -14,6 +13,7 @@ import posthog from "../posthog.js";
 import Button from "./ui/Button.js";
 import { Field } from "./ui/Field.js";
 import PasswordInput from "./ui/PasswordInput.js";
+import StatusLine from "./ui/StatusLine.js";
 
 /** Seconds before the confirmation mail may be sent again. */
 export const RESEND_COOLDOWN = 60;
@@ -136,7 +136,7 @@ export default function SignUpForm({
           </span>
         </label>
         {failure !== null && (
-          <StatusLine tone="problem" role="alert" className="border-warn text-warn">
+          <StatusLine tone="problem" role="alert">
             {c.signUp.error[failure]}
           </StatusLine>
         )}
@@ -198,7 +198,7 @@ function CheckEmail({
       <p className={introClassName}>{c.signUp.doneBody(email)}</p>
       {resent && <p className={introClassName}>{c.signUp.resent}</p>}
       {failure !== null && (
-        <StatusLine tone="problem" role="alert" className="border-warn text-warn">
+        <StatusLine tone="problem" role="alert">
           {c.mailError[failure]}
         </StatusLine>
       )}

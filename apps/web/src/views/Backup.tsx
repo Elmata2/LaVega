@@ -1,4 +1,3 @@
-import StatusLine from "../components/ui/StatusLine.js";
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import type { CipherBlob, VaultStorage } from "@lavega/adapters";
@@ -11,6 +10,7 @@ import posthog from "../posthog.js";
 import Button from "../components/ui/Button.js";
 import Card from "../components/ui/Card.js";
 import { Field, CheckboxField } from "../components/ui/Field.js";
+import StatusLine from "../components/ui/StatusLine.js";
 
 type BackupProps = {
   storage: VaultStorage;
@@ -219,7 +219,7 @@ function ServerBackup({
       </Button>
       {conflict && (
         <>
-          <StatusLine tone="problem" role="alert" className="border-warn text-warn">
+          <StatusLine tone="problem" role="alert">
             {c.server.conflict.message(formatDateTime(locale, conflict))}
           </StatusLine>
           <Button disabled={busy || erasing} onClick={() => void upload(true)}>
@@ -229,7 +229,7 @@ function ServerBackup({
       )}
       {message && <p>{message}</p>}
       {error && (
-        <StatusLine tone="problem" role="alert" className="border-warn text-warn">
+        <StatusLine tone="problem" role="alert">
           {error}
         </StatusLine>
       )}
@@ -281,7 +281,7 @@ function ServerBackup({
       )}
       {eraseMessage && <p>{eraseMessage}</p>}
       {eraseError && (
-        <StatusLine tone="problem" role="alert" className="border-warn text-warn">
+        <StatusLine tone="problem" role="alert">
           {eraseError}
         </StatusLine>
       )}
@@ -389,7 +389,7 @@ export default function Backup({ storage, asOf, documentCount = 0, onRestored }:
           {c.restore.confirmLabel}
         </CheckboxField>
         {error && (
-          <StatusLine tone="problem" role="alert" className="border-warn text-warn">
+          <StatusLine tone="problem" role="alert">
             {error}
           </StatusLine>
         )}

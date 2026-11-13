@@ -1,9 +1,9 @@
-import StatusLine from "../components/ui/StatusLine.js";
 import { useState } from "react";
 import type { AdvisorProfile, AdvisorProfileStore, scoreCapacity } from "@lavega/core";
 import Button from "../components/ui/Button.js";
 import Card from "../components/ui/Card.js";
 import CardLink from "../components/ui/CardLink.js";
+import StatusLine from "../components/ui/StatusLine.js";
 import { useAppLocale } from "../appLocale.js";
 import type { View } from "../appRoutes.js";
 import { intakeCopy, type AboutYouCopy } from "../copy/intake.js";
@@ -63,7 +63,7 @@ export default function AboutYou(props: AboutYouProps) {
         </StatusLine>
       )}
       {saveFailed && (
-        <StatusLine tone="problem" role="alert" className="border-warn text-warn">
+        <StatusLine tone="problem" role="alert">
           {c.saveFailed}
         </StatusLine>
       )}

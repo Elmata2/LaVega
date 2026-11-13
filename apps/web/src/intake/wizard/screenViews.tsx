@@ -1,4 +1,3 @@
-import StatusLine from "../../components/ui/StatusLine.js";
 import { useId, useState, type ReactNode } from "react";
 import type { WorkKind } from "@lavega/core";
 import type { WizardCopy } from "../../copy/wizard.js";
@@ -8,6 +7,7 @@ import CardPicker, { orderedCardIds } from "./CardPicker.js";
 import type { CardKind } from "./cardOptions.js";
 import { WORK_ORDER } from "./screens.js";
 import MultiTiles from "./MultiTiles.js";
+import StatusLine from "../../components/ui/StatusLine.js";
 
 type Busy = { busy: boolean };
 

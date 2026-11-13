@@ -1,6 +1,6 @@
-import StatusLine from "../components/ui/StatusLine.js";
 import type { AccountTypeKind, BalanceSheet, IncomeStatement, Reports } from "@lavega/core";
 import Card from "../components/ui/Card.js";
+import StatusLine from "../components/ui/StatusLine.js";
 import { moneyCopy } from "../copy/money.js";
 import { reportsCopy, type PlanFmt, type ReportsCopy } from "../copy/plan/index.js";
 import { Rows, useSectionCopy, type FigureRow } from "./sections/common.js";

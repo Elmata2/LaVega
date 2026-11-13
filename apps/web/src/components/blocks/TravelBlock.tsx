@@ -1,4 +1,3 @@
-import StatusLine, { StatusIcon } from "../ui/StatusLine.js";
 import { useEffect, useRef, useState } from "react";
 import type { View } from "../../App";
 import type {
@@ -55,6 +54,7 @@ import Badge from "../ui/Badge.js";
 import Button from "../ui/Button.js";
 import CardLink from "../ui/CardLink.js";
 import SaldoInput from "../ui/SaldoInput.js";
+import StatusLine, { StatusIcon } from "../ui/StatusLine.js";
 
 /* A self-contained block: everything it needs arrives as props and it owns only
  * its own draft state. That made it the first MODULAR block, and it is now one

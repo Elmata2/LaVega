@@ -1,4 +1,3 @@
-import StatusLine from "./ui/StatusLine.js";
 import { useState } from "react";
 import type { FormEvent } from "react";
 import type { VaultStorage } from "@lavega/adapters";
@@ -9,6 +8,7 @@ import Button from "./ui/Button.js";
 import Card from "./ui/Card.js";
 import { Field } from "./ui/Field.js";
 import PasswordInput from "./ui/PasswordInput.js";
+import StatusLine from "./ui/StatusLine.js";
 
 type VaultGateProps = {
   gate: GateState;
@@ -110,7 +110,7 @@ function AdoptScreen({
           />
         </Field>
         {error && (
-          <StatusLine tone="problem" role="alert" className="border-warn text-warn">
+          <StatusLine tone="problem" role="alert">
             {error}
           </StatusLine>
         )}

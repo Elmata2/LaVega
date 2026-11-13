@@ -1,4 +1,3 @@
-import StatusLine, { StatusIcon } from "../components/ui/StatusLine.js";
 import { useState } from "react";
 import type { Account, AccountSummary, Tx, DuplicateGroup, Valuation } from "@lavega/core";
 import {
@@ -28,6 +27,7 @@ import { CATALOGUE_ENTRIES } from "../catalogue-rates";
 import { wizardCopy } from "../copy/wizard";
 import { statedCardPlaceholders } from "../plan/statedPlaceholders";
 import { Table, TableWrap, Th, Td } from "../components/ui/Table.js";
+import StatusLine, { StatusIcon } from "../components/ui/StatusLine.js";
 import "../styles/views.css";
 
 type RekeningenProps = {

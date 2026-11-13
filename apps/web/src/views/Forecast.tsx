@@ -7,7 +7,6 @@ import type {
   Tx,
   ScheduledFlow,
 } from "@lavega/core";
-import { StatusIcon } from "../components/ui/StatusLine.js";
 import { billForecastProjection, forecastCashflow } from "@lavega/core";
 import type { ConversionMode } from "../settings.js";
 import { formatDate, formatEuroIn } from "../format";
@@ -24,6 +23,7 @@ import {
 } from "../forecast-view";
 import TrendChart, { type TrendPoint } from "../components/TrendChart";
 import Card, { CardHeader } from "../components/ui/Card.js";
+import { StatusIcon } from "../components/ui/StatusLine.js";
 
 type ForecastProps = {
   txs: Tx[];

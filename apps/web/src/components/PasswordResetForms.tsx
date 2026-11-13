@@ -1,4 +1,3 @@
-import StatusLine from "./ui/StatusLine.js";
 import { useState } from "react";
 import type { FormEvent } from "react";
 import type { Locale } from "../locale.js";
@@ -13,6 +12,7 @@ import posthog from "../posthog.js";
 import Button from "./ui/Button.js";
 import { Field } from "./ui/Field.js";
 import PasswordInput from "./ui/PasswordInput.js";
+import StatusLine from "./ui/StatusLine.js";
 
 type MailFailure = Extract<MailResult, { ok: false }>["kind"];
 
@@ -85,7 +85,7 @@ export function RequestResetForm({
           />
         </Field>
         {failure !== null && (
-          <StatusLine tone="problem" role="alert" className="border-warn text-warn">
+          <StatusLine tone="problem" role="alert">
             {c.mailError[failure]}
           </StatusLine>
         )}
@@ -173,7 +173,7 @@ export function NewPasswordForm({
         </span>
       </Field>
       {failure !== null && (
-        <StatusLine tone="problem" role="alert" className="border-warn text-warn">
+        <StatusLine tone="problem" role="alert">
           {c.reset.error[failure]}
         </StatusLine>
       )}

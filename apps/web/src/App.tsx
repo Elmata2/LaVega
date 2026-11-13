@@ -1,4 +1,3 @@
-import StatusLine from "./components/ui/StatusLine.js";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   Account,
@@ -159,6 +158,7 @@ import NavBar from "./components/NavBar";
 import TopBar from "./components/TopBar";
 import CardLink from "./components/ui/CardLink.js";
 import Button from "./components/ui/Button.js";
+import StatusLine from "./components/ui/StatusLine.js";
 import {
   enabledModules as resolveModules,
   navModules,
@@ -2240,7 +2240,7 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
           <p role="status">{intakeCopy[locale].loading}</p>
         ) : profileRead === "error" ? (
           <div role="alert">
-            <StatusLine tone="problem" className="border-warn text-warn">
+            <StatusLine tone="problem">
               {intakeCopy[locale].loadError}
             </StatusLine>
             <Button onClick={() => void retryProfileRead()}>{intakeCopy[locale].retry}</Button>
@@ -2628,7 +2628,7 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
                 <p role="status">{intakeCopy[locale].loading}</p>
               ) : profileRead === "error" ? (
                 <div role="alert">
-                  <StatusLine tone="problem" className="border-warn text-warn">
+                  <StatusLine tone="problem">
                     {intakeCopy[locale].loadError}
                   </StatusLine>
                   <Button onClick={() => void retryProfileRead()}>

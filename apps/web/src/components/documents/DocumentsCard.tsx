@@ -1,5 +1,4 @@
 import { useMemo, useState } from "react";
-import StatusLine from "../ui/StatusLine.js";
 import type { Account, Tx, UploadProblem, Valuation, VaultDocument } from "@lavega/core";
 import {
   DOCUMENT_MAX_BYTES,
@@ -14,6 +13,7 @@ import { formatEuroIn } from "../../format.js";
 import Button from "../ui/Button.js";
 import Card from "../ui/Card.js";
 import CardLink from "../ui/CardLink.js";
+import StatusLine from "../ui/StatusLine.js";
 
 /** What the last upload did, so the card can say WHY a file was refused or was
  *  already there instead of leaving the owner guessing. */

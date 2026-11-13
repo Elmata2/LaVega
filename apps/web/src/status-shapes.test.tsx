@@ -27,11 +27,13 @@ test("an attention chip has a dashed border and keeps its symbol; ok does not", 
   expect(ok).not.toContain("border-dashed");
 });
 
-test("status dots differ by shape: filled positive, hollow negative, dashed warning", () => {
+test("status dots differ by shape: filled circle, hollow ring, filled diamond", () => {
   expect(rule(".dot-pos")).toContain("background: var(--pos)");
-  expect(rule(".dot-neg")).toContain("background: transparent");
-  expect(rule(".dot-neg")).toContain("inset");
-  expect(rule(".dot-warn")).toContain("dashed");
+  expect(rule(".dot-warn")).toContain("background: transparent");
+  expect(rule(".dot-warn")).toContain("solid var(--warn)");
+  expect(rule(".dot-neg")).toContain("background: var(--neg)");
+  expect(rule(".dot-neg")).toContain("rotate(45deg)");
+  expect(rule(".dot-neg")).toContain("border-radius: 1px");
 });
 
 test("the duplicate-account banner is a dashed warning", () => {

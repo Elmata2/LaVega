@@ -20,6 +20,8 @@ describe("StatusLine", () => {
     expect(html).toContain("border-solid");
     expect(html).toContain("border-neg");
     expect(html).toContain('data-status-icon="problem"');
+    expect(html).toContain("text-neg");
+    expect(html).not.toContain("warn");
   });
 
   test("success: icon with a check", () => {

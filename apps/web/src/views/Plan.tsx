@@ -1,4 +1,3 @@
-import StatusLine from "../components/ui/StatusLine.js";
 import { useMemo, useState } from "react";
 import {
   SECTION_IDS,
@@ -18,6 +17,7 @@ import { ConnectChecklist } from "../components/blocks/ConnectChecklist.js";
 import { inviteState } from "../components/blocks/IntakeInviteCard.js";
 import Button from "../components/ui/Button.js";
 import Card from "../components/ui/Card.js";
+import StatusLine from "../components/ui/StatusLine.js";
 import { intakeCopy } from "../copy/intake.js";
 import { useProfileCommit } from "../intake/useProfileCommit.js";
 import { planFmt, planShellCopy } from "../copy/plan/index.js";
@@ -179,7 +179,7 @@ export default function Plan({
         <StatusLine
           tone="problem"
           role="alert"
-          className="border-warn text-warn"
+          
           data-testid="plan-error-state"
         >
           {shell.errors.state}
@@ -189,7 +189,7 @@ export default function Plan({
         <StatusLine
           tone="problem"
           role="alert"
-          className="border-warn text-warn"
+          
           data-testid="plan-error-write"
         >
           {shell.errors.write}
@@ -228,7 +228,7 @@ export default function Plan({
           <StatusLine
             tone="problem"
             role="alert"
-            className="border-warn text-warn"
+            
             data-testid="plan-error-recompute"
           >
             {shell.errors.recompute}

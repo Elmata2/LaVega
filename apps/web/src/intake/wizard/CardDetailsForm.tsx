@@ -1,4 +1,3 @@
-import StatusLine from "../../components/ui/StatusLine.js";
 import { useId, useState, type ReactNode } from "react";
 import type { WizardCopy } from "../../copy/wizard.js";
 import ChoiceTiles from "./ChoiceTiles.js";
@@ -11,6 +10,7 @@ import {
   type DetailsResult,
   type RowState,
 } from "./cardDetails.js";
+import StatusLine from "../../components/ui/StatusLine.js";
 
 export type CardDetailsFormProps = {
   copy: WizardCopy;

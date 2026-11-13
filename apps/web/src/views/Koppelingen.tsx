@@ -1,4 +1,3 @@
-import StatusLine from "../components/ui/StatusLine.js";
 import { useEffect, useRef, useState } from "react";
 import { useAppLocale } from "../appLocale.js";
 import { adminCopy } from "../copy/admin.js";
@@ -14,6 +13,7 @@ import posthog from "../posthog.js";
 import { FORWARDING_GUIDE_ANCHOR } from "./ForwardingGuide.js";
 import Button from "../components/ui/Button.js";
 import Card, { CardHeader } from "../components/ui/Card.js";
+import StatusLine from "../components/ui/StatusLine.js";
 
 /* Koppelingen — één blok: het doorstuuradres voor facturen.
  *
@@ -256,7 +256,7 @@ export default function Koppelingen({ fetchImpl, onNavigate }: KoppelingenProps)
           {forwardError && (
             <StatusLine
               tone="problem"
-              className="border-warn text-warn"
+              
               role="alert"
               style={{ margin: "0 0 var(--sp-3)" }}
             >

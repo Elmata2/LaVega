@@ -1,4 +1,3 @@
-import StatusLine from "../../components/ui/StatusLine.js";
 import { useState } from "react";
 import { useAppLocale } from "../../appLocale.js";
 import { cardAdviceCopy } from "../../copy/cardAdvice.js";
@@ -9,6 +8,7 @@ import CardDetailsForm from "../../intake/wizard/CardDetailsForm.js";
 import { upsertBalance } from "../../views/Punten.js";
 import { saveProfile } from "./profileEdits.js";
 import type { PlanCtx } from "./types.js";
+import StatusLine from "../../components/ui/StatusLine.js";
 
 /** The balance, paid-in-full, rate and points of the stated credit cards, edited
  *  with the same form the intake uses. Saved to the profile (balances) and the
@@ -32,7 +32,10 @@ export default function CardBalancesEditor({ ctx }: { ctx: PlanCtx }) {
     askPoints: ctx.saveRewards !== undefined,
     repayment: profile?.cardRepayment?.value ?? null,
   });
-  const key = JSON.stringify([profile?.cardBalances?.value ?? [], rows.map((r) => r.points)]);
+  const key = JSON.stringify([
+    profile?.cardBalances?.value ?? [],
+    rows.map((r) => r.points),
+  ]);
   return (
     <div className="mb-3" data-testid="plan-card-details">
       <h5 className="m-0 mb-1 text-[0.85rem] font-semibold">{c.editTitle}</h5>

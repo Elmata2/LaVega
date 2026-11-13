@@ -47,7 +47,7 @@ export function applyPreviewTheme(theme: Theme) {
 export type Mode =
   | { id: string; group: string; label: string; kind: "app"; path: string; openCards?: boolean }
   | { id: string; group: string; label: string; kind: "wizard"; stop: WizardStop }
-  | { id: string; group: string; label: string; kind: "dialog" | "gate" | "signin" };
+  | { id: string; group: string; label: string; kind: "dialog" | "gate" | "signin" | "status" };
 
 export const MODES: Mode[] = [
   { id: "overview", group: "App", label: "Overview", kind: "app", path: "/app" },
@@ -84,6 +84,7 @@ export const MODES: Mode[] = [
   { id: "dialog", group: "Other", label: "Dialog", kind: "dialog" },
   { id: "gate", group: "Other", label: "Vault error", kind: "gate" },
   { id: "signin", group: "Other", label: "Sign-in form", kind: "signin" },
+  { id: "status", group: "Other", label: "Status variants", kind: "status" },
 ];
 
 const today = new Date();
@@ -166,6 +167,7 @@ export function Stage({ mode, dataset }: { mode: Mode; dataset: Dataset }) {
     VaultGate: typeof import("../components/VaultGate").default;
     SignInForm: typeof import("../components/SignInForm").default;
     Card: typeof import("../components/ui/Card").default;
+    StatusSheet: typeof import("./StatusSheet").default;
   }>(null);
   useEffect(() => {
     void Promise.all([
@@ -175,7 +177,8 @@ export function Stage({ mode, dataset }: { mode: Mode; dataset: Dataset }) {
       import("../components/VaultGate"),
       import("../components/SignInForm"),
       import("../components/ui/Card"),
-    ]).then(([a, w, f, g, s, c]) =>
+      import("./StatusSheet"),
+    ]).then(([a, w, f, g, s, c, st]) =>
       setParts({
         App: a.default,
         IntakeWizard: w.default,
@@ -183,6 +186,7 @@ export function Stage({ mode, dataset }: { mode: Mode; dataset: Dataset }) {
         VaultGate: g.default,
         SignInForm: s.default,
         Card: c.default,
+        StatusSheet: st.default,
       }),
     );
   }, []);
@@ -235,6 +239,7 @@ export function Stage({ mode, dataset }: { mode: Mode; dataset: Dataset }) {
       />
     );
   }
+  if (mode.kind === "status") return <parts.StatusSheet key={key} />;
   return (
     <div className="pv-pad">
       <parts.Card className="pv-narrow">

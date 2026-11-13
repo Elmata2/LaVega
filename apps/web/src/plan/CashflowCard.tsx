@@ -1,9 +1,9 @@
-import StatusLine from "../components/ui/StatusLine.js";
 import { useId, useState, type ReactNode } from "react";
 import { PLAN_THRESHOLDS, type CashflowResult } from "@lavega/core";
 import Card from "../components/ui/Card.js";
 import Button from "../components/ui/Button.js";
 import CardLink from "../components/ui/CardLink.js";
+import StatusLine from "../components/ui/StatusLine.js";
 import { cashflowCopy } from "../copy/plan/index.js";
 import { applyChargesVat } from "../intake/state.js";
 import { parseNumber } from "./sections/parse.js";
@@ -276,7 +276,7 @@ function VatChoice({ ctx }: { ctx: PlanCtx }) {
         </Button>
       </div>
       {failed && (
-        <StatusLine tone="problem" role="alert" className="m-0 text-[0.85rem] border-warn text-warn">
+        <StatusLine tone="problem" role="alert" className="m-0 text-[0.85rem]">
           {copy.inputs.vatSaveFailed}
         </StatusLine>
       )}

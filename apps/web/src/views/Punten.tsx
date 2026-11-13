@@ -1,4 +1,3 @@
-import StatusLine, { type StatusTone } from "../components/ui/StatusLine.js";
 import { useState } from "react";
 import type { RewardProgram, RewardsBalance, TrackedStatus, TrackingState } from "@lavega/core";
 import {
@@ -20,6 +19,7 @@ import Button from "../components/ui/Button.js";
 import Card from "../components/ui/Card.js";
 import CardLink from "../components/ui/CardLink.js";
 import SaldoInput from "../components/ui/SaldoInput.js";
+import StatusLine, { type StatusTone } from "../components/ui/StatusLine.js";
 import "../styles/views.css";
 import { moneyCopy } from "../copy/money.js";
 
@@ -409,8 +409,8 @@ function puntCardBorderClass(state: TrackingState): string {
 /** Same rule for the status badge (was `.punt-badge-overdue`/`.punt-badge-due`):
  *  overdue is a problem (solid border + cross), due a warning (dashed + triangle). */
 function puntBadgeProps(state: TrackingState): { tone?: StatusTone; className?: string } {
-  if (state === "overdue") return { tone: "problem", className: "border-warn text-warn" };
-  if (state === "due") return { tone: "warning", className: "border-accent text-accent" };
+  if (state === "overdue") return { tone: "problem" };
+  if (state === "due") return { tone: "warning" };
   return {};
 }
 

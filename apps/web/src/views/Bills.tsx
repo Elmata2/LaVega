@@ -1,4 +1,3 @@
-import StatusLine, { type StatusTone } from "../components/ui/StatusLine.js";
 import { useMemo, useState } from "react";
 import type {
   Account,
@@ -39,6 +38,7 @@ import Badge from "../components/ui/Badge.js";
 import Button from "../components/ui/Button.js";
 import Card from "../components/ui/Card.js";
 import CardLink from "../components/ui/CardLink.js";
+import StatusLine, { type StatusTone } from "../components/ui/StatusLine.js";
 import "../styles/views.css";
 import {
   calendarWeeks,

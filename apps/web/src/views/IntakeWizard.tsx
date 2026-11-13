@@ -1,4 +1,3 @@
-import StatusLine from "../components/ui/StatusLine.js";
 import { useEffect, useState } from "react";
 import {
   AdvisorProfile,
@@ -83,6 +82,7 @@ import {
   UploadScreen,
   WorkScreen,
 } from "../intake/wizard/screenViews.js";
+import StatusLine from "../components/ui/StatusLine.js";
 
 export type IntakeWizardProps = {
   store: AdvisorProfileStore | null;

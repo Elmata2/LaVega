@@ -1,4 +1,3 @@
-import StatusLine from "../ui/StatusLine.js";
 import { useState } from "react";
 import type {
   Account,
@@ -20,6 +19,7 @@ import { formatEuroIn } from "../../format.js";
 import Button from "../ui/Button.js";
 import Card from "../ui/Card.js";
 import CardLink from "../ui/CardLink.js";
+import StatusLine from "../ui/StatusLine.js";
 import { tableFromRows, xlsxToRows } from "../../xlsx.js";
 
 export type GenericImportRequest = {
@@ -202,7 +202,7 @@ export default function GenericImportCard({
         <StatusLine
           tone="problem"
           role="alert"
-          className="border-warn text-warn"
+          
           data-testid="generic-import-error"
         >
           {c.unsupported}

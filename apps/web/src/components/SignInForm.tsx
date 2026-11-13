@@ -1,4 +1,3 @@
-import StatusLine from "./ui/StatusLine.js";
 import { useState } from "react";
 import type { FormEvent } from "react";
 import type { Locale } from "../locale.js";
@@ -8,6 +7,7 @@ import posthog from "../posthog.js";
 import Button from "./ui/Button.js";
 import { Field } from "./ui/Field.js";
 import PasswordInput from "./ui/PasswordInput.js";
+import StatusLine from "./ui/StatusLine.js";
 
 /* Extracted from Profiel's AccountBlock so the same sign-in UI can also render
  * on the public landing page. `locale` is a prop rather than read via
@@ -106,7 +106,7 @@ export default function SignInForm({
           </p>
         )}
         {failure !== null && (
-          <StatusLine tone="problem" role="alert" className="border-warn text-warn">
+          <StatusLine tone="problem" role="alert">
             {c.profiel.account.signInError[failure]}
           </StatusLine>
         )}

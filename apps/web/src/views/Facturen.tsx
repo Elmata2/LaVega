@@ -1,4 +1,3 @@
-import StatusLine from "../components/ui/StatusLine.js";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Invoice, Tx } from "@lavega/core";
 import {
@@ -24,6 +23,7 @@ import SaldoInput from "../components/ui/SaldoInput.js";
 import ToonMeer from "../components/ToonMeer.js";
 import { resolveInvoiceParties } from "../invoiceParty.js";
 import { Table, TableWrap, Th, Td } from "../components/ui/Table.js";
+import StatusLine from "../components/ui/StatusLine.js";
 import {
   addHandledInvoiceMessageIds,
   getAiExtractionEnabled,

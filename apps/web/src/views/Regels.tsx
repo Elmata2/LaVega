@@ -1,4 +1,3 @@
-import StatusLine from "../components/ui/StatusLine.js";
 import { useMemo, useState } from "react";
 import type {
   Account,
@@ -23,6 +22,7 @@ import Badge from "../components/ui/Badge.js";
 import Button from "../components/ui/Button.js";
 import Card from "../components/ui/Card.js";
 import { Table, TableWrap, Th, Td } from "../components/ui/Table.js";
+import StatusLine from "../components/ui/StatusLine.js";
 
 /* The rules editor for the v2 engine.
  *
@@ -828,7 +828,7 @@ function RuleEditor({
       </label>
 
       {error !== null && (
-        <StatusLine tone="problem" role="alert" className="border-warn text-warn">
+        <StatusLine tone="problem" role="alert">
           {error}
         </StatusLine>
       )}

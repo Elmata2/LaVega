@@ -1,4 +1,3 @@
-import StatusLine from "../components/ui/StatusLine.js";
 import { useEffect, useMemo, useState } from "react";
 import type { VaultStorage } from "@lavega/adapters";
 import {
@@ -15,6 +14,7 @@ import { useAppLocale } from "../appLocale.js";
 import { assistantCopy } from "../copy/assistant.js";
 import { formatEuroIn, localeTag } from "../format.js";
 import { isSpendingSummary, runReadTool, type AssistantVaultSnapshot } from "./tools.js";
+import StatusLine from "../components/ui/StatusLine.js";
 
 /*
  * The personal assistant panel (WS5.8 thin slice, issue #301).
@@ -292,7 +292,7 @@ export function AssistantPanel({
       </form>
 
       {saveError && (
-        <StatusLine tone="problem" role="status" className="mt-2 text-sm border-warn text-warn">
+        <StatusLine tone="problem" role="status" className="mt-2 text-sm">
           {locale === "nl"
             ? "Je beslissing kon niet worden opgeslagen. Probeer het nog eens."
             : "Your decision could not be saved. Try again."}

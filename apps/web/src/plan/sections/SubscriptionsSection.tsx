@@ -1,4 +1,3 @@
-import StatusLine from "../../components/ui/StatusLine.js";
 import { useState } from "react";
 import {
   hash,
@@ -10,6 +9,7 @@ import {
   type UsageLog,
 } from "@lavega/core";
 import Button from "../../components/ui/Button.js";
+import StatusLine from "../../components/ui/StatusLine.js";
 import { subscriptionsCopy } from "../../copy/plan/index.js";
 import { nowIso } from "../clock.js";
 import SectionCard from "../SectionCard.js";
@@ -106,7 +106,7 @@ function SubRowView({ row, ctx, group }: { row: SubRow; ctx: PlanCtx; group: Sub
         <StatusLine
           tone="problem"
           role="alert"
-          className="m-0 text-[0.85rem] border-warn text-warn"
+          className="m-0 text-[0.85rem]"
         >
           {a.saveFailed}
         </StatusLine>

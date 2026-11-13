@@ -1,4 +1,3 @@
-import StatusLine from "../../components/ui/StatusLine.js";
 import { useState, type FormEvent } from "react";
 import {
   accountTypeKind,
@@ -9,6 +8,7 @@ import {
   type GoalsFigures,
 } from "@lavega/core";
 import Button from "../../components/ui/Button.js";
+import StatusLine from "../../components/ui/StatusLine.js";
 import { goalsCopy, learnShortHorizonText } from "../../copy/plan/index.js";
 import { nowIso } from "../clock.js";
 import SectionCard from "../SectionCard.js";
@@ -115,7 +115,7 @@ function GoalEditor({
         </p>
       )}
       {linkError && (
-        <StatusLine tone="problem" role="alert" className="m-0 mb-2 text-[0.85rem] border-warn text-warn">
+        <StatusLine tone="problem" role="alert" className="m-0 mb-2 text-[0.85rem]">
           {a.saveFailed}
         </StatusLine>
       )}
@@ -278,7 +278,7 @@ function StudyForm({ ctx }: { ctx: PlanCtx }) {
         tone="problem"
         role={error === null ? undefined : "alert"}
         data-testid="plan-error-study"
-        className="m-0 text-[0.85rem] border-warn text-warn"
+        className="m-0 text-[0.85rem]"
       >
         {error}
       </StatusLine>
