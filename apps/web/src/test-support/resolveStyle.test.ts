@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { expect, test } from "vitest";
-import { resolved } from "./resolveStyle.js";
+import { resolved, resolvedInContainer } from "./resolveStyle.js";
 import { MODULE_GRID_CLASS } from "../module-grid.js";
 
 const built = existsSync(fileURLToPath(new URL("../../dist/assets/", import.meta.url)));
@@ -15,10 +15,24 @@ test("resolves a hand-written rule", () => {
  * grid being converted to utilities. */
 test("resolves inside each max-width block", () => {
   expect(resolved([MODULE_GRID_CLASS], "grid-template-columns")).toBe("repeat(3,minmax(0,1fr))");
-  expect(resolved([MODULE_GRID_CLASS], "grid-template-columns", 1200)).toBe(
+  // The module grid's breakpoints are container queries now (see module-grid.ts).
+  expect(resolvedInContainer([MODULE_GRID_CLASS], "grid-template-columns", 1096)).toBe(
     "repeat(2,minmax(0,1fr))",
   );
-  expect(resolved([MODULE_GRID_CLASS], "grid-template-columns", 900)).toBe("minmax(0,1fr)");
+  expect(resolvedInContainer([MODULE_GRID_CLASS], "grid-template-columns", 868)).toBe(
+    "minmax(0,1fr)",
+  );
+});
+
+test("keeps @media and @container blocks apart", () => {
+  // .module-grid has no viewport rule at 1200 any more; a media lookup must not
+  // pick up the container block of the same width, and vice versa.
+  expect(resolved([MODULE_GRID_CLASS], "grid-template-columns", 1096)).toBe(
+    "repeat(3,minmax(0,1fr))",
+  );
+  expect(resolvedInContainer([MODULE_GRID_CLASS], "grid-template-columns", 1200)).toBe(
+    "repeat(3,minmax(0,1fr))",
+  );
 });
 
 /* The whole point: a generated utility resolves the same way a hand-written

@@ -787,7 +787,7 @@ export default function Valuta({ accounts, facts = [], entries = CATALOGUE_FX }:
           hoeft de bol nooit te zien; wie hem niet weet scrollt één scherm. Andersom
           zou iedereen langs een bol van 420 px moeten om bij het bedrag te komen. */}
       <ModuleGrid
-        className="grid-2 grid-cols-2 [@media(max-width:900px)]:grid-cols-1"
+        className="grid-2 grid-cols-2 [@container(max-width:868px)]:grid-cols-1"
         label={c.moduleLabels.grid}
       >
         <Module title={c.moduleLabels.transferTitle} height="tall">

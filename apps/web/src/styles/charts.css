@@ -475,9 +475,9 @@
 
   /* ---------- Phone ---------- */
 
-  @media (max-width: 900px) {
+  @container (max-width: 868px) {
     /* .lv-chart-readout-value's own mobile size is now the
-   * [@media(max-width:900px)]: variant on TrendChart.tsx's utility class —
+   * [@container(max-width:868px)]: variant on TrendChart.tsx's utility class —
    * one column means every chart gets the full width, so the readout can grow
    * into the big-number register the mobile reference uses. */
     .lv-chart-withaxis {

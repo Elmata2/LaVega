@@ -1230,7 +1230,7 @@ export default function Optimalisatie({
       </div>
 
       <ModuleGrid
-        className="grid-2 grid-cols-2 [@media(max-width:900px)]:grid-cols-1"
+        className="grid-2 grid-cols-2 [@container(max-width:868px)]:grid-cols-1"
         label={c.header.gridLabel}
       >
         {/* ── Abonnementen: de grote helft ──────────────────────────────── */}
