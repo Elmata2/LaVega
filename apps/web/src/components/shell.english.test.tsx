@@ -47,3 +47,20 @@ test("the same component renders Dutch when the cookie says so", () => {
   const html = nav();
   expect(html).toContain(shellCopy.nl.nav.moduleLabels.overview);
 });
+
+test("the English nav follows the same order: Overview, Optimization, Accounts, Your plan", () => {
+  const labels = shellCopy.en.nav.moduleLabels;
+  const html = renderToStaticMarkup(
+    <NavBar
+      view="overview"
+      modules={navModules(enabledModules(["plan", "accounts", "optimalisatie"]))}
+      onNavigate={() => {}}
+      onOpenProfile={() => {}}
+    />,
+  );
+  const at = [labels.overview, labels.optimalisatie, labels.accounts, labels.plan].map((l) =>
+    html.indexOf(l),
+  );
+  expect(at.every((i) => i >= 0)).toBe(true);
+  expect([...at].sort((a, b) => a - b)).toEqual(at);
+});

@@ -78,3 +78,19 @@ test("TopBar's title and scope switch are English under the en locale cookie", (
   expect(html).toContain("Personal");
   expect(html).toContain("Business");
 });
+
+test("the rendered nav lists the core four in the new order, then optional modules", () => {
+  const html = renderToStaticMarkup(
+    <NavBar
+      view="overview"
+      modules={navModules(enabledModules(["plan", "forecast", "accounts", "optimalisatie"]))}
+      onNavigate={() => {}}
+      onOpenProfile={() => {}}
+    />,
+  );
+  const at = ["Overzicht", "Optimalisatie", "Rekeningen", "Jouw plan", "Forecast"].map((l) =>
+    html.indexOf(l),
+  );
+  expect(at.every((i) => i >= 0)).toBe(true);
+  expect([...at].sort((a, b) => a - b)).toEqual(at);
+});
