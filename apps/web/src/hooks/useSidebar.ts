@@ -60,7 +60,8 @@ export function useSidebar(): SidebarApi {
     open: prefs.open,
     width: clampWidth(prefs.width, viewport),
     maxWidth: maxWidthFor(viewport),
-    toggle,     setWidth,
+    toggle,
+    setWidth,
     reset,
   };
 }

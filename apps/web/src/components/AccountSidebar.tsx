@@ -140,6 +140,12 @@ export function AccountSidebar({
               <span className="shell2-acc-bank">{g.named ? g.label : money.zonderBank}</span>
               <span className="shell2-acc-total">
                 {g.total === null ? money.saldoOnbekend : formatSignedEuroIn(locale, g.total)}
+                {g.total !== null && g.unknownCount > 0 && (
+                  <span className="shell2-acc-partial">
+                    {" "}
+                    {money.vanKnownVanTotal(g.knownCount, g.rows.length)}
+                  </span>
+                )}
               </span>
             </summary>
             <ul className="shell2-acc-list">

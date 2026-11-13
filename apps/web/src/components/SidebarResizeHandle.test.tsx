@@ -116,3 +116,15 @@ test("drag: moves report live widths, storage commit only on pointer-up", () => 
   ptr(window, "pointermove", 400);
   expect(onDrag).toHaveBeenCalledTimes(4);
 });
+
+test("unmounting mid-drag removes the window listeners and commits nothing", () => {
+  render();
+  ptr(handle(), "pointerdown", 300);
+  act(() => root!.unmount());
+  root = null;
+  onDrag.mockClear();
+  ptr(window, "pointermove", 400);
+  ptr(window, "pointerup", 400);
+  expect(onDrag).not.toHaveBeenCalled();
+  expect(onCommit).not.toHaveBeenCalled();
+});

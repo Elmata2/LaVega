@@ -167,3 +167,20 @@ test("english copy", () => {
   expect(host.querySelector(".shell2-acc-add")!.textContent).toBe("+ Add account");
   expect(tab("Debts")).toBeDefined();
 });
+
+test("a group with some unknown balances marks its total as partial", () => {
+  render({
+    accounts: [
+      acct({ key: "a", name: "A", bank: "ING", balance: 100 }),
+      acct({ key: "b", name: "B", bank: "ING", balance: null }),
+    ],
+  });
+  const total = host.querySelector(".shell2-acc-total")!;
+  expect(total.textContent).toContain("100,00");
+  expect(total.querySelector(".shell2-acc-partial")!.textContent).toContain("van 1 van 2");
+});
+
+test("a fully known group has no partial marker", () => {
+  render({ accounts: [acct({ key: "a", balance: 100 }), acct({ key: "b", balance: 5 })] });
+  expect(host.querySelector(".shell2-acc-partial")).toBeNull();
+});

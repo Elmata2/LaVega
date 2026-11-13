@@ -1,4 +1,4 @@
-import { useRef, type KeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
+import { useEffect, useRef, type KeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { useAppLocale } from "../appLocale.js";
 import { shellCopy } from "../copy/shell.js";
 
@@ -28,6 +28,8 @@ export function SidebarResizeHandle({
 }: SidebarResizeHandleProps) {
   const [locale] = useAppLocale();
   const drag = useRef<{ x: number; width: number; last: number } | null>(null);
+  const stop = useRef<(() => void) | null>(null);
+  useEffect(() => () => stop.current?.(), []);
   const clamp = (n: number) => Math.max(min, Math.min(max, n));
 
   function onPointerDown(e: ReactPointerEvent<HTMLDivElement>) {
@@ -45,7 +47,15 @@ export function SidebarResizeHandle({
       window.removeEventListener("pointerup", up);
       window.removeEventListener("pointercancel", up);
       drag.current = null;
+      stop.current = null;
       onCommit(start.last);
+    };
+    /* Unmount mid-drag: drop the listeners, commit nothing. */
+    stop.current = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      window.removeEventListener("pointercancel", up);
+      drag.current = null;
     };
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", up);
