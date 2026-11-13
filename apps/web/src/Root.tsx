@@ -1,10 +1,21 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import App from "./App";
 import Landing from "./views/Landing";
 import { APP_BASE, authLinkFailed, isAppPathname, normalizeAppLocation } from "./appRoutes";
 import { localeForPath, type Locale } from "./locale";
 import { useAuthState } from "./authClient";
 import posthog from "./posthog";
+import { applyTheme, readStoredTheme } from "./lib/theme";
+
+/** The landing page is midnight in every theme (its CSS has its own palette).
+ *  Forces it while mounted and puts the stored theme back on unmount. */
+function MidnightScope({ children }: { children: ReactNode }) {
+  useEffect(() => {
+    applyTheme("midnight");
+    return () => applyTheme(readStoredTheme());
+  }, []);
+  return children;
+}
 
 /** Public landing at `/`. Vault app at `/app` and `/app/<view>`. Legacy
  *  `/#app` and `/?eb=…` normalise into `/app` so Enable Banking still lands. */
@@ -72,13 +83,15 @@ export default function Root() {
     // page still lets App pick them up once it mounts.
   }
   return (
-    <Landing
-      locale={locale}
-      linkError={authLinkFailed()}
-      onEnter={() => {
-        window.history.pushState({}, "", APP_BASE);
-        setRoute("app");
-      }}
-    />
+    <MidnightScope>
+      <Landing
+        locale={locale}
+        linkError={authLinkFailed()}
+        onEnter={() => {
+          window.history.pushState({}, "", APP_BASE);
+          setRoute("app");
+        }}
+      />
+    </MidnightScope>
   );
 }

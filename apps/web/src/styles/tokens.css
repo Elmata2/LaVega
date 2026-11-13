@@ -224,6 +224,55 @@
   --shadow-float: 0 24px 80px rgba(2, 7, 10, 0.16);
 }
 
+/* Monochrome: white ground, black ink, no hue. Selected in Profiel (step 4) and
+ * applied before first paint by public/theme-init.js. Every #rrggbb colour token
+ * of :root is set here (scripts/check-midnight-contrast.mjs fails otherwise), so
+ * nothing leaks from midnight. Colour no longer carries meaning: positive and
+ * negative read by sign and glyph, warnings by dashed border and icon. Radius,
+ * type, spacing and motion are shared. Placed after the light block on purpose:
+ * Globe.test.tsx splits this file at the light selector. */
+:root[data-theme="mono"] {
+  color-scheme: light;
+  --gutter: #ffffff;
+  --bg: #ffffff;
+  --surface: #f5f5f5;
+  --surface-2: #ebebeb;
+  --ink: #000000;
+  --ink-soft: #262626;
+  --on-ink: #ffffff;
+  --muted: #595959;
+  --line: rgba(0, 0, 0, 0.12);
+  --accent: #000000;
+  --accent-soft: rgba(0, 0, 0, 0.06);
+  --cta: #000000;
+  --on-cta: #ffffff;
+  --pos: #000000;
+  --neg: #404040;
+  --warn: #262626;
+  --chart-blue: #000000;
+  --chart-purple: #4d4d4d;
+  --chart-teal: #737373;
+  --card-face-1: #1f1f1f;
+  --card-face-2: #2b2b2b;
+  --card-face-3: #383838;
+  --card-face-4: #454545;
+  --card-text: #ffffff;
+  --slice-1: #1a1a1a;
+  --slice-2: #2d2d2d;
+  --slice-3: #404040;
+  --slice-4: #545454;
+  --slice-5: #686868;
+  --slice-6: #7c7c7c;
+  --slice-7: #909090;
+  --slice-8: #a0a0a0;
+  --slice-rest: #b0b0b0;
+  --scrim: rgba(0, 0, 0, 0.4);
+  --shadow-float: 0 24px 80px rgba(0, 0, 0, 0.14);
+  /* The wizard panel is light in every theme; same greys, no blue cast. */
+  --wz-cardrow-line: #e5e5e5;
+  --wz-cardrow-ink: #141414;
+}
+
 /* Tailwind's namespace, pointed at the variables above. Adding a token means
  * adding it in :root and naming it here — never a second hard-coded value. */
 @theme inline {

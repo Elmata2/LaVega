@@ -118,3 +118,18 @@ test("a failed verification link on a signed-out /app load tells the landing pag
   expect(window.location.search).toBe("");
   expect(el.querySelector('[data-testid="landing"]')?.getAttribute("data-link-error")).toBe("yes");
 });
+
+test("landing forces midnight while mounted and restores the stored theme on unmount", () => {
+  const html = document.documentElement;
+  window.localStorage.setItem("lavega.theme", "mono");
+  html.dataset.theme = "mono";
+  window.history.replaceState({}, "", "/");
+  vi.mocked(useAuthState).mockReturnValue({ state: { kind: "signed-out" }, refresh: vi.fn() });
+  render();
+  expect(html.hasAttribute("data-theme")).toBe(false);
+  act(() => root!.unmount());
+  root = null;
+  expect(html.dataset.theme).toBe("mono");
+  window.localStorage.clear();
+  delete html.dataset.theme;
+});
