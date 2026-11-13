@@ -1,10 +1,22 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import App from "./App";
 import Landing from "./views/Landing";
 import { APP_BASE, authLinkFailed, isAppPathname, normalizeAppLocation } from "./appRoutes";
 import { localeForPath, type Locale } from "./locale";
 import { useAuthState } from "./authClient";
 import posthog from "./posthog";
+import { applyTheme, currentTheme } from "./lib/theme";
+
+/** The landing page is midnight in every theme (its CSS has its own palette).
+ *  Forces it while mounted and puts the stored theme back on unmount. A layout
+ *  effect, so the correction lands before the browser paints. */
+function MidnightScope({ children }: { children: ReactNode }) {
+  useLayoutEffect(() => {
+    applyTheme("midnight");
+    return () => applyTheme(currentTheme());
+  }, []);
+  return children;
+}
 
 /** Public landing at `/`. Vault app at `/app` and `/app/<view>`. Legacy
  *  `/#app` and `/?eb=…` normalise into `/app` so Enable Banking still lands. */
@@ -55,6 +67,16 @@ export default function Root() {
     };
   }, []);
 
+  /* theme-init.js applies mono only on /app paths, so a legacy entry (`/#app`,
+   * `/?eb=…`) that normalises into /app after load has not been themed yet.
+   * Apply the stored theme whenever the vault is shown (not for a signed-out
+   * /app, which renders the landing page). */
+  const appShown =
+    route === "app" && (authState.kind === "unconfigured" || authState.kind === "signed-in");
+  useLayoutEffect(() => {
+    if (appShown) applyTheme(currentTheme());
+  }, [appShown]);
+
   if (route === "app") {
     // The first get-session answer has not arrived yet: render nothing
     // rather than flash the landing page or the vault, same idiom as
@@ -72,13 +94,15 @@ export default function Root() {
     // page still lets App pick them up once it mounts.
   }
   return (
-    <Landing
-      locale={locale}
-      linkError={authLinkFailed()}
-      onEnter={() => {
-        window.history.pushState({}, "", APP_BASE);
-        setRoute("app");
-      }}
-    />
+    <MidnightScope>
+      <Landing
+        locale={locale}
+        linkError={authLinkFailed()}
+        onEnter={() => {
+          window.history.pushState({}, "", APP_BASE);
+          setRoute("app");
+        }}
+      />
+    </MidnightScope>
   );
 }

@@ -984,3 +984,37 @@ test("de legenda blijft waar met een bredere lijst, en geen regel wordt een dode
     expect(r).not.toContain("dagkoers");
   }
 });
+
+test("een themawissel op <html> laat de bol zijn palet opnieuw lezen en tekenen", async () => {
+  const sets: unknown[] = [];
+  const ctx = new Proxy(
+    {},
+    {
+      get: () => () => {},
+      set: (_t, prop, value) => {
+        if (prop === "fillStyle") sets.push(value);
+        return true;
+      },
+    },
+  ) as unknown as CanvasRenderingContext2D;
+  vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(ctx);
+  const colour = () =>
+    document.documentElement.dataset.theme === "mono" ? "rgb(10, 10, 10)" : "rgb(20, 20, 20)";
+  vi.spyOn(window, "getComputedStyle").mockImplementation(
+    () => ({ color: colour() }) as unknown as CSSStyleDeclaration,
+  );
+  delete document.documentElement.dataset.theme;
+  mount(<Globe value="USD" onPick={() => {}} supported={SUPPORTED} />);
+  expect(sets).toContain("rgb(20, 20, 20)");
+  expect(sets).not.toContain("rgb(10, 10, 10)");
+  await act(async () => {
+    document.documentElement.dataset.theme = "mono";
+    await Promise.resolve();
+  });
+  expect(sets).toContain("rgb(10, 10, 10)");
+  await act(async () => {
+    delete document.documentElement.dataset.theme;
+    await Promise.resolve();
+  });
+  expect(sets.at(-1)).toBe("rgb(20, 20, 20)");
+});

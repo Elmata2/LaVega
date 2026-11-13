@@ -85,6 +85,17 @@ export const Debt = Schema.Struct({
 }).check(derivedNeedsEvidence);
 export type Debt = Schema.Schema.Type<typeof Debt>;
 
+/** What the user stated about one credit card: the outstanding balance, whether
+ *  it is paid in full every month (false = revolving credit) and, when he
+ *  knows it, the yearly credit interest rate in percentage points. `cardId` is
+ *  a catalogue id or "other". Points balances live in the rewards store. */
+export const CardBalance = Schema.Struct({
+  cardId: Id,
+  balanceCents: Cents,
+  paysInFull: Schema.Boolean,
+  ratePct: Schema.optionalKey(Schema.Finite.check(Schema.isGreaterThanOrEqualTo(0))),
+});
+export type CardBalance = Schema.Schema.Type<typeof CardBalance>;
 export const MoneySharing = Schema.Literals(["shared", "separate", "mixed"]);
 export type MoneySharing = Schema.Schema.Type<typeof MoneySharing>;
 
@@ -219,6 +230,8 @@ export class AdvisorProfile extends Schema.Class<AdvisorProfile>("AdvisorProfile
   statedCards: Schema.optionalKey(Field(Schema.Array(Schema.String))),
   /** Catalogue ids of debit cards (betaalpassen) the user says they have, or "other". */
   statedDebitCards: Schema.optionalKey(Field(Schema.Array(Schema.String))),
+  /** Balance, paid-in-full and interest rate of the credit cards in `statedCards`. */
+  cardBalances: Schema.optionalKey(Field(Schema.Array(CardBalance))),
   birthYear: Schema.optionalKey(Field(Schema.Int)),
   incomeRegularity: Schema.optionalKey(Field(IncomeRegularity)),
   /** Catalogue ids of banks the user says they use, or "other". */

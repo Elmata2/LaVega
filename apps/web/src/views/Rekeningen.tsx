@@ -22,6 +22,10 @@ import CardLink from "../components/ui/CardLink.js";
 import Button from "../components/ui/Button.js";
 import Pill from "../components/ui/Pill.js";
 import SaldoInput from "../components/ui/SaldoInput.js";
+import BankLink from "../components/BankLink";
+import { CATALOGUE_ENTRIES } from "../catalogue-rates";
+import { wizardCopy } from "../copy/wizard";
+import { statedCardPlaceholders } from "../plan/statedPlaceholders";
 import { Table, TableWrap, Th, Td } from "../components/ui/Table.js";
 import "../styles/views.css";
 
@@ -45,6 +49,12 @@ type RekeningenProps = {
    *  the FULL list in App; only groups touching the current scope are shown. */
   duplicateGroups: DuplicateGroup[];
   onMergeDuplicates: (survivorKey: string, duplicateKey: string) => void;
+  /** Cards the person named in the wizard (catalogue ids or "other"); the ones
+   *  no bank data stands in for yet are listed as not connected. */
+  statedCredit?: readonly string[];
+  statedDebit?: readonly string[];
+  /** Re-read every connected bank, passed on to the bank-linking flow. */
+  onRefreshBank?: () => void;
   /** How many stored transfer pairs the last merge/delete had to drop because
    *  one of their legs no longer exists. A count, not a sentence: the wording
    *  lives in the copy module with the rest of this screen's copy. */
@@ -63,6 +73,9 @@ type RekeningenProps = {
   onValuationCommit: (accountKey: string, date: string, amountCents: number) => void;
   onValuationRemove: (id: string) => void;
 };
+
+const NO_IDS: readonly string[] = [];
+const NO_REFRESH = () => {};
 
 /* ---------------------------------------------------------------------------
  * Grouping accounts under their bank — pure, so it is tested without a DOM.
@@ -1108,6 +1121,9 @@ export default function Rekeningen({
   onDeleteAccount,
   duplicateGroups,
   onMergeDuplicates,
+  statedCredit = NO_IDS,
+  statedDebit = NO_IDS,
+  onRefreshBank = NO_REFRESH,
   transferLinksDropped,
   valuations,
   asOf,
@@ -1129,6 +1145,15 @@ export default function Rekeningen({
   const [selected, setSelected] = useState<Record<string, string>>({});
   // The bank a half-typed rename belongs to — see groupAccountsByBank.
   const [rename, setRename] = useState<{ key: string; bank: string } | null>(null);
+  const [linking, setLinking] = useState(false);
+  const wc = wizardCopy[locale];
+  const placeholders = statedCardPlaceholders({
+    credit: statedCredit,
+    debit: statedDebit,
+    accounts,
+    entries: CATALOGUE_ENTRIES,
+    otherLabels: { credit: wc.otherCard, debit: wc.otherDebitCard },
+  });
 
   const rows = accountSummaries(accounts, txs);
   const groups = groupAccountsByBank(rows, (a) =>
@@ -1196,6 +1221,35 @@ export default function Rekeningen({
           </div>
         );
       })}
+
+      {placeholders.length > 0 && (
+        <div
+          className="border border-dashed border-line rounded p-4 mb-4"
+          data-testid="not-connected"
+        >
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <h3 className="m-0">{c.nietGekoppeldHeading}</h3>
+            <Button
+              className="px-3 py-1 font-semibold bg-transparent"
+              aria-expanded={linking}
+              onClick={() => setLinking(!linking)}
+            >
+              {c.nietGekoppeldKoppelen}
+            </Button>
+          </div>
+          <ul className="m-0 mt-2 pl-5">
+            {placeholders.map((p) => (
+              <li key={`${p.kind}:${p.id}`}>
+                {p.name}{" "}
+                <span className="text-muted">
+                  ({p.kind === "credit" ? c.nietGekoppeldCredit : c.nietGekoppeldDebit})
+                </span>
+              </li>
+            ))}
+          </ul>
+          {linking && <BankLink busy={busy} onRefresh={onRefreshBank} />}
+        </div>
+      )}
 
       {transferLinksDropped != null && transferLinksDropped > 0 && (
         <p className="dup-banner-sub" role="status" data-testid="transfer-links-dropped">

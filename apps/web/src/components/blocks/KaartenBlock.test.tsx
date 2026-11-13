@@ -127,3 +127,86 @@ test("elk gebundeld logo is een data-URI en de bundel blijft klein", () => {
   const totaal = BANK_LOGOS.reduce((n, l) => n + l.dataUri.length, 0);
   expect(totaal).toBeLessThan(250_000);
 });
+
+/* --- Kaarten uit de wizard die nog niet gekoppeld zijn ------------------- */
+
+import { act } from "react";
+import { createRoot } from "react-dom/client";
+
+function mountKaarten(el: React.ReactElement) {
+  const host = document.createElement("div");
+  document.body.appendChild(host);
+  const root = createRoot(host);
+  act(() => root.render(el));
+  return {
+    host,
+    unmount: () => {
+      act(() => root.unmount());
+      host.remove();
+    },
+  };
+}
+
+test("een in de wizard genoemde kaart staat er als 'nog niet gekoppeld', en Koppelen opent Rekeningen", () => {
+  const seen: string[] = [];
+  const m = mountKaarten(
+    <KaartenBlock
+      accounts={[]}
+      statedCredit={["american-express-gold-card"]}
+      statedDebit={[]}
+      onNavigate={(v) => seen.push(v)}
+    />,
+  );
+  const card = m.host.querySelector<HTMLElement>('article[aria-label$="nog niet gekoppeld"]');
+  expect(card).not.toBeNull();
+  expect(card!.getAttribute("aria-label")).toBe("American Express Gold Card, nog niet gekoppeld");
+  expect(card!.textContent).toContain("Nog niet gekoppeld");
+  // Geen saldo en geen IBAN: die heeft LaVega niet.
+  expect(card!.textContent).not.toContain("geen IBAN bekend");
+  expect(card!.textContent).not.toContain("Saldo");
+  const btn = [...card!.querySelectorAll("button")].find((b) => b.textContent === "Koppelen");
+  expect(btn).toBeDefined();
+  act(() => {
+    btn!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+  });
+  expect(seen).toEqual(["accounts"]);
+  m.unmount();
+});
+
+test("de lege tekst verdwijnt als er alleen placeholders zijn, en blijft zonder beide", () => {
+  const only = renderToStaticMarkup(
+    <KaartenBlock accounts={[]} statedCredit={["other"]} statedDebit={[]} onNavigate={() => {}} />,
+  );
+  expect(only).not.toContain("Nog geen rekeningen gekoppeld");
+  expect(only).toContain("Een andere kaart");
+  const none = renderToStaticMarkup(
+    <KaartenBlock accounts={[]} statedCredit={[]} statedDebit={[]} onNavigate={() => {}} />,
+  );
+  expect(none).toContain("Nog geen rekeningen gekoppeld");
+});
+
+test("een placeholder komt na de echte kaarten, in dezelfde strip", () => {
+  const html = renderToStaticMarkup(
+    <KaartenBlock
+      accounts={[amex]}
+      statedCredit={["ics-creditcard"]}
+      statedDebit={[]}
+      onNavigate={() => {}}
+    />,
+  );
+  expect(html.indexOf("American Express")).toBeGreaterThan(-1);
+  expect(html.indexOf("American Express")).toBeLessThan(html.indexOf("nog niet gekoppeld"));
+});
+
+test("een Knab-betaalpas als placeholder krijgt het banklabel, en het logo als Knab er een heeft", () => {
+  const html = renderToStaticMarkup(
+    <KaartenBlock
+      accounts={[]}
+      statedCredit={[]}
+      statedDebit={["knab-betaalpas"]}
+      onNavigate={() => {}}
+    />,
+  );
+  expect(html).toContain("nog niet gekoppeld");
+  expect(html.includes("<img")).toBe(bankLogo("Knab") !== null);
+});

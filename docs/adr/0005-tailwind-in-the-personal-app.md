@@ -88,11 +88,13 @@ the rule it reads is load-bearing, since the test regex-parses the
 `color-mix()` palette. Before trusting this column for any sheet, grep the
 basename, not the path.
 
-`ModuleGrid` and `Module` are **excluded for now** for a second reason too: their
-media queries are desktop-first (`max-width: 1200px`, `900px`) while Tailwind is
-mobile-first (`min-width`). Converting them means inverting the breakpoint logic,
-which is easy to get subtly and invisibly wrong on the one layout every screen
-depends on.
+`ModuleGrid` and `Module` were **excluded for a second reason too**: their
+breakpoints were desktop-first (`max-width`) while Tailwind is mobile-first
+(`min-width`). They have since moved to desktop-first container queries on the
+`.content-container` wrapper in main (`[@container(max-width:1136px)]:` and
+`868px`, see `src/module-grid.ts`), no longer the 1200 / 900 viewport media
+queries. The arbitrary at-rule form keeps the `max-width` direction, so nothing
+was inverted.
 
 **The replacement for CSS-as-contract already exists in this branch.** The
 DeltaPill conversion was verified by rendering old rules and new classes side by

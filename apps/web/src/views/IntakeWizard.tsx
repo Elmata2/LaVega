@@ -5,6 +5,7 @@ import {
   RISK_SCALE,
   type AdvisorProfileStore,
   type Goal,
+  type RewardsBalance,
 } from "@lavega/core";
 import { useAppLocale } from "../appLocale.js";
 import { intakeCopy } from "../copy/intake.js";
@@ -13,6 +14,7 @@ import { formatWholeEuroIn } from "../format.js";
 import {
   applyBirthYear,
   applyBuffer,
+  applyCardBalances,
   applyCardRepayment,
   applyCheckInCadence,
   applyChildren,
@@ -39,6 +41,8 @@ import {
   applyChargesVat,
 } from "../intake/state.js";
 import { useProfileCommit } from "../intake/useProfileCommit.js";
+import { applyPoints, cardName, detailRows } from "../intake/wizard/cardDetails.js";
+import CardDetailsForm from "../intake/wizard/CardDetailsForm.js";
 import { bankBrandIds } from "../intake/wizard/cardOptions.js";
 import SummaryScreen from "../intake/wizard/SummaryScreen.js";
 import { summaryRows } from "../intake/wizard/summaryRows.js";
@@ -63,6 +67,7 @@ import {
   WIZARD_GOAL,
   type ScreenId,
 } from "../intake/wizard/screens.js";
+import { upsertBalance } from "./Punten.js";
 import {
   AmountScreen,
   BirthYearScreen,
@@ -90,6 +95,10 @@ export type IntakeWizardProps = {
    *  bookkeeping alone. Defaults to 1. */
   round?: 1 | 2;
   now?: () => string;
+  /** The manual points balances and how to store them (the Punten tab's store).
+   *  Without the saver the points are not asked. */
+  rewards?: RewardsBalance[];
+  onSaveRewards?: (next: RewardsBalance[]) => Promise<void>;
 };
 
 /** A copy record as tile options, in the record's own order. */
@@ -209,7 +218,12 @@ export default function IntakeWizard(props: IntakeWizardProps) {
     if (returnTo !== null) {
       const changed = change(profile);
       const fresh = after.filter((x) => !fullList.includes(x) && !isAnswered(changed, x));
-      const queue = [...pending.filter((x) => after.includes(x) && !isAnswered(changed, x)), ...fresh];
+      const lost = after.filter(
+        (x) => x !== id && isAnswered(profile, x) && !isAnswered(changed, x),
+      );
+      const queue = [
+        ...new Set([...pending.filter((x) => after.includes(x) && !isAnswered(changed, x)), ...fresh, ...lost]),
+      ];
       const [head, ...rest] = queue;
       setPending(rest);
       if (head !== undefined) {
@@ -649,6 +663,40 @@ export default function IntakeWizard(props: IntakeWizardProps) {
         onSubmit={(ids) =>
           void save((p) => applyStatedCards(answerCards(p, true, asOf), ids, asOf))
         }
+      />
+    );
+  } else if (screen === "card-balances") {
+    question = q.cardDetails(together);
+    const rewards = props.rewards ?? [];
+    body = (
+      <CardDetailsForm
+        key="card-balances"
+        copy={w}
+        busy={busy}
+        submitLabel={w.next}
+        rows={detailRows({
+          cardIds: profile.statedCards?.value ?? [],
+          balances: profile.cardBalances?.value ?? [],
+          rewards,
+          nameOf: (id) => cardName(id, w.otherCard, w.cardDetails.unknownCard),
+          askPoints: props.onSaveRewards !== undefined,
+          repayment: profile.cardRepayment?.value ?? null,
+        })}
+        onSkip={() => void save((p) => p)}
+        onSubmit={(result) => {
+          void (async () => {
+            try {
+              if (props.onSaveRewards !== undefined) {
+                const next = applyPoints(rewards, result.points, asOf, upsertBalance);
+                if (next !== null) await props.onSaveRewards(next);
+              }
+            } catch {
+              setSaveFailed(true);
+              return;
+            }
+            await save((p) => applyCardBalances(p, result.balances, asOf));
+          })();
+        }}
       />
     );
   } else if (screen === "buffer") {

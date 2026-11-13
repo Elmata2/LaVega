@@ -24,6 +24,7 @@ const SOURCE: Partial<Record<ScreenId, { section: ProfileSection; key?: string }
   "debit-cards": { section: "statedDebitCards" },
   cards: { section: "statedCards" },
   "card-repayment": { section: "cardRepayment" },
+  "card-balances": { section: "cardBalances" },
   "spend-mix": { section: "spendMix" },
   "foreign-spend": { section: "foreignSpend" },
   goal: { section: "goals", key: `goals:${WIZARD_GOAL}` },

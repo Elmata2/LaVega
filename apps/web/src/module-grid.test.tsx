@@ -8,10 +8,13 @@ import {
   moduleClass,
   MODULE_COLUMNS,
   MODULE_GRID_CLASS,
+  CONTENT_CONTAINER_CLASS,
+  CONTAINER_ONE_COL_MAX,
+  CONTAINER_TWO_COL_MAX,
   type ModuleHeight,
   type ModuleSpan,
 } from "./module-grid.js";
-import { resolved } from "./test-support/resolveStyle.js";
+import { resolved, resolvedInContainer } from "./test-support/resolveStyle.js";
 
 /* Span behaviour lives in two halves that must agree: Module/ModuleGrid pick
  * the class, styles/modules.css (grid template) or module-grid.ts itself
@@ -68,19 +71,19 @@ function gridClasses(): string[] {
 
 test("moduleClass maps span + height onto the grid's classes", () => {
   expect(moduleClass()).toBe(
-    "module [grid-column:span_1] [@media(max-width:900px)]:col-span-full min-h-[var(--module-h-short)]",
+    "module [grid-column:span_1] [@container(max-width:868px)]:col-span-full min-h-[var(--module-h-short)]",
   );
   expect(moduleClass({ span: 2 })).toBe(
-    "module [grid-column:span_2] [@media(max-width:1200px)]:col-span-full [@media(max-width:900px)]:col-span-full min-h-[var(--module-h-short)]",
+    "module [grid-column:span_2] [@container(max-width:1136px)]:col-span-full [@container(max-width:868px)]:col-span-full min-h-[var(--module-h-short)]",
   );
   expect(moduleClass({ span: 3, height: "tall" })).toBe(
-    "module col-span-full min-h-[var(--module-h-tall)] [@media(max-width:900px)]:min-h-[var(--module-h-short)]",
+    "module col-span-full min-h-[var(--module-h-tall)] [@container(max-width:868px)]:min-h-[var(--module-h-short)]",
   );
 });
 
 test("moduleClass keeps a caller's own class last", () => {
   expect(moduleClass({ span: 2, className: "overzicht-positie" })).toBe(
-    "module [grid-column:span_2] [@media(max-width:1200px)]:col-span-full [@media(max-width:900px)]:col-span-full min-h-[var(--module-h-short)] overzicht-positie",
+    "module [grid-column:span_2] [@container(max-width:1136px)]:col-span-full [@container(max-width:868px)]:col-span-full min-h-[var(--module-h-short)] overzicht-positie",
   );
 });
 
@@ -98,6 +101,27 @@ test("the grid shows MODULE_COLUMNS columns on desktop", () => {
   );
 });
 
+test("the container widths in the class strings are the exported constants", () => {
+  // Tailwind needs the literal in the class string, so a constant and a
+  // literal can drift apart; read the numbers back out and compare.
+  const widths = new Set<number>();
+  for (const span of [1, 2, 3] as const) {
+    for (const height of ["short", "tall"] as const) {
+      for (const m of moduleClass({ span, height }).matchAll(
+        /\[@container\(max-width:(\d+)px\)\]:/g,
+      )) {
+        widths.add(Number(m[1]));
+      }
+    }
+  }
+  expect([...widths].sort((a, b) => a - b)).toEqual([CONTAINER_ONE_COL_MAX, CONTAINER_TWO_COL_MAX]);
+  expect(CONTAINER_TWO_COL_MAX).toBeGreaterThan(CONTAINER_ONE_COL_MAX);
+});
+
+test("the content wrapper is a size container on the inline axis", () => {
+  expect(resolved([CONTENT_CONTAINER_CLASS], "container-type")).toBe("inline-size");
+});
+
 test("every class a mounted module can carry is styled, at the width it applies", () => {
   const emitted = new Set<string>();
   for (const span of [1, 2, 3] as const) {
@@ -106,18 +130,29 @@ test("every class a mounted module can carry is styled, at the width it applies"
     }
   }
   for (const cls of emitted) {
-    // A breakpoint variant's own rule only exists inside its max-width block,
-    // so it must be probed there — resolving without atWidth would find
+    // A breakpoint variant's own rule only exists inside its @container block,
+    // so it must be probed there — resolving without a width would find
     // nothing and throw for a reason that has nothing to do with a rename.
-    const width = Number(/^\[@media\(max-width:(\d+)px\)\]:/.exec(cls)?.[1] ?? NaN);
-    const atWidth = Number.isFinite(width) ? width : undefined;
+    const width = Number(/^\[@container\(max-width:(\d+)px\)\]:/.exec(cls)?.[1] ?? NaN);
     // "display" is a probe, not the property under test: resolved() throws
     // only when no rule matches the class at all, whatever property is asked for.
     expect(
-      () => resolved([cls], "display", atWidth),
+      () =>
+        Number.isFinite(width)
+          ? resolvedInContainer([cls], "display", width)
+          : resolved([cls], "display"),
       `.${cls} has no rule in modules.css`,
     ).not.toThrow();
   }
+});
+
+test("no module class falls back to a viewport media query", () => {
+  const all = [1, 2, 3].flatMap((span) =>
+    ["short", "tall"].flatMap((height) =>
+      moduleClasses(span as ModuleSpan, height as ModuleHeight),
+    ),
+  );
+  expect(all.filter((cls) => cls.includes("@media"))).toEqual([]);
 });
 
 test("on desktop a span occupies exactly that many columns", () => {
@@ -128,23 +163,29 @@ test("on desktop a span occupies exactly that many columns", () => {
   expect(resolved(moduleClasses(3), "grid-column")).toBe("1/-1");
 });
 
-test("at 1200px the grid is 2 columns and wide spans clamp to the full row", () => {
-  expect(resolved(gridClasses(), "grid-template-columns", 1200)).toBe("repeat(2,minmax(0,1fr))");
-  expect(resolved(moduleClasses(2), "grid-column", 1200)).toBe("1/-1");
-  expect(resolved(moduleClasses(3), "grid-column", 1200)).toBe("1/-1");
+test("in a container <= 1136px the grid is 2 columns and wide spans clamp to the full row", () => {
+  expect(resolvedInContainer(gridClasses(), "grid-template-columns", CONTAINER_TWO_COL_MAX)).toBe(
+    "repeat(2,minmax(0,1fr))",
+  );
+  expect(resolvedInContainer(moduleClasses(2), "grid-column", CONTAINER_TWO_COL_MAX)).toBe("1/-1");
+  expect(resolvedInContainer(moduleClasses(3), "grid-column", CONTAINER_TWO_COL_MAX)).toBe("1/-1");
 });
 
-test("at 900px the shell is one column: every span is the full row", () => {
-  expect(resolved(gridClasses(), "grid-template-columns", 900)).toBe("minmax(0,1fr)");
-  expect(resolved(moduleClasses(1), "grid-column", 900)).toBe("1/-1");
-  expect(resolved(moduleClasses(2), "grid-column", 900)).toBe("1/-1");
-  expect(resolved(moduleClasses(3), "grid-column", 900)).toBe("1/-1");
+test("in a container <= 868px the grid is one column: every span is the full row", () => {
+  expect(resolvedInContainer(gridClasses(), "grid-template-columns", CONTAINER_ONE_COL_MAX)).toBe(
+    "minmax(0,1fr)",
+  );
+  expect(resolvedInContainer(moduleClasses(1), "grid-column", CONTAINER_ONE_COL_MAX)).toBe("1/-1");
+  expect(resolvedInContainer(moduleClasses(2), "grid-column", CONTAINER_ONE_COL_MAX)).toBe("1/-1");
+  expect(resolvedInContainer(moduleClasses(3), "grid-column", CONTAINER_ONE_COL_MAX)).toBe("1/-1");
 });
 
-test("a tall module reserves more height than a short one, but not on a phone", () => {
+test("a tall module reserves more height than a short one, but not in a one-column container", () => {
   expect(resolved(moduleClasses(1, "short"), "min-height")).toBe("var(--module-h-short)");
   expect(resolved(moduleClasses(1, "tall"), "min-height")).toBe("var(--module-h-tall)");
-  expect(resolved(moduleClasses(1, "tall"), "min-height", 900)).toBe("var(--module-h-short)");
+  expect(resolvedInContainer(moduleClasses(1, "tall"), "min-height", CONTAINER_ONE_COL_MAX)).toBe(
+    "var(--module-h-short)",
+  );
 });
 
 test("module titles keep the reference's uppercase letter-spaced register", () => {

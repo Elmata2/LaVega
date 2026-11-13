@@ -170,23 +170,30 @@
     font-size: 0.85rem;
   }
 
-  /* ---------- Breakpoints: the grid collapses, spans clamp to full width ---------- */
+  /* ---------- Breakpoints: the grid collapses, spans clamp to full width ----------
+ * Container queries on .content-container, the wrapper inside the scrolling
+ * main. The widths are the old viewport 1200 / 900 offset by the shell chrome;
+ * module-grid.ts explains the arithmetic. */
 
-  @media (max-width: 1200px) {
+  .content-container {
+    container-type: inline-size;
+  }
+
+  @container (max-width: 1136px) {
     .module-grid {
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }
     /* span-2/span-3 clamping to the full row at this width is now the
-   * `[@media(max-width:1200px)]:col-span-full` variant on module-span-2 in
+   * `[@container(max-width:1136px)]:col-span-full` variant on module-span-2 in
    * module-grid.ts (span-3 is always the full row and carries no variant). */
   }
 
-  @media (max-width: 900px) {
+  @container (max-width: 868px) {
     .module-grid {
       grid-template-columns: minmax(0, 1fr);
     }
     /* span-1/2/3 clamping to the full row, and module-tall collapsing to the
-   * short height, at this width are now the `[@media(max-width:900px)]:…`
+   * short height, at this width are now the `[@container(max-width:868px)]:…`
    * variants in module-grid.ts's SPAN_CLASS / HEIGHT_CLASS. */
     .module {
       padding: var(--sp-4);
@@ -217,12 +224,13 @@
  * opmaak uit. Twee verschijningsvormen op één element: `.toonmeer-regel` is de
  * volle regel onder een blok, `.toonmeer-info` het kleine ⓘ naast een kop.
  *
- * GEEN @media-blok in deze sectie, en dat is geen luiheid. module-grid.test.ts
- * leest dit stylesheet en zet elk @media-blok in een Map met de breedte als
- * sleutel; een tweede `@media (max-width: 900px)` overschrijft daar het
+ * GEEN @media- of @container-blok in deze sectie, en dat is geen luiheid.
+ * test-support/resolveStyle.ts (gebruikt door module-grid.test.tsx) leest dit
+ * stylesheet en zet elk @media- en @container-blok in een Map met de breedte als
+ * sleutel; een tweede `@container (max-width: 868px)` overschrijft daar het
  * bestaande blok en laat de gridtests slagen op de verkeerde regels. Het
  * onderdeel is vloeiend, dus het heeft er ook geen nodig — heb je er tóch een
- * nodig, kies dan een breedte die hierboven nog niet voorkomt (nu: 1200, 900).
+ * nodig, kies dan een breedte die hierboven nog niet voorkomt (nu: 1136, 868).
  *
  * En geen transition, geen animation, geen keyframes: open en dicht mogen
  * gewoon gebeuren. */

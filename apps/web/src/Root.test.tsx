@@ -3,6 +3,7 @@ import { act } from "react";
 import { createRoot, type Root as ReactRoot } from "react-dom/client";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import Root from "./Root";
+import { rememberTheme } from "./lib/theme";
 import { useAuthState } from "./authClient.js";
 import { resetAuthLinkFailure, takePendingEbParams } from "./appRoutes.js";
 
@@ -117,4 +118,68 @@ test("a failed verification link on a signed-out /app load tells the landing pag
   const el = render();
   expect(window.location.search).toBe("");
   expect(el.querySelector('[data-testid="landing"]')?.getAttribute("data-link-error")).toBe("yes");
+});
+
+test("landing forces midnight while mounted and restores the stored theme on unmount", () => {
+  const html = document.documentElement;
+  window.localStorage.setItem("lavega.theme", "mono");
+  html.dataset.theme = "mono";
+  window.history.replaceState({}, "", "/");
+  vi.mocked(useAuthState).mockReturnValue({ state: { kind: "signed-out" }, refresh: vi.fn() });
+  render();
+  expect(html.hasAttribute("data-theme")).toBe(false);
+  act(() => root!.unmount());
+  root = null;
+  expect(html.dataset.theme).toBe("mono");
+  window.localStorage.clear();
+  delete html.dataset.theme;
+});
+
+test("a legacy #app entry that normalises into /app gets the stored theme (init skipped it on /)", () => {
+  window.localStorage.setItem("lavega.theme", "mono");
+  delete document.documentElement.dataset.theme;
+  window.history.replaceState({}, "", "/#app");
+  vi.mocked(useAuthState).mockReturnValue({
+    state: { kind: "signed-in", id: "u1", email: "x@y.nl" },
+    refresh: vi.fn(),
+  });
+  render();
+  expect(document.documentElement.dataset.theme).toBe("mono");
+  window.localStorage.clear();
+  delete document.documentElement.dataset.theme;
+});
+
+test("signed-out /app with mono already applied by the init script is corrected to midnight", () => {
+  window.localStorage.setItem("lavega.theme", "mono");
+  document.documentElement.dataset.theme = "mono";
+  window.history.replaceState({}, "", "/app");
+  vi.mocked(useAuthState).mockReturnValue({ state: { kind: "signed-out" }, refresh: vi.fn() });
+  render();
+  expect(document.documentElement.hasAttribute("data-theme")).toBe(false);
+  window.localStorage.clear();
+});
+
+test("blocked storage: the in-memory choice survives leaving and re-entering the app", () => {
+  vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+    throw new Error("blocked");
+  });
+  vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
+    throw new Error("blocked");
+  });
+  rememberTheme("mono");
+  window.history.replaceState({}, "", "/");
+  vi.mocked(useAuthState).mockReturnValue({
+    state: { kind: "signed-in", id: "u1", email: "x@y.nl" },
+    refresh: vi.fn(),
+  });
+  render();
+  expect(document.documentElement.hasAttribute("data-theme")).toBe(false); // landing
+  act(() => {
+    window.history.pushState({}, "", "/app");
+    window.dispatchEvent(new PopStateEvent("popstate"));
+  });
+  expect(document.documentElement.dataset.theme).toBe("mono");
+  rememberTheme(null);
+  vi.restoreAllMocks();
+  delete document.documentElement.dataset.theme;
 });

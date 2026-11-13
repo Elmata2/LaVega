@@ -33,7 +33,8 @@ export type ConnectChecklistInput = {
 
 const escapeRe = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
-const matches = (bank: string, brand: string): boolean => {
+/** Whether an account's bank name is this brand, by whole-word alias match. */
+export const bankMatchesBrand = (bank: string, brand: string): boolean => {
   const name = bank.toLowerCase();
   const aliases = BANK_ALIASES[brand] ?? [brand];
   return aliases.some((a) => new RegExp(`(^|[^a-z0-9])${escapeRe(a)}($|[^a-z0-9])`).test(name));
@@ -49,6 +50,6 @@ export function connectChecklist(i: ConnectChecklistInput): ConnectItem[] {
   const linked = i.accounts.filter((a) => a.linkedAt !== undefined);
   return brands.map((brand) => ({
     brand,
-    connected: linked.some((a) => matches(a.bank, brand)),
+    connected: linked.some((a) => bankMatchesBrand(a.bank, brand)),
   }));
 }

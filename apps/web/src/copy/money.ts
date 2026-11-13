@@ -110,6 +110,10 @@ type RekeningenCopy = {
   nogGeenTransactiesGeimporteerd: string;
   verwijder: string;
   geenRekeningen: string;
+  nietGekoppeldHeading: string;
+  nietGekoppeldCredit: string;
+  nietGekoppeldDebit: string;
+  nietGekoppeldKoppelen: string;
   verbergen: string;
   rekeningTonen: string;
   rekeningenTonen: string;
@@ -492,6 +496,9 @@ type KaartenCopy = {
   saldoLabel: string;
   onbekend: string;
   cardAria: (bank: string, type: string) => string;
+  nietGekoppeld: string;
+  koppelen: string;
+  placeholderAria: (name: string) => string;
 };
 
 type FacturenCopy = {
@@ -677,6 +684,10 @@ const nl: MoneyCopy = {
     nogGeenTransactiesGeimporteerd: "Nog geen transacties geïmporteerd",
     verwijder: "Verwijder",
     geenRekeningen: "Nog geen rekeningen — importeer eerst een bestand.",
+    nietGekoppeldHeading: "Nog niet gekoppeld",
+    nietGekoppeldCredit: "Creditcard",
+    nietGekoppeldDebit: "Betaalpas",
+    nietGekoppeldKoppelen: "Koppelen",
     verbergen: "Verbergen",
     rekeningTonen: "Rekening tonen",
     rekeningenTonen: "Rekeningen tonen",
@@ -1205,6 +1216,9 @@ const nl: MoneyCopy = {
     saldoLabel: "Saldo",
     onbekend: "onbekend",
     cardAria: (bank, type) => `${bank} · ${type}`,
+    nietGekoppeld: "Nog niet gekoppeld",
+    koppelen: "Koppelen",
+    placeholderAria: (name) => `${name}, nog niet gekoppeld`,
   },
   facturen: {
     facturenArrow: "Facturen →",
@@ -1381,6 +1395,10 @@ const en: MoneyCopy = {
     nogGeenTransactiesGeimporteerd: "No transactions imported yet",
     verwijder: "Delete",
     geenRekeningen: "No accounts yet — import a file first.",
+    nietGekoppeldHeading: "Not connected yet",
+    nietGekoppeldCredit: "Credit card",
+    nietGekoppeldDebit: "Debit card",
+    nietGekoppeldKoppelen: "Connect",
     verbergen: "Hide",
     rekeningTonen: "Show account",
     rekeningenTonen: "Show accounts",
@@ -1906,6 +1924,9 @@ const en: MoneyCopy = {
     saldoLabel: "Balance",
     onbekend: "unknown",
     cardAria: (bank, type) => `${bank} · ${type}`,
+    nietGekoppeld: "Not connected yet",
+    koppelen: "Connect",
+    placeholderAria: (name) => `${name}, not connected yet`,
   },
   facturen: {
     facturenArrow: "Invoices →",

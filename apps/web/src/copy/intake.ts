@@ -70,6 +70,8 @@ export type AboutYouCopy = {
     yes: string;
     no: string;
     notAnswered: string;
+    cardPaidInFull: string;
+    cardRevolving: (rate: string | null) => string;
   };
   editors: {
     euros: string;
@@ -338,6 +340,7 @@ export const intakeCopy: Record<Locale, IntakeCopy> = {
         chargesVat: "Btw rekenen",
         statedCards: "Creditcards",
         statedDebitCards: "Betaalpassen",
+        cardBalances: "Saldo creditcards",
         birthYear: "Geboortejaar",
         incomeRegularity: "Vast of wisselend inkomen",
         statedBanks: "Banken",
@@ -398,6 +401,8 @@ export const intakeCopy: Record<Locale, IntakeCopy> = {
         yes: "Ja",
         no: "Nee",
         notAnswered: "Niet ingevuld",
+        cardPaidInFull: "elke maand volledig betaald",
+        cardRevolving: (r) => (r === null ? "saldo blijft staan" : `saldo blijft staan, rente ${r}`),
       },
       editors: {
         euros: "Bedrag in euro",
@@ -602,6 +607,7 @@ export const intakeCopy: Record<Locale, IntakeCopy> = {
         chargesVat: "Charges VAT",
         statedCards: "Credit cards",
         statedDebitCards: "Debit cards",
+        cardBalances: "Credit card balances",
         birthYear: "Birth year",
         incomeRegularity: "Fixed or varying income",
         statedBanks: "Banks",
@@ -661,6 +667,8 @@ export const intakeCopy: Record<Locale, IntakeCopy> = {
         yes: "Yes",
         no: "No",
         notAnswered: "Not filled in",
+        cardPaidInFull: "paid in full every month",
+        cardRevolving: (r) => (r === null ? "balance carried over" : `balance carried over, interest ${r}`),
       },
       editors: {
         euros: "Amount in euros",

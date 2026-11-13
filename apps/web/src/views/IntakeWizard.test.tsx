@@ -5,12 +5,16 @@ import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import {
   RISK_SCALE,
   emptyProfileStore,
+  makeRewardsBalance,
   findAdviceLanguage,
   type AdvisorProfileStore,
+  type RewardsBalance,
 } from "@lavega/core";
 import IntakeWizard from "./IntakeWizard";
 import { wizardCopy } from "../copy/wizard";
 import {
+  applyCardBalances,
+  applyCardRepayment,
   applyBirthYear,
   applyCheckInCadence,
   applyConfidence,
@@ -67,6 +71,7 @@ function mount(
     ok: true,
     count: 0,
   }),
+  extra: Partial<React.ComponentProps<typeof IntakeWizard>> = {},
 ): Mounted {
   const spy = vi.fn(onSave);
   const onFinish = vi.fn();
@@ -84,6 +89,7 @@ function mount(
         onFinish={onFinish}
         onExit={() => {}}
         now={NOW}
+        {...extra}
       />,
     ),
   );
@@ -814,6 +820,98 @@ test("exact mode prefills only an exact stored spend, never a band", async () =>
   expect(c.querySelector("input")!.value).toBe("");
 });
 
+
+// --- card details: balance, paid in full, rate, points -----------------------
+
+const AMEX = "american-express-gold-card";
+const withCards = (ids: string[]) =>
+  fromScreen("card-repayment", (p) =>
+    applyCardRepayment(applyStatedCards(p, ids, AS_OF), "full", AS_OF),
+  );
+const field = (c: HTMLElement, label: RegExp) =>
+  [...c.querySelectorAll<HTMLLabelElement>("label")]
+    .find((l) => label.test(l.textContent ?? ""))!
+    .control as HTMLInputElement;
+
+test("the card-details screen follows the card picker, with a row per card", () => {
+  const { c } = mount(withCards([AMEX, "ing-creditcard"]), async () => {}, false, undefined, {
+    rewards: [],
+    onSaveRewards: async () => {},
+  });
+  expect(h1(c)).toBe("What is on your credit cards right now?");
+  expect(c.querySelectorAll("[data-testid='wz-cardrow']")).toHaveLength(2);
+  // Points are asked for the Amex card only.
+  expect(c.textContent).toContain("Points balance American Express Membership Rewards");
+  expect(c.textContent?.match(/Points balance/g)).toHaveLength(1);
+});
+
+test("a revolving balance with a rate and a points balance is stored: profile for the balance, rewards for the points", async () => {
+  const onSaveRewards = vi.fn(async (_next: RewardsBalance[]) => {});
+  const { c, saved } = mount(withCards([AMEX]), async () => {}, false, undefined, {
+    rewards: [],
+    onSaveRewards,
+  });
+  await type(field(c, /Outstanding balance/), "1.500");
+  await act(async () => tile(c, "No, part of it stays").click());
+  await type(field(c, /Interest on the outstanding/), "14,9");
+  await type(field(c, /Points balance/), "12500");
+  await act(async () => nextBtn(c).click());
+  expect(saved().current.cardBalances).toEqual({
+    value: [{ cardId: AMEX, balanceCents: 150_000, paysInFull: false, ratePct: 14.9 }],
+    source: "stated",
+    at: AS_OF,
+  });
+  expect(onSaveRewards).toHaveBeenCalledTimes(1);
+  const list = onSaveRewards.mock.calls[0]![0];
+  expect(list).toEqual([
+    expect.objectContaining({
+      id: "american express membership rewards",
+      points: 12_500,
+      updatedAt: AS_OF,
+    }),
+  ]);
+});
+
+test("the paid-in-full answer starts from the global repayment answer, so a balance saves without a second tap", async () => {
+  const { c, onSave } = mount(withCards([AMEX]), async () => {}, false, undefined, {
+    rewards: [],
+    onSaveRewards: async () => {},
+  });
+  await type(field(c, /Outstanding balance/), "800");
+  const before = onSave.mock.calls.length;
+  await act(async () => nextBtn(c).click());
+  expect(c.querySelector("[role='alert']")).toBeNull();
+  expect(onSave.mock.calls.length).toBe(before + 1);
+});
+
+test("skipping stores nothing and moves on to the spend-mix question", async () => {
+  const { c, saved } = mount(withCards([AMEX]), async () => {}, false, undefined, {
+    rewards: [],
+    onSaveRewards: async () => {},
+  });
+  const skip = [...c.querySelectorAll<HTMLButtonElement>("button")].find(
+    (b) => b.textContent === "Skip",
+  )!;
+  await act(async () => skip.click());
+  expect(saved().current.cardBalances).toBeUndefined();
+  expect(h1(c)).toBe("Where does most of your money go?");
+});
+
+test("stored balances and points come back prefilled when the screen is reopened", () => {
+  const p = fromScreen("card-repayment", (q) =>
+    applyCardBalances(applyCardRepayment(applyStatedCards(q, [AMEX], AS_OF), "full", AS_OF), [
+      { cardId: AMEX, balanceCents: 250_000, paysInFull: false, ratePct: 9.5 },
+    ], AS_OF),
+  );
+  const { c } = mount(p, async () => {}, false, undefined, {
+    rewards: [makeRewardsBalance({ program: "American Express Membership Rewards", points: 7000, updatedAt: AS_OF })],
+    onSaveRewards: async () => {},
+  });
+  expect(field(c, /Outstanding balance/).value).toBe("2500");
+  expect(field(c, /Interest on the outstanding/).value).toBe("9,5");
+  expect(field(c, /Points balance/).value).toBe("7000");
+});
+
 test("together then shared stores moneySharing", async () => {
   const { c, saved } = mount();
   await tap(c, "Together");
@@ -899,7 +997,7 @@ test("card repayment saves", async () => {
   );
   await tap(c, "Sometimes not in full");
   expect(saved().current.cardRepayment?.value).toBe("sometimes");
-  expect(h1(c)).toBe("Where does most of your money go?");
+  expect(h1(c)).toBe("What is on your credit cards right now?");
 });
 
 test("spend mix disables a fourth pick", async () => {
@@ -1149,6 +1247,26 @@ test("editing work to freelance from the summary asks vat, then returns with a v
   expect(saved().current.chargesVat?.value).toBe(true);
   expect(h1(c)).toBe("This is what LaVega knows about you now");
   expect(editBtn(c, "vat")).not.toBeNull();
+});
+
+test("replacing the stated card from the summary asks the card details again for the new card", async () => {
+  const { c } = mount(
+    fromScreen("priorities", (p) =>
+      applyCardBalances(
+        applyCardRepayment(applyStatedCards(summaryProfile(p), [AMEX], AS_OF), "full", AS_OF),
+        [{ cardId: AMEX, balanceCents: 1000, paysInFull: true }],
+        AS_OF,
+      ),
+    ),
+  );
+  expect(editBtn(c, "card-balances")).not.toBeNull();
+  await act(async () => editBtn(c, "cards").click());
+  await openBrand(c, /^ING/);
+  await act(async () => box(c, "ING creditcard").click());
+  await openBrand(c, /^American Express/);
+  await act(async () => (boxes(c).find((b) => b.getAttribute("aria-checked") === "true" && b.textContent !== "ING creditcard") as HTMLElement).click());
+  await act(async () => nextBtn(c).click());
+  expect(h1(c)).toBe("What is on your credit cards right now?");
 });
 
 test("editing household to together asks money sharing, then returns to the summary", async () => {
