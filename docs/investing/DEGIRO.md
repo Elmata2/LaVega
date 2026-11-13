@@ -29,8 +29,8 @@ ID`, semicolon). No real DeGiro export has that shape; D1 deleted them and
 - The transaction export maps to trades and merges with the account statement
   by execution (#318, D6). The portfolio export maps to dated positions and its
   cash row (#319, D7). `parseBrokerFiles` is the multi-file seam; neither export
-  proves cash history on its own. Nothing in `apps/` calls any of it yet: the
-  upload route (#323) and the DeGiro tab (#324) are the remaining path to a user.
+  proves cash history on its own. The upload route (#323) calls the seam; the
+  DeGiro tab (#324) is the remaining path to a user.
 - `Transactions.csv` and `Portfolio.csv` shapes were **unverified** until D1.
   They are now verified from real exports of 2026-11-12 (see the two sections
   below), and their headers are the ones D2 matches.
@@ -377,7 +377,8 @@ its currency; `Lokale waarde`/`Local value` is the same pair.
   is `unknown` with a reason that names the missing account statement. Only the
   account statement can claim a window.
 
-`parseBrokerFiles(files)` is the multi-file seam for #323. It parses every file
+`parseBrokerFiles(files)` is the multi-file seam the upload route (#323) calls.
+It parses every file
 with `parseBrokerFile` and, when an import holds more than one, hands them to
 `mergeDeGiroFiles`. The first account statement and the first transaction export
 are the import; extra files, unknown headers and portfolio exports contribute
