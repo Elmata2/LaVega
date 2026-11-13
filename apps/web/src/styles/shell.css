@@ -381,6 +381,7 @@
   }
   .shell2-acc-head {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     gap: var(--sp-2);
     padding: 6px 12px;
@@ -409,14 +410,23 @@
     font-weight: 600;
   }
   .shell2-acc-total {
-    /* Figure plus markers may wrap to a second line (each marker is nowrap);
-       never truncated. */
-    flex: 0 1 auto;
-    max-width: 65%;
-    text-align: right;
+    /* The amount is one unbreakable unit: the sign never leaves the figure. */
+    flex: none;
+    white-space: nowrap;
     font-size: 12px;
     color: var(--muted);
     font-variant-numeric: tabular-nums;
+  }
+  /* Line 2 of the head, only when a marker exists: right-aligned under the
+     amount; each marker is nowrap, two may stack. */
+  .shell2-acc-marks {
+    flex: 0 0 100%;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    column-gap: var(--sp-2);
+    font-size: 12px;
+    color: var(--muted);
   }
   .shell2-acc-list {
     margin: 0;

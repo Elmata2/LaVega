@@ -179,9 +179,10 @@ test("a group with some unknown balances marks its total as partial", () => {
       acct({ key: "b", name: "B", bank: "ING", balance: null }),
     ],
   });
-  const total = host.querySelector(".shell2-acc-total")!;
-  expect(total.textContent).toContain("100,00");
-  expect(total.querySelector(".shell2-acc-partial")!.textContent).toContain("1 van 2 bekend");
+  expect(host.querySelector(".shell2-acc-total")!.textContent).toContain("100,00");
+  expect(host.querySelector(".shell2-acc-marks .shell2-acc-partial")!.textContent).toContain(
+    "1 van 2 bekend",
+  );
 });
 
 test("a fully known group has no partial marker", () => {
@@ -234,7 +235,7 @@ test("a USD row shows its own currency, never a euro sign, and the head is parti
   const total = host.querySelector(".shell2-acc-total")!.textContent!;
   expect(total).toContain("100,00");
   expect(total).not.toContain("600");
-  expect(total).toContain("1 van 2");
+  expect(host.querySelector(".shell2-acc-marks")!.textContent).toContain("1 van 2");
 });
 
 test("a group of only USD accounts reads saldo onbekend", () => {
@@ -249,12 +250,32 @@ test("head carries the dag onbekend marker when a summed balance has no date", (
       acct({ key: "n", name: "Undated", bank: "ING", balance: 50 }),
     ],
   });
-  expect(host.querySelector(".shell2-acc-total")!.textContent).toContain("dag onbekend");
+  expect(host.querySelector(".shell2-acc-marks")!.textContent).toContain("dag onbekend");
 });
 
 test("head has no dag onbekend marker when every summed balance is dated", () => {
   render({
     accounts: [acct({ key: "d", bank: "ING", balance: 100, balanceDate: "2026-11-01" })],
   });
-  expect(host.querySelector(".shell2-acc-total")!.textContent).not.toContain("dag onbekend");
+  expect(host.querySelector(".shell2-acc-marks")).toBeNull();
+});
+
+test("the amount element holds only the signed amount; markers sit in their own container", () => {
+  render({
+    accounts: [
+      acct({ key: "a", name: "A", bank: "ING", balance: 100 }),
+      acct({ key: "b", name: "B", bank: "ING", balance: null }),
+    ],
+  });
+  expect(host.querySelector(".shell2-acc-total")!.textContent).toMatch(/^\+€\s100,00$/);
+  const marks = host.querySelector(".shell2-acc-marks")!;
+  expect(marks.textContent).toContain("1 van 2 bekend");
+  expect(marks.parentElement!.classList.contains("shell2-acc-head")).toBe(true);
+});
+
+test("no marker container when the group has no marker", () => {
+  render({
+    accounts: [acct({ key: "a", bank: "ING", balance: 100, balanceDate: "2026-11-01" })],
+  });
+  expect(host.querySelector(".shell2-acc-marks")).toBeNull();
 });
