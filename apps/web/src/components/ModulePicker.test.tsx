@@ -158,7 +158,7 @@ test("Overzicht cannot be switched off — an app with no home is a broken app",
   expect(enabledModules([])).toEqual(["overview"]);
 });
 
-test("the default nav is plan, overview, accounts, optimalisatie; the rest is optional but in the picker", () => {
+test("the default nav is overview, optimalisatie, accounts, plan; the rest is optional but in the picker", () => {
   expect(DEFAULT_MODULES).toEqual(
     expect.arrayContaining(["overview", "accounts", "optimalisatie"]),
   );

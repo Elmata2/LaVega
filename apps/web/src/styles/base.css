@@ -37,14 +37,14 @@
    * condensed strokes stay open. */
   html {
     font-size: 17px;
-    background: var(--gutter);
+    background: var(--bg);
   }
 
   body {
     margin: 0;
-    /* Soft gutter the floating app frame sits on; the app itself scrolls
-   * internally so the page (gutter) never scrolls. */
-    background: var(--gutter);
+    /* The app frame fills the viewport and scrolls internally, so the page
+   * itself never scrolls. */
+    background: var(--bg);
     color: var(--ink);
     font-family: var(--font-body);
     font-size: 1rem;

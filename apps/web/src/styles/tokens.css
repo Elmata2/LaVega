@@ -23,8 +23,8 @@
 /* LaVega design-system tokens. "Midnight" palette matching the marketing site:
  * near-black ground, two raised panel tones, hairline borders, cantaloupe for the
  * primary action and blue for links and active states. Instrument Serif for
- * display, Geist for everything else (self-hosted, see the @font-face block below). The app sits as a single
- * floating, rounded "frame" on the gutter. Everything references these
+ * display, Geist for everything else (self-hosted, see the @font-face block below). The app is a full-viewport
+ * frame on --bg (no gutter, no radius). Everything references these
  * variables, so the whole theme lives here. */
 
 /* Two families, each with one job (2026-11-11):
@@ -95,7 +95,6 @@
   --swatch-mono-bg: #ffffff;
   --swatch-mono-ink: #000000;
   --swatch-ring: #8a8a8a; /* mid-grey: visible on a white and on a black pill */
-  --gutter: #02070a; /* ground the app frame sits on */
   --bg: #02070a; /* app surface inside the frame */
   --surface: #0d171d; /* raised panels */
   --surface-2: #16222a; /* nested rows / inputs */
@@ -147,7 +146,6 @@
   --scrim: rgba(2, 7, 10, 0.72); /* behind dialogs */
 
   /* Radius: large and soft, like the site's panels */
-  --r-lg: 32px; /* the floating app frame */
   --r-card: 28px; /* module cards on the homescreen grid */
   --r: 20px; /* cards */
   --r-sm: 14px; /* inputs, chips, small controls */
@@ -174,9 +172,6 @@
   --shadow-sm: 0 0 0 0 transparent; /* a real value, not `none`: Tailwind lists it among ring shadows */
   --shadow-float: 0 24px 80px rgba(0, 0, 0, 0.55);
 
-  /* Layout */
-  --frame-gap: 20px; /* gutter around the floating app */
-
   /* Wizard card-details block: hairline between cards and the card legend ink.
    * Fixed values (the wizard sits on a light panel in every theme). */
   --wz-cardrow-line: #e4e7ec;
@@ -200,7 +195,6 @@
  * checks both themes). Bank card faces keep their fixed colours. */
 :root[data-theme="light"] {
   color-scheme: light;
-  --gutter: #e9eef1;
   --bg: #ffffff;
   --surface: #f3f6f8;
   --surface-2: #e8edf0;
@@ -241,7 +235,6 @@
  * Globe.test.tsx splits this file at the light selector. */
 :root[data-theme="mono"] {
   color-scheme: light;
-  --gutter: #ffffff;
   --bg: #ffffff;
   --surface: #f5f5f5;
   --surface-2: #ebebeb;
@@ -292,7 +285,6 @@
 /* Tailwind's namespace, pointed at the variables above. Adding a token means
  * adding it in :root and naming it here — never a second hard-coded value. */
 @theme inline {
-  --color-gutter: var(--gutter);
   --color-bg: var(--bg);
   --color-surface: var(--surface);
   --color-surface-2: var(--surface-2);
@@ -314,7 +306,6 @@
   --color-chart-purple: var(--chart-purple);
   --color-chart-teal: var(--chart-teal);
 
-  --radius-lg: var(--r-lg);
   --radius-card: var(--r-card);
   /* `--radius`, not `--radius-DEFAULT`. Tailwind v4 keys the bare `rounded`
    * utility off `--radius`; a `-DEFAULT` suffix is simply an unused token, so
