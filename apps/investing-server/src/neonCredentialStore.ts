@@ -1,9 +1,10 @@
+import { CREDENTIAL_BROKERS } from "@lavega/core";
 import type { BrokerCredentials, CredentialBroker, CredentialStore } from "@lavega/core";
 import { UnreadableBrokerCredentialsError, type EncryptedBrokerRepository } from "@lavega/database";
 import type { RuntimeBrokerDataSnapshot } from "./runtimeBrokerData.js";
 import type { ServerVaultStatus } from "./fileCredentialStore.js";
 
-const BROKERS: readonly CredentialBroker[] = ["ibkr", "trading212"];
+const BROKERS = CREDENTIAL_BROKERS;
 
 type BrokerSnapshot = NonNullable<RuntimeBrokerDataSnapshot[CredentialBroker]>;
 export type BrokerReadability = Record<CredentialBroker, "empty" | "readable" | "unreadable">;

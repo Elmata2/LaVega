@@ -1,9 +1,12 @@
 import { Hono } from "hono";
 import { Schema, type Layer } from "effect";
 import {
+  brokerShortLabel,
   confirmCashFlowSuggestion,
+  CREDENTIAL_BROKERS,
   emptyInvestingDashboard,
   GICS_SECTOR_LABELS,
+  isCredentialBroker,
   InvestingDashboardDataSchema,
   InvestingLayoutSchema,
   LOCAL_TENANT_ID,
@@ -14,6 +17,7 @@ import {
   RealizedIncomeReportSchema,
   suggestionSignChange,
   type CashFlowSuggestion,
+  type CredentialBroker,
   emptyRealizedReport,
   type BenchmarkInstrument,
   type BenchmarkSelectionStore,
@@ -126,7 +130,7 @@ export type InvestingDashboardReader = (input: {
   timing?: ServerTiming;
 }) => Promise<InvestingDashboardData>;
 export type BrokerCredentialInput = {
-  broker: "ibkr" | "trading212";
+  broker: CredentialBroker;
   token: string;
   queryId?: string;
   secret?: string;
@@ -177,7 +181,7 @@ export type InvestingHealth = {
   trading212: { lastSyncedAt: string | null; positions: number };
 };
 type BrokerVaultStatus = "empty" | "locked" | "unlocked";
-type BrokerReadability = Record<"ibkr" | "trading212", "empty" | "readable" | "unreadable">;
+type BrokerReadability = Record<CredentialBroker, "empty" | "readable" | "unreadable">;
 type PriceDependencies = {
   /** The shared, instrument-keyed price store (issue #307). One series per
    *  instrument for the whole installation. */
@@ -890,7 +894,7 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
       if (!dependencies.brokerReadability) return c.json(encodeDashboard(dashboard));
       try {
         const readability = await dependencies.brokerReadability();
-        const unreadable = (["ibkr", "trading212"] as const).filter(
+        const unreadable = CREDENTIAL_BROKERS.filter(
           (broker) => readability?.[broker] === "unreadable",
         );
         return c.json(
@@ -900,7 +904,7 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
               ...dashboard.problems,
               ...unreadable.map(
                 (broker) =>
-                  `${broker === "ibkr" ? "IBKR" : "Trading 212"} credentials cannot be read. Reconnect broker to restore data.`,
+                  `${brokerShortLabel(broker)} credentials cannot be read. Reconnect broker to restore data.`,
               ),
             ],
           }),
@@ -1317,8 +1321,10 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
       .json<Partial<BrokerCredentialInput>>()
       .catch(() => ({}) as Partial<BrokerCredentialInput>);
     const broker = body.broker;
-    if (broker !== "ibkr" && broker !== "trading212")
-      return c.json({ problems: ["broker must be ibkr or trading212"] }, 400);
+    /* Only a broker with credentials has an API to connect. DeGiro is imported
+     * from files (#320), so it must never reach this route. */
+    if (!isCredentialBroker(broker))
+      return c.json({ problems: [`broker must be ${CREDENTIAL_BROKERS.join(" or ")}`] }, 400);
     if (!body.token?.trim()) return c.json({ problems: ["token is required"] }, 400);
     if (passphraseMode() === "required" && !body.passphrase?.trim())
       return c.json({ problems: ["passphrase is required"] }, 400);

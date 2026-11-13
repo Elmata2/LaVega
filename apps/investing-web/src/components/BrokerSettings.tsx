@@ -1,12 +1,25 @@
 import { useEffect, useState } from "react";
+import {
+  BROKERS,
+  CREDENTIAL_BROKERS,
+  isCredentialBroker,
+  type CredentialBroker,
+} from "@lavega/core";
 import { Button } from "./ui/button.js";
 import { filterVisibleSyncProblems, requestRefresh, useSyncSession } from "../lib/syncSession.js";
 
 const SYNC_BACKGROUND_MESSAGE = "Sync continues in the background; progress is shown above.";
 
-function otherBrokerUnconfigured(problem: string, broker: "ibkr" | "trading212"): boolean {
-  const other = broker === "ibkr" ? /trading\s*212/i : /ibkr/i;
-  return other.test(problem) && /credentials are not configured/i.test(problem);
+function otherBrokerUnconfigured(problem: string, broker: CredentialBroker): boolean {
+  /* A missing credential for another broker is expected on the first save: the
+   * sync reports every broker it cannot read. Only those problems do not block
+   * this form. The wording is the adapters' own ("<short label>: credentials
+   * are not configured"), derived from the broker table. */
+  return CREDENTIAL_BROKERS.some(
+    (id) =>
+      id !== broker &&
+      problem.startsWith(`${BROKERS[id].shortLabel}: credentials are not configured`),
+  );
 }
 
 function BrokerSetupCard({
@@ -298,8 +311,8 @@ function BrokerVaultUnlock() {
   );
 }
 
-function BrokerCredentialForm({ onSaved }: { onSaved?: (broker: "ibkr" | "trading212") => void }) {
-  const [broker, setBroker] = useState<"ibkr" | "trading212">("ibkr");
+function BrokerCredentialForm({ onSaved }: { onSaved?: (broker: CredentialBroker) => void }) {
+  const [broker, setBroker] = useState<CredentialBroker>("ibkr");
   const [token, setToken] = useState("");
   const [queryId, setQueryId] = useState("");
   const [secret, setSecret] = useState("");
@@ -308,7 +321,7 @@ function BrokerCredentialForm({ onSaved }: { onSaved?: (broker: "ibkr" | "tradin
   const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
   const [message, setMessage] = useState<string | null>(null);
 
-  function resetBroker(next: "ibkr" | "trading212") {
+  function resetBroker(next: CredentialBroker) {
     setBroker(next);
     setToken("");
     setQueryId("");
@@ -380,11 +393,16 @@ function BrokerCredentialForm({ onSaved }: { onSaved?: (broker: "ibkr" | "tradin
           <select
             aria-label="Broker"
             value={broker}
-            onChange={(event) => resetBroker(event.target.value as "ibkr" | "trading212")}
+            onChange={(event) => {
+              if (isCredentialBroker(event.target.value)) resetBroker(event.target.value);
+            }}
             className="mt-2 block rounded-pill border border-input bg-background px-3 py-2 text-sm font-normal"
           >
-            <option value="ibkr">Interactive Brokers</option>
-            <option value="trading212">Trading 212</option>
+            {CREDENTIAL_BROKERS.map((id) => (
+              <option key={id} value={id}>
+                {BROKERS[id].label}
+              </option>
+            ))}
           </select>
         </label>
       </div>
@@ -466,7 +484,7 @@ function BrokerCredentialForm({ onSaved }: { onSaved?: (broker: "ibkr" | "tradin
 }
 
 export function BrokerSettings() {
-  const [unreadableBrokers, setUnreadableBrokers] = useState<Array<"ibkr" | "trading212">>([]);
+  const [unreadableBrokers, setUnreadableBrokers] = useState<CredentialBroker[]>([]);
   const [storageProblem, setStorageProblem] = useState<string | null>(null);
   useEffect(() => {
     void fetch("/api/brokers/credentials/status")
@@ -474,11 +492,11 @@ export function BrokerSettings() {
         if (!response.ok)
           throw new Error("Broker credential storage is unavailable. Try again later.");
         return (await response.json()) as {
-          brokers?: Record<"ibkr" | "trading212", string>;
+          brokers?: Partial<Record<CredentialBroker, string>>;
         };
       })
       .then(({ brokers }) => {
-        const unreadable = (["ibkr", "trading212"] as const).filter(
+        const unreadable = CREDENTIAL_BROKERS.filter(
           (broker) => brokers?.[broker] === "unreadable",
         );
         setUnreadableBrokers(unreadable);
@@ -492,7 +510,7 @@ export function BrokerSettings() {
   const credentialProblem =
     storageProblem ??
     (unreadableBrokers.length
-      ? `${unreadableBrokers.map((broker) => (broker === "ibkr" ? "IBKR" : "Trading 212")).join(" and ")} credentials cannot be read. Save new credentials below to reconnect.`
+      ? `${unreadableBrokers.map((broker) => BROKERS[broker].shortLabel).join(" and ")} credentials cannot be read. Save new credentials below to reconnect.`
       : null);
   return (
     <div className="space-y-8">

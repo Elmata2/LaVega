@@ -1,230 +1,119 @@
-import type { TradeWithoutId } from "../investing/hash.js";
-import type { Position, TradeSide } from "../investing/model.js";
-import { headerIndex, parseAmount, parseDate, splitRows } from "./primitives.js";
-import { norm } from "../hash.js";
+import type { Dividend } from "../investing/dividend.js";
+import type { CashBalance, CashFlow, Position, Trade } from "../investing/model.js";
+import { type AccountCoverage, readDeGiroAccount } from "./degiro/accountProfile.js";
+import { mergeDeGiroFiles } from "./degiro/merge.js";
+import { type DeGiroProfile, readDeGiroCsv } from "./degiro/profiles.js";
+import { NO_ACCOUNT_HISTORY_REASON, readDeGiroTransactions } from "./degiro/transactions.js";
+
+/** One export in an import: the name is kept for problem attribution only. */
+export type BrokerFileInput = { filename: string; text: string };
+
+/** The sections a parser actually read. A section not listed is unavailable,
+ *  never an empty complete section: the snapshot would wipe stored rows. */
+export type BrokerFileSection = "trades" | "dividends" | "cashFlows" | "cashBalances";
 
 export type ParsedBrokerFile = {
   positions: Omit<Position, "entity" | "tenantId">[];
-  trades: Omit<TradeWithoutId, "tenantId">[];
+  trades: Omit<Trade, "entity" | "id">[];
   source: string;
   problems: string[];
+  /** Which export the header matched; absent when the header is unknown. */
+  profile?: DeGiroProfile;
+  dividends?: Omit<Dividend, "entity">[];
+  cashFlows?: Omit<CashFlow, "entity">[];
+  cashBalances?: Omit<CashBalance, "entity" | "broker">[];
+  cashHistory?: AccountCoverage;
+  period?: { from: string; to: string };
+  sections?: readonly BrokerFileSection[];
+  /** Set by `parseBrokerFiles` only, so a multi-file import can name the file
+   *  a problem came from. `parseBrokerFile` still ignores the filename. */
+  filename?: string;
 };
 
-function delimiter(text: string): string {
-  const head = text.split(/\r?\n/).slice(0, 3).join("\n");
-  const candidates = [";", ",", "\t", "|"];
-  return candidates.reduce((best, candidate) =>
-    head.split(candidate).length > head.split(best).length ? candidate : best,
-  );
-}
+const ACCOUNT_SECTIONS: readonly BrokerFileSection[] = [
+  "trades",
+  "dividends",
+  "cashFlows",
+  "cashBalances",
+];
 
-function pick(index: Record<string, number>, names: string[]): number {
-  for (const name of names) {
-    const key = norm(name);
-    if (key in index) return index[key];
+/**
+ * Broker-file detection, delegating to the DeGiro readers in `./degiro/`.
+ *
+ * The filename is accepted for API compatibility with the upload path and is
+ * deliberately unused: a real DeGiro export arrives as `Account.csv`,
+ * `Transactions (1).csv` or whatever the user renamed it to, so only the
+ * header may decide the profile.
+ *
+ * The account statement is the only profile that proves cash history: it alone
+ * carries cash flows, dividends, cash balances, trades and coverage (#317).
+ * The transaction export maps to trades and an unknown coverage claim (#318):
+ * trades alone do not prove cash history. The portfolio export still only names
+ * itself; its row mapping lands in #319.
+ */
+export function parseBrokerFile(filename: string, text: string): ParsedBrokerFile {
+  void filename;
+
+  const read = readDeGiroCsv(text);
+  if (!read.detection.known)
+    return { positions: [], trades: [], source: "", problems: read.problems };
+
+  const { profile } = read.detection;
+  if (profile === "account") {
+    const account = readDeGiroAccount(text);
+    return {
+      profile,
+      sections: ACCOUNT_SECTIONS,
+      positions: [],
+      trades: account.trades,
+      dividends: account.dividends,
+      cashFlows: account.cashFlows,
+      cashBalances: account.cashBalances,
+      cashHistory: account.coverage,
+      ...(account.period ? { period: account.period } : {}),
+      source: "DeGiro account",
+      problems: account.problems,
+    };
   }
-  return -1;
-}
+  if (profile === "transactions") {
+    const transactions = readDeGiroTransactions(text);
+    return {
+      profile,
+      sections: ["trades"],
+      positions: [],
+      trades: transactions.trades,
+      cashHistory: { status: "unknown", reason: NO_ACCOUNT_HISTORY_REASON },
+      ...(transactions.period ? { period: transactions.period } : {}),
+      source: "DeGiro transactions",
+      problems: transactions.problems,
+    };
+  }
 
-function value(row: string[], index: number): string {
-  return index < 0 ? "" : String(row[index] ?? "").trim();
-}
-
-function parsedAmount(row: string[], index: number): number | null {
-  return parseAmount(value(row, index));
-}
-
-function side(raw: string, quantity: number | null, amount: number | null): TradeSide {
-  if (/^(buy|purchase|koop|aankoop|bought)$/i.test(raw)) return "buy";
-  if (/^(sell|sale|verkoop|verkocht)$/i.test(raw)) return "sell";
-  if (quantity != null && quantity < 0) return "sell";
-  if (amount != null && amount < 0) return "buy";
-  if (amount != null && amount > 0) return "sell";
-  return "other";
-}
-
-function finish(trades: Omit<TradeWithoutId, "tenantId">[], source: string): ParsedBrokerFile {
-  if (trades.length) return { positions: [], trades, source, problems: [] };
   return {
+    profile,
     positions: [],
     trades: [],
-    source,
-    problems: [`formaat herkend (${source}) maar geen transacties gevonden`],
-  };
-}
-
-function finishPositions(positions: Omit<Position, "entity" | "tenantId">[]): ParsedBrokerFile {
-  if (positions.length) return { positions, trades: [], source: "DeGiro", problems: [] };
-  return {
-    positions: [],
-    trades: [],
-    source: "DeGiro",
-    problems: ["formaat herkend (DeGiro portfolio) maar geen posities gevonden"],
+    source: `DeGiro ${profile}`,
+    problems:
+      read.problems.length > 0
+        ? read.problems
+        : [
+            "DeGiro portfolio-export herkend, maar nog niet uitgelezen: de rij-mapping volgt in #319",
+          ],
   };
 }
 
 /**
- * Parses DeGiro's transaction export. Verified export shape (Dutch/English):
- * semicolon-delimited CSV with Date/Datum, Product, ISIN, Quantity/Aantal,
- * Price/Koers, Total/Totaal, Currency/Valuta and Order ID columns. DeGiro's
- * cash-flow export has no product/order fields and is reported, not discarded.
- * Portfolio exports are parsed as positions when no transaction shape matches.
+ * Parse every export of one import. A single file keeps `parseBrokerFile`'s
+ * result untouched; several files are merged into one result by
+ * `mergeDeGiroFiles`, so the upload route (#323) has one seam to call.
  */
-export function parseBrokerFile(filename: string, text: string): ParsedBrokerFile {
-  if (!text.trim())
-    return {
-      positions: [],
-      trades: [],
-      source: "",
-      problems: ["onbekend of leeg bestand — geen transacties herkend"],
-    };
-
-  const rows = splitRows(text, delimiter(text));
-  if (!rows.length)
-    return {
-      positions: [],
-      trades: [],
-      source: "",
-      problems: ["onbekend of leeg bestand — geen transacties herkend"],
-    };
-  const header = rows[0].map((cell) => cell.trim());
-  const h = header.map(norm).join("|");
-  const idx = headerIndex(header);
-  const date = pick(idx, ["date", "datum"]);
-  const product = pick(idx, ["product", "instrument", "naam"]);
-  const isin = pick(idx, ["isin"]);
-  const quantity = pick(idx, ["quantity", "aantal", "qty"]);
-  const price = pick(idx, ["price", "koers"]);
-  const total = pick(idx, ["total", "totaal", "amount", "bedrag"]);
-  const currency = pick(idx, ["currency", "valuta"]);
-  const action = pick(idx, ["type", "action", "transaction type", "transactietype"]);
-  const commission = pick(idx, ["transaction costs", "transactiekosten", "commission", "kosten"]);
-  const orderId = pick(idx, ["order id", "orderid", "order-id"]);
-
-  const symbol = pick(idx, ["symbol", "ticker", "product", "instrument", "naam"]);
-  const positionQuantity = pick(idx, ["quantity", "aantal", "qty", "amount", "units", "positie"]);
-  const averagePrice = pick(idx, [
-    "average price",
-    "average price per unit",
-    "gemiddelde koers",
-    "gemiddelde prijs",
-    "average cost",
-  ]);
-  const marketPrice = pick(idx, [
-    "market price",
-    "price",
-    "koers",
-    "current price",
-    "huidige koers",
-  ]);
-  const marketValue = pick(idx, [
-    "market value",
-    "value",
-    "waarde",
-    "total value",
-    "value in eur",
-    "waarde in eur",
-    "local value",
-  ]);
-  const asOf = pick(idx, ["as of", "date", "datum", "peildatum", "valuation date"]);
-
-  const identifiedAsDeGiro =
-    /degiro/i.test(filename) ||
-    (isin > -1 && currency > -1 && (product > -1 || symbol > -1) && (date > -1 || asOf > -1));
-  const transactionExport =
-    identifiedAsDeGiro &&
-    date > -1 &&
-    product > -1 &&
-    quantity > -1 &&
-    price > -1 &&
-    total > -1 &&
-    (isin > -1 || orderId > -1);
-  const cashflowExport =
-    date > -1 &&
-    total > -1 &&
-    product < 0 &&
-    (/cash ?flow|cashflow|value date|valutadatum|description|omschrijving/.test(h) ||
-      /degiro/i.test(filename));
-  if (!transactionExport) {
-    if (cashflowExport)
-      return {
-        positions: [],
-        trades: [],
-        source: "DeGiro cashflow",
-        problems: ["DeGiro cashflow-export bevat geen transacties"],
-      };
-    const portfolioHint =
-      /portfolio|position|posities|overzicht/i.test(filename) ||
-      (symbol > -1 &&
-        positionQuantity > -1 &&
-        (marketValue > -1 || marketPrice > -1 || averagePrice > -1));
-    if (
-      portfolioHint &&
-      symbol > -1 &&
-      positionQuantity > -1 &&
-      (isin > -1 || pick(idx, ["symbol", "ticker"]) > -1)
-    ) {
-      const positions: Omit<Position, "entity" | "tenantId">[] = [];
-      for (let rowNo = 1; rowNo < rows.length; rowNo++) {
-        const row = rows[rowNo];
-        const symbolValue = value(row, symbol);
-        const quantityValue = parsedAmount(row, positionQuantity);
-        if (!symbolValue || quantityValue == null) continue;
-        const currencyValue = value(row, currency) || "EUR";
-        const averagePriceValue = parsedAmount(row, averagePrice);
-        positions.push({
-          symbol: symbolValue,
-          ...(value(row, isin) ? { isin: value(row, isin) } : {}),
-          quantity: quantityValue,
-          brokerCost:
-            averagePriceValue === null
-              ? { status: "unknown", reason: "not-reported" }
-              : {
-                  status: "known",
-                  amount: averagePriceValue * quantityValue,
-                  currency: currencyValue,
-                },
-          averagePrice: averagePriceValue,
-          marketPrice: parsedAmount(row, marketPrice),
-          marketValue: parsedAmount(row, marketValue),
-          currency: currencyValue,
-          asOf: parseDate(value(row, asOf)) ?? "",
-        });
-      }
-      return finishPositions(positions);
-    }
-    return {
-      positions: [],
-      trades: [],
-      source: "",
-      problems: ["onbekend of leeg bestand — geen transacties of posities herkend"],
-    };
-  }
-
-  const trades: Omit<TradeWithoutId, "tenantId">[] = [];
-  for (let rowNo = 1; rowNo < rows.length; rowNo++) {
-    const row = rows[rowNo];
-    const dateValue = parseDate(value(row, date));
-    const rawQuantity = parseAmount(value(row, quantity));
-    const rawPrice = parseAmount(value(row, price));
-    const amount = parseAmount(value(row, total));
-    if (!dateValue || rawQuantity == null || rawPrice == null || amount == null) continue;
-    const productValue = value(row, product);
-    if (!productValue) continue;
-    const sideValue = side(value(row, action), rawQuantity, amount);
-    trades.push({
-      entity: "",
-      date: dateValue,
-      symbol: productValue,
-      ...(value(row, isin) ? { isin: value(row, isin) } : {}),
-      side: sideValue,
-      quantity: Math.abs(rawQuantity),
-      price: Math.abs(rawPrice),
-      amount,
-      currency: value(row, currency) || "EUR",
-      commission: commission > -1 ? parseAmount(value(row, commission)) : null,
-      ...(value(row, orderId) ? { brokerTradeId: value(row, orderId) } : {}),
-    });
-  }
-  return finish(trades, "DeGiro");
+export function parseBrokerFiles(files: readonly BrokerFileInput[]): ParsedBrokerFile {
+  const parsed = files.map((file) => ({
+    ...parseBrokerFile(file.filename, file.text),
+    filename: file.filename,
+  }));
+  const [only] = parsed;
+  if (parsed.length === 1 && only !== undefined) return only;
+  return mergeDeGiroFiles(parsed);
 }

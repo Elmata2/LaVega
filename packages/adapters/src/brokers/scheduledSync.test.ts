@@ -1,8 +1,9 @@
-import { type CredentialStore, type Position } from "@lavega/core";
+import { type CredentialStore, type Position, type ScheduledBroker } from "@lavega/core";
 import { expect, test, vi } from "vitest";
 import type { BrokerResult, BrokerSyncRequest } from "./BrokerAccessAdapter.js";
 import {
   createMemoryBrokerSyncStateStore,
+  SCHEDULED_BROKERS,
   syncScheduledBrokers,
   type BrokerSyncOperationStore,
   type BrokerSyncProgressRecord,
@@ -10,7 +11,7 @@ import {
 } from "./scheduledSync.js";
 
 const credentials = {
-  async getCredentials(tenantId: string, broker: "ibkr" | "trading212") {
+  async getCredentials(tenantId: string, broker: ScheduledBroker) {
     return broker === "trading212"
       ? { broker, tenantId, token: "key", secret: "secret" }
       : { broker, tenantId, token: "key", queryId: "1" };
@@ -24,14 +25,20 @@ function adapters(sync: (request: BrokerSyncRequest) => Promise<BrokerResult>) {
 
 /** A credential store whose answer for each broker the test controls, including
  *  a thrown error for a broker whose stored credentials cannot be decrypted. */
-function credentialsWith(get: (broker: "ibkr" | "trading212") => unknown): CredentialStore {
+function credentialsWith(get: (broker: ScheduledBroker) => unknown): CredentialStore {
   return {
-    async getCredentials(_tenantId: string, broker: "ibkr" | "trading212") {
+    async getCredentials(_tenantId: string, broker: ScheduledBroker) {
       return get(broker);
     },
     async putCredentials() {},
   } as unknown as CredentialStore;
 }
+
+/* Issue #320: the scheduled set is derived from the one broker table, so an
+ *  import-only broker cannot be driven by a sync. */
+test("the scheduled brokers are the credential brokers with a scheduled API", () => {
+  expect(SCHEDULED_BROKERS).toEqual(["ibkr", "trading212"]);
+});
 
 const empty = (overrides: {
   positions?: BrokerResult["sections"]["positions"]["rows"];

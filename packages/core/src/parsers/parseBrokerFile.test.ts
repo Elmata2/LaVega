@@ -1,98 +1,137 @@
+import { readFileSync } from "node:fs";
 import { expect, test } from "vitest";
 import { parseBrokerFile } from "./parseBrokerFile.js";
+import { DEGIRO_HEADERS, detectProfile } from "./degiro/profiles.js";
 
-const DEGIRO = [
-  "Date;Time;Product;ISIN;Exchange;Quantity;Price;Local value;Value;Exchange rate;Transaction costs;Total;Currency;Order ID",
-  "2026-08-14;10:00;Vanguard S&P 500 ETF;IE00B3XXRP09;Euronext;2;100,50;201,00;201,00;1;-2,00;-203,00;EUR;ORD-1",
-  "2026-08-15;11:00;Vanguard S&P 500 ETF;IE00B3XXRP09;Euronext;-1;101,00;-101,00;-101,00;1;-1,00;100,00;EUR;ORD-2",
-].join("\n");
+/* Issue #314: the DeGiro reader and header-signature profile detection.
+ *
+ * The old parser guessed from the filename and from loose header names. Run
+ * against a real NL account statement it answered `onbekend of leeg bestand —
+ * geen transacties of posities herkend` (see `docs/investing/DEGIRO.md`,
+ * "Current state"). These tests pin the replacement: the header alone decides
+ * the profile, and the filename is never consulted.
+ *
+ * The invented #47/#49 DeGiro fixtures are gone (#313). The account statement is
+ * fully mapped (#315–#317), the transaction export maps to trades and an unknown
+ * cash-history claim (#318), and the portfolio export still only names itself
+ * (#319).
+ */
 
-test("parseBrokerFile maps DeGiro transaction export to trades", () => {
-  const result = parseBrokerFile("degiro-transactions.csv", DEGIRO);
-  expect(result.source).toBe("DeGiro");
-  expect(result.problems).toEqual([]);
-  expect(result.positions).toEqual([]);
-  expect(result.trades).toMatchObject([
-    {
-      date: "2026-08-14",
-      symbol: "Vanguard S&P 500 ETF",
-      isin: "IE00B3XXRP09",
-      side: "buy",
-      quantity: 2,
-      price: 100.5,
-      amount: -203,
-      currency: "EUR",
-      brokerTradeId: "ORD-1",
-    },
-    {
-      date: "2026-08-15",
-      side: "sell",
-      quantity: 1,
-      price: 101,
-      amount: 100,
-      brokerTradeId: "ORD-2",
-    },
+const fixture = (path: string): string =>
+  readFileSync(new URL(`./__fixtures__/degiro/${path}`, import.meta.url), "utf8");
+
+const account = fixture("nl/account.csv");
+const transactions = fixture("nl/transactions.csv");
+const portfolio = fixture("nl/portfolio.csv");
+
+test("the real-format account statement is detected and mapped as `account`, not rejected", () => {
+  // The whole point of the issue: the pre-#314 parser rejected this file.
+  expect(detectProfile(account.split("\n")[0]!.split(","))).toMatchObject({
+    known: true,
+    profile: "account",
+    language: "nl",
+  });
+
+  const parsed = parseBrokerFile("Account.csv", account);
+  expect(parsed.profile).toBe("account");
+  expect(parsed.source).toBe("DeGiro account");
+  expect(parsed.problems).toEqual([]);
+  // The statement itself is the import (#317): no other file is needed.
+  expect(parsed.positions).toEqual([]);
+  expect(parsed.trades).toHaveLength(4);
+  expect(parsed.dividends).toHaveLength(2);
+  expect(parsed.cashFlows).toHaveLength(21);
+  expect(parsed.cashBalances).toHaveLength(2);
+  expect(parsed.cashHistory).toEqual({
+    status: "complete",
+    from: "2026-01-05",
+    to: "2026-03-06",
+  });
+  expect(parsed.period).toEqual({ from: "2026-01-05", to: "2026-03-06" });
+});
+
+test("a transactions export maps to trades but claims no cash history", () => {
+  const parsed = parseBrokerFile("Transactions.csv", transactions);
+  expect(parsed.profile).toBe("transactions");
+  expect(parsed.source).toBe("DeGiro transactions");
+  expect(parsed.positions).toEqual([]);
+  expect(parsed.trades).toHaveLength(25);
+  expect(parsed.dividends).toBeUndefined();
+  expect(parsed.cashFlows).toBeUndefined();
+  expect(parsed.cashBalances).toBeUndefined();
+  // Only the account statement proves cash history; a trade list does not.
+  expect(parsed.cashHistory).toMatchObject({ status: "unknown" });
+  expect(parsed.period).toEqual({ from: "2022-03-30", to: "2025-02-06" });
+  expect(parsed.problems).toEqual([]);
+  expect(parsed.sections).toEqual(["trades"]);
+});
+
+test("a portfolio export is recognised but its row mapping is still #319", () => {
+  // Reporting an empty complete section would look like a read that wipes
+  // stored rows, so the file still names itself and adds one problem.
+  const parsed = parseBrokerFile("Portfolio.csv", portfolio);
+  expect(parsed.profile).toBe("portfolio");
+  expect(parsed.positions).toEqual([]);
+  expect(parsed.trades).toEqual([]);
+  expect(parsed.dividends).toBeUndefined();
+  expect(parsed.cashFlows).toBeUndefined();
+  expect(parsed.cashBalances).toBeUndefined();
+  expect(parsed.cashHistory).toBeUndefined();
+  expect(parsed.period).toBeUndefined();
+  expect(parsed.problems).toEqual([
+    "DeGiro portfolio-export herkend, maar nog niet uitgelezen: de rij-mapping volgt in #319",
   ]);
 });
 
-test.each(["", "Date;Amount;Currency;Description\n2026-08-14;100;EUR;Deposit"])(
-  "parseBrokerFile reports unknown or cashflow-only input: %s",
-  (text) => {
-    const result = parseBrokerFile("degiro-cashflow.csv", text);
-    expect(result.positions).toEqual([]);
-    expect(result.trades).toEqual([]);
-    expect(result.problems.length).toBeGreaterThan(0);
-  },
-);
-
-test("parseBrokerFile reports recognized empty DeGiro export", () => {
-  const header = DEGIRO.split("\n", 1)[0];
-  const result = parseBrokerFile("degiro-transactions.csv", header);
-  expect(result.source).toBe("DeGiro");
-  expect(result.trades).toEqual([]);
-  expect(result.problems[0]).toContain("geen transacties");
+test.each([
+  ["nl/account.csv", "account"],
+  ["nl/transactions.csv", "transactions"],
+  ["en/transactions.csv", "transactions"],
+  ["nl/portfolio.csv", "portfolio"],
+  ["en/portfolio.csv", "portfolio"],
+] as const)("%s is detected as %s", (path, profile) => {
+  expect(parseBrokerFile("export.csv", fixture(path)).source).toBe(`DeGiro ${profile}`);
 });
 
-const PORTFOLIO = [
-  "Product;ISIN;Symbol;Amount;Price;Value;Currency;Date",
-  "Vanguard S&P 500 ETF;IE00B3XXRP09;VUAA;2;101,25;202,50;EUR;2026-08-18",
-  "Apple Inc.;US0378331005;AAPL;3;;;USD;2026-08-18",
-].join("\n");
-
-test("parseBrokerFile maps DeGiro portfolio export to positions", () => {
-  const result = parseBrokerFile("Portfolio.csv", PORTFOLIO);
-  expect(result.source).toBe("DeGiro");
-  expect(result.problems).toEqual([]);
-  expect(result.trades).toEqual([]);
-  expect(result.positions).toEqual([
-    {
-      symbol: "VUAA",
-      isin: "IE00B3XXRP09",
-      quantity: 2,
-      brokerCost: { status: "unknown", reason: "not-reported" },
-      averagePrice: null,
-      marketPrice: 101.25,
-      marketValue: 202.5,
-      currency: "EUR",
-      asOf: "2026-08-18",
-    },
-    {
-      symbol: "AAPL",
-      isin: "US0378331005",
-      quantity: 3,
-      brokerCost: { status: "unknown", reason: "not-reported" },
-      averagePrice: null,
-      marketPrice: null,
-      marketValue: null,
-      currency: "USD",
-      asOf: "2026-08-18",
-    },
-  ]);
+test("a renamed file is detected the same as a correctly named one", () => {
+  const names = ["Account.csv", "foo.csv", "export (1).csv", "", "rekening.CSV"];
+  const parsed = names.map((name) => parseBrokerFile(name, account));
+  for (const result of parsed) {
+    expect(result.source).toBe("DeGiro account");
+    expect(result.problems).toEqual(parsed[0]!.problems);
+  }
 });
 
-test("parseBrokerFile reports recognized empty DeGiro portfolio export", () => {
-  const result = parseBrokerFile("positions.csv", "Product;ISIN;Quantity;Value;Currency");
-  expect(result.source).toBe("DeGiro");
-  expect(result.positions).toEqual([]);
-  expect(result.problems[0]).toContain("geen posities");
+test("the filename never overrides the header", () => {
+  // A file the user named after the wrong export still parses by its header.
+  expect(parseBrokerFile("Portfolio.csv", account).source).toBe("DeGiro account");
+  expect(parseBrokerFile("Transactions.csv", portfolio).source).toBe("DeGiro portfolio");
+  expect(parseBrokerFile("Account.csv", transactions).source).toBe("DeGiro transactions");
+});
+
+test("an unknown header returns one clear problem and no rows", () => {
+  const table = "Datum,Onbekend,Velderij\n06-03-2026,x,y\n";
+  const parsed = parseBrokerFile("Account.csv", table);
+  expect(parsed.positions).toEqual([]);
+  expect(parsed.trades).toEqual([]);
+  expect(parsed.source).toBe("");
+  expect(parsed.problems).toEqual(["onbekend DeGiro-formaat: Datum,Onbekend,Velderij"]);
+});
+
+test.each([
+  ["empty file", "", /leeg bestand/],
+  ["whitespace only", "  \r\n\r\n", /leeg bestand/],
+  ["header-only account", `${DEGIRO_HEADERS[0]!.header.join(",")}\n`, /zonder rijen/],
+  ["header-only transactions", `${DEGIRO_HEADERS[1]!.header.join(",")}\r\n`, /zonder rijen/],
+  [
+    "a semicolon export",
+    "Date;Amount;Currency;Description\n2026-08-14;100;EUR;Deposit",
+    /onbekend/,
+  ],
+])("%s returns one problem and no rows", (_label, text, problem) => {
+  const parsed = parseBrokerFile("Account.csv", text);
+  expect(parsed.positions).toEqual([]);
+  expect(parsed.trades).toEqual([]);
+  expect(parsed.problems).toHaveLength(1);
+  expect(parsed.problems[0]).toMatch(problem);
 });
