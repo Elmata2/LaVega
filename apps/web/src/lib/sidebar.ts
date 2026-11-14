@@ -1,3 +1,5 @@
+import { makePanelPrefsStore, type PanelPrefs } from "./panelPrefs";
+
 export const SIDEBAR_KEY = "lavega.sidebar";
 export const SIDEBAR_DEFAULT_WIDTH = 296;
 export const SIDEBAR_MIN_WIDTH = 240;
@@ -6,7 +8,7 @@ export const RAIL_WIDTH = 84;
 /* Main never gets narrower than this; the sidebar gives way first. */
 export const MAIN_MIN_WIDTH = 480;
 
-export type SidebarPrefs = { open: boolean; width: number };
+export type SidebarPrefs = PanelPrefs;
 
 /* The rail and sidebar exist from 1024px; a first visit keeps the sidebar
  * closed below 1280px so main keeps room. */
@@ -38,49 +40,23 @@ export function defaultSidebar(viewport: number): SidebarPrefs {
   return { open: viewport >= SIDEBAR_OPEN_MIN_VIEWPORT, width: SIDEBAR_DEFAULT_WIDTH };
 }
 
-function coerce(raw: unknown, viewport: number): SidebarPrefs {
-  const fallback = defaultSidebar(viewport);
-  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return fallback;
-  const rec = raw as Record<string, unknown>;
-  return {
-    open: typeof rec.open === "boolean" ? rec.open : fallback.open,
-    width: typeof rec.width === "number" ? clampStoredWidth(rec.width) : fallback.width,
-  };
-}
-
-/* What this page view chose, for when storage is blocked. */
-let chosenInMemory: SidebarPrefs | null = null;
+const store = makePanelPrefsStore({
+  key: SIDEBAR_KEY,
+  defaultPrefs: defaultSidebar,
+  clampStoredWidth,
+});
 
 export function forgetMemorySidebar(): void {
-  chosenInMemory = null;
+  store.forgetMemory();
 }
 
 /* Stored prefs, else the first-visit default. Never throws. The width is the
  * stored choice (240..440); apply `clampWidth` with the live viewport to show it. */
 export function readSidebar(viewport: number): SidebarPrefs {
-  try {
-    const raw = window.localStorage.getItem(SIDEBAR_KEY);
-    if (raw !== null) {
-      try {
-        return coerce(JSON.parse(raw), viewport);
-      } catch {
-        return defaultSidebar(viewport);
-      }
-    }
-  } catch {
-    /* storage blocked: fall through to the in-memory choice */
-  }
-  return chosenInMemory ?? defaultSidebar(viewport);
+  return store.read(viewport);
 }
 
 /* Persist. False when storage is blocked; the choice then lives in memory. */
 export function writeSidebar(prefs: SidebarPrefs): boolean {
-  try {
-    window.localStorage.setItem(SIDEBAR_KEY, JSON.stringify(prefs));
-    chosenInMemory = null;
-    return true;
-  } catch {
-    chosenInMemory = prefs;
-    return false;
-  }
+  return store.write(prefs);
 }

@@ -92,7 +92,7 @@ test("phone: exactly one nav, the bottom bar, no rail, no sidebar", () => {
 test("rail: items are links with href and a visible label; active has aria-current", () => {
   render(frame({ ids: [...CORE, "plan"], view: "accounts" }));
   const items = [...host.querySelectorAll<HTMLAnchorElement>(".shell2-rail-list a")];
-  expect(items.map((a) => a.textContent)).toEqual(["Overzicht", "Optimalisatie", "Rekeningen"]);
+  expect(items.map((a) => a.textContent)).toEqual(["Home", "Optimalisatie", "Rekeningen"]);
   for (const a of items) expect(a.getAttribute("href")).toMatch(/^\//);
   const current = host.querySelectorAll('[aria-current="page"]');
   expect(current).toHaveLength(1);
@@ -144,13 +144,13 @@ test("bottom bar: exactly the three core items, no Meer when nothing else is on"
   stubDesktop(false);
   render(frame({ ids: CORE }));
   const bar = host.querySelector("nav")!;
-  expect(labels(bar)).toEqual(["Overzicht", "Optimalisatie", "Rekeningen"]);
+  expect(labels(bar)).toEqual(["Home", "Optimalisatie", "Rekeningen"]);
 });
 
 test("bottom bar: Jouw plan is never an item, even when the id is passed in", () => {
   stubDesktop(false);
   render(frame({ ids: [...CORE, "plan"] }));
-  expect(labels(host.querySelector("nav")!)).toEqual(["Overzicht", "Optimalisatie", "Rekeningen"]);
+  expect(labels(host.querySelector("nav")!)).toEqual(["Home", "Optimalisatie", "Rekeningen"]);
 });
 
 test("on the plan view the bottom bar and phone top bar mark Profiel current", () => {
@@ -168,7 +168,7 @@ test("bottom bar: Meer appears only with another module on, and calls onOpenMore
   const other = MODULES.find((m) => !CORE.includes(m.id) && m.id !== "plan")!.id;
   render(frame({ ids: [...CORE, "plan", other], onOpenMore }));
   const bar = host.querySelector("nav")!;
-  expect(labels(bar)).toEqual(["Overzicht", "Optimalisatie", "Rekeningen", "Meer"]);
+  expect(labels(bar)).toEqual(["Home", "Optimalisatie", "Rekeningen", "Meer"]);
   const more = bar.querySelector<HTMLButtonElement>("button")!;
   expect(more.textContent).toBe("Meer");
   act(() => more.click());
@@ -233,6 +233,29 @@ test("English labels", () => {
   const other = MODULES.find((m) => !CORE.includes(m.id) && m.id !== "plan")!.id;
   render(frame({ ids: [...CORE, other] }));
   const bar = host.querySelector("nav")!;
-  expect(labels(bar)).toEqual(["Overview", "Optimise", "Accounts", "More"]);
+  expect(labels(bar)).toEqual(["Home", "Optimise", "Accounts", "More"]);
   expect(host.querySelector(".shell2-skip")?.textContent).toBe("Skip to content");
+});
+
+test("bottom bar: Assistent sits after the module links and before Meer; popup-flagged", () => {
+  stubDesktop(false);
+  const other = MODULES.find((m) => !CORE.includes(m.id) && m.id !== "plan")!.id;
+  render(
+    <Shell
+      title="Overzicht"
+      assistant={<div />}
+      nav={{
+        view: "overview",
+        modules: navModules([...CORE, other]),
+        onNavigate: () => {},
+        onOpenProfile: () => {},
+      }}
+    >
+      b
+    </Shell>,
+  );
+  const bar = host.querySelector("nav")!;
+  expect(labels(bar)).toEqual(["Home", "Optimalisatie", "Rekeningen", "Assistent", "Meer"]);
+  const item = bar.querySelector<HTMLButtonElement>("button.shell2-bar-item.shell2-bar-assistant")!;
+  expect(item.getAttribute("aria-haspopup")).toBe("dialog");
 });

@@ -43,11 +43,20 @@ test("stored prefs naming archived ids are ignored, not an error", () => {
   ]);
   expect(
     enabledWidgets({ on: ["btw-stand", "aandacht"], seen: ["btw-stand", "aandacht"] }),
-  ).toEqual(["aandacht", "intake-invite", "room-card", "connect-checklist", "betaalagenda"]);
+  ).toEqual(["aandacht"]);
   expect(normaliseWidgets(["positie", "facturen-open", "btw-stand", "aandacht"])).toEqual([
     "aandacht",
   ]);
   expect(navModules(["overview", "valuta"] as never).map((m) => m.id)).toEqual(["overview"]);
+});
+
+test("a stored widget list naming the removed cards (pop-ups, room card) still resolves", () => {
+  expect(
+    enabledWidgets({
+      on: ["intake-invite", "betaalagenda"],
+      seen: ["intake-invite", "betaalagenda", "room-card"],
+    }),
+  ).toEqual(["betaalagenda"]);
 });
 
 test("default modules and widgets exclude archived ids", () => {

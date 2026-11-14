@@ -10,6 +10,10 @@ import {
 } from "../lib/sidebar";
 
 export type SidebarApi = {
+  /** The stored choice, before the fit rule (lib/assistantPanel `fitPanels`). */
+  prefs: SidebarPrefs;
+  /** Live viewport width. */
+  viewport: number;
   open: boolean;
   /** Width to render: the stored choice clamped to the live viewport. */
   width: number;
@@ -57,6 +61,8 @@ export function useSidebar(): SidebarApi {
   );
 
   return {
+    prefs,
+    viewport,
     open: prefs.open,
     width: clampWidth(prefs.width, viewport),
     maxWidth: maxWidthFor(viewport),

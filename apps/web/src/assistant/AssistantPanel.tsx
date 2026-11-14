@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import type { VaultStorage } from "@lavega/adapters";
 import {
   approvalDecision,
@@ -14,6 +14,7 @@ import { useAppLocale } from "../appLocale.js";
 import { assistantCopy } from "../copy/assistant.js";
 import { formatEuroIn, localeTag } from "../format.js";
 import { isSpendingSummary, runReadTool, type AssistantVaultSnapshot } from "./tools.js";
+import Button from "../components/ui/Button.js";
 import StatusLine from "../components/ui/StatusLine.js";
 
 /*
@@ -59,39 +60,62 @@ function decidedAtLabel(locale: "nl" | "en", iso: string): string {
       }).format(date);
 }
 
-export function AssistantPanel({
-  storage,
-  asOf,
-}: {
+export type AssistantPanelProps = {
   storage: VaultStorage;
   /** The app's current date, so the tool's default month is deterministic. */
   asOf: string;
-}) {
+  /** The frame's close seam; absent in the phone sheet, which has its own. */
+  onClose?: () => void;
+  /** Leave out the heading, for the phone sheet whose header already shows it. */
+  hideTitle?: boolean;
+  /** False while the column is closed; going true re-reads the stored state. */
+  active?: boolean;
+};
+
+export function AssistantPanel({
+  storage,
+  asOf,
+  onClose,
+  hideTitle = false,
+  active = true,
+}: AssistantPanelProps) {
   const [locale] = useAppLocale();
   const copy = assistantCopy[locale];
-  const [snapshot, setSnapshot] = useState<AssistantVaultSnapshot | null>(null);
   const [assistant, setAssistant] = useState<AssistantState>(emptyAssistantState);
   const [messages, setMessages] = useState<Message[]>([]);
   const [open, setOpen] = useState<OpenApproval | null>(null);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
+  /* The synchronous twin of `busy` (state lags a render) and the latest stored
+   * state, for code that runs after an await. */
+  const busyRef = useRef(false);
+  const assistantRef = useRef(assistant);
+  function applyAssistant(state: AssistantState) {
+    assistantRef.current = state;
+    setAssistant(state);
+  }
+  function startTurn(): boolean {
+    if (busyRef.current) return false;
+    busyRef.current = true;
+    setBusy(true);
+    return true;
+  }
+  function endTurn() {
+    busyRef.current = false;
+    setBusy(false);
+  }
   const [saveError, setSaveError] = useState(false);
 
   useEffect(() => {
+    if (!active) return;
     let cancelled = false;
-    /* Loading the vault is the external system this effect synchronises with;
-     * the state it sets is the answer, not a derived value. */
+    /* Loading the stored decisions is the external system this effect
+     * synchronises with; the state it sets is the answer, not a derived value.
+     * Re-runs when the column opens, so a decision made elsewhere shows. */
     const load = async () => {
       try {
-        const [accounts, txs, rules, state] = await Promise.all([
-          storage.getAccounts(),
-          storage.getTxs(),
-          storage.getRules(),
-          storage.getAssistant(),
-        ]);
-        if (cancelled) return;
-        setSnapshot({ accounts, txs, rules, asOf });
-        setAssistant(state);
+        const state = await storage.getAssistant();
+        if (!cancelled) applyAssistant(state);
       } catch {
         if (!cancelled) setSaveError(true);
       }
@@ -100,7 +124,7 @@ export function AssistantPanel({
     return () => {
       cancelled = true;
     };
-  }, [storage, asOf]);
+  }, [storage, active]);
 
   const money = useMemo(() => (cents: number) => formatEuroIn(locale, cents / 100), [locale]);
 
@@ -108,12 +132,14 @@ export function AssistantPanel({
     setMessages((current) => [...current, { id: newId(), role, text }]);
   }
 
-  function answerRead(intent: Extract<ReturnType<typeof routeAssistantIntent>, { kind: "read" }>) {
-    if (!snapshot) return;
+  function answerRead(
+    intent: Extract<ReturnType<typeof routeAssistantIntent>, { kind: "read" }>,
+    snapshot: AssistantVaultSnapshot,
+  ) {
     const result = runReadTool(intent, snapshot);
     /* A stored length preference changes the answer: "kort" gives the figure
      * only. That is the thin slice's proof that an approved memory is read. */
-    const short = storedMemory(assistant, "lengte")?.valueId === "kort";
+    const short = storedMemory(assistantRef.current, "lengte")?.valueId === "kort";
     if (isSpendingSummary(result)) {
       const lines = [copy.spending.title(monthLabel(locale, result.month))];
       if (result.countedRows === 0) lines.push(copy.spending.empty);
@@ -148,10 +174,17 @@ export function AssistantPanel({
     );
   }
 
-  function submit(event: React.FormEvent) {
-    event.preventDefault();
-    const text = input.trim();
-    if (!text || busy) return;
+  async function ask(raw: string) {
+    const text = raw.trim();
+    if (!text || !startTurn()) return;
+    try {
+      await runTurn(text);
+    } finally {
+      endTurn();
+    }
+  }
+
+  async function runTurn(text: string) {
     setInput("");
     pushMessage("user", text);
     const intent = routeAssistantIntent({ text, asOf, locale });
@@ -160,7 +193,17 @@ export function AssistantPanel({
       return;
     }
     if (intent.kind === "read") {
-      answerRead(intent);
+      /* Read the vault now, not once at mount: an import since the last turn counts. */
+      try {
+        const [accounts, txs, rules] = await Promise.all([
+          storage.getAccounts(),
+          storage.getTxs(),
+          storage.getRules(),
+        ]);
+        answerRead(intent, { accounts, txs, rules, asOf });
+      } catch {
+        pushMessage("assistant", copy.readError);
+      }
       return;
     }
     const approval: OpenApproval = {
@@ -176,12 +219,16 @@ export function AssistantPanel({
     );
   }
 
+  function submit(event: FormEvent) {
+    event.preventDefault();
+    void ask(input);
+  }
+
   async function decide(decision: "approved" | "rejected") {
-    if (!open || busy) return;
-    setBusy(true);
+    if (!open || !startTurn()) return;
     setSaveError(false);
     const next = decideApproval({
-      state: assistant,
+      state: assistantRef.current,
       id: open.id,
       tool: open.tool,
       payload: open.payload,
@@ -193,7 +240,7 @@ export function AssistantPanel({
       /* One save: the decision event and (on approve) the memory it authorises
        * land together, so a reload cannot show one without the other. */
       await storage.putAssistant(next);
-      setAssistant(next);
+      applyAssistant(next);
       setOpen(null);
       const label = copy.preference(String(open.payload.subject), String(open.payload.valueId));
       pushMessage(
@@ -203,7 +250,7 @@ export function AssistantPanel({
     } catch {
       setSaveError(true);
     } finally {
-      setBusy(false);
+      endTurn();
     }
   }
 
@@ -214,22 +261,47 @@ export function AssistantPanel({
   const memories = assistant.memories;
 
   return (
-    <section
-      aria-label={copy.title}
-      className="rounded-card border border-border bg-card p-4 sm:p-5"
-      data-testid="assistant-panel"
-    >
-      <h2 className="text-lg font-semibold">{copy.title}</h2>
-      <p className="mt-1 text-sm text-muted-foreground">{copy.intro}</p>
+    <div className="flex h-full min-h-0 flex-col gap-3 p-4" data-testid="assistant-panel">
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          {!hideTitle && <h2 className="text-lg font-semibold text-ink">{copy.title}</h2>}
+          <p className="mt-1 text-sm text-muted">{copy.intro}</p>
+        </div>
+        {onClose && (
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label={copy.close}
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-sm text-muted hover:bg-surface-2 hover:text-ink"
+          >
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 16 16"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              aria-hidden="true"
+            >
+              <path d="M4 4l8 8M12 4l-8 8" />
+            </svg>
+          </button>
+        )}
+      </div>
 
-      <div className="mt-3 flex flex-col gap-2" aria-live="polite" data-testid="assistant-log">
+      <div
+        className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto"
+        aria-live="polite"
+        data-testid="assistant-log"
+      >
         {messages.map((message) => (
           <p
             key={message.id}
             className={
               message.role === "user"
-                ? "self-end rounded-tile bg-secondary px-3 py-2 text-sm"
-                : "self-start rounded-tile bg-secondary/50 px-3 py-2 text-sm"
+                ? "self-end rounded-sm bg-surface-2 px-3 py-2 text-sm text-ink"
+                : "self-start rounded-sm border border-line px-3 py-2 text-sm text-ink"
             }
           >
             {message.text}
@@ -237,41 +309,103 @@ export function AssistantPanel({
         ))}
       </div>
 
+      {messages.length === 0 && (
+        <div className="flex flex-col items-start gap-2" role="group" aria-label={copy.chipsLabel}>
+          {copy.chips.map((chip) => (
+            <button
+              key={chip}
+              type="button"
+              data-testid="assistant-chip"
+              disabled={busy}
+              onClick={() => void ask(chip)}
+              className="rounded-pill border border-line bg-surface-2 px-3 py-1.5 text-left text-sm text-ink hover:border-accent"
+            >
+              {chip}
+            </button>
+          ))}
+        </div>
+      )}
+
       {open && (
         <div
-          className="mt-3 rounded-tile border border-border bg-secondary/30 p-3"
+          className="rounded-sm border border-line bg-surface-2 p-3"
           role="group"
           aria-label={copy.approval.title}
           data-testid="assistant-approval"
         >
-          <p className="text-sm font-semibold">{copy.approval.title}</p>
-          <p className="mt-1 text-sm">
+          <p className="text-sm font-semibold text-ink">{copy.approval.title}</p>
+          <p className="mt-1 text-sm text-ink">
             {copy.approval.body(
               copy.preference(String(open.payload.subject), String(open.payload.valueId)),
             )}
           </p>
           <div className="mt-2 flex gap-2">
-            <button
-              type="button"
+            <Button
+              variant="primary"
               disabled={busy}
               onClick={() => void decide("approved")}
-              className="rounded-chip bg-foreground px-3 py-1.5 text-sm font-semibold text-background"
+              className="py-1.5 text-sm font-semibold"
             >
               {copy.approval.approve}
-            </button>
-            <button
-              type="button"
+            </Button>
+            <Button
               disabled={busy}
               onClick={() => void decide("rejected")}
-              className="rounded-chip border border-border px-3 py-1.5 text-sm font-semibold"
+              className="py-1.5 text-sm font-semibold"
             >
               {copy.approval.reject}
-            </button>
+            </Button>
           </div>
         </div>
       )}
 
-      <form onSubmit={submit} className="mt-3 flex gap-2">
+      {saveError && (
+        <StatusLine tone="problem" role="status" className="text-sm">
+          {copy.saveError}
+        </StatusLine>
+      )}
+
+      {(decisions.length > 0 || memories.length > 0) && (
+        <details className="text-sm text-ink">
+          <summary className="cursor-pointer font-semibold">{copy.history}</summary>
+          {decisions.length > 0 && (
+            <div className="mt-2" data-testid="assistant-decisions">
+              <h3 className="text-sm font-semibold">{copy.decisions}</h3>
+              <ul className="mt-1 flex flex-col gap-1">
+                {decisions.map((decision) => (
+                  <li key={decision.id} data-testid="assistant-decision">
+                    <span className="font-semibold">
+                      {copy.preference(
+                        String(decision.payload.subject),
+                        String(decision.payload.valueId),
+                      )}
+                    </span>{" "}
+                    ·{" "}
+                    {approvalDecision(assistant, decision.id) === "approved"
+                      ? copy.approval.approved
+                      : copy.approval.rejected}{" "}
+                    · {copy.approval.decidedAt(decidedAtLabel(locale, decision.decidedAt))}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {memories.length > 0 && (
+            <div className="mt-2" data-testid="assistant-memories">
+              <h3 className="text-sm font-semibold">{copy.memory.title}</h3>
+              <ul className="mt-1 flex flex-col gap-1">
+                {memories.map((memory) => (
+                  <li key={memory.id}>
+                    {copy.memory.row(copy.preference(memory.subject, memory.valueId))}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </details>
+      )}
+
+      <form onSubmit={submit} className="flex gap-2">
         <label className="sr-only" htmlFor="assistant-input">
           {copy.placeholder}
         </label>
@@ -279,65 +413,24 @@ export function AssistantPanel({
           id="assistant-input"
           value={input}
           onChange={(event) => setInput(event.target.value)}
+          readOnly={busy}
+          aria-busy={busy}
           placeholder={copy.placeholder}
-          className="min-w-0 flex-1 rounded-tile border border-border bg-background px-3 py-2 text-sm"
+          className="min-w-0 flex-1 rounded-sm border border-line bg-bg px-3 py-2 text-sm text-ink"
         />
-        <button
+        <Button
           type="submit"
+          variant="primary"
           disabled={busy || !input.trim()}
-          className="rounded-chip bg-foreground px-3 py-1.5 text-sm font-semibold text-background"
+          className="py-1.5 text-sm font-semibold"
         >
           {copy.ask}
-        </button>
+        </Button>
       </form>
 
-      {saveError && (
-        <StatusLine tone="problem" role="status" className="mt-2 text-sm">
-          {locale === "nl"
-            ? "Je beslissing kon niet worden opgeslagen. Probeer het nog eens."
-            : "Your decision could not be saved. Try again."}
-        </StatusLine>
-      )}
-
-      {decisions.length > 0 && (
-        <div className="mt-4 border-t border-border pt-3" data-testid="assistant-decisions">
-          <h3 className="text-sm font-semibold">{copy.decisions}</h3>
-          <ul className="mt-1 flex flex-col gap-1 text-sm">
-            {decisions.map((decision) => (
-              <li key={decision.id} data-testid="assistant-decision">
-                <span className="font-semibold">
-                  {copy.preference(
-                    String(decision.payload.subject),
-                    String(decision.payload.valueId),
-                  )}
-                </span>{" "}
-                ·{" "}
-                {approvalDecision(assistant, decision.id) === "approved"
-                  ? copy.approval.approved
-                  : copy.approval.rejected}{" "}
-                · {copy.approval.decidedAt(decidedAtLabel(locale, decision.decidedAt))}
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-
-      {memories.length > 0 && (
-        <div className="mt-3 border-t border-border pt-3" data-testid="assistant-memories">
-          <h3 className="text-sm font-semibold">{copy.memory.title}</h3>
-          <ul className="mt-1 flex flex-col gap-1 text-sm">
-            {memories.map((memory) => (
-              <li key={memory.id}>
-                {copy.memory.row(copy.preference(memory.subject, memory.valueId))}
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-
-      <p className="mt-3 text-xs text-muted-foreground" data-testid="assistant-privacy">
+      <p className="text-xs text-muted" data-testid="assistant-privacy">
         {copy.privacy}
       </p>
-    </section>
+    </div>
   );
 }

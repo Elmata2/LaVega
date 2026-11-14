@@ -79,9 +79,12 @@ function scopes(source: string): {
   base: string;
   media: Map<number, string>;
   container: Map<number, string>;
+  /** Every container block in source order, for the cascade-accurate lookup. */
+  containerOrdered: { width: number; body: string }[];
 } {
   const media = new Map<number, string>();
   const container = new Map<number, string>();
+  const containerOrdered: { width: number; body: string }[] = [];
   let base = "";
   let i = 0;
   while (i < source.length) {
@@ -107,11 +110,14 @@ function scopes(source: string): {
       const target = found.kw === "@media" ? media : container;
       const width = Number(/max-width:\s*(\d+)px/.exec(source.slice(at, open))?.[1] ?? NaN);
       const body = source.slice(open + 1, j - 1);
-      if (Number.isFinite(width)) target.set(width, (target.get(width) ?? "") + body);
+      if (Number.isFinite(width)) {
+        target.set(width, (target.get(width) ?? "") + body);
+        if (found.kw === "@container") containerOrdered.push({ width, body });
+      }
     }
     i = j;
   }
-  return { base, media, container };
+  return { base, media, container, containerOrdered };
 }
 
 const SCOPES = scopes(SHEET);
@@ -211,18 +217,47 @@ export function resolvedInContainer(
   );
 }
 
+/** Like `resolvedInContainer`, but cascade-accurate: every `@container
+ *  (max-width: N)` block with N >= `atWidth` applies, in SOURCE order, so the
+ *  later of two blocks that both match wins, as in a browser. This is what
+ *  catches a narrower rule emitted before a wider one. Layers are not modelled.
+ *
+ *  `parentClasses` makes a `.parent > .child` selector match: the rule applies
+ *  when the element with `classes` is a direct child of an element carrying
+ *  `parentClasses`. Without it, combinator selectors are refused as before. */
+export function resolvedAtContainerWidth(
+  classes: readonly string[],
+  property: string,
+  atWidth: number,
+  options: { parentClasses?: readonly string[] } = {},
+): string | undefined {
+  const blocks = SCOPES.containerOrdered
+    .filter((b) => b.width >= atWidth)
+    .map((b) => b.body)
+    .join("\n");
+  return resolveIn(SCOPES.base + "\n" + blocks, classes, property, "", options.parentClasses);
+}
+
 function resolveIn(
   scope: string,
   classes: readonly string[],
   property: string,
   state: string,
+  parentClasses?: readonly string[],
 ): string | undefined {
   let found: string | undefined;
   let matchedAnyRule = false;
   const rule = /([^{}]+)\{([^{}]*)\}/g;
   for (let m = rule.exec(scope); m !== null; m = rule.exec(scope)) {
     const [, selectors, body] = m;
-    if (!splitSelectors(selectors).some((s) => targets(s, classes, state))) continue;
+    const hit = splitSelectors(selectors).some((s) => {
+      const child = /^\s*(\S+?)\s*>\s*(\S+)\s*$/.exec(s);
+      if (child && parentClasses) {
+        return targets(child[1]!, parentClasses, "") && targets(child[2]!, classes, state);
+      }
+      return targets(s, classes, state);
+    });
+    if (!hit) continue;
     matchedAnyRule = true;
     const decl = new RegExp(`(?:^|;)\\s*${property}\\s*:\\s*([^;]+)`).exec(body);
     /* Normalised, because the source sheets are readable and the built one is

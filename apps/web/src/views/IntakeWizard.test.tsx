@@ -34,7 +34,7 @@ import {
   applyStatedDebitCards,
   applyStatedHousing,
 } from "../intake/state";
-import { inviteState } from "../components/blocks/IntakeInviteCard";
+import { inviteState } from "../intake/inviteState";
 import { isAnswered, isFinishedIntake, markDone, resumeScreen, screensFor } from "../intake/wizard/screens";
 
 (

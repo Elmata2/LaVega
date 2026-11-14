@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, type ReactNode } from "react";
 import type { ScheduledFlow, Tx } from "@lavega/core";
 import {
   availableBalanceCents,
@@ -9,7 +9,7 @@ import {
 } from "@lavega/core";
 import type { View } from "../../App";
 import { formatEuroIn, formatSignedEuroIn } from "../../format.js";
-import Module from "../Module.js";
+import Module, { type ModuleParts } from "../Module.js";
 import TrendChart from "../TrendChart.js";
 import CardLink from "../ui/CardLink.js";
 import DeltaPill from "./DeltaPill.js";
@@ -65,9 +65,9 @@ function Comparison({
   );
 }
 
-type SaldoBlockProps = {
-  /** Widened to 3 when the Positie widget is off, so that row has no hole. The
-   *  caller decides, because only Overzicht knows what else is on the page. */
+export type SaldoBlockProps = {
+  /** Column span of the card. `homeSpans` (lib/homeLayout.ts) decides it from
+   *  the widgets that are on, 3 when Positie is off, so that row has no hole. */
   span?: 1 | 2 | 3;
   accounts: Account[];
   txs: Tx[];
@@ -76,9 +76,11 @@ type SaldoBlockProps = {
   onNavigate: (view: View) => void;
   fxHistory: Record<string, Record<string, number>>;
   mode: ConversionMode;
+  /** A control for the Module header, set by the Home chart slot. */
+  headerControl?: ReactNode;
 };
 
-export default function SaldoBlock({
+export function useSaldoParts({
   accounts,
   txs,
   scheduledFlows,
@@ -87,7 +89,7 @@ export default function SaldoBlock({
   span = 2,
   fxHistory,
   mode,
-}: SaldoBlockProps) {
+}: Omit<SaldoBlockProps, "headerControl">): ModuleParts {
   const [locale] = useAppLocale();
   const c = moneyCopy[locale].saldo;
   const series = useMemo(
@@ -139,115 +141,130 @@ export default function SaldoBlock({
    *  the history does not reach back a week — then nothing is shown. */
   const weekPct = changePct(knownSum, series.weekAgo);
 
-  return (
-    <Module
-      title={c.title(unknownCount)}
-      span={span}
-      height="tall"
-      menu={<CardLink onClick={() => onNavigate("accounts")}>{c.rekeningenArrow}</CardLink>}
-      footer={
-        <>
-          {c.rekeningenEntiteiten(accounts.length, entities.length)}
-          {accounts.length > 0 && reserved > 0 && (
-            <>
-              {c.beschikbaarNaBtw(
-                formatEuroIn(locale, availableBalanceCents(knownSum, scheduledFlows, asOf) / 100),
-              )}
-            </>
-          )}
-        </>
-      }
-    >
-      <div className="module-figure">
-        <span
-          className={`module-figure-value ${accounts.length === 0 ? "" : knownSum >= 0 ? "text-pos" : "text-neg"}`}
-        >
-          {accounts.length === 0 ? "—" : formatSignedEuroIn(locale, knownSum)}
-        </span>
-        <DeltaPill pct={weekPct} upIsGood={true} />
-        {/* A bare "▲ 3%" is unreadable: three percent since WHEN? The pill is
+  return {
+    title: c.title(unknownCount),
+    menu: <CardLink onClick={() => onNavigate("accounts")}>{c.rekeningenArrow}</CardLink>,
+    footer: (
+      <>
+        {c.rekeningenEntiteiten(accounts.length, entities.length)}
+        {accounts.length > 0 && reserved > 0 && (
+          <>
+            {c.beschikbaarNaBtw(
+              formatEuroIn(locale, availableBalanceCents(knownSum, scheduledFlows, asOf) / 100),
+            )}
+          </>
+        )}
+      </>
+    ),
+    body: (
+      <>
+        <div className="module-figure">
+          <span
+            className={`module-figure-value ${accounts.length === 0 ? "" : knownSum >= 0 ? "text-pos" : "text-neg"}`}
+          >
+            {accounts.length === 0 ? "—" : formatSignedEuroIn(locale, knownSum)}
+          </span>
+          <DeltaPill pct={weekPct} upIsGood={true} />
+          {/* A bare "▲ 3%" is unreadable: three percent since WHEN? The pill is
             the move against the position one week ago, so the card says so
             next to it — and says nothing at all when there is no week to
             compare against. */}
-        {weekPct !== null && <span className="text-muted text-[0.8rem]">{c.tOvVorigeWeek}</span>}
-      </div>
-      <p className="module-figure-label">
-        {accounts.length === 0
-          ? c.importeerOfVulSaldos
-          : noBalanceCount > 0
-            ? c.rekeningNogZonderSaldo(noBalanceCount)
-            : c.compleetElkeRekeningHeeftSaldo}
-      </p>
-      {currencyCount > 0 && (
+          {weekPct !== null && <span className="text-muted text-[0.8rem]">{c.tOvVorigeWeek}</span>}
+        </div>
         <p className="module-figure-label">
-          {mode === "convert"
-            ? c.vreemdeValutaConvert(currencyCount, currencyNames)
-            : c.vreemdeValutaSeparate(currencyCount, currencyNames)}
+          {accounts.length === 0
+            ? c.importeerOfVulSaldos
+            : noBalanceCount > 0
+              ? c.rekeningNogZonderSaldo(noBalanceCount)
+              : c.compleetElkeRekeningHeeftSaldo}
         </p>
-      )}
-      {anyConverted && <p className="module-figure-label">{c.omgerekendViaEcb}</p>}
-      {missingIban.length > 0 && (
-        <p className="module-figure-label">
-          {c.ibanOntbreekt(missingIban.length, nameList(missingIban))}
-        </p>
-      )}
-      {missingType.length > 0 && (
-        <p className="module-figure-label">
-          {c.typeOntbreekt(missingType.length, nameList(missingType))}
-        </p>
-      )}
+        {currencyCount > 0 && (
+          <p className="module-figure-label">
+            {mode === "convert"
+              ? c.vreemdeValutaConvert(currencyCount, currencyNames)
+              : c.vreemdeValutaSeparate(currencyCount, currencyNames)}
+          </p>
+        )}
+        {anyConverted && <p className="module-figure-label">{c.omgerekendViaEcb}</p>}
+        {missingIban.length > 0 && (
+          <p className="module-figure-label">
+            {c.ibanOntbreekt(missingIban.length, nameList(missingIban))}
+          </p>
+        )}
+        {missingType.length > 0 && (
+          <p className="module-figure-label">
+            {c.typeOntbreekt(missingType.length, nameList(missingType))}
+          </p>
+        )}
 
-      {hasGraph ? (
-        <div className="position-graph">
-          <TrendChart
-            points={series.points.map((p) => ({
-              label: dayLabelIn(locale, p.date),
-              value: p.value,
-            }))}
-            color="var(--accent)"
-            format={(v) => formatEuroIn(locale, v)}
-            ariaLabel={c.positiePerDagAria}
-            readoutLabel={c.positieOpReadout}
-            height={132}
-            /* DE Y-AS AAN, op zijn verzoek. TrendChart kon dit al; hij stond hier
-             * uit omdat de as in een SMALLE kaart de plot opeet. Dit blok staat
-             * standaard op span 2, dus er is ruimte — maar iemand kan het op 1
-             * zetten, en dan is een as die de helft van de breedte kost erger dan
-             * geen as. Vandaar de voorwaarde in plaats van een vast true.
-             *
-             * Wat de as toevoegt is niet decoratief: zonder ijkpunten vertelt een
-             * lijn alleen de VORM, en op een positiegrafiek is het verschil tussen
-             * een dal van honderd euro en een van tienduizend precies wat je wilt
-             * weten. */
-            showAxis={span >= 2}
+        {hasGraph ? (
+          <div className="position-graph">
+            <TrendChart
+              points={series.points.map((p) => ({
+                label: dayLabelIn(locale, p.date),
+                value: p.value,
+              }))}
+              color="var(--accent)"
+              format={(v) => formatEuroIn(locale, v)}
+              ariaLabel={c.positiePerDagAria}
+              readoutLabel={c.positieOpReadout}
+              height={132}
+              /* DE Y-AS AAN, op zijn verzoek. TrendChart kon dit al; hij stond hier
+               * uit omdat de as in een SMALLE kaart de plot opeet. Dit blok staat
+               * standaard op span 2, dus er is ruimte — maar iemand kan het op 1
+               * zetten, en dan is een as die de helft van de breedte kost erger dan
+               * geen as. Vandaar de voorwaarde in plaats van een vast true.
+               *
+               * Wat de as toevoegt is niet decoratief: zonder ijkpunten vertelt een
+               * lijn alleen de VORM, en op een positiegrafiek is het verschil tussen
+               * een dal van honderd euro en een van tienduizend precies wat je wilt
+               * weten. */
+              showAxis={span >= 2}
+            />
+          </div>
+        ) : (
+          <p className="block-empty mt-4 p-4 border border-dashed border-line rounded bg-surface-2">
+            {series.coverageDays === 0
+              ? limitLabel
+                ? c.heeftNogGeenTransacties(limitLabel)
+                : c.geenTransactiesOpRekeningenMetSaldo
+              : c.pasNDagenTransactiegeschiedenis(series.coverageDays, MIN_HISTORY_DAYS)}
+          </p>
+        )}
+
+        <div className="flex flex-wrap gap-8 mt-4 pt-3 border-t border-line">
+          <Comparison
+            locale={locale}
+            label={c.vorigeWeek}
+            now={knownSum}
+            then={series.weekAgo}
+            missing={c.nogGeenWeekGeschiedenis}
+          />
+          <Comparison
+            locale={locale}
+            label={c.vorigeMaand}
+            now={knownSum}
+            then={series.monthAgo}
+            missing={c.nogGeenMaandGeschiedenis}
           />
         </div>
-      ) : (
-        <p className="block-empty mt-4 p-4 border border-dashed border-line rounded bg-surface-2">
-          {series.coverageDays === 0
-            ? limitLabel
-              ? c.heeftNogGeenTransacties(limitLabel)
-              : c.geenTransactiesOpRekeningenMetSaldo
-            : c.pasNDagenTransactiegeschiedenis(series.coverageDays, MIN_HISTORY_DAYS)}
-        </p>
-      )}
+      </>
+    ),
+  };
+}
 
-      <div className="flex flex-wrap gap-8 mt-4 pt-3 border-t border-line">
-        <Comparison
-          locale={locale}
-          label={c.vorigeWeek}
-          now={knownSum}
-          then={series.weekAgo}
-          missing={c.nogGeenWeekGeschiedenis}
-        />
-        <Comparison
-          locale={locale}
-          label={c.vorigeMaand}
-          now={knownSum}
-          then={series.monthAgo}
-          missing={c.nogGeenMaandGeschiedenis}
-        />
-      </div>
+export default function SaldoBlock({ span = 2, headerControl, ...rest }: SaldoBlockProps) {
+  const parts = useSaldoParts({ ...rest, span });
+  return (
+    <Module
+      title={parts.title}
+      span={span}
+      height="tall"
+      period={headerControl}
+      menu={parts.menu}
+      footer={parts.footer}
+    >
+      {parts.body}
     </Module>
   );
 }

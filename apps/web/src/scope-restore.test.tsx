@@ -20,6 +20,7 @@ vi.mock("./archive", () => ({
     localStorage.getItem("lavega.defaultScope") === "business" ? "business" : "personal",
 }));
 import type { Account, EntityProfile, Tx } from "@lavega/core";
+import { setEnabledWidgets } from "./components/moduleRegistry";
 
 /* DE NAVIGATIE IS EEN <a href> GEWORDEN, geen <button> meer (commit edea871,
  * path-based personal views). Dat is een verbetering - er zijn nu echte URL's,
@@ -246,6 +247,9 @@ const title = () => container!.querySelector(".shell2-title")?.textContent ?? ""
 const screen = () => container!.querySelector("main#main")!.textContent ?? "";
 
 test("Persoonlijk → Zakelijk → Persoonlijk puts the same screen back", async () => {
+  // Home shows no transactions until the widget is switched on, and this test
+  // reads the screen through them.
+  setEnabledWidgets(["recente-transacties"]);
   await mount();
 
   const before = screen();
@@ -269,7 +273,7 @@ test("you come back to the module you left the half on, not the one the other ha
   vault.profiles = [];
   await mount();
 
-  expect(title()).toBe("Overzicht");
+  expect(title()).toBe("Home");
   const overzicht = screen();
 
   await click(scopeButton("Zakelijk"));
@@ -277,7 +281,7 @@ test("you come back to the module you left the half on, not the one the other ha
   expect(title()).toBe("Rekeningen");
 
   await click(scopeButton("Persoonlijk"));
-  expect(title()).toBe("Overzicht");
+  expect(title()).toBe("Home");
   expect(screen()).toBe(overzicht);
 });
 
@@ -330,9 +334,9 @@ test("an optional view that is not in the nav still opens by direct URL", async 
   try {
     await mount();
     expect(title()).toBe("Forecast");
-    expect([...container!.querySelectorAll("a.shell2-rail-item")].map((a) => a.textContent)).not.toContain(
-      "Forecast",
-    );
+    expect(
+      [...container!.querySelectorAll("a.shell2-rail-item")].map((a) => a.textContent),
+    ).not.toContain("Forecast");
   } finally {
     window.history.pushState({}, "", "/");
   }

@@ -4,7 +4,7 @@ import { expect, test } from "vitest";
 import type { Account, CategoryComparison, Tx } from "@lavega/core";
 import { categoryComparison, ownAccounts } from "@lavega/core";
 import { formatEuro } from "../../format.js";
-import TopUitgavenBlock, { TopUitgavenView } from "./TopUitgavenBlock";
+import { TopUitgavenBlock, TopUitgavenView } from "./TopUitgavenBlock";
 import { own, rules, txs } from "./fixtures";
 
 /* The block renders core's verdict on whether two months may be compared at

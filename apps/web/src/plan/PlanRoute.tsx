@@ -50,6 +50,7 @@ export default function PlanRoute({
       {...(onSaveRewards === undefined ? {} : { onSaveRewards })}
       accounts={input.accounts}
       entityProfiles={input.entityProfiles}
+      hasTransactions={input.txs.length > 0}
     />
   );
 }

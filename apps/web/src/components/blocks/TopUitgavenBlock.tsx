@@ -3,6 +3,9 @@ import type { CategoryComparison, OwnAccounts, Rule, Tx } from "@lavega/core";
 import { categoryComparison } from "@lavega/core";
 import { formatEuroIn, formatSignedPercentIn, monthLabel } from "../../format.js";
 import Module from "../Module.js";
+import type { ModuleSpan } from "../../module-grid.js";
+import { useWidgetEnabled } from "../moduleRegistry";
+import WidgetHideButton from "../WidgetHideButton";
 import CardLink from "../ui/CardLink.js";
 import { useAppLocale } from "../../appLocale.js";
 import { moneyCopy, categoryLabel } from "../../copy/money.js";
@@ -54,14 +57,16 @@ function CategoryDelta({ changePct }: { changePct: number | null }) {
 type TopUitgavenViewProps = {
   comparison: CategoryComparison;
   onSelectCategory: (category: string) => void;
+  span?: ModuleSpan;
 };
 
 /** The block's rendering, given a comparison. Split out so core's verdict can
  *  be handed straight in — including the verdict "these two months cannot be
  *  compared", which is the case the block exists to get right. */
-export function TopUitgavenView({ comparison, onSelectCategory }: TopUitgavenViewProps) {
+export function TopUitgavenView({ comparison, onSelectCategory, span }: TopUitgavenViewProps) {
   const [locale] = useAppLocale();
   const c = moneyCopy[locale].topUitgaven;
+  const hide = <WidgetHideButton id="top-uitgaven" />;
   const { coverage, current } = comparison;
   const rows = comparison.rows.slice(0, ROWS);
   const month = monthLabel(locale, comparison.month);
@@ -72,7 +77,7 @@ export function TopUitgavenView({ comparison, onSelectCategory }: TopUitgavenVie
   // Nothing imported at all — not a comparison problem, an empty vault.
   if (comparison.month === "") {
     return (
-      <Module title={c.title} height="tall">
+      <Module title={c.title} widgetId="top-uitgaven" span={span} height="tall" menu={hide}>
         <p className="block-empty">{c.nogGeenUitgavenDezeMaand}</p>
       </Module>
     );
@@ -83,7 +88,14 @@ export function TopUitgavenView({ comparison, onSelectCategory }: TopUitgavenVie
     // there is no like-for-like figure to print, and an approximate one would
     // be read as an exact one.
     return (
-      <Module title={c.title} height="tall" footer={<>{c.maandTOvPrev(month, prev)}</>}>
+      <Module
+        title={c.title}
+        widgetId="top-uitgaven"
+        span={span}
+        height="tall"
+        menu={hide}
+        footer={<>{c.maandTOvPrev(month, prev)}</>}
+      >
         <p className="mt-0 mx-0 mb-3 py-2 px-3 border border-dashed border-line rounded bg-surface-2 text-muted text-[0.8rem]">
           {c.nietVergelijkbaar(month, prev)}
           {excludedOut > 0 && <>{c.erStaatWelUitgaven(formatEuroIn(locale, excludedOut))}</>}
@@ -96,7 +108,10 @@ export function TopUitgavenView({ comparison, onSelectCategory }: TopUitgavenVie
   return (
     <Module
       title={c.title}
+      widgetId="top-uitgaven"
+      span={span}
       height="tall"
+      menu={hide}
       footer={rows.length > 0 ? <>{c.aandeelEnDeltaTOv(month, prev)}</> : undefined}
     >
       {rows.length === 0 ? (
@@ -152,14 +167,32 @@ type TopUitgavenBlockProps = {
   rules: Rule[];
   own: OwnAccounts;
   onSelectCategory: (category: string) => void;
+  /** Set by Home, which knows what sits beside this card. */
+  span?: ModuleSpan;
 };
 
-export default function TopUitgavenBlock({
+export function TopUitgavenBlock({
   txs,
   rules,
   own,
   onSelectCategory,
+  span,
 }: TopUitgavenBlockProps) {
   const comparison = useMemo(() => categoryComparison(txs, rules, own), [txs, rules, own]);
-  return <TopUitgavenView comparison={comparison} onSelectCategory={onSelectCategory} />;
+  return (
+    <TopUitgavenView
+      comparison={comparison}
+      onSelectCategory={onSelectCategory}
+      {...(span ? { span } : {})}
+    />
+  );
 }
+
+/** The card as Home places it: itself when the widget is on, nothing when it is
+ *  off. This is the default export so the Home view gets the switchable card
+ *  from a plain import. */
+export function TopUitgavenWidget(props: TopUitgavenBlockProps) {
+  return useWidgetEnabled("top-uitgaven") ? <TopUitgavenBlock {...props} /> : null;
+}
+
+export default TopUitgavenWidget;

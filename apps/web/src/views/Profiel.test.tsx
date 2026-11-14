@@ -293,13 +293,11 @@ test("the rules are no longer buried in the settings card", async () => {
   expect(container!.textContent).not.toContain("albert heijn");
 });
 
-test("the module picker is on the profile, with Overzicht locked on", async () => {
+test("the module picker is on the profile, with Home locked on", async () => {
   await render();
   const picker = section("Modules");
   expect(picker.querySelectorAll(".mp-item").length).toBeGreaterThan(1);
-  const home = picker.querySelector(
-    '[aria-label="Overzicht in de navigatie"]',
-  ) as HTMLButtonElement;
+  const home = picker.querySelector('[aria-label="Home in de navigatie"]') as HTMLButtonElement;
   expect(home.disabled).toBe(true);
 });
 
@@ -460,52 +458,66 @@ test("the overview widgets are switched here, and they start off", async () => {
   expect(widgets.textContent).toContain("Positie");
 
   for (const label of ["Aandacht", "Positie"]) {
-    const toggle = widgets.querySelector(
-      `[aria-label="${label} op je overzicht"]`,
-    ) as HTMLButtonElement;
+    const toggle = widgets.querySelector(`[aria-label="${label} op Home"]`) as HTMLButtonElement;
     expect(toggle, `no switch for ${label}`).not.toBeNull();
     expect(toggle.getAttribute("aria-checked")).toBe("false");
     expect(toggle.disabled).toBe(false); // neither is locked on, unlike Overzicht in the nav
   }
 });
 
-test("Facturen en BTW zijn hier allebei te schakelen, met hun eigen beginstand", async () => {
-  /* Uit één zin: "dan moet de factuur ook in het overzicht komen, als de
-   * gebruiker dat wilt, doe default wel btw." Twee kaarten, twee standen. De
-   * standen zelf staan in het register; wat hier bewezen wordt is dat ze in het
-   * profiel te bereiken zijn — een kaart die standaard aan staat en die je niet
-   * kunt uitzetten, is geen widget maar een besluit. */
+test("Facturen en BTW zijn hier allebei te schakelen, en beginnen allebei uit", async () => {
+  /* Home begint met vijf vaste blokken; elke widget is een keuze. Wat hier
+   * bewezen wordt is dat ze in het profiel te bereiken zijn en uit beginnen. */
   await render();
   const widgets = section("Widgets");
-  const facturen = widgets.querySelector(
-    '[aria-label="Facturen op je overzicht"]',
-  ) as HTMLButtonElement;
-  const btw = widgets.querySelector('[aria-label="BTW op je overzicht"]') as HTMLButtonElement;
+  const facturen = widgets.querySelector('[aria-label="Facturen op Home"]') as HTMLButtonElement;
+  const btw = widgets.querySelector('[aria-label="BTW op Home"]') as HTMLButtonElement;
 
   expect(facturen, "geen schakelaar voor Facturen").not.toBeNull();
   expect(btw, "geen schakelaar voor BTW").not.toBeNull();
   expect(facturen.getAttribute("aria-checked")).toBe("false");
-  expect(btw.getAttribute("aria-checked")).toBe("true");
+  expect(btw.getAttribute("aria-checked")).toBe("false");
   expect(facturen.disabled).toBe(false);
   expect(btw.disabled).toBe(false);
 
   act(() => btw.dispatchEvent(new MouseEvent("click", { bubbles: true })));
-  expect(btw.getAttribute("aria-checked")).toBe("false");
+  expect(btw.getAttribute("aria-checked")).toBe("true");
   const stored = JSON.parse(localStorage.getItem("lavega.overviewWidgets") ?? "null");
-  expect(stored.on).not.toContain("btw-stand");
+  expect(stored.on).toContain("btw-stand");
   expect(stored.seen).toEqual(expect.arrayContaining(["btw-stand", "facturen-open"]));
 
-  act(() => facturen.dispatchEvent(new MouseEvent("click", { bubbles: true })));
-  expect(facturen.getAttribute("aria-checked")).toBe("true");
-  expect(JSON.parse(localStorage.getItem("lavega.overviewWidgets") ?? "null").on).toContain(
-    "facturen-open",
+  act(() => btw.dispatchEvent(new MouseEvent("click", { bubbles: true })));
+  expect(btw.getAttribute("aria-checked")).toBe("false");
+  expect(JSON.parse(localStorage.getItem("lavega.overviewWidgets") ?? "null").on).not.toContain(
+    "btw-stand",
   );
+});
+
+test("Standaard herstellen puts every widget back off and forgets the stored choice", async () => {
+  localStorage.setItem(
+    "lavega.overviewWidgets",
+    JSON.stringify({ on: ["aandacht", "betaalagenda"], seen: ["aandacht", "betaalagenda"] }),
+  );
+  await render();
+  const widgets = section("Widgets");
+  const reset = [...widgets.querySelectorAll("button")].find(
+    (b) => b.textContent === "Standaard herstellen",
+  ) as HTMLButtonElement;
+  expect(reset, "no reset button").toBeDefined();
+  expect(
+    widgets.querySelector('[aria-label="Aandacht op Home"]')?.getAttribute("aria-checked"),
+  ).toBe("true");
+  act(() => reset.dispatchEvent(new MouseEvent("click", { bubbles: true })));
+  for (const toggle of widgets.querySelectorAll('[role="switch"], [aria-checked]')) {
+    expect(toggle.getAttribute("aria-checked")).toBe("false");
+  }
+  expect(localStorage.getItem("lavega.overviewWidgets")).toBeNull();
 });
 
 test("switching a widget on is remembered, and does not touch the nav preference", async () => {
   await render();
   const toggle = section("Widgets").querySelector(
-    '[aria-label="Aandacht op je overzicht"]',
+    '[aria-label="Aandacht op Home"]',
   ) as HTMLButtonElement;
   act(() => toggle.dispatchEvent(new MouseEvent("click", { bubbles: true })));
   expect(toggle.getAttribute("aria-checked")).toBe("true");
@@ -515,10 +527,8 @@ test("switching a widget on is remembered, and does not touch the nav preference
    * blijft. `seen` legt vast welke hij gezien heeft; ontbreken uit `on` betekent
    * pas "uit" voor de widgets die daarin staan. */
   const stored = JSON.parse(localStorage.getItem("lavega.overviewWidgets") ?? "null");
-  /* WAT ER ONTHOUDEN IS, niet dat er verder niets aan staat. Een schakelaar
-   * omzetten schrijft de HELE huidige keuze weg, en daar zit ook alles in wat al
-   * standaard aan stond (Betaalagenda). Eisen dat `on` precies ["aandacht"] is,
-   * zou dus eisen dat een andere widget stilletjes uitgaat. */
+  /* WAT ER ONTHOUDEN IS: een schakelaar omzetten schrijft de HELE huidige keuze
+   * weg, `on` en `seen` samen. */
   expect(stored.on).toContain("aandacht");
   expect(stored.seen).toEqual(expect.arrayContaining(["aandacht"]));
   expect(localStorage.getItem("lavega.navModules")).toBeNull();
@@ -538,12 +548,12 @@ test("een oude, kale widget-lijst blijft betekenen wat hij toen betekende", asyn
   localStorage.setItem("lavega.overviewWidgets", JSON.stringify(["aandacht"]));
   await render();
   const widgets = section("Widgets");
-  const aan = widgets.querySelector('[aria-label="Aandacht op je overzicht"]');
+  const aan = widgets.querySelector('[aria-label="Aandacht op Home"]');
   expect(aan?.getAttribute("aria-checked")).toBe("true");
   // Betaalagenda bestond nog niet toen die lijst werd opgeslagen, dus zijn
-  // afwezigheid daarin is geen keuze en mag hem niet uitzetten.
+  // afwezigheid daarin is geen keuze; zijn eigen beginstand (uit) geldt.
   const agenda = widgets.querySelector('[aria-label^="Betaalagenda"]');
-  if (agenda) expect(agenda.getAttribute("aria-checked")).not.toBe("false");
+  expect(agenda?.getAttribute("aria-checked")).toBe("false");
 });
 
 /* ══════ CASHBACK CORRIGEREN — de feedbackmodule ═════════════════════════════
@@ -937,7 +947,6 @@ test("Weergave: een storage-event van een ander tabblad werkt de keuze bij", asy
   );
   delete document.documentElement.dataset.theme;
 });
-
 
 /* ══════ JOUW PLAN — the only way in now that the nav no longer lists it ═══════ */
 

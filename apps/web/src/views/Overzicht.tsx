@@ -7,7 +7,6 @@ import type {
   BillOccurrence,
   Invoice,
   OwnAccounts,
-  RoomResult,
   Rule,
   Tx,
   ScheduledFlow,
@@ -21,21 +20,17 @@ import {
   paycheckOverview,
 } from "@lavega/core";
 import type { View } from "../App";
-import type { VaultStorage } from "@lavega/adapters";
-import { AssistantPanel } from "../assistant/AssistantPanel.js";
 import type { ConversionMode } from "../settings.js";
 import { useAppLocale } from "../appLocale.js";
 import { shellCopy } from "../copy/shell.js";
 import ModuleGrid from "../components/ModuleGrid";
-import { IntakeInviteWidget } from "../components/blocks/IntakeInviteCard";
-import { ConnectChecklistWidget } from "../components/blocks/ConnectChecklist";
-import { RoomCardWidget } from "../components/blocks/RoomCard";
+import HomeAddArea from "../components/HomeAddArea";
 import { AandachtWidget } from "../components/blocks/AandachtBlock";
-import SaldoBlock from "../components/blocks/SaldoBlock";
+import ChartSlot from "../components/blocks/ChartSlot";
 import StatistiekBlock from "../components/blocks/StatistiekBlock";
 import { PositieWidget } from "../components/blocks/PositieBlock";
-import { useWidgetEnabled } from "../components/moduleRegistry";
-import CashflowBlock from "../components/blocks/CashflowBlock";
+import { useOverviewWidgets } from "../components/moduleRegistry";
+import { homeSpans } from "../lib/homeLayout";
 import RecenteTransactiesBlock from "../components/blocks/RecenteTransactiesBlock";
 import BetaalschemaBlock from "../components/blocks/BetaalschemaBlock";
 import FacturenWidget from "../components/blocks/FacturenWidget";
@@ -44,39 +39,20 @@ import TopUitgavenBlock from "../components/blocks/TopUitgavenBlock";
 import KaartenBlock from "../components/blocks/KaartenBlock";
 import TravelBlock, { type TravelBlockProps } from "../components/blocks/TravelBlock";
 
-/* The homescreen: a grid of modules, nothing else.
+/* Home: a grid of modules, nothing else.
  *
  * Every block lives in its own file under components/blocks/ and takes only
- * props, so a block can later be switched off per user (the module picker)
- * without touching any other block. This view does two things: derive the two
- * values more than one block needs (the forecast, and the alerts computed from
- * it), and declare the order and spans.
+ * props. This view derives the two values more than one block needs (the
+ * forecast, and the alerts computed from it) and declares the order and spans.
  *
- * The order is Alexander's priority order from the 2026-08-16 review, not the
- * order the blocks were built in:
+ * Home starts with four fixed full-width blocks: the chart slot (Totale positie
+ * or Cashflow), Statistieken, Je kaarten and Travel. Every other block is a
+ * widget the user switches on; `homeSpans` decides how the widgets that are on
+ * share a row, so a row never has a hole. Order, top to bottom:
  *
- *   Aandacht                 (3)  — anything wrong comes first
- *   Totale positie   (2) + Positie per bedrijf (1)
- *                                 — the most important number, with its graph;
- *                                   the per-BV split shrunk to a small block
- *   Statistieken             (3)  — the major block, both reference views
- *   Recente transacties (2) + Betaalagenda (1)
- *   BTW                 (2) + Facturen (1)
- *                                 — het paar dat er op 22 augustus bij kwam:
- *                                   "dan moet de factuur ook in het overzicht
- *                                   komen, als de gebruiker dat wilt, doe
- *                                   default wel btw". BTW staat standaard aan,
- *                                   Facturen standaard uit, en de spans zijn
- *                                   daarom variabel — zie hieronder.
- *   Cashflow            (2) + Top uitgaven (1)
- *   Je kaarten               (3)  — presentational, "which cards are connected"
- *   Op reis                  (3)
- *
- * Every row fills exactly, and the grid collapses to 2 then 1 column.
- *
- * "Verandering per categorie" is gone: it and Statistieken asked the same
- * question twice, so the comparison moved INTO Statistieken as its per-category
- * per-month view. */
+ *   Aandacht, chart slot (+ Positie), Statistieken, Recente transacties,
+ *   Betaalagenda, BTW, Facturen, Top uitgaven, Je kaarten, Op reis, and last the
+ *   add area (components/HomeAddArea.tsx). */
 
 type OverzichtProps = {
   accounts: Account[];
@@ -106,27 +82,14 @@ type OverzichtProps = {
   mode: ConversionMode;
   onBufferChange: (cents: number) => void;
   onNavigate: (view: View) => void;
+  /** Opens the widget picker in Profiel (the "Alle widgets" link). */
+  onAddWidget: () => void;
   onSelectCategory: (category: string) => void;
-  /** Push a pre-filled question into the LaVega assistant (used by the
-   *  per-category "vs. gemiddelde" benchmark button). */
-  /** The assistant panel needs the unlocked vault (WS5.8, issue #301). Absent
-   *  in a test or a caller without storage, and then the panel is not shown. */
-  storage?: VaultStorage;
   /** Everything the travel module needs, passed straight through. */
   travel: TravelBlockProps;
-  /** The adviser profile and the room worked out from it; absent while the
-   *  profile is still being read, in which case neither intake card shows. */
-  intake?: {
-    store: AdvisorProfileStore | null;
-    room: RoomResult;
-    statedInputs?: {
-      income: { lowCents: number; highCents: number };
-      spend: { lowCents: number; highCents: number };
-    };
-    onSave: (next: AdvisorProfileStore) => Promise<void>;
-    /** Opens the wizard in round 2 (the coaching questions). */
-    onOpenRound2?: () => void;
-  };
+  /** The profile store, for the card list. Absent while the profile is still
+   *  being read. */
+  intake?: { store: AdvisorProfileStore | null };
 };
 
 const NO_STATED: readonly string[] = [];
@@ -150,8 +113,8 @@ export default function Overzicht({
   mode,
   onBufferChange,
   onNavigate,
+  onAddWidget,
   onSelectCategory,
-  storage,
   travel,
   intake,
 }: OverzichtProps) {
@@ -207,68 +170,26 @@ export default function Overzicht({
     }).preview;
   }, [bills, billOccurrences, billDecisions, asOf, accounts]);
 
-  const positieOn = useWidgetEnabled("positie");
-
-  /* De spans van het nieuwe paar. Zelfde afweging als Saldo/Positie hierboven:
-   * een afwezige kaart hoort een BREDERE buur op te leveren, geen gat. BTW staat
-   * standaard aan en Facturen standaard uit, dus die situatie (BTW alleen, over
-   * de volle breedte) is de gewone en niet de uitzondering. Alleen deze view
-   * weet wat er verder op de pagina staat, dus de span wordt hier bepaald en
-   * niet in de kaarten zelf. Staan ze allebei uit, dan renderen ze allebei niets
-   * en verdwijnt de rij vanzelf. */
-  const facturenOn = useWidgetEnabled("facturen-open");
-  const btwOn = useWidgetEnabled("btw-stand");
+  const [enabled] = useOverviewWidgets();
+  const spans = homeSpans(enabled);
 
   return (
     <>
-      {storage && (
-        <div className="mb-5">
-          <AssistantPanel storage={storage} asOf={asOf} />
-        </div>
-      )}
-      <ModuleGrid label={c.overzicht.gridLabel}>
+      <ModuleGrid label={c.overzicht.gridLabel} className="home-grid">
         <AandachtWidget alerts={alerts} bufferCents={bufferCents} onBufferChange={onBufferChange} />
 
-        {intake && (
-          <>
-            <IntakeInviteWidget
-              store={intake.store}
-              asOf={asOf}
-              onSave={intake.onSave}
-              onOpenIntake={() => onNavigate("intake")}
-              {...(intake.onOpenRound2 ? { onOpenRound2: intake.onOpenRound2 } : {})}
-              hasTransactions={txs.length > 0}
-            />
-            <RoomCardWidget
-              store={intake.store}
-              result={intake.room}
-              accounts={accounts}
-              {...(intake.statedInputs ? { statedInputs: intake.statedInputs } : {})}
-              onOpenIntake={() => onNavigate("intake")}
-              onImport={() => onNavigate("profiel")}
-              onOpenPlan={() => onNavigate("plan")}
-            />
-            <ConnectChecklistWidget
-              store={intake.store}
-              accounts={accounts}
-              onOpenAccounts={() => onNavigate("accounts")}
-            />
-          </>
-        )}
-
-        {/* Saldo is span-2 with Positie beside it and span-3 without: an absent
-          widget should leave a wider card, not a gap. Only this view knows what
-          else is on the page, which is why the span is decided here rather than
-          inside either block. */}
-        <SaldoBlock
-          span={positieOn ? 2 : 3}
-          accounts={accounts}
-          txs={txs}
-          scheduledFlows={scheduledFlows}
-          asOf={asOf}
-          onNavigate={onNavigate}
-          fxHistory={fxHistory}
-          mode={mode}
+        <ChartSlot
+          span={spans.chart === 2 ? 2 : 3}
+          saldo={{
+            accounts,
+            txs,
+            scheduledFlows,
+            asOf,
+            onNavigate,
+            fxHistory,
+            mode,
+          }}
+          cashflow={{ forecast, bufferCents, onNavigate }}
         />
         <PositieWidget
           accounts={accounts}
@@ -288,6 +209,7 @@ export default function Overzicht({
         />
 
         <RecenteTransactiesBlock
+          span={spans["recente-transacties"] ?? 3}
           txs={txs}
           accounts={accounts}
           rules={rules}
@@ -296,6 +218,7 @@ export default function Overzicht({
           onSelectCategory={onSelectCategory}
         />
         <BetaalschemaBlock
+          span={spans.betaalagenda ?? 3}
           scheduledFlows={scheduledFlows}
           txs={txs}
           asOf={asOf}
@@ -303,7 +226,7 @@ export default function Overzicht({
         />
 
         <BtwWidget
-          span={facturenOn ? 2 : 3}
+          span={spans["btw-stand"] ?? 3}
           entities={entities}
           txs={txs}
           accounts={accounts}
@@ -314,15 +237,20 @@ export default function Overzicht({
           onNavigate={onNavigate}
         />
         <FacturenWidget
-          span={btwOn ? 1 : 3}
+          span={spans["facturen-open"] ?? 3}
           invoices={invoices}
           entities={entities}
           asOf={asOf}
           onNavigate={onNavigate}
         />
 
-        <CashflowBlock forecast={forecast} bufferCents={bufferCents} onNavigate={onNavigate} />
-        <TopUitgavenBlock txs={txs} rules={rules} own={own} onSelectCategory={onSelectCategory} />
+        <TopUitgavenBlock
+          span={spans["top-uitgaven"] ?? 3}
+          txs={txs}
+          rules={rules}
+          own={own}
+          onSelectCategory={onSelectCategory}
+        />
 
         <KaartenBlock
           accounts={accounts}
@@ -332,6 +260,8 @@ export default function Overzicht({
         />
 
         <TravelBlock {...travel} />
+
+        <HomeAddArea onOpenPicker={onAddWidget} />
       </ModuleGrid>
     </>
   );

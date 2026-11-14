@@ -281,6 +281,50 @@
     transition: none;
   }
 
+  /* Assistant column (right edge). Same single 200ms width transition as the
+   * sidebar; the inner box keeps the open width so content does not reflow.
+   * Opened/closed by the owner (occasional), so it earns the motion; nothing
+   * else here moves. No transition while dragging. */
+  .shell2-assistant {
+    position: relative;
+    flex: none;
+    width: var(--shell2-assistant-w, 380px);
+    overflow: hidden;
+    background: var(--bg);
+    border-left: 1px solid var(--line);
+    transition:
+      width 200ms var(--ease-emphasized),
+      visibility 0s linear 0s;
+  }
+  .shell2-assistant-closed {
+    width: 0;
+    border-left-width: 0;
+    visibility: hidden;
+    transition:
+      width 200ms var(--ease-emphasized),
+      visibility 0s linear 200ms;
+  }
+  .shell2-assistant-inner {
+    width: var(--shell2-assistant-w, 380px);
+    height: 100%;
+    overflow-y: auto;
+  }
+  .shell2-resize-left {
+    right: auto;
+    left: 0;
+  }
+  .shell2-resize-left::after {
+    right: auto;
+    left: 1px;
+  }
+  .shell2-toggle-end {
+    margin-left: 0;
+    margin-right: -10px;
+  }
+  .shell2-dragging .shell2-assistant {
+    transition: none;
+  }
+
   .shell2-acc {
     display: flex;
     flex-direction: column;
@@ -683,10 +727,88 @@
     padding-top: var(--sp-2);
   }
 
+  /* Assistant sheet (components/AssistantSheet.tsx): the drawer's mechanics from
+   * the right. Only transform and opacity move; the scrim is the drawer's. */
+  .shell2-sheet-root {
+    position: fixed;
+    inset: 0;
+    z-index: 40;
+    visibility: hidden;
+    pointer-events: none;
+    transition: visibility 0s linear 180ms;
+  }
+  .shell2-sheet-open {
+    visibility: visible;
+    pointer-events: auto;
+    transition: visibility 0s;
+  }
+  .shell2-sheet-open .shell2-scrim {
+    opacity: 1;
+  }
+  .shell2-sheet {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    display: flex;
+    flex-direction: column;
+    width: min(94vw, 440px);
+    padding-top: env(safe-area-inset-top, 0px);
+    background: var(--bg);
+    border-left: 1px solid var(--line);
+    color: var(--ink);
+    overscroll-behavior: contain;
+    transform: translateX(100%);
+    transition: transform 180ms var(--ease-emphasized);
+  }
+  .shell2-sheet-open .shell2-sheet {
+    transform: none;
+    transition-duration: 220ms;
+  }
+  .shell2-sheet-head {
+    display: flex;
+    flex: none;
+    align-items: center;
+    justify-content: space-between;
+    height: 48px;
+    padding: 0 var(--sp-2) 0 var(--sp-4);
+    border-bottom: 1px solid var(--line);
+  }
+  .shell2-sheet-title {
+    margin: 0;
+    font-size: 1rem;
+    line-height: 1.2;
+    letter-spacing: 0;
+  }
+  .shell2-sheet-close {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    background: none;
+    border: 0;
+    border-radius: var(--r-sm);
+    color: var(--ink);
+    cursor: pointer;
+  }
+  .shell2-sheet-close:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
+  }
+  .shell2-sheet-body {
+    flex: 1 1 0;
+    min-height: 0;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+
   @media (prefers-reduced-motion: reduce) {
     .shell2-drawer-root,
+    .shell2-sheet-root,
     .shell2-scrim,
     .shell2-drawer,
+    .shell2-sheet,
     .shell2-drawer-item {
       transition: none;
     }
@@ -696,6 +818,8 @@
     }
     .shell2-sidebar,
     .shell2-sidebar-closed,
+    .shell2-assistant,
+    .shell2-assistant-closed,
     .shell2-acc-add,
     .shell2-acc-row,
     .shell2-acc-head,

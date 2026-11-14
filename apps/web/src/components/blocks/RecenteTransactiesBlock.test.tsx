@@ -2,7 +2,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { expect, test } from "vitest";
 import { formatSignedEuroIn } from "../../format.js";
-import RecenteTransactiesBlock, { matchesSearch } from "./RecenteTransactiesBlock";
+import { RecenteTransactiesBlock, matchesSearch } from "./RecenteTransactiesBlock";
 import { accounts, own, rules, txs } from "./fixtures";
 
 const render = (list = txs) =>

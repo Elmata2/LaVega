@@ -4,6 +4,9 @@ import { categorize, enrichTxs } from "@lavega/core";
 import type { View } from "../../App";
 import { formatSignedEuroIn } from "../../format.js";
 import Module from "../Module.js";
+import type { ModuleSpan } from "../../module-grid.js";
+import { useWidgetEnabled } from "../moduleRegistry";
+import WidgetHideButton from "../WidgetHideButton";
 import CardLink from "../ui/CardLink.js";
 import { useAppLocale } from "../../appLocale.js";
 import { moneyCopy, dayLabelIn, categoryLabel } from "../../copy/money.js";
@@ -48,15 +51,18 @@ type RecenteTransactiesBlockProps = {
   own: OwnAccounts;
   onNavigate: (view: View) => void;
   onSelectCategory: (category: string) => void;
+  /** Set by Home, which knows what sits beside this card. */
+  span?: ModuleSpan;
 };
 
-export default function RecenteTransactiesBlock({
+export function RecenteTransactiesBlock({
   txs,
   accounts,
   rules,
   own,
   onNavigate,
   onSelectCategory,
+  span,
 }: RecenteTransactiesBlockProps) {
   const [locale] = useAppLocale();
   const c = moneyCopy[locale].recenteTransacties;
@@ -80,7 +86,8 @@ export default function RecenteTransactiesBlock({
   return (
     <Module
       title={c.title}
-      span={2}
+      widgetId="recente-transacties"
+      span={span}
       height="tall"
       period={
         <input
@@ -93,7 +100,12 @@ export default function RecenteTransactiesBlock({
           onChange={(e) => setQuery(e.target.value)}
         />
       }
-      menu={<CardLink onClick={() => onNavigate("transactions")}>{c.bekijkAlles}</CardLink>}
+      menu={
+        <>
+          <CardLink onClick={() => onNavigate("transactions")}>{c.bekijkAlles}</CardLink>
+          <WidgetHideButton id="recente-transacties" />
+        </>
+      }
     >
       {all.length === 0 ? (
         <p className="block-empty">{c.nogGeenTransacties}</p>
@@ -140,3 +152,12 @@ export default function RecenteTransactiesBlock({
     </Module>
   );
 }
+
+/** The card as Home places it: itself when the widget is on, nothing when it is
+ *  off. Same pattern as the Betaalagenda; this is the default export so the
+ *  Home view gets the switchable card from a plain import. */
+export function RecenteTransactiesWidget(props: RecenteTransactiesBlockProps) {
+  return useWidgetEnabled("recente-transacties") ? <RecenteTransactiesBlock {...props} /> : null;
+}
+
+export default RecenteTransactiesWidget;

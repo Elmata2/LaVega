@@ -122,6 +122,14 @@ Specified in **`docs/investing/STACK.md`** — the investing side's own stack, d
 - **Portfolio letter** — one stored letter from Charlie Munger about the whole portfolio: a verdict and at most three observations, each citing the owner's own figures. The broker-sync cron writes it when the broker snapshot changes, and the owner can ask for one with `Write letter now` on the card (see ADR 0008). The card shows the latest one; it never generates one on page load.
 - **Erase all data** — the account-level delete. It removes every thread, thesis, goal, observation, portfolio letter, and profile setting. It is separate from deleting one thread.
 
+### Personal app glossary
+
+- **Home** — the first page of the personal app (view id `overview`, route `/app`). Four fixed blocks: the chart slot (Totale positie or Cashflow), Statistieken, Je kaarten, Travel; then the add area.
+- **Widget** — an optional Home card the user switches on (Aandacht, Recente transacties, Betaalagenda, BTW, Facturen, Top uitgaven, Positie per bedrijf). None is on by default. The choice is per browser; "Standaard herstellen" clears it.
+- **Add area** — the dashed boxes at the bottom of Home, one per widget that is off (at most four). A click switches the widget on; "Alle widgets" opens the picker.
+- **Assistant panel** — the right-hand column of the app frame, on every view at >= 1024px (a sheet from the bottom bar below that). It runs in the browser, reads the vault before every turn and makes no network call.
+- **Pop-up** — a modal dialog on Home that asks the user to answer the intake questions or to connect banks. At most one per browser session; a dismissal hides it for 7 days.
+
 ## Conventions
 
 - Dutch in the UI, English in code identifiers.

@@ -461,7 +461,7 @@ share their Personal bank position into this chart. The figure is
 NOT investment accounts: a `Beleggingsrekening` (or an explicitly crypto-typed
 account) is the Investing portfolio's own figure, so adding its Personal
 balance too would count the same euro twice. This is a deliberate difference
-from Overzicht's SaldoBlock, which still sums every account for the Personal
+from SaldoBlock (inside Home's chart slot), which still sums every account for the Personal
 card; the shared total is the bank half only, and `personalShareAccounts`
 (`@lavega/core`) is the one rule both the share and the transfer
 classification use. A confirmed contribution from a bank account into an

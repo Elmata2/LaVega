@@ -60,7 +60,7 @@ const inOrder = (html: string, labels: string[]) => {
 
 test("the rail renders exactly the enabled modules, and nothing else", () => {
   const html = rail(["overview", "valuta"]);
-  expect(html).toContain("Overzicht");
+  expect(html).toContain("Home");
   expect(html).toContain("Valuta");
   expect(html).not.toContain("Facturen");
   expect(html).not.toContain("Belasting");
@@ -68,7 +68,7 @@ test("the rail renders exactly the enabled modules, and nothing else", () => {
 
 test("the rail lists the core three in order, then optional modules", () => {
   inOrder(rail(["forecast", "accounts", "optimalisatie"]), [
-    "Overzicht",
+    "Home",
     "Optimalisatie",
     "Rekeningen",
     "Forecast",
@@ -112,11 +112,11 @@ test("English labels under the en locale cookie, Dutch ones are gone", () => {
   const html = rail(["overview", "valuta"]);
   expect(html).toContain(shellCopy.en.nav.moduleLabels.overview);
   expect(html).toContain(shellCopy.en.nav.moduleLabels.valuta);
-  expect(html).not.toContain(shellCopy.nl.nav.moduleLabels.overview);
+  // Home is "Home" in both languages, so only the labels that differ can prove it.
   expect(html).not.toContain(shellCopy.nl.nav.moduleLabels.valuta);
 });
 
-test("the English rail follows the same order: Overview, Optimization, Accounts", () => {
+test("the English rail follows the same order: Home, Optimization, Accounts", () => {
   setCookie("en");
   const l = shellCopy.en.nav.moduleLabels;
   const html = rail(["plan", "accounts", "optimalisatie"]);
