@@ -97,7 +97,7 @@ import { CONTENT_CONTAINER_CLASS } from "./module-grid.js";
 import { Shell } from "./components/Shell.js";
 import { HomePopups } from "./components/HomePopups.js";
 import { AccountSidebar } from "./components/AccountSidebar.js";
-import { SHOW_INVOICE_FORWARDING, initialScope, isArchivedView } from "./archive";
+import { SHOW_INVOICE_FORWARDING, initialScope, isArchivedView, isArchivedWidget } from "./archive";
 import { pathForView, takePendingEbParams, viewFromPathname, type View } from "./appRoutes";
 import { gateState } from "./vault-gate.js";
 import type { GateState } from "./vault-gate.js";
@@ -118,7 +118,6 @@ import {
   setOwnerName,
   ownerDisplayName,
   getEnabledModules,
-  setEnabledModules,
   getFxConversionMode,
   setFxConversionMode,
   getShareNetWorthEnabled,
@@ -164,6 +163,8 @@ import StatusLine from "./components/ui/StatusLine.js";
 import {
   enabledModules as resolveModules,
   navModules,
+  useOverviewWidgets,
+  WIDGETS,
   type ModuleId,
 } from "./components/moduleRegistry";
 import IntakeWizard from "./views/IntakeWizard";
@@ -488,20 +489,22 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
   // The owner's own module selection: which modules sit in the top nav. A local
   // preference (settings.ts); the registry resolves an unset/stale stored list
   // and guarantees Overzicht is in it.
-  const [modules, setModules] = useState<ModuleId[]>(() => resolveModules(getEnabledModules()));
-  function handleModulesChange(next: ModuleId[]) {
-    const resolved = resolveModules(next);
-    setModules(resolved);
-    setEnabledModules(resolved);
-  }
-  // Bumped by "Widget toevoegen" in the header so the profile scrolls to the
-  // picker instead of the top of a long settings page.
-  const [addWidget, setAddWidget] = useState(0);
+  // Profiel no longer has a picker, so a stored choice is read and honoured, not written here.
+  const [modules] = useState<ModuleId[]>(() => resolveModules(getEnabledModules()));
+  // "Widget toevoegen" only shows while the add area has a box to show.
+  const [widgetsOn] = useOverviewWidgets();
+  const canAddWidget = WIDGETS.some((w) => !isArchivedWidget(w.id) && !widgetsOn.includes(w.id));
   // The phone drawer (and later the assistant sheet) covers the page: no pop-up opens under it.
   const [overlayOpen, setOverlayOpen] = useState(false);
+  // "Widget toevoegen" in the header: bring Home's add area into view. The add
+  // boxes are the only place a widget is switched on.
   function handleAddWidget() {
-    setView("profiel");
-    setAddWidget((n) => n + 1);
+    setView("overview");
+    requestAnimationFrame(() => {
+      const area = document.querySelector<HTMLElement>("[data-add-area]");
+      area?.scrollIntoView?.({ block: "center" });
+      area?.querySelector<HTMLElement>("[data-add-heading]")?.focus();
+    });
   }
 
   const [view, setViewState] = useState<View>(
@@ -2235,9 +2238,7 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
           <p role="status">{intakeCopy[locale].loading}</p>
         ) : profileRead === "error" ? (
           <div role="alert">
-            <StatusLine tone="problem">
-              {intakeCopy[locale].loadError}
-            </StatusLine>
+            <StatusLine tone="problem">{intakeCopy[locale].loadError}</StatusLine>
             <Button onClick={() => void retryProfileRead()}>{intakeCopy[locale].retry}</Button>
           </div>
         ) : (
@@ -2290,16 +2291,14 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
           scope={scope}
           onScopeChange={handleScopeChange}
           onAddWidget={handleAddWidget}
-          showAddWidget={view === "overview"}
+          showAddWidget={view === "overview" && canAddWidget}
         />
       }
     >
       <HomePopups
         view={view}
         blocked={
-          problems.length > 0 ||
-          (scopedAccounts.length === 0 && accounts.length > 0) ||
-          overlayOpen
+          problems.length > 0 || (scopedAccounts.length === 0 && accounts.length > 0) || overlayOpen
         }
         store={okProfileStore}
         profileReady={profileRead !== "loading" && profileRead !== "error"}
@@ -2335,10 +2334,7 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
             {shell.emptyScope.before}
             <strong>{shell.scope[scope]}</strong>
             {shell.emptyScope.after}
-            <CardLink onClick={() => setView("accounts")}>
-              {shell.emptyScope.linkLabel}
-            </CardLink>
-            .
+            <CardLink onClick={() => setView("accounts")}>{shell.emptyScope.linkLabel}</CardLink>.
           </p>
         )}
 
@@ -2367,7 +2363,6 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
             mode={fxConversionMode}
             onBufferChange={handleBufferChange}
             onNavigate={setView}
-            onAddWidget={handleAddWidget}
             {...(profileRead !== "loading" && profileRead !== "error"
               ? { intake: { store: profileRead.kind === "ok" ? profileRead.store : null } }
               : {})}
@@ -2475,6 +2470,8 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
             onValuationCommit={handleValuationCommit}
             onValuationRemove={handleValuationRemove}
             onSelectAccount={openAccountTransactions}
+            fxConversionMode={fxConversionMode}
+            onFxConversionModeChange={handleFxConversionModeChange}
           />
         )}
 
@@ -2586,9 +2583,7 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
           />
         )}
 
-        {view === "koppelingen" && SHOW_INVOICE_FORWARDING && (
-          <Koppelingen onNavigate={setView} />
-        )}
+        {view === "koppelingen" && SHOW_INVOICE_FORWARDING && <Koppelingen onNavigate={setView} />}
 
         {view === "backup" && (
           <Backup
@@ -2634,12 +2629,8 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
             <p role="status">{intakeCopy[locale].loading}</p>
           ) : profileRead === "error" ? (
             <div role="alert">
-              <StatusLine tone="problem">
-                {intakeCopy[locale].loadError}
-              </StatusLine>
-              <Button onClick={() => void retryProfileRead()}>
-                {intakeCopy[locale].retry}
-              </Button>
+              <StatusLine tone="problem">{intakeCopy[locale].loadError}</StatusLine>
+              <Button onClick={() => void retryProfileRead()}>{intakeCopy[locale].retry}</Button>
             </div>
           ) : (
             <AboutYou
@@ -2658,17 +2649,12 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
             planUnlocked={planUnlocked}
             intakeStore={okProfileStore}
             hasTransactions={txs.length > 0}
-            enabledModules={modules}
-            onModulesChange={handleModulesChange}
-            focusModules={addWidget}
             entities={entitySummaryRows}
             onClassifyEntity={handleClassifyEntity}
             homeCountry={homeCountry}
             onHomeCountryChange={handleHomeCountryChange}
             homeRegion={homeRegion}
             onHomeRegionChange={handleHomeRegionChange}
-            fxConversionMode={fxConversionMode}
-            onFxConversionModeChange={handleFxConversionModeChange}
             shareNetWorthEnabled={shareNetWorthEnabled}
             onShareNetWorthEnabledChange={handleShareNetWorthEnabledChange}
             shareNetWorthPendingDelete={shareNetWorthPendingDelete}

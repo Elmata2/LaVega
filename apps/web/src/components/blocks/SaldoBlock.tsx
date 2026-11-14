@@ -208,7 +208,7 @@ export function useSaldoParts({
               format={(v) => formatEuroIn(locale, v)}
               ariaLabel={c.positiePerDagAria}
               readoutLabel={c.positieOpReadout}
-              height={132}
+              height={96}
               /* DE Y-AS AAN, op zijn verzoek. TrendChart kon dit al; hij stond hier
                * uit omdat de as in een SMALLE kaart de plot opeet. Dit blok staat
                * standaard op span 2, dus er is ruimte — maar iemand kan het op 1

@@ -124,7 +124,6 @@ export type ShellCopy = {
   /** The add area at the bottom of Home and the hide button on a widget card. */
   home: {
     addHeading: string;
-    allWidgets: string;
     added: (label: string) => string;
     hide: (label: string) => string;
   };
@@ -198,6 +197,10 @@ export type ShellCopy = {
         error: Record<SignUpFailure, string>;
       };
     };
+    general: {
+      ariaLabel: string;
+      heading: string;
+    };
     head: {
       ariaLabel: string;
       noName: string;
@@ -250,6 +253,9 @@ export type ShellCopy = {
       heading: string;
       convertLabel: string;
       description: string;
+      /** The quiet control on Rekeningen that opens the pop-up. */
+      settingsButton: string;
+      closeLabel: string;
     };
     lock: {
       ariaLabel: string;
@@ -461,7 +467,6 @@ const nl: ShellCopy = {
   },
   home: {
     addHeading: "Voeg toe aan Home",
-    allWidgets: "Alle widgets",
     added: (label) => `${label} toegevoegd`,
     hide: (label) => `Verberg ${label}`,
   },
@@ -584,6 +589,10 @@ const nl: ShellCopy = {
         },
       },
     },
+    general: {
+      ariaLabel: "Algemeen",
+      heading: "Algemeen",
+    },
     head: {
       ariaLabel: "Profiel",
       noName: "Nog geen naam ingevuld",
@@ -624,7 +633,8 @@ const nl: ShellCopy = {
     countryRegion: {
       ariaLabel: "Land en regio",
       heading: "Land en regio",
-      purpose: "Bepaalt in welke markt LaVega de voorwaarden van je kaarten opzoekt.",
+      purpose:
+        "Bepaalt in welke markt LaVega kaartvoorwaarden opzoekt. Je vult dit zelf in; LaVega leidt nooit af waar je bent.",
       neverInferred:
         "Je vult dit zelf in. LaVega leidt nooit af waar je bent — geen locatie, geen IP, geen tijdzone.",
       countryLabel: "Land",
@@ -642,6 +652,8 @@ const nl: ShellCopy = {
       convertLabel: "Vreemde valuta omrekenen naar euro",
       description:
         "Rekeningen en transacties in een andere valuta dan euro tellen mee in de totalen, omgerekend via de ECB-koers van de dag. Zet dit uit om ze zoals voorheen apart te houden.",
+      settingsButton: "Valuta-instellingen",
+      closeLabel: "Sluiten",
     },
     lock: {
       ariaLabel: "Uitloggen",
@@ -859,7 +871,6 @@ const en: ShellCopy = {
   },
   home: {
     addHeading: "Add to Home",
-    allWidgets: "All widgets",
     added: (label) => `${label} added`,
     hide: (label) => `Hide ${label}`,
   },
@@ -981,6 +992,10 @@ const en: ShellCopy = {
         },
       },
     },
+    general: {
+      ariaLabel: "General",
+      heading: "General",
+    },
     head: {
       ariaLabel: "Profile",
       noName: "No name entered yet",
@@ -1021,7 +1036,8 @@ const en: ShellCopy = {
     countryRegion: {
       ariaLabel: "Country and region",
       heading: "Country and region",
-      purpose: "Determines which market LaVega looks up your card terms in.",
+      purpose:
+        "Determines which market LaVega looks up card terms in. You fill this in yourself; LaVega never infers where you are.",
       neverInferred:
         "You fill this in yourself. LaVega never infers where you are — no location, no IP, no time zone.",
       countryLabel: "Country",
@@ -1038,6 +1054,8 @@ const en: ShellCopy = {
       convertLabel: "Convert foreign currency to euros",
       description:
         "Accounts and transactions in a currency other than euros count toward the totals, converted at the day's ECB rate. Turn this off to keep them separate, as before.",
+      settingsButton: "Currency settings",
+      closeLabel: "Close",
     },
     lock: {
       ariaLabel: "Sign out",

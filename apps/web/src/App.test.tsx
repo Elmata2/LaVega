@@ -7,6 +7,13 @@ import { resetNetWorthShareStateForTests } from "./netWorthShare.js";
 
 (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
+/* The share card is hidden in Profiel for now (SHOW_NET_WORTH_SHARE in archive.ts).
+ * These tests drive the share state through its toggle, so they show it. */
+vi.mock("./archive", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./archive")>()),
+  SHOW_NET_WORTH_SHARE: true,
+}));
+
 /* An unlocked vault: every read resolves at once, so the app reaches gate
  * "ready" without ever touching IndexedDB. Only the methods App.tsx actually
  * calls on mount/render are here — the rest of the real VaultStorage
@@ -239,7 +246,15 @@ test("another tab switching sharing off is picked up via the storage event — n
   // dependency list exactly like a sync's accounts/txs update — must not
   // resurrect the total tab B just removed: the storage event already
   // turned shareNetWorthEnabled off here too, before this trigger fires.
-  openProfiel(el);
+  // The fx control now lives in a pop-up on Rekeningen.
+  const accountsLink = el.querySelector<HTMLAnchorElement>('a[href="/app/accounts"]');
+  expect(accountsLink).not.toBeNull();
+  act(() => {
+    accountsLink!.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+  });
+  act(() => {
+    el.querySelector<HTMLElement>('[data-testid="fx-settings-open"]')!.click();
+  });
   const fxToggle = el.querySelector<HTMLInputElement>(
     '[aria-label="Vreemde valuta omrekenen naar euro"]',
   )!;

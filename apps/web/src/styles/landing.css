@@ -37,8 +37,9 @@
     --gutter: clamp(20px, 5vw, 80px);
     --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
     --space: clamp(112px, 15vw, 216px);
-    /* Display serif only at ~28px and up (headlines, the wordmark, the
-     * quote); Geist for body, controls and every figure. */
+    /* Display serif only at ~28px and up (headlines, the quote); Geist for
+     * body, controls, every figure and the wordmark (owner, 14 Nov 2026: the
+     * "LaVega" mark uses the same face as the app's "LV"). */
     --serif: "Instrument Serif", "Instrument Serif Fallback", Georgia, serif;
     --sans: "Geist", "Geist Fallback", system-ui, -apple-system, "Segoe UI", sans-serif;
 
@@ -98,8 +99,6 @@
    * tightening it is what made the old headlines hard to read. */
   .lp h1,
   .lp h2,
-  .lp .logo,
-  .lp .shot-nav b,
   .lp .reveal,
   .lp .ask,
   .lp blockquote {
@@ -222,8 +221,10 @@
     height: 72px;
   }
   .lp .logo {
-    font-size: 1.7rem;
-    letter-spacing: -0.01em;
+    font-family: var(--sans);
+    font-size: 1.35rem;
+    font-weight: 600;
+    letter-spacing: -0.02em;
   }
   .lp .links {
     display: flex;
@@ -386,8 +387,9 @@
   }
   .lp .shot-nav b {
     flex: none;
-    font-weight: 400;
-    font-size: 1.4rem;
+    font-weight: 600;
+    font-size: 1.1rem;
+    letter-spacing: -0.02em;
     margin-right: 18px;
   }
   .lp .shot-nav span {

@@ -760,6 +760,12 @@ type BackupCopy = {
       errorGeneric: string;
     };
   };
+  /** The simple card: two visible actions, the rest behind "more options". */
+  simple: {
+    makeButton: string;
+    restoreButton: string;
+    moreOptions: string;
+  };
   restore: {
     title: string;
     warning: string;
@@ -1603,6 +1609,11 @@ const nlBackup: BackupCopy = {
       errorGeneric: "Verwijderen mislukt.",
     },
   },
+  simple: {
+    makeButton: "Back-up maken",
+    restoreButton: "Terugzetten",
+    moreOptions: "Meer opties",
+  },
   restore: {
     title: "Herstel uit back-up",
     warning: "Dit vervangt je huidige data in deze kluis.",
@@ -2415,6 +2426,11 @@ const enBackup: BackupCopy = {
       success: (rows, tables) => `Deleted: ${rows} rows across ${tables} tables.`,
       errorGeneric: "Failed to delete.",
     },
+  },
+  simple: {
+    makeButton: "Make backup",
+    restoreButton: "Restore",
+    moreOptions: "More options",
   },
   restore: {
     title: "Restore from backup",

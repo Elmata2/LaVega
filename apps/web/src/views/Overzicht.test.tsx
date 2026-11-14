@@ -41,7 +41,6 @@ function mount() {
         mode="separate"
         onBufferChange={() => {}}
         onNavigate={() => {}}
-        onAddWidget={() => {}}
         onSelectCategory={() => {}}
         travel={{
           accounts,

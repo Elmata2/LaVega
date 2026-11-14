@@ -15,14 +15,17 @@ import { useSaldoParts, type SaldoBlockProps } from "./SaldoBlock";
  * preference of this browser (lib/homeChart). Switching swaps the body at once,
  * with no motion. */
 
+/* The slot sits in one half of the fixed 2 x 2 group on Home (`.home-fixed`), so
+ * its Module is span 1. The chart still gets its y-axis: the span the Saldo parts
+ * take is a "this is a wide card" hint for the axis, not a grid placement. */
+const CHART_SPAN = 2;
+
 type ChartSlotProps = {
-  /** 2 beside the Positie card, 3 on its own; decided by `homeSpans`. */
-  span: 2 | 3;
   saldo: Omit<SaldoBlockProps, "span" | "headerControl">;
   cashflow: Omit<CashflowBlockProps, "span" | "headerControl">;
 };
 
-export default function ChartSlot({ span, saldo, cashflow }: ChartSlotProps) {
+export default function ChartSlot({ saldo, cashflow }: ChartSlotProps) {
   const [locale] = useAppLocale();
   const c = shellCopy[locale].overzicht.chart;
   const name = useId();
@@ -58,14 +61,14 @@ export default function ChartSlot({ span, saldo, cashflow }: ChartSlotProps) {
     </div>
   );
 
-  const saldoParts = useSaldoParts({ ...saldo, span });
+  const saldoParts = useSaldoParts({ ...saldo, span: CHART_SPAN });
   const cashflowParts = useCashflowParts(cashflow);
   const parts = chart === "cashflow" ? cashflowParts : saldoParts;
 
   return (
     <Module
       title={parts.title}
-      span={span}
+      span={1}
       height="tall"
       period={control}
       menu={parts.menu}

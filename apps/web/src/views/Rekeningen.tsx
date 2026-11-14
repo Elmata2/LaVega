@@ -15,6 +15,9 @@ import {
 import { formatEuroIn, formatSignedEuroIn } from "../format";
 import { useAppLocale } from "../appLocale";
 import { moneyCopy } from "../copy/money";
+import { shellCopy } from "../copy/shell";
+import type { ConversionMode } from "../settings";
+import Dialog from "../components/ui/Dialog.js";
 import type { MoneyCopy } from "../copy/money";
 import type { Locale } from "../locale";
 import Badge from "../components/ui/Badge.js";
@@ -74,6 +77,10 @@ type RekeningenProps = {
   /** Add or replace the valuation on one date (identity is account + date). */
   onValuationCommit: (accountKey: string, date: string, amountCents: number) => void;
   onValuationRemove: (id: string) => void;
+  /** Whether a non-EUR balance/transaction counts toward the euro totals. Owned
+   *  by App; the control (a small pop-up) shows only when both are given. */
+  fxConversionMode?: ConversionMode;
+  onFxConversionModeChange?: (mode: ConversionMode) => void;
 };
 
 const NO_IDS: readonly string[] = [];
@@ -1135,9 +1142,13 @@ export default function Rekeningen({
   onOpeningCommit,
   onValuationCommit,
   onValuationRemove,
+  fxConversionMode,
+  onFxConversionModeChange,
 }: RekeningenProps) {
   const [locale] = useAppLocale();
   const c = moneyCopy[locale].rekeningen;
+  const fx = shellCopy[locale].profiel.fx;
+  const [fxOpen, setFxOpen] = useState(false);
   // Only flag duplicates you can actually see here — a group whose accounts all
   // sit outside the active entity scope would be a banner about nothing.
   const visibleKeys = new Set(accounts.map((a) => a.key));
@@ -1172,6 +1183,11 @@ export default function Rekeningen({
     <Card as="section" aria-label={c.heading}>
       <CardHeader>
         <h2>{c.heading}</h2>
+        {fxConversionMode !== undefined && onFxConversionModeChange !== undefined && (
+          <CardLink onClick={() => setFxOpen(true)} data-testid="fx-settings-open">
+            {fx.settingsButton}
+          </CardLink>
+        )}
         {accounts.length > 0 && (
           <div
             className="flex gap-2"
@@ -1196,6 +1212,26 @@ export default function Rekeningen({
           </div>
         )}
       </CardHeader>
+
+      {fxConversionMode !== undefined && onFxConversionModeChange !== undefined && (
+        <Dialog
+          open={fxOpen}
+          onClose={() => setFxOpen(false)}
+          title={fx.heading}
+          closeLabel={fx.closeLabel}
+        >
+          <label>
+            <input
+              type="checkbox"
+              checked={fxConversionMode === "convert"}
+              aria-label={fx.convertLabel}
+              onChange={(e) => onFxConversionModeChange(e.target.checked ? "convert" : "separate")}
+            />{" "}
+            {fx.convertLabel}
+          </label>
+          <p className="cell-sub">{fx.description}</p>
+        </Dialog>
+      )}
 
       {shownGroups.map((group) => {
         const others = group.accounts.filter((a) => a.key !== group.survivor.key);

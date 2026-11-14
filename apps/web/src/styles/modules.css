@@ -43,6 +43,27 @@
  * declarations below are gone because a Tailwind class carries its own
  * declaration, not because the layout changed. */
 
+  /* ---------- Home: the four fixed blocks, two per row ----------
+ * Chart slot, Statistieken, Kaarten and Travel sit in this wrapper (Overzicht),
+ * which is ONE item of .home-grid and takes its full row. Inside it the blocks
+ * pair up in a 2 x 2 grid down to a container of 784px (columns of at least 380px),
+ * one column at <= 783px.
+ * Their own span/height classes are overridden in the utilities layer at the end
+ * of this file; that block also holds the height rules to tune. */
+  .home-fixed {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--grid-gap);
+    align-items: stretch;
+    min-width: 0;
+  }
+  @container (max-width: 783px) {
+    .home-fixed {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+
   /* ---------- Module card ---------- */
 
   /* Flatter than it was: the reference announces a block with a title and a rule
@@ -204,20 +225,6 @@
     .home-add-grid {
       grid-template-columns: minmax(0, 1fr);
     }
-  }
-  .home-add-all {
-    min-height: 44px;
-    padding: 0 var(--sp-3);
-    background: none;
-    border: 0;
-    color: var(--muted);
-    font: inherit;
-    font-size: 0.8rem;
-    text-decoration: underline;
-    cursor: pointer;
-  }
-  .home-add-all:hover {
-    color: var(--ink);
   }
   .home-add-box {
     display: flex;
@@ -700,5 +707,64 @@
     .home-grid > .module {
       grid-column: 1 / -1;
     }
+  }
+}
+
+/* Home fixed blocks (see .home-fixed above). In the utilities layer on purpose,
+ * like the rule above: a block's span and height are Tailwind utilities
+ * (SPAN_CLASS / HEIGHT_CLASS in module-grid.ts), and only a utilities rule with
+ * two classes beats them, including their @container variants.
+ *
+ * WHAT DECIDES THE HEIGHT of a fixed block (tune these first):
+ *   --home-block-min  min-height of the card, replaces --module-h-tall (360px) and
+ *                     --module-h-short (200px). Cards otherwise size to content.
+ *   --home-block-pad  card padding, replaces --module-pad (24px).
+ *   chart heights     the `height` prop of TrendChart / CategoryBars in
+ *                     SaldoBlock (HOME_CHART_H), CashflowBlock and StatistiekBlock.
+ *   .module-head      the 32px header row plus its bottom padding and margin
+ *                     (tightened below).
+ * Target at a 1440 x 900 window: about 340px per block. */
+@layer utilities {
+  .home-fixed > .module {
+    --home-block-min: 0px;
+    --home-block-pad: var(--sp-3);
+    grid-column: auto;
+    min-height: var(--home-block-min);
+    padding: var(--home-block-pad);
+  }
+  .home-fixed > .module .module-head {
+    padding-bottom: var(--sp-2);
+    margin-bottom: var(--sp-2);
+  }
+  /* Statistieken header: title and period pill on row 1, the tab bar on row 2.
+   * Tabs + pill + title never fit one line in a half-width card, so the header
+   * wraps on purpose instead of pushing the pill out of the card. */
+  .home-fixed .module-head:has(> .module-controls > .module-period) {
+    flex-wrap: wrap;
+    row-gap: var(--sp-2);
+  }
+  .home-fixed .module-head:has(> .module-controls > .module-period) > .module-controls {
+    display: contents;
+  }
+  .home-fixed .module-head:has(> .module-controls > .module-period) .module-period {
+    order: 2;
+    margin-left: auto;
+  }
+  .home-fixed .module-head:has(> .module-controls > .module-period) .module-tabs {
+    order: 3;
+    flex: 1 0 100%;
+    box-sizing: border-box;
+    max-width: 100%;
+  }
+  /* Statistieken is the tallest block; tighten its stacked rows. */
+  .home-fixed .toonmeer-regel {
+    margin-top: var(--sp-2);
+  }
+  .home-fixed .toonmeer-regel > .toonmeer-summary {
+    padding: var(--sp-2) 0;
+  }
+  .home-fixed .stat-figures {
+    margin-top: var(--sp-2);
+    padding-top: var(--sp-2);
   }
 }
