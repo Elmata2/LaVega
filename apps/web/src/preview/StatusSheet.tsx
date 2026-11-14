@@ -1,4 +1,4 @@
-/* Every status variant side by side, for the black-and-white check. Preview
+/* Every status variant side by side, for the colourless check. Preview
  * only: reached through harness mode "status", never imported by the product. */
 import type { Alert } from "@lavega/core";
 import AandachtBlock from "../components/blocks/AandachtBlock";

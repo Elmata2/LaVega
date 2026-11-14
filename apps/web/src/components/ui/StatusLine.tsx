@@ -1,8 +1,8 @@
 import type { HTMLAttributes } from "react";
 import { cn } from "./utils.js";
 
-/* A status is never carried by tint alone. In the black-and-white theme --warn,
- * --neg and --pos are near-identical greys, so the SHAPE says what it is:
+/* A status is never carried by tint alone. For colour-blind users --warn,
+ * --neg and --pos can look alike, so the SHAPE says what it is:
  * warning = dashed border + triangle, problem = solid border + cross-in-circle,
  * success = solid border + check-in-circle. Same markup in both themes; the
  * tokens do the colour. */

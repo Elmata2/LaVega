@@ -133,8 +133,8 @@ export default function SpendPie({
   // decimals keeps the string short without a visible seam. Between arcs sits a
   // --bg gap of SLICE_GAP percent of the ring: about 2.6px at the mid radius of
   // the 168px ring and about 2px on the 132px ring (wider toward the outer
-  // edge). In the black-and-white theme the slice greys alone cannot tell
-  // neighbours apart, so the gap is what draws the edge. One slice is a whole
+  // edge). Adjacent slice colours can look alike (and
+  // to colour-blind users), so the gap is what draws the edge. One slice is a whole
   // ring and needs none. Each slice gives up at most a quarter of its own arc
   // per side, so a tiny slice stays a visible sliver instead of vanishing.
   const r2 = (n: number) => Math.round(n * 100) / 100;

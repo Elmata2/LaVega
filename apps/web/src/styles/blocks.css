@@ -207,8 +207,8 @@
   .module-tabs .module-tab:focus-visible,
   .module-tabs .chart-option:has(input:focus-visible),
   .module-tabs .theme-option:has(input:focus-visible) {
-    /* The pill's own text colour: an accent ring is invisible on the selected
-     * pill in the monochrome theme, where accent and pill are both black. */
+    /* The pill's own text colour: it stays visible on the selected pill, whose
+     * ground is --ink in both themes. */
     outline: 2px solid currentColor;
     outline-offset: -2px;
   }
@@ -232,8 +232,8 @@
       var(--swatch-midnight-cta) 50%
     );
   }
-  .theme-swatch-mono {
-    background: linear-gradient(135deg, var(--swatch-mono-bg) 50%, var(--swatch-mono-ink) 50%);
+  .theme-swatch-light {
+    background: linear-gradient(135deg, var(--swatch-light-bg) 50%, var(--swatch-light-cta) 50%);
   }
 
   /* ---------- SaldoBlock (Totale positie) ---------- */

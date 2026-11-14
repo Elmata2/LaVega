@@ -193,7 +193,7 @@
 
   /* ---------- Home add area and the widget hide button ----------
  * Dashed hairline boxes: the dashed outline and the "+" mark carry "this is not
- * here yet", so it reads in the monochrome theme too. Motion budget: the boxes
+ * here yet", so it reads without colour too. Motion budget: the boxes
  * ease background and border colour in 120ms; a newly added card fades in over
  * 150ms; nothing else moves. Reduced motion: instant. The inner grid columns
  * (4 / 2 at a container <= 900px / 1 at <= 520px) are the .home-add-grid rules

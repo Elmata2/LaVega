@@ -52,7 +52,7 @@ type Tier = { severity: AlertSeverity };
 
 /** Ranked hardest-first, the same order core sorts in. The word is the label;
  *  the icon shape (cross, triangle, "i") and the border style (solid, dashed,
- *  none) reinforce it where the tints cannot, e.g. in the black-and-white theme. */
+ *  none) reinforce it where the tints cannot, e.g. for colour-blind users. */
 const TIERS: Tier[] = [{ severity: "critical" }, { severity: "warning" }, { severity: "info" }];
 
 /** Below this, folding costs more than it saves: the "Toon 2 ter info" button

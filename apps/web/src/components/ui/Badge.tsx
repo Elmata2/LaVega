@@ -15,7 +15,7 @@ const BADGE_BASE =
 export type BadgeProps = HTMLAttributes<HTMLSpanElement> & {
   "data-testid"?: string;
   /* Used as a status: border style (dashed warning, solid problem/success) plus
-   * an icon, so the meaning survives the black-and-white theme. */
+   * an icon, so the meaning survives without colour. */
   tone?: StatusTone;
 };
 

@@ -1,13 +1,11 @@
-/* WCAG contrast of the colour tokens in three themes: dark (:root, "midnight"),
- * light (:root[data-theme="light"]) and mono (:root[data-theme="mono"]). light
- * and mono inherit what they do not override, as in the browser; mono may not
- * inherit anything: every #rrggbb token of :root must be defined in its block.
+/* WCAG contrast of the colour tokens in two themes: dark (:root, "midnight") and
+ * light (:root[data-theme="light"]). light inherits what it does not override, as
+ * in the browser, but may not inherit anything: every #rrggbb token of :root must
+ * be defined in its block.
  *   - text pairs at 4.5:1 (AA text)
  *   - non-text pairs at 3:1 (chart tokens on all three grounds; accent as the
  *     focus ring on bg and surface)
- *   - slice-1..8 / slice-rest on surface: printed as `info`, never fail (an
- *     8-step grey ramp cannot each reach 3:1; the charts rule in the design spec
- *     is the requirement)
+ *   - slice-1..8 / slice-rest on surface: printed as `info`, never fail
  * Only #rrggbb tokens are read. --line, --accent-soft, --pos-tint, --neg-tint,
  * --scrim and --shadow-float (rgba, color-mix) are not covered.
  * KNOWN GAPS: none for midnight or light on the 3:1 list at the time of writing.
@@ -25,11 +23,10 @@ const read = (src) =>
     [...src.matchAll(/--([\w-]+):\s*(#[0-9a-fA-F]{6})\b/g)].map((m) => [m[1], m[2]]),
   );
 const dark = read(block(":root"));
-const monoOwn = read(block(':root[data-theme="mono"]'));
+const lightOwn = read(block(':root[data-theme="light"]'));
 const themes = {
   dark,
-  light: { ...dark, ...read(block(':root[data-theme="light"]')) },
-  mono: { ...dark, ...monoOwn },
+  light: { ...dark, ...lightOwn },
 };
 
 const lin = (c) => ((c /= 255) <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
@@ -63,9 +60,9 @@ let bad = 0;
 const line = (status, name, fg, bg, r) =>
   console.log(`${status} ${name.padEnd(5)} ${fg.padEnd(12)} on ${bg.padEnd(12)} ${r.toFixed(2)}`);
 for (const token of Object.keys(dark)) {
-  if (!(token in monoOwn)) {
+  if (!(token in lightOwn)) {
     bad++;
-    console.log(`FAIL mono  --${token} is defined in :root but not in the mono block`);
+    console.log(`FAIL light --${token} is defined in :root but not in the light block`);
   }
 }
 for (const [name, tok] of Object.entries(themes)) {

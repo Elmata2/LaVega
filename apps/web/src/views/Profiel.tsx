@@ -48,7 +48,7 @@ import posthog from "../posthog.js";
 import type { ShellNotice } from "../shellNotice.js";
 import { useAppLocale } from "../appLocale.js";
 import { useTheme } from "../hooks/useTheme.js";
-import type { Theme } from "../lib/theme.js";
+import { THEME_OPTIONS } from "../lib/theme.js";
 import { shellCopy } from "../copy/shell.js";
 import { intakeCopy } from "../copy/intake.js";
 import { inviteState } from "../intake/inviteState.js";
@@ -459,8 +459,6 @@ function CashbackCorrigeren({
     </Card>
   );
 }
-
-const THEME_OPTIONS: readonly Theme[] = ["midnight", "mono"];
 
 export default function Profiel({
   planUnlocked,

@@ -753,33 +753,44 @@ test("Weergave: twee gelabelde radio's in een radiogroup, in Algemeen", async ()
   expect(group).not.toBeNull();
   expect(group!.getAttribute("aria-label")).toBe("Thema");
   const radios = [...card.querySelectorAll<HTMLInputElement>('input[type="radio"]')];
-  expect(radios.map((r) => r.value)).toEqual(["midnight", "mono"]);
-  expect(card.textContent).toContain("Midnight");
-  expect(card.textContent).toContain("Zwart-wit");
+  expect(radios.map((r) => r.value)).toEqual(["midnight", "light"]);
+  expect(radios).toHaveLength(2);
+  expect(card.textContent).toContain("Donker");
+  expect(card.textContent).toContain("Licht");
+  expect(card.textContent).not.toContain("Zwart-wit");
   for (const r of radios) expect(r.labels?.length).toBe(1);
 });
 
-test("Weergave: Engels gebruikt 'Black and white'", async () => {
+test("Weergave: Engels gebruikt 'Dark' en 'Light'", async () => {
   document.cookie = "lavega_locale=en";
   await render();
-  expect(container!.textContent).toContain("Black and white");
+  expect(container!.textContent).toContain("Dark");
+  expect(container!.textContent).toContain("Light");
+  expect(container!.textContent).not.toContain("Black and white");
 });
 
-test("Weergave: de gekozen radio volgt het opgeslagen thema bij het laden", async () => {
+test("Weergave: een opgeslagen 'mono' staat als Licht aan", async () => {
   localStorage.setItem("lavega.theme", "mono");
   await render();
   const radios = [...section("Algemeen").querySelectorAll<HTMLInputElement>("input[type=radio]")];
-  expect(radios.find((r) => r.checked)?.value).toBe("mono");
+  expect(radios.find((r) => r.checked)?.value).toBe("light");
+});
+
+test("Weergave: de gekozen radio volgt het opgeslagen thema bij het laden", async () => {
+  localStorage.setItem("lavega.theme", "light");
+  await render();
+  const radios = [...section("Algemeen").querySelectorAll<HTMLInputElement>("input[type=radio]")];
+  expect(radios.find((r) => r.checked)?.value).toBe("light");
 });
 
 test("Weergave: kiezen bewaart en past direct toe", async () => {
   delete document.documentElement.dataset.theme;
   await render();
-  const mono = section("Algemeen").querySelector<HTMLInputElement>('input[value="mono"]')!;
-  await pick(mono);
-  expect(localStorage.getItem("lavega.theme")).toBe("mono");
-  expect(document.documentElement.dataset.theme).toBe("mono");
-  expect(mono.checked).toBe(true);
+  const light = section("Algemeen").querySelector<HTMLInputElement>('input[value="light"]')!;
+  await pick(light);
+  expect(localStorage.getItem("lavega.theme")).toBe("light");
+  expect(document.documentElement.dataset.theme).toBe("light");
+  expect(light.checked).toBe(true);
   const mid = section("Algemeen").querySelector<HTMLInputElement>('input[value="midnight"]')!;
   await pick(mid);
   expect(document.documentElement.hasAttribute("data-theme")).toBe(false);
@@ -793,9 +804,9 @@ test("Weergave: geblokkeerde opslag wisselt toch, zonder foutmelding", async () 
   await render();
   const card = section("Algemeen");
   const before = card.textContent;
-  await pick(card.querySelector<HTMLInputElement>('input[value="mono"]')!);
-  expect(document.documentElement.dataset.theme).toBe("mono");
-  expect(card.querySelector<HTMLInputElement>('input[value="mono"]')!.checked).toBe(true);
+  await pick(card.querySelector<HTMLInputElement>('input[value="light"]')!);
+  expect(document.documentElement.dataset.theme).toBe("light");
+  expect(card.querySelector<HTMLInputElement>('input[value="light"]')!.checked).toBe(true);
   expect(card.textContent).toBe(before);
   expect(card.querySelector('[role="alert"]')).toBeNull();
   vi.restoreAllMocks();
@@ -805,12 +816,12 @@ test("Weergave: geblokkeerde opslag wisselt toch, zonder foutmelding", async () 
 test("Weergave: een storage-event van een ander tabblad werkt de keuze bij", async () => {
   delete document.documentElement.dataset.theme;
   await render();
-  localStorage.setItem("lavega.theme", "mono");
+  localStorage.setItem("lavega.theme", "light");
   act(() => {
-    window.dispatchEvent(new StorageEvent("storage", { key: "lavega.theme", newValue: "mono" }));
+    window.dispatchEvent(new StorageEvent("storage", { key: "lavega.theme", newValue: "light" }));
   });
-  expect(document.documentElement.dataset.theme).toBe("mono");
-  expect(section("Algemeen").querySelector<HTMLInputElement>('input[value="mono"]')!.checked).toBe(
+  expect(document.documentElement.dataset.theme).toBe("light");
+  expect(section("Algemeen").querySelector<HTMLInputElement>('input[value="light"]')!.checked).toBe(
     true,
   );
   delete document.documentElement.dataset.theme;

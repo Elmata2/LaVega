@@ -999,7 +999,7 @@ test("een themawissel op <html> laat de bol zijn palet opnieuw lezen en tekenen"
   ) as unknown as CanvasRenderingContext2D;
   vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(ctx);
   const colour = () =>
-    document.documentElement.dataset.theme === "mono" ? "rgb(10, 10, 10)" : "rgb(20, 20, 20)";
+    document.documentElement.dataset.theme === "light" ? "rgb(10, 10, 10)" : "rgb(20, 20, 20)";
   vi.spyOn(window, "getComputedStyle").mockImplementation(
     () => ({ color: colour() }) as unknown as CSSStyleDeclaration,
   );
@@ -1008,7 +1008,7 @@ test("een themawissel op <html> laat de bol zijn palet opnieuw lezen en tekenen"
   expect(sets).toContain("rgb(20, 20, 20)");
   expect(sets).not.toContain("rgb(10, 10, 10)");
   await act(async () => {
-    document.documentElement.dataset.theme = "mono";
+    document.documentElement.dataset.theme = "light";
     await Promise.resolve();
   });
   expect(sets).toContain("rgb(10, 10, 10)");

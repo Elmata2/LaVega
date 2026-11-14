@@ -265,9 +265,6 @@
   .shell2-dragging .shell2-resize::after {
     background: var(--accent);
   }
-  :root[data-theme="mono"] .shell2-resize:focus-visible::after {
-    background: var(--ink);
-  }
   /* Windows High Contrast drops backgrounds: the handle needs a real outline. */
   @media (forced-colors: active) {
     .shell2-resize:focus-visible {

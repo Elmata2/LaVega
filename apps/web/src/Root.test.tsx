@@ -122,21 +122,21 @@ test("a failed verification link on a signed-out /app load tells the landing pag
 
 test("landing forces midnight while mounted and restores the stored theme on unmount", () => {
   const html = document.documentElement;
-  window.localStorage.setItem("lavega.theme", "mono");
-  html.dataset.theme = "mono";
+  window.localStorage.setItem("lavega.theme", "light");
+  html.dataset.theme = "light";
   window.history.replaceState({}, "", "/");
   vi.mocked(useAuthState).mockReturnValue({ state: { kind: "signed-out" }, refresh: vi.fn() });
   render();
   expect(html.hasAttribute("data-theme")).toBe(false);
   act(() => root!.unmount());
   root = null;
-  expect(html.dataset.theme).toBe("mono");
+  expect(html.dataset.theme).toBe("light");
   window.localStorage.clear();
   delete html.dataset.theme;
 });
 
 test("a legacy #app entry that normalises into /app gets the stored theme (init skipped it on /)", () => {
-  window.localStorage.setItem("lavega.theme", "mono");
+  window.localStorage.setItem("lavega.theme", "light");
   delete document.documentElement.dataset.theme;
   window.history.replaceState({}, "", "/#app");
   vi.mocked(useAuthState).mockReturnValue({
@@ -144,14 +144,14 @@ test("a legacy #app entry that normalises into /app gets the stored theme (init 
     refresh: vi.fn(),
   });
   render();
-  expect(document.documentElement.dataset.theme).toBe("mono");
+  expect(document.documentElement.dataset.theme).toBe("light");
   window.localStorage.clear();
   delete document.documentElement.dataset.theme;
 });
 
-test("signed-out /app with mono already applied by the init script is corrected to midnight", () => {
-  window.localStorage.setItem("lavega.theme", "mono");
-  document.documentElement.dataset.theme = "mono";
+test("signed-out /app with light already applied by the init script is corrected to midnight", () => {
+  window.localStorage.setItem("lavega.theme", "light");
+  document.documentElement.dataset.theme = "light";
   window.history.replaceState({}, "", "/app");
   vi.mocked(useAuthState).mockReturnValue({ state: { kind: "signed-out" }, refresh: vi.fn() });
   render();
@@ -166,7 +166,7 @@ test("blocked storage: the in-memory choice survives leaving and re-entering the
   vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
     throw new Error("blocked");
   });
-  rememberTheme("mono");
+  rememberTheme("light");
   window.history.replaceState({}, "", "/");
   vi.mocked(useAuthState).mockReturnValue({
     state: { kind: "signed-in", id: "u1", email: "x@y.nl" },
@@ -178,7 +178,7 @@ test("blocked storage: the in-memory choice survives leaving and re-entering the
     window.history.pushState({}, "", "/app");
     window.dispatchEvent(new PopStateEvent("popstate"));
   });
-  expect(document.documentElement.dataset.theme).toBe("mono");
+  expect(document.documentElement.dataset.theme).toBe("light");
   rememberTheme(null);
   vi.restoreAllMocks();
   delete document.documentElement.dataset.theme;

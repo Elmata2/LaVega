@@ -2506,7 +2506,7 @@ export default function Optimalisatie({
                         <strong>{pct(locale, o.cashbackPct)}</strong> —{" "}
                         {o.bank ? `${o.bank} · ` : ""}
                         {o.product}{" "}
-                        <span style={{ opacity: 0.7 }}>
+                        <span style={{ opacity: "var(--aside-opacity)" }}>
                           {c.cashback.otherOffers.itemMeta(o.asOf)}
                         </span>
                       </li>
@@ -2834,7 +2834,7 @@ export default function Optimalisatie({
                                       {row.candidates.map((f) => (
                                         <li key={f.productId}>
                                           {f.product} — {feeLabel(locale, f.amount)}{" "}
-                                          <span style={{ opacity: 0.7 }}>
+                                          <span style={{ opacity: "var(--aside-opacity)" }}>
                                             ({sourceHost(f.sourceUrl)}, peildatum {f.asOf})
                                           </span>
                                         </li>

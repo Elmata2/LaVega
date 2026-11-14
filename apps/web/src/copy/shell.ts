@@ -150,7 +150,7 @@ export type ShellCopy = {
       heading: string;
       groupLabel: string;
       midnight: string;
-      mono: string;
+      light: string;
     };
     account: {
       ariaLabel: string;
@@ -521,8 +521,8 @@ const nl: ShellCopy = {
       ariaLabel: "Weergave",
       heading: "Weergave",
       groupLabel: "Thema",
-      midnight: "Midnight",
-      mono: "Zwart-wit",
+      midnight: "Donker",
+      light: "Licht",
     },
     account: {
       ariaLabel: "Account",
@@ -925,8 +925,8 @@ const en: ShellCopy = {
       ariaLabel: "Appearance",
       heading: "Appearance",
       groupLabel: "Theme",
-      midnight: "Midnight",
-      mono: "Black and white",
+      midnight: "Dark",
+      light: "Light",
     },
     account: {
       ariaLabel: "Account",
