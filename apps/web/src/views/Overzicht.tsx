@@ -82,8 +82,6 @@ type OverzichtProps = {
   mode: ConversionMode;
   onBufferChange: (cents: number) => void;
   onNavigate: (view: View) => void;
-  /** Opens the widget picker in Profiel (the "Alle widgets" link). */
-  onAddWidget: () => void;
   onSelectCategory: (category: string) => void;
   /** Everything the travel module needs, passed straight through. */
   travel: TravelBlockProps;
@@ -113,7 +111,6 @@ export default function Overzicht({
   mode,
   onBufferChange,
   onNavigate,
-  onAddWidget,
   onSelectCategory,
   travel,
   intake,
@@ -178,19 +175,6 @@ export default function Overzicht({
       <ModuleGrid label={c.overzicht.gridLabel} className="home-grid">
         <AandachtWidget alerts={alerts} bufferCents={bufferCents} onBufferChange={onBufferChange} />
 
-        <ChartSlot
-          span={spans.chart === 2 ? 2 : 3}
-          saldo={{
-            accounts,
-            txs,
-            scheduledFlows,
-            asOf,
-            onNavigate,
-            fxHistory,
-            mode,
-          }}
-          cashflow={{ forecast, bufferCents, onNavigate }}
-        />
         <PositieWidget
           accounts={accounts}
           onNavigate={onNavigate}
@@ -199,14 +183,37 @@ export default function Overzicht({
           mode={mode}
         />
 
-        <StatistiekBlock
-          txs={txs}
-          rules={rules}
-          own={own}
-          onSelectCategory={onSelectCategory}
-          fxHistory={fxHistory}
-          mode={mode}
-        />
+        <div className="home-fixed" data-testid="home-fixed">
+          <ChartSlot
+            saldo={{
+              accounts,
+              txs,
+              scheduledFlows,
+              asOf,
+              onNavigate,
+              fxHistory,
+              mode,
+            }}
+            cashflow={{ forecast, bufferCents, onNavigate }}
+          />
+          <StatistiekBlock
+            txs={txs}
+            rules={rules}
+            own={own}
+            onSelectCategory={onSelectCategory}
+            fxHistory={fxHistory}
+            mode={mode}
+          />
+
+          <KaartenBlock
+            accounts={accounts}
+            onNavigate={onNavigate}
+            statedCredit={intake?.store?.current.statedCards?.value ?? NO_STATED}
+            statedDebit={intake?.store?.current.statedDebitCards?.value ?? NO_STATED}
+          />
+
+          <TravelBlock {...travel} />
+        </div>
 
         <RecenteTransactiesBlock
           span={spans["recente-transacties"] ?? 3}
@@ -252,16 +259,7 @@ export default function Overzicht({
           onSelectCategory={onSelectCategory}
         />
 
-        <KaartenBlock
-          accounts={accounts}
-          onNavigate={onNavigate}
-          statedCredit={intake?.store?.current.statedCards?.value ?? NO_STATED}
-          statedDebit={intake?.store?.current.statedDebitCards?.value ?? NO_STATED}
-        />
-
-        <TravelBlock {...travel} />
-
-        <HomeAddArea onOpenPicker={onAddWidget} />
+        <HomeAddArea />
       </ModuleGrid>
     </>
   );

@@ -23,7 +23,7 @@ export function requestFocusAfterHide(): void {
   pending = { kind: "hidden" };
 }
 
-export default function HomeAddArea({ onOpenPicker }: { onOpenPicker: () => void }) {
+export default function HomeAddArea() {
   const [locale] = useAppLocale();
   const c = shellCopy[locale];
   const [enabled, setEnabled] = useOverviewWidgets();
@@ -76,9 +76,6 @@ export default function HomeAddArea({ onOpenPicker }: { onOpenPicker: () => void
             >
               {c.home.addHeading}
             </h2>
-            <button type="button" className="home-add-all" onClick={onOpenPicker}>
-              {c.home.allWidgets}
-            </button>
           </div>
           <div className="home-add-grid">
             {candidates.map((w) => {

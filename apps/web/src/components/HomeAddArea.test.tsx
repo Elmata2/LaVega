@@ -50,7 +50,7 @@ function Agenda() {
   ) : null;
 }
 
-function mount(onOpenPicker: () => void = () => {}, strict = false) {
+function mount(strict = false) {
   container = document.createElement("div");
   container.id = "main";
   container.tabIndex = -1;
@@ -60,7 +60,7 @@ function mount(onOpenPicker: () => void = () => {}, strict = false) {
     <>
       <Aandacht />
       <Agenda />
-      <HomeAddArea onOpenPicker={onOpenPicker} />
+      <HomeAddArea />
     </>
   );
   act(() => root!.render(strict ? <StrictMode>{tree}</StrictMode> : tree));
@@ -139,14 +139,13 @@ test("the add grid is 4 columns, 2 at a container <= 900px and 1 at <= 520px", (
   expect(cols(400)).toBe("minmax(0,1fr)");
 });
 
-test("the all-widgets link calls onOpenPicker", () => {
-  const open = vi.fn();
-  mount(open);
-  const link = Array.from(container!.querySelectorAll("button")).find(
-    (b) => b.textContent === c.home.allWidgets,
-  )!;
-  act(() => link.click());
-  expect(open).toHaveBeenCalledTimes(1);
+test("there is no all-widgets link: the boxes are the only control", () => {
+  mount();
+  expect(
+    Array.from(container!.querySelectorAll("button")).some(
+      (b) => b.textContent === "Alle widgets",
+    ),
+  ).toBe(false);
 });
 
 test("the hide button has a text name, turns the widget off and focuses the add-area heading", () => {
@@ -181,7 +180,7 @@ test("when the card renders nothing and the area is gone, focus falls back to #m
 });
 
 test("under StrictMode one click adds exactly one widget", () => {
-  mount(() => {}, true);
+  mount(true);
   act(() => boxes()[0]!.click());
   expect(stored()?.on).toEqual(["aandacht"]);
 });

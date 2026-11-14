@@ -21,6 +21,13 @@ export const SHOW_SCOPE_SWITCH: boolean = !ARCHIVE_BUSINESS;
 export const SHOW_INVOICE_FORWARDING: boolean = !ARCHIVE_BUSINESS;
 export const SHOW_ENTITY_CLASSIFIER: boolean = !ARCHIVE_BUSINESS;
 
+/* Profiel trim (14 Nov 2026): cards hidden "for now". The components, props and
+ * handlers stay; flip a flag to true to bring the card back. */
+export const SHOW_OWN_COLUMNS_IMPORT: boolean = false;
+export const SHOW_DOCUMENTS_CARD: boolean = false;
+export const SHOW_CASHBACK_CORRECTION: boolean = false;
+export const SHOW_NET_WORTH_SHARE: boolean = false;
+
 export function isArchivedView(v: string): boolean {
   return (ARCHIVED_VIEWS as readonly string[]).includes(v);
 }

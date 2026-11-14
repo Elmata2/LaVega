@@ -107,7 +107,7 @@ export function useCashflowParts({
             ariaLabel={c.verwachteKaspositieAria}
             readoutLabel={c.verwacht}
             mark={shortfallWeek !== null ? { index: shortfallWeek, color: "var(--neg)" } : null}
-            height={170}
+            height={112}
           />
         )}
       </>

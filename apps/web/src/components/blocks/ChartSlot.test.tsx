@@ -22,14 +22,13 @@ afterEach(() => {
   document.cookie = "lavega_locale=; Max-Age=0; Path=/";
 });
 
-function mount(span: 2 | 3 = 3) {
+function mount() {
   container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);
   act(() =>
     root!.render(
       <ChartSlot
-        span={span}
         saldo={{
           accounts,
           txs,
@@ -101,9 +100,9 @@ test("storage that throws still renders Totale positie and still switches", () =
   expect(heading()).toBe("Cashflow");
 });
 
-test("the slot takes the span it is given", () => {
-  mount(2);
-  expect(container!.querySelector("section")?.className).toContain("span_2");
+test("the slot is one half of the fixed Home group: span 1", () => {
+  mount();
+  expect(container!.querySelector("section")?.className).toContain("span_1");
 });
 
 test("changing the choice keeps the radio group element and keyboard focus", () => {

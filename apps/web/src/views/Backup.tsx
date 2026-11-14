@@ -298,6 +298,7 @@ export default function Backup({ storage, asOf, documentCount = 0, onRestored }:
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [restored, setRestored] = useState(false);
+  const [restoreOpen, setRestoreOpen] = useState(false);
 
   async function handleDownload() {
     // The FULL bundle (v3): the vault AND the sealed document bytes. A download
@@ -330,6 +331,7 @@ export default function Backup({ storage, asOf, documentCount = 0, onRestored }:
         return;
       }
       setRestored(true);
+      setRestoreOpen(false);
       setPass("");
       setFile(null);
       setConfirmed(false);
@@ -345,59 +347,70 @@ export default function Backup({ storage, asOf, documentCount = 0, onRestored }:
   return (
     <Card as="section" aria-label={c.ariaLabel}>
       <h2>{c.title}</h2>
-
-      <h3>{c.download.title}</h3>
       <p>{c.download.description}</p>
-      <Button variant="primary" onClick={handleDownload}>
-        {c.download.button}
-      </Button>
-
-      <PortableExport storage={storage} asOf={asOf} />
-
-      <ServerBackup storage={storage} documentCount={documentCount} />
-
-      <h3>{c.restore.title}</h3>
-      <StatusLine tone="warning">{c.restore.warning}</StatusLine>
-      <form onSubmit={handleRestore}>
-        <Field>
-          <label htmlFor="backup-restore-file">{c.restore.fileLabel}</label>
-          <input
-            id="backup-restore-file"
-            type="file"
-            accept=".lavega"
-            disabled={busy}
-            onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-          />
-        </Field>
-        <Field>
-          <label htmlFor="backup-restore-pass">{c.restore.passwordLabel}</label>
-          <input
-            id="backup-restore-pass"
-            type="password"
-            value={pass}
-            onChange={(e) => setPass(e.target.value)}
-            disabled={busy}
-          />
-        </Field>
-        <CheckboxField>
-          <input
-            type="checkbox"
-            checked={confirmed}
-            onChange={(e) => setConfirmed(e.target.checked)}
-            disabled={busy}
-          />
-          {c.restore.confirmLabel}
-        </CheckboxField>
-        {error && (
-          <StatusLine tone="problem" role="alert">
-            {error}
-          </StatusLine>
-        )}
-        {restored && <p>{c.restore.success}</p>}
-        <Button type="submit" variant="primary" disabled={busy || !file || !confirmed}>
-          {c.restore.submitButton}
+      <div className="flex flex-wrap gap-2" data-testid="backup-primary">
+        <Button variant="primary" onClick={handleDownload}>
+          {c.simple.makeButton}
         </Button>
-      </form>
+        <Button
+          aria-expanded={restoreOpen}
+          aria-controls="backup-restore-form"
+          onClick={() => setRestoreOpen((open) => !open)}
+        >
+          {c.simple.restoreButton}
+        </Button>
+      </div>
+
+      {restoreOpen && (
+        <form id="backup-restore-form" onSubmit={handleRestore}>
+          <h3>{c.restore.title}</h3>
+          <StatusLine tone="warning">{c.restore.warning}</StatusLine>
+          <Field>
+            <label htmlFor="backup-restore-file">{c.restore.fileLabel}</label>
+            <input
+              id="backup-restore-file"
+              type="file"
+              accept=".lavega"
+              disabled={busy}
+              onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+            />
+          </Field>
+          <Field>
+            <label htmlFor="backup-restore-pass">{c.restore.passwordLabel}</label>
+            <input
+              id="backup-restore-pass"
+              type="password"
+              value={pass}
+              onChange={(e) => setPass(e.target.value)}
+              disabled={busy}
+            />
+          </Field>
+          <CheckboxField>
+            <input
+              type="checkbox"
+              checked={confirmed}
+              onChange={(e) => setConfirmed(e.target.checked)}
+              disabled={busy}
+            />
+            {c.restore.confirmLabel}
+          </CheckboxField>
+          {error && (
+            <StatusLine tone="problem" role="alert">
+              {error}
+            </StatusLine>
+          )}
+          <Button type="submit" variant="primary" disabled={busy || !file || !confirmed}>
+            {c.restore.submitButton}
+          </Button>
+        </form>
+      )}
+      {restored && <p>{c.restore.success}</p>}
+
+      <details className="mt-4" data-testid="backup-more">
+        <summary className="cursor-pointer">{c.simple.moreOptions}</summary>
+        <PortableExport storage={storage} asOf={asOf} />
+        <ServerBackup storage={storage} documentCount={documentCount} />
+      </details>
     </Card>
   );
 }

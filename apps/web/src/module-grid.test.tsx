@@ -214,6 +214,19 @@ test("on Home a span-1 card takes the full row at a container <= 1200px, one of 
   );
 });
 
+test("the four fixed Home blocks sit two per row at a container down to 784px, one column at <= 783px", () => {
+  const wrapper = ["home-fixed"];
+  const card = moduleClasses(1, "tall");
+  const opts = { parentClasses: wrapper };
+  expect(resolved(wrapper, "grid-template-columns")).toBe("repeat(2,minmax(0,1fr))");
+  expect(resolvedAtContainerWidth(wrapper, "grid-template-columns", 783)).toBe("minmax(0,1fr)");
+  // A fixed block never goes full-row on its own and never keeps the 360px minimum.
+  // Checked at 1000: below 900 the resolver would let the Tailwind @container variants
+  // win by source order, while a browser lets the two-class override win by specificity.
+  expect(resolvedAtContainerWidth(card, "grid-column", 1000, opts)).toBe("auto");
+  expect(resolvedAtContainerWidth(card, "min-height", 1000, opts)).toBe("var(--home-block-min)");
+});
+
 test("off Home a span-1 card still shares a row in the two-column band", () => {
   const plain = mount(<ModuleGrid>{null}</ModuleGrid>).className.split(" ");
   expect(

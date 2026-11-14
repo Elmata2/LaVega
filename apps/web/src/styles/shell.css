@@ -167,7 +167,9 @@
     align-items: center;
     justify-content: center;
     gap: var(--sp-2);
+    font-family: var(--font-body);
     font-weight: 600;
+    letter-spacing: -0.02em;
   }
   /* Only the 48px phone bar is sticky; the title and actions scroll with the
    * content. There is no inline sidebar, so no toggle either. */

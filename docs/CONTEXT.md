@@ -126,7 +126,7 @@ Specified in **`docs/investing/STACK.md`** — the investing side's own stack, d
 
 - **Home** — the first page of the personal app (view id `overview`, route `/app`). Four fixed blocks: the chart slot (Totale positie or Cashflow), Statistieken, Je kaarten, Travel; then the add area.
 - **Widget** — an optional Home card the user switches on (Aandacht, Recente transacties, Betaalagenda, BTW, Facturen, Top uitgaven, Positie per bedrijf). None is on by default. The choice is per browser; "Standaard herstellen" clears it.
-- **Add area** — the dashed boxes at the bottom of Home, one per widget that is off (at most four). A click switches the widget on; "Alle widgets" opens the picker.
+- **Add area** — the dashed boxes at the bottom of Home, one per widget that is off (at most four). A click switches the widget on. There is no picker; the boxes and hide buttons are the only widget control.
 - **Assistant panel** — the right-hand column of the app frame, on every view at >= 1024px (a sheet from the bottom bar below that). It runs in the browser, reads the vault before every turn and makes no network call.
 - **Pop-up** — a modal dialog on Home that asks the user to answer the intake questions or to connect banks. At most one per browser session; a dismissal hides it for 7 days.
 

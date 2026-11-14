@@ -765,7 +765,7 @@ export default function StatistiekBlock({
                     format={(v) => formatEuroAxisIn(locale, v)}
                     ariaLabel={c.uitgavenPerCategoriePer(unitWordIn(locale, perCategory.unit))}
                     showAxis
-                    height={196}
+                    height={104}
                   />
                 </div>
                 {/* Drie notities die alle drie hetzelfde zeggen — "dit zie je
@@ -858,6 +858,7 @@ export default function StatistiekBlock({
                   groups={growthGroups}
                   format={(v) => formatEuroIn(locale, v)}
                   ariaLabel={c.verschilAria(windowDays)}
+                  height={96}
                 />
                 {/* De zin boven de staven zegt WAT er gestegen is en met
                     hoeveel; dit zegt welke dagen dat "ervoor" precies zijn en
@@ -910,7 +911,7 @@ export default function StatistiekBlock({
                 peakIndex={peak?.index ?? -1}
                 averageValue={weekdays?.dayAverage ?? null}
                 averageLabel={c.gewoneDagLabel}
-                height={196}
+                height={104}
               />
               {/* Wat "gemiddeld" hier betekent: per VOORKOMEN van die weekdag,
                   zodat de dag die het vaakst langskwam niet wint door langs te
