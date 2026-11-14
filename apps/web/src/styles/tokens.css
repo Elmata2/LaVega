@@ -86,11 +86,11 @@
   /* Color: midnight */
   /* Theme-picker swatches (Profiel > Weergave). Constant in every theme on
    * purpose: each swatch shows its own theme's real ground and ink, whichever
-   * theme is active. Same four values in the mono block (contrast script). */
+   * theme is active. Same five values in the light block (contrast script). */
   --swatch-midnight-bg: #02070a;
   --swatch-midnight-cta: #fc734d;
-  --swatch-mono-bg: #ffffff;
-  --swatch-mono-ink: #000000;
+  --swatch-light-bg: #ffffff;
+  --swatch-light-cta: #fc734d;
   --swatch-ring: #8a8a8a; /* mid-grey: visible on a white and on a black pill */
   --bg: #02070a; /* app surface inside the frame */
   --surface: #0d171d; /* raised panels */
@@ -168,9 +168,13 @@
   --shadow-float: 0 24px 80px rgba(0, 0, 0, 0.55);
 
   /* Wizard card-details block: hairline between cards and the card legend ink.
-   * Fixed values (the wizard sits on a light panel in every theme). */
-  --wz-cardrow-line: #e4e7ec;
-  --wz-cardrow-ink: #14161a;
+   * The wizard sits on --bg: light ink here, dark ink in the light block. */
+  --wz-cardrow-line: #26333b; /* hairline on the dark ground */
+  --wz-cardrow-ink: #ffffff; /* legend ink: was dark-on-dark (1.12:1) in midnight */
+
+  /* Opacity for dimmed inline asides (e.g. peildatum). The light block raises it:
+   * --muted at .7 on a pale surface is only 3.2:1. */
+  --aside-opacity: 0.7;
 
   /* Motion */
   --ease-emphasized: cubic-bezier(0.23, 1, 0.32, 1); /* fast out, gentle settle */
@@ -184,10 +188,15 @@
   --module-pad: var(--sp-5);
 }
 
-/* Light: the same brand on a white ground. Only colour changes; radius, type,
- * spacing and motion are shared. Blue and the semantic colours are darkened so
- * they stay >= 4.5:1 as text on the light panels (scripts/check-midnight-contrast.mjs
- * checks both themes). Bank card faces keep their fixed colours. */
+/* Light: the same brand on a white ground. Selected in Profiel > Weergave and
+ * applied before first paint by public/theme-init.js (on /app only). Only colour
+ * changes; radius, type, spacing and motion are shared. Blue and the semantic
+ * colours are darkened so they stay >= 4.5:1 as text on the light panels.
+ * Every #rrggbb colour token of :root is set here, even where the value is the
+ * same (card faces, swatches): scripts/check-midnight-contrast.mjs fails
+ * otherwise, so a token added to :root cannot silently leak into light. Bank
+ * card faces keep their fixed colours. Placed right after :root on purpose:
+ * Globe.test.tsx splits this file at this selector. */
 :root[data-theme="light"] {
   color-scheme: light;
   --bg: #ffffff;
@@ -217,64 +226,21 @@
   --slice-7: #3f8f58;
   --slice-8: #6b7983;
   --slice-rest: #9aa5ad;
+  --card-face-1: #0a4a6b;
+  --card-face-2: #0f5c55;
+  --card-face-3: #4b3f8f;
+  --card-face-4: #8a3a22;
+  --card-text: #f7f5f0;
   --scrim: rgba(2, 7, 10, 0.4);
   --shadow-float: 0 24px 80px rgba(2, 7, 10, 0.16);
-}
-
-/* Monochrome: white ground, black ink, no hue. Selected in Profiel (step 4) and
- * applied before first paint by public/theme-init.js. Every #rrggbb colour token
- * of :root is set here (scripts/check-midnight-contrast.mjs fails otherwise), so
- * nothing leaks from midnight. Colour no longer carries meaning: positive and
- * negative read by sign and glyph, warnings by dashed border and icon. Radius,
- * type, spacing and motion are shared. Placed after the light block on purpose:
- * Globe.test.tsx splits this file at the light selector. */
-:root[data-theme="mono"] {
-  color-scheme: light;
-  --bg: #ffffff;
-  --surface: #f5f5f5;
-  --surface-2: #ebebeb;
-  --ink: #000000;
-  --ink-soft: #262626;
-  --on-ink: #ffffff;
-  --muted: #595959;
-  --line: rgba(0, 0, 0, 0.12);
-  --accent: #000000;
-  --accent-soft: rgba(0, 0, 0, 0.06);
-  --cta: #000000;
-  --on-cta: #ffffff;
-  --pos: #000000;
-  --neg: #404040;
-  --warn: #262626;
-  --chart-blue: #000000;
-  --chart-purple: #4d4d4d;
-  --chart-teal: #737373;
-  --card-face-1: #1f1f1f;
-  --card-face-2: #2b2b2b;
-  --card-face-3: #383838;
-  --card-face-4: #454545;
-  --card-text: #ffffff;
-  --slice-1: #1a1a1a;
-  --slice-2: #2d2d2d;
-  --slice-3: #404040;
-  --slice-4: #545454;
-  --slice-5: #686868;
-  --slice-6: #7c7c7c;
-  --slice-7: #909090;
-  --slice-8: #a0a0a0;
-  --slice-rest: #b0b0b0;
-  --scrim: rgba(0, 0, 0, 0.4);
-  --shadow-float: 0 24px 80px rgba(0, 0, 0, 0.14);
-  /* The wizard panel is light in every theme; same greys, no blue cast. */
-  --wz-cardrow-line: #e5e5e5;
-  --wz-cardrow-ink: #141414;
-  /* Theme-picker swatches (Profiel > Weergave). Constant in every theme on
-   * purpose: each swatch shows its own theme's real ground and ink, whichever
-   * theme is active. Same four values as in :root. */
+  --wz-cardrow-line: #e4e7ec;
+  --wz-cardrow-ink: #14161a;
+  --aside-opacity: 0.9;
   --swatch-midnight-bg: #02070a;
   --swatch-midnight-cta: #fc734d;
-  --swatch-mono-bg: #ffffff;
-  --swatch-mono-ink: #000000;
-  --swatch-ring: #8a8a8a; /* mid-grey: visible on a white and on a black pill */
+  --swatch-light-bg: #ffffff;
+  --swatch-light-cta: #fc734d;
+  --swatch-ring: #8a8a8a;
 }
 
 /* Tailwind's namespace, pointed at the variables above. Adding a token means

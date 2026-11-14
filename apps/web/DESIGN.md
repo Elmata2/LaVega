@@ -95,14 +95,14 @@ The working product behind app.lavega.dev, and the reference the content site an
 **Key characteristics**
 
 - One face in the app: Geist, page titles included. Only the landing page keeps Instrument Serif (its own `--serif` under `.lp`). Self-hosted from `src/assets/fonts/` with the OFL licenses.
-- Two themes: midnight (dark, default) and mono (black and white, chosen in Profiel). Radius, type, spacing and motion are shared. See "Monochrome theme".
+- Two themes: midnight (dark, default) and light, both with colour, chosen in Profiel. Radius, type, spacing and motion are shared. See "Light theme".
 - The app is a full-viewport frame (`100dvh`): icon rail, account sidebar, main. No margin, radius or shadow. Only main scrolls.
 - Depth is tone plus a 12% hairline. Only floating layers (dialogs, menus) cast a shadow.
 - Cantaloupe is the one filled call to action; signal blue carries links, active state and focus.
 
 ## Colors
 
-`color-scheme: dark` on `:root`. The light theme is `:root[data-theme="light"]` and changes colour only.
+`color-scheme: dark` on `:root`. The light theme is `:root[data-theme="light"]` and changes colour only (see "Light theme").
 
 - **Midnight `#02070a`** — app surface. The frame fills the viewport, so there is no separate gutter ground.
 - **Surface `#0d171d` / Surface-2 `#16222a`** — raised panels, then nested rows and inputs.
@@ -211,38 +211,37 @@ Scope: `views/Profiel.tsx`. Five cards, in this order: Algemeen (account e-mail 
 - A dismissal (Later, Escape, backdrop, close) hides that pop-up for 7 days, stored in `localStorage["lavega.popups"]` per id; the intake id includes the invite kind. The primary action writes no dismissal.
 - It opens one frame after the page paints, never over the vault gate or the wizard.
 
-## Monochrome theme
+## Light theme
 
-Scope: the personal app. Selector `:root[data-theme="mono"]` in `styles/tokens.css`, after the light block. Scheme is light (white ground, black ink), `color-scheme: light`. Every `#rrggbb` token in `:root` is redefined there; `scripts/check-midnight-contrast.mjs` fails otherwise, and `src/contrast-script.test.ts` runs it.
+Scope: the personal app. Selector `:root[data-theme="light"]` in `styles/tokens.css`, right after `:root`. White ground, dark ink, `color-scheme: light`. The brand colour stays: cantaloupe for the one primary action, blue for links and focus, coloured money figures and charts. Every `#rrggbb` token in `:root` is also set in the light block (card faces, swatches and wizard inks repeat their midnight value); `scripts/check-midnight-contrast.mjs` fails otherwise, and `src/contrast-script.test.ts` runs it. Midnight is the default and has no `data-theme` attribute.
 
-| Token                                | Mono                                         | Use                                                   |
-| ------------------------------------ | -------------------------------------------- | ----------------------------------------------------- |
-| `--bg` / `--surface` / `--surface-2` | #ffffff / #f5f5f5 / #ebebeb                  | Ground, cards and rail, inset fills and active nav    |
-| `--ink` / `--ink-soft` / `--on-ink`  | #000000 / #262626 / #ffffff                  | Text, hover, text on ink                              |
-| `--muted`                            | #595959                                      | Secondary text, 5.88:1 or better on all three grounds |
-| `--line`                             | rgba(0,0,0,.12)                              | Hairline                                              |
-| `--accent` / `--accent-soft`         | #000000 / rgba(0,0,0,.06)                    | Links (underlined), active, focus ring                |
-| `--cta` / `--on-cta`                 | #000000 / #ffffff                            | The one filled action: black pill                     |
-| `--pos` / `--neg` / `--warn`         | #000000 / #404040 / #262626                  | Never the only signal, see below                      |
-| `--chart-blue` / `-purple` / `-teal` | #000000 / #4d4d4d / #737373                  | 3:1 on bg, surface and surface-2                      |
-| `--slice-1..8`, `--slice-rest`       | #1a1a1a to #a0a0a0, rest #b0b0b0             | Informational in the script; labels carry meaning     |
-| `--card-face-1..4`, `--card-text`    | #1f1f1f, #2b2b2b, #383838, #454545; #ffffff  | Bank card faces                                       |
-| `--scrim` / `--shadow-float`         | rgba(0,0,0,.4) / 0 24px 80px rgba(0,0,0,.14) | Floating layers only                                  |
+| Token                                | Light                                        | Use                                                       |
+| ------------------------------------ | -------------------------------------------- | --------------------------------------------------------- |
+| `--bg` / `--surface` / `--surface-2` | #ffffff / #f3f6f8 / #e8edf0                  | Ground, cards and rail, inset fills and active nav        |
+| `--ink` / `--ink-soft` / `--on-ink`  | #02070a / #1c2830 / #ffffff                  | Text, hover, text on ink. The selected pill is ink on ink |
+| `--muted`                            | #4f5d66                                      | Secondary text, 4.5:1 or better on all three grounds      |
+| `--line`                             | rgba(2,7,10,.1)                              | Hairline                                                  |
+| `--accent` / `--accent-soft`         | #016da3 / rgba(2,151,222,.12)                | Links, active, focus ring                                 |
+| `--cta` / `--on-cta`                 | #fc734d / #02070a                            | The one filled action: cantaloupe pill                    |
+| `--pos` / `--neg` / `--warn`         | #17703f / #b42f25 / #7d5200                  | Darkened for text on white; never the only signal         |
+| `--chart-blue` / `-purple` / `-teal` | #016da3 / #5a45c4 / #0a6f64                  | 3:1 on bg, surface and surface-2                          |
+| `--slice-1..8`, `--slice-rest`       | #3d5ce0 to #6b7983, rest #9aa5ad             | Informational in the script; labels carry meaning         |
+| `--card-face-1..4`, `--card-text`    | same as midnight                             | Bank card faces keep their fixed colours                  |
+| `--scrim` / `--shadow-float`         | rgba(2,7,10,.4) / 0 24px 80px rgba(2,7,10,.16) | Floating layers only                                    |
 
-Behaviour rules (they also hold in midnight, because they help colour-blind users):
+Behaviour rules (they hold in both themes, because they help colour-blind users):
 
-| Rule                                                                                                                                                                                      | Where                                                                                  |
-| ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
-| Signed amounts: sign first, real minus U+2212, zero unsigned ("−€ 5,00", "+€5,00")                                                                                                        | `formatSignedEuroIn`, `formatSignedCurrencyIn`, `formatSignedPercentIn` in `format.ts` |
-| Status never by tint alone: warning is a dashed border plus triangle, problem a solid border plus cross, success a solid border plus check                                                | `components/ui/StatusLine.tsx`; `Badge` takes `tone`                                   |
-| Dot shapes: positive filled circle, warning hollow ring, negative diamond                                                                                                                 | `.dot-pos`, `.dot-warn`, `.dot-neg` in `base.css`                                      |
-| Charts with more than 3 series carry a legend with figures or direct labels. Adjacent segments are parted by a 2px `--bg` line                                                            | `SpendPie` legend and arc gap, `.proportion-bar span + span` in `base.css`             |
-| Bank logos are greyscale                                                                                                                                                                  | `:root[data-theme="mono"] .bank-logo` in `base.css`                                    |
-| Focus ring 2px `--accent` (black in mono, Signal Blue in midnight). Shell controls draw it inset (offset -2px); the resize handle uses a grip colour change and a `forced-colors` outline | `base.css`; `styles/shell.css`                                                         |
-| Selected segmented option and the primary button: black pill, white label                                                                                                                 | `--cta`, `--on-cta`                                                                    |
-| The landing page stays midnight in both themes                                                                                                                                            | `MidnightScope` in `Root.tsx`; `theme-init.js` applies mono on `/app` paths only       |
+| Rule                                                                                                                                                                  | Where                                                                                  |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| Signed amounts: sign first, real minus U+2212, zero unsigned ("−€ 5,00", "+€5,00")                                                                                    | `formatSignedEuroIn`, `formatSignedCurrencyIn`, `formatSignedPercentIn` in `format.ts` |
+| Status never by tint alone: warning is a dashed border plus triangle, problem a solid border plus cross, success a solid border plus check                            | `components/ui/StatusLine.tsx`; `Badge` takes `tone`                                   |
+| Dot shapes: positive filled circle, warning hollow ring, negative diamond                                                                                             | `.dot-pos`, `.dot-warn`, `.dot-neg` in `base.css`                                      |
+| Charts with more than 3 series carry a legend with figures or direct labels. Adjacent segments are parted by a 2px `--bg` line                                        | `SpendPie` legend and arc gap, `.proportion-bar span + span` in `base.css`             |
+| Focus ring 2px `--accent`. Shell controls draw it inset (offset -2px); the resize handle uses a grip colour change and a `forced-colors` outline; on the selected pill the ring is `currentColor` | `base.css`; `styles/shell.css`; `blocks.css`                                           |
+| Selected segmented option and active nav item: `--ink` ground, `--on-ink` label (white pill in midnight, dark pill in light)                                           | `.module-tab-on`, `.scope-on`, nav items                                               |
+| The landing page stays midnight in both themes                                                                                                                        | `MidnightScope` in `Root.tsx`; `theme-init.js` applies light on `/app` paths only      |
 
-Persistence: `localStorage["lavega.theme"]` is `"midnight"` or `"mono"`; anything else is midnight. `public/theme-init.js` runs before first paint (the CSP blocks inline script) and sets `data-theme` and `color-scheme`. A `storage` event keeps tabs in step. The switch is the Weergave part of the Algemeen card in Profiel and is instant, with no colour transition. Known gap: input borders at the 12% line are below 3:1 in all themes.
+Persistence: `localStorage["lavega.theme"]` is `"midnight"` or `"light"`. The retired value `"mono"` reads as light and is rewritten on the next save; anything else is midnight. `public/theme-init.js` runs before first paint (the CSP blocks inline script) and sets `data-theme` and `color-scheme`. A `storage` event keeps tabs in step. The switch (Donker / Licht, with a swatch of each ground plus a spot of cantaloupe) is the Weergave part of the Algemeen card in Profiel and is instant, with no colour transition. There is no "follow the system" option. Known gap: input borders at the 12% line are below 3:1 in both themes. Rule for new CSS: no hard-coded colour outside `tokens.css`; add a token in `:root` and in the light block.
 
 ## Components
 
@@ -250,7 +249,7 @@ Persistence: `localStorage["lavega.theme"]` is `"midnight"` or `"mono"`; anythin
 - **Pill (`components/ui/Pill.tsx`).** Toggle chip, 0.85rem, transparent with a hairline. Active is accent-soft fill, ink text, blue border.
 - **Card.** Surface, 14px radius (`--r-sm`), hairline, no shadow, 24px padding (16px on phones). Modules on the homescreen grid add the height tokens (200px short, 360px tall).
 - **Input.** Surface-2 fill, hairline, 14px radius, 6px 10px padding, 0.9rem. Focus is the blue ring, never a colour change of the border.
-- **Nav item.** Text tab, muted; active is the white pill with midnight text — the same treatment as the marketing site.
+- **Nav item.** Text tab, muted; active is the `--ink` pill with `--on-ink` text (white with midnight text in midnight, dark with white text in light) — the same treatment as the marketing site.
 - **Dialog (`components/ui/Dialog.tsx`).** Native `<dialog>`, `--scrim` backdrop, surface panel, `--shadow-float`, 24px padding. The only place a shadow is allowed. See Pop-ups.
 
 ## Motion

@@ -2,7 +2,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { applyTheme, readStoredTheme, storeTheme, THEME_KEY } from "./theme";
+import { applyTheme, readStoredTheme, storeTheme, THEME_KEY, THEME_OPTIONS } from "./theme";
 import { isAppPathname } from "../appRoutes";
 
 const root = document.documentElement;
@@ -20,18 +20,27 @@ test("the storage key is lavega.theme", () => {
   expect(THEME_KEY).toBe("lavega.theme");
 });
 
-test("reads mono and midnight", () => {
-  window.localStorage.setItem(THEME_KEY, "mono");
-  expect(readStoredTheme()).toBe("mono");
+test("reads light and midnight", () => {
+  window.localStorage.setItem(THEME_KEY, "light");
+  expect(readStoredTheme()).toBe("light");
   window.localStorage.setItem(THEME_KEY, "midnight");
   expect(readStoredTheme()).toBe("midnight");
+});
+
+test("a stored retired mono reads as light", () => {
+  window.localStorage.setItem(THEME_KEY, "mono");
+  expect(readStoredTheme()).toBe("light");
+});
+
+test("the switch offers exactly midnight and light", () => {
+  expect(THEME_OPTIONS).toEqual(["midnight", "light"]);
 });
 
 test("missing value is midnight", () => {
   expect(readStoredTheme()).toBe("midnight");
 });
 
-test.each(["light", "MONO", "", "dark", "null", "{}"])("invalid value %j is midnight", (v) => {
+test.each(["LIGHT", "MONO", "", "dark", "null", "{}"])("invalid value %j is midnight", (v) => {
   window.localStorage.setItem(THEME_KEY, v);
   expect(readStoredTheme()).toBe("midnight");
 });
@@ -43,14 +52,14 @@ test("blocked storage (getItem throws) is midnight", () => {
   expect(readStoredTheme()).toBe("midnight");
 });
 
-test("apply mono sets data-theme and a light colour scheme", () => {
-  applyTheme("mono");
-  expect(root.dataset.theme).toBe("mono");
+test("apply light sets data-theme and a light colour scheme", () => {
+  applyTheme("light");
+  expect(root.dataset.theme).toBe("light");
   expect(root.style.colorScheme).toBe("light");
 });
 
 test("apply midnight removes data-theme and sets a dark colour scheme", () => {
-  root.dataset.theme = "mono";
+  root.dataset.theme = "light";
   applyTheme("midnight");
   expect(root.hasAttribute("data-theme")).toBe(false);
   expect(root.style.colorScheme).toBe("dark");
@@ -61,16 +70,22 @@ function runInit() {
   new Function(initScript)();
 }
 
-test("init script applies stored mono", () => {
-  window.localStorage.setItem(THEME_KEY, "mono");
+test("init script applies stored light", () => {
+  window.localStorage.setItem(THEME_KEY, "light");
   runInit();
-  expect(root.dataset.theme).toBe("mono");
+  expect(root.dataset.theme).toBe("light");
   expect(root.style.colorScheme).toBe("light");
 });
 
-test.each([null, "light", "garbage"])("init script leaves midnight for %j", (v) => {
+test("init script reads a stored retired mono as light", () => {
+  window.localStorage.setItem(THEME_KEY, "mono");
+  runInit();
+  expect(root.dataset.theme).toBe("light");
+});
+
+test.each([null, "midnight", "garbage"])("init script leaves midnight for %j", (v) => {
   if (v !== null) window.localStorage.setItem(THEME_KEY, v);
-  root.dataset.theme = "mono";
+  root.dataset.theme = "light";
   runInit();
   expect(root.hasAttribute("data-theme")).toBe(false);
   expect(root.style.colorScheme).toBe("dark");
@@ -97,8 +112,8 @@ test("index.html loads the init script synchronously before the module script", 
 });
 
 test("storeTheme persists and reports success", () => {
-  expect(storeTheme("mono")).toBe(true);
-  expect(window.localStorage.getItem(THEME_KEY)).toBe("mono");
+  expect(storeTheme("light")).toBe(true);
+  expect(window.localStorage.getItem(THEME_KEY)).toBe("light");
   expect(storeTheme("midnight")).toBe(true);
   expect(readStoredTheme()).toBe("midnight");
 });
@@ -107,7 +122,7 @@ test("storeTheme swallows blocked storage and returns false", () => {
   vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
     throw new Error("quota");
   });
-  expect(storeTheme("mono")).toBe(false);
+  expect(storeTheme("light")).toBe(false);
 });
 
 const PATHS = [
@@ -121,11 +136,11 @@ const PATHS = [
   "/en/app",
 ];
 
-test.each(PATHS)("init script applies mono only on app paths: %s", (path) => {
+test.each(PATHS)("init script applies light only on app paths: %s", (path) => {
   window.history.replaceState({}, "", path);
-  window.localStorage.setItem(THEME_KEY, "mono");
+  window.localStorage.setItem(THEME_KEY, "light");
   runInit();
-  const wantMono = isAppPathname(path);
-  expect(root.dataset.theme).toBe(wantMono ? "mono" : undefined);
-  expect(root.style.colorScheme).toBe(wantMono ? "light" : "dark");
+  const wantLight = isAppPathname(path);
+  expect(root.dataset.theme).toBe(wantLight ? "light" : undefined);
+  expect(root.style.colorScheme).toBe(wantLight ? "light" : "dark");
 });

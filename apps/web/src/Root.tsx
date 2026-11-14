@@ -67,7 +67,7 @@ export default function Root() {
     };
   }, []);
 
-  /* theme-init.js applies mono only on /app paths, so a legacy entry (`/#app`,
+  /* theme-init.js applies the light theme only on /app paths, so a legacy entry (`/#app`,
    * `/?eb=…`) that normalises into /app after load has not been themed yet.
    * Apply the stored theme whenever the vault is shown (not for a signed-out
    * /app, which renders the landing page). */

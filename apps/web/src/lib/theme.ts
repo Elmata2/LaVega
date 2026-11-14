@@ -1,12 +1,17 @@
-export type Theme = "midnight" | "mono";
+export type Theme = "midnight" | "light";
+
+/** The options the switch offers, in order. */
+export const THEME_OPTIONS: readonly Theme[] = ["midnight", "light"];
 
 /* Same key and fallback as public/theme-init.js, which applies the theme before
- * first paint. Anything but "mono" (missing, invalid, blocked storage) is midnight. */
+ * first paint. "light" and the retired "mono" read as light; anything else
+ * (missing, invalid, blocked storage) is midnight. */
 export const THEME_KEY = "lavega.theme";
 
 export function readStoredTheme(): Theme {
   try {
-    return window.localStorage.getItem(THEME_KEY) === "mono" ? "mono" : "midnight";
+    const stored = window.localStorage.getItem(THEME_KEY);
+    return stored === "light" || stored === "mono" ? "light" : "midnight";
   } catch {
     return "midnight";
   }
@@ -15,9 +20,9 @@ export function readStoredTheme(): Theme {
 /* Midnight is the :root default, so it is "no data-theme attribute". */
 export function applyTheme(theme: Theme): void {
   const root = document.documentElement;
-  if (theme === "mono") root.dataset.theme = "mono";
+  if (theme === "light") root.dataset.theme = "light";
   else delete root.dataset.theme;
-  root.style.colorScheme = theme === "mono" ? "light" : "dark";
+  root.style.colorScheme = theme === "light" ? "light" : "dark";
 }
 
 /* Persist the choice. Returns false when storage is blocked; callers keep the

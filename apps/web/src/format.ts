@@ -53,7 +53,7 @@ function signFirst(fmt: Intl.NumberFormat, n: number): string {
 
 /** formatEuroIn with an explicit sign: "+" for positive, a real minus for
  *  negative, none for zero. For amounts coloured by sign, so the sign still
- *  tells income from spending when colour cannot (monochrome, colour-blind). */
+ *  tells income from spending when colour cannot (colour-blind). */
 export function formatSignedEuroIn(locale: Locale, n: number): string {
   return signFirst(
     new Intl.NumberFormat(tag(locale), {
