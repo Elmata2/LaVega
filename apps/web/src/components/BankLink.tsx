@@ -37,6 +37,7 @@ export default function BankLink({
   onRefresh,
   onBeforeRedirect,
   defaultPsuType = "business",
+  compact = false,
 }: {
   busy: boolean;
   /** Re-read every connected bank. See App's `handleRefreshBank`. */
@@ -46,6 +47,9 @@ export default function BankLink({
    *  and shows as the usual bank-link error. */
   onBeforeRedirect?: () => void | Promise<void>;
   defaultPsuType?: PsuType;
+  /** The intake wizard's last step: no heading, refresh row, account-type
+   *  switch (always personal) or vendor name. */
+  compact?: boolean;
 }) {
   const [locale] = useAppLocale();
   const c = moneyCopy[locale];
@@ -53,7 +57,7 @@ export default function BankLink({
     business: c.bankLink.zakelijk,
     personal: c.bankLink.particulier,
   };
-  const [psuType, setPsuType] = useState<PsuType>(defaultPsuType);
+  const [psuType, setPsuType] = useState<PsuType>(compact ? "personal" : defaultPsuType);
   const [aspsps, setAspsps] = useState<Aspsp[] | null>(null);
   const [selected, setSelected] = useState("");
   const [loading, setLoading] = useState(false);
@@ -128,23 +132,30 @@ export default function BankLink({
 
   return (
     <div
-      style={{
-        marginTop: "var(--sp-4)",
-        borderTop: "1px solid var(--line)",
-        paddingTop: "var(--sp-4)",
-      }}
+      style={
+        compact
+          ? { marginTop: "var(--sp-3)" }
+          : {
+              marginTop: "var(--sp-4)",
+              borderTop: "1px solid var(--line)",
+              paddingTop: "var(--sp-4)",
+            }
+      }
     >
-      <h3 style={{ marginTop: 0 }}>{c.bankLink.ofKoppelJeBankDirect}</h3>
+      {!compact && <h3 style={{ marginTop: 0 }}>{c.bankLink.ofKoppelJeBankDirect}</h3>}
       {/* VERVERSEN STAAT BOVEN HET KOPPELEN, want voor wie al gekoppeld is, is
           dit de knop die hij zoekt. Altijd zichtbaar en niet pas na een
           statuscheck: het antwoord "er is nog geen koppeling" komt van de
           server en is een zin die hij kan lezen, geen knop die er niet is. */}
-      <div className="flex flex-wrap gap-2 mb-[var(--sp-3)]">
-        <Button disabled={busy} onClick={onRefresh}>
-          {c.bankLink.ververs}
-        </Button>
-        <span className="cell-sub">{c.bankLink.ververshHint}</span>
-      </div>
+      {!compact && (
+        <div className="flex flex-wrap gap-2 mb-[var(--sp-3)]">
+          <Button disabled={busy} onClick={onRefresh}>
+            {c.bankLink.ververs}
+          </Button>
+          <span className="cell-sub">{c.bankLink.ververshHint}</span>
+        </div>
+      )}
+      {!compact && (
       <div className="scope-switch" role="group" aria-label={c.bankLink.typeRekeningAria}>
         {PSU_TYPE_ORDER.map((t, i) => (
           <Fragment key={t}>
@@ -161,9 +172,14 @@ export default function BankLink({
           </Fragment>
         ))}
       </div>
+      )}
       {aspsps === null ? (
         <Button disabled={busy || loading} onClick={() => void loadBanks(psuType)}>
-          {loading ? c.bankLink.laden : c.bankLink.koppelBankEnableBanking}
+          {loading
+            ? c.bankLink.laden
+            : compact
+              ? c.bankLink.koppelJeBank
+              : c.bankLink.koppelBankEnableBanking}
         </Button>
       ) : aspsps.length === 0 ? (
         <p className="cell-sub">{c.bankLink.geenBankenBeschikbaar}</p>
@@ -197,9 +213,11 @@ export default function BankLink({
           {c.bankLink.bankkoppelingError(error)}
         </StatusLine>
       )}
-      <p className="eyebrow" style={{ marginTop: "var(--sp-2)" }}>
-        {c.bankLink.alleenLezenToegang}
-      </p>
+      {!compact && (
+        <p className="eyebrow" style={{ marginTop: "var(--sp-2)" }}>
+          {c.bankLink.alleenLezenToegang}
+        </p>
+      )}
     </div>
   );
 }

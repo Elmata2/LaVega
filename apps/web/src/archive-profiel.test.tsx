@@ -47,6 +47,7 @@ const storage = fakeStorage().storage;
 
 async function render(overrides: Partial<Parameters<typeof Profiel>[0]> = {}) {
   const props: Parameters<typeof Profiel>[0] = {
+    owner: { kind: "device" },
     planUnlocked: false,
     entities: entitySummaries(
       [

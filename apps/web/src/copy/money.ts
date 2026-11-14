@@ -552,6 +552,8 @@ type BankLinkCopy = {
   ververshHint: string;
   laden: string;
   koppelBankEnableBanking: string;
+  /** The intake's neutral label for the same action (no vendor name). */
+  koppelJeBank: string;
   geenBankenBeschikbaar: string;
   doorsturen: string;
   autoriseer: string;
@@ -1292,6 +1294,7 @@ const nl: MoneyCopy = {
     ververshHint: "Haalt saldo en transacties opnieuw op bij elke gekoppelde bank.",
     laden: "Laden…",
     koppelBankEnableBanking: "Koppel bank (Enable Banking)",
+    koppelJeBank: "Koppel je bank",
     geenBankenBeschikbaar: "Geen banken beschikbaar.",
     doorsturen: "Doorsturen…",
     autoriseer: "Autoriseer",
@@ -1995,6 +1998,7 @@ const en: MoneyCopy = {
     ververshHint: "Fetches balances and transactions again from every connected bank.",
     laden: "Loading…",
     koppelBankEnableBanking: "Link bank (Enable Banking)",
+    koppelJeBank: "Connect your bank",
     geenBankenBeschikbaar: "No banks available.",
     doorsturen: "Redirecting…",
     autoriseer: "Authorise",

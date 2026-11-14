@@ -57,6 +57,7 @@ export type WizardCopy = {
     cardDetails: (together: boolean) => string;
     debitCards: (together: boolean) => string;
     upload: string;
+    connectBank: string;
     moneySharing: string;
     birthYear: string;
     incomeRegularity: string;
@@ -101,6 +102,9 @@ export type WizardCopy = {
   debitBrands: Record<Exclude<DebitBrand, "other-brand">, string>;
   /** Group name for brands the list does not know. */
   otherBrand: string;
+  /** Link under the card tiles: lift the filter to the banks answer. */
+  showAllBanks: string;
+  showMyBanks: string;
   /** Badge on a brand tile: how many of its cards are picked. */
   cardsPicked: (n: number) => string;
   /** The balance, paid-in-full, rate and points row per credit card. */
@@ -119,6 +123,8 @@ export type WizardCopy = {
     errors: { balance: string; paysInFull: string; rate: string; points: string };
   };
   upload: {
+    /** One line under "Connect your bank": read-only, and a file works too. */
+    connectBody: string;
     button: string;
     later: string;
     toPlan: string;
@@ -169,7 +175,7 @@ const bankNames = (other: string, crypto: string): Record<string, string> => ({
 
 export const wizardCopy: Record<Locale, WizardCopy> = {
   nl: {
-    sections: { about: "Over jou", goals: "Doelen", risk: "Risico" },
+    sections: { about: "Over jou", goals: "Doelen", risk: "Risico", finish: "Afronden" },
     next: "Verder",
     back: "Terug",
     close: "Sluiten",
@@ -216,6 +222,7 @@ export const wizardCopy: Record<Locale, WizardCopy> = {
       debitCards: (t) =>
         t ? "Welke betaalpassen hebben jullie?" : "Welke betaalpassen heb je?",
       upload: "Wil je je bankafschrift toevoegen?",
+      connectBank: "Koppel je bank",
       moneySharing: "Delen jullie je geld?",
       birthYear: "In welk jaar ben je geboren?",
       incomeRegularity: "Is je inkomen elke maand gelijk?",
@@ -317,6 +324,8 @@ export const wizardCopy: Record<Locale, WizardCopy> = {
     otherDebitCard: "Een andere pas",
     debitBrands: DEBIT_BRANDS,
     otherBrand: "Overige",
+    showAllBanks: "Toon alle banken",
+    showMyBanks: "Toon alleen mijn banken",
     cardsPicked: (n) => `${n} gekozen`,
     cardDetails: {
       balance: "Openstaand saldo",
@@ -338,6 +347,8 @@ export const wizardCopy: Record<Locale, WizardCopy> = {
       },
     },
     upload: {
+      connectBody:
+        "De koppeling is alleen-lezen: LaVega kan niets betalen of verplaatsen. Een bestand uploaden kan ook.",
       button: "Bankafschrift uploaden",
       later: "Later",
       toPlan: "Naar je plan",
@@ -361,7 +372,7 @@ export const wizardCopy: Record<Locale, WizardCopy> = {
     dateFuture: "Kies een datum in de toekomst.",
   },
   en: {
-    sections: { about: "About you", goals: "Goals", risk: "Risk" },
+    sections: { about: "About you", goals: "Goals", risk: "Risk", finish: "Finish" },
     next: "Next",
     back: "Back",
     close: "Close",
@@ -407,6 +418,7 @@ export const wizardCopy: Record<Locale, WizardCopy> = {
         t ? "What is on your credit cards right now?" : "What is on your credit cards right now?",
       debitCards: (t) => (t ? "Which debit cards do you have?" : "Which debit cards do you have?"),
       upload: "Do you want to add your bank statement?",
+      connectBank: "Connect your bank",
       moneySharing: "Do you share your money?",
       birthYear: "What year were you born?",
       incomeRegularity: "Is your income the same every month?",
@@ -508,6 +520,8 @@ export const wizardCopy: Record<Locale, WizardCopy> = {
     otherDebitCard: "Another card",
     debitBrands: DEBIT_BRANDS,
     otherBrand: "Other",
+    showAllBanks: "Show all banks",
+    showMyBanks: "Show only my banks",
     cardsPicked: (n) => `${n} selected`,
     cardDetails: {
       balance: "Outstanding balance",
@@ -529,6 +543,8 @@ export const wizardCopy: Record<Locale, WizardCopy> = {
       },
     },
     upload: {
+      connectBody:
+        "The link is read-only: LaVega cannot pay or move anything. Uploading a file works too.",
       button: "Upload bank statement",
       later: "Later",
       toPlan: "Go to your plan",

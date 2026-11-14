@@ -289,7 +289,7 @@ test("after the new questions comes the summary, not the risk block", () => {
 
 test("new screens belong to their sections", () => {
   for (const id of ["work", "debit-cards", "cards", "money-sharing", "foreign-spend"] as const) expect(sectionOf(id)).toBe("about");
-  expect(sectionOf("upload")).toBe("risk");
+  expect(sectionOf("upload")).toBe("finish");
   expect(sectionOf("priorities")).toBe("risk");
 });
 
@@ -303,6 +303,8 @@ test("risk screens follow RISK_SCALE order and sections are assigned", () => {
   expect(sectionOf("buffer")).toBe("goals");
   expect(sectionOf(risk[0] as never)).toBe("risk");
   expect(sectionOf("invested")).toBe("risk");
+  expect(sectionOf("summary")).toBe("risk");
+  expect(sectionOf("upload")).toBe("finish");
 });
 
 test("resume after Ja on children opens child-years", () => {

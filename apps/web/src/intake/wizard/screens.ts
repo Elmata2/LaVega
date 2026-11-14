@@ -37,7 +37,7 @@ export type ScreenId =
   | "summary"
   | "upload";
 
-export type Section = "about" | "goals" | "risk";
+export type Section = "about" | "goals" | "risk" | "finish";
 
 /** The wizard owns the goal and the debt with these ids. */
 export const WIZARD_GOAL = "wizard-goal";
@@ -195,6 +195,7 @@ export function isAnswered(p: AdvisorProfile, id: ScreenId): boolean {
 export function sectionOf(id: ScreenId): Section {
   if (ABOUT.includes(id) || ROUND2.includes(id)) return "about";
   if (GOALS.includes(id)) return "goals";
+  if (id === "upload") return "finish";
   return "risk";
 }
 

@@ -12,6 +12,7 @@ let openResult: "created" | "opened" = "created";
 function fakeStorage(): VaultStorage {
   return {
     open: async () => openResult,
+    onVaultDestroyed: () => () => {},
     getAccounts: async () => [],
     getTxs: async () => [],
     getRules: async () => [],

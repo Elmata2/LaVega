@@ -65,6 +65,7 @@ const GUARDED = [
   ["GET", "/api/eb/accounts"],
   ["GET", "/api/eb/aspsps"],
   ["DELETE", "/api/account/data"],
+  ["DELETE", "/api/account/personal-data"],
   ["POST", "/api/agent/chat"],
   ["POST", "/api/agent/categorize"],
   ["POST", "/api/agent/extract-invoice"],

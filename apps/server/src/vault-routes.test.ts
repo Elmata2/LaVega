@@ -155,6 +155,21 @@ test("a stale write is refused with the server's copy so the user can choose", a
   });
 });
 
+test("a write that names a server copy which no longer exists is a conflict with no date", async () => {
+  const { app, repository } = harness();
+  repository.put.mockResolvedValue({ status: "conflict" });
+  repository.get.mockResolvedValue(null);
+
+  const response = await put(app, { blob, baseUpdatedAt: "2026-08-30T00:00:00.000Z" });
+
+  expect(response.status).toBe(409);
+  expect(await response.json()).toEqual({
+    problems: ["De server heeft een nieuwere back-up"],
+    updatedAt: null,
+  });
+  expect(repository.overwrite).not.toHaveBeenCalled();
+});
+
 test("overwrite is the only way past a conflict, and it is explicit", async () => {
   const { app, repository } = harness();
 

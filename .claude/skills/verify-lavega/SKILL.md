@@ -36,6 +36,7 @@ What differs between the two, and is not a bug:
 | `/api/vault/backup`        | route not registered → SPA HTML | 401 without session     |
 | `/api/vault/key`           | route not registered → SPA HTML | 401 without session     |
 | `DELETE /api/account/data` | 404 (needs Neon)                | 401 without session     |
+| `DELETE /api/account/personal-data` | 404 (needs Neon)       | 401 without session     |
 | `POST /api/agent/*`        | 503 "niet geconfigureerd"       | 401; 503 once signed in |
 | `/api/investing/*`         | off (`INVESTING_MOUNT=0`)       | 401 without session     |
 
