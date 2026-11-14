@@ -75,6 +75,7 @@ vi.mock("@lavega/adapters", async (importOriginal) => {
     ...actual,
     createEncryptedStorage: () => ({
       open: async () => "opened",
+      onVaultDestroyed: () => () => {},
       lock: () => {},
       export: () => null,
       restore: async () => false,

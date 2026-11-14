@@ -83,6 +83,7 @@ import {
   WorkScreen,
 } from "../intake/wizard/screenViews.js";
 import StatusLine from "../components/ui/StatusLine.js";
+import BankLink from "../components/BankLink.js";
 
 export type IntakeWizardProps = {
   store: AdvisorProfileStore | null;
@@ -100,6 +101,9 @@ export type IntakeWizardProps = {
    *  Without the saver the points are not asked. */
   rewards?: RewardsBalance[];
   onSaveRewards?: (next: RewardsBalance[]) => Promise<void>;
+  /** Present when bank linking is available (the server has Enable Banking
+   *  configured): the last step then offers the bank link first. */
+  bankLink?: { onRefresh: () => void } | "pending";
 };
 
 /** A copy record as tile options, in the record's own order. */
@@ -644,6 +648,7 @@ export default function IntakeWizard(props: IntakeWizardProps) {
         copy={w}
         busy={busy}
         kind="debit"
+        banks={profile.statedBanks?.value}
         label={question}
         initial={profile.statedDebitCards?.value ?? []}
         onSubmit={(ids) => void save((p) => applyStatedDebitCards(p, ids, asOf))}
@@ -656,6 +661,7 @@ export default function IntakeWizard(props: IntakeWizardProps) {
         key={screen}
         copy={w}
         busy={busy}
+        banks={profile.statedBanks?.value}
         label={question}
         initial={profile.statedCards?.value ?? []}
         noneLabel={w.noneCard}
@@ -734,11 +740,38 @@ export default function IntakeWizard(props: IntakeWizardProps) {
         ),
     );
   } else if (screen === "upload") {
-    question = q.upload;
+    const link = props.bankLink === "pending" ? undefined : props.bankLink;
+    const pending = props.bankLink === "pending";
+    question = link || pending ? q.connectBank : q.upload;
     body = (
       <UploadScreen
         copy={w}
         busy={busy}
+        pending={pending}
+        {...(link
+          ? {
+              bankLink: (
+                <BankLink
+                  compact
+                  busy={busy}
+                  defaultPsuType="personal"
+                  onRefresh={link.onRefresh}
+                  onBeforeRedirect={async () => {
+                    // Done and stored before the browser leaves, so the return
+                    // trip lands in the finished app, not back in the wizard.
+                    // Busy meanwhile, so Later and the upload cannot race it.
+                    setBusy(true);
+                    try {
+                      const ok = await update((p) => markDone(p, "upload"));
+                      if (!ok) throw new Error(w.saveFailed);
+                    } finally {
+                      setBusy(false);
+                    }
+                  }}
+                />
+              ),
+            }
+          : {})}
         onImport={props.onImport}
         onFinish={() => void save((p) => p)}
       />

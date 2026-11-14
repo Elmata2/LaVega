@@ -1,5 +1,5 @@
 import type { Hono } from "hono";
-import { eraseUserData, type ErasureReport } from "@lavega/database";
+import { erasePersonalData, eraseUserData, type ErasureReport } from "@lavega/database";
 import {
   credentialsArePerTenant,
   requireRuntimeDatabase,
@@ -9,6 +9,7 @@ import { investingTenantId } from "./investing-mount.js";
 export type AccountRouteDependencies = {
   tenantId: (request: Request) => Promise<string | null>;
   erase: (tenantId: string) => Promise<ErasureReport>;
+  resetPersonal: (tenantId: string) => Promise<ErasureReport>;
 };
 
 /**
@@ -50,6 +51,35 @@ export function registerAccountRoutes(app: Hono, dependencies: AccountRouteDepen
      * cannot answer a regulator about. */
     return c.json({ erased: report });
   });
+
+  /* Not an erasure: clears the personal side only and keeps the login, the
+   * vault key and everything under Investing (`erasePersonalData`). Its own
+   * route and its own confirm value, so a request meant for one can never
+   * act as the other. */
+  app.delete("/api/account/personal-data", async (c) => {
+    const tenantId = await dependencies.tenantId(c.req.raw);
+    if (!tenantId) return c.json({ problems: ["Authentication is required"] }, 401);
+
+    // `null` is valid JSON and has no `.confirm`; it must be a 400, not a throw.
+    const body: { confirm?: unknown; expectedOwner?: unknown } | null = await c.req
+      .json<{ confirm?: unknown; expectedOwner?: unknown } | null>()
+      .catch(() => null);
+    if (body?.confirm !== "RESET-PERSONAL") {
+      return c.json({ problems: ['Bevestig met { "confirm": "RESET-PERSONAL" }'] }, 400);
+    }
+    if (typeof body.expectedOwner !== "string" || body.expectedOwner === "") {
+      return c.json({ problems: ["expectedOwner ontbreekt"] }, 400);
+    }
+    /* The screen shows the account whose vault this tab opened. If the session
+     * now belongs to someone else (another tab signed in as another account),
+     * deleting would hit an account the person did not look at. The value only
+     * GATES; the tenant that is deleted is still the session's, never this. */
+    if (body.expectedOwner !== tenantId) {
+      return c.json({ problems: ["Het account in deze sessie is een ander account"], code: "owner-changed" }, 409);
+    }
+
+    return c.json({ erased: await dependencies.resetPersonal(tenantId) });
+  });
 }
 
 /** Wiring for the real server: session identity, Neon storage. */
@@ -58,5 +88,6 @@ export function accountRouteDependencies(): AccountRouteDependencies | null {
   return {
     tenantId: investingTenantId,
     erase: (tenantId) => eraseUserData(requireRuntimeDatabase(), tenantId),
+    resetPersonal: (tenantId) => erasePersonalData(requireRuntimeDatabase(), tenantId),
   };
 }

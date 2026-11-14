@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import "fake-indexeddb/auto";
 import { IDBFactory } from "fake-indexeddb";
-import { beforeAll, expect, test } from "vitest";
+import { beforeAll, expect, test, vi } from "vitest";
 import { openDB } from "idb";
 import type {
   Account,
@@ -1242,4 +1242,337 @@ test("assistant approvals and memories round-trip across lock/unlock; legacy vau
   expect(await v.open(KEY, "user:a")).toBe("opened");
   // The decision must survive the reload the owner experiences.
   expect(await v.getAssistant()).toEqual(state);
+});
+
+test("destroyVault deletes only the open owner's database and locks", async () => {
+  globalThis.indexedDB = new IDBFactory();
+  const s = createEncryptedStorage("lavega-vault-test-destroy");
+  await s.open(KEY, "user:a");
+  await s.putAccounts([acc("A", 1)]);
+  await s.putDocumentBytes("sha-1", bytesOf("one"));
+  s.lock();
+  await s.open(OTHER_KEY, "user:b");
+  await s.putAccounts([acc("B", 2)]);
+  // The legacy password-vault database sits at the bare name; it must survive.
+  const legacy = await openDB("lavega-vault-test-destroy", 2, {
+    upgrade(db) {
+      db.createObjectStore("vault");
+      db.createObjectStore("documents");
+    },
+  });
+  legacy.close();
+  s.lock();
+  await s.open(KEY, "user:a");
+
+  await s.destroyVault({ settleMs: 0 });
+
+  const names = (await indexedDB.databases()).map((entry) => entry.name);
+  expect(names).not.toContain("lavega-vault-test-destroy:user:a");
+  expect(names).toContain("lavega-vault-test-destroy:user:b");
+  expect(names).toContain("lavega-vault-test-destroy");
+  await expect(s.getAccounts()).rejects.toThrow(); // locked
+  // The other owner's vault is intact; the destroyed owner now starts empty.
+  expect(await s.open(OTHER_KEY, "user:b")).toBe("opened");
+  expect((await s.getAccounts())[0]?.balance).toBe(2);
+  s.lock();
+  expect(await s.open(KEY, "user:a")).toBe("created");
+  expect(await s.getAccounts()).toEqual([]);
+  expect(await s.listDocumentBytes()).toEqual([]);
+});
+
+test("destroyVault on a locked storage rejects and deletes nothing", async () => {
+  globalThis.indexedDB = new IDBFactory();
+  const s = createEncryptedStorage("lavega-vault-test-destroy-locked");
+  await expect(s.destroyVault()).rejects.toMatchObject({ reason: "locked" });
+});
+
+test("destroyVault gives up with an error when another connection blocks the delete", async () => {
+  globalThis.indexedDB = new IDBFactory();
+  const s = createEncryptedStorage("lavega-vault-test-destroy-blocked");
+  await s.open(KEY, "user:a");
+  // Another tab: a connection that ignores `versionchange` and stays open.
+  const holder = await openDB("lavega-vault-test-destroy-blocked:user:a", 2);
+
+  await expect(s.destroyVault({ timeoutMs: 50, settleMs: 0 })).rejects.toMatchObject({
+    reason: "blocked",
+  });
+
+  holder.close();
+});
+
+test("a second instance (another tab) that held the vault cannot re-create it after a destroy", async () => {
+  globalThis.indexedDB = new IDBFactory();
+  const tabA = createEncryptedStorage("lavega-vault-test-two-tabs");
+  const tabB = createEncryptedStorage("lavega-vault-test-two-tabs");
+  await tabA.open(KEY, "user:a");
+  await tabA.putAccounts([acc("A", 1)]);
+  await tabB.open(KEY, "user:a");
+  const told = vi.fn();
+  tabB.onVaultDestroyed(told);
+
+  await tabA.destroyVault({ settleMs: 30 });
+
+  // Two phases: locked first (no reload yet), destroyed once the delete succeeded.
+  await vi.waitFor(() =>
+    expect(told.mock.calls.map((call) => call[0])).toEqual(["locked", "destroyed"]),
+  );
+  // The stale tab's save is refused as locked, and nothing is written back.
+  await expect(tabB.putAccounts([acc("A", 999)])).rejects.toThrow();
+  const names = (await indexedDB.databases()).map((entry) => entry.name);
+  expect(names).not.toContain("lavega-vault-test-two-tabs:user:a");
+  // A fresh open finds no old data.
+  const fresh = createEncryptedStorage("lavega-vault-test-two-tabs");
+  expect(await fresh.open(KEY, "user:a")).toBe("created");
+  expect(await fresh.getAccounts()).toEqual([]);
+});
+
+test("a destroy in one tab does not lock a tab with another owner open", async () => {
+  globalThis.indexedDB = new IDBFactory();
+  const tabA = createEncryptedStorage("lavega-vault-test-two-owners");
+  const tabB = createEncryptedStorage("lavega-vault-test-two-owners");
+  await tabA.open(KEY, "user:a");
+  await tabB.open(OTHER_KEY, "user:b");
+  const told = vi.fn();
+  tabB.onVaultDestroyed(told);
+
+  await tabA.destroyVault({ settleMs: 30 });
+
+  expect(told).not.toHaveBeenCalled();
+  await tabB.putAccounts([acc("B", 5)]);
+  expect((await tabB.getAccounts())[0]?.balance).toBe(5);
+});
+
+const fakeLocalStorage = () => {
+  const data = new Map<string, string>();
+  return {
+    data,
+    getItem: (k: string) => data.get(k) ?? null,
+    setItem: (k: string, v: string) => void data.set(k, v),
+    removeItem: (k: string) => void data.delete(k),
+  };
+};
+
+test("a tab told 'destroying' locks at once but is only told to reload after the delete succeeded", async () => {
+  globalThis.indexedDB = new IDBFactory();
+  const sender = createEncryptedStorage("lavega-vault-test-phases");
+  const receiver = createEncryptedStorage("lavega-vault-test-phases");
+  await sender.open(KEY, "user:a");
+  await receiver.open(KEY, "user:a");
+  const phases: string[] = [];
+  receiver.onVaultDestroyed((phase) => phases.push(phase));
+
+  const done = sender.destroyVault({ settleMs: 80 });
+  await new Promise((resolve) => setTimeout(resolve, 40));
+  // Mid-window: locked, not yet told to reload, cannot persist.
+  expect(phases).toEqual(["locked"]);
+  await expect(receiver.putAccounts([acc("X", 1)])).rejects.toThrow();
+  await done;
+  await new Promise((resolve) => setTimeout(resolve, 30));
+  expect(phases).toEqual(["locked", "destroyed"]);
+});
+
+test("an instance that opens during the destroy window does not read the old vault", async () => {
+  globalThis.indexedDB = new IDBFactory();
+  const store = fakeLocalStorage();
+  vi.stubGlobal("localStorage", store);
+  try {
+    const sender = createEncryptedStorage("lavega-vault-test-window");
+    await sender.open(KEY, "user:a");
+    await sender.putAccounts([acc("OLD", 1)]);
+
+    const done = sender.destroyVault({ settleMs: 300 });
+    await new Promise((resolve) => setTimeout(resolve, 60));
+    expect(store.data.has("lavega.vaultDestroying")).toBe(true);
+
+    // A reloaded tab: a NEW instance opening the same owner mid-window.
+    const reloaded = createEncryptedStorage("lavega-vault-test-window");
+    const opened = reloaded.open(KEY, "user:a");
+    await done;
+
+    expect(await opened).toBe("created");
+    expect(await reloaded.getAccounts()).toEqual([]);
+    expect(store.data.has("lavega.vaultDestroying")).toBe(false);
+  } finally {
+    vi.unstubAllGlobals();
+  }
+});
+
+test("a stale marker (a crashed delete) does not hold an open back", async () => {
+  globalThis.indexedDB = new IDBFactory();
+  const store = fakeLocalStorage();
+  store.setItem(
+    "lavega.vaultDestroying",
+    JSON.stringify({ db: "lavega-vault-test-stale:user:a", at: Date.now() - 120_000 }),
+  );
+  vi.stubGlobal("localStorage", store);
+  try {
+    const s = createEncryptedStorage("lavega-vault-test-stale");
+    const started = Date.now();
+    expect(await s.open(KEY, "user:a")).toBe("created");
+    expect(Date.now() - started).toBeLessThan(2000);
+  } finally {
+    vi.unstubAllGlobals();
+  }
+});
+
+test("a marker for another owner does not delay an open", async () => {
+  globalThis.indexedDB = new IDBFactory();
+  const store = fakeLocalStorage();
+  store.setItem(
+    "lavega.vaultDestroying",
+    JSON.stringify({ db: "lavega-vault-test-other:user:z", at: Date.now() }),
+  );
+  vi.stubGlobal("localStorage", store);
+  try {
+    const s = createEncryptedStorage("lavega-vault-test-other");
+    const started = Date.now();
+    await s.open(KEY, "user:a");
+    expect(Date.now() - started).toBeLessThan(1000);
+  } finally {
+    vi.unstubAllGlobals();
+  }
+});
+
+test("a save that was sealing when the lock arrived never writes, and never to a database named 'null'", async () => {
+  globalThis.indexedDB = new IDBFactory();
+  const tabA = createEncryptedStorage("lavega-vault-test-null");
+  const tabB = createEncryptedStorage("lavega-vault-test-null");
+  await tabA.open(KEY, "user:a");
+  await tabB.open(KEY, "user:a");
+
+  // B starts a save, then the lock arrives while it is still in flight.
+  const saving = tabB.putAccounts([acc("A", 9)]);
+  const destroying = tabA.destroyVault({ settleMs: 30 });
+  await saving.catch(() => {});
+  await destroying;
+  await new Promise((resolve) => setTimeout(resolve, 30));
+
+  const names = (await indexedDB.databases()).map((entry) => entry.name);
+  expect(names).not.toContain("null");
+  expect(names).not.toContain("lavega-vault-test-null:user:a");
+});
+
+test("a failed (blocked) destroy locks the sender too, and tells other tabs it stalled", async () => {
+  globalThis.indexedDB = new IDBFactory();
+  const sender = createEncryptedStorage("lavega-vault-test-fail");
+  const other = createEncryptedStorage("lavega-vault-test-fail");
+  await sender.open(KEY, "user:a");
+  await other.open(KEY, "user:a");
+  const phases: string[] = [];
+  other.onVaultDestroyed((phase) => phases.push(phase));
+  const holder = await openDB("lavega-vault-test-fail:user:a", 2);
+
+  await expect(sender.destroyVault({ timeoutMs: 50, settleMs: 0 })).rejects.toMatchObject({
+    reason: "blocked",
+  });
+  await new Promise((resolve) => setTimeout(resolve, 30));
+
+  await expect(sender.putAccounts([acc("A", 1)])).rejects.toThrow(); // sender locked
+  expect(phases).toEqual(["locked", "stalled"]);
+  holder.close();
+});
+
+test("a locked tab that never hears 'destroyed' says so after the bounded wait", async () => {
+  globalThis.indexedDB = new IDBFactory();
+  const tab = createEncryptedStorage("lavega-vault-test-stall");
+  await tab.open(KEY, "user:a");
+  const phases: string[] = [];
+  const locked = new Promise<void>((resolve) =>
+    tab.onVaultDestroyed((phase) => {
+      phases.push(phase);
+      if (phase === "locked") resolve();
+    }),
+  );
+
+  vi.useFakeTimers({ toFake: ["setTimeout"] });
+  const raw = new BroadcastChannel("lavega-vault-destroyed");
+  try {
+    raw.postMessage({ type: "destroying", db: "lavega-vault-test-stall:user:a" });
+    await locked;
+    expect(phases).toEqual(["locked"]);
+    vi.advanceTimersByTime(13_000);
+    expect(phases).toEqual(["locked", "stalled"]);
+  } finally {
+    vi.useRealTimers();
+    raw.close();
+  }
+});
+
+test("a BroadcastChannel constructor that throws never stops the vault from opening or saving", async () => {
+  globalThis.indexedDB = new IDBFactory();
+  vi.stubGlobal(
+    "BroadcastChannel",
+    class {
+      constructor() {
+        throw new Error("blocked");
+      }
+    },
+  );
+  try {
+    const s = createEncryptedStorage("lavega-vault-test-nochannel");
+    expect(await s.open(KEY, "user:a")).toBe("created");
+    await s.putAccounts([acc("A", 1)]);
+    // Destroying still works (without a channel); nobody to tell.
+    await s.destroyVault({ settleMs: 0 });
+  } finally {
+    vi.unstubAllGlobals();
+  }
+});
+
+test("a marker stamped in the future counts as stale: open does not wait and removes it", async () => {
+  globalThis.indexedDB = new IDBFactory();
+  const store = fakeLocalStorage();
+  store.setItem(
+    "lavega.vaultDestroying",
+    JSON.stringify({ db: "lavega-vault-test-future:user:a", at: Date.now() + 3_600_000 }),
+  );
+  vi.stubGlobal("localStorage", store);
+  try {
+    const s = createEncryptedStorage("lavega-vault-test-future");
+    const started = Date.now();
+    await s.open(KEY, "user:a");
+    expect(Date.now() - started).toBeLessThan(1000);
+    expect(store.data.has("lavega.vaultDestroying")).toBe(false);
+  } finally {
+    vi.unstubAllGlobals();
+  }
+});
+
+test("a stale marker is removed by open so it cannot cost another wait", async () => {
+  globalThis.indexedDB = new IDBFactory();
+  const store = fakeLocalStorage();
+  store.setItem(
+    "lavega.vaultDestroying",
+    JSON.stringify({ db: "lavega-vault-test-stale2:user:a", at: Date.now() - 60_000 }),
+  );
+  vi.stubGlobal("localStorage", store);
+  try {
+    await createEncryptedStorage("lavega-vault-test-stale2").open(KEY, "user:a");
+    expect(store.data.has("lavega.vaultDestroying")).toBe(false);
+  } finally {
+    vi.unstubAllGlobals();
+  }
+});
+
+test("an open that waited out a live marker removes it before it proceeds", async () => {
+  globalThis.indexedDB = new IDBFactory();
+  const store = fakeLocalStorage();
+  // Live for this database, never cleared by anyone (a stuck sender).
+  store.setItem(
+    "lavega.vaultDestroying",
+    JSON.stringify({ db: "lavega-vault-test-stuck:user:a", at: Date.now() }),
+  );
+  vi.stubGlobal("localStorage", store);
+  vi.useFakeTimers({ toFake: ["setTimeout", "Date"] });
+  try {
+    const s = createEncryptedStorage("lavega-vault-test-stuck");
+    const opening = s.open(KEY, "user:a");
+    // The wait is capped; fast-forward through the whole cap.
+    for (let i = 0; i < 250; i++) await vi.advanceTimersByTimeAsync(50);
+    expect(await opening).toBe("created");
+    expect(store.data.has("lavega.vaultDestroying")).toBe(false);
+  } finally {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  }
 });

@@ -189,6 +189,7 @@ import Koppelingen from "./views/Koppelingen";
 import Backup from "./views/Backup";
 import Profiel from "./views/Profiel";
 import type { N8nNotice, PendingInvoice } from "./n8n.js";
+import { adminCopy } from "./copy/admin.js";
 import { useAppLocale } from "./appLocale.js";
 import { shellCopy } from "./copy/shell.js";
 import { importSessionCopy } from "./copy/importSession.js";
@@ -471,6 +472,9 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
   // Whether the server has a MISTRAL_API_KEY (drives the AI features'
   // "not configured" state). Fetched once; defaults false on any error.
   const [llmConfigured, setLlmConfigured] = useState(false);
+  /** Bank linking (Enable Banking) is set up on the server. Null until known, false when the
+   *  request fails: the intake's last step then leads with the file upload. */
+  const [ebConfigured, setEbConfigured] = useState<boolean | null>(null);
   // A question raised elsewhere in the UI (e.g. the per-category "vs.
   // gemiddelde" button). The floating chat widget that consumed it is
   // deliberately not rendered for now (his UI review: "remove it, decide later
@@ -638,6 +642,41 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
       cancelled = true;
     };
   }, []);
+
+  // Same for bank linking: a public { configured } status GET, no account data.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`${API_BASE}/api/eb/status`);
+        if (!res.ok) {
+          if (!cancelled) setEbConfigured(false);
+          return;
+        }
+        const data = (await res.json()) as { configured?: boolean };
+        if (!cancelled) setEbConfigured(data.configured === true);
+      } catch {
+        if (!cancelled) setEbConfigured(false); // the wizard offers the upload only
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Another tab cleared the personal data (Back-up > Clear personal data). The
+  // storage already dropped its copy and refuses writes; reload into the empty vault.
+  // Two phases: "locked" shows a neutral wait state (reloading now could re-open the
+  // vault before the other tab deletes it); "destroyed" reloads; "stalled" says so.
+  const [tabReset, setTabReset] = useState<"locked" | "stalled" | null>(null);
+  useEffect(
+    () =>
+      storage.onVaultDestroyed((phase) => {
+        if (phase === "destroyed") window.location.assign("/app");
+        else setTabReset(phase);
+      }),
+    [],
+  );
 
   // Open the vault with the owner's key (docs/adr/0009-account-held-vault-key.md).
   // Nothing to ask in the normal case; the gate only shows for a one-time
@@ -2214,6 +2253,22 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
     }
   }
 
+  if (tabReset) {
+    const t = adminCopy[locale].backup.resetPersonal.otherTab;
+    return (
+      <main className="mx-auto max-w-xl p-6" data-testid="reset-elsewhere">
+        <p role={tabReset === "stalled" ? "alert" : "status"}>
+          {tabReset === "stalled" ? t.stalled : t.busy}
+        </p>
+        {tabReset === "stalled" && (
+          <Button variant="primary" onClick={() => window.location.assign("/app")}>
+            {t.reload}
+          </Button>
+        )}
+      </main>
+    );
+  }
+
   // Until the vault is unlocked/set up/migrated, render only the gate — never
   // the app shell (whose data-reads would throw against a locked/empty vault).
   if (gate !== "ready") {
@@ -2250,6 +2305,11 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
             rewards={rewards}
             onSaveRewards={saveRewards}
             onImport={importFile}
+            {...(ebConfigured === null
+              ? { bankLink: "pending" as const }
+              : ebConfigured
+                ? { bankLink: { onRefresh: () => void handleRefreshBank() } }
+                : {})}
             round={intakeRound}
             onFinish={() => {
               setIntakeRound(1);
@@ -2590,6 +2650,7 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
             storage={storage}
             asOf={asOf}
             documentCount={documents.length}
+            owner={owner}
             onRestored={handleRestored}
           />
         )}
@@ -2645,6 +2706,7 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
 
         {view === "profiel" && (
           <Profiel
+            owner={owner}
             onNavigate={setView}
             planUnlocked={planUnlocked}
             intakeStore={okProfileStore}

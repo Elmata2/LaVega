@@ -1442,3 +1442,213 @@ test("abandoning round 2 keeps answers and reopening resumes at the first unansw
   expect(h1(again.c)).toBe("How much of an overview do you have of your money right now?");
   expect(counter(again.c)).toBe("3 / 6");
 });
+
+// ---- Card questions follow the banks answer (spec 2.1) ----
+const withBanks = (banks: string[]) => (p: AdvisorProfileStore["current"]) =>
+  applyStatedBanks(p, banks, AS_OF);
+const brandNames = (c: HTMLElement) =>
+  [...c.querySelectorAll<HTMLButtonElement>("button[aria-expanded]")].map((b) =>
+    (b.textContent ?? "").replace(/\d+ picked$/, "").trim(),
+  );
+const linkText = (c: HTMLElement, text: string) =>
+  [...c.querySelectorAll<HTMLButtonElement>("button.wz-link")].find((b) => b.textContent === text);
+const BANKS = ["ing", "revolut", "amex", "other"];
+
+test("debit screen shows only the chosen banks and the other group, never ABN", () => {
+  const { c } = mount(fromScreen("banks", withBanks(BANKS)));
+  expect(h1(c)).toBe("Which debit cards do you have?");
+  const names = brandNames(c);
+  expect(names).toContain("ING");
+  expect(names).toContain("Revolut");
+  expect(names).not.toContain("ABN AMRO");
+  expect(names).not.toContain("American Express");
+  expect(boxes(c).map((b) => b.textContent)).toEqual(["Another card"]);
+});
+
+test("credit screen shows ING and American Express, not ABN", () => {
+  const { c } = mount(fromScreen("debit-cards", withBanks(BANKS)));
+  expect(h1(c)).toBe("Which credit cards do you have?");
+  const names = brandNames(c);
+  expect(names).toContain("ING");
+  expect(names).toContain("American Express");
+  expect(names).not.toContain("ABN AMRO");
+  expect(linkText(c, "Show all banks")).toBeDefined();
+});
+
+test("a stored card of another brand stays visible and selected", () => {
+  const { c } = mount(
+    fromScreen("banks", (p) =>
+      applyStatedDebitCards(withBanks(["ing"])(p), ["abn-amro-betaalpas"], AS_OF),
+    ),
+  );
+  expect(brandNames(c).some((n) => n.startsWith("ABN AMRO"))).toBe(true);
+  expect(brandTile(c, /ABN AMRO/).className).toContain("is-selected");
+});
+
+test("Show all banks lifts the filter, Show only my banks restores it", async () => {
+  const { c } = mount(fromScreen("banks", withBanks(["ing"])));
+  expect(brandNames(c)).not.toContain("ABN AMRO");
+  await act(async () => linkText(c, "Show all banks")!.click());
+  expect(brandNames(c)).toContain("ABN AMRO");
+  await act(async () => linkText(c, "Show only my banks")!.click());
+  expect(brandNames(c)).not.toContain("ABN AMRO");
+});
+
+test("search follows the filter", async () => {
+  const { c } = mount(fromScreen("debit-cards", withBanks(["ing"])));
+  await type(searchInput(c), "american express gold");
+  expect(boxes(c).map((b) => b.textContent)).toEqual(["Another card", "I have none"]);
+});
+
+test("no banks answer: the full list and no link", () => {
+  const { c } = mount(fromScreen("banks"));
+  expect(brandNames(c)).toContain("ABN AMRO");
+  expect(brandNames(c).length).toBeGreaterThan(8);
+  expect(linkText(c, "Show all banks")).toBeUndefined();
+});
+
+// ---- Last step: connect your bank (spec 2.2) ----
+function stubBankFetch() {
+  const original = globalThis.fetch;
+  globalThis.fetch = (async (url: string) =>
+    String(url).includes("/api/eb/auth")
+      ? ({ ok: true, status: 200, json: async () => ({ url: "https://bank.example/auth" }) } as Response)
+      : ({
+          ok: true,
+          status: 200,
+          json: async () => ({ aspsps: [{ name: "ING", country: "NL" }] }),
+        } as Response)) as typeof fetch;
+  return () => {
+    globalThis.fetch = original;
+  };
+}
+const btn = (c: HTMLElement, text: string) =>
+  [...c.querySelectorAll<HTMLButtonElement>("button")].find((b) => b.textContent === text)!;
+
+test("bank linking available: title, bank link first, upload as a secondary link", () => {
+  const { c } = mount(fromScreen("summary"), undefined, false, undefined, {
+    bankLink: { onRefresh: () => {} },
+  });
+  expect(h1(c)).toBe("Connect your bank");
+  expect(btn(c, "Connect your bank")).toBeDefined();
+  expect(c.querySelector(".scope-switch")).toBeNull();
+  expect(c.textContent).not.toContain("Enable Banking");
+  expect(c.querySelector(".wz-upload")!.className).toContain("wz-link");
+  expect(c.querySelector(".wz-upload")!.className).not.toContain("wz-next");
+});
+
+test("the wizard is saved as done before the browser leaves for the bank", async () => {
+  const restore = stubBankFetch();
+  try {
+    const { c, onSave, onFinish } = mount(fromScreen("summary"), undefined, false, undefined, {
+      bankLink: { onRefresh: () => {} },
+    });
+    await act(async () => btn(c, "Connect your bank").click());
+    await flush();
+    expect(onSave).not.toHaveBeenCalled();
+    await act(async () => btn(c, "Authorise").click());
+    await flush();
+    expect(onSave).toHaveBeenCalledTimes(1);
+    expect(onSave.mock.calls[0]![0].current.intake.lastScreen).toBe("upload");
+    expect(onFinish).not.toHaveBeenCalled();
+  } finally {
+    restore();
+  }
+});
+
+test("bank linking not available: the old title and the upload as primary", () => {
+  const { c } = mount(fromScreen("summary"));
+  expect(h1(c)).toBe("Do you want to add your bank statement?");
+  expect(c.querySelector(".wz-upload")!.className).toContain("wz-next");
+  expect(c.textContent).not.toContain("Enable Banking");
+});
+
+test("a save failure cancels the redirect and shows the error", async () => {
+  const restore = stubBankFetch();
+  try {
+    const { c, onSave, onFinish } = mount(
+      fromScreen("summary"),
+      async () => {
+        throw new Error("disk full");
+      },
+      false,
+      undefined,
+      { bankLink: { onRefresh: () => {} } },
+    );
+    await act(async () => btn(c, "Connect your bank").click());
+    await flush();
+    await act(async () => btn(c, "Authorise").click());
+    await flush();
+    expect(onSave).toHaveBeenCalledTimes(1);
+    expect(c.textContent).toContain(wizardCopy.en.saveFailed);
+    expect(btn(c, "Authorise")).toBeDefined();
+    expect(onFinish).not.toHaveBeenCalled();
+  } finally {
+    restore();
+  }
+});
+
+test("Later and the upload are disabled while the redirect save is in flight", async () => {
+  const restore = stubBankFetch();
+  try {
+    let release: () => void = () => {};
+    const { c } = mount(
+      fromScreen("summary"),
+      () => new Promise<void>((r) => (release = r)),
+      false,
+      undefined,
+      { bankLink: { onRefresh: () => {} } },
+    );
+    await act(async () => btn(c, "Connect your bank").click());
+    await flush();
+    await act(async () => btn(c, "Authorise").click());
+    expect(btn(c, "Later").disabled).toBe(true);
+    expect(c.querySelector<HTMLInputElement>('input[type="file"]')!.disabled).toBe(true);
+    await act(async () => release());
+  } finally {
+    restore();
+  }
+});
+
+test("status unknown: the action area is held, no bank link, no upload, then renders once", async () => {
+  const { c } = mount(fromScreen("summary"), undefined, false, undefined, { bankLink: "pending" });
+  expect(h1(c)).toBe("Connect your bank");
+  expect(c.querySelector('[aria-busy="true"]')).not.toBeNull();
+    expect(btn(c, "Later").disabled).toBe(true);
+  expect(c.querySelector<HTMLInputElement>('input[type="file"]')!.disabled).toBe(true);
+});
+
+test("a banks answer with no card of the kind still lets the user go on", async () => {
+  const { c, saved } = mount(fromScreen("banks", withBanks(["amex"])));
+  expect(brandNames(c)).toEqual([]);
+  expect(linkText(c, "Show all banks")).toBeDefined();
+  await act(async () => box(c, "Another card").click());
+  expect(nextBtn(c).disabled).toBe(false);
+  await act(async () => nextBtn(c).click());
+  expect(saved().current.statedDebitCards?.value).toEqual(["other"]);
+});
+
+test("Show all banks rescues a banks answer with no card of the kind", async () => {
+  const { c } = mount(fromScreen("banks", withBanks(["amex"])));
+  await act(async () => linkText(c, "Show all banks")!.click());
+  expect(brandNames(c).length).toBeGreaterThan(8);
+});
+
+test("a finished user's rerun still ends at the summary when bank linking is available", async () => {
+  const { c, onFinish } = mount(finishedOld(), undefined, false, undefined, {
+    bankLink: { onRefresh: () => {} },
+  });
+  await birth(c);
+  await tap(c, "Yes, the same every month");
+  await act(async () => box(c, "Other").click());
+  await act(async () => nextBtn(c).click());
+  await act(async () => box(c, "Groceries").click());
+  await act(async () => nextBtn(c).click());
+  await tap(c, "Never");
+  await act(async () => box(c, "Save more").click());
+  await act(async () => nextBtn(c).click());
+  expect(h1(c)).toBe("This is what LaVega knows about you now");
+  await act(async () => nextBtn(c).click());
+  expect(onFinish).toHaveBeenCalledTimes(1);
+  expect(c.textContent).not.toContain("Connect your bank");
+});

@@ -61,6 +61,7 @@ import GenericImportCard, {
 import Import from "./Import";
 import Koppelingen from "./Koppelingen";
 import Backup from "./Backup";
+import type { VaultOwner } from "../vaultKey.js";
 import Button from "../components/ui/Button.js";
 import Card, { CardHeader } from "../components/ui/Card.js";
 import CardLink from "../components/ui/CardLink.js";
@@ -78,6 +79,8 @@ import SignInForm from "../components/SignInForm.js";
  * place — so there is one implementation of each. */
 
 type ProfielProps = {
+  /** Whose vault is open: decides whether the Back-up card's reset has a server to clear. */
+  owner: VaultOwner;
   /** Opens "what LaVega knows about you". Absent: the card is not shown. */
   onNavigate?: (view: View) => void;
   /** The intake has produced something to plan with (App's rule, unchanged).
@@ -461,6 +464,7 @@ function CashbackCorrigeren({
 }
 
 export default function Profiel({
+  owner,
   planUnlocked,
   intakeStore = null,
   hasTransactions = false,
@@ -679,7 +683,7 @@ export default function Profiel({
         onRefreshBank={onRefreshBank}
       />
 
-      <Backup storage={storage} asOf={asOf} onRestored={onRestored} />
+      <Backup storage={storage} asOf={asOf} owner={owner} onRestored={onRestored} />
 
       {/* Hidden unless the owner already opted in (or a delete is pending): then it stays
           visible so the choice can be seen and revoked. */}

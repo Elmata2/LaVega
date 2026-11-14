@@ -21,7 +21,7 @@ Preconditions:
 - Local instance up (guard open) and network access to `https://www.lavega.dev` (guard closed).
 
 - **Closed posture on prod.** Run `node .claude/skills/verify-lavega/control-lavega.mjs guard --target prod --out /tmp/lavega-verify/evidence/guard-prod.json`. All eight guarded rows show `401`, all four public rows `200`, exit code `0`.
-- **Open posture locally.** Run `node .claude/skills/verify-lavega/control-lavega.mjs guard --out /tmp/lavega-verify/evidence/guard-local.json`. No row is `401`; agent routes answer `503` (dark), `DELETE /api/account/data` answers `404` (no Neon), exit code `0`.
+- **Open posture locally.** Run `node .claude/skills/verify-lavega/control-lavega.mjs guard --out /tmp/lavega-verify/evidence/guard-local.json`. No row is `401`; agent routes answer `503` (dark), `DELETE /api/account/data` and `DELETE /api/account/personal-data` answer `404` (no Neon), exit code `0`.
 - **Preview deploy.** Run `... guard --base https://<preview>.vercel.app`. Same expectations as prod.
 - **Sign-up open.** `POST /api/auth/sign-up/email` accepts a new address. The response has `token: null` until the person confirms the mail. A sixth signup from the same IP inside 10 minutes is refused.
 - **Proof.** The two `--out` JSON files plus the exit codes. Both files carry `closed: true|false` and one row per route.

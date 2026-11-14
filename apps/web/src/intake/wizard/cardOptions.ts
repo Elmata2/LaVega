@@ -207,3 +207,38 @@ export const bankBrandIds = (): string[] => [
     [...brandOrder("debit"), ...brandOrder("credit")].filter((b) => b !== "other-brand"),
   ),
 ];
+
+/** The brands a card picker is limited to, from the banks answer. null means
+ *  no filter: no answer, an empty one, or only "other" (old profiles, Wijzig).
+ *  "other" next to real banks adds the group for cards without a known brand. */
+export const bankFilter = (
+  banks: readonly string[] | null | undefined,
+): ReadonlySet<CardBrand> | null => {
+  const valid = new Set(bankBrandIds());
+  const known = new Set<CardBrand>(
+    (banks ?? []).filter((b) => valid.has(b)) as CardBrand[],
+  );
+  if (known.size === 0) return null;
+  if ((banks ?? []).includes(OTHER_CARD)) known.add("other-brand");
+  return known;
+};
+
+/** Whether a card shows under the filter. A picked card always shows, so
+ *  changing the banks answer later never hides or drops a stored card. */
+export const cardVisible = (
+  id: string,
+  kind: CardKind,
+  filter: ReadonlySet<CardBrand> | null,
+  picked: readonly string[],
+): boolean => filter === null || filter.has(brandOf(id, kind)) || picked.includes(id);
+
+/** The groups the filter leaves: brands in the filter, plus any group that
+ *  holds a picked card. */
+export const filterGroups = (
+  groups: readonly CardGroup[],
+  filter: ReadonlySet<CardBrand> | null,
+  picked: readonly string[],
+): CardGroup[] =>
+  filter === null
+    ? [...groups]
+    : groups.filter((g) => filter.has(g.brand) || g.cards.some((c) => picked.includes(c.id)));

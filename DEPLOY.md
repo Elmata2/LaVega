@@ -117,6 +117,10 @@ ledger disagreeing with the directory; removing them is a manual `DELETE` from
   or the request has a verified session. Everything else answers
   `401`, including the routes that spend the Mistral key (`/api/agent/*`), the
   bank flow (`/api/eb/*`) and the encrypted vault backup (`/api/vault/backup`).
+  The two account deletes are guarded the same way: `DELETE /api/account/data` (full
+  GDPR erase, confirm `ERASE`) and `DELETE /api/account/personal-data` (personal reset,
+  confirm `RESET-PERSONAL` plus `expectedOwner` (409 when it is not the session's account); clears bank links, forwarding address, server vault copy and
+  net-worth totals; keeps the login, the vault key, the AI spend ledger and all of Investing).
   Investing keeps a second, later check on top: `investingTenantId` decides
   _which tenant_ the request is served under, and `forwardInvesting` requires that
   tenant explicitly — there is no `LOCAL_TENANT_ID` default for a future call site

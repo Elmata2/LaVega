@@ -1,11 +1,18 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import type { CipherBlob, VaultStorage } from "@lavega/adapters";
 import { backupFilename, buildPortableExport, serializeBackup, parseBackup } from "../backup.js";
-import { eraseServerData, fetchServerBackup, uploadServerBackup } from "../vaultSync.js";
+import {
+  eraseServerData,
+  fetchServerBackup,
+  PersonalResetError,
+  resetPersonalData,
+  uploadServerBackup,
+} from "../vaultSync.js";
 import { adminCopy } from "../copy/admin.js";
 import { useAppLocale } from "../appLocale.js";
 import type { Locale } from "../locale.js";
+import type { VaultOwner } from "../vaultKey.js";
 import posthog from "../posthog.js";
 import Button from "../components/ui/Button.js";
 import Card from "../components/ui/Card.js";
@@ -18,6 +25,8 @@ type BackupProps = {
   /** How many documents the vault holds; used to refuse a server backup that
    *  cannot carry them, instead of silently dropping the files. */
   documentCount?: number;
+  /** Whose vault is open. An account owner has a server copy; a device owner is local-only. */
+  owner: VaultOwner;
   // Called after a successful restore so App reloads accounts/txs/rules from
   // the (now swapped) vault state — restore() itself never touches React state.
   onRestored: () => void;
@@ -90,6 +99,130 @@ const formatDateTime = (locale: Locale, iso: string) =>
   new Date(iso).toLocaleString(locale === "nl" ? "nl-NL" : "en-GB");
 
 /**
+ * Reset the personal side only (docs/superpowers/specs/2026-11-14-personal-data-reset-design.md).
+ * Whether a server exists is decided by the owner, before any click: an account
+ * owner always has one (so the server call must succeed first), a device owner
+ * is a local-only install. On success the page reloads at /app.
+ */
+function ResetPersonal({
+  storage,
+  owner,
+  ready,
+}: {
+  storage: VaultStorage;
+  owner: VaultOwner;
+  /** False while the account state is still being checked: confirm waits. */
+  ready: boolean;
+}) {
+  const [locale] = useAppLocale();
+  const c = adminCopy[locale].backup;
+  const r = c.resetPersonal;
+  const account = owner.kind === "account";
+  const [confirming, setConfirming] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const running = useRef(false);
+  const introRef = useRef<HTMLParagraphElement>(null);
+  const confirmRef = useRef<HTMLDivElement>(null);
+  const errorRef = useRef<HTMLDivElement>(null);
+  const cancelled = useRef(false);
+
+  useEffect(() => {
+    if (confirming) confirmRef.current?.focus();
+    else if (cancelled.current) {
+      cancelled.current = false;
+      introRef.current?.focus();
+    }
+  }, [confirming]);
+  useEffect(() => {
+    if (error) errorRef.current?.focus();
+  }, [error]);
+
+  function describe(err: unknown): string {
+    if (!(err instanceof PersonalResetError)) return r.errors.generic;
+    const prefix = account ? r.serverCleared : "";
+    switch (err.code) {
+      case "network":
+        return r.errors.network;
+      case "unauthorized":
+        return r.errors.unauthorized;
+      case "owner-changed":
+        return r.errors.ownerChanged;
+      case "local-blocked":
+        return prefix + r.errors.localBlocked;
+      case "local-failed":
+        return prefix + r.errors.localFailed;
+      default:
+        return err.message || r.errors.generic;
+    }
+  }
+
+  async function reset() {
+    if (running.current) return; // a double click must not start a second run
+    running.current = true;
+    setBusy(true);
+    setError("");
+    try {
+      await resetPersonalData({ locale, storage, owner });
+      posthog.capture("personal_data_reset", { account });
+      // The page is navigating to /app; keep the busy state until it does.
+    } catch (err) {
+      setError(describe(err));
+      setBusy(false);
+      running.current = false;
+    }
+  }
+
+  return (
+    <>
+      {!confirming && (
+        <p ref={introRef} tabIndex={-1}>
+          <Button
+            data-testid="reset-personal"
+            onClick={() => {
+              setConfirming(true);
+              setError("");
+            }}
+          >
+            {r.button}
+          </Button>
+        </p>
+      )}
+      {confirming && (
+        <div data-testid="reset-personal-confirm" ref={confirmRef} tabIndex={-1}>
+          <StatusLine tone="warning" role="alert">
+            {r.closeTabs} {account ? r.goes : r.goesLocalOnly}{" "}
+            {account ? r.stays : r.staysLocalOnly} {r.cannotUndo} {r.otherDevices}
+            {account ? ` ${r.bankConsent}` : ""}
+          </StatusLine>
+          {!ready && <p role="status">{r.checking}</p>}
+          <Button disabled={busy || !ready} onClick={() => void reset()}>
+            {busy ? c.common.busy : r.confirmButton}
+          </Button>{" "}
+          <Button
+            disabled={busy}
+            onClick={() => {
+              cancelled.current = true;
+              setError("");
+              setConfirming(false);
+            }}
+          >
+            {r.cancelButton}
+          </Button>
+        </div>
+      )}
+      {error && (
+        <div ref={errorRef} tabIndex={-1} data-testid="reset-personal-error">
+          <StatusLine tone="problem" role="alert">
+            {error}
+          </StatusLine>
+        </div>
+      )}
+    </>
+  );
+}
+
+/**
  * Back-up naar de server. De kluis wordt hier versleuteld en gaat er versleuteld
  * heen: de server bewaart bytes die hij niet kan lezen. Dat is de reden dat dit
  * mag bestaan naast de download, en het is ook de reden dat een verloren
@@ -97,9 +230,11 @@ const formatDateTime = (locale: Locale, iso: string) =>
  */
 function ServerBackup({
   storage,
+  owner,
   documentCount = 0,
 }: {
   storage: VaultStorage;
+  owner: VaultOwner;
   documentCount?: number;
 }) {
   const [locale] = useAppLocale();
@@ -107,7 +242,7 @@ function ServerBackup({
   const [state, setState] = useState<"checking" | "signed-out" | "ready">("checking");
   const [updatedAt, setUpdatedAt] = useState<string | null>(null);
   const [serverBlob, setServerBlob] = useState<CipherBlob | null>(null);
-  const [conflict, setConflict] = useState<string | null>(null);
+  const [conflict, setConflict] = useState<{ updatedAt: string | null } | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -150,7 +285,7 @@ function ServerBackup({
       if (result.status === "conflict") {
         /* Niet stilletjes overschrijven: de andere kant is iemands echte
          * administratie. De datum erbij, zodat de keuze een keuze is. */
-        setConflict(result.updatedAt);
+        setConflict({ updatedAt: result.updatedAt });
         return;
       }
       setUpdatedAt(result.updatedAt);
@@ -188,12 +323,16 @@ function ServerBackup({
     }
   }
 
-  if (state === "checking") return null;
+  if (state === "checking") {
+    // Nothing to show yet except the reset, whose confirm waits for an account owner.
+    return <ResetPersonal storage={storage} owner={owner} ready={owner.kind === "device"} />;
+  }
   if (state === "signed-out") {
     return (
       <>
         <h3>{c.server.title}</h3>
         <p>{c.server.signedOut}</p>
+        <ResetPersonal storage={storage} owner={owner} ready />
       </>
     );
   }
@@ -220,7 +359,9 @@ function ServerBackup({
       {conflict && (
         <>
           <StatusLine tone="problem" role="alert">
-            {c.server.conflict.message(formatDateTime(locale, conflict))}
+            {conflict.updatedAt
+              ? c.server.conflict.message(formatDateTime(locale, conflict.updatedAt))
+              : c.server.conflict.missing}
           </StatusLine>
           <Button disabled={busy || erasing} onClick={() => void upload(true)}>
             {c.server.conflict.overwriteButton}
@@ -252,6 +393,7 @@ function ServerBackup({
           </Button>
         </p>
       )}
+      <ResetPersonal storage={storage} owner={owner} ready />
       {!confirmErase && (
         <p>
           <Button
@@ -289,7 +431,13 @@ function ServerBackup({
   );
 }
 
-export default function Backup({ storage, asOf, documentCount = 0, onRestored }: BackupProps) {
+export default function Backup({
+  storage,
+  asOf,
+  documentCount = 0,
+  owner,
+  onRestored,
+}: BackupProps) {
   const [locale] = useAppLocale();
   const c = adminCopy[locale].backup;
   const [file, setFile] = useState<File | null>(null);
@@ -409,7 +557,7 @@ export default function Backup({ storage, asOf, documentCount = 0, onRestored }:
       <details className="mt-4" data-testid="backup-more">
         <summary className="cursor-pointer">{c.simple.moreOptions}</summary>
         <PortableExport storage={storage} asOf={asOf} />
-        <ServerBackup storage={storage} documentCount={documentCount} />
+        <ServerBackup storage={storage} owner={owner} documentCount={documentCount} />
       </details>
     </Card>
   );

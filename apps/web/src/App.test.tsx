@@ -24,6 +24,7 @@ let mockAccounts: unknown[] = [];
 function fakeStorage(): VaultStorage {
   return {
     open: async () => "opened",
+    onVaultDestroyed: () => () => {},
     getAccounts: async () => mockAccounts,
     getTxs: async () => [],
     getRules: async () => [],

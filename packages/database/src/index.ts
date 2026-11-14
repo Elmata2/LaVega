@@ -1446,10 +1446,21 @@ export function createOpaqueVaultRepository(db: Database, userId: string | undef
     async put(blob: Buffer, expectedUpdatedAt: string | null): Promise<OpaqueVaultWrite> {
       if (blob.length === 0) throw new Error("Vault blob is empty");
       return withTenantStatement(db, tenantId, async (client) => {
-        const result = await client.query<QueryResultRow>(
-          `INSERT INTO personal.vaults (user_id, vault_blob) VALUES (current_setting('app.user_id'), $1) ON CONFLICT (user_id) DO UPDATE SET vault_blob = EXCLUDED.vault_blob, updated_at = CURRENT_TIMESTAMP WHERE personal.vaults.updated_at = $2::timestamptz RETURNING ${VAULT_VERSION}`,
-          [blob, expectedUpdatedAt],
-        );
+        /* A client that names a server copy (`expectedUpdatedAt`) is replacing
+         * THAT row. If the row is gone (a personal-data reset, a full erase) a
+         * plain UPDATE finds nothing and the answer is a conflict, instead of an
+         * INSERT that silently puts an old device's vault back. Only a client
+         * that expects nothing (`null`) may create the first row. */
+        const result =
+          expectedUpdatedAt === null
+            ? await client.query<QueryResultRow>(
+                `INSERT INTO personal.vaults (user_id, vault_blob) VALUES (current_setting('app.user_id'), $1) ON CONFLICT (user_id) DO UPDATE SET vault_blob = EXCLUDED.vault_blob, updated_at = CURRENT_TIMESTAMP WHERE personal.vaults.updated_at = $2::timestamptz RETURNING ${VAULT_VERSION}`,
+                [blob, expectedUpdatedAt],
+              )
+            : await client.query<QueryResultRow>(
+                `UPDATE personal.vaults SET vault_blob = $1, updated_at = CURRENT_TIMESTAMP WHERE user_id = current_setting('app.user_id') AND updated_at = $2::timestamptz RETURNING ${VAULT_VERSION}`,
+                [blob, expectedUpdatedAt],
+              );
         const row = result.rows[0];
         return row
           ? { status: "stored", updatedAt: row.updated_at as string }
@@ -1649,6 +1660,45 @@ export async function eraseUserData(
     const user = await client.query('DELETE FROM public."user" WHERE id = $1', [identity]);
     report.push({ table: 'public."user"', rows: user.rowCount ?? 0 });
 
+    return report;
+  });
+}
+
+/* The personal-side reset (docs/superpowers/specs/2026-11-14-personal-data-reset-design.md).
+ * A literal list, like USER_DATA_TABLES, and deliberately SHORTER than it: no
+ * investing.* table, no Better Auth table, and two personal tables stay.
+ *
+ * Kept on purpose:
+ *  - personal.vault_keys: the key a browser vault is sealed with. Deleting it
+ *    would mint a new key on the next request and strand any vault copy still
+ *    in a browser behind a misleading "unreachable" screen.
+ *  - personal.ai_usage: the AI spend ledger; deleting it would reset the cap. */
+export const PERSONAL_RESET_TABLES = [
+  "personal.eb_sessions",
+  // No RLS (0003_eb_flow.sql): the WHERE user_id below is the only guard.
+  "personal.eb_pending_auth",
+  "personal.n8n_forwarding",
+  "personal.vaults",
+  "personal.net_worth_totals",
+] as const;
+
+/**
+ * Clear one person's personal-side data and nothing else: the five tables in
+ * PERSONAL_RESET_TABLES, in one transaction, each `DELETE ... WHERE user_id = $1`
+ * with the id as a bound parameter. The login, Investing and the vault key stay.
+ * Not a GDPR erasure; see `eraseUserData` for that.
+ */
+export async function erasePersonalData(
+  db: Database,
+  userId: string | undefined | null,
+): Promise<ErasureReport> {
+  const identity = requireUserId(userId);
+  return withTenant(db, identity, async (client) => {
+    const report: ErasureReport = [];
+    for (const table of PERSONAL_RESET_TABLES) {
+      const result = await client.query(`DELETE FROM ${table} WHERE user_id = $1`, [identity]);
+      report.push({ table, rows: result.rowCount ?? 0 });
+    }
     return report;
   });
 }
