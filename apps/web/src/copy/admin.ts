@@ -884,7 +884,7 @@ const nlFacturen: FacturenCopy = {
     manual: {
       moduleTitle: "3 · Handmatig",
       footer:
-        "Een verwachte factuur verschijnt op de vervaldatum in Overzicht en Forecast en gaat zelf op “betaald” zodra een passende banktransactie binnenkomt.",
+        "Een verwachte factuur verschijnt op de vervaldatum in Home en Forecast en gaat zelf op “betaald” zodra een passende banktransactie binnenkomt.",
       entityLabel: "Entiteit",
       entityAriaLabel: "Entiteit",
       directionLabel: "Richting",
@@ -1696,7 +1696,7 @@ const enFacturen: FacturenCopy = {
     manual: {
       moduleTitle: "3 · Manual",
       footer:
-        "An expected invoice shows up on its due date in Overview and Forecast, and switches itself to “paid” as soon as a matching bank transaction comes in.",
+        "An expected invoice shows up on its due date in Home and Forecast, and switches itself to “paid” as soon as a matching bank transaction comes in.",
       entityLabel: "Entity",
       entityAriaLabel: "Entity",
       directionLabel: "Direction",

@@ -832,7 +832,7 @@ const optimalisatieCopy_nl: OptimalisatieCopy = {
     },
 
     openGapsSentence: (products) =>
-      `Cashback onbekend voor ${products}, en aannemen mag hier niet. Twee manieren om dat te sluiten: kies een bestemming in het reisblok op Overzicht en klik Zoek voorwaarden, of vul het percentage zelf in bij Profiel → Cashback corrigeren.`,
+      `Cashback onbekend voor ${products}, en aannemen mag hier niet. Twee manieren om dat te sluiten: kies een bestemming in het reisblok op Home en klik Zoek voorwaarden, of vul het percentage zelf in bij Profiel → Cashback corrigeren.`,
     openGapsCallToAction: {
       searchLink: "Zoek voorwaarden",
       profileLink: "Profiel → Cashback corrigeren",
@@ -1330,7 +1330,7 @@ const optimalisatieCopy_en: OptimalisatieCopy = {
     },
 
     openGapsSentence: (products) =>
-      `Cashback unknown for ${products}, and it can't be assumed here. Two ways to close that: pick a destination in the travel block on Overview and click Look up terms, or enter the percentage yourself under Profile → Correct cashback.`,
+      `Cashback unknown for ${products}, and it can't be assumed here. Two ways to close that: pick a destination in the travel block on Home and click Look up terms, or enter the percentage yourself under Profile → Correct cashback.`,
     openGapsCallToAction: {
       searchLink: "Look up terms",
       profileLink: "Profile → Correct cashback",

@@ -170,6 +170,140 @@
     font-size: 0.85rem;
   }
 
+  /* ---------- Home add area and the widget hide button ----------
+ * Dashed hairline boxes: the dashed outline and the "+" mark carry "this is not
+ * here yet", so it reads in the monochrome theme too. Motion budget: the boxes
+ * ease background and border colour in 120ms; a newly added card fades in over
+ * 150ms; nothing else moves. Reduced motion: instant. The inner grid columns
+ * (4 / 2 at a container <= 900px / 1 at <= 520px) are the .home-add-grid rules
+ * below. Plain CSS, in this order on purpose: both container rules match a
+ * narrow container, and the later one (520) must win. Tailwind arbitrary
+ * container variants are emitted narrowest first and got this wrong. */
+  .home-add {
+    grid-column: 1 / -1;
+    min-width: 0;
+  }
+  .home-add-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--sp-3);
+    margin-bottom: var(--sp-3);
+  }
+  .home-add-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: var(--sp-3);
+  }
+  @container (max-width: 900px) {
+    .home-add-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+  @container (max-width: 520px) {
+    .home-add-grid {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+  .home-add-all {
+    min-height: 44px;
+    padding: 0 var(--sp-3);
+    background: none;
+    border: 0;
+    color: var(--muted);
+    font: inherit;
+    font-size: 0.8rem;
+    text-decoration: underline;
+    cursor: pointer;
+  }
+  .home-add-all:hover {
+    color: var(--ink);
+  }
+  .home-add-box {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--sp-1);
+    min-height: 44px;
+    min-width: 0;
+    padding: var(--sp-4);
+    text-align: left;
+    font: inherit;
+    color: var(--ink);
+    background: transparent;
+    border: 1px dashed var(--line);
+    border-radius: var(--r-sm);
+    cursor: pointer;
+    transition:
+      background-color 120ms ease-out,
+      border-color 120ms ease-out;
+  }
+  .home-add-box:hover,
+  .home-add-box:focus-visible {
+    background: var(--surface-2);
+    border-color: var(--muted);
+  }
+  .home-add-plus {
+    font-family: var(--font-mono);
+    font-size: 1.2rem;
+    line-height: 1;
+    color: var(--muted);
+  }
+  .home-add-label {
+    font-weight: 500;
+  }
+  .home-add-what {
+    font-size: 0.8rem;
+    color: var(--muted);
+  }
+
+  /* The hide button sits in the card header. 44px hit area, pulled back with
+ * negative margin so the header keeps its height. Hidden until the card is
+ * hovered or holds focus, but always shown on a device that cannot hover. */
+  .widget-hide {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    margin: -6px;
+    padding: 0;
+    background: none;
+    border: 0;
+    border-radius: 50%;
+    color: var(--muted);
+    cursor: pointer;
+  }
+  .widget-hide:hover {
+    color: var(--ink);
+  }
+  @media (hover: hover) {
+    .widget-hide {
+      opacity: 0;
+    }
+    .module:hover .widget-hide,
+    .module:focus-within .widget-hide {
+      opacity: 1;
+    }
+  }
+
+  @keyframes module-added {
+    from {
+      opacity: 0;
+    }
+  }
+  .module[data-just-added] {
+    animation: module-added 150ms ease-out;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .home-add-box {
+      transition: none;
+    }
+    .module[data-just-added] {
+      animation: none;
+    }
+  }
+
   /* ---------- Breakpoints: the grid collapses, spans clamp to full width ----------
  * Container queries on .content-container, the wrapper inside the scrolling
  * main, so they follow what is left beside the rail and the sidebar rather than
@@ -213,6 +347,7 @@
      * with it; at `flex: none` a full-width search plus a link ran past the card. */
     .module-controls {
       flex: 1 1 auto;
+      flex-wrap: wrap;
       min-width: 0;
       justify-content: flex-end;
     }
@@ -425,6 +560,90 @@
       opacity: 0;
     }
   }
+  .ui-dialog {
+    position: relative;
+    padding: 0;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--r);
+    box-shadow: var(--shadow-float);
+    width: min(92vw, 480px);
+    max-height: calc(100vh - 32px);
+    overflow-y: auto;
+    font-family: var(--font-body);
+    color: var(--ink);
+    opacity: 0;
+    transition:
+      opacity 150ms var(--ease-emphasized),
+      overlay 150ms allow-discrete,
+      display 150ms allow-discrete;
+  }
+  /* Content is unmounted on close, so an exit fade would show an empty dialog. */
+  .ui-dialog:not([open]) {
+    transition: none;
+  }
+  .ui-dialog[open] {
+    opacity: 1;
+  }
+  @starting-style {
+    .ui-dialog[open] {
+      opacity: 0;
+    }
+  }
+  .ui-dialog::backdrop {
+    background: var(--scrim);
+    opacity: 0;
+    transition: opacity 150ms var(--ease-emphasized);
+  }
+  .ui-dialog[open]::backdrop {
+    opacity: 1;
+  }
+  @starting-style {
+    .ui-dialog[open]::backdrop {
+      opacity: 0;
+    }
+  }
+  .ui-dialog-body {
+    padding: 24px;
+  }
+  .ui-dialog-title {
+    margin: 0 32px 12px 0;
+    font-size: 1.15rem;
+  }
+  .ui-dialog-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 20px;
+  }
+  .ui-dialog-close {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    width: 44px;
+    height: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: none;
+    border: none;
+    border-radius: var(--pill);
+    font-size: 1.3rem;
+    line-height: 1;
+    color: var(--muted);
+    cursor: pointer;
+  }
+  .ui-dialog-close:hover {
+    background: var(--surface-2);
+    color: var(--ink);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .ui-dialog,
+    .ui-dialog::backdrop {
+      transition: none;
+    }
+  }
   .guide-dialog-close {
     position: absolute;
     top: 14px;
@@ -461,6 +680,25 @@
       .guide-dialog[open] {
         opacity: 0;
       }
+    }
+  }
+}
+
+/* Home only: a span-1 card takes the full row at a container <= 1200px.
+ *
+ * homeSpans (lib/homeLayout.ts) packs rows for three columns, a span-2 card
+ * beside a span-1 card. Between 901px and 1200px the grid has two columns, the
+ * span-2 card clamps to the full row, and its span-1 partner would sit alone in
+ * a half-width row. Here the partner takes the full row too. Other pages that
+ * use .module-grid keep the shared behaviour.
+ *
+ * Outside @layer components on purpose: a card's own span is a Tailwind
+ * utility (layer utilities), which beats anything in components. This rule is
+ * in the utilities layer too and wins on specificity (two classes). */
+@layer utilities {
+  @container (max-width: 1200px) {
+    .home-grid > .module {
+      grid-column: 1 / -1;
     }
   }
 }

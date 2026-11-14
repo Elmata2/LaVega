@@ -95,6 +95,7 @@ import { CATALOGUE_ENTRIES, CATALOGUE_RATES } from "./catalogue-rates";
 import { API_BASE } from "./api.js";
 import { CONTENT_CONTAINER_CLASS } from "./module-grid.js";
 import { Shell } from "./components/Shell.js";
+import { HomePopups } from "./components/HomePopups.js";
 import { AccountSidebar } from "./components/AccountSidebar.js";
 import { SHOW_INVOICE_FORWARDING, initialScope, isArchivedView } from "./archive";
 import { pathForView, takePendingEbParams, viewFromPathname, type View } from "./appRoutes";
@@ -170,6 +171,7 @@ import AboutYou from "./views/AboutYou";
 import PlanRoute from "./plan/PlanRoute";
 import { intakeCopy } from "./copy/intake.js";
 import Overzicht from "./views/Overzicht";
+import { AssistantPanel } from "./assistant/AssistantPanel";
 import Transacties from "./views/Transacties";
 import Regels from "./views/Regels";
 import Rekeningen from "./views/Rekeningen";
@@ -495,6 +497,8 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
   // Bumped by "Widget toevoegen" in the header so the profile scrolls to the
   // picker instead of the top of a long settings page.
   const [addWidget, setAddWidget] = useState(0);
+  // The phone drawer (and later the assistant sheet) covers the page: no pop-up opens under it.
+  const [overlayOpen, setOverlayOpen] = useState(false);
   function handleAddWidget() {
     setView("profiel");
     setAddWidget((n) => n + 1);
@@ -547,7 +551,7 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
   /* Een verse kluis opent de intake-wizard op de eerste vraag, niet
    * de oude instelstap. `showOnboarding` blijft de poort: alleen een verse kluis
    * die dit apparaat nog niet zag, dus een bestaande gebruiker krijgt hier niets
-   * en ziet de uitnodiging op Overzicht. De vlag gaat meteen om; de intake
+   * en ziet de uitnodiging als pop-up op Home. De vlag gaat meteen om; de intake
    * onthoudt zelf waar hij was en hervat via die uitnodiging. */
   useEffect(() => {
     if (gate !== "ready" || !showOnboarding(freshVault, onboarded)) return;
@@ -1320,6 +1324,10 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
     () => ({ ...own, names: ownNamesForMatching }),
     [own, ownNamesForMatching],
   );
+  const okProfileStore =
+    profileRead !== "loading" && profileRead !== "error" && profileRead.kind === "ok"
+      ? profileRead.store
+      : null;
   // Profiel's "Jouw plan" card opens the plan once the intake has produced something to plan with.
   const planUnlocked =
     profileRead !== "loading" &&
@@ -1344,35 +1352,6 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
   );
   // Capacity for "what LaVega knows about you": the same room and the same
   // profile inputs the intake uses, worked out here and never stored.
-  // The home screen's room card: computed once per data change, and only while
-  // the overview is showing.
-  const homeRoom = useMemo(() => {
-    if (view !== "overview" || profileRead === "loading" || profileRead === "error") return null;
-    const profile = profileRead.kind === "ok" ? profileRead.store.current : emptyProfile();
-    const computed = computeRoom({
-      txs: ledgerTxs,
-      accounts,
-      profiles: entityProfiles,
-      rules,
-      own: ownWithNames,
-      asOf,
-      mode: fxConversionMode,
-      fxHistory,
-    });
-    return resolveRoom(computed, profile);
-  }, [
-    view,
-    profileRead,
-    ledgerTxs,
-    accounts,
-    entityProfiles,
-    rules,
-    ownWithNames,
-    asOf,
-    fxConversionMode,
-    fxHistory,
-  ]);
-
   const aboutYouCapacity = useMemo(() => {
     const profile =
       profileRead !== "loading" && profileRead !== "error" && profileRead.kind === "ok"
@@ -2288,6 +2267,8 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
   return (
     <Shell
       title={shell.topBar.viewTitles[view]}
+      onOverlayChange={setOverlayOpen}
+      assistant={<AssistantPanel storage={storage} asOf={asOf} />}
       nav={{
         view,
         modules: navModules(modules),
@@ -2313,6 +2294,26 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
         />
       }
     >
+      <HomePopups
+        view={view}
+        blocked={
+          problems.length > 0 ||
+          (scopedAccounts.length === 0 && accounts.length > 0) ||
+          overlayOpen
+        }
+        store={okProfileStore}
+        profileReady={profileRead !== "loading" && profileRead !== "error"}
+        asOf={asOf}
+        hasTransactions={txs.length > 0}
+        accounts={currentScopedAccounts}
+        onSave={saveProfile}
+        onOpenIntake={() => setView("intake")}
+        onOpenRound2={() => {
+          setIntakeRound(2);
+          setView("intake");
+        }}
+        onOpenAccounts={() => setView("accounts")}
+      />
       <div className={CONTENT_CONTAINER_CLASS}>
         {/* Import moved into the profile, so import/bank-link messages would
           otherwise only be visible on that page. They are the outcome of
@@ -2343,7 +2344,6 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
 
         {view === "overview" && (
           <Overzicht
-            storage={storage}
             accounts={currentScopedAccounts}
             txs={scopedTxs}
             rules={rules}
@@ -2367,19 +2367,9 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
             mode={fxConversionMode}
             onBufferChange={handleBufferChange}
             onNavigate={setView}
-            {...(homeRoom && profileRead !== "loading" && profileRead !== "error"
-              ? {
-                  intake: {
-                    store: profileRead.kind === "ok" ? profileRead.store : null,
-                    room: homeRoom.room,
-                    ...(homeRoom.statedInputs ? { statedInputs: homeRoom.statedInputs } : {}),
-                    onSave: saveProfile,
-                    onOpenRound2: () => {
-                      setIntakeRound(2);
-                      setView("intake");
-                    },
-                  },
-                }
+            onAddWidget={handleAddWidget}
+            {...(profileRead !== "loading" && profileRead !== "error"
+              ? { intake: { store: profileRead.kind === "ok" ? profileRead.store : null } }
               : {})}
             travel={{
               accounts: scopedAccounts,
@@ -2666,6 +2656,8 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
           <Profiel
             onNavigate={setView}
             planUnlocked={planUnlocked}
+            intakeStore={okProfileStore}
+            hasTransactions={txs.length > 0}
             enabledModules={modules}
             onModulesChange={handleModulesChange}
             focusModules={addWidget}

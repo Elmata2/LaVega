@@ -1,7 +1,9 @@
+import type { ReactNode } from "react";
 import type { EntityForecast } from "@lavega/core";
 import type { View } from "../../App";
 import { formatEuroIn, formatEuroAxisIn } from "../../format.js";
-import Module from "../Module.js";
+import Module, { type ModuleParts } from "../Module.js";
+import type { ModuleSpan } from "../../module-grid.js";
 import TrendChart, { type TrendPoint } from "../TrendChart.js";
 import CardLink from "../ui/CardLink.js";
 import { StatusIcon } from "../ui/StatusLine.js";
@@ -18,14 +20,21 @@ import { moneyCopy } from "../../copy/money.js";
  * the large one on the Forecast tab are the same chart at two sizes — and both
  * gained the hover/tap readout. */
 
-type CashflowBlockProps = {
+export type CashflowBlockProps = {
   forecast: EntityForecast;
   /** Warn below this balance, in integer cents — drawn as the dashed line. */
   bufferCents: number;
   onNavigate: (view: View) => void;
+  span?: ModuleSpan;
+  /** A control for the Module header, set by the Home chart slot. */
+  headerControl?: ReactNode;
 };
 
-export default function CashflowBlock({ forecast, bufferCents, onNavigate }: CashflowBlockProps) {
+export function useCashflowParts({
+  forecast,
+  bufferCents,
+  onNavigate,
+}: Omit<CashflowBlockProps, "span" | "headerControl">): ModuleParts {
   const [locale] = useAppLocale();
   const c = moneyCopy[locale].forecast;
   const shortfallWeek =
@@ -63,48 +72,61 @@ export default function CashflowBlock({ forecast, bufferCents, onNavigate }: Cas
     : undefined;
   const color = forecast.shortfall ? "var(--neg)" : "var(--pos)";
 
+  return {
+    title: "Cashflow",
+    menu: <CardLink onClick={() => onNavigate("forecast")}>Forecast →</CardLink>,
+    footer: hasChart ? (
+      forecast.shortfall && shortfallWeek !== null ? (
+        <>
+          {c.krapsteWeekLabel}{" "}
+          <strong className="text-warn">
+            <StatusIcon tone="warning" />
+            {c.krapsteWeekDetail(
+              shortfallWeek,
+              formatEuroIn(locale, forecast.shortfall.balanceCents / 100),
+            )}
+          </strong>
+        </>
+      ) : (
+        c.noneSentence
+      )
+    ) : undefined,
+    body: (
+      <>
+        {forecast.openingCents === null ? (
+          <p className="block-empty">{c.positieOnbekendKort}</p>
+        ) : !hasChart ? (
+          <p className="block-empty">{c.onvoldoendeHistorieVoorPrognose}</p>
+        ) : (
+          <TrendChart
+            points={points}
+            band={band}
+            reference={{ value: bufferCents / 100, label: c.bufferReferenceLabel }}
+            color={color}
+            format={(v) => formatEuroAxisIn(locale, v)}
+            ariaLabel={c.verwachteKaspositieAria}
+            readoutLabel={c.verwacht}
+            mark={shortfallWeek !== null ? { index: shortfallWeek, color: "var(--neg)" } : null}
+            height={170}
+          />
+        )}
+      </>
+    ),
+  };
+}
+
+export default function CashflowBlock({ span = 2, headerControl, ...rest }: CashflowBlockProps) {
+  const parts = useCashflowParts(rest);
   return (
     <Module
-      title="Cashflow"
-      span={2}
+      title={parts.title}
+      span={span}
       height="tall"
-      menu={<CardLink onClick={() => onNavigate("forecast")}>Forecast →</CardLink>}
-      footer={
-        hasChart ? (
-          forecast.shortfall && shortfallWeek !== null ? (
-            <>
-              {c.krapsteWeekLabel}{" "}
-              <strong className="text-warn">
-                <StatusIcon tone="warning" />
-                {c.krapsteWeekDetail(
-                  shortfallWeek,
-                  formatEuroIn(locale, forecast.shortfall.balanceCents / 100),
-                )}
-              </strong>
-            </>
-          ) : (
-            c.noneSentence
-          )
-        ) : undefined
-      }
+      period={headerControl}
+      menu={parts.menu}
+      footer={parts.footer}
     >
-      {forecast.openingCents === null ? (
-        <p className="block-empty">{c.positieOnbekendKort}</p>
-      ) : !hasChart ? (
-        <p className="block-empty">{c.onvoldoendeHistorieVoorPrognose}</p>
-      ) : (
-        <TrendChart
-          points={points}
-          band={band}
-          reference={{ value: bufferCents / 100, label: c.bufferReferenceLabel }}
-          color={color}
-          format={(v) => formatEuroAxisIn(locale, v)}
-          ariaLabel={c.verwachteKaspositieAria}
-          readoutLabel={c.verwacht}
-          mark={shortfallWeek !== null ? { index: shortfallWeek, color: "var(--neg)" } : null}
-          height={170}
-        />
-      )}
+      {parts.body}
     </Module>
   );
 }

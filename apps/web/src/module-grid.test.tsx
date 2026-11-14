@@ -14,7 +14,11 @@ import {
   type ModuleHeight,
   type ModuleSpan,
 } from "./module-grid.js";
-import { resolved, resolvedInContainer } from "./test-support/resolveStyle.js";
+import {
+  resolved,
+  resolvedInContainer,
+  resolvedAtContainerWidth,
+} from "./test-support/resolveStyle.js";
 
 /* Span behaviour lives in two halves that must agree: Module/ModuleGrid pick
  * the class, styles/modules.css (grid template) or module-grid.ts itself
@@ -193,4 +197,32 @@ test("module titles keep the reference's uppercase letter-spaced register", () =
   expect(resolved(title, "text-transform")).toBe("uppercase");
   // Built sheet drops the leading zero the source writes; same value, ".12em".
   expect(resolved(title, "letter-spacing")).toBe(".12em");
+});
+
+test("on Home a span-1 card takes the full row at a container <= 1200px, one of three above", () => {
+  const grid = mount(<ModuleGrid className="home-grid">{null}</ModuleGrid>).className.split(" ");
+  const card = moduleClasses(1);
+  const opts = { parentClasses: grid };
+  // The hand-written rule keeps "1 / -1"; Tailwind writes "1/-1". Same value.
+  const col = (w: number) =>
+    resolvedAtContainerWidth(card, "grid-column", w, opts)?.replace(/\s*\/\s*/g, "/");
+  expect(col(1000)).toBe("1/-1");
+  expect(col(1200)).toBe("1/-1");
+  expect(col(1300)).toBe("span 1");
+  expect(resolvedAtContainerWidth(grid, "grid-template-columns", 1300)).toBe(
+    "repeat(3,minmax(0,1fr))",
+  );
+});
+
+test("off Home a span-1 card still shares a row in the two-column band", () => {
+  const plain = mount(<ModuleGrid>{null}</ModuleGrid>).className.split(" ");
+  expect(
+    resolvedAtContainerWidth(moduleClasses(1), "grid-column", 1000, { parentClasses: plain }),
+  ).toBe("span 1");
+});
+
+test("the control slot wraps and a wide tab bar scrolls inside it on a narrow card", () => {
+  expect(resolvedInContainer(["module-controls"], "flex-wrap", CONTAINER_ONE_COL_MAX)).toBe("wrap");
+  expect(resolved(["module-tabs"], "max-width")).toBe("100%");
+  expect(resolved(["module-tabs"], "overflow-x")).toBe("auto");
 });

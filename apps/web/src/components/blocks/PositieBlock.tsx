@@ -6,6 +6,7 @@ import { formatSignedEuroIn } from "../../format.js";
 import Module from "../Module.js";
 import CardLink from "../ui/CardLink.js";
 import { useWidgetEnabled } from "../moduleRegistry";
+import WidgetHideButton from "../WidgetHideButton";
 import { useAppLocale } from "../../appLocale.js";
 import { moneyCopy } from "../../copy/money.js";
 
@@ -121,8 +122,14 @@ export default function PositieBlock({
   return (
     <Module
       title="Positie"
+      widgetId="positie"
       height="short"
-      menu={<CardLink onClick={() => onNavigate("accounts")}>{c.rekeningenArrow}</CardLink>}
+      menu={
+        <>
+          <CardLink onClick={() => onNavigate("accounts")}>{c.rekeningenArrow}</CardLink>
+          <WidgetHideButton id="positie" />
+        </>
+      }
       footer={
         rows.length > 0 ? (
           <>

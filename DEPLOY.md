@@ -206,7 +206,7 @@ or down. Use this endpoint to diagnose an empty Trading 212 portfolio.
 
 6. Verify:
    - `https://lavega.dev/` → landing
-   - `https://lavega.dev/app` → personal vault (Overzicht)
+   - `https://lavega.dev/app` → personal vault (Home)
    - `https://lavega.dev/app/transactions` → Transacties (same for other modules)
    - `https://lavega.dev/health` → `{"ok":true}`
    - Signed in: `https://lavega.dev/api/investing/health/detail` → real tenant health
@@ -219,7 +219,7 @@ Personal app paths (SPA; server already serves `index.html` for unknown paths):
 | ------------------------- | --------------------------- |
 | `/`                       | Landing (Dutch — canonical) |
 | `/en`                     | Landing (English)           |
-| `/app` or `/app/overview` | Overzicht                   |
+| `/app` or `/app/overview` | Home                        |
 | `/app/transactions`       | Transacties                 |
 | `/app/accounts`           | Rekeningen                  |
 | `/app/forecast`           | Forecast                    |

@@ -14,7 +14,7 @@ import {
 import type { View } from "../App";
 import { useAppLocale } from "../appLocale.js";
 import { ConnectChecklist } from "../components/blocks/ConnectChecklist.js";
-import { inviteState } from "../components/blocks/IntakeInviteCard.js";
+import { inviteState } from "../intake/inviteState.js";
 import Button from "../components/ui/Button.js";
 import Card from "../components/ui/Card.js";
 import StatusLine from "../components/ui/StatusLine.js";
@@ -55,6 +55,8 @@ export type PlanProps = {
    *  linked only to a personal account. */
   accounts?: readonly Account[];
   entityProfiles?: readonly EntityProfile[];
+  /** The vault holds at least one transaction; the invitation counts it like the pop-up does. */
+  hasTransactions?: boolean;
   /** Test seam: the verified public facts to read. Default is PUBLIC_FACTS. */
   publicFacts?: readonly PublicFact[];
 };
@@ -93,6 +95,7 @@ export default function Plan({
   onSaveProfile,
   accounts = [],
   entityProfiles = [],
+  hasTransactions = false,
   publicFacts,
   rewards,
   onSaveRewards,
@@ -116,7 +119,7 @@ export default function Plan({
     );
   }
   if (planProfileOf(store).intakeBlocksDone < 1) {
-    const invite = inviteState(store, asOf);
+    const invite = inviteState(store, asOf, hasTransactions);
     const steps = intakeCopy[locale].home.invite;
     const resume =
       invite === null || invite.kind !== "intake"

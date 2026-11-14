@@ -2,6 +2,7 @@ import { useState } from "react";
 import type { Alert, AlertSeverity } from "@lavega/core";
 import Module from "../Module.js";
 import { useWidgetEnabled } from "../moduleRegistry";
+import WidgetHideButton from "../WidgetHideButton";
 import Badge from "../ui/Badge.js";
 import CardLink from "../ui/CardLink.js";
 import SaldoInput from "../ui/SaldoInput.js";
@@ -105,23 +106,27 @@ export default function AandachtBlock({ alerts, bufferCents, onBufferChange }: A
   return (
     <Module
       title="Aandacht"
+      widgetId="aandacht"
       span={3}
       // hug: full width with only a line or two in it, so don't reserve the
       // grid's short-module height. head-wrap: the buffer editor is a labelled
       // input, wider than the pill the control slot is sized for.
       className="module-hug module-head-wrap"
       menu={
-        <label className="buffer-field eyebrow">
-          {c.waarschuwOnderBuffer}{" "}
-          <SaldoInput
-            inputMode="decimal"
-            placeholder="0"
-            aria-label={c.waarschuwingsbufferAria}
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            onBlur={commit}
-          />
-        </label>
+        <>
+          <label className="buffer-field eyebrow">
+            {c.waarschuwOnderBuffer}{" "}
+            <SaldoInput
+              inputMode="decimal"
+              placeholder="0"
+              aria-label={c.waarschuwingsbufferAria}
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              onBlur={commit}
+            />
+          </label>
+          <WidgetHideButton id="aandacht" />
+        </>
       }
       footer={zeroBuffer ? <span className="cell-sub">{c.bufferZeroNote}</span> : undefined}
     >

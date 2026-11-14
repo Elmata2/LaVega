@@ -398,6 +398,9 @@ type StatistiekBlockProps = {
   onSelectCategory: (category: string) => void;
   fxHistory: Record<string, Record<string, number>>;
   mode: ConversionMode;
+  /** The view the block opens on. Home leaves it out and gets the outflows
+   *  donut; a test that needs another view names it. */
+  initialView?: StatView;
 };
 
 export default function StatistiekBlock({
@@ -407,6 +410,7 @@ export default function StatistiekBlock({
   onSelectCategory,
   fxHistory,
   mode,
+  initialView = "verdeling",
 }: StatistiekBlockProps) {
   const [locale] = useAppLocale();
   const c = moneyCopy[locale].statistiek;
@@ -420,7 +424,7 @@ export default function StatistiekBlock({
     label: c.views[i].label,
   }));
   const [period, setPeriod] = useState<StatPeriod>("12m");
-  const [view, setView] = useState<StatView>("categorie");
+  const [view, setView] = useState<StatView>(initialView);
   const [custom, setCustom] = useState<{ start: string; end: string }>({ start: "", end: "" });
   const conversion = useMemo(() => ({ fxHistory, mode }), [fxHistory, mode]);
 

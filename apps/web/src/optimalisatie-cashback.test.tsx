@@ -151,7 +151,7 @@ test("de openstaande vraag gaat alleen nog over de kaarten waar niets mag worden
   expect(open).toContain("Trading 212 betaalpas");
   expect(open).not.toContain("ING betaalpas");
   // Twee wegen die allebei bestaan, en de tweede is nieuw: het veld in Profiel.
-  expect(open).toContain("reisblok op Overzicht");
+  expect(open).toContain("reisblok op Home");
   expect(open).toContain("Zoek voorwaarden");
   expect(open).toContain("Profiel");
 });

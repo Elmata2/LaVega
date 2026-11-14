@@ -72,7 +72,15 @@ export function BottomBar({
   onOpenMore,
   expanded = false,
   behind = false,
-}: ShellNavProps & { expanded?: boolean; behind?: boolean }) {
+  onOpenAssistant,
+  assistantExpanded = false,
+}: ShellNavProps & {
+  expanded?: boolean;
+  behind?: boolean;
+  /** Given: the bar shows an "Assistent" item that opens the phone sheet. */
+  onOpenAssistant?: () => void;
+  assistantExpanded?: boolean;
+}) {
   const [locale] = useAppLocale();
   const c = shellCopy[locale];
   const items = modules.filter((m) => BAR_IDS.has(m.id));
@@ -97,6 +105,32 @@ export function BottomBar({
           <span className="shell2-rail-label">{c.nav.moduleLabels[m.id]}</span>
         </a>
       ))}
+      {onOpenAssistant && (
+        <button
+          type="button"
+          className="shell2-bar-item shell2-bar-assistant"
+          aria-haspopup="dialog"
+          aria-expanded={assistantExpanded}
+          onClick={onOpenAssistant}
+        >
+          <span className="shell2-rail-icon" aria-hidden="true">
+            <svg
+              viewBox="0 0 24 24"
+              width="20"
+              height="20"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.6"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M5 5.5h14a1.5 1.5 0 0 1 1.5 1.5v8a1.5 1.5 0 0 1-1.5 1.5h-7l-4.5 3.5V16.5H5A1.5 1.5 0 0 1 3.5 15V7A1.5 1.5 0 0 1 5 5.5z" />
+            </svg>
+          </span>
+          <span className="shell2-rail-label">{c.frame.assistant}</span>
+        </button>
+      )}
       {hasMore && (
         <button
           type="button"

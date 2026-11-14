@@ -99,27 +99,11 @@ export type IntakeCopy = {
   loading: string;
   loadError: string;
   retry: string;
-  payoff: {
-    title: string;
-    headline: (amount: string) => string;
-    range: (low: string, high: string) => string;
-    partial: (n: number) => string;
-    stated: string;
-    showCalc: string;
-    monthLine: (month: string, incoming: string, outgoing: string, net: string) => string;
-    middleNote: string;
-    rulesNote: string;
-    statedCalc: (incLow: string, incHigh: string, spLow: string, spHigh: string) => string;
-    foreignExcluded: (n: number) => string;
-    none: { noData: string; noFullMonth: string };
-    /** Accounts whose data stops months from counting, one line per reason. */
-    blocking: { stale: (name: string) => string; short: (name: string, since: string) => string };
-    /** Stands in for an account that has neither a name nor a bank. */
-    anAccount: string;
-    continue: string;
-  };
-  /** The two cards on the home screen. */
+  /** The pop-ups on the home screen. */
   home: {
+    /** Shared by the intake and connect pop-ups. */
+    later: string;
+    closeDialog: string;
     invite: {
       title: string;
       intro: string;
@@ -130,14 +114,10 @@ export type IntakeCopy = {
       newQuestions: { title: string; count: (n: number) => string };
       round2: { title: string; count: (n: number) => string };
     };
-    room: {
-      title: string;
-      open: string;
-      importLink: string;
-    };
     connect: {
       title: string;
       line: (bank: string) => string;
+      /** The one button of the connect pop-up: to Rekeningen. */
       link: string;
     };
   };
@@ -168,36 +148,9 @@ export const intakeCopy: Record<Locale, IntakeCopy> = {
     loading: "Je gegevens worden geladen…",
     loadError: "Je profiel kon niet uit de kluis worden gelezen.",
     retry: "Opnieuw proberen",
-    payoff: {
-      title: "Je ruimte per maand",
-      headline: (a) => `Ongeveer ${a} per maand`,
-      range: (l, h) => `Tussen ${l} en ${h}`,
-      partial: (n) =>
-        `Er waren minder dan drie volledige maanden; berekend over ${n}. We extrapoleren niet.`,
-      stated: "Berekend uit de bandbreedtes die je zelf opgaf.",
-      showCalc: "Toon de berekening",
-      monthLine: (m, i, o, n) => `${m}: ontvangen ${i}, uitgegeven ${o}, over ${n}`,
-      middleNote:
-        "Het hoofdbedrag is de middelste maand; de bandbreedte loopt van de laagste tot de hoogste maand.",
-      rulesNote:
-        "Geld dat tussen je eigen rekeningen schuift telt niet mee. Aflossingen tellen als uitgave. Eenmalige bedragen tellen mee zoals ze vielen.",
-      statedCalc: (il, ih, sl, sh) =>
-        `Inkomen ${il} tot ${ih} min uitgaven ${sl} tot ${sh}: laagste uitkomst is laagste inkomen min hoogste uitgaven, hoogste uitkomst het omgekeerde.`,
-      foreignExcluded: (n) => `${n} transactie(s) in vreemde valuta zijn niet meegeteld.`,
-      none: {
-        noData: "We hebben nog te weinig gegevens om je ruimte te berekenen.",
-        noFullMonth: "We hebben nog geen volledige maand aan gegevens om je ruimte te berekenen.",
-      },
-      blocking: {
-        stale: (name) =>
-          `${name} heeft geen recente transacties, dus deze maanden kunnen niet meetellen. Synchroniseer of importeer de rekening om dit op te lossen.`,
-        short: (name, since) =>
-          `${name} heeft pas gegevens vanaf ${since}; je ruimte gebruikt minder maanden tot er drie volle zijn.`,
-      },
-      anAccount: "Een rekening",
-      continue: "Verder",
-    },
     home: {
+      later: "Later",
+      closeDialog: "Sluiten",
       invite: {
         title: "Vertel LaVega over je situatie",
         intro:
@@ -215,11 +168,6 @@ export const intakeCopy: Record<Locale, IntakeCopy> = {
           title: "Nog een paar vragen",
           count: (n) => `${n} ${n === 1 ? "vraag" : "vragen"} zodat LaVega je kan coachen`,
         },
-      },
-      room: {
-        title: "Je ruimte per maand",
-        open: "Pas je antwoorden aan",
-        importLink: "Naar importeren en koppelen",
       },
       connect: {
         title: "Koppel voor het complete beeld",
@@ -402,7 +350,8 @@ export const intakeCopy: Record<Locale, IntakeCopy> = {
         no: "Nee",
         notAnswered: "Niet ingevuld",
         cardPaidInFull: "elke maand volledig betaald",
-        cardRevolving: (r) => (r === null ? "saldo blijft staan" : `saldo blijft staan, rente ${r}`),
+        cardRevolving: (r) =>
+          r === null ? "saldo blijft staan" : `saldo blijft staan, rente ${r}`,
       },
       editors: {
         euros: "Bedrag in euro",
@@ -435,36 +384,9 @@ export const intakeCopy: Record<Locale, IntakeCopy> = {
     loading: "Loading your data…",
     loadError: "Your profile could not be read from the vault.",
     retry: "Try again",
-    payoff: {
-      title: "Your room each month",
-      headline: (a) => `About ${a} a month`,
-      range: (l, h) => `Between ${l} and ${h}`,
-      partial: (n) =>
-        `Fewer than three full months were available; worked out over ${n}. We do not extrapolate.`,
-      stated: "Worked out from the ranges you gave.",
-      showCalc: "Show the calculation",
-      monthLine: (m, i, o, n) => `${m}: received ${i}, spent ${o}, left ${n}`,
-      middleNote:
-        "The headline is the middle month; the range runs from the lowest to the highest month.",
-      rulesNote:
-        "Money moving between your own accounts is left out. Loan and debt payments count as spending. One-off amounts count as they fell.",
-      statedCalc: (il, ih, sl, sh) =>
-        `Income ${il} to ${ih} minus spending ${sl} to ${sh}: the low end is the lowest income minus the highest spending, the high end the reverse.`,
-      foreignExcluded: (n) => `${n} transaction(s) in a foreign currency were not counted.`,
-      none: {
-        noData: "We do not have enough data yet to work out your room.",
-        noFullMonth: "We do not have a full month of data yet to work out your room.",
-      },
-      blocking: {
-        stale: (name) =>
-          `${name} has no recent transactions, so these months can't be counted. Sync or import it to fix this.`,
-        short: (name, since) =>
-          `${name} only has data since ${since}; the room uses fewer months until there are three full ones.`,
-      },
-      anAccount: "An account",
-      continue: "Continue",
-    },
     home: {
+      later: "Later",
+      closeDialog: "Close",
       invite: {
         title: "Tell LaVega about your situation",
         intro:
@@ -482,11 +404,6 @@ export const intakeCopy: Record<Locale, IntakeCopy> = {
           title: "A few more questions",
           count: (n) => `${n} ${n === 1 ? "question" : "questions"} so LaVega can coach you`,
         },
-      },
-      room: {
-        title: "Your room each month",
-        open: "Change your answers",
-        importLink: "Go to import and linking",
       },
       connect: {
         title: "Connect for the full picture",
@@ -668,7 +585,8 @@ export const intakeCopy: Record<Locale, IntakeCopy> = {
         no: "No",
         notAnswered: "Not filled in",
         cardPaidInFull: "paid in full every month",
-        cardRevolving: (r) => (r === null ? "balance carried over" : `balance carried over, interest ${r}`),
+        cardRevolving: (r) =>
+          r === null ? "balance carried over" : `balance carried over, interest ${r}`,
       },
       editors: {
         euros: "Amount in euros",

@@ -124,7 +124,7 @@ test("menu lists all enabled modules, then the sidebar body", () => {
   );
   expect(items).toHaveLength(ALL.length - 1);
   expect(items).not.toContain("Jouw plan");
-  expect(items.slice(0, 3)).toEqual(["Overzicht", "Optimalisatie", "Rekeningen"]);
+  expect(items.slice(0, 3)).toEqual(["Home", "Optimalisatie", "Rekeningen"]);
   expect(dialog().querySelector(".go")).not.toBeNull();
 });
 

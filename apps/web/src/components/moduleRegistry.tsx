@@ -126,8 +126,8 @@ function Line({ x, y, w, strong }: { x: number; y: number; w: number; strong?: b
 export const MODULES: ModuleDef[] = [
   {
     id: "overview",
-    label: "Overzicht",
-    what: "Je startpagina: totaalpositie, cashflow, aandachtspunten en statistieken.",
+    label: "Home",
+    what: "Home: totaalpositie of cashflow, statistieken, je kaarten en je reizen.",
     icon: (
       <Icon>
         <rect x="3" y="3" width="7" height="7" rx="1.5" />
@@ -526,13 +526,12 @@ export function navModules(enabled: ModuleId[]): ModuleDef[] {
  *  `belasting`: die laatste twee zijn routes. Er staat een test op. */
 export type WidgetId =
   | "aandacht"
-  | "intake-invite"
-  | "room-card"
-  | "connect-checklist"
   | "positie"
+  | "recente-transacties"
   | "betaalagenda"
+  | "btw-stand"
   | "facturen-open"
-  | "btw-stand";
+  | "top-uitgaven";
 
 export type WidgetDef = {
   id: WidgetId;
@@ -543,23 +542,9 @@ export type WidgetDef = {
   what: string;
   /** Static thumbnail built from the design system (no screenshots). */
   preview: ReactNode;
-  /** OP DE STARTPAGINA ZOLANG HIJ ER NIETS OVER GEZEGD HEEFT?
-   *
-   *  Aandacht en Positie staan uit: die zijn er als KEUZE bijgekomen ("instead
-   *  of it always being default there"), dus ze mogen niet ongevraagd
-   *  verschijnen. Betaalagenda staat aan, en dat is dezelfde regel en niet de
-   *  omgekeerde: die kaart staat er al sinds hij bestaat, en review 4 punt 8
-   *  vraagt om een schakelaar — niet om hem kwijt te raken. Een widget
-   *  schakelbaar maken mag nooit hetzelfde zijn als hem weghalen.
-   *
-   *  BTW IS HET OMGEKEERDE GEVAL EN DE UITZONDERING DIE UITGESCHREVEN MOET
-   *  WORDEN: die kaart is NIEUW en staat tóch aan. Niet omdat een nieuwe kaart
-   *  dat mag — dat mag hij niet, zie Facturen hiernaast — maar omdat hij er in
-   *  dezelfde zin expliciet om vroeg: "als de gebruiker dat wilt, doe default
-   *  wel btw". De regel hierboven zegt dat een kaart niet ONGEVRAAGD verschijnt;
-   *  deze is gevraagd. Facturen in diezelfde zin ("als de gebruiker dat wilt")
-   *  is precies het tegenovergestelde verzoek en staat dus uit. Zonder deze
-   *  alinea lezen die twee naast elkaar als een inconsequentie. */
+  /** Home starts with the four fixed blocks; every widget is a choice, so no
+   *  entry sets this today. A stored choice is kept through `{on, seen}`; the
+   *  flag only decides a widget the user was never asked about. */
   defaultOn?: boolean;
   /** Eén regel extra onder `what`, voor het geval dat uitleg nodig heeft. */
   note?: string;
@@ -584,56 +569,6 @@ export const WIDGETS: WidgetDef[] = [
     ),
   },
   {
-    id: "intake-invite",
-    label: "Vertel over jezelf",
-    what: "Een uitnodiging om de vragen over je situatie te beantwoorden, of om verder te gaan waar je stopte.",
-    note: "Staat aan zolang de vragen niet af zijn — hier zet je hem uit.",
-    defaultOn: true,
-    preview: (
-      <Thumb>
-        <Tile x={8} y={10} w={80} h={40} />
-        <Line x={14} y={18} w={36} strong />
-        <Line x={14} y={27} w={58} />
-        <rect x="14" y="36" width="22" height="8" rx="4" fill="var(--accent)" opacity="0.8" />
-      </Thumb>
-    ),
-  },
-  {
-    id: "room-card",
-    label: "Je ruimte per maand",
-    what: "Wat er gemiddeld per maand overblijft, met de laagste en hoogste maand als bandbreedte.",
-    note: "Verschijnt zodra je de eerste vragen hebt beantwoord.",
-    defaultOn: true,
-    preview: (
-      <Thumb>
-        <Tile x={8} y={10} w={80} h={40} />
-        <Line x={14} y={17} w={24} />
-        <rect x="14" y="25" width="34" height="7" rx="3.5" fill="var(--pos)" opacity="0.7" />
-        <rect x="14" y="38" width="60" height="3" rx="1.5" fill="var(--line)" />
-        <rect x="30" y="38" width="28" height="3" rx="1.5" fill="var(--accent)" opacity="0.6" />
-      </Thumb>
-    ),
-  },
-  {
-    id: "connect-checklist",
-    label: "Koppel voor het complete beeld",
-    what: "Welke van je banken nog niet gekoppeld zijn, met een link naar Rekeningen.",
-    note: "Verschijnt alleen als je banken hebt opgegeven die nog niet gekoppeld zijn.",
-    defaultOn: true,
-    preview: (
-      <Thumb>
-        <Tile x={8} y={10} w={80} h={40} />
-        <Line x={14} y={17} w={36} strong />
-        <circle cx="16" cy="29" r="2.5" fill="var(--warn)" />
-        <Line x={23} y={28} w={34} />
-        <Line x={68} y={28} w={14} strong />
-        <circle cx="16" cy="40" r="2.5" fill="var(--warn)" />
-        <Line x={23} y={39} w={26} />
-        <Line x={68} y={39} w={14} strong />
-      </Thumb>
-    ),
-  },
-  {
     id: "positie",
     label: "Positie",
     what: "Een kleine kaart met de verdeling van je geld over je bedrijven.",
@@ -652,11 +587,28 @@ export const WIDGETS: WidgetDef[] = [
     ),
   },
   {
+    id: "recente-transacties",
+    label: "Recente transacties",
+    what: "De laatste zeven transacties, met zoeken en een link naar de volledige lijst.",
+    preview: (
+      <Thumb>
+        <Line x={8} y={9} w={26} strong />
+        <Tile x={8} y={18} w={80} h={10} />
+        <Line x={13} y={21.5} w={28} />
+        <Line x={72} y={22} w={10} strong />
+        <Tile x={8} y={31} w={80} h={10} />
+        <Line x={13} y={34.5} w={22} />
+        <Line x={72} y={35} w={10} strong />
+        <Tile x={8} y={44} w={80} h={10} />
+        <Line x={13} y={47.5} w={32} />
+        <Line x={72} y={48} w={10} strong />
+      </Thumb>
+    ),
+  },
+  {
     id: "betaalagenda",
     label: "Betaalagenda",
     what: "Wat er als eerste af moet: geplande bedragen en herkende vaste lasten, met hun datum.",
-    note: "Deze stond al op je overzicht — hier zet je hem uit.",
-    defaultOn: true,
     preview: (
       <Thumb>
         <rect
@@ -690,35 +642,9 @@ export const WIDGETS: WidgetDef[] = [
     ),
   },
   {
-    id: "facturen-open",
-    label: "Facturen",
-    what: "Hoeveel facturen er open staan, voor welk bedrag, en wat er over de vervaldatum heen is.",
-    /* "dan moet de factuur ook in het overzicht komen, ALS DE GEBRUIKER DAT
-     * WILT." Die tweede helft is de standaard: uit, tot hij hem hier aanzet. */
-    note: "Staat standaard uit — zet hem aan als je hem op je overzicht wilt.",
-    preview: (
-      <Thumb>
-        <Line x={8} y={9} w={10} strong />
-        <Line x={22} y={10} w={22} />
-        <Tile x={8} y={22} w={80} h={13} />
-        <Line x={13} y={26} w={26} />
-        <Line x={68} y={26} w={14} strong />
-        <Tile x={8} y={38} w={80} h={13} />
-        <Line x={13} y={42} w={20} />
-        <Line x={68} y={42} w={14} strong />
-        <rect x="8" y="38" width="3" height="13" rx="1.5" fill="var(--neg)" opacity="0.7" />
-      </Thumb>
-    ),
-  },
-  {
     id: "btw-stand",
     label: "BTW",
     what: "Wat je deze aangifteperiode te betalen of terug te vragen hebt, en tot wanneer je hebt.",
-    /* Nieuw en tóch aan — zie de alinea bij `defaultOn` hierboven: hij vroeg er
-     * met zoveel woorden om. De note zegt dat hier ook, want een schakelaar die
-     * aan staat terwijl de kaart nieuw is, laat de lezer aan zichzelf twijfelen. */
-    note: "Deze kaart staat standaard op je overzicht — hier zet je hem uit.",
-    defaultOn: true,
     preview: (
       <Thumb>
         <Line x={8} y={9} w={14} strong />
@@ -740,17 +666,44 @@ export const WIDGETS: WidgetDef[] = [
       </Thumb>
     ),
   },
+  {
+    id: "facturen-open",
+    label: "Facturen",
+    what: "Hoeveel facturen er open staan, voor welk bedrag, en wat er over de vervaldatum heen is.",
+    preview: (
+      <Thumb>
+        <Line x={8} y={9} w={10} strong />
+        <Line x={22} y={10} w={22} />
+        <Tile x={8} y={22} w={80} h={13} />
+        <Line x={13} y={26} w={26} />
+        <Line x={68} y={26} w={14} strong />
+        <Tile x={8} y={38} w={80} h={13} />
+        <Line x={13} y={42} w={20} />
+        <Line x={68} y={42} w={14} strong />
+        <rect x="8" y="38" width="3" height="13" rx="1.5" fill="var(--neg)" opacity="0.7" />
+      </Thumb>
+    ),
+  },
+  {
+    id: "top-uitgaven",
+    label: "Top uitgaven",
+    what: "Waar je geld deze maand heen ging, per categorie, met de verandering ten opzichte van vorige maand.",
+    preview: (
+      <Thumb>
+        <Line x={8} y={9} w={24} strong />
+        <Line x={8} y={20} w={18} />
+        <rect x="8" y="26" width="64" height="4" rx="2" fill="var(--accent)" opacity="0.7" />
+        <Line x={8} y={34} w={14} />
+        <rect x="8" y="40" width="42" height="4" rx="2" fill="var(--accent)" opacity="0.7" />
+        <Line x={8} y={48} w={22} />
+        <rect x="8" y="54" width="26" height="3" rx="1.5" fill="var(--accent)" opacity="0.7" />
+      </Thumb>
+    ),
+  },
 ];
 
-/** Wat er op de startpagina staat zolang hij niets gekozen heeft: per widget wat
- *  `defaultOn` zegt, en niet één lijst voor alledrie.
- *
- *  De asymmetrie met DEFAULT_MODULES blijft: een ongekozen NAV betekent "alles",
- *  want een navigatie leegmaken leest als een storing. Een ongekozen WIDGET
- *  betekent per kaart iets anders, en dat is geen slordigheid maar het enige
- *  antwoord dat allebei zijn zinnen respecteert — Aandacht, Positie en Facturen
- *  mogen niet ongevraagd verschijnen, Betaalagenda mag niet ongevraagd
- *  verdwijnen, en BTW moet er staan omdat hij daar met zoveel woorden om vroeg. */
+/** What Home shows before anything is chosen: the widgets whose own `defaultOn`
+ *  is true, which is none. Unlike the nav, an unchosen Home is the clean page. */
 export const DEFAULT_WIDGETS: WidgetId[] = WIDGETS.filter(
   (w) => w.defaultOn && !isArchivedWidget(w.id),
 ).map((w) => w.id);
@@ -911,6 +864,18 @@ export function setEnabledWidgets(ids: WidgetId[]): void {
     /* quota/serialization errors are non-fatal for a preference */
   }
   widgetCache = next;
+  for (const listener of widgetListeners) listener();
+}
+
+/** Forget the stored choice: Home goes back to the clean page, every widget
+ *  off, and every card and switch is told. */
+export function resetWidgets(): void {
+  try {
+    if (typeof localStorage !== "undefined") localStorage.removeItem(WIDGETS_KEY);
+  } catch {
+    /* a preference that cannot be removed is not worth failing a click for */
+  }
+  widgetCache = null;
   for (const listener of widgetListeners) listener();
 }
 

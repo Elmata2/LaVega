@@ -3,7 +3,9 @@ import type { PaycheckPreview, ScheduledFlow, Tx } from "@lavega/core";
 import { detectScheduleStreams } from "@lavega/core";
 import { formatDate, formatEuroIn, formatSignedEuroIn, monthShort } from "../../format.js";
 import Module from "../Module.js";
+import type { ModuleSpan } from "../../module-grid.js";
 import { useWidgetEnabled } from "../moduleRegistry";
+import WidgetHideButton from "../WidgetHideButton";
 import { daysBetween, shiftDate } from "./dates.js";
 import type { Locale } from "../../locale.js";
 import { useAppLocale } from "../../appLocale.js";
@@ -128,9 +130,17 @@ type BetaalschemaBlockProps = {
   /** The declared-income paycheck preview (#288). Absent means the bills lane
    *  has not been wired here, and the agenda keeps its #286 behaviour. */
   paycheck?: PaycheckPreview;
+  /** Set by Home, which knows what sits beside this card. */
+  span?: ModuleSpan;
 };
 
-export function BetaalschemaBlock({ scheduledFlows, txs, asOf, paycheck }: BetaalschemaBlockProps) {
+export function BetaalschemaBlock({
+  scheduledFlows,
+  txs,
+  asOf,
+  paycheck,
+  span,
+}: BetaalschemaBlockProps) {
   const [locale] = useAppLocale();
   const c = moneyCopy[locale].betaalschema;
   const upcoming = useMemo(
@@ -171,7 +181,13 @@ export function BetaalschemaBlock({ scheduledFlows, txs, asOf, paycheck }: Betaa
   const [open, setOpen] = useState<string | null>(null);
 
   return (
-    <Module title={c.title} height="tall">
+    <Module
+      title={c.title}
+      widgetId="betaalagenda"
+      span={span}
+      height="tall"
+      menu={<WidgetHideButton id="betaalagenda" />}
+    >
       {paycheck != null && (
         <div
           data-testid="betaalschema-paycheck"

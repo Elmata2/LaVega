@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import type {
   Account,
+  AdvisorProfileStore,
   EntityScope,
   EntitySummary,
   ImportSession,
@@ -28,7 +29,12 @@ import {
 } from "@lavega/core";
 import type { VaultStorage } from "@lavega/adapters";
 import ModulePicker, { WidgetPicker } from "../components/ModulePicker";
-import { WIDGETS, useOverviewWidgets, type ModuleId } from "../components/moduleRegistry";
+import {
+  WIDGETS,
+  resetWidgets,
+  useOverviewWidgets,
+  type ModuleId,
+} from "../components/moduleRegistry";
 import { CATALOGUE_ENTRIES } from "../catalogue-rates";
 import { countryListIn, countryNameIn, regionLabelIn, regionsFor } from "../countries.js";
 import {
@@ -47,6 +53,7 @@ import { useTheme } from "../hooks/useTheme.js";
 import type { Theme } from "../lib/theme.js";
 import { shellCopy } from "../copy/shell.js";
 import { intakeCopy } from "../copy/intake.js";
+import { inviteState } from "../intake/inviteState.js";
 import type { View } from "../appRoutes.js";
 import { heldCashbackSentence } from "../copy/optimise.js";
 import DocumentsCard, { type DocumentNotice } from "../components/documents/DocumentsCard.js";
@@ -58,6 +65,7 @@ import Koppelingen from "./Koppelingen";
 import Backup from "./Backup";
 import Button from "../components/ui/Button.js";
 import Card, { CardHeader } from "../components/ui/Card.js";
+import CardLink from "../components/ui/CardLink.js";
 import SaldoInput from "../components/ui/SaldoInput.js";
 import StatusLine from "../components/ui/StatusLine.js";
 import SignInForm from "../components/SignInForm.js";
@@ -80,6 +88,10 @@ type ProfielProps = {
   /** The intake has produced something to plan with (App's rule, unchanged).
    *  Unlocked, the top card opens the plan; locked, it starts the intake. */
   planUnlocked: boolean;
+  /** The stored profile and whether the vault holds a transaction: locked, the
+   *  plan card says "Ga verder" for a half-done intake. */
+  intakeStore?: AdvisorProfileStore | null;
+  hasTransactions?: boolean;
   /** Module picker. */
   enabledModules: ModuleId[];
   onModulesChange: (next: ModuleId[]) => void;
@@ -473,6 +485,8 @@ const THEME_OPTIONS: readonly Theme[] = ["midnight", "mono"];
 
 export default function Profiel({
   planUnlocked,
+  intakeStore = null,
+  hasTransactions = false,
   enabledModules,
   onModulesChange,
   focusModules,
@@ -544,16 +558,17 @@ export default function Profiel({
   }, [focusModules]);
 
   const invite = intakeCopy[locale].home.invite;
+  const resuming = (() => {
+    const state = inviteState(intakeStore, asOf, hasTransactions);
+    return state?.kind === "intake" && state.resumeAt !== null;
+  })();
   return (
     <>
       <Card as="section" aria-label={c.nav.moduleLabels.plan} className="profiel-plan">
         <h2>{c.nav.moduleLabels.plan}</h2>
         <p>{planUnlocked ? c.profiel.plan.line : invite.intro}</p>
-        <Button
-          variant="primary"
-          onClick={() => onNavigate?.(planUnlocked ? "plan" : "intake")}
-        >
-          {planUnlocked ? c.profiel.plan.open : invite.start}
+        <Button variant="primary" onClick={() => onNavigate?.(planUnlocked ? "plan" : "intake")}>
+          {planUnlocked ? c.profiel.plan.open : resuming ? invite.resume : invite.start}
         </Button>
       </Card>
       <Card as="section" aria-label={c.profiel.languageSwitch.ariaLabel}>
@@ -689,6 +704,9 @@ export default function Profiel({
         </CardHeader>
         <p className="cell-sub">{c.profiel.widgets.description}</p>
         <WidgetPicker enabled={widgets} onChange={setWidgets} />
+        <p className="mt-3 mb-0">
+          <CardLink onClick={resetWidgets}>{c.profiel.widgets.reset}</CardLink>
+        </p>
       </Card>
 
       {SHOW_ENTITY_CLASSIFIER && (

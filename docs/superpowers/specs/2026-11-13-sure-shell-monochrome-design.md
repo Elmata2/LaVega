@@ -34,6 +34,7 @@ Goals
 
 Non-goals (this spec)
 - Right-hand assistant panel. The AssistantPanel stays inline on Overzicht. Moving it is a separate spec. The shell must not reserve space for it.
+  Superseded 14 Nov 2026: `2026-11-13-home-assistant-popups-design.md` adds the right-hand assistant panel as a fourth shell region.
 - Account detail page, date-grouped transaction rows, bulk bar, Drawer primitive (report steps 5+).
 - Sparklines in the sidebar (needs a per-account balance series that does not exist yet). Rows show name and balance only.
 - Privacy-blur toggle, breadcrumbs, dashboard widget drag/hide UI, an insights feed.

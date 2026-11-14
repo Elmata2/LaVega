@@ -22,6 +22,9 @@ export type SidebarResizeHandleProps = {
   onReset: () => void;
   /** Id of the sidebar element this handle resizes (aria-controls). */
   controls: string;
+  /** Which edge of its panel the handle sits on. `left` (the assistant column)
+   *  inverts the drag delta and the arrow keys: dragging left widens. */
+  edge?: "right" | "left";
 };
 
 /** The sidebar's right-edge drag handle (a WAI-ARIA window splitter). */
@@ -33,8 +36,10 @@ export function SidebarResizeHandle({
   onCommit,
   onReset,
   controls,
+  edge = "right",
 }: SidebarResizeHandleProps) {
   const [locale] = useAppLocale();
+  const dir = edge === "left" ? -1 : 1;
   const drag = useRef<{ x: number; width: number; last: number } | null>(null);
   const stop = useRef<(() => void) | null>(null);
   useEffect(() => () => stop.current?.(), []);
@@ -47,7 +52,7 @@ export function SidebarResizeHandle({
     drag.current = start;
     onDrag(width);
     const move = (ev: PointerEvent) => {
-      start.last = clamp(start.width + ev.clientX - start.x);
+      start.last = clamp(start.width + dir * (ev.clientX - start.x));
       onDrag(start.last);
     };
     const up = () => {
@@ -74,10 +79,10 @@ export function SidebarResizeHandle({
     const step = e.shiftKey ? STEP_SHIFT : STEP;
     switch (e.key) {
       case "ArrowRight":
-        onCommit(clamp(width + step));
+        onCommit(clamp(width + dir * step));
         break;
       case "ArrowLeft":
-        onCommit(clamp(width - step));
+        onCommit(clamp(width - dir * step));
         break;
       case "Home":
         onCommit(min);
@@ -99,12 +104,16 @@ export function SidebarResizeHandle({
       role="separator"
       aria-orientation="vertical"
       aria-controls={controls}
-      aria-label={shellCopy[locale].accountSidebar.resizeLabel}
+      aria-label={
+        edge === "left"
+          ? shellCopy[locale].frame.assistantResizeLabel
+          : shellCopy[locale].accountSidebar.resizeLabel
+      }
       aria-valuenow={width}
       aria-valuemin={min}
       aria-valuemax={max}
       tabIndex={0}
-      className="shell2-resize"
+      className={edge === "left" ? "shell2-resize shell2-resize-left" : "shell2-resize"}
       onPointerDown={onPointerDown}
       onDoubleClick={onReset}
       onKeyDown={onKeyDown}

@@ -36,6 +36,7 @@ function mount(): HTMLDivElement {
     root = createRoot(el);
     root.render(
       <StatistiekBlock
+        initialView="categorie"
         txs={txs}
         rules={rules}
         own={own}

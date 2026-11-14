@@ -6,6 +6,7 @@ import { formatEuroIn } from "../../format.js";
 import Module from "../Module.js";
 import CardLink from "../ui/CardLink.js";
 import { useWidgetEnabled } from "../moduleRegistry";
+import WidgetHideButton from "../WidgetHideButton";
 import type { Locale } from "../../locale.js";
 import { useAppLocale } from "../../appLocale.js";
 import { moneyCopy, type MoneyCopy } from "../../copy/money.js";
@@ -183,9 +184,15 @@ export function FacturenBlock({ invoices, entities, asOf, span, onNavigate }: Fa
   return (
     <Module
       title="Facturen"
+      widgetId="facturen-open"
       span={span}
       height="short"
-      menu={<CardLink onClick={() => onNavigate("facturen")}>{c.facturenArrow}</CardLink>}
+      menu={
+        <>
+          <CardLink onClick={() => onNavigate("facturen")}>{c.facturenArrow}</CardLink>
+          <WidgetHideButton id="facturen-open" />
+        </>
+      }
       footer={
         s.zonderEuroBedrag > 0 ? <>{c.vanNFacturenBedragOnbekend(s.zonderEuroBedrag)}</> : undefined
       }

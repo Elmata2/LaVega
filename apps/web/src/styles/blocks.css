@@ -117,6 +117,12 @@
     border-radius: var(--pill);
     border: 1px solid var(--line);
     background: var(--surface-2);
+    /* Never wider than the control slot: four labels do not fit a phone-width
+     * card, so the bar scrolls from its left edge instead of being pushed out
+     * of the card on the left by the slot's flex-end alignment. */
+    max-width: 100%;
+    overflow-x: auto;
+    scrollbar-width: thin;
   }
   .module-tab {
     border: none;
@@ -174,6 +180,44 @@
       outline-offset: 2px;
     }
   }
+  /* The Home chart slot's switch: .module-tabs / .module-tab with native radios
+ * inside the labels, as the theme picker does. Instant, no transition. */
+  .chart-option {
+    position: relative;
+  }
+  .chart-option input {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    opacity: 0;
+    cursor: pointer;
+  }
+  .chart-option:has(input:focus-visible) {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  /* .module-tabs scrolls (overflow-x: auto), which also clips on the y axis, and
+ * its padding is 2px: an outside ring would be cut off. Inside the bar the ring
+ * is drawn inset, within each pill. Covers the
+ * Statistieken tabs (button), the Home chart switch and the theme picker
+ * (labels with a hidden radio). No size or padding change. */
+  .module-tabs .module-tab:focus-visible,
+  .module-tabs .chart-option:has(input:focus-visible),
+  .module-tabs .theme-option:has(input:focus-visible) {
+    /* The pill's own text colour: an accent ring is invisible on the selected
+     * pill in the monochrome theme, where accent and pill are both black. */
+    outline: 2px solid currentColor;
+    outline-offset: -2px;
+  }
+  @supports not selector(:has(*)) {
+    .module-tabs .theme-option input:focus-visible + .theme-swatch {
+      outline-offset: -2px;
+    }
+  }
+
   .theme-swatch {
     flex: none;
     width: 24px;

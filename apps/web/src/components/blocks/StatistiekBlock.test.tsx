@@ -11,7 +11,14 @@ const SEPARATE = { fxHistory: {}, mode: "separate" as const };
 
 const render = (t = txs) =>
   renderToStaticMarkup(
-    <StatistiekBlock txs={t} rules={rules} own={own} onSelectCategory={() => {}} {...SEPARATE} />,
+    <StatistiekBlock
+      txs={t}
+      rules={rules}
+      own={own}
+      onSelectCategory={() => {}}
+      initialView="categorie"
+      {...SEPARATE}
+    />,
   );
 
 test("customWindow refuses to turn half a range into a window", () => {
