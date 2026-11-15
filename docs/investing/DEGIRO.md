@@ -580,7 +580,9 @@ overlapping account files). A re-import must not append duplicates.
   to the overview. The status line reads
   `Last imported <date>, covers <from>–<to>`; there is deliberately no
   fresh/stale/never wording. The holdings table shows the product name; an ISIN
-  symbol is not repeated as the holding's identity line (D10, #322).
+  symbol is not repeated as the holding's identity line (D10, #322). Captures at
+  375 px: [preview](assets/degiro-import-preview.png) and
+  [success](assets/degiro-import-success.png).
 
 ### Out of scope
 
