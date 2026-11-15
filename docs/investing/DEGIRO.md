@@ -29,8 +29,8 @@ ID`, semicolon). No real DeGiro export has that shape; D1 deleted them and
 - The transaction export maps to trades and merges with the account statement
   by execution (#318, D6). The portfolio export maps to dated positions and its
   cash row (#319, D7). `parseBrokerFiles` is the multi-file seam; neither export
-  proves cash history on its own. The upload route (#323) calls the seam; the
-  DeGiro tab (#324) is the remaining path to a user.
+  proves cash history on its own. The upload route (#323) calls the seam and the
+  DeGiro tab (#324) drives it from Broker settings.
 - `Transactions.csv` and `Portfolio.csv` shapes were **unverified** until D1.
   They are now verified from real exports of 2026-11-12 (see the two sections
   below), and their headers are the ones D2 matches.
@@ -507,8 +507,8 @@ section would tell the snapshot the broker reported nothing and wipe stored rows
 - **Portfolio cash row.** A `CASH & CASH FUND …` row is a `CashBalance`, not a
   position (D7).
 - **Position `asOf`.** The portfolio export carries no date (confirmed 2026-11-12).
-  `readDeGiroPortfolio` requires the export date as an argument and the upload
-  form asks for it (#323), default today. Never invent one silently.
+  `readDeGiroPortfolio` requires the export date as an argument and the DeGiro
+  tab's date input asks for it (#324), default today. Never invent one silently.
 
 ### Re-import
 
@@ -562,9 +562,24 @@ overlapping account files). A re-import must not append duplicates.
   reads for the import age. A file-import broker's vault row holds a snapshot and
   no credentials (`credentials_blob IS NULL`); `broker_vaults_material_not_empty`
   still requires credentials or a snapshot, never neither.
-- Web: a DeGiro tab in broker settings with export steps, multi-file drop,
-  preview, confirm. Status reads "Last imported <date>, covers <from>–<to>",
-  not fresh/stale/never. The holdings table shows the product name; an ISIN
+- Status route (D12, #324): `GET /api/investing/brokers/degiro/import`. The same
+  tenant-bound handler answers the read: it parses no form, claims no lease,
+  ensures nothing writable and writes nothing. It answers
+  `{ mode: "status", importedAt, files: [{ filename, sha256 }], coverage, positionsAsOf }`:
+  `importedAt` and `files` come from the stored `lastImport`, `coverage` from the
+  stored cash history, and `positionsAsOf` is the latest stored position date
+  (lexicographic max of the ISO days). An absent snapshot gives
+  `importedAt: null`, `files: []`, `coverage: null`, `positionsAsOf: null`. A
+  locked vault answers 409, like the commit.
+- Web (D12, #324): Broker settings holds two tabs, `Broker APIs` and
+  `DeGiro import`. The DeGiro tab lists the three export steps, accepts at most
+  3 CSV files (4 MB total) through browse or drag and drop, previews every file
+  with its detected type, date range, row counts and problems (an unknown header
+  shows its problem only). It asks for the portfolio export date when a portfolio
+  export is selected (the input defaults to today), then commits. The success card names the stored row totals and links
+  to the overview. The status line reads
+  `Last imported <date>, covers <from>–<to>`; there is deliberately no
+  fresh/stale/never wording. The holdings table shows the product name; an ISIN
   symbol is not repeated as the holding's identity line (D10, #322).
 
 ### Out of scope
@@ -616,4 +631,8 @@ account and transactions imports replace only their own window, an older import
 is a backfill, and a portfolio export older than the stored holdings leaves
 positions and cash alone), D11 (#323, the tenant-bound upload route with a
 preview that writes nothing and a commit that merges under the broker lease and
-records `lastImport` inside the encrypted snapshot).
+records `lastImport` inside the encrypted snapshot), D12 (#324, the DeGiro tab
+in Broker settings: export steps, per-file previews, the portfolio export date
+asked for and defaulting to today, commit totals and the `Last imported …`
+status line; the same route answers `GET` with the stored import status and
+writes nothing).
