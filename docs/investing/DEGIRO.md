@@ -571,8 +571,11 @@ overlapping account files). A re-import must not append duplicates.
   (lexicographic max of the ISO days). An absent snapshot gives
   `importedAt: null`, `files: []`, `coverage: null`, `positionsAsOf: null`. A
   locked vault answers 409, like the commit.
-- Web (D12, #324): Broker settings holds two tabs, `Broker APIs` and
-  `DeGiro import`. The DeGiro tab lists the three export steps, accepts at most
+- Web (D12, #324): Broker settings holds a two-row broker rail, `Broker APIs`
+  (Interactive Brokers and Trading 212) and `DeGiro import` (CSV export files,
+  no API). The rail stays visible while either panel is open, so a DeGiro user
+  sees the file import before opening a control. The DeGiro panel lists the
+  three export steps, accepts at most
   3 CSV files (4 MB total) through browse or drag and drop, previews every file
   with its detected type, date range, row counts and problems (an unknown header
   shows its problem only). It asks for the portfolio export date when a portfolio

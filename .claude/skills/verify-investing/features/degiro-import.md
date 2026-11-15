@@ -6,12 +6,13 @@ are stored.
 
 ## Reach
 
-- `/profile#brokers` → tab `DeGiro import`. The tab labels are `Broker APIs` and
-  `DeGiro import`; the second is the import.
-- The tab lists three exports: `Inbox → Rekeningoverzicht (Account statement)`,
+- `/profile#brokers` → rail tab `DeGiro import`. The rail labels are `Broker APIs`
+  (subtitle `Interactive Brokers and Trading 212`) and `DeGiro import` (subtitle
+  `CSV export files, no API`).
+- The DeGiro panel lists three exports: `Inbox → Rekeningoverzicht (Account statement)`,
   `Inbox → Transacties (Transactions)` and `Portefeuille → Exporteren → CSV
 (Portfolio → Export → CSV)`. Up to 3 CSV files, 4 MB total.
-- A portfolio export makes the tab ask for `Portfolio export date`; the input defaults
+- A portfolio export makes the panel ask for `Portfolio export date`; the input defaults
   to today.
 - `GET /api/investing/brokers/degiro/import` (stored status) and
   `POST /api/investing/brokers/degiro/import?mode=preview|commit` on the investing app
@@ -60,7 +61,7 @@ node $C cleanup
 
 ## Prove
 
-- The tab shows `Last imported <date>, covers <from>–<to>` after a commit. There is no
+- The panel shows `Last imported <date>, covers <from>–<to>` after a commit. There is no
   fresh, stale or never wording.
 - Every file shows its detected type (`Account statement`, `Transactions export`,
   `Portfolio export`, or `Unknown file`) and its problems. A known profile also shows
