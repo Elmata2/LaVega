@@ -265,189 +265,193 @@ export function DeGiroImportTab() {
   return (
     <section className="space-y-6">
       <div>
-        <h3 className="font-display text-3xl">DeGiro import</h3>
+        <h3 className="font-display text-3xl">Import DeGiro files</h3>
         {statusLine !== null && <p className="mt-2 text-sm text-muted-foreground">{statusLine}</p>}
-        <p className="mt-3 text-sm leading-6 text-muted-foreground">
+        <p className="mt-3 max-w-2xl text-sm leading-6 text-muted-foreground">
           DeGiro has no API. Export your own CSV files and import them here. LaVega parses them on
           your server and stores only the parsed rows.
         </p>
       </div>
 
-      <div className="rounded-card border border-border bg-card p-5 sm:p-6">
-        <h4 className="text-lg font-semibold">Export from DeGiro</h4>
-        <ol className="mt-3 list-decimal space-y-3 pl-5 text-sm leading-6 text-muted-foreground">
-          {STEPS.map((step) => (
-            <li key={step}>{step}</li>
-          ))}
-        </ol>
-        <p className="mt-4 border-t border-border pt-4 text-sm leading-6 text-muted-foreground">
-          The account statement is the primary import. Transactions and Portfolio add detail and are
-          optional.
-        </p>
-      </div>
-
-      <label
-        onDragOver={(event) => {
-          event.preventDefault();
-          if (!busy) setDragging(true);
-        }}
-        onDragLeave={() => setDragging(false)}
-        onDrop={(event) => {
-          event.preventDefault();
-          setDragging(false);
-          if (busy) return;
-          addFiles([...event.dataTransfer.files]);
-        }}
-        className={`block cursor-pointer rounded-card border border-dashed p-6 text-center transition-colors duration-150 ease-out focus-within:ring-2 focus-within:ring-ring motion-reduce:transition-none ${
-          dragging ? "border-ring bg-secondary/60" : "border-border hover:border-ring/60"
-        }`}
-      >
-        <input
-          ref={fileInputRef}
-          type="file"
-          multiple
-          accept=".csv,text/csv"
-          className="sr-only"
-          disabled={busy}
-          onChange={(event) => {
-            addFiles([...(event.target.files ?? [])]);
-            event.target.value = "";
-          }}
-        />
-        <span className="block font-semibold">Choose CSV files</span>
-        <span className="block text-sm text-muted-foreground">or drop them here</span>
-        <span className="mt-1 block text-xs text-muted-foreground">
-          Account statement, transactions and portfolio. Up to 3 files, 4 MB total.
-        </span>
-      </label>
-
-      {pickerProblem !== null && (
-        <p role="alert" className="text-sm text-negative">
-          {pickerProblem}
-        </p>
-      )}
-
-      {files.length > 0 && (
-        <ul className="space-y-3">
-          {files.map((file, index) => (
-            <FileCard
-              key={`${file.name}-${file.lastModified}-${index}`}
-              file={file}
-              report={reports?.[index]}
-              reading={flow.kind === "reading"}
-              busy={busy}
-              onRemove={() => removeFile(index)}
-            />
-          ))}
-        </ul>
-      )}
-
-      {portfolioDetected && (
+      <div className="grid gap-5 xl:grid-cols-2 xl:items-start">
         <div className="rounded-card border border-border bg-card p-5 sm:p-6">
-          <label className="block text-sm font-semibold">
-            Portfolio export date
+          <h4 className="text-lg font-semibold">Export from DeGiro</h4>
+          <ol className="mt-3 list-decimal space-y-3 pl-5 text-sm leading-6 text-muted-foreground">
+            {STEPS.map((step) => (
+              <li key={step}>{step}</li>
+            ))}
+          </ol>
+          <p className="mt-4 border-t border-border pt-4 text-sm leading-6 text-muted-foreground">
+            The account statement is the primary import. Transactions and Portfolio add detail and
+            are optional.
+          </p>
+        </div>
+
+        <div className="space-y-5">
+          <label
+            onDragOver={(event) => {
+              event.preventDefault();
+              if (!busy) setDragging(true);
+            }}
+            onDragLeave={() => setDragging(false)}
+            onDrop={(event) => {
+              event.preventDefault();
+              setDragging(false);
+              if (busy) return;
+              addFiles([...event.dataTransfer.files]);
+            }}
+            className={`flex min-h-40 cursor-pointer flex-col items-center justify-center rounded-card border border-dashed p-6 text-center transition-colors duration-150 ease-out focus-within:ring-2 focus-within:ring-ring motion-reduce:transition-none ${
+              dragging ? "border-ring bg-secondary/60" : "border-border hover:border-ring/60"
+            }`}
+          >
             <input
-              type="date"
-              required
-              value={asOf}
+              ref={fileInputRef}
+              type="file"
+              multiple
+              accept=".csv,text/csv"
+              className="sr-only"
               disabled={busy}
               onChange={(event) => {
-                asOfRef.current = event.target.value;
-                setAsOf(event.target.value);
+                addFiles([...(event.target.files ?? [])]);
+                event.target.value = "";
               }}
-              className="mt-2 block w-full rounded-tile border border-input bg-background px-3 py-2.5 text-sm font-normal"
             />
-            <span className="mt-2 block text-xs font-normal text-muted-foreground">
-              The portfolio export has no date column. LaVega dates its positions with this day.
+            <span className="block font-semibold">Choose CSV files</span>
+            <span className="block text-sm text-muted-foreground">or drop them here</span>
+            <span className="mt-1 block text-xs text-muted-foreground">
+              Account statement, transactions and portfolio. Up to 3 files, 4 MB total.
             </span>
           </label>
-        </div>
-      )}
 
-      {flow.kind === "failed" && (
-        <div
-          role="alert"
-          className="rounded-tile border border-negative/20 bg-negative/5 px-4 py-3 text-sm"
-        >
-          <p className="font-semibold">
-            {flow.preview === null ? "Preview failed" : "Import failed"}
-          </p>
-          <ul className="mt-2 list-disc space-y-1 pl-5">
-            {flow.problems.map((problem, index) => (
-              <li key={`${problem}-${index}`}>{problem}</li>
-            ))}
-          </ul>
-        </div>
-      )}
-
-      {disabledReason !== null && (
-        <p id="degiro-import-reason" className="text-sm text-muted-foreground">
-          {disabledReason}
-        </p>
-      )}
-
-      {flow.kind !== "done" && (
-        <div className="flex flex-wrap items-center gap-3">
-          <Button
-            type="button"
-            disabled={!canCommit}
-            aria-describedby={disabledReason === null ? undefined : "degiro-import-reason"}
-            onClick={() => void commit()}
-          >
-            {busy ? "Importing…" : "Confirm import"}
-          </Button>
-          {flow.kind === "failed" && flow.preview === null && files.length > 0 && (
-            <Button type="button" variant="outline" onClick={() => startReading([...files])}>
-              Try again
-            </Button>
+          {pickerProblem !== null && (
+            <p role="alert" className="text-sm text-negative">
+              {pickerProblem}
+            </p>
           )}
+
           {files.length > 0 && (
-            <Button
-              type="button"
-              variant="ghost"
-              disabled={busy}
-              onClick={() => {
-                startReading([]);
-                setPickerProblem(null);
-                fileInputRef.current?.focus();
-              }}
-            >
-              Clear files
-            </Button>
-          )}
-        </div>
-      )}
-
-      {flow.kind === "done" && (
-        <div
-          role="status"
-          className="rounded-card border border-positive/30 bg-positive/5 p-5 sm:p-6"
-        >
-          <h3
-            ref={successHeadingRef}
-            tabIndex={-1}
-            className="font-display text-3xl outline-none focus-visible:ring-0 focus-visible:ring-offset-0"
-          >
-            Import complete.
-          </h3>
-          <p className="mt-2 text-sm leading-6 text-positive">
-            Your DeGiro account now holds {countsSentence(flow.result.totals)}.
-          </p>
-          {flow.result.problems.length > 0 && (
-            <ul className="mt-3 list-disc space-y-1 pl-5 text-sm leading-6 text-foreground">
-              {flow.result.problems.map((problem, index) => (
-                <li key={`${problem}-${index}`}>{problem}</li>
+            <ul className="space-y-3">
+              {files.map((file, index) => (
+                <FileCard
+                  key={`${file.name}-${file.lastModified}-${index}`}
+                  file={file}
+                  report={reports?.[index]}
+                  reading={flow.kind === "reading"}
+                  busy={busy}
+                  onRemove={() => removeFile(index)}
+                />
               ))}
             </ul>
           )}
-          <Link
-            to="/"
-            className="mt-3 inline-block text-sm font-semibold text-accent underline-offset-2 hover:underline"
-          >
-            View overview
-          </Link>
+
+          {portfolioDetected && (
+            <div className="rounded-card border border-border bg-card p-5 sm:p-6">
+              <label className="block text-sm font-semibold">
+                Portfolio export date
+                <input
+                  type="date"
+                  required
+                  value={asOf}
+                  disabled={busy}
+                  onChange={(event) => {
+                    asOfRef.current = event.target.value;
+                    setAsOf(event.target.value);
+                  }}
+                  className="mt-2 block w-full rounded-tile border border-input bg-background px-3 py-2.5 text-sm font-normal"
+                />
+                <span className="mt-2 block text-xs font-normal text-muted-foreground">
+                  The portfolio export has no date column. LaVega dates its positions with this day.
+                </span>
+              </label>
+            </div>
+          )}
+
+          {flow.kind === "failed" && (
+            <div
+              role="alert"
+              className="rounded-tile border border-negative/20 bg-negative/5 px-4 py-3 text-sm"
+            >
+              <p className="font-semibold">
+                {flow.preview === null ? "Preview failed" : "Import failed"}
+              </p>
+              <ul className="mt-2 list-disc space-y-1 pl-5">
+                {flow.problems.map((problem, index) => (
+                  <li key={`${problem}-${index}`}>{problem}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {disabledReason !== null && (
+            <p id="degiro-import-reason" className="text-sm text-muted-foreground">
+              {disabledReason}
+            </p>
+          )}
+
+          {flow.kind !== "done" && files.length > 0 && (
+            <div className="flex flex-wrap items-center gap-3">
+              <Button
+                type="button"
+                disabled={!canCommit}
+                aria-describedby={disabledReason === null ? undefined : "degiro-import-reason"}
+                onClick={() => void commit()}
+              >
+                {busy ? "Importing…" : "Confirm import"}
+              </Button>
+              {flow.kind === "failed" && flow.preview === null && files.length > 0 && (
+                <Button type="button" variant="outline" onClick={() => startReading([...files])}>
+                  Try again
+                </Button>
+              )}
+              {files.length > 0 && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  disabled={busy}
+                  onClick={() => {
+                    startReading([]);
+                    setPickerProblem(null);
+                    fileInputRef.current?.focus();
+                  }}
+                >
+                  Clear files
+                </Button>
+              )}
+            </div>
+          )}
+
+          {flow.kind === "done" && (
+            <div
+              role="status"
+              className="rounded-card border border-positive/30 bg-positive/5 p-5 sm:p-6"
+            >
+              <h3
+                ref={successHeadingRef}
+                tabIndex={-1}
+                className="font-display text-3xl outline-none focus-visible:ring-0 focus-visible:ring-offset-0"
+              >
+                Import complete.
+              </h3>
+              <p className="mt-2 text-sm leading-6 text-positive">
+                Your DeGiro account now holds {countsSentence(flow.result.totals)}.
+              </p>
+              {flow.result.problems.length > 0 && (
+                <ul className="mt-3 list-disc space-y-1 pl-5 text-sm leading-6 text-foreground">
+                  {flow.result.problems.map((problem, index) => (
+                    <li key={`${problem}-${index}`}>{problem}</li>
+                  ))}
+                </ul>
+              )}
+              <Link
+                to="/"
+                className="mt-3 inline-block text-sm font-semibold text-accent underline-offset-2 hover:underline"
+              >
+                View overview
+              </Link>
+            </div>
+          )}
         </div>
-      )}
+      </div>
     </section>
   );
 }
