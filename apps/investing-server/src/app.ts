@@ -1415,6 +1415,13 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
       return c.json({ problems: ["DeGiro import is not available in this server mode"] }, 503);
     return dependencies.deGiroImportRequest(c.req.raw);
   });
+  /* The same path reads the stored import status (#324): what was imported,
+   * when, and which files. It writes nothing. */
+  investingApp.get("/api/investing/brokers/degiro/import", async (c) => {
+    if (!dependencies.deGiroImportRequest)
+      return c.json({ problems: ["DeGiro import is not available in this server mode"] }, 503);
+    return dependencies.deGiroImportRequest(c.req.raw);
+  });
   investingApp.delete("/api/prices/cache", async (c) => {
     /* Prices are public reference data now (issue #307): with a database one
      * user must not delete what every user reads. A local file store serves one
