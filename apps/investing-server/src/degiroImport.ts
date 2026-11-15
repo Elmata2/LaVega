@@ -59,7 +59,17 @@ export type DeGiroImportCommit = {
   problems: string[];
 };
 
-export type DeGiroImportResult = DeGiroImportPreview | DeGiroImportCommit;
+/** What the stored snapshot says about its last import. A GET reads this and
+ *  writes nothing. */
+export type DeGiroImportStatus = {
+  mode: "status";
+  importedAt: string | null;
+  files: { filename: string; sha256: string }[];
+  coverage: CashHistoryCoverage | null;
+  positionsAsOf: string | null;
+};
+
+export type DeGiroImportResult = DeGiroImportPreview | DeGiroImportCommit | DeGiroImportStatus;
 
 export class DeGiroImportRequestError extends Schema.TaggedError<DeGiroImportRequestError>()(
   "DeGiroImportRequestError",
@@ -273,7 +283,35 @@ export class DeGiroImport extends Context.Service<
           catch: () => conflictError("The credential vault is locked; unlock it before importing"),
         });
 
+      /* The latest dated holdings, which is the day the portfolio was exported
+       * on. A snapshot without positions reports no date. */
+      const positionsAsOf = (snapshot: BrokerAccountSnapshot | undefined): string | null =>
+        (snapshot?.positions ?? []).reduce<string | null>((latest, position) => {
+          const day = position.asOf.slice(0, 10);
+          if (day === "") return latest;
+          return latest === null || day > latest ? day : latest;
+        }, null);
+
+      const importStatus = (stored: RuntimeBrokerDataSnapshot): DeGiroImportStatus => {
+        const snapshot = stored.degiro;
+        return {
+          mode: "status",
+          importedAt: snapshot?.lastImport?.importedAt ?? null,
+          files: snapshot?.lastImport?.files ?? [],
+          coverage: snapshot?.cashHistory ?? null,
+          positionsAsOf: positionsAsOf(snapshot),
+        };
+      };
+
       const importRequest = Effect.fn("DeGiroImport.import")(function* (request: Request) {
+        /* A status read has no form and no mode: it reports what the stored
+         * snapshot already holds, so it never touches the lease or the vault
+         * write path. */
+        if (request.method === "GET") {
+          const stored = yield* readStored();
+          return importStatus(stored ?? {}) satisfies DeGiroImportResult;
+        }
+
         const mode = yield* readMode(request);
         const form = yield* readForm(request);
         const uploads = yield* readUploads(form);
