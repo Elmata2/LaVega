@@ -109,7 +109,12 @@ export function renameFactSubject(
 }
 
 /** The raw value for (agent, subject, key), or null when nothing is known. */
-export function factValue(facts: readonly LearnedFact[], agent: string, subject: string, key: string): string | null {
+export function factValue(
+  facts: readonly LearnedFact[],
+  agent: string,
+  subject: string,
+  key: string,
+): string | null {
   const id = factId(agent, subject, key);
   return facts.find((f) => f.id === id)?.value ?? null;
 }
@@ -118,7 +123,12 @@ export function factValue(facts: readonly LearnedFact[], agent: string, subject:
  *  unparseable. Accepts a Dutch comma and a stray "%" — a corrected value is
  *  typed by a human. Never coerces unknown to 0: "we don't know" and "it's
  *  free" must stay distinguishable, or an unknown card would rank as the best. */
-export function factNumber(facts: readonly LearnedFact[], agent: string, subject: string, key: string): number | null {
+export function factNumber(
+  facts: readonly LearnedFact[],
+  agent: string,
+  subject: string,
+  key: string,
+): number | null {
   const raw = factValue(facts, agent, subject, key);
   if (raw === null) return null;
   const n = Number(String(raw).replace(",", ".").replace("%", "").trim());
@@ -128,13 +138,22 @@ export function factNumber(facts: readonly LearnedFact[], agent: string, subject
 /** The stored fact itself, for showing where a number came from and how old it
  *  is — "1,4% (door jou ingesteld)" reads very differently from a figure an
  *  agent found months ago, and the owner deserves to tell them apart. */
-export function factEntry(facts: readonly LearnedFact[], agent: string, subject: string, key: string): LearnedFact | null {
+export function factEntry(
+  facts: readonly LearnedFact[],
+  agent: string,
+  subject: string,
+  key: string,
+): LearnedFact | null {
   const id = factId(agent, subject, key);
   return facts.find((f) => f.id === id) ?? null;
 }
 
 /** Every fact about one subject, for showing "what LaVega thinks it knows". */
-export function factsFor(facts: readonly LearnedFact[], agent: string, subject: string): LearnedFact[] {
+export function factsFor(
+  facts: readonly LearnedFact[],
+  agent: string,
+  subject: string,
+): LearnedFact[] {
   const want = norm(subject);
   return facts.filter((f) => norm(f.agent) === norm(agent) && norm(f.subject) === want);
 }

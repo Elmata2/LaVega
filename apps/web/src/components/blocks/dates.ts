@@ -35,9 +35,30 @@ export function weekdayIndex(iso: string): number {
 
 /** Monday-first weekday names, short and long. */
 export const WEEKDAYS_SHORT_NL = ["ma", "di", "wo", "do", "vr", "za", "zo"];
-export const WEEKDAYS_NL = ["Maandag", "Dinsdag", "Woensdag", "Donderdag", "Vrijdag", "Zaterdag", "Zondag"];
+export const WEEKDAYS_NL = [
+  "Maandag",
+  "Dinsdag",
+  "Woensdag",
+  "Donderdag",
+  "Vrijdag",
+  "Zaterdag",
+  "Zondag",
+];
 
-const MONTHS_SHORT_NL = ["jan", "feb", "mrt", "apr", "mei", "jun", "jul", "aug", "sep", "okt", "nov", "dec"];
+const MONTHS_SHORT_NL = [
+  "jan",
+  "feb",
+  "mrt",
+  "apr",
+  "mei",
+  "jun",
+  "jul",
+  "aug",
+  "sep",
+  "okt",
+  "nov",
+  "dec",
+];
 
 /** "2026-08-11" -> "11 aug". The year is left off on purpose: these labels sit
  *  on an axis or in a list where the year is already established. */

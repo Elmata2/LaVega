@@ -3,7 +3,6 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { expect, test } from "vitest";
 import type { Account, Tx } from "@lavega/core";
 import Transacties from "./views/Transacties";
-import Regels from "./views/Regels";
 
 /* App review 20-08-2026, item 2 — the "onbekend" category, raised four times.
  *
@@ -20,12 +19,27 @@ import Regels from "./views/Regels";
  */
 
 const ACCOUNTS: Account[] = [
-  { key: "NL01INGB", iban: "NL01INGB", name: "Betaalrekening", bank: "ING", entity: "Prive", currency: "EUR", balance: 100 },
+  {
+    key: "NL01INGB",
+    iban: "NL01INGB",
+    name: "Betaalrekening",
+    bank: "ING",
+    entity: "Prive",
+    currency: "EUR",
+    balance: 100,
+  },
 ];
 
 const tx = (id: string, cp: string, desc: string, amount = -20): Tx => ({
-  id, accountKey: "NL01INGB", date: "2026-07-14", amount, currency: "EUR",
-  counterparty: cp, description: desc, category: "", manual: false,
+  id,
+  accountKey: "NL01INGB",
+  date: "2026-07-14",
+  amount,
+  currency: "EUR",
+  counterparty: cp,
+  description: desc,
+  category: "",
+  manual: false,
 });
 
 const props = (txs: Tx[], configured = true) =>
@@ -36,14 +50,24 @@ const props = (txs: Tx[], configured = true) =>
     own: { all: [], byKey: new Map<string, string[]>() },
     entityOptions: ["Prive"],
     entityScope: "",
-    fEntity: "", onFEntityChange: () => {},
-    fAccount: "", onFAccountChange: () => {},
-    fSearch: "", onFSearchChange: () => {},
-    fFrom: "", onFFromChange: () => {},
-    fTo: "", onFToChange: () => {},
-    fCategory: "", onFCategoryChange: () => {},
+    fEntity: "",
+    onFEntityChange: () => {},
+    fAccount: "",
+    onFAccountChange: () => {},
+    fSearch: "",
+    onFSearchChange: () => {},
+    fFrom: "",
+    onFFromChange: () => {},
+    fTo: "",
+    onFToChange: () => {},
+    fCategory: "",
+    onFCategoryChange: () => {},
     configured,
     onApplyCategories: async () => {},
+    transfers: [],
+    suggestions: [],
+    onConfirmTransfer: () => {},
+    onRejectTransfer: () => {},
   }) as unknown as Parameters<typeof Transacties>[0];
 
 test("the onbekend pile is quantified on screen, per named reason", () => {
@@ -69,7 +93,12 @@ test("the onbekend pile is quantified on screen, per named reason", () => {
 
 test("the AI button reports what it will actually send, not the batch cap", () => {
   const html = renderToStaticMarkup(
-    <Transacties {...props([tx("t1", "TIENDA J LOPEZ", "VALENCIA ESP"), tx("t2", "QUIOSC 4412", "priveopname")])} />,
+    <Transacties
+      {...props([
+        tx("t1", "TIENDA J LOPEZ", "VALENCIA ESP"),
+        tx("t2", "QUIOSC 4412", "priveopname"),
+      ])}
+    />,
   );
   expect(html).toContain("Laat de AI ze lezen");
   expect(html).toContain("(2)"); // both fit in one run, so no "x van y" theatre
@@ -101,7 +130,7 @@ test("without a server key the panel names the missing key, not a vague failure"
   const html = renderToStaticMarkup(
     <Transacties {...props([tx("t1", "TIENDA J LOPEZ", "VALENCIA ESP")], false)} />,
   );
-  expect(html).toContain("geen Anthropic-sleutel");
+  expect(html).toContain("geen Mistral-sleutel");
   expect(html).not.toContain("Laat de AI ze lezen");
 });
 
@@ -114,26 +143,23 @@ test("each onbekend row in the table says why, with its country when we have one
 });
 
 test("a placed row shows its category and no reason badge", () => {
-  const html = renderToStaticMarkup(<Transacties {...props([tx("t1", "MERCADONA", "VALENCIA ESP")])} />);
+  const html = renderToStaticMarkup(
+    <Transacties {...props([tx("t1", "MERCADONA", "VALENCIA ESP")])} />,
+  );
   // The Zuid-Europese block places this one, so there is no onbekend pile at all.
   expect(html).toContain("Boodschappen");
   expect(html).not.toContain("Onbekend</div>");
 });
 
-test("Regels warns when a typed category is a new one, and offers the existing list", () => {
-  const base = {
-    rules: [], busy: false, ruleMatch: "mercadona",
-    onRuleMatchChange: () => {}, onRuleCategoryChange: () => {}, onSaveRules: () => {},
-  };
-  const listed = renderToStaticMarkup(<Regels {...base} ruleCategory="Boodschappen" />);
-  expect(listed).toContain('list="regel-categorieen"');
-  expect(listed).toContain("<datalist");
-  expect(listed).not.toContain("staat niet in de lijst");
-
-  // A different spelling of an existing category is exactly the case that
-  // silently splits every total, so it has to be called out.
-  const typo = renderToStaticMarkup(<Regels {...base} ruleCategory="boodschappen " />);
-  expect(typo).not.toContain("staat niet in de lijst"); // same category, other case — fine
-  const novel = renderToStaticMarkup(<Regels {...base} ruleCategory="Boodschapen" />);
-  expect(novel).toContain("staat niet in de lijst");
+test("a coloured transaction amount carries an explicit sign, + or a real minus", () => {
+  const html = renderToStaticMarkup(
+    <Transacties
+      {...props([
+        tx("t1", "Albert Heijn", "Rotterdam", -25),
+        tx("t2", "Werkgever BV", "salaris", 1_000),
+      ])}
+    />,
+  ).replace(/<!-- -->/g, "");
+  expect(html).toMatch(/text-neg">\u2212€\s25,00/);
+  expect(html).toMatch(/text-pos">\+€\s1\.000,00/);
 });

@@ -7,7 +7,8 @@ function ingShapedSheet(): string {
   // Deliberately free of cap vocabulary: an earlier version of this filler said
   // "per maand", which is cap language, so every block matched and the slicer
   // correctly declined to slice at all. The fixture, not the slicer, was wrong.
-  const filler = (label: string) => `${label} algemene bepalingen en overige informatie zonder bedragen `.repeat(60);
+  const filler = (label: string) =>
+    `${label} algemene bepalingen en overige informatie zonder bedragen `.repeat(60);
   return [
     "KOSTENOVERZICHT BETAALPRODUCTEN",
     "Deze brochure is geldig vanaf 15 juni 2026.",
@@ -40,7 +41,9 @@ describe("sliceForExtraction", () => {
   });
 
   test("keeps the footnote that can disqualify a row", () => {
-    expect(sliceForExtraction(ingShapedSheet()).text).toContain("afwijkende kosten bij een Basispakket");
+    expect(sliceForExtraction(ingShapedSheet()).text).toContain(
+      "afwijkende kosten bij een Basispakket",
+    );
   });
 
   test("keeps the document's own validity date", () => {
@@ -84,9 +87,14 @@ describe("sliceForExtraction", () => {
   });
 
   test("keeps a de Volksbank row, which never says 'koersopslag' at all", () => {
-    const doc = ["TARIEVENWIJZER", "filler ".repeat(900),
+    const doc = [
+      "TARIEVENWIJZER",
+      "filler ".repeat(900),
       "• Betalen met een betaalpas in vreemde valuta 1,4% van het betaalde bedrag",
-      "filler ".repeat(900), "• Opname in vreemde valuta 2% valutawisselkosten", "filler ".repeat(900)].join("\n");
+      "filler ".repeat(900),
+      "• Opname in vreemde valuta 2% valutawisselkosten",
+      "filler ".repeat(900),
+    ].join("\n");
     const r = sliceForExtraction(doc);
     expect(r.text).toContain("1,4% van het betaalde bedrag");
     expect(r.text).toContain("2% valutawisselkosten");

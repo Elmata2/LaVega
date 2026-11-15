@@ -1,8 +1,21 @@
-import type { Hono } from "hono";
+import type { Context, Hono } from "hono";
 import { streamSSE } from "hono/streaming";
-import { loadLlmConfig, loadIngestConfig } from "./config.js";
+import type { SSEStreamingApi } from "hono/streaming";
+import { loadLlmConfig, loadIngestConfig, loadBudgetConfig } from "./config.js";
+import {
+  checkBudget,
+  recordFailure,
+  recordUsage,
+  releaseReservation,
+  spentCents,
+  type ReservationHandle,
+} from "./agent/budget.js";
+import type { AiUsage } from "@lavega/database";
+import { MISTRAL_SMALL, MISTRAL_MEDIUM } from "./agent/models.js";
+import { MistralHttpError } from "./agent/mistral.js";
+import { aiFailureCode, upstreamHttpStatus } from "./agent/failure.js";
 import { sanitizeExtractInput, type InvoiceExtractInput } from "./agent/redaction.js";
-import { extractInvoiceFields } from "./agent/anthropicExtract.js";
+import { extractInvoiceFields } from "./agent/invoiceExtract.js";
 import { sanitizeChatContext, sanitizeMessages } from "./agent/chatContext.js";
 import { runChat } from "./agent/chat.js";
 import { sanitizeCategorizeInput } from "./agent/categorize.js";
@@ -11,11 +24,15 @@ import { sanitizeTravelInput, lookupProviderTerms } from "./agent/travel.js";
 import { sanitizeKnownFacts } from "./agent/facts.js";
 import { getCardTerms, ingestCardTerms } from "./cardTerms.js";
 import { getBankNlTable } from "./bankNl.js";
-import { createRateLimiter } from "./agent/rateLimit.js";
+import { clientIp, rateLimitKey } from "./agent/rateLimit.js";
+import { createSharedRateLimiter, type SharedRateLimiter } from "./agent/sharedRateLimit.js";
+import { sessionUserId } from "./apiGuard.js";
 import { AGENTS, type BankNlTable, type LearnedFact } from "@lavega/core";
+import { ValidationError } from "./agent/validationError.js";
+import { secretsMatch } from "./secrets.js";
 
-/* Agent proxy routes. The server holds the Anthropic key (it never reaches the
- * client) and is the ONLY place that talks to Claude. `deps.extract`/`deps.chat`
+/* Agent proxy routes. The server holds the Mistral key (it never reaches the
+ * client) and is the ONLY place that talks to Mistral. `deps.extract`/`deps.chat`
  * are injectable so routes can be tested without a real network call. */
 
 type Deps = {
@@ -25,12 +42,151 @@ type Deps = {
   travelFacts?: typeof lookupProviderTerms;
   /** The bank.nl koersopslag comparison table. Injected so a test never fetches. */
   cardComparison?: () => Promise<BankNlTable>;
+  /** The process-wide ceiling across every AI route. Injected so a test can pin it. */
+  globalLimit?: SharedRateLimiter;
 };
 
-// 20 requests/min per route key (each route passes its own key — "extract" /
-// "chat" / "categorize" — so each gets an independent bucket). Single-user
-// personal app, so these limits are a safety valve, not a shared budget.
-const limit = createRateLimiter(20, 60_000);
+/* 20 requests/min per CALLER per route, counted in Neon when DATABASE_URL is
+ * set and in this process otherwise (#246). The key comes from `rateLimitKey`,
+ * which prefers the verified session's user id and falls back to the caller's
+ * address; see the note there for why it is not the route name alone.
+ *
+ * The store is shared, so the ceiling no longer multiplies by the number of
+ * warm serverless instances. Without a database the limiter warns once a minute
+ * and keeps the bounded in-process Map from #238; see sharedRateLimit.ts for
+ * why that is the fallback rather than a 503. */
+const limit = createSharedRateLimiter({ max: 20, windowMs: 60_000 });
+
+/* ONE ceiling across every AI route, whatever the caller and whatever the
+ * bucket. 120/min is well above a person (20/min on four routes) and well below
+ * a runaway loop that would burn the Mistral key before the next budget read.
+ *
+ * A caller who rotates addresses gets a fresh per-caller bucket every request,
+ * so this bucket is what stops the spread, and the per-caller rows it lets
+ * through are deleted one window later (0026). The budget reservation remains
+ * the real spend cap.
+ */
+const GLOBAL_LIMIT_PER_MINUTE = 120;
+const allCallers = createSharedRateLimiter({
+  max: GLOBAL_LIMIT_PER_MINUTE,
+  windowMs: 60_000,
+});
+
+// Mistral's error text (up to 2000 chars of its raw response body, per
+// mistral.ts) must never reach the browser — it can carry more detail about
+// our account/usage than a stranger should see. Every AI-route failure logs
+// the real error server-side and returns this one fixed message instead.
+const AI_ERROR_MESSAGE = "De AI-dienst gaf een fout; probeer het later opnieuw.";
+
+// Neon being unreachable is a different failure than the model itself
+// erroring (AI_ERROR_MESSAGE, above) or the budget being spent
+// (budgetErrorMessage, below) — checkBudget()/spentCents() throwing means the
+// gate itself couldn't answer, not that it answered "over cap".
+const AI_UNAVAILABLE_MESSAGE = "De AI-dienst is tijdelijk niet beschikbaar.";
+
+/* An upstream 429 is not a fault, it is a ceiling somewhere else: the Mistral
+ * workspace's own rate limit or a spend cap that has been reached. Saying "try
+ * again later" there sends the owner to retry a request that cannot succeed
+ * until he opens a billing page, which is exactly what happened on 14 Sep. It
+ * is deliberately distinct from `budgetErrorMessage`, which is LaVega's OWN
+ * cap and is the owner's to raise in the app's environment. */
+const AI_UPSTREAM_LIMIT_MESSAGE =
+  "De AI-aanbieder weigert nu verzoeken (limiet van het account bereikt). Controleer je Mistral-account; opnieuw proberen helpt pas daarna.";
+
+/* A key the provider rejects is not a transient fault either, and "probeer het
+ * later opnieuw" is actively wrong advice for it: retrying a rejected key fails
+ * forever. Same reasoning as the 429 message above — the owner is the only
+ * reader of this app, and the only person who can fix it, so the message has to
+ * name the thing he must go and change. It says nothing about the account
+ * beyond "these credentials were refused", which the browser's own operator
+ * already knows.
+ *
+ * Found on 17 Sep: `/api/agent/status` reported `configured: true` and the
+ * screen still said "gaf een fout", because `configured` only checks that the
+ * env var is SET. A key that is present and refused looked identical to a
+ * model that fell over. */
+const AI_CREDENTIALS_MESSAGE =
+  "De AI-aanbieder weigert de sleutel van deze server (401/403). Controleer MISTRAL_API_KEY in de omgeving; opnieuw proberen helpt niet.";
+
+type AiFailure = { code: string; message: string };
+
+/** 429 is their ceiling, 401/403 is our key, anything else is a fault. */
+function aiFailure(e: unknown): AiFailure {
+  if (!(e instanceof MistralHttpError)) return { code: "ai-fault", message: AI_ERROR_MESSAGE };
+  if (e.status === 429) return { code: "ai-upstream-limit", message: AI_UPSTREAM_LIMIT_MESSAGE };
+  if (e.status === 401 || e.status === 403)
+    return { code: "ai-credentials-refused", message: AI_CREDENTIALS_MESSAGE };
+  return { code: "ai-fault", message: AI_ERROR_MESSAGE };
+}
+
+/** Same wire shape as `stream.writeSSE({ event: "error", data: message })`,
+ *  plus a `code:` field a browser can read the machine-readable failure from.
+ *  Written as one raw record (not via `writeSSE`, which has no `code` slot)
+ *  so `code` lands in the SAME record as the Dutch `data:` line. An older
+ *  browser's SSE parser only recognizes `event:`/`data:` line prefixes and
+ *  silently skips anything else, so this is backward compatible: an old
+ *  bundle still gets exactly the Dutch message it gets today, on the same
+ *  `event: error`, and simply never sees the extra line. */
+async function writeSseError(
+  stream: SSEStreamingApi,
+  code: string,
+  message: string,
+): Promise<void> {
+  const dataLines = message
+    .split(/\r\n|\r|\n/)
+    .map((line) => `data: ${line}`)
+    .join("\n");
+  await stream.write(`event: error\ncode: ${code}\n${dataLines}\n\n`);
+}
+
+function logAiError(route: string, e: unknown): void {
+  console.error(`agent/${route}: ${e instanceof Error ? e.message : String(e)}`);
+}
+
+function budgetErrorMessage(scope: "day" | "month"): string {
+  return scope === "day"
+    ? "De AI-limiet voor vandaag is bereikt."
+    : "De AI-limiet voor deze maand is bereikt.";
+}
+
+/** The shared pre-flight budget check for the three routes that answer with
+ *  plain JSON (extract-invoice, categorize, travel-facts — chat does its own
+ *  version inline, since it has to speak SSE instead). `blocked` is a
+ *  Response to send immediately (429 over cap, 503 if checkBudget() itself
+ *  failed — Neon down must not read the same as "the model failed" or "over
+ *  cap"), or `null` to proceed — in which case `reservation` is the hold this
+ *  call now owns and MUST either pass to `recordUsage` on success or release
+ *  via `releaseReservation` on failure (see checkBudget's own comment). */
+async function requireBudget(
+  c: Context,
+  route: AiUsage["route"],
+): Promise<{ blocked: Response } | { blocked: null; reservation?: ReservationHandle }> {
+  try {
+    const budget = await checkBudget(route, sessionUserId(c));
+    if (!budget.ok)
+      return {
+        blocked: c.json(
+          {
+            error: budgetErrorMessage(budget.scope),
+            code: budget.scope === "day" ? "ai-budget-day" : "ai-budget-month",
+          },
+          429,
+        ),
+      };
+    return { blocked: null, reservation: budget.reservation };
+  } catch (e) {
+    logAiError("budget", e);
+    return { blocked: c.json({ error: AI_UNAVAILABLE_MESSAGE, code: "ai-unavailable" }, 503) };
+  }
+}
+
+/* This request's rate-limit bucket for `route`. */
+function bucket(
+  c: { req: { header(name: string): string | undefined; raw: Request } },
+  route: string,
+): string {
+  return rateLimitKey(route, sessionUserId(c as never), clientIp(c.req.raw.headers));
+}
 
 export function registerAgentRoutes(app: Hono, deps: Deps = {}): void {
   const extract = deps.extract ?? extractInvoiceFields;
@@ -38,19 +194,79 @@ export function registerAgentRoutes(app: Hono, deps: Deps = {}): void {
   const categorize = deps.categorize ?? categorizeTransactions;
   const travelFacts = deps.travelFacts ?? lookupProviderTerms;
   const cardComparison = deps.cardComparison ?? (() => getBankNlTable());
+  const globalLimit = deps.globalLimit ?? allCallers;
+
+  /* Per-caller first, then the shared ceiling. The order matters for
+   * availability: a caller already over its own limit must not spend a unit of
+   * the shared ceiling, or one client in a retry loop would lock every caller
+   * (including the owner) out of every AI route for the rest of the window.
+   *
+   * The table stays bounded anyway: one row per distinct caller per window, and
+   * the prune inside the same statement drops every row from a previous window,
+   * so its size tracks callers in the current window, not total history. */
+  const rateCheck = async (
+    c: Parameters<typeof bucket>[0],
+    route: string,
+  ): Promise<"ok" | "caller" | "global"> => {
+    if (!(await limit(bucket(c, route)))) return "caller";
+    if (!(await globalLimit("all"))) return "global";
+    return "ok";
+  };
 
   // Whether AI extraction is available server-side (does the key exist?). The
   // key itself is never returned. Lives here, not in index.ts (Task 1 deferred).
+  // PUBLIC (see apiGuard.ts's PUBLIC_API_PATHS) — it must answer with no
+  // personal or operational data, which is why the budget lives on its own
+  // guarded route below instead of here.
   app.get("/api/agent/status", (c) => c.json({ configured: loadLlmConfig().configured }));
 
-  // Extract one invoice's fields via Claude. Guard order: 503 (not configured)
-  // -> 429 (rate limited) -> 400 (bad/oversize input, thrown by the redaction
-  // boundary) -> 502 (extraction failed). The request body is sanitized BEFORE
-  // it can reach the SDK, so transactions/balances never leave the browser.
+  // Today's/this month's AI spend against the configured caps, for a UI that
+  // wants to show the budget rather than just guess at it. NOT on
+  // apiGuard.ts's PUBLIC_API_PATHS, so it requires a verified session — actual
+  // spend figures are operational data, unlike the boolean above.
+  app.get("/api/agent/budget", async (c) => {
+    let spent: { dayCents: number; monthCents: number };
+    try {
+      spent = await spentCents(sessionUserId(c));
+    } catch (e) {
+      logAiError("budget", e);
+      return c.json({ error: AI_UNAVAILABLE_MESSAGE, code: "ai-unavailable" }, 503);
+    }
+    const caps = loadBudgetConfig();
+    return c.json({
+      dayCents: caps.dayCents,
+      monthCents: caps.monthCents,
+      spentTodayCents: spent.dayCents,
+      spentMonthCents: spent.monthCents,
+    });
+  });
+
+  // Extract one invoice's fields via Mistral. Guard order: 503 (not configured)
+  // -> 429 (rate limited) -> 429 (budget) -> 400 (bad/oversize input, thrown by
+  // the redaction boundary) -> 502 (extraction failed). The request body is
+  // sanitized BEFORE it can reach the SDK, so transactions/balances never leave
+  // the browser.
   app.post("/api/agent/extract-invoice", async (c) => {
     const { configured, apiKey } = loadLlmConfig();
-    if (!configured || !apiKey) return c.json({ error: "AI-extractie is niet geconfigureerd op de server." }, 503);
-    if (!limit("extract")) return c.json({ error: "Even wachten — te veel AI-verzoeken." }, 429);
+    if (!configured || !apiKey)
+      return c.json(
+        {
+          error: "AI-extractie is niet geconfigureerd op de server.",
+          code: "extract-not-configured",
+        },
+        503,
+      );
+    const rate = await rateCheck(c, "extract");
+    if (rate !== "ok")
+      return c.json(
+        {
+          error: "Even wachten — te veel AI-verzoeken.",
+          code: rate === "global" ? "ai-rate-limited-global" : "extract-rate-limited-local",
+        },
+        429,
+      );
+    const budget = await requireBudget(c, "extract-invoice");
+    if (budget.blocked) return budget.blocked;
     let input: InvoiceExtractInput;
     let facts: LearnedFact[];
     try {
@@ -60,23 +276,69 @@ export function registerAgentRoutes(app: Hono, deps: Deps = {}): void {
       // invoice FIELD, never per counterparty) — sanitized like every input.
       facts = sanitizeKnownFacts(raw?.facts, AGENTS.facturen);
     } catch (e) {
-      return c.json({ error: e instanceof Error ? e.message : "ongeldige invoer" }, 400);
+      /* Both halves matter here: the reservation must come back, AND the
+       * reader must get this in their own language. */
+      await releaseReservation(budget.reservation);
+      if (e instanceof ValidationError) return c.json({ error: e.message, code: e.code }, 400);
+      return c.json(
+        { error: e instanceof Error ? e.message : "ongeldige invoer", code: "bad-input" },
+        400,
+      );
     }
     try {
-      return c.json(await extract(input, apiKey, facts));
+      const result = await extract(
+        input,
+        apiKey,
+        facts,
+        (usage) =>
+          recordUsage(
+            { route: "extract-invoice", model: MISTRAL_SMALL, ...usage },
+            budget.reservation,
+          ),
+        sessionUserId(c),
+      );
+      return c.json(result);
     } catch (e) {
-      return c.json({ error: e instanceof Error ? e.message : "extractie mislukt" }, 502);
+      /* The provider may already have charged this call at its ceiling before
+       * throwing (invoiceExtract.ts's own catch). Mark that same row failed with
+       * the reason instead of merely releasing it (#300, WS5.7). */
+      const { code, message } = aiFailure(e);
+      await recordFailure(
+        {
+          route: "extract-invoice",
+          model: MISTRAL_SMALL,
+          errorCode: aiFailureCode(e),
+          ...(upstreamHttpStatus(e) === undefined ? {} : { httpStatus: upstreamHttpStatus(e) }),
+        },
+        budget.reservation,
+      );
+      logAiError("extract-invoice", e);
+      return c.json({ error: message, code }, 502);
     }
   });
 
-  // Stream one chat turn from Claude. Guard order matches extract-invoice:
+  // Stream one chat turn from Mistral. Guard order matches extract-invoice:
   // 503 (not configured) -> 429 (rate limited) -> 400 (bad body / no messages)
   // -> stream. `context` is redacted per-tab by `sanitizeChatContext` BEFORE it
-  // reaches `chat` — that's the boundary that keeps raw data off Claude.
+  // reaches `chat` — that's the boundary that keeps raw data off Mistral.
   app.post("/api/agent/chat", async (c) => {
+    if (process.env.LAVEGA_CHAT_ENABLED !== "true")
+      return c.json({ error: "Not found", code: "chat-disabled" }, 404);
     const { configured, apiKey } = loadLlmConfig();
-    if (!configured || !apiKey) return c.json({ error: "AI-assistent is niet geconfigureerd." }, 503);
-    if (!limit("chat")) return c.json({ error: "Even wachten — te veel verzoeken." }, 429);
+    if (!configured || !apiKey)
+      return c.json(
+        { error: "AI-assistent is niet geconfigureerd.", code: "chat-not-configured" },
+        503,
+      );
+    const chatRate = await rateCheck(c, "chat");
+    if (chatRate !== "ok")
+      return c.json(
+        {
+          error: "Even wachten — te veel verzoeken.",
+          code: chatRate === "global" ? "ai-rate-limited-global" : "chat-rate-limited-local",
+        },
+        429,
+      );
     let tab = "";
     let messages;
     let context;
@@ -89,30 +351,104 @@ export function registerAgentRoutes(app: Hono, deps: Deps = {}): void {
       // How the owner wants the assistant to answer — the chat agent's own
       // namespace, never anything about his money.
       facts = sanitizeKnownFacts(raw?.facts, AGENTS.chat);
-      if (messages.length === 0) return c.json({ error: "Geen bericht." }, 400);
+      if (messages.length === 0)
+        return c.json({ error: "Geen bericht.", code: "chat-empty-message" }, 400);
     } catch (e) {
-      return c.json({ error: e instanceof Error ? e.message : "ongeldige invoer" }, 400);
+      if (e instanceof ValidationError) return c.json({ error: e.message, code: e.code }, 400);
+      return c.json(
+        { error: e instanceof Error ? e.message : "ongeldige invoer", code: "bad-input" },
+        400,
+      );
     }
     return streamSSE(c, async (stream) => {
+      // Budget goes here, not before streamSSE, so it stays right next to the
+      // call it's guarding rather than one more pre-flight check bundled with
+      // 503/429(rate)/400 above. Chat is the one route where an upstream
+      // failure ALREADY comes back as an {event: "error"} frame under 200
+      // (see the SSE error test below and its Dutch AI_ERROR_MESSAGE) — the
+      // budget refusal reuses that same convention for consistency, not
+      // because streamSSE structurally rules out a plain JSON 429 here.
+      let budget: Awaited<ReturnType<typeof checkBudget>>;
       try {
-        for await (const chunk of chat({ tab, messages, context, facts, apiKey })) {
+        budget = await checkBudget("chat", sessionUserId(c));
+      } catch (e) {
+        logAiError("budget", e);
+        await writeSseError(stream, "ai-unavailable", AI_UNAVAILABLE_MESSAGE);
+        return;
+      }
+      if (!budget.ok) {
+        await writeSseError(
+          stream,
+          budget.scope === "day" ? "ai-budget-day" : "ai-budget-month",
+          budgetErrorMessage(budget.scope),
+        );
+        return;
+      }
+      try {
+        for await (const chunk of chat({
+          tab,
+          messages,
+          context,
+          facts,
+          apiKey,
+          userId: sessionUserId(c),
+          onUsage: (usage) =>
+            recordUsage(
+              { route: "chat", model: MISTRAL_MEDIUM, ...usage, searches: 1 },
+              budget.reservation,
+            ),
+        })) {
           await stream.writeSSE({ data: chunk });
         }
         await stream.writeSSE({ event: "done", data: "" });
       } catch (e) {
-        await stream.writeSSE({ event: "error", data: e instanceof Error ? e.message : "fout" });
+        await recordFailure(
+          {
+            route: "chat",
+            model: MISTRAL_MEDIUM,
+            errorCode: aiFailureCode(e),
+            ...(upstreamHttpStatus(e) === undefined ? {} : { httpStatus: upstreamHttpStatus(e) }),
+          },
+          budget.reservation,
+        );
+        logAiError("chat", e);
+        /* aiFailure(e), not the bare AI_ERROR_MESSAGE this used to send. The
+         * other two AI routes already told a provider ceiling apart from a
+         * fault; chat did not, so the one route the owner uses most was the one
+         * route that could only ever say "probeer het later opnieuw" — whether
+         * the real cause was a 429 he had to fix in his Mistral account or a
+         * key the provider was refusing outright. */
+        const { code, message } = aiFailure(e);
+        await writeSseError(stream, code, message);
       }
     });
   });
 
-  // Bulk-categorize onbekend transactions via Claude. Guard order matches the
-  // other agent routes: 503 -> 429 -> 400 -> 502. `sanitizeCategorizeInput`
-  // strips every item down to {id,text,sign} BEFORE it can reach the model, so
-  // amounts/accounts/balances never leave the browser.
+  // Bulk-categorize onbekend transactions via Mistral. Guard order matches the
+  // other agent routes: 503 -> 429 -> 429 (budget) -> 400 -> 502.
+  // `sanitizeCategorizeInput` strips every item down to {id,text,sign} BEFORE
+  // it can reach the model, so amounts/accounts/balances never leave the browser.
   app.post("/api/agent/categorize", async (c) => {
     const { configured, apiKey } = loadLlmConfig();
-    if (!configured || !apiKey) return c.json({ error: "AI-categorisatie is niet geconfigureerd." }, 503);
-    if (!limit("categorize")) return c.json({ error: "Even wachten — te veel verzoeken." }, 429);
+    if (!configured || !apiKey)
+      return c.json(
+        { error: "AI-categorisatie is niet geconfigureerd.", code: "categorize-not-configured" },
+        503,
+      );
+    const categorizeRate = await rateCheck(c, "categorize");
+    if (categorizeRate !== "ok")
+      return c.json(
+        {
+          error: "Even wachten — te veel verzoeken.",
+          code:
+            categorizeRate === "global"
+              ? "ai-rate-limited-global"
+              : "categorize-rate-limited-local",
+        },
+        429,
+      );
+    const budget = await requireBudget(c, "categorize");
+    if (budget.blocked) return budget.blocked;
     let input: { items: import("./agent/categorize.js").CategorizeItem[] };
     let facts: LearnedFact[];
     try {
@@ -122,12 +458,38 @@ export function registerAgentRoutes(app: Hono, deps: Deps = {}): void {
       // to category, so no merchant can ride along.
       facts = sanitizeKnownFacts(raw?.facts, AGENTS.categorize);
     } catch (e) {
-      return c.json({ error: e instanceof Error ? e.message : "ongeldige invoer" }, 400);
+      /* Both halves matter here: the reservation must come back, AND the
+       * reader must get this in their own language. */
+      await releaseReservation(budget.reservation);
+      if (e instanceof ValidationError) return c.json({ error: e.message, code: e.code }, 400);
+      return c.json(
+        { error: e instanceof Error ? e.message : "ongeldige invoer", code: "bad-input" },
+        400,
+      );
     }
     try {
-      return c.json(await categorize(input, apiKey, facts));
+      const result = await categorize(
+        input,
+        apiKey,
+        facts,
+        (usage) =>
+          recordUsage({ route: "categorize", model: MISTRAL_SMALL, ...usage }, budget.reservation),
+        sessionUserId(c),
+      );
+      return c.json(result);
     } catch (e) {
-      return c.json({ error: e instanceof Error ? e.message : "categorisatie mislukt" }, 502);
+      const { code, message } = aiFailure(e);
+      await recordFailure(
+        {
+          route: "categorize",
+          model: MISTRAL_SMALL,
+          errorCode: aiFailureCode(e),
+          ...(upstreamHttpStatus(e) === undefined ? {} : { httpStatus: upstreamHttpStatus(e) }),
+        },
+        budget.reservation,
+      );
+      logAiError("categorize", e);
+      return c.json({ error: message, code }, 502);
     }
   });
 
@@ -135,16 +497,44 @@ export function registerAgentRoutes(app: Hono, deps: Deps = {}): void {
   // cashback, iDEAL top-up) for the providers the user banks with. The tightest
   // boundary in the app — `sanitizeTravelInput` lets only a country pair, a
   // currency and provider NAMES through, because the ranking that needs his
-  // balances is done locally in core. Same ladder: 503 -> 429 -> 400 -> 502.
+  // balances is done locally in core. Same ladder: 503 -> 429 -> 429 (budget)
+  // -> 400 -> 502. The budget gate only guards route ENTRY: the actual model
+  // call happens later, in a background lookup this route never awaits (see
+  // cardTerms.ts), so usage recording lives inside lookupProviderTerms itself.
   app.post("/api/agent/travel-facts", async (c) => {
     const { configured, apiKey } = loadLlmConfig();
-    if (!configured || !apiKey) return c.json({ error: "AI-reisadvies is niet geconfigureerd." }, 503);
-    if (!limit("travel")) return c.json({ error: "Even wachten — te veel verzoeken." }, 429);
+    if (!configured || !apiKey)
+      return c.json(
+        { error: "AI-reisadvies is niet geconfigureerd.", code: "travel-not-configured" },
+        503,
+      );
+    const travelRate = await rateCheck(c, "travel");
+    if (travelRate !== "ok")
+      return c.json(
+        {
+          error: "Even wachten — te veel verzoeken.",
+          code: travelRate === "global" ? "ai-rate-limited-global" : "travel-rate-limited-local",
+        },
+        429,
+      );
+    const budget = await requireBudget(c, "travel");
+    if (budget.blocked) return budget.blocked;
+    // This gate only answers "is there room for one more travel call right
+    // now" — it releases its own hold immediately rather than keeping it,
+    // because it never becomes a real call itself. The actual spend, and the
+    // reservation that actually guards it, happens once per BACKGROUNDED
+    // lookup inside travel.ts's checkBudget("travel")/recordUsage() pair
+    // (see the comment above this route and travel.ts's own).
+    await releaseReservation(budget.reservation);
     let input: import("./agent/travel.js").TravelInput;
     try {
       input = sanitizeTravelInput(await c.req.json());
     } catch (e) {
-      return c.json({ error: e instanceof Error ? e.message : "ongeldige invoer" }, 400);
+      if (e instanceof ValidationError) return c.json({ error: e.message, code: e.code }, 400);
+      return c.json(
+        { error: e instanceof Error ? e.message : "ongeldige invoer", code: "bad-input" },
+        400,
+      );
     }
     // Returns instantly with whatever is cached and starts background lookups
     // for the gaps — card tariffs are PUBLIC data, the same for every user, so
@@ -157,19 +547,26 @@ export function registerAgentRoutes(app: Hono, deps: Deps = {}): void {
     // for seven Dutch banks at once, including ING and Rabobank, whose own
     // tariff pages refuse us. It ranks BELOW a provider's own tariff page and
     // below the owner's correction — see the ladder in cardTerms.ts.
-    return c.json(getCardTerms(input, apiKey, { lookup: travelFacts, comparison: cardComparison }));
+    return c.json(
+      getCardTerms(input, apiKey, {
+        lookup: travelFacts,
+        comparison: cardComparison,
+        userId: sessionUserId(c),
+      }),
+    );
   });
 
   // Ingest from the n8n workflow, which fetches each provider's OWN tariff page
   // and extracts the numbers — no searching, so no flaky "couldn't find it".
   // Shared-secret auth: without CARD_TERMS_INGEST_TOKEN the endpoint is closed,
   // and a wrong token is refused, because this writes into the cache every user
-  // reads. Constant-time-ish compare: reject on length first, then value.
+  // reads. The compare is constant-time (sha256 both sides, then timingSafeEqual)
+  // so the response time cannot be used to recover the token a byte at a time.
   app.post("/api/card-terms/ingest", async (c) => {
     const { configured, token } = loadIngestConfig();
     if (!configured || !token) return c.json({ error: "Ingest is niet geconfigureerd." }, 503);
     const given = c.req.header("x-ingest-token") ?? "";
-    if (given.length !== token.length || given !== token) return c.json({ error: "Ongeldige token." }, 401);
+    if (!secretsMatch(given, token)) return c.json({ error: "Ongeldige token." }, 401);
 
     let body: { homeCountry?: unknown; currency?: unknown; terms?: unknown };
     try {

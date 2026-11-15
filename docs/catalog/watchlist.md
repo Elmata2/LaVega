@@ -7,22 +7,22 @@
 >
 > **Look for the provider's PDF before declaring it unreachable.** Tariff sheets, cardmember
 > agreements and fee documents are legally required, sit on unprotected asset hosts, are stable
-> across editions, and carry the *conditions* as well as the rates.
+> across editions, and carry the _conditions_ as well as the rates.
 >
-> | Product | This file says | Verified by hand |
-> |---|---|---|
-> | ING (all cards) | bot-blocked, agent-only | **Plain curl, no User-Agent needed.** `assets.ing.com/m/21a7a55ed70382ab/original/ING_Kostenoverzicht-betaalproducten-particulieren_2023.pdf` — 200, 174.665 B, `koersopslag niet-euro 1,40%` plus the credit-card tiering with its conditions |
-> | American Express | no FX markup published anywhere | **Plain curl.** The Cardmember Agreement PDF, §2.6: `Wisselkoersopslag ... 2,5%` |
-> | Revolut | 403, agent-only | Headed Chrome only — **headless parks on the Cloudflare challenge and never resolves** |
-> | ABN AMRO Direct Sparen | unreadable | Reads by plain curl at `/nl/prive/rente/actuele-rente.html`; the URL in this file has gone stale |
+> | Product                | This file says                  | Verified by hand                                                                                                                                                                                                                               |
+> | ---------------------- | ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+> | ING (all cards)        | bot-blocked, agent-only         | **Plain curl, no User-Agent needed.** `assets.ing.com/m/21a7a55ed70382ab/original/ING_Kostenoverzicht-betaalproducten-particulieren_2023.pdf` — 200, 174.665 B, `koersopslag niet-euro 1,40%` plus the credit-card tiering with its conditions |
+> | American Express       | no FX markup published anywhere | **Plain curl.** The Cardmember Agreement PDF, §2.6: `Wisselkoersopslag ... 2,5%`                                                                                                                                                               |
+> | Revolut                | 403, agent-only                 | Headed Chrome only — **headless parks on the Cloudflare challenge and never resolves**                                                                                                                                                         |
+> | ABN AMRO Direct Sparen | unreadable                      | Reads by plain curl at `/nl/prive/rente/actuele-rente.html`; the URL in this file has gone stale                                                                                                                                               |
 >
-> **And one live data error this sweep did not catch:** Revolut is *not* 0%. Its own per-plan pages
+> **And one live data error this sweep did not catch:** Revolut is _not_ 0%. Its own per-plan pages
 > say 0% applies only inside a monthly limit — Standard €1.000 then **1%**, Plus €3.000 then **0,5%**.
 > LaVega currently ranks Revolut top on an unconditional 0%. See
 > `docs/superpowers/specs/2026-08-18-catalog-coverage-design.md` for the full corrections.
 
-Sweep of **18 August 2026**. This is a watchlist, **not a price list**: it records *what products exist*,
-*where their terms live*, and *whether we can actually read them*. No rates are collected here as product
+Sweep of **18 August 2026**. This is a watchlist, **not a price list**: it records _what products exist_,
+_where their terms live_, and _whether we can actually read them_. No rates are collected here as product
 data. Every figure quoted below is evidence that a page is readable and that the number sits **next to the
 thing it describes** — the collection stage does the collecting properly, and this file tells it where to go.
 
@@ -61,6 +61,7 @@ unanswerable for two days.
 ### Betaalpassen (debit) (32)
 
 #### ING betaalpas
+
 - **Issuer** — ING Bank N.V.
 - **Terms** — <https://www.ing.nl/particulier/betalen/passen/buitenland>
 - **Measured** — `connection killed (curl 92 on HTTP/2, curl 28/56 on HTTP/1.1)` · readable: **bot-blocked** · fields on page: none
@@ -68,6 +69,7 @@ unanswerable for two days.
 - **Trap** — ing.nl is blocked at HOST level, not per page — every path tried died, including a static .pdf tariff sheet. A browser UA does NOT help here, unlike everywhere else. WebFetch (different egress) reached it but returned only the <title>, so behind the block it is also a JS shell. Only figure available is bank.nl's third-party 1,4% koersopslag, checked 15-1-2026.
 
 #### ABN AMRO betaalpas
+
 - **Issuer** — ABN AMRO Bank N.V.
 - **Terms** — <https://www.abnamro.nl/nl/prive/betalen/tarieven/buitenlands-geld.html>
 - **Measured** — `200` · readable: **yes** · fields on page: fxFee, conditions
@@ -75,6 +77,7 @@ unanswerable for two days.
 - **Trap** — CORRECTS the standing assumption that ABN's tariff page is an empty JS shell. That is true only of the INDEX: /betalen/tarieven/index.html is 1.078.742 bytes stripping to 9.124 chars of pure navigation with ZERO percent signs. Its sibling /betalen/tarieven/buitenlands-geld.html strips to 11.228 chars and carries real tariff tables ('Met Betaalpas — € 0,15 en 1,2% valutakoersopslag per keer'). ABN's betaalpas is 1,2%, NOT the 1,4% herd figure. The page also warns its own ECB-reference percentage differs from the 1,2% because that comparison uses the Mastercard rate.
 
 #### Rabobank betaalpas
+
 - **Issuer** — Coöperatieve Rabobank U.A.
 - **Terms** — <https://www.rabobank.nl/particulieren/betalen/betaalproducten/kosten-voorwaarden>
 - **Measured** — `403 (18.728-byte interstitial)` · readable: **bot-blocked** · fields on page: none
@@ -82,6 +85,7 @@ unanswerable for two days.
 - **Trap** — CORRECTS the standing note that Rabobank kills the connection like ING. It returns a clean 403, identical on HTTP/2 and HTTP/1.1 across 4 paths, and WebFetch also got 403 — a uniform edge block. Operationally this matters: a 403 may yield to a cookie/session, a killed connection will not. Fallback figure is bank.nl's 1,4%, checked 15-1-2026.
 
 #### SNS betaalpas
+
 - **Issuer** — ASN Bank N.V. (formerly SNS Bank N.V. / de Volksbank)
 - **Terms** — <https://www.snsbank.nl/particulier/betalen/service/betalen-in-het-buitenland.html>
 - **Measured** — `200` · readable: **yes** · fields on page: fxFee, conditions
@@ -89,6 +93,7 @@ unanswerable for two days.
 - **Trap** — BRAND BEING RETIRED — the biggest trap in this bucket. SNS Bank legally became ASN Bank on 1 July 2025 (de Volksbank N.V. → ASN Bank N.V.); the page's own nav reads 'SNS wordt ASN Bank'. It still returns 200 and is fully readable, measured in context: 'Betalen in vreemde valuta kost 1,4% over het betaalde bedrag… + € 3,50 per keer.' LaVega will keep generating 'SNS betaalpas' from legacy account labels, so keep the name but point terms at ASN. bank.nl has no SNS row.
 
 #### ASN betaalpas
+
 - **Issuer** — ASN Bank N.V.
 - **Terms** — <https://www.asnbank.nl/service/asn-betaalpas/betalen-buitenland.html>
 - **Measured** — `200` · readable: **yes** · fields on page: fxFee
@@ -96,6 +101,7 @@ unanswerable for two days.
 - **Trap** — Cleanest source in the bucket. Measured in context: '…1,4% van het opgenomen bedrag + € 3,50 vaste vergoeding per opname' and '…1,4% van het betaalde bedrag per betaling.' URL trap: the /particulier/betalen/… paths that work on snsbank.nl are 404 on asnbank.nl (three guessed variants measured 404). ASN uses /service/asn-betaalpas/ and /betalen/asn-creditcard/.
 
 #### RegioBank betaalpas
+
 - **Issuer** — ASN Bank N.V. (formerly RegioBank N.V.)
 - **Terms** — <https://www.regiobank.nl/service/betalen/buitenland.html>
 - **Measured** — `200` · readable: **yes** · fields on page: fxFee
@@ -103,6 +109,7 @@ unanswerable for two days.
 - **Trap** — BRAND BEING RETIRED: RegioBank officially became ASN Bank on 1 December 2025, adviser conversion running through 2026. Page still 200 and readable, wording IDENTICAL to SNS ('1,4%… + € 3,50 per keer') as expected for one bank behind three brands. bank.nl has no RegioBank row.
 
 #### Knab betaalpas
+
 - **Issuer** — Knab (Aegon Bank N.V.)
 - **Terms** — <https://www.knab.nl/tarieven>
 - **Measured** — `200` · readable: **yes** · fields on page: fxFee, interest, conditions
@@ -110,6 +117,7 @@ unanswerable for two days.
 - **Trap** — THE KNAB TRAP REPRODUCED. One page carries betaalpas, creditcard, roodstand, sparen and deposito. The betaalpas figure is 'Betalen en opname van contant geld buiten eurolanden — Mastercard wisselkoers + 1,4% koersopslag', inside the 'Betalen en overboeken' block. The 2% about 19 lines further down belongs to the 'Knab Creditcard' block. Anchor on the section heading, never on the first percentage found. Genuine negative finding: 'Rente op je betaalrekening 0%' — the current account pays NO interest. Cross-track: non-EEA transfers €15 + 0,1% koersopslag.
 
 #### Triodos betaalpas
+
 - **Issuer** — Triodos Bank N.V.
 - **Terms** — <https://www.triodos.nl/service/particulieren/betalen/betaalpas>
 - **Measured** — `200` · readable: **marketing-only** · fields on page: conditions only
@@ -117,6 +125,7 @@ unanswerable for two days.
 - **Trap** — A clean example of readable-but-useless: 200, real prose, and ZERO percent signs (counted — 0 matches). It deliberately declines to publish a number: 'Visa bepaalt de wisselkoersen en opslagen.' The rate is behind a JS 'rekenhulp' at /betaalpas/rekenhulp, which is 200 but strips to 2.402 chars with no figures. Triodos's own site has NO scrapeable fx rate anywhere. The only figure is bank.nl's third-party 1,0% — the cheapest betaalpas in the bucket and the only one that is neither 1,2% nor 1,4%, which is exactly why it needs real verification rather than a herd assumption.
 
 #### bunq Free betaalpas
+
 - **Issuer** — bunq B.V. (NL banking licence); Mastercard
 - **Terms** — <https://www.bunq.com/nl-nl/personal/plans/bunq-free>
 - **Measured** — `200` · readable: **yes** · fields on page: fxFee, interest, annualFee, conditions
@@ -124,6 +133,7 @@ unanswerable for two days.
 - **Trap** — NO cashback anywhere — grep returns zero. Contradiction to record: this page says 3% after the €1.000 cap, the bunq Core FAQ says only 'standaard conversiekosten' with no number, and a search snippet claimed 1,5%. Trust this page, not search.
 
 #### bunq Core betaalpas
+
 - **Issuer** — bunq B.V.; Mastercard
 - **Terms** — <https://www.bunq.com/nl-nl/personal/plans/bunq-core>
 - **Measured** — `200` · readable: **yes** · fields on page: fxFee, interest, annualFee, conditions
@@ -131,6 +141,7 @@ unanswerable for two days.
 - **Trap** — Renders server-side, ~25KB of text. No cashback. The 0,5% sits inside the ZeroFX FAQ answer next to the words it describes — verified in context, not counted as a stray %.
 
 #### bunq Pro betaalpas
+
 - **Issuer** — bunq B.V.; Mastercard
 - **Terms** — <https://www.bunq.com/nl-nl/personal/plans/bunq-pro>
 - **Measured** — `200` · readable: **yes** · fields on page: interest, annualFee, conditions
@@ -138,6 +149,7 @@ unanswerable for two days.
 - **Trap** — TRAP: unlike Free/Core/Elite this page mentions ZeroFX by name but does NOT print the 0,5% number (measured: zero matches for '0,5%'). Do not carry a sibling page's number over without saying so.
 
 #### bunq Elite betaalpas
+
 - **Issuer** — bunq B.V.; Mastercard
 - **Terms** — <https://www.bunq.com/nl-nl/personal/plans/bunq-elite>
 - **Measured** — `200 (after refetch)` · readable: **yes** · fields on page: fxFee, interest, annualFee, conditions
@@ -145,6 +157,7 @@ unanswerable for two days.
 - **Trap** — TRAP (flaky SSR): the first fetch returned HTTP 200 with a 30-byte empty JS shell; an immediate refetch of the SAME URL returned the full 28KB page. bunq's CDN serves a shell on cache miss. Always refetch a bunq 200 that yields near-zero text before calling it a js-shell.
 
 #### bunq Free Business betaalpas
+
 - **Issuer** — bunq B.V.; Mastercard
 - **Terms** — <https://www.bunq.com/nl-nl/business/plans>
 - **Measured** — `200 (after refetch)` · readable: **yes** · fields on page: annualFee, conditions
@@ -152,6 +165,7 @@ unanswerable for two days.
 - **Trap** — Same flaky-SSR trap as bunq Elite: first fetch 200 with 30 bytes of text, refetch 200 with 9,3KB. The business comparison table is also TRUNCATED in server HTML — only the first rows render, the rest sits behind 'Volledige tabel weergeven'.
 
 #### bunq Core Business betaalpas
+
 - **Issuer** — bunq B.V.; Mastercard
 - **Terms** — <https://www.bunq.com/nl-nl/business/plans>
 - **Measured** — `200` · readable: **yes** · fields on page: annualFee, conditions
@@ -159,6 +173,7 @@ unanswerable for two days.
 - **Trap** — Business monthly prices measured on-page: Free €0, Core €7,99, Pro €13,99, Elite €23,99. No fxFee/cashback/interest anywhere in the rendered business plans HTML.
 
 #### bunq Pro Business betaalpas
+
 - **Issuer** — bunq B.V.; Mastercard
 - **Terms** — <https://www.bunq.com/nl-nl/business/plans>
 - **Measured** — `200` · readable: **yes** · fields on page: annualFee, conditions
@@ -166,6 +181,7 @@ unanswerable for two days.
 - **Trap** — See bunq Core Business — the business tier pages carry price only; /nl-nl/business/cards is pure marketing (measured: 16,8KB of text, zero fee figures).
 
 #### bunq Elite Business betaalpas
+
 - **Issuer** — bunq B.V.; Mastercard
 - **Terms** — <https://www.bunq.com/nl-nl/business/plans>
 - **Measured** — `200` · readable: **yes** · fields on page: annualFee, conditions
@@ -173,6 +189,7 @@ unanswerable for two days.
 - **Trap** — Includes a Metal Card per /nl-nl/business/cards, but that page names the card without any fee, FX or cashback figure.
 
 #### Revolut Standard betaalpas
+
 - **Issuer** — Revolut Bank UAB (Lithuania), in NL via passport/branch
 - **Terms** — <https://www.revolut.com/nl-NL/legal/standard-fees/>
 - **Measured** — `403 (Cloudflare)` · readable: **bot-blocked** · fields on page: none
@@ -180,6 +197,7 @@ unanswerable for two days.
 - **Trap** — Hard Cloudflare block. Measured headers: 'server: cloudflare', 'cf-mitigated: challenge', HTTP/2 403, an 873KB interstitial containing 67 bytes of text ('Just a quick security check'). Blocked on www.revolut.com AND help.revolut.com, and WebFetch from different infrastructure also got 403. A guessed PDF at assets.revolut.com 404'd. availableToNL is inferred from the /nl-NL/ path 403ing rather than 404ing plus market knowledge — NOT from a page anyone read.
 
 #### Revolut Plus betaalpas
+
 - **Issuer** — Revolut Bank UAB
 - **Terms** — <https://www.revolut.com/nl-NL/legal/plus-fees/>
 - **Measured** — `403` · readable: **bot-blocked** · fields on page: none
@@ -187,6 +205,7 @@ unanswerable for two days.
 - **Trap** — Same Cloudflare challenge. The tier URL came from the search index only; its content was never read.
 
 #### Revolut Premium betaalpas
+
 - **Issuer** — Revolut Bank UAB
 - **Terms** — <https://www.revolut.com/nl-NL/legal/premium-fees/>
 - **Measured** — `403` · readable: **bot-blocked** · fields on page: none
@@ -194,6 +213,7 @@ unanswerable for two days.
 - **Trap** — Same Cloudflare challenge.
 
 #### Revolut Metal betaalpas
+
 - **Issuer** — Revolut Bank UAB
 - **Terms** — <https://www.revolut.com/nl-NL/legal/metal-fees/>
 - **Measured** — `403` · readable: **bot-blocked** · fields on page: none
@@ -201,6 +221,7 @@ unanswerable for two days.
 - **Trap** — This is the exact URL whose response headers were captured (cf-mitigated: challenge).
 
 #### N26 Standard betaalpas
+
 - **Issuer** — N26 Bank AG (Germany) — German IBAN even for Dutch residents; Mastercard Debit
 - **Terms** — <https://n26.com/en-eu/plans>
 - **Measured** — `200` · readable: **yes** · fields on page: fxFee, cashback, interest, annualFee, conditions
@@ -208,6 +229,7 @@ unanswerable for two days.
 - **Trap** — There is NO Dutch locale: n26.com/nl-nl, /nl-nl/ and /en-nl all MEASURED 404. The canonical readable source is the English /en-eu/plans comparison table, fully server-rendered. Dutch residents get a DE IBAN, i.e. iDEAL/Tikkie friction.
 
 #### N26 Smart betaalpas
+
 - **Issuer** — N26 Bank AG; Mastercard Debit
 - **Terms** — <https://n26.com/en-eu/plans>
 - **Measured** — `200` · readable: **yes** · fields on page: fxFee, cashback, interest, annualFee, conditions
@@ -215,6 +237,7 @@ unanswerable for two days.
 - **Trap** — Same page as Standard. Naming trap: search results and older reviews call the €9,90 tier 'You'; N26's live page calls it 'Go'. Use Go.
 
 #### N26 Go betaalpas
+
 - **Issuer** — N26 Bank AG; Mastercard Debit
 - **Terms** — <https://n26.com/en-eu/plans>
 - **Measured** — `200` · readable: **yes** · fields on page: fxFee, cashback, interest, annualFee, conditions
@@ -222,6 +245,7 @@ unanswerable for two days.
 - **Trap** — Formerly marketed as 'N26 You'. Card payments worldwide are stated free of FX markup on all tiers; the cashback is the tier-gated part.
 
 #### N26 Metal betaalpas
+
 - **Issuer** — N26 Bank AG; metal Mastercard Debit
 - **Terms** — <https://n26.com/en-eu/metal>
 - **Measured** — `200` · readable: **yes** · fields on page: fxFee, cashback, interest, annualFee, conditions
@@ -229,6 +253,7 @@ unanswerable for two days.
 - **Trap** — Both /en-eu/metal and /en-eu/plans are readable. /en-eu/foreign-transaction-fee is an SEO explainer, marketing-only — it discusses generic 1–3% industry FX fees and is very easy to misread as N26's own tariff.
 
 #### Wise betaalpas
+
 - **Issuer** — Wise Europe SA (Belgium) for EEA customers; Visa/Mastercard debit
 - **Terms** — <https://wise.com/nl/pricing/>
 - **Measured** — `200` · readable: **yes** · fields on page: fxFee, annualFee, conditions
@@ -236,6 +261,7 @@ unanswerable for two days.
 - **Trap** — ENTITY TRAP: the Dutch-language pricing page renders an FCA/UK footer ('Wise Payments Limited', Electronic Money Regulations 2011). The EEA entity strings ('Wise Europe SA', 'Wise Assets Europe AS') are present in the page's JS translation bundle but NOT in the rendered footer. Confirm which entity's price list applies to an NL resident before quoting a number. Also: wise.com/nl/card/ is marketing-only — it says ATM is free 'tot € 250, daarna een surcharge' with NO percentage. No cashback, no points on any Wise page.
 
 #### Trade Republic betaalpas
+
 - **Issuer** — Trade Republic Bank GmbH (Germany), Nederlandse vestiging Amsterdam; Visa debit
 - **Terms** — <https://traderepublic.com/nl-nl/kaart/_payload.json>
 - **Measured** — `200 (payload) / 200 shell (HTML)` · readable: **yes via SSR payload** · fields on page: cashback, fxFee, annualFee, conditions
@@ -243,6 +269,7 @@ unanswerable for two days.
 - **Trap** — THE KEY TRAP: the HTML at /nl-nl/kaart is a Nuxt shell — 76KB of HTML stripping to 483 bytes of text (just the footer). Every figure came from the SSR payload at /nl-nl/kaart/_payload.json (measured 200, 317KB), which curl fetches fine. The footer 'Tarieven' link is not an href at all but a JS modal (slug 'pricing-scheme'), so there is no separate tariff URL to fetch.
 
 #### 212 Card
+
 - **Issuer** — Paynetics (card issuer); NL customers under Trading 212 Markets Ltd (Cyprus) or Trading 212 EU GmbH (Germany)
 - **Terms** — <https://helpcentre.trading212.com/hc/en-us/articles/19288398028317-What-are-the-fees-for-using-the-212-card>
 - **Measured** — `200` · readable: **yes** · fields on page: fxFee, cashback, annualFee, conditions
@@ -250,6 +277,7 @@ unanswerable for two days.
 - **Trap** — TWO-HOST TRAP, the single most useful routing fact here: www.trading212.com is a hard Cloudflare 403 on every path (/card, /interest-on-cash, root) with an 'Access Denied' body, but helpcentre.trading212.com (Zendesk) is fully readable at 200 — and its JSON API at /api/v2/help_center/articles/search.json?query=… returns full article bodies. NL availability VERIFIED from the eligibility article: the Netherlands appears in both the Markets Ltd and the EU GmbH country lists.
 
 #### Openbank betaalpas (R42 Betaalpas)
+
 - **Issuer** — Open Bank S.A. (Spain, Santander group) — Spanish IBAN used in NL; Mastercard
 - **Terms** — <https://www.openbank.nl/betaalrekening>
 - **Measured** — `200` · readable: **yes** · fields on page: annualFee, conditions
@@ -257,6 +285,7 @@ unanswerable for two days.
 - **Trap** — THE INVERSE OF A TIER TRAP: the page's free-account framing sits directly above a €4,99/month gate on the only FX benefit, so recording Openbank as 'no FX fee' would be wrong. Crucially the page never states what FX COSTS without Travel+ — that number is on no Openbank HTML page, only in the 'informatie over vergoedingen en commissies' document. Deposit guarantee is SPANISH (€100.000), not Dutch.
 
 #### Krak Card (Kraken)
+
 - **Issuer** — Monavate UAB, Lithuania (EEA); Monavate Ltd in the UK — Mastercard debit
 - **Terms** — <https://www.kraken.com/krak/card>
 - **Measured** — `200` · readable: **yes** · fields on page: cashback, fxFee, annualFee, conditions
@@ -264,6 +293,7 @@ unanswerable for two days.
 - **Trap** — Kraken's consumer money app is branded Krak. krak.com times out (connection killed at 25s); the live pages are kraken.com/krak and kraken.com/krak/card, and kraken.com/features/krak is 404. FX: 'zero FX fees' but footnote 2 measured 'A variable spread applies when spending across assets' — so it is not genuinely free when you spend from crypto. Own-page eligibility: 'available to residents of the UK and the EU'.
 
 #### Plutus Card
+
 - **Issuer** — Plutus (Visa debit, NL IBAN per their marketing; issuing EMI not named on the plans page)
 - **Terms** — <https://plutus.it/plans>
 - **Measured** — `200` · readable: **yes** · fields on page: cashback, annualFee, conditions
@@ -271,6 +301,7 @@ unanswerable for two days.
 - **Trap** — Two traps. (1) The tier table is rendered TWICE — a full desktop table then a partial mobile card list starting at 'Chad' — so a careless read drops the bottom five tiers. (2) Review sites are WRONG on the numbers: a widely-cited source says 'Everyday requires 250 PLU for 4%' and 'Legend 8.000 PLU for 8%'; measured on plutus.it/plans, 4% is Hero at 2.000 PLU and Legend is 10.000 PLU at 6%. Provider page wins. The homepage also mentions a 'free virtual Plutus Card… No fees' alongside the paid plans — the two claims conflict on their own site and need resolving at collection time.
 
 #### Bybit Card
+
 - **Issuer** — Bybit EU (EUR card for EEA residents); issuing EMI not obtainable
 - **Terms** — <https://www.bybit.eu/en/cards>
 - **Measured** — `200` · readable: **js-shell** · fields on page: none
@@ -280,6 +311,7 @@ unanswerable for two days.
 ### Creditcards (40)
 
 #### ING creditcard
+
 - **Issuer** — International Card Services (ICS)
 - **Terms** — <https://www.ing.nl/particulier/betalen/tarieven>
 - **Measured** — `connection killed` · readable: **bot-blocked** · fields on page: none
@@ -287,6 +319,7 @@ unanswerable for two days.
 - **Trap** — Same host-level block. There is NO ICS backdoor: icscards.nl/ing measured 404, so the trick that rescues ABN (ICS is an ABN subsidiary) does not exist for ING. bank.nl lumps the base card and the platinum tier under one heading 'Met creditcard of platinumcard' — do not let that lump erase the two-tier split.
 
 #### ING Platinumcard
+
 - **Issuer** — International Card Services (ICS)
 - **Terms** — _no terms URL found_
 - **Measured** — `connection killed` · readable: **bot-blocked** · fields on page: none
@@ -294,6 +327,7 @@ unanswerable for two days.
 - **Trap** — Existence of a distinct platinum tier is confirmed only by bank.nl's column header 'Met creditcard of platinumcard' — a third-party comparison site, fetched directly. The marketing names 'Creditcard More' / 'Creditcard Extra' come only from affiliate blogs and are NOT confirmed. Listed separately because collapsing tiers is what made Amex unanswerable for two days.
 
 #### ABN AMRO creditcard
+
 - **Issuer** — International Card Services (ICS)
 - **Terms** — <https://www.icscards.nl/abnamro/klantenservice/betalen/contant-geld-opnemen>
 - **Measured** — `200` · readable: **yes** · fields on page: fxFee, conditions, (merchant offers)
@@ -301,6 +335,7 @@ unanswerable for two days.
 - **Trap** — icscards.nl is the readable backdoor when abnamro.nl misbehaves. Measured in context: 'Voor alle ABN AMRO creditcards is de koersopslag 2%…'. The merchant-discount list (8% Expedia, tot 25% Samsung, tot 20% Center Parcs) is NOT cashback — those are partner offers with marketing 'tot' ranges. /abnamro/klantenservice/tarieven is a 404; do not guess that path.
 
 #### ABN AMRO Gold Card
+
 - **Issuer** — International Card Services (ICS)
 - **Terms** — <https://www.icscards.nl/abnamro>
 - **Measured** — `200` · readable: **yes** · fields on page: conditions
@@ -308,6 +343,7 @@ unanswerable for two days.
 - **Trap** — Genuinely DISTINCT from 'ABN AMRO creditcard' — named as its own item in the ICS portal nav with its own withdrawal limit. The 2% koersopslag is worded 'voor alle ABN AMRO creditcards' so it should cover Gold, but the Gold-specific annualFee needs its own fetch. Do not collapse into the standard card.
 
 #### Rabobank creditcard
+
 - **Issuer** — International Card Services (ICS)
 - **Terms** — <https://www.rabobank.nl/particulieren/betalen/creditcard/rabocard>
 - **Measured** — `403` · readable: **bot-blocked** · fields on page: none
@@ -315,6 +351,7 @@ unanswerable for two days.
 - **Trap** — This is the name productOf() will generate. Underneath it the real card is the RaboCard or the Rabo GoldCard. Search results claim the RaboCard is being auto-converted to GoldCard and closed to new applications — every rabobank.nl URL 403s, so that is NOT verified.
 
 #### Rabo GoldCard
+
 - **Issuer** — International Card Services (ICS)
 - **Terms** — <https://www.rabobank.nl/particulieren/betalen/creditcard/rabo-goldcard>
 - **Measured** — `403` · readable: **bot-blocked** · fields on page: none
@@ -322,6 +359,7 @@ unanswerable for two days.
 - **Trap** — The 403 interstitial is served regardless of whether the path exists, so existence is search-derived, not measured — a 403 is only weak evidence a URL is real. Higher spending limit than RaboCard per search results. Listed separately rather than folded into 'Rabobank creditcard'.
 
 #### SNS creditcard
+
 - **Issuer** — International Card Services (ICS)
 - **Terms** — <https://www.snsbank.nl/particulier/betalen/sns-visa-credit-card/kosten-van-je-creditcard.html>
 - **Measured** — `200` · readable: **yes** · fields on page: fxFee, annualFee, conditions
@@ -329,6 +367,7 @@ unanswerable for two days.
 - **Trap** — RENAMED: ICS confirms on its own page that from 5 January 2026 the SNS and RegioBank credit cards became 'ASN Creditcard'. So today this product effectively IS the ASN Creditcard — the €37,50 and 2% figures match across both pages, a clean cross-check. Multi-product page: it also links betaalpas content, but the 2% wisselkoersopslag sits unambiguously under 'Kosten betalen met je creditcard'.
 
 #### ASN Creditcard
+
 - **Issuer** — International Card Services (ICS)
 - **Terms** — <https://www.asnbank.nl/betalen/asn-creditcard/kosten-asn-creditcard.html>
 - **Measured** — `200` · readable: **yes** · fields on page: fxFee, annualFee, conditions
@@ -336,6 +375,7 @@ unanswerable for two days.
 - **Trap** — The surviving brand that SNS creditcard and RegioBank creditcard both folded into on 5 Jan 2026. Rates sit in a clean labelled table (2% directly under 'Betalen met buitenlands geld'), so the figure is genuinely next to the thing it describes. Treat as canonical for all three legacy brands.
 
 #### RegioBank creditcard
+
 - **Issuer** — International Card Services (ICS)
 - **Terms** — <https://www.regiobank.nl/downloads/tarievenwijzer-betalen-1.html>
 - **Measured** — `200 (serves PDF bytes)` · readable: **yes (PDF extractor required)** · fields on page: fxFee, conditions
@@ -343,6 +383,7 @@ unanswerable for two days.
 - **Trap** — FORMAT TRAP: the URL ends in .html but the bytes are a 4-page PDF 1.4 document (verified with file(1)). An HTML tag-stripper returns PDF object garbage ('3 0 obj', '/TrimBox') and finds ZERO tariffs — a false 'unreadable'. Sniff content type, never the extension. Once extracted it is the richest RegioBank source and says 'De RegioBank Creditcard is een product van International Card Services (ICS). ASN Bank heeft de dienstverlening… ondergebracht' — already naming ASN. Renamed ASN Creditcard on 5 Jan 2026.
 
 #### Knab creditcard
+
 - **Issuer** — Knab (Aegon Bank N.V.)
 - **Terms** — <https://www.knab.nl/tarieven>
 - **Measured** — `200` · readable: **yes** · fields on page: fxFee, interest, conditions
@@ -350,6 +391,7 @@ unanswerable for two days.
 - **Trap** — Same URL as the Knab betaalpas — these two MUST be read from their own sections. Measured under the 'Knab Creditcard' heading: 'Betalingen in vreemde valuta — 2% koersopslag' and 'Contant geld opnemen — 4%'. Unlike ABN/ASN/SNS there is NO positive-balance 1% discount on this page, though a search summary claimed one — do not import it. Knab's page never names ICS, unlike SNS/RegioBank; issuer left as Knab/Aegon rather than assumed.
 
 #### bunq creditcard
+
 - **Issuer** — bunq B.V. (self-issued, Mastercard) — notably NOT ICS
 - **Terms** — <https://www.bunq.com/nl-nl/personal/features/credit-card>
 - **Measured** — `200` · readable: **yes** · fields on page: annualFee, conditions
@@ -357,6 +399,7 @@ unanswerable for two days.
 - **Trap** — The page contradicts itself: 'Elke bunq gebruiker krijgt een creditcard, zonder rente of jaarlijkse kosten' versus the FAQ 'fysieke Credit Cards vereisen een betaald plan'. No cashback, no points — verified absent. No FX figure here; the 0,5% ZeroFX lives on the plan pages.
 
 #### American Express Blue Card
+
 - **Issuer** — American Express (self-issued in NL; NOT ICS)
 - **Terms** — <https://www.americanexpress.com/nl-nl/creditcard/blue-card/>
 - **Measured** — `200` · readable: **yes** · fields on page: annualFee, points, interest, conditions
@@ -364,6 +407,7 @@ unanswerable for two days.
 - **Trap** — Server-rendered, plain curl with a browser UA is enough (~775KB HTML, real text). Points are Membership Rewards at 1 punt per 2 euro — HALF the Green/Gold/Platinum rate and easy to conflate. NO cashback (grep, 0 hits). NO fxFee/koersopslag anywhere — Amex NL does not publish an FX markup in HTML at all.
 
 #### American Express Green Card
+
 - **Issuer** — American Express (self-issued in NL; NOT ICS)
 - **Terms** — <https://www.americanexpress.com/nl-nl/creditcard/green-card/>
 - **Measured** — `200` · readable: **yes** · fields on page: annualFee, points, interest, conditions
@@ -371,6 +415,7 @@ unanswerable for two days.
 - **Trap** — Price is PER MONTH, not per year — do not read €6,50 as an annual fee. 1 MR punt per euro. The page also advertises the Business Gold Card at €270 per jaar in a cross-sell block: that number belongs to a DIFFERENT product and is the Knab-style trap on this page.
 
 #### American Express Gold Card
+
 - **Issuer** — American Express (self-issued in NL; NOT ICS)
 - **Terms** — <https://www.americanexpress.com/nl-nl/creditcard/gold-card/>
 - **Measured** — `200` · readable: **yes** · fields on page: annualFee, points, interest, conditions
@@ -378,6 +423,7 @@ unanswerable for two days.
 - **Trap** — Per-month pricing. 1 MR punt per euro. Dense with euro-denominated BENEFIT valuations (€900 aan voordelen per jaar, €100 dining value, €1.400 purchase-insurance cap) that are NOT fees — a naive euro-regex will pick them up. Cross-sells Business Gold at €270 per jaar.
 
 #### American Express Platinum Card
+
 - **Issuer** — American Express (self-issued in NL; NOT ICS)
 - **Terms** — <https://www.americanexpress.com/nl-nl/creditcard/platinum-card/>
 - **Measured** — `200` · readable: **yes** · fields on page: annualFee, points, interest, conditions
@@ -385,6 +431,7 @@ unanswerable for two days.
 - **Trap** — Per-month pricing. 1 MR punt per euro. Worst page on the site for euro-figure noise: €2.400 benefits, €500 lounge value, €370/€210 Privium values, €3.000.000 medical cover, plus the €10 extra-card fee — five different euro amounts near the headline price.
 
 #### Flying Blue - American Express Entry Card
+
 - **Issuer** — American Express (self-issued in NL; co-brand with Flying Blue / KLM-Air France)
 - **Terms** — <https://www.americanexpress.com/nl-nl/creditcard/flying-blue-entry-card/>
 - **Measured** — `200` · readable: **yes** · fields on page: annualFee, points, interest, conditions
@@ -392,6 +439,7 @@ unanswerable for two days.
 - **Trap** — Earn rate 1 Mile per 2 euro — the LOWEST of the four Flying Blue cards and the one most often mis-quoted as '1 Mile per euro'. Miles are POINTS, not cashback. The footer carousel shows '€ 55.00 per maand' — that is the Flying Blue Platinum's price bleeding into the same DOM; do not attribute it here.
 
 #### Flying Blue - American Express Silver Card
+
 - **Issuer** — American Express (self-issued in NL; co-brand with Flying Blue / KLM-Air France)
 - **Terms** — <https://www.americanexpress.com/nl-nl/creditcard/flying-blue-silver-card/>
 - **Measured** — `200` · readable: **yes** · fields on page: annualFee, points, conditions
@@ -399,6 +447,7 @@ unanswerable for two days.
 - **Trap** — THIS CARD IS EASY TO MISS. It is not returned by generic searches for the Flying Blue range and only surfaced from the Amex NL nav; the family is FOUR cards, not three. That is likely part of what made Amex unanswerable before. Footer carousel again shows the Platinum's €55.00.
 
 #### Flying Blue - American Express Gold Card
+
 - **Issuer** — American Express (self-issued in NL; co-brand with Flying Blue / KLM-Air France)
 - **Terms** — <https://www.americanexpress.com/nl-nl/creditcard/flying-blue-gold-card/>
 - **Measured** — `200` · readable: **yes** · fields on page: annualFee, points, interest, conditions
@@ -406,6 +455,7 @@ unanswerable for two days.
 - **Trap** — THREE live URLs, ONE product: /nl-nl/creditcard/flying-blue-gold-card/, /nl-nl/kaarten/flying-blue-gold-card/ and /en-nl/cards/flying-blue-gold-card/. Deduplicate on product, not URL; treat the /nl-nl/creditcard/ path as canonical.
 
 #### Flying Blue - American Express Platinum Card
+
 - **Issuer** — American Express (self-issued in NL; co-brand with Flying Blue / KLM-Air France)
 - **Terms** — <https://www.americanexpress.com/nl-nl/creditcard/flying-blue-platinum-card/>
 - **Measured** — `200` · readable: **yes** · fields on page: annualFee, points, conditions
@@ -413,6 +463,7 @@ unanswerable for two days.
 - **Trap** — The page renders the price inconsistently as both '€ 55 per maand' and '€ 55.00 per maand' (dot, not comma) — a decimal-comma-only parser will miss one form.
 
 #### American Express Business Entry Card
+
 - **Issuer** — American Express (self-issued in NL; NOT ICS)
 - **Terms** — <https://www.americanexpress.com/nl-nl/zakelijk/kaarten/business-entry-card/>
 - **Measured** — `200` · readable: **yes** · fields on page: annualFee, points, conditions
@@ -420,6 +471,7 @@ unanswerable for two days.
 - **Trap** — Priced PER YEAR, unlike the consumer cards which are per month — never apply one convention across the Amex set. 1 MR punt per uitgegeven euro. The €23.000 income figure sits two lines from the price and reads like a fee to a regex.
 
 #### American Express Business Green Card
+
 - **Issuer** — American Express (self-issued in NL; NOT ICS)
 - **Terms** — <https://www.americanexpress.com/nl-nl/zakelijk/kaarten/business-green-card/>
 - **Measured** — `200` · readable: **yes** · fields on page: annualFee, points, conditions
@@ -427,6 +479,7 @@ unanswerable for two days.
 - **Trap** — Three different euro-per-jaar figures on the page (€23.000 income, €50 extra card, €85 main fee) — the main fee is the LAST one, in the pricing block near the foot.
 
 #### American Express Business Gold Card
+
 - **Issuer** — American Express (self-issued in NL; NOT ICS)
 - **Terms** — <https://www.americanexpress.com/nl-nl/zakelijk/kaarten/business-gold-card/>
 - **Measured** — `200` · readable: **yes** · fields on page: annualFee, points, conditions
@@ -434,6 +487,7 @@ unanswerable for two days.
 - **Trap** — THE €270 ECHO — the single most cross-referenced price on the whole Amex NL site: '€ 270 per jaar' appears in a cross-sell block on ALL EIGHT consumer card pages, so an unqualified price search attributes it to the wrong product. Also sold from a second live URL, /nl-nl/zakelijk/kaarten/business-companion-card/gold/ (measured 200, readable) — that is the companion framing of THIS product, not a separate card.
 
 #### American Express Corporate Card
+
 - **Issuer** — American Express (self-issued in NL; NOT ICS)
 - **Terms** — <https://www.americanexpress.com/nl-nl/zakelijk/kaarten/corporate-card/>
 - **Measured** — `200` · readable: **yes** · fields on page: annualFee, points, conditions
@@ -442,6 +496,7 @@ unanswerable for two days.
 - **Trap** — availableToNL is FALSE deliberately: a Dutch resident cannot open this individually — it needs an employer-side Corporate Card programme. Listed so the next stage does not rediscover it and mistake it for a retail card. The fee is footnoted ('* De standaard jaarbijdrage…') well below the fold, not in the pricing block.
 
 #### American Express Corporate Gold Card
+
 - **Issuer** — American Express (self-issued in NL; NOT ICS)
 - **Terms** — <https://www.americanexpress.com/nl-nl/zakelijk/kaarten/corporate-gold-card/>
 - **Measured** — `200` · readable: **yes** · fields on page: annualFee, points, conditions
@@ -450,6 +505,7 @@ unanswerable for two days.
 - **Trap** — Corporate programme only, not individually openable. Fee is in a footnote, same pattern as the plain Corporate Card.
 
 #### KLM American Express Corporate Card
+
 - **Issuer** — American Express (self-issued in NL; co-brand with KLM / Flying Blue / bluebiz)
 - **Terms** — <https://www.americanexpress.com/nl-nl/zakelijk/kaarten/corporate-klm-card/>
 - **Measured** — `200` · readable: **yes** · fields on page: points, conditions
@@ -458,6 +514,7 @@ unanswerable for two days.
 - **Trap** — NO annual fee is published anywhere on this page — measured; the only euro figure is the €35 Flying Blue participation cost that is already bundled. Do NOT infer the annual fee from the €35. The card runs TWO loyalty currencies at once (personal Miles at 1,5/euro on KLM-AF-Transavia-Hertz, 1/euro elsewhere, plus corporate bluebiz credits) — both points, neither cashback.
 
 #### ICS Visa World Card
+
 - **Issuer** — International Card Services B.V. (ICS, an ABN AMRO subsidiary)
 - **Terms** — <https://www.icscards.nl/creditcard-aanvragen/visa-world-card>
 - **Measured** — `200` · readable: **yes** · fields on page: fxFee, annualFee, interest, conditions
@@ -465,6 +522,7 @@ unanswerable for two days.
 - **Trap** — Koersopslag 2% IS on this page, stated as '2% voor EU landen zonder euro en voor landen buiten EU'. Two URLs serve a BYTE-IDENTICAL page (md5-verified): /creditcard-aanvragen/visa-world-card and /ics-producten/cards/visa-world-card. The 'interest' here is SAVINGS interest on a positive card balance (1,25%), not borrowing interest — the borrowing rate is on a separate page. Zero occurrences of 'cashback'.
 
 #### ICS Visa World Card Gold
+
 - **Issuer** — International Card Services B.V. (ICS, an ABN AMRO subsidiary)
 - **Terms** — <https://www.icscards.nl/creditcard-aanvragen/visa-world-card-gold>
 - **Measured** — `200` · readable: **yes** · fields on page: annualFee, interest, conditions
@@ -472,6 +530,7 @@ unanswerable for two days.
 - **Trap** — THE IMPORTANT TRAP IN THIS BUCKET: unlike its three Visa siblings this page carries NO koersopslag line at all — grep for 'opslag', 'vreemde valuta' and 'munteenheid' returned zero hits. The 2% has to come from a TIPS page, https://www.icscards.nl/tips/wat-kost-een-creditcard, which states 2% for 'de Visa Card, Visa World Card Gold en Platinum'. Whatever collects rates must capture the 15 Sep 2026 effective date, not just the number.
 
 #### ICS Visa World Card Platinum
+
 - **Issuer** — International Card Services B.V. (ICS, an ABN AMRO subsidiary)
 - **Terms** — <https://www.icscards.nl/creditcard-aanvragen/visa-world-card-platinum>
 - **Measured** — `200` · readable: **yes** · fields on page: fxFee, annualFee, interest, conditions
@@ -479,6 +538,7 @@ unanswerable for two days.
 - **Trap** — Koersopslag 2% present on page. The only ICS consumer card with the Uitgebreide Doorlopende Reisverzekering, and the one card Consumentenbond flags as not requiring the whole trip to be paid on the card for cover. Zero 'cashback' hits.
 
 #### ICS Visa World Card Panda
+
 - **Issuer** — International Card Services B.V. (ICS, an ABN AMRO subsidiary) — co-brand with Wereld Natuur Fonds (WWF)
 - **Terms** — <https://www.icscards.nl/creditcard-aanvragen/visa-world-card-panda>
 - **Measured** — `200` · readable: **yes** · fields on page: fxFee, annualFee, interest, conditions
@@ -486,6 +546,7 @@ unanswerable for two days.
 - **Trap** — The one surviving Dutch charity co-brand. Economically identical to the plain Visa World Card (same €42,95, same 2%, same 180-day purchase insurance, same 1,25%) — the only difference is the WWF donation. Do not model the donation as a user-facing benefit.
 
 #### ICS Mastercard Classic
+
 - **Issuer** — International Card Services B.V. (ICS, an ABN AMRO subsidiary)
 - **Terms** — <https://www.icscards.nl/creditcard-aanvragen/mastercard-classic>
 - **Measured** — `200` · readable: **yes** · fields on page: fxFee, annualFee, interest, conditions
@@ -493,6 +554,7 @@ unanswerable for two days.
 - **Trap** — Koersopslag 2% present. PATH TRAP: the ICS Mastercard pages live ONLY under /creditcard-aanvragen/ — every /ics-producten/cards/mastercard-* path measured 404, so a crawler that assumes the Visa path shape silently loses all three Mastercards.
 
 #### ICS Mastercard Gold
+
 - **Issuer** — International Card Services B.V. (ICS, an ABN AMRO subsidiary)
 - **Terms** — <https://www.icscards.nl/creditcard-aanvragen/mastercard-gold>
 - **Measured** — `200` · readable: **yes** · fields on page: fxFee, annualFee, interest, conditions
@@ -500,6 +562,7 @@ unanswerable for two days.
 - **Trap** — Koersopslag 2% present. This is the card every former de Bijenkorf Card holder was migrated onto in March 2022. It has its own cardholder sub-site at icscards.nl/gold/… — a DIFFERENT page tree — and the historic Bijenkorf notice there, /gold/info/jaarbijdrage-bijenkorf, now measures 404.
 
 #### ICS Mastercard Black
+
 - **Issuer** — International Card Services B.V. (ICS, an ABN AMRO subsidiary)
 - **Terms** — <https://www.icscards.nl/creditcard-aanvragen/mastercard-black>
 - **Measured** — `200` · readable: **yes** · fields on page: fxFee, annualFee, interest, conditions
@@ -507,6 +570,7 @@ unanswerable for two days.
 - **Trap** — Koersopslag 2% present. Top of the ICS consumer range. Zero 'cashback' hits.
 
 #### ICS Visa World Card Business
+
 - **Issuer** — International Card Services B.V. (ICS, an ABN AMRO subsidiary)
 - **Terms** — <https://www.icscards.nl/zakelijk/zakelijke-creditcards-vergelijken>
 - **Measured** — `200` · readable: **yes** · fields on page: fxFee, annualFee, interest, conditions
@@ -514,6 +578,7 @@ unanswerable for two days.
 - **Trap** — Realistic card for a DGA. The per-product page /zakelijk/zakelijke-creditcard-aanvragen/visa-world-card-business (200, readable) shows the €45 but NOT the FX markup; this comparison page is the only ICS page that puts the business Wisselkoersopslag of 2,5% next to the product. The business rate is 2,5%, HIGHER than the 2% on consumer cards — do not carry the consumer number across. The per-product page also lists all four business prices in a footer strip (€45 / €154 / €43 / €48), which is exactly how the wrong one gets picked up.
 
 #### ICS Visa World Card Business Gold
+
 - **Issuer** — International Card Services B.V. (ICS, an ABN AMRO subsidiary)
 - **Terms** — <https://www.icscards.nl/zakelijk/zakelijke-creditcards-vergelijken>
 - **Measured** — `200` · readable: **yes** · fields on page: fxFee, annualFee, interest, conditions
@@ -521,6 +586,7 @@ unanswerable for two days.
 - **Trap** — Own page at /zakelijk/zakelijke-creditcard-aanvragen/visa-world-card-business-gold (200, readable) but again without the FX markup. The only card in the ICS business range whose top volume tier has no number at all — record that as 'op aanvraag', never as equal to the €154 tier.
 
 #### ICS Mastercard Business
+
 - **Issuer** — International Card Services B.V. (ICS, an ABN AMRO subsidiary)
 - **Terms** — <https://www.icscards.nl/zakelijk/zakelijke-creditcards-vergelijken>
 - **Measured** — `200` · readable: **yes** · fields on page: fxFee, annualFee, interest, conditions
@@ -528,6 +594,7 @@ unanswerable for two days.
 - **Trap** — Cheapest ICS business card. Own page at /zakelijk/zakelijke-creditcard-aanvragen/mastercard-business (200, readable) carries the €43 and the €2,50 insurance add-on but not the FX markup. The €2,50 line sits close to the fee and is a plausible mis-pick.
 
 #### ICS Mastercard Corporate
+
 - **Issuer** — International Card Services B.V. (ICS, an ABN AMRO subsidiary)
 - **Terms** — <https://www.icscards.nl/zakelijk/zakelijke-creditcards-vergelijken>
 - **Measured** — `200` · readable: **yes** · fields on page: fxFee, annualFee, interest, conditions
@@ -535,6 +602,7 @@ unanswerable for two days.
 - **Trap** — Own page at /zakelijk/zakelijke-creditcard-aanvragen/mastercard-corporate (200, readable). Despite the name this IS applied for directly on icscards.nl, unlike the Amex Corporate cards which need an employer programme — the word 'corporate' means different things at the two issuers.
 
 #### ANWB Visa Classic Card
+
 - **Issuer** — International Card Services B.V. (ICS) on behalf of ANWB
 - **Terms** — <https://www.anwb.nl/creditcard/informatie/kosten>
 - **Measured** — `200` · readable: **yes** · fields on page: fxFee, annualFee, conditions
@@ -542,6 +610,7 @@ unanswerable for two days.
 - **Trap** — The tariff page is MULTI-PRODUCT: all three ANWB tiers (€29,95 / €39,95 / €51,95) appear as three bare prices in a row with the card names in a separate preceding block — the classic mis-attribution setup. Koersopslag 2% is stated there and applies to the whole range. The per-card page /creditcard/visa-card (200, readable) has the fee and a clean 'Rekenvoorbeeld' but NO koersopslag.
 
 #### ANWB Visa Silver Card
+
 - **Issuer** — International Card Services B.V. (ICS) on behalf of ANWB
 - **Terms** — <https://www.anwb.nl/creditcard/silver-card>
 - **Measured** — `200` · readable: **yes** · fields on page: annualFee, conditions
@@ -549,6 +618,7 @@ unanswerable for two days.
 - **Trap** — MEASURED TRAP: this page also contains '29,95 per jaar' in prose ('Je hebt al een ANWB Creditcard vanaf € 29,95 per jaar'), which is the CLASSIC card's price. A first-match regex returns €29,95 for the Silver Card. Only the 'Rekenvoorbeeld' block is reliable. No koersopslag here — take the 2% from /creditcard/informatie/kosten.
 
 #### ANWB Visa Gold Card
+
 - **Issuer** — International Card Services B.V. (ICS) on behalf of ANWB
 - **Terms** — <https://www.anwb.nl/creditcard/gold-card>
 - **Measured** — `200` · readable: **yes** · fields on page: annualFee, conditions
@@ -556,6 +626,7 @@ unanswerable for two days.
 - **Trap** — WORST PAGE IN THE BUCKET for wrong numbers — FOUR distinct euro-per-jaar figures (€29,95 cross-reference to the Classic, €25,98 promo year 1, €51,95 steady state, €17,75 membership), and a first-match regex returns €29,95, the wrong product entirely. Only the second 'Totaalprijs' block gives the steady-state truth. Quoting the card fee alone understates real cost by ~34% across the ANWB range.
 
 #### Nexo Card
+
 - **Issuer** — Nexo (dual Credit/Debit mode card; the issuing e-money institution is NOT named anywhere on the page)
 - **Terms** — <https://nexo.com/crypto-card>
 - **Measured** — `200` · readable: **yes** · fields on page: cashback, fxFee, interest, conditions
@@ -565,6 +636,7 @@ unanswerable for two days.
 ### Spaarrekeningen (34)
 
 #### bunq Termijndeposito
+
 - **Issuer** — bunq B.V.
 - **Terms** — <https://www.bunq.com/nl-nl/personal/features/savings-accounts>
 - **Measured** — `200` · readable: **yes** · fields on page: interest, conditions
@@ -572,6 +644,7 @@ unanswerable for two days.
 - **Trap** — Only found as a section on the savings-accounts page. A guessed dedicated URL (/nl-nl/personal/features/term-deposit) MEASURED 404 — no standalone terms page exists at that path. The page points to a 'Termijndeposito-pagina' whose real URL was not located.
 
 #### N26 Instant Savings
+
 - **Issuer** — N26 Bank AG; German Deposit Guarantee Scheme
 - **Terms** — <https://n26.com/en-eu/savings-account>
 - **Measured** — `200` · readable: **yes** · fields on page: interest, conditions
@@ -579,6 +652,7 @@ unanswerable for two days.
 - **Trap** — MEASURED CONTRADICTION between two N26 pages fetched the same day: /en-eu/savings-account and the /en-eu/metal footnote both say 0,30% Standard & Smart / 0,50% Go / 1,50% Metal, while the /en-eu/plans comparison table says 0,25% / 0,25% / 0,55% / 1,50%. Whoever collects the number must pick a source and say which.
 
 #### Trade Republic spaarrekening (rente op kassaldo)
+
 - **Issuer** — Trade Republic Bank GmbH; funds held at partner banks — 'je krijgt rente van onze partnerbanken'
 - **Terms** — <https://traderepublic.com/nl-nl/kaart/_payload.json>
 - **Measured** — `200 (payload) / 200 shell (HTML)` · readable: **yes via SSR payload** · fields on page: interest, conditions
@@ -586,6 +660,7 @@ unanswerable for two days.
 - **Trap** — Same _payload.json route as the card; the plain HTML at /nl-nl is a 488-char shell and /nl-nl/pricing, /nl-nl/tarieven, /nl-nl/savings all 404. A search-result summary reported a flat 3% with no cap — never quote this rate without the new-customer clause. Note it is a broker cash-balance rate, not a Dutch spaarrekening.
 
 #### Trading 212 interest on cash
+
 - **Issuer** — Trading 212 Markets Ltd / Trading 212 EU GmbH; cash at third-party banks or in Qualifying Money Market Funds
 - **Terms** — <https://helpcentre.trading212.com/hc/en-us/articles/15475153380637-What-is-interest-on-cash>
 - **Measured** — `200` · readable: **yes (conditions only)** · fields on page: conditions
@@ -593,6 +668,7 @@ unanswerable for two days.
 - **Trap** — THE RATE ITSELF IS UNREACHABLE BY FETCH. The help article explicitly points at the 'Terms & Fees' page on www.trading212.com, and that host is the Cloudflare 403. Conditions readable on helpcentre, rate readable nowhere. A jurisdiction carve-out also exists (German residents under T212 EU GmbH lost interest on non-EUR balances from 5 Jan 2026), so NL treatment should be confirmed, not assumed.
 
 #### Bigbank Flexibel Sparen
+
 - **Issuer** — Bigbank AS (Estonia) — Estonian DGS per geld.nl
 - **Terms** — <https://www.bigbank.nl/sparen/flexibel-sparen/>
 - **Measured** — `200` · readable: **yes** · fields on page: interest, conditions, annualFee
@@ -600,6 +676,7 @@ unanswerable for two days.
 - **Trap** — Cleanest source in the bucket: action rate, standard rate and the 6-month window all sit next to each other in plain HTML. IMPORTANT: rates.ts's STATIC fallback still carries 3,10/2,10 for Bigbank, while both the live provider page and live geld.nl say 2,75/2,00 — the bundled snapshot is stale by 0,35pp.
 
 #### bunq spaarrekening (MassInterest)
+
 - **Issuer** — bunq B.V. (NL) — Dutch DGS
 - **Terms** — <https://help.bunq.com/articles/what-massinterest-rate-applies-to-me>
 - **Measured** — `200` · readable: **yes** · fields on page: interest, conditions
@@ -607,6 +684,7 @@ unanswerable for two days.
 - **Trap** — TRAP — geld.nl encodes this as 'actierente 3,01% t/m 01-01-2027, daarna 1,50%', which is the WRONG MECHANISM: it is a balance-threshold split, not a promo window, and an existing saver holding a flat balance ends up on the base rate for the whole balance. rates.ts would emit 'Actierente, daarna 1,50%' — misleading. Second trap: the identical '3,01%' headline appears on all four bunq plan pages, which cannot be right if the rate is plan-dependent as bunq's own FAQ says; the per-plan/per-threshold table is on no HTML page (it sits behind 'Bekijk de spaarrentetarieven en voorwaarden' and the in-app savings tab). bunq's marketing site is useless here: www.bunq.com/nl/pricing is a 200 JS shell (2.978 chars, zero percentages) and /nl/rates, /rates, /nl/interest-rates all 404. Only the help-centre article is machine-readable.
 
 #### Santander Consumer Bank Spaarrekening
+
 - **Issuer** — Santander Consumer Bank — the page footer shows 'RPR Gent, BTW BE0763.791.559' (Belgian entity) while geld.nl labels the DGS Spanish; the two disagree
 - **Terms** — <https://www.santanderconsumerbank.nl/sparen>
 - **Measured** — `200` · readable: **yes** · fields on page: interest, conditions
@@ -614,6 +692,7 @@ unanswerable for two days.
 - **Trap** — CONFLICT, UNRESOLVED — the bank's own page says 2,50%/2,00%; geld.nl says 3,01% actierente / 2,10% standaard over 6 months. Neither page carries a readable 'geldig per' date, so which is current cannot be established. Do not merge either number without a tiebreak. Domain trap: santander.nl is the wrong host and santanderconsumer.nl does not resolve at all (curl rc=6); only santanderconsumerbank.nl serves this.
 
 #### Garanti BBVA International Gouden Internet Rekening
+
 - **Issuer** — Garanti BBVA International N.V. (NL) — Dutch DGS per geld.nl
 - **Terms** — <https://garantibank.nl/products/gouden-internet-rekening>
 - **Measured** — `403 (Akamai)` · readable: **bot-blocked** · fields on page: none
@@ -621,6 +700,7 @@ unanswerable for two days.
 - **Trap** — Two traps. (1) The obvious domain garantibbvainternational.nl does not resolve (curl rc=6, DNS failure); the live host is garantibank.nl. (2) garantibank.nl returns a 407-byte Akamai 'Access Denied' page (reference URL errors.edgesuite.net) — the same bot-block family as ING and Rabobank. Needs the agent, not a fetch.
 
 #### DHB Bank S@veOnlinerekening
+
 - **Issuer** — Demir-Halk Bank (Nederland) N.V. — Dutch DGS
 - **Terms** — <https://www.dhbbank.nl/dhb-saveonlinerekening>
 - **Measured** — `200` · readable: **yes** · fields on page: interest, conditions, annualFee
@@ -628,6 +708,7 @@ unanswerable for two days.
 - **Trap** — geld.nl gets the 3,00/1,85/6-month triple right but has NO FIELD for the €50.000 cap, so a switching suggestion built on geld.nl alone overstates the gain for anyone holding more than 50k. The cap exists only on the provider page. Correct URLs are flat (/dhb-saveonlinerekening, /welkomstactie) — /nl/sparen and /nl/particulier/sparen both 404.
 
 #### Anadolubank Alfa Slimmer Sparen
+
 - **Issuer** — Anadolubank Nederland N.V. — Dutch DGS
 - **Terms** — <https://www.anadolubank.nl/>
 - **Measured** — `200` · readable: **yes** · fields on page: interest, conditions
@@ -635,6 +716,7 @@ unanswerable for two days.
 - **Trap** — Rates live on the ROOT page only — /sparen/ and /particulier/sparen/ both 404. Multi-product headline: the Alfa Depositorekening 2.80% (1 jaar) sits directly beside the 3,00% savings promo and is written with a DOT decimal ('2.80%') while the savings rate uses a comma ('3,00%') — a naive numeric parse mixes the two up.
 
 #### Scalable Capital Scalable Overnight
+
 - **Issuer** — Scalable Capital Bank GmbH (Germany) — German DGS per geld.nl
 - **Terms** — <https://nl.scalable.capital/>
 - **Measured** — `200` · readable: **yes** · fields on page: interest, conditions
@@ -642,6 +724,7 @@ unanswerable for two days.
 - **Trap** — Not a deposit product in the normal sense — the footnote admits the money may sit in money-market funds rather than a guaranteed deposit, a materially different risk from every other row in this bucket. The RATE is not gated behind the paid PRIME+ tier (€4,99/mnd); PRIME+ only changes the deposit-guarantee spreading. Do not use de.scalable.capital/en/prime-broker — that is the German site with different products and prices.
 
 #### Raisin spaarrekening (platform, 19 partner banks)
+
 - **Issuer** — Raisin GmbH is the platform; the deposit is held by the partner bank (Banca Progetto, Banca CF+, FCM Bank, Inbank, Morrow Bank, Nordax Bank, Renault Bank, Avarda Bank, Lea Bank, BW-Bank, Resurs Bank, Collector, Carrefour Banque S.A, Imprebanca, Izola Bank, EuroExtra, Klarna, Bank B, Alisa Bank)
 - **Terms** — <https://www.raisin.nl/spaarrekening/>
 - **Measured** — `200` · readable: **yes** · fields on page: interest, conditions
@@ -649,6 +732,7 @@ unanswerable for two days.
 - **Trap** — The landing-page headline ('Tot 3,05%', and elsewhere 'tot wel 3,60%') is a marketing rollup across all partners and all terms — not a rate. The USABLE source is the per-partner page at raisin.com/nl-nl/banken/<slug>/, verified for Klarna (200, readable, clean table). The other 18 partner pages were NOT fetched — the pattern is verified on one and assumed for the rest. BUG this exposes in rates.ts: it sets freeWithdrawal:true for every geld.nl 'Spaarrekening' row, which is FALSE for Lea Bank's opzegtermijn product and unverified for the four 'met voorwaarden' products. The condition is right there in geld.nl's own productnaam field, unread.
 
 #### Klarna Flex rekening
+
 - **Issuer** — Klarna Bank AB (Sweden) — Swedish DGS
 - **Terms** — <https://www.klarna.com/nl/flex-rekening/>
 - **Measured** — `200` · readable: **yes** · fields on page: interest, annualFee
@@ -656,6 +740,7 @@ unanswerable for two days.
 - **Trap** — TRAP — Klarna appears TWICE on geld.nl at two different rates through two different channels: direct 'Klarna Flex spaarrekening' 1,95% and 'Klarna (via Raisin)' 1,80%. Same bank, same guarantee scheme, 0,15pp apart. rates.ts's dedupe-by-bank keeps both only because the strings differ; normalising the bank name would silently drop one. Correct URL is /nl/flex-rekening/ — /nl/sparen/, /nl/spaarrekening/ and /nl/spaargeld/ all 404.
 
 #### Ayvens Bank Flexibel Sparen
+
 - **Issuer** — Ayvens Bank N.V. (formerly LeasePlan Bank, renamed Oct 2024) — Dutch DGS
 - **Terms** — <https://www.ayvensbank.nl/actuele-rentestanden>
 - **Measured** — `200` · readable: **yes** · fields on page: interest
@@ -663,6 +748,7 @@ unanswerable for two days.
 - **Trap** — 'LeasePlan Bank' NO LONGER EXISTS as a brand — do not search for it. The page is partly React ('Loading component…' placeholders survive stripping) but the 1,85% and the whole deposito ladder ARE in the static HTML. Careful: the deposito ladder renders inside a CALCULATOR dropdown, so the highest number on the page (3,00%) is a 5-year lock-up, not the savings rate. /sparen/flexibel-sparen 404s; use /actuele-rentestanden.
 
 #### Argenta Internetspaarrekening
+
 - **Issuer** — Argenta Spaarbank N.V., Dutch branch — Belgian DGS per geld.nl
 - **Terms** — <https://www.argenta.nl/sparen/>
 - **Measured** — `200` · readable: **marketing-only** · fields on page: interest (wrong product only)
@@ -670,6 +756,7 @@ unanswerable for two days.
 - **Trap** — TRAP — the ONLY rate rendered on argenta.nl/sparen/ is '2,50% 1 jaar vast Termijndeposito'. The internetspaarrekening's own 1,80% is NOT on the page (it sits behind a 'Bekijk alle spaarrentes' link) and /sparen/internetspaarrekening 404s. Anyone scraping the visible figure records the deposito rate as the savings rate — a 0,70pp error in the wrong direction.
 
 #### Openbank Welkom Spaarrekening
+
 - **Issuer** — Open Bank S.A. (Santander Group, Madrid) — Spanish DGS
 - **Terms** — <https://www.openbank.nl/spaarrekening>
 - **Measured** — `200` · readable: **yes** · fields on page: interest, conditions, annualFee
@@ -677,6 +764,7 @@ unanswerable for two days.
 - **Trap** — BIGGEST COVERAGE GAP IN THE SWEEP — geld.nl lists Openbank at 1,80%/1,80% with an EMPTY actierente field, so LaVega currently cannot see the 2,80% welcome rate at all. That is a 1,00pp understatement: geld.nl will FAIL to recommend a switch that is genuinely one of the best flexible offers on the list. The mirror image of the overstatement risk, and it needs its own source. Openbank also publishes a precontractual PDF at /assets/static/nl/pdf/Products/Precontractuele_informatie_Welkom_Spaarrekening.pdf (surfaced in search, not fetched). Fully static HTML, easily parsed.
 
 #### Openbank Open Spaarrekening
+
 - **Issuer** — Open Bank S.A. (Santander Group, Madrid) — Spanish DGS
 - **Terms** — <https://www.openbank.nl/gratis-spaarrekening>
 - **Measured** — `200` · readable: **yes** · fields on page: interest, conditions, annualFee
@@ -684,6 +772,7 @@ unanswerable for two days.
 - **Trap** — The clearest, most honest page in the whole sweep — rate, cap, the 0,00% above the cap and a worked example all sit in context. This is the STANDARD rate an existing customer actually gets, and it matches geld.nl exactly. Note /open-spaarrekening 404s; the terms are also described inside the Welkom Spaarrekening page's FAQ at /spaarrekening. Deposit protection is SPANISH, not Dutch, which matters for a 'switch to X' recommendation.
 
 #### Yapi Kredi Bank Euro-Plus Spaarrekening
+
 - **Issuer** — Yapi Kredi Bank Nederland N.V. — Dutch DGS
 - **Terms** — <https://www.yapikredi.nl/>
 - **Measured** — `200` · readable: **yes** · fields on page: interest, conditions
@@ -691,6 +780,7 @@ unanswerable for two days.
 - **Trap** — geld.nl IS STALE HERE — it lists Yapi Kredi at 1,80% with standaardrente 1,79% and NO actierente flag, while the bank's own dated page advertises 3,30% for new customers. A 1,50pp miss, dated one day before it was measured. Rates live on the ROOT page (/sparen/ 404s). Multi-product: three Euro-Plus Deposito rows (3,10% 1y / 3,20% 2y / 3,35% 5y) sit in the SAME table as the spaarrekening.
 
 #### NIBC Spaarrekening
+
 - **Issuer** — NIBC Bank N.V. — Dutch DGS
 - **Terms** — <https://www.nibc.nl/sparen/>
 - **Measured** — `200` · readable: **yes** · fields on page: interest, conditions, annualFee
@@ -698,6 +788,7 @@ unanswerable for two days.
 - **Trap** — geld.nl lists NIBC TWICE (Spaarrekening 1,54% and Kwartaalspaarrekening 1,60%) and rates.ts's dedupe-by-bank throws THIS one away, keeping only the Kwartaalspaarrekening. Small discrepancy too: geld.nl says 1,54%, NIBC's own page says 1,55%.
 
 #### NIBC Kwartaalspaarrekening
+
 - **Issuer** — NIBC Bank N.V. — Dutch DGS
 - **Terms** — <https://www.nibc.nl/sparen/>
 - **Measured** — `200` · readable: **yes** · fields on page: interest, conditions, annualFee
@@ -705,6 +796,7 @@ unanswerable for two days.
 - **Trap** — TRAP — the page's own <title> is 'Alles over sparen | Tot 3,01% rente' and 3,01% is the TERMIJNDEPOSITO, not either savings account. A title-scrape or a max()-over-percentages yields 3,01%, nearly double the real flexible rate. Three products on one URL. geld.nl flattens the 'tot' qualifier into a flat 1,60%.
 
 #### Lloyds Bank Spaarrekening
+
 - **Issuer** — Lloyds Bank GmbH — German DGS per geld.nl
 - **Terms** — <https://www.lloydsbank.nl/sparen/>
 - **Measured** — `200` · readable: **yes** · fields on page: interest, conditions, annualFee
@@ -712,6 +804,7 @@ unanswerable for two days.
 - **Trap** — Matches geld.nl exactly. Watch the URL: the lloydsbank.nl root is almost entirely mortgages and /sparen/spaarrente/ 404s. Only /sparen/ works.
 
 #### Nationale-Nederlanden Internetsparen
+
 - **Issuer** — Nationale-Nederlanden Bank N.V. — Dutch DGS
 - **Terms** — <https://www.nn.nl/Particulier/Sparen/Internetsparen.htm>
 - **Measured** — `200` · readable: **yes** · fields on page: interest, conditions
@@ -719,6 +812,7 @@ unanswerable for two days.
 - **Trap** — Use the Internetsparen deep link, not the hub: nn.nl/Particulier/Sparen.htm returns 200 but strips to 2.202 chars of nav with zero rate content (one stray 2,30% in raw HTML that does not survive stripping — exactly the CSS/percent-sign artefact trap). geld.nl reports a flat 1,30% and therefore OVERSTATES the return for anyone holding more than €25.000.
 
 #### Centraal Beheer RentePlús Rekening
+
 - **Issuer** — Achmea Bank N.V. (Centraal Beheer) — Dutch DGS
 - **Terms** — <https://www.centraalbeheer.nl/sparen>
 - **Measured** — `200` · readable: **yes** · fields on page: interest, conditions
@@ -726,6 +820,7 @@ unanswerable for two days.
 - **Trap** — The only page in the sweep that timestamps its own rate, and the timestamp is STALE (10-07-2025). geld.nl currently agrees (1,50% / 1,49% standaard) so the figure is probably still live, but the provider page cannot be used to confirm freshness. Multi-product: the RenteVast Rekening 3,00% (10-year lock-up) sits directly below and is the largest number on the page.
 
 #### Knab Flexibel Sparen
+
 - **Issuer** — Knab (Aegon Bank N.V. / BAWAG Group) — Austrian DGS per geld.nl
 - **Terms** — <https://www.knab.nl/sparen>
 - **Measured** — `200` · readable: **yes** · fields on page: interest, conditions, annualFee
@@ -733,6 +828,7 @@ unanswerable for two days.
 - **Trap** — SAME MULTI-PRODUCT TRAP AS THE KNAB CARD PAGE, and it appears on BOTH Knab URLs. /sparen carries four rates at once (Flexibel 1,25%, Deposito 2,10%* at 5 years, Pensioensparen 2,50%* at 5–20 years, and the 0,75%+1,25% bonus action), so a model asked for 'the Knab savings rate' can plausibly return 2,50%, 2,10% or 2,00% — all wrong. /tarieven carries the same account next to the betaalpas and creditcard blocks. geld.nl carries the plain 1,25% and does NOT carry the 0,75% bonusrente action.
 
 #### ABN AMRO Direct Sparen
+
 - **Issuer** — ABN AMRO Bank N.V. — Dutch DGS
 - **Terms** — <https://www.abnamro.nl/nl/prive/sparen/rente.html>
 - **Measured** — `200` · readable: **marketing-only** · fields on page: none
@@ -740,6 +836,7 @@ unanswerable for two days.
 - **Trap** — CONFIRMS THE ABN SHELL FINDING, now for savings. Three URLs measured, all 200 and all ~1,1MB: /nl/prive/sparen/rente.html, /nl/prive/sparen/rente/index.html and /nl/prive/sparen/direct-sparen.html. All three strip to ~10.000 chars of pure navigation with ZERO percentage figures of any kind. The rate table is client-rendered. Note this is the OPPOSITE of ABN's card tariffs, where the buitenlands-geld sibling page IS readable — ABN is readable for cards and not for savings.
 
 #### ING Oranje Spaarrekening
+
 - **Issuer** — ING Bank N.V. — Dutch DGS
 - **Terms** — <https://www.ing.nl/particulier/sparen/spaarrente>
 - **Measured** — `connection killed` · readable: **bot-blocked** · fields on page: none
@@ -747,6 +844,7 @@ unanswerable for two days.
 - **Trap** — Re-measured twice: HTTP/2 dies with curl error 92 'stream 1 was not closed cleanly: INTERNAL_ERROR', and forcing --http1.1 dies with curl error 56 'Recv failure: Operation timed out'. Akamai kills the connection rather than answering. No fetch strategy will work. geld.nl is the only source.
 
 #### Rabobank Rabo SpaarRekening
+
 - **Issuer** — Coöperatieve Rabobank U.A. — Dutch DGS
 - **Terms** — <https://www.rabobank.nl/particulieren/sparen/rente>
 - **Measured** — `403` · readable: **bot-blocked** · fields on page: none
@@ -754,6 +852,7 @@ unanswerable for two days.
 - **Trap** — 403 with an 18KB Dutch SOFT-ERROR page ('Sorry, er gaat iets niet goed…') rather than a hard block page — easy to mistake for a real page if you only check that bytes>0. Always check the status code, not the body size.
 
 #### ASN Bank ASN Ideaalsparen
+
 - **Issuer** — ASN Bank (de Volksbank N.V.) — Dutch DGS
 - **Terms** — <https://www.asnbank.nl/sparen/rente.html>
 - **Measured** — `200` · readable: **yes** · fields on page: interest, conditions
@@ -761,6 +860,7 @@ unanswerable for two days.
 - **Trap** — A NASTY TRAP. The page is DOMINATED by ASN Pensioendeposito and Pensioen Uitkeringsrekening ladders running '10 jaar vast 2,70% … 20 jaar vast 3,10% … 30 jaar vast 3,20%'. The savings table is a small block among them. Taking the largest percentage gives 3,20% against a real flexible rate of 1,30% — a 1,90pp error. Name mismatch too: geld.nl calls it 'ASN Ideaalsparen', ASN's own page calls it 'ASN Sparen'.
 
 #### SNS Internet Sparen
+
 - **Issuer** — SNS Bank (de Volksbank N.V.) — Dutch DGS
 - **Terms** — <https://www.snsbank.nl/particulier/sparen/rente-spaarrekeningen.html>
 - **Measured** — `200` · readable: **yes** · fields on page: interest, conditions
@@ -768,6 +868,7 @@ unanswerable for two days.
 - **Trap** — MISSING FROM GELD.NL ENTIRELY — SNS does not appear in any of the 46 rows on geld.nl's spaarrente overview, so LaVega currently cannot see one of the largest retail savings accounts in the Netherlands. Needs its own source. Also: the /particulier/sparen.html hub is 200 but strips to 6.516 chars with zero percentages; only the rente-spaarrekeningen.html deep link carries the table — which holds FIVE tiered tables at once (Zilvervloot Sparen 1,50%, SNS Jeugdsparen 1,70%, SNS Jongeren Sparen 1,50/1,20/1,00 and beleggingsrekening cash rates).
 
 #### RegioBank Spaar-op-Maat Vrij
+
 - **Issuer** — RegioBank (de Volksbank N.V.) — Dutch DGS
 - **Terms** — <https://www.regiobank.nl/sparen/actuele-rentes.html>
 - **Measured** — `200` · readable: **yes** · fields on page: interest, conditions
@@ -776,6 +877,7 @@ unanswerable for two days.
 - **Trap** — availableToNL is FALSE on purpose — a Dutch resident who is not already a RegioBank customer cannot open this, so it must NEVER appear in a 'switch to X' suggestion even though the rate table is live and readable. Correctly absent from geld.nl. URL trap: every /particulier/… path 404s; the working paths are /sparen/actuele-rentes.html and /sparen/spaar-op-maat-vrij.html.
 
 #### Triodos Bank Internet Sparen
+
 - **Issuer** — Triodos Bank N.V. — Dutch DGS
 - **Terms** — <https://www.triodos.nl/sparen>
 - **Measured** — `200` · readable: **yes** · fields on page: interest, conditions
@@ -783,6 +885,7 @@ unanswerable for two days.
 - **Trap** — geld.nl reports a flat 1,15%, which is only true on the FIRST €10.000 — at €50.000 the blended rate is materially lower, so a switching suggestion built on the geld.nl figure OVERSTATES the gain. Multi-product page: Triodos Spaar Deposito 2,00% (1 jaar), a kinderrekening 'tot 1,75%', Zakelijke Spaarrekening 1,15% and Zakelijk Spaar Deposito 2,00% all share the URL.
 
 #### Brand New Day De Spaarrekening
+
 - **Issuer** — Brand New Day Bank N.V. — Dutch DGS
 - **Terms** — <https://new.brandnewday.nl/spaarrekening/>
 - **Measured** — `200` · readable: **yes** · fields on page: interest, conditions
@@ -790,6 +893,7 @@ unanswerable for two days.
 - **Trap** — WORST TRAP IN THE SWEEP — Brand New Day runs TWO live official sites that CONTRADICT each other on the same product. new.brandnewday.nl/spaarrekening/ returns 200 and says 1,30%; www.brandnewday.nl/sparen.html ALSO returns 200 and says 'Brand New Day Spaarrekening 0,25% per jaar'. A 1,05pp gap between two pages the bank itself serves, and the STALE one sits on the primary www domain and outranks the new one. geld.nl backs 1,30%, which is the tiebreak used — but neither page is dated, so this is an inference, not a proof. Additional noise: www.brandnewday.nl/, /sparen, /spaarrekening, /particulier/sparen and /producten/spaarrekening all 404 or are JS shells.
 
 #### Nexent Bank Spaarrekening
+
 - **Issuer** — Nexent Bank N.V. — Dutch DGS per geld.nl
 - **Terms** — <https://www.nexentbank.nl/>
 - **Measured** — `200` · readable: **yes** · fields on page: interest, conditions
@@ -797,6 +901,7 @@ unanswerable for two days.
 - **Trap** — geld.nl MISSES THIS ACTION RATE — it lists Nexent at 1,25%/1,25% with an empty actierente field, a 1,50pp understatement. The second of three geld.nl action-rate blind spots alongside Openbank and Yapi Kredi. Rates on the root only (/sparen/ 404s). Multi-product headline: a Termijndeposito 3,65% (10 jaar) is the biggest number on the page.
 
 #### Revolut Dagelijkse Spaarrekening
+
 - **Issuer** — Revolut Bank UAB (Lithuania) — Lithuanian DGS per geld.nl
 - **Terms** — <https://www.revolut.com/nl-NL/savings/>
 - **Measured** — `403 (Cloudflare)` · readable: **bot-blocked** · fields on page: none
@@ -806,6 +911,7 @@ unanswerable for two days.
 ### Beleggings- en rentefondsen (5)
 
 #### bunq beleggingsrekening
+
 - **Issuer** — Ginmon (execution/custody) inside the bunq app
 - **Terms** — <https://www.bunq.com/nl-nl/personal/plans/bunq-pro>
 - **Measured** — `200` · readable: **yes** · fields on page: conditions
@@ -813,6 +919,7 @@ unanswerable for two days.
 - **Trap** — No standalone terms page found; the only figures live inside the plan pages. bunq's own disclaimer says 'Investment features have separate terms'. A discount off an unpublished base is not a price.
 
 #### N26 flexible cash fund
+
 - **Issuer** — Fidelity International (fund manager), distributed by N26
 - **Terms** — <https://n26.com/en-eu/metal>
 - **Measured** — `200` · readable: **yes** · fields on page: interest, conditions
@@ -820,6 +927,7 @@ unanswerable for two days.
 - **Trap** — Sits next to N26 Instant Savings in the same marketing block, so a fund yield is easy to mistake for a savings rate. It is not a savings rate.
 
 #### Wise Rente
+
 - **Issuer** — Wise Assets Europe AS
 - **Terms** — <https://wise.com/nl/pricing/>
 - **Measured** — `200` · readable: **yes** · fields on page: annualFee, conditions
@@ -827,6 +935,7 @@ unanswerable for two days.
 - **Trap** — Do not file this as a spaarrekening; Wise deliberately publishes the cost, not a rate. Regulated by a different Wise entity from the payments business.
 
 #### Wise Aandelen
+
 - **Issuer** — Wise Assets Europe AS
 - **Terms** — <https://wise.com/nl/pricing/>
 - **Measured** — `200` · readable: **yes** · fields on page: annualFee, conditions
@@ -834,6 +943,7 @@ unanswerable for two days.
 - **Trap** — Listed as a separate line on Wise's own price list, next to Wise Rente.
 
 #### Trading 212 beleggingsrekening
+
 - **Issuer** — Trading 212 Markets Ltd / Trading 212 EU GmbH
 - **Terms** — <https://helpcentre.trading212.com/hc/en-us/articles/30752021087005-What-fees-does-Trading-212-charge-for-crypto-trading>
 - **Measured** — `200` · readable: **yes (conditions only)** · fields on page: conditions
@@ -843,6 +953,7 @@ unanswerable for two days.
 ### Prepaid (6)
 
 #### Crypto.com Prepaid Card — Basic (Midnight Blue)
+
 - **Issuer** — Crypto.com (EEA entity; prepaid Visa, issuing bank not named on the page)
 - **Terms** — <https://crypto.com/nl/cards>
 - **Measured** — `200` · readable: **yes** · fields on page: cashback, annualFee, conditions
@@ -850,6 +961,7 @@ unanswerable for two days.
 - **Trap** — Multi-product page: ONE table holds all five EUR tiers side by side and the table is rendered TWICE — desktop order Midnight→Obsidian, then a mobile block in REVERSE order Obsidian→Midnight. A model skimming it will pair the wrong percentage with the wrong tier. The page headline 'Earn Up to 5% back' is the €450.000-lockup Obsidian tier, not an achievable base. Ignore the '8%' review sites quote — that is the US Prime/Visa Signature credit card, a different product.
 
 #### Crypto.com Prepaid Card — Plus (Ruby Steel)
+
 - **Issuer** — Crypto.com (EEA entity; prepaid Visa, issuing bank not named on the page)
 - **Terms** — <https://crypto.com/nl/cards>
 - **Measured** — `200` · readable: **yes** · fields on page: cashback, annualFee, conditions
@@ -857,6 +969,7 @@ unanswerable for two days.
 - **Trap** — The 2% is payable only while enrolled in Level Up. Crypto.com's own help page states it plainly: 'Cardholders who do not participate in the Level Up program will not be eligible for the listed benefits.'
 
 #### Crypto.com Prepaid Card — Pro (Jade Green / Royal Indigo)
+
 - **Issuer** — Crypto.com (EEA entity; prepaid Visa, issuing bank not named on the page)
 - **Terms** — <https://crypto.com/nl/cards>
 - **Measured** — `200` · readable: **yes** · fields on page: cashback, annualFee, conditions
@@ -864,6 +977,7 @@ unanswerable for two days.
 - **Trap** — Jade Green and Royal Indigo are the SAME tier in different colours — one product, two skins. Do not split them.
 
 #### Crypto.com Prepaid Card — Private (Icy White / Rose Gold)
+
 - **Issuer** — Crypto.com (EEA entity; prepaid Visa, issuing bank not named on the page)
 - **Terms** — <https://crypto.com/nl/cards>
 - **Measured** — `200` · readable: **yes** · fields on page: cashback, annualFee, conditions
@@ -871,6 +985,7 @@ unanswerable for two days.
 - **Trap** — Icy White and Rose Gold are the same tier. The page marks both with footnote 1 (invitation/eligibility caveat).
 
 #### Crypto.com Prepaid Card — Private (Obsidian)
+
 - **Issuer** — Crypto.com (EEA entity; prepaid Visa, issuing bank not named on the page)
 - **Terms** — <https://crypto.com/nl/cards>
 - **Measured** — `200` · readable: **yes** · fields on page: cashback, annualFee, conditions
@@ -878,6 +993,7 @@ unanswerable for two days.
 - **Trap** — This is the source of the headline 'up to 5%'. Any catalogue that prints '5%' next to Crypto.com without the €450.000 lockup is misleading.
 
 #### paysafecard (prepaid code / PaysafeWallet)
+
 - **Issuer** — Paysafe
 - **Terms** — <https://www.paysafecard.com/nl-nl/kosten-limieten/>
 - **Measured** — `200` · readable: **yes** · fields on page: annualFee, conditions
@@ -887,6 +1003,7 @@ unanswerable for two days.
 ### Crypto-rail cards (7)
 
 #### bunq crypto
+
 - **Issuer** — Payward Europe Solutions Ltd t/a Kraken (Central Bank of Ireland); staking by Payward Commercial Ltd
 - **Terms** — <https://www.bunq.com/nl-nl/personal/plans>
 - **Measured** — `200` · readable: **yes** · fields on page: conditions
@@ -894,6 +1011,7 @@ unanswerable for two days.
 - **Trap** — That 25% carve-out is exactly what a headline staking APR hides, and it is only in the small print at the bottom of the plans page, not on any crypto feature page.
 
 #### Bleap Card
+
 - **Issuer** — Bleap SIA (Latvia), Mastercard debit, self-custodial
 - **Terms** — <https://www.bleap.finance/en-us/card/cashback>
 - **Measured** — `200` · readable: **yes** · fields on page: cashback, conditions
@@ -901,6 +1019,7 @@ unanswerable for two days.
 - **Trap** — THE ONLY CARD IN THIS BUCKET whose headline is not gated behind a token stake — but the 20% applies only to Streaming/AI/Gaming, so 'up to 20% cashback' in the page title is category-specific, not a general rate. URL trap: the bare host bleap.finance 404s on /en-us/cashback, /en-us/pricing and /en-us/legal; the working paths are on www.bleap.finance. The Pricing Disclosure (200, readable, updated 12 Mar 2026) covers buy/sell/network/processing fees and spreads and says NOTHING about card cashback — do not mine it for rates. 'No FX markup' is claimed on the marketing card page only, with no figure.
 
 #### Zeal Card (Gnosis Pay rails)
+
 - **Issuer** — Monavate Limited (UK, FCA EMI, FRN 901097) with Gnosis Pay Co Ltd — Visa debit
 - **Terms** — <https://www.zeal.app/>
 - **Measured** — `200` · readable: **yes** · fields on page: cashback, fxFee, interest, conditions
@@ -908,6 +1027,7 @@ unanswerable for two days.
 - **Trap** — This is the consumer front-end you actually sign up to for a Gnosis Pay card. FX measured: Visa wholesale rate, Zeal charges no additional FX fee, but Gnosis Pay ATM fees may apply. Two different footnote systems on one page — read the 'FOR CARD:' block, not 'FOR BANK TRANSFERS:'. Also note 'Zeal is a self-custodial software and as such is NOT regulated in any jurisdiction.'
 
 #### Gnosis Pay Card (direct consumer)
+
 - **Issuer** — Gnosis Pay Co Ltd / Monavate Limited
 - **Terms** — <https://gnosispay.com/>
 - **Measured** — `200 homepage; 404 on /card, /pricing and /personal` · readable: **marketing-only** · fields on page: none
@@ -916,6 +1036,7 @@ unanswerable for two days.
 - **Trap** — MEASURED PIVOT — gnosispay.com is now a B2B page: 'White-label infrastructure for instant card issuance, fiat rails, and multi-currency accounts. Book a demo / View API docs.' No consumer offer, no pricing, no cashback figure. app.gnosispay.com returns 200 but is a 3KB shell. A Dutch person cannot sign up with Gnosis Pay directly; they reach the same card through a front-end such as Zeal. Affiliate reviews still describe a consumer 'Gnosis Pay Card with up to 5% GNO cashback' — that is stale.
 
 #### Wirex Card (Wirex One)
+
 - **Issuer** — Wirex; card issuer previously UAB PayrNet, current EEA issuer not stated on any readable page
 - **Terms** — <https://www.wirexapp.com/>
 - **Measured** — `200` · readable: **marketing-only** · fields on page: none
@@ -923,6 +1044,7 @@ unanswerable for two days.
 - **Trap** — Two traps. (1) DOMAIN: wirex.com does not connect at all; the live host is www.wirexapp.com. (2) PRODUCT SPLIT: Wirex's own blog (200, readable) confirms EEA Classic users are being pushed to 'Wirex One', with posts dated 9 and 30 June 2026, and that the Classic app's crypto features and Cryptoback rewards ENDED in the EEA on 30 June 2026, leaving a fiat card. So a Dutch person today signs up to Wirex One, NOT the 8%-Cryptoback product every review still describes. The homepage (4,9MB) strips to pure navigation; help.wirexapp.com is 200 but strips to 1.043 chars (JS shell); /eu/fees and /en/fees are 404.
 
 #### Tria Card
+
 - **Issuer** — Tria (self-custodial Visa; issuing EMI not stated)
 - **Terms** — <https://www.tria.so/>
 - **Measured** — `200` · readable: **marketing-only** · fields on page: none
@@ -938,90 +1060,90 @@ A scheduled job can simply read these. Cheap and exact. Grouped by the URL it sh
 **one page often carries several products** — the Knab, Crypto.com, ANWB and ICS-business pages are all
 multi-product, and anchoring on the first percentage found is exactly how the wrong number gets in.
 
-| URL | Products it carries |
-|---|---|
-| `https://www.abnamro.nl/nl/prive/betalen/tarieven/buitenlands-geld.html` | ABN AMRO betaalpas |
-| `https://www.icscards.nl/abnamro/klantenservice/betalen/contant-geld-opnemen` | ABN AMRO creditcard |
-| `https://www.icscards.nl/abnamro` | ABN AMRO Gold Card |
-| `https://www.snsbank.nl/particulier/betalen/service/betalen-in-het-buitenland.html` | SNS betaalpas |
-| `https://www.snsbank.nl/particulier/betalen/sns-visa-credit-card/kosten-van-je-creditcard.html` | SNS creditcard |
-| `https://www.asnbank.nl/service/asn-betaalpas/betalen-buitenland.html` | ASN betaalpas |
-| `https://www.asnbank.nl/betalen/asn-creditcard/kosten-asn-creditcard.html` | ASN Creditcard |
-| `https://www.regiobank.nl/service/betalen/buitenland.html` | RegioBank betaalpas |
-| `https://www.regiobank.nl/downloads/tarievenwijzer-betalen-1.html` | RegioBank creditcard |
-| `https://www.knab.nl/tarieven` | Knab betaalpas; Knab creditcard |
-| `https://www.bunq.com/nl-nl/personal/plans/bunq-free` | bunq Free betaalpas |
-| `https://www.bunq.com/nl-nl/personal/plans/bunq-core` | bunq Core betaalpas |
-| `https://www.bunq.com/nl-nl/personal/plans/bunq-pro` | bunq Pro betaalpas; bunq beleggingsrekening |
-| `https://www.bunq.com/nl-nl/personal/plans/bunq-elite` | bunq Elite betaalpas |
-| `https://www.bunq.com/nl-nl/personal/features/credit-card` | bunq creditcard |
-| `https://www.bunq.com/nl-nl/personal/features/savings-accounts` | bunq Termijndeposito |
-| `https://www.bunq.com/nl-nl/personal/plans` | bunq crypto |
-| `https://www.bunq.com/nl-nl/business/plans` | bunq Free Business betaalpas; bunq Core Business betaalpas; bunq Pro Business betaalpas; bunq Elite Business betaalpas |
-| `https://n26.com/en-eu/plans` | N26 Standard betaalpas; N26 Smart betaalpas; N26 Go betaalpas |
-| `https://n26.com/en-eu/metal` | N26 Metal betaalpas; N26 flexible cash fund |
-| `https://n26.com/en-eu/savings-account` | N26 Instant Savings |
-| `https://wise.com/nl/pricing/` | Wise betaalpas; Wise Rente; Wise Aandelen |
-| `https://traderepublic.com/nl-nl/kaart/_payload.json` | Trade Republic betaalpas; Trade Republic spaarrekening (rente op kassaldo) |
-| `https://helpcentre.trading212.com/hc/en-us/articles/19288398028317-What-are-the-fees-for-using-the-212-card` | 212 Card |
-| `https://helpcentre.trading212.com/hc/en-us/articles/15475153380637-What-is-interest-on-cash` | Trading 212 interest on cash |
-| `https://helpcentre.trading212.com/hc/en-us/articles/30752021087005-What-fees-does-Trading-212-charge-for-crypto-trading` | Trading 212 beleggingsrekening |
-| `https://www.openbank.nl/betaalrekening` | Openbank betaalpas (R42 Betaalpas) |
-| `https://www.americanexpress.com/nl-nl/creditcard/blue-card/` | American Express Blue Card |
-| `https://www.americanexpress.com/nl-nl/creditcard/green-card/` | American Express Green Card |
-| `https://www.americanexpress.com/nl-nl/creditcard/gold-card/` | American Express Gold Card |
-| `https://www.americanexpress.com/nl-nl/creditcard/platinum-card/` | American Express Platinum Card |
-| `https://www.americanexpress.com/nl-nl/creditcard/flying-blue-entry-card/` | Flying Blue - American Express Entry Card |
-| `https://www.americanexpress.com/nl-nl/creditcard/flying-blue-silver-card/` | Flying Blue - American Express Silver Card |
-| `https://www.americanexpress.com/nl-nl/creditcard/flying-blue-gold-card/` | Flying Blue - American Express Gold Card |
-| `https://www.americanexpress.com/nl-nl/creditcard/flying-blue-platinum-card/` | Flying Blue - American Express Platinum Card |
-| `https://www.americanexpress.com/nl-nl/zakelijk/kaarten/business-entry-card/` | American Express Business Entry Card |
-| `https://www.americanexpress.com/nl-nl/zakelijk/kaarten/business-green-card/` | American Express Business Green Card |
-| `https://www.americanexpress.com/nl-nl/zakelijk/kaarten/business-gold-card/` | American Express Business Gold Card |
-| `https://www.americanexpress.com/nl-nl/zakelijk/kaarten/corporate-card/` | American Express Corporate Card |
-| `https://www.americanexpress.com/nl-nl/zakelijk/kaarten/corporate-gold-card/` | American Express Corporate Gold Card |
-| `https://www.americanexpress.com/nl-nl/zakelijk/kaarten/corporate-klm-card/` | KLM American Express Corporate Card |
-| `https://www.icscards.nl/creditcard-aanvragen/visa-world-card` | ICS Visa World Card |
-| `https://www.icscards.nl/creditcard-aanvragen/visa-world-card-gold` | ICS Visa World Card Gold |
-| `https://www.icscards.nl/creditcard-aanvragen/visa-world-card-platinum` | ICS Visa World Card Platinum |
-| `https://www.icscards.nl/creditcard-aanvragen/visa-world-card-panda` | ICS Visa World Card Panda |
-| `https://www.icscards.nl/creditcard-aanvragen/mastercard-classic` | ICS Mastercard Classic |
-| `https://www.icscards.nl/creditcard-aanvragen/mastercard-gold` | ICS Mastercard Gold |
-| `https://www.icscards.nl/creditcard-aanvragen/mastercard-black` | ICS Mastercard Black |
-| `https://www.icscards.nl/zakelijk/zakelijke-creditcards-vergelijken` | ICS Visa World Card Business; ICS Visa World Card Business Gold; ICS Mastercard Business; ICS Mastercard Corporate |
-| `https://www.anwb.nl/creditcard/informatie/kosten` | ANWB Visa Classic Card |
-| `https://www.anwb.nl/creditcard/silver-card` | ANWB Visa Silver Card |
-| `https://www.anwb.nl/creditcard/gold-card` | ANWB Visa Gold Card |
-| `https://crypto.com/nl/cards` | Crypto.com Prepaid Card — Basic (Midnight Blue); Crypto.com Prepaid Card — Plus (Ruby Steel); Crypto.com Prepaid Card — Pro (Jade Green / Royal Indigo); Crypto.com Prepaid Card — Private (Icy White / Rose Gold); Crypto.com Prepaid Card — Private (Obsidian) |
-| `https://nexo.com/crypto-card` | Nexo Card |
-| `https://www.kraken.com/krak/card` | Krak Card (Kraken) |
-| `https://plutus.it/plans` | Plutus Card |
-| `https://www.bleap.finance/en-us/card/cashback` | Bleap Card |
-| `https://www.zeal.app/` | Zeal Card (Gnosis Pay rails) |
-| `https://www.paysafecard.com/nl-nl/kosten-limieten/` | paysafecard (prepaid code / PaysafeWallet) |
-| `https://www.bigbank.nl/sparen/flexibel-sparen/` | Bigbank Flexibel Sparen |
-| `https://help.bunq.com/articles/what-massinterest-rate-applies-to-me` | bunq spaarrekening (MassInterest) |
-| `https://www.santanderconsumerbank.nl/sparen` | Santander Consumer Bank Spaarrekening |
-| `https://www.dhbbank.nl/dhb-saveonlinerekening` | DHB Bank S@veOnlinerekening |
-| `https://www.anadolubank.nl/` | Anadolubank Alfa Slimmer Sparen |
-| `https://nl.scalable.capital/` | Scalable Capital Scalable Overnight |
-| `https://www.raisin.nl/spaarrekening/` | Raisin spaarrekening (platform, 19 partner banks) |
-| `https://www.klarna.com/nl/flex-rekening/` | Klarna Flex rekening |
-| `https://www.ayvensbank.nl/actuele-rentestanden` | Ayvens Bank Flexibel Sparen |
-| `https://www.openbank.nl/spaarrekening` | Openbank Welkom Spaarrekening |
-| `https://www.openbank.nl/gratis-spaarrekening` | Openbank Open Spaarrekening |
-| `https://www.yapikredi.nl/` | Yapi Kredi Bank Euro-Plus Spaarrekening |
-| `https://www.nibc.nl/sparen/` | NIBC Spaarrekening; NIBC Kwartaalspaarrekening |
-| `https://www.lloydsbank.nl/sparen/` | Lloyds Bank Spaarrekening |
-| `https://www.nn.nl/Particulier/Sparen/Internetsparen.htm` | Nationale-Nederlanden Internetsparen |
-| `https://www.centraalbeheer.nl/sparen` | Centraal Beheer RentePlús Rekening |
-| `https://www.knab.nl/sparen` | Knab Flexibel Sparen |
-| `https://www.asnbank.nl/sparen/rente.html` | ASN Bank ASN Ideaalsparen |
-| `https://www.snsbank.nl/particulier/sparen/rente-spaarrekeningen.html` | SNS Internet Sparen |
-| `https://www.regiobank.nl/sparen/actuele-rentes.html` | RegioBank Spaar-op-Maat Vrij |
-| `https://www.triodos.nl/sparen` | Triodos Bank Internet Sparen |
-| `https://new.brandnewday.nl/spaarrekening/` | Brand New Day De Spaarrekening |
-| `https://www.nexentbank.nl/` | Nexent Bank Spaarrekening |
+| URL                                                                                                                       | Products it carries                                                                                                                                                                                                                                              |
+| ------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `https://www.abnamro.nl/nl/prive/betalen/tarieven/buitenlands-geld.html`                                                  | ABN AMRO betaalpas                                                                                                                                                                                                                                               |
+| `https://www.icscards.nl/abnamro/klantenservice/betalen/contant-geld-opnemen`                                             | ABN AMRO creditcard                                                                                                                                                                                                                                              |
+| `https://www.icscards.nl/abnamro`                                                                                         | ABN AMRO Gold Card                                                                                                                                                                                                                                               |
+| `https://www.snsbank.nl/particulier/betalen/service/betalen-in-het-buitenland.html`                                       | SNS betaalpas                                                                                                                                                                                                                                                    |
+| `https://www.snsbank.nl/particulier/betalen/sns-visa-credit-card/kosten-van-je-creditcard.html`                           | SNS creditcard                                                                                                                                                                                                                                                   |
+| `https://www.asnbank.nl/service/asn-betaalpas/betalen-buitenland.html`                                                    | ASN betaalpas                                                                                                                                                                                                                                                    |
+| `https://www.asnbank.nl/betalen/asn-creditcard/kosten-asn-creditcard.html`                                                | ASN Creditcard                                                                                                                                                                                                                                                   |
+| `https://www.regiobank.nl/service/betalen/buitenland.html`                                                                | RegioBank betaalpas                                                                                                                                                                                                                                              |
+| `https://www.regiobank.nl/downloads/tarievenwijzer-betalen-1.html`                                                        | RegioBank creditcard                                                                                                                                                                                                                                             |
+| `https://www.knab.nl/tarieven`                                                                                            | Knab betaalpas; Knab creditcard                                                                                                                                                                                                                                  |
+| `https://www.bunq.com/nl-nl/personal/plans/bunq-free`                                                                     | bunq Free betaalpas                                                                                                                                                                                                                                              |
+| `https://www.bunq.com/nl-nl/personal/plans/bunq-core`                                                                     | bunq Core betaalpas                                                                                                                                                                                                                                              |
+| `https://www.bunq.com/nl-nl/personal/plans/bunq-pro`                                                                      | bunq Pro betaalpas; bunq beleggingsrekening                                                                                                                                                                                                                      |
+| `https://www.bunq.com/nl-nl/personal/plans/bunq-elite`                                                                    | bunq Elite betaalpas                                                                                                                                                                                                                                             |
+| `https://www.bunq.com/nl-nl/personal/features/credit-card`                                                                | bunq creditcard                                                                                                                                                                                                                                                  |
+| `https://www.bunq.com/nl-nl/personal/features/savings-accounts`                                                           | bunq Termijndeposito                                                                                                                                                                                                                                             |
+| `https://www.bunq.com/nl-nl/personal/plans`                                                                               | bunq crypto                                                                                                                                                                                                                                                      |
+| `https://www.bunq.com/nl-nl/business/plans`                                                                               | bunq Free Business betaalpas; bunq Core Business betaalpas; bunq Pro Business betaalpas; bunq Elite Business betaalpas                                                                                                                                           |
+| `https://n26.com/en-eu/plans`                                                                                             | N26 Standard betaalpas; N26 Smart betaalpas; N26 Go betaalpas                                                                                                                                                                                                    |
+| `https://n26.com/en-eu/metal`                                                                                             | N26 Metal betaalpas; N26 flexible cash fund                                                                                                                                                                                                                      |
+| `https://n26.com/en-eu/savings-account`                                                                                   | N26 Instant Savings                                                                                                                                                                                                                                              |
+| `https://wise.com/nl/pricing/`                                                                                            | Wise betaalpas; Wise Rente; Wise Aandelen                                                                                                                                                                                                                        |
+| `https://traderepublic.com/nl-nl/kaart/_payload.json`                                                                     | Trade Republic betaalpas; Trade Republic spaarrekening (rente op kassaldo)                                                                                                                                                                                       |
+| `https://helpcentre.trading212.com/hc/en-us/articles/19288398028317-What-are-the-fees-for-using-the-212-card`             | 212 Card                                                                                                                                                                                                                                                         |
+| `https://helpcentre.trading212.com/hc/en-us/articles/15475153380637-What-is-interest-on-cash`                             | Trading 212 interest on cash                                                                                                                                                                                                                                     |
+| `https://helpcentre.trading212.com/hc/en-us/articles/30752021087005-What-fees-does-Trading-212-charge-for-crypto-trading` | Trading 212 beleggingsrekening                                                                                                                                                                                                                                   |
+| `https://www.openbank.nl/betaalrekening`                                                                                  | Openbank betaalpas (R42 Betaalpas)                                                                                                                                                                                                                               |
+| `https://www.americanexpress.com/nl-nl/creditcard/blue-card/`                                                             | American Express Blue Card                                                                                                                                                                                                                                       |
+| `https://www.americanexpress.com/nl-nl/creditcard/green-card/`                                                            | American Express Green Card                                                                                                                                                                                                                                      |
+| `https://www.americanexpress.com/nl-nl/creditcard/gold-card/`                                                             | American Express Gold Card                                                                                                                                                                                                                                       |
+| `https://www.americanexpress.com/nl-nl/creditcard/platinum-card/`                                                         | American Express Platinum Card                                                                                                                                                                                                                                   |
+| `https://www.americanexpress.com/nl-nl/creditcard/flying-blue-entry-card/`                                                | Flying Blue - American Express Entry Card                                                                                                                                                                                                                        |
+| `https://www.americanexpress.com/nl-nl/creditcard/flying-blue-silver-card/`                                               | Flying Blue - American Express Silver Card                                                                                                                                                                                                                       |
+| `https://www.americanexpress.com/nl-nl/creditcard/flying-blue-gold-card/`                                                 | Flying Blue - American Express Gold Card                                                                                                                                                                                                                         |
+| `https://www.americanexpress.com/nl-nl/creditcard/flying-blue-platinum-card/`                                             | Flying Blue - American Express Platinum Card                                                                                                                                                                                                                     |
+| `https://www.americanexpress.com/nl-nl/zakelijk/kaarten/business-entry-card/`                                             | American Express Business Entry Card                                                                                                                                                                                                                             |
+| `https://www.americanexpress.com/nl-nl/zakelijk/kaarten/business-green-card/`                                             | American Express Business Green Card                                                                                                                                                                                                                             |
+| `https://www.americanexpress.com/nl-nl/zakelijk/kaarten/business-gold-card/`                                              | American Express Business Gold Card                                                                                                                                                                                                                              |
+| `https://www.americanexpress.com/nl-nl/zakelijk/kaarten/corporate-card/`                                                  | American Express Corporate Card                                                                                                                                                                                                                                  |
+| `https://www.americanexpress.com/nl-nl/zakelijk/kaarten/corporate-gold-card/`                                             | American Express Corporate Gold Card                                                                                                                                                                                                                             |
+| `https://www.americanexpress.com/nl-nl/zakelijk/kaarten/corporate-klm-card/`                                              | KLM American Express Corporate Card                                                                                                                                                                                                                              |
+| `https://www.icscards.nl/creditcard-aanvragen/visa-world-card`                                                            | ICS Visa World Card                                                                                                                                                                                                                                              |
+| `https://www.icscards.nl/creditcard-aanvragen/visa-world-card-gold`                                                       | ICS Visa World Card Gold                                                                                                                                                                                                                                         |
+| `https://www.icscards.nl/creditcard-aanvragen/visa-world-card-platinum`                                                   | ICS Visa World Card Platinum                                                                                                                                                                                                                                     |
+| `https://www.icscards.nl/creditcard-aanvragen/visa-world-card-panda`                                                      | ICS Visa World Card Panda                                                                                                                                                                                                                                        |
+| `https://www.icscards.nl/creditcard-aanvragen/mastercard-classic`                                                         | ICS Mastercard Classic                                                                                                                                                                                                                                           |
+| `https://www.icscards.nl/creditcard-aanvragen/mastercard-gold`                                                            | ICS Mastercard Gold                                                                                                                                                                                                                                              |
+| `https://www.icscards.nl/creditcard-aanvragen/mastercard-black`                                                           | ICS Mastercard Black                                                                                                                                                                                                                                             |
+| `https://www.icscards.nl/zakelijk/zakelijke-creditcards-vergelijken`                                                      | ICS Visa World Card Business; ICS Visa World Card Business Gold; ICS Mastercard Business; ICS Mastercard Corporate                                                                                                                                               |
+| `https://www.anwb.nl/creditcard/informatie/kosten`                                                                        | ANWB Visa Classic Card                                                                                                                                                                                                                                           |
+| `https://www.anwb.nl/creditcard/silver-card`                                                                              | ANWB Visa Silver Card                                                                                                                                                                                                                                            |
+| `https://www.anwb.nl/creditcard/gold-card`                                                                                | ANWB Visa Gold Card                                                                                                                                                                                                                                              |
+| `https://crypto.com/nl/cards`                                                                                             | Crypto.com Prepaid Card — Basic (Midnight Blue); Crypto.com Prepaid Card — Plus (Ruby Steel); Crypto.com Prepaid Card — Pro (Jade Green / Royal Indigo); Crypto.com Prepaid Card — Private (Icy White / Rose Gold); Crypto.com Prepaid Card — Private (Obsidian) |
+| `https://nexo.com/crypto-card`                                                                                            | Nexo Card                                                                                                                                                                                                                                                        |
+| `https://www.kraken.com/krak/card`                                                                                        | Krak Card (Kraken)                                                                                                                                                                                                                                               |
+| `https://plutus.it/plans`                                                                                                 | Plutus Card                                                                                                                                                                                                                                                      |
+| `https://www.bleap.finance/en-us/card/cashback`                                                                           | Bleap Card                                                                                                                                                                                                                                                       |
+| `https://www.zeal.app/`                                                                                                   | Zeal Card (Gnosis Pay rails)                                                                                                                                                                                                                                     |
+| `https://www.paysafecard.com/nl-nl/kosten-limieten/`                                                                      | paysafecard (prepaid code / PaysafeWallet)                                                                                                                                                                                                                       |
+| `https://www.bigbank.nl/sparen/flexibel-sparen/`                                                                          | Bigbank Flexibel Sparen                                                                                                                                                                                                                                          |
+| `https://help.bunq.com/articles/what-massinterest-rate-applies-to-me`                                                     | bunq spaarrekening (MassInterest)                                                                                                                                                                                                                                |
+| `https://www.santanderconsumerbank.nl/sparen`                                                                             | Santander Consumer Bank Spaarrekening                                                                                                                                                                                                                            |
+| `https://www.dhbbank.nl/dhb-saveonlinerekening`                                                                           | DHB Bank S@veOnlinerekening                                                                                                                                                                                                                                      |
+| `https://www.anadolubank.nl/`                                                                                             | Anadolubank Alfa Slimmer Sparen                                                                                                                                                                                                                                  |
+| `https://nl.scalable.capital/`                                                                                            | Scalable Capital Scalable Overnight                                                                                                                                                                                                                              |
+| `https://www.raisin.nl/spaarrekening/`                                                                                    | Raisin spaarrekening (platform, 19 partner banks)                                                                                                                                                                                                                |
+| `https://www.klarna.com/nl/flex-rekening/`                                                                                | Klarna Flex rekening                                                                                                                                                                                                                                             |
+| `https://www.ayvensbank.nl/actuele-rentestanden`                                                                          | Ayvens Bank Flexibel Sparen                                                                                                                                                                                                                                      |
+| `https://www.openbank.nl/spaarrekening`                                                                                   | Openbank Welkom Spaarrekening                                                                                                                                                                                                                                    |
+| `https://www.openbank.nl/gratis-spaarrekening`                                                                            | Openbank Open Spaarrekening                                                                                                                                                                                                                                      |
+| `https://www.yapikredi.nl/`                                                                                               | Yapi Kredi Bank Euro-Plus Spaarrekening                                                                                                                                                                                                                          |
+| `https://www.nibc.nl/sparen/`                                                                                             | NIBC Spaarrekening; NIBC Kwartaalspaarrekening                                                                                                                                                                                                                   |
+| `https://www.lloydsbank.nl/sparen/`                                                                                       | Lloyds Bank Spaarrekening                                                                                                                                                                                                                                        |
+| `https://www.nn.nl/Particulier/Sparen/Internetsparen.htm`                                                                 | Nationale-Nederlanden Internetsparen                                                                                                                                                                                                                             |
+| `https://www.centraalbeheer.nl/sparen`                                                                                    | Centraal Beheer RentePlús Rekening                                                                                                                                                                                                                               |
+| `https://www.knab.nl/sparen`                                                                                              | Knab Flexibel Sparen                                                                                                                                                                                                                                             |
+| `https://www.asnbank.nl/sparen/rente.html`                                                                                | ASN Bank ASN Ideaalsparen                                                                                                                                                                                                                                        |
+| `https://www.snsbank.nl/particulier/sparen/rente-spaarrekeningen.html`                                                    | SNS Internet Sparen                                                                                                                                                                                                                                              |
+| `https://www.regiobank.nl/sparen/actuele-rentes.html`                                                                     | RegioBank Spaar-op-Maat Vrij                                                                                                                                                                                                                                     |
+| `https://www.triodos.nl/sparen`                                                                                           | Triodos Bank Internet Sparen                                                                                                                                                                                                                                     |
+| `https://new.brandnewday.nl/spaarrekening/`                                                                               | Brand New Day De Spaarrekening                                                                                                                                                                                                                                   |
+| `https://www.nexentbank.nl/`                                                                                              | Nexent Bank Spaarrekening                                                                                                                                                                                                                                        |
 
 **Fetch-tier gotchas, all measured — a job that ignores these will report false negatives:**
 
@@ -1036,11 +1158,11 @@ multi-product, and anchoring on the first percentage found is exactly how the wr
 - **A tag-stripper's silence is not proof a page is empty.** On `icscards.nl/tips/prepaid-creditcard-kopen` an
   unbalanced `<script>` reduced the page to a stray `5128`; the content was in the raw bytes all along.
   Grep the raw HTML before calling a page dead.
-- **A percentage-proximity check must be line-agnostic.** Requiring 80 characters either side *on the same line*
+- **A percentage-proximity check must be line-agnostic.** Requiring 80 characters either side _on the same line_
   falsely reported 'no rates' for NIBC, whose page renders one item per line.
 - **Body size proves nothing.** Rabobank's 403 is an 18KB Dutch soft-error page; Revolut's is 873KB; Bitget
   serves a 186KB soft-404; Binance answers **HTTP 202 with a zero-byte body**, which passes a naive
-  status-code check. Check the status code *and* look for the figure.
+  status-code check. Check the status code _and_ look for the figure.
 
 **Readable, but with a named field that exists on no fetchable page** — record these as gaps, never as zero:
 
@@ -1051,7 +1173,7 @@ multi-product, and anchoring on the first percentage found is exactly how the wr
   loading, please wait.' Amex FX must come from the cardholder agreement PDF or the agent, never a search result.
 - **ICS Visa World Card Gold** is the one ICS card with no koersopslag line on its own page; the 2% is only on
   `icscards.nl/tips/wat-kost-een-creditcard`. **ICS business FX (2,5%)** is only on the comparison page.
-- **Openbank betaalpas**: the FX cost *without* Travel+ is in the 'informatie over vergoedingen en commissies'
+- **Openbank betaalpas**: the FX cost _without_ Travel+ is in the 'informatie over vergoedingen en commissies'
   document, not on any HTML page.
 - **Trading 212**: conditions are readable on `helpcentre.trading212.com`, but the interest rate and the
   equities/ETF schedule exist only on `www.trading212.com`, which is a hard Cloudflare 403.
@@ -1065,25 +1187,25 @@ multi-product, and anchoring on the first percentage found is exactly how the wr
 ## Needs the agent (23 products, 22 URLs, 13 hosts)
 
 Not a failure list — a routing decision. The agent read these correctly today, which is why they are here
-rather than marked unknown. What matters is *why* each one resists a fetch, because the failure modes differ
+rather than marked unknown. What matters is _why_ each one resists a fetch, because the failure modes differ
 and only some of them might yield to a cookie or a session.
 
-| Host | Products | Failure mode measured |
-|---|---|---|
-| `www.revolut.com` | Revolut Standard betaalpas; Revolut Plus betaalpas; Revolut Premium betaalpas; Revolut Metal betaalpas; Revolut Dagelijkse Spaarrekening | **Cloudflare challenge.** HTTP/2 403, headers `server: cloudflare` + `cf-mitigated: challenge`, an 873KB interstitial containing 67 bytes of text. Blocked on `help.revolut.com` too, and a WebFetch from different infrastructure also 403'd. |
-| `www.rabobank.nl` | Rabobank betaalpas; Rabobank creditcard; Rabo GoldCard; Rabobank Rabo SpaarRekening | **Clean 403**, identical on HTTP/2 and HTTP/1.1 across several paths; WebFetch also 403. An 18KB Dutch soft-error body, so it looks like a page if you only check bytes>0. Distinct from ING: **a 403 may yield to a cookie/session, a killed connection will not.** |
-| `www.ing.nl` | ING betaalpas; ING creditcard; ING Oranje Spaarrekening | **Connection killed at HOST level.** curl 92 (INTERNAL_ERROR) on HTTP/2 and curl 28/56 on HTTP/1.1, on every path tried including a static `.pdf`. **A browser UA does not help here** — the one site where it doesn't. WebFetch's different egress got through but returned only the `<title>`, so it is a JS shell behind the block. There is no ICS backdoor: `icscards.nl/ing` is 404. Hardest target in the sweep. |
-| `(no URL)` | ING Platinumcard | **No terms URL exists to fetch.** ING publishes no readable page for its platinum tier and the ICS backdoor that rescues ABN is a 404 for ING, so there is nothing to point an agent at yet — the agent's first job here is to *find* the page, not read it. |
-| `www.triodos.nl` | Triodos betaalpas | **200, real prose, zero percent signs (counted).** Deliberately numberless: 'Visa bepaalt de wisselkoersen en opslagen.' The rekenhulp at `/betaalpas/rekenhulp` is a 2.402-char JS shell. Triodos's own site has no scrapeable FX rate anywhere. |
-| `gnosispay.com` | Gnosis Pay Card (direct consumer) | **200 homepage, pivoted to B2B white-label.** `/card`, `/pricing` and `/personal` all 404; `app.gnosispay.com` is a 3KB shell. There is no consumer offer left to read. |
-| `www.bybit.eu` | Bybit Card | **JS shell on both `.eu` and `.com`** — ~90KB of HTML stripping to one line. The help-centre article says 'This article is currently not supported on this site'; the wiki cashback article returns 'Article not found'. Only the country-availability wiki page renders, and it does confirm NL. |
-| `www.coinbase.com` | Coinbase Card | **Cloudflare 'Just a moment…'** 403 on `/nl/card`, `/en-nl/card` and `help.coinbase.com`. A browser UA does not get past it — same family as Revolut and Trading 212. |
-| `www.wirexapp.com` | Wirex Card (Wirex One) | **200 marketing-only** (a 4,9MB homepage stripping to navigation and slogans). `help.wirexapp.com` is a 1.043-char JS shell, `/eu/fees` and `/en/fees` are 404, and `wirex.com` does not connect at all. |
-| `www.binance.com` | Binance Card | **HTTP 202 with a zero-byte body** — a bot-mitigation pattern that looks like success to any code checking only the status code. The product is dead anyway; the row exists to stop it being re-added. |
-| `www.tria.so` | Tria Card | **200, server-rendered marketing with no rates, no fees and no country list.** `/cards` is 404. Availability to NL is flagged unverified rather than guessed. |
-| `garantibank.nl` | Garanti BBVA International Gouden Internet Rekening | **Akamai 'Access Denied'**, a 407-byte body citing `errors.edgesuite.net` — same family as ING and Rabobank. Also note the intuitive domain `garantibbvainternational.nl` does not resolve at all. |
-| `www.argenta.nl` | Argenta Internetspaarrekening | **200, marketing-only for the product asked about.** The only rate rendered is the 1-year Termijndeposito; the internetspaarrekening's rate sits behind 'Bekijk alle spaarrentes' and `/sparen/internetspaarrekening` is 404. Scraping the visible figure records the wrong product. |
-| `www.abnamro.nl` | ABN AMRO Direct Sparen | **200 but client-rendered.** Three savings URLs, each ~1,1MB, all stripping to ~10.000 chars of pure navigation with **zero** percentage figures. Note ABN is readable for CARD tariffs on `/betalen/tarieven/buitenlands-geld.html` and unreadable for SAVINGS — the host is not uniformly one or the other. |
+| Host               | Products                                                                                                                                 | Failure mode measured                                                                                                                                                                                                                                                                                                                                                                                                   |
+| ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `www.revolut.com`  | Revolut Standard betaalpas; Revolut Plus betaalpas; Revolut Premium betaalpas; Revolut Metal betaalpas; Revolut Dagelijkse Spaarrekening | **Cloudflare challenge.** HTTP/2 403, headers `server: cloudflare` + `cf-mitigated: challenge`, an 873KB interstitial containing 67 bytes of text. Blocked on `help.revolut.com` too, and a WebFetch from different infrastructure also 403'd.                                                                                                                                                                          |
+| `www.rabobank.nl`  | Rabobank betaalpas; Rabobank creditcard; Rabo GoldCard; Rabobank Rabo SpaarRekening                                                      | **Clean 403**, identical on HTTP/2 and HTTP/1.1 across several paths; WebFetch also 403. An 18KB Dutch soft-error body, so it looks like a page if you only check bytes>0. Distinct from ING: **a 403 may yield to a cookie/session, a killed connection will not.**                                                                                                                                                    |
+| `www.ing.nl`       | ING betaalpas; ING creditcard; ING Oranje Spaarrekening                                                                                  | **Connection killed at HOST level.** curl 92 (INTERNAL_ERROR) on HTTP/2 and curl 28/56 on HTTP/1.1, on every path tried including a static `.pdf`. **A browser UA does not help here** — the one site where it doesn't. WebFetch's different egress got through but returned only the `<title>`, so it is a JS shell behind the block. There is no ICS backdoor: `icscards.nl/ing` is 404. Hardest target in the sweep. |
+| `(no URL)`         | ING Platinumcard                                                                                                                         | **No terms URL exists to fetch.** ING publishes no readable page for its platinum tier and the ICS backdoor that rescues ABN is a 404 for ING, so there is nothing to point an agent at yet — the agent's first job here is to _find_ the page, not read it.                                                                                                                                                            |
+| `www.triodos.nl`   | Triodos betaalpas                                                                                                                        | **200, real prose, zero percent signs (counted).** Deliberately numberless: 'Visa bepaalt de wisselkoersen en opslagen.' The rekenhulp at `/betaalpas/rekenhulp` is a 2.402-char JS shell. Triodos's own site has no scrapeable FX rate anywhere.                                                                                                                                                                       |
+| `gnosispay.com`    | Gnosis Pay Card (direct consumer)                                                                                                        | **200 homepage, pivoted to B2B white-label.** `/card`, `/pricing` and `/personal` all 404; `app.gnosispay.com` is a 3KB shell. There is no consumer offer left to read.                                                                                                                                                                                                                                                 |
+| `www.bybit.eu`     | Bybit Card                                                                                                                               | **JS shell on both `.eu` and `.com`** — ~90KB of HTML stripping to one line. The help-centre article says 'This article is currently not supported on this site'; the wiki cashback article returns 'Article not found'. Only the country-availability wiki page renders, and it does confirm NL.                                                                                                                       |
+| `www.coinbase.com` | Coinbase Card                                                                                                                            | **Cloudflare 'Just a moment…'** 403 on `/nl/card`, `/en-nl/card` and `help.coinbase.com`. A browser UA does not get past it — same family as Revolut and Trading 212.                                                                                                                                                                                                                                                   |
+| `www.wirexapp.com` | Wirex Card (Wirex One)                                                                                                                   | **200 marketing-only** (a 4,9MB homepage stripping to navigation and slogans). `help.wirexapp.com` is a 1.043-char JS shell, `/eu/fees` and `/en/fees` are 404, and `wirex.com` does not connect at all.                                                                                                                                                                                                                |
+| `www.binance.com`  | Binance Card                                                                                                                             | **HTTP 202 with a zero-byte body** — a bot-mitigation pattern that looks like success to any code checking only the status code. The product is dead anyway; the row exists to stop it being re-added.                                                                                                                                                                                                                  |
+| `www.tria.so`      | Tria Card                                                                                                                                | **200, server-rendered marketing with no rates, no fees and no country list.** `/cards` is 404. Availability to NL is flagged unverified rather than guessed.                                                                                                                                                                                                                                                           |
+| `garantibank.nl`   | Garanti BBVA International Gouden Internet Rekening                                                                                      | **Akamai 'Access Denied'**, a 407-byte body citing `errors.edgesuite.net` — same family as ING and Rabobank. Also note the intuitive domain `garantibbvainternational.nl` does not resolve at all.                                                                                                                                                                                                                      |
+| `www.argenta.nl`   | Argenta Internetspaarrekening                                                                                                            | **200, marketing-only for the product asked about.** The only rate rendered is the 1-year Termijndeposito; the internetspaarrekening's rate sits behind 'Bekijk alle spaarrentes' and `/sparen/internetspaarrekening` is 404. Scraping the visible figure records the wrong product.                                                                                                                                    |
+| `www.abnamro.nl`   | ABN AMRO Direct Sparen                                                                                                                   | **200 but client-rendered.** Three savings URLs, each ~1,1MB, all stripping to ~10.000 chars of pure navigation with **zero** percentage figures. Note ABN is readable for CARD tariffs on `/betalen/tarieven/buitenlands-geld.html` and unreadable for SAVINGS — the host is not uniformly one or the other.                                                                                                           |
 
 **Two corrections to standing assumptions, both measured this sweep:**
 
@@ -1236,7 +1358,7 @@ betaalpas at 1,4%; Lloyds, NIBC, Ayvens and Klarna savings), not because anyone 
 **The worst offenders, ranked by how far the headline is from the truth:**
 
 1. **Trading 212's 212 Card has a base cashback rate of 0%.** The 1,5% needs 'Invest cashback' switched on, a
-   Pie selected, *and* a qualifying recurring subscription billed monthly-or-shorter detected on the card — all
+   Pie selected, _and_ a qualifying recurring subscription billed monthly-or-shorter detected on the card — all
    three at once — capped at €15/month and never payable as cash.
 2. **Crypto.com's '5% back' needs €450.000 of CRO locked for 12 months.** Its free tier earns literally 0%.
 3. **Plutus needs both a paid subscription and a token stake**, and its 9% needs 40.000 PLU; even the 3% base is
@@ -1280,7 +1402,7 @@ comparison sites and review blogs:
 - **SNS Bank, RegioBank and de Volksbank are all now ASN Bank.** de Volksbank N.V. → ASN Bank N.V. and SNS on
   **1 July 2025**; RegioBank on **1 December 2025**; and ICS renamed the SNS and RegioBank credit cards to
   **'ASN Creditcard' on 5 January 2026** (confirmed on ICS's own page). The snsbank.nl and regiobank.nl pages
-  still return 200 with correct, *identical* tariffs, so nothing is broken yet — but they are legacy hosts on a
+  still return 200 with correct, _identical_ tariffs, so nothing is broken yet — but they are legacy hosts on a
   retirement path. `productOf()` will keep generating 'SNS betaalpas' and 'RegioBank creditcard' from legacy
   account labels, so **keep the names for matching and point the terms at ASN**. Treat the three as one
   rate-set with three names: the figures were verified to match, which is a consistency check, not three
@@ -1295,10 +1417,10 @@ comparison sites and review blogs:
 
 ### What nobody could confirm
 
-- **ING's credit-card tier names.** 'Creditcard More' / 'Creditcard Extra' appear only in affiliate blogs. The *existence* of a second platinum tier is confirmed neutrally by bank.nl's column header 'Met creditcard of platinumcard'; the names, the €2,00/€4,35 monthly fees and the €650/month minimum income are not confirmed on anything readable.
-- **Rabobank's RaboCard → Rabo GoldCard migration**, its €33/year fee, and the 'Rabo Comfort pays no fixed withdrawal amount' claim. Every rabobank.nl URL 403s. A 403 interstitial is served regardless of whether a path exists, so even the GoldCard's *existence* is search-derived rather than measured.
+- **ING's credit-card tier names.** 'Creditcard More' / 'Creditcard Extra' appear only in affiliate blogs. The _existence_ of a second platinum tier is confirmed neutrally by bank.nl's column header 'Met creditcard of platinumcard'; the names, the €2,00/€4,35 monthly fees and the €650/month minimum income are not confirmed on anything readable.
+- **Rabobank's RaboCard → Rabo GoldCard migration**, its €33/year fee, and the 'Rabo Comfort pays no fixed withdrawal amount' claim. Every rabobank.nl URL 403s. A 403 interstitial is served regardless of whether a path exists, so even the GoldCard's _existence_ is search-derived rather than measured.
 - **All four Revolut tiers** — fees, cashback, savings (Savings Vaults, Flexible Cash Funds), RevPoints, and whether a fifth 'Ultra' tier exists for NL. Not one provider-owned page was reachable.
-- **Bybit's and Coinbase's card fees and cashback.** NL availability *is* verified for Bybit from its own wiki; the rates are not. Coinbase's NL sign-up status could not be confirmed at all — the availability flag rests on a Coinbase blog post, not the product page.
+- **Bybit's and Coinbase's card fees and cashback.** NL availability _is_ verified for Bybit from its own wiki; the rates are not. Coinbase's NL sign-up status could not be confirmed at all — the availability flag rests on a Coinbase blog post, not the product page.
 - **Wirex One's rates, caps and tiers**, and the **Gnosis Pay GNO cashback ladder** that Zeal's footnote points at.
 - **Trading 212's actual interest rates and equities fee schedule** — conditions verified, rates behind the 403.
 - **Whether Santander Consumer Bank's current rate is 2,50%/2,00% (their own page) or 3,01%/2,10% (geld.nl).** Neither page is dated. Both figures exist; which is current is unknown.
@@ -1311,7 +1433,7 @@ comparison sites and review blogs:
 
 ### Products actively disproven — do not let these back in
 
-- **'ICS Visa World Card Select' with '0,5% cashback' does not exist.** The URL 404s and ICS's own comparison page lists exactly four Visa cards. An affiliate result asserted both a fabricated product *and* a fabricated rate.
+- **'ICS Visa World Card Select' with '0,5% cashback' does not exist.** The URL 404s and ICS's own comparison page lists exactly four Visa cards. An affiliate result asserted both a fabricated product _and_ a fabricated rate.
 - **'Euroclix Mastercard'** — euroclix.nl is live and readable and contains zero occurrences of 'mastercard' or 'creditcard'. An affiliate page called it 'the only real cashback credit card in the Netherlands'; that is stale.
 - **'N26 You'** — the €9,90 tier is called **Go** on N26's live page. Several review sites still say 'You'.
 - **American Express Business Platinum (NL)** — 404, byte-identical to Amex NL's generic 404 page. Amex NL lists exactly three business cards.
@@ -1334,7 +1456,7 @@ For savings, **geld.nl** is the incumbent source and `rates.ts` already parses i
 
 1. **SNS Bank is absent entirely** from all 46 rows — one of the largest retail savings accounts in the
    Netherlands is invisible to LaVega. (RegioBank is absent too, but correctly, being closed to new customers.)
-2. **Three action rates are missing**, all *understatements*, so LaVega fails to suggest switches worth making:
+2. **Three action rates are missing**, all _understatements_, so LaVega fails to suggest switches worth making:
    Openbank (2,80% vs the 1,80% shown, −1,00pp), Yapi Kredi (3,30% vs 1,80%, −1,50pp, and their page was dated
    the day before it was measured), Nexent (2,75% vs 1,25%, −1,50pp).
 3. **Santander is an overstatement risk** in the other direction — geld.nl's 3,01%/2,10% against the bank's own
@@ -1352,8 +1474,8 @@ Two `rates.ts` bugs surfaced while measuring, both worth fixing before the catal
   quoted. geld.nl's minifier is inconsistent, so the regex works by luck. If the spaarrente page flips to the
   quoted form, rows drop to 0, the `rates.length < 5` guard fires, `scrapeGeldNl` returns null, and the service
   silently serves the bundled STATIC snapshot — **which is already stale** (it carries Bigbank 3,10/2,10 while
-  both the provider page and live geld.nl say 2,75/2,00). A parser failure degrades invisibly into *wrong*
-  numbers rather than into *no* numbers. Also note `rates.ts` never fetches `geld.nl/sparen/deposito` at all
+  both the provider page and live geld.nl say 2,75/2,00). A parser failure degrades invisibly into _wrong_
+  numbers rather than into _no_ numbers. Also note `rates.ts` never fetches `geld.nl/sparen/deposito` at all
   (65 providers, a different URL), and geld.nl's dedupe-by-bank silently drops NIBC Spaarrekening in favour of
   the Kwartaalspaarrekening.
 
@@ -1406,6 +1528,5 @@ not just their value: ICS Visa World Card Gold €57,95 → €59,50 and ICS Mas
 
 `docs/catalog/state.json` — the diff anchor. One entry per product with identifying fields and routing only,
 **no rates**, `lastChecked: null` on every product and a top-level `lastRun: null`. It exists so the first real
-sweep reports *changes* rather than re-dumping the world, and so a figure that moves later shows up as a
+sweep reports _changes_ rather than re-dumping the world, and so a figure that moves later shows up as a
 reviewable git diff instead of a silent overwrite.
-

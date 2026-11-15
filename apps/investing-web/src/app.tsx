@@ -1,108 +1,151 @@
+import { useChat } from "@ai-sdk/react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Link, NavLink, Outlet, Route, Routes, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { buildIndexedSeries, type InvestingDashboardData, type InvestingPositionDetail } from "@lavega/core";
+import {
+  Link,
+  NavLink,
+  Navigate,
+  Outlet,
+  Route,
+  Routes,
+  useLocation,
+  useNavigate,
+  useParams,
+  useSearchParams,
+} from "react-router-dom";
+import {
+  findMentions,
+  type InvestingDashboardData,
+  type InvestingPositionDetail,
+  type RiskRange,
+} from "@lavega/core";
 import { EmptyState } from "./components/EmptyState";
+import { AgentMessageText } from "./components/AgentMessageText";
+import { MentionInput, MentionText } from "./components/MentionInput.js";
 import { AllocationDonut } from "./components/AllocationDonut";
-import { AuthForm } from "./components/AuthForm";
+import {
+  AuthForm,
+  CheckEmailPage,
+  EmailConfirmedPage,
+  ForgotPasswordPage,
+  ResetPasswordPage,
+} from "./components/AuthForm";
+import { Profile } from "./components/Profile";
+import { ThemeToggle } from "./components/ThemeToggle";
+import { NetWorthPage } from "./components/NetWorthPage.js";
+import { AgentsList } from "./components/AgentsList.js";
+import { StockResearch } from "./components/StockResearch.js";
+import { AgentThreads } from "./components/AgentThreads.js";
+import { fetchThreadMessages } from "./lib/agentMemory.js";
 import { RequireAuth } from "./components/RequireAuth";
 import { Button } from "./components/ui/button";
+import { AgentCatalogProblem, PortfolioAgentCard } from "./components/PortfolioAgentCard.js";
+import { Card, CardContent, CardHeader, CardTitle } from "./components/ui/card";
 import { PositionPriceChart } from "./components/PositionPriceChart";
+import { PositionSectorControl } from "./components/PositionSectorControl.js";
+import { RealizedReport } from "./components/RealizedReport.js";
+import { saveAccountWrappers, withWrapper } from "./lib/accountWrappers.js";
 import { PortfolioBenchmarkChart } from "./components/PortfolioBenchmarkChart";
-import { NetWorthChart } from "./components/NetWorthChart";
-import { PortfolioSummaryCard } from "./components/PortfolioSummaryCard";
-import { signOut } from "./lib/auth-client";
-
-const DASHBOARD_REFRESH_EVENT = "lavega:dashboard-refresh";
-const BROKER_SYNC_STARTED_EVENT = "lavega:broker-sync-started";
-
-const SYNC_BACKGROUND_MESSAGE = "Synchronisatie loopt door op de achtergrond; de voortgang staat hierboven.";
-
-function brokerSyncActive(status?: BrokerProgress["status"]): boolean {
-  return status === "running" || status === "waiting";
-}
-
-function notifyBrokerSyncStarted() {
-  window.dispatchEvent(new Event(BROKER_SYNC_STARTED_EVENT));
-}
-
-/* Een eerste volledige synchronisatie duurt langer dan de time-out van de edge:
-   Cloudflare kapt de aanvraag na ongeveer 100 seconden af met een HTML-pagina
-   (524), terwijl de server gewoon doorwerkt. Een antwoord zonder JSON is dus
-   geen mislukking, en de parserfout hoort niet als foutmelding op het scherm. */
-async function readSyncResult(response: Response): Promise<{ problems?: string[] } | null> {
-  return await response.json().catch(() => null) as { problems?: string[] } | null;
-}
-
-function otherBrokerUnconfigured(problem: string, broker: "ibkr" | "trading212"): boolean {
-  const other = broker === "ibkr" ? /trading\s*212/i : /ibkr/i;
-  return other.test(problem) && /credentials are not configured/i.test(problem);
-}
+import { PortfolioSummaryCard, type SummaryState } from "./components/PortfolioSummaryCard";
+import { SectorAllocationCard } from "./components/SectorAllocationCard.js";
+import { PortfolioFigureNotes, PortfolioKpiRow } from "./components/PortfolioKpiRow.js";
+import { OverviewStatus, mergeStatusItems, type StatusItem } from "./components/OverviewStatus.js";
+import { formatMoney, formatSignedPercent, portfolioFigures } from "./lib/portfolioFigures.js";
+import { holdingIdentityLine } from "./lib/holdingIdentity.js";
+import { longDate, shortDate } from "./lib/dates.js";
+import { readDashboard, useDashboard } from "./lib/dashboardResource";
+import { HOME_MODULE, MODULES, investingModulePath } from "./lib/investingRegistry.js";
+import { useInvestingLayout } from "./lib/layoutResource.js";
+import { useSectors } from "./lib/sectorResource.js";
+import { PortfolioLetterCard } from "./components/PortfolioLetterCard.js";
+import { letterToText, useLatestLetter } from "./lib/portfolioLetter.js";
+import {
+  chatErrorMessage,
+  currentThreadId,
+  forgetThread,
+  portfolioChat,
+  selectThread,
+  startNewThread,
+  useAgentCatalog,
+} from "./lib/portfolioAgents";
+import { filterVisibleSyncProblems, requestRefresh, useSyncSession } from "./lib/syncSession";
+import { PERSONAL_URL } from "./lib/personal";
+import { brokerLabel, historyGate } from "./lib/historyGate";
 
 /* `service` only comes back from the investing server itself. Mounted on
  * lavega.dev the personal server answers /health, and it names no service. */
 type Health = { ok: boolean; service?: string };
-type BrokerProgress = { status: "idle" | "running" | "waiting" | "completed" | "problem"; pages: number; ordersRead: number; positionsRead: number; waitUntil: string | null; remaining: number | null; updatedAt: string | null; message: string | null };
-type PriceProgress = { status: "idle" | "running" | "waiting" | "completed" | "problem"; total: number; completed: number; remainingSymbols: string[]; currentSymbol: string | null; waitUntil: string | null; updatedAt: string | null; message: string | null; problems: string[] };
-type DashboardState =
-  | { status: "loading" }
-  | { status: "ready"; data: InvestingDashboardData; refreshError?: string }
-  | { status: "error"; message: string };
-
-function isDashboardData(value: unknown): value is InvestingDashboardData {
-  if (!value || typeof value !== "object") return false;
-  const data = value as Partial<InvestingDashboardData>;
-  return typeof data.presentationCurrency === "string"
-    && Boolean(data.portfolio && typeof data.portfolio === "object")
-    && Boolean(data.allocation && typeof data.allocation === "object")
-    && typeof data.dataVersion === "number"
-    && (data.benchmarks === undefined || Array.isArray(data.benchmarks))
-    && Array.isArray(data.externalCashFlows)
-    && Array.isArray(data.positions)
-    && Array.isArray(data.problems)
-    && (data.position === null || (Boolean(data.position) && typeof data.position === "object"));
-}
-
-async function fetchDashboard(symbol?: string): Promise<InvestingDashboardData> {
-  const query = symbol ? `?symbol=${encodeURIComponent(symbol)}` : "";
-  const response = await fetch(`/api/investing/dashboard${query}`);
-  if (!response.ok) throw new Error(`Dashboard laden mislukt: ${response.status}`);
-  const payload: unknown = await response.json();
-  if (!isDashboardData(payload)) throw new Error("Dashboardgegevens hebben ongeldig formaat.");
-  return payload;
-}
-
-function useDashboard(symbol?: string): DashboardState {
-  const [state, setState] = useState<DashboardState>({ status: "loading" });
-  useEffect(() => {
-    let current = true;
-    const load = () => {
-      setState((previous) => previous.status === "ready" ? previous : { status: "loading" });
-      void fetchDashboard(symbol)
-        .then((data) => { if (current) setState({ status: "ready", data }); })
-        .catch((reason: unknown) => {
-          if (!current) return;
-          const message = reason instanceof Error ? reason.message : "Dashboard laden mislukt";
-          setState((previous) => previous.status === "ready" ? { ...previous, refreshError: message } : { status: "error", message });
-        });
-    };
-    load();
-    window.addEventListener(DASHBOARD_REFRESH_EVENT, load);
-    return () => { current = false; window.removeEventListener(DASHBOARD_REFRESH_EVENT, load); };
-  }, [symbol]);
-  return state;
-}
-
 function DashboardLoading() {
-  return <div role="status" className="rounded-card border border-border bg-secondary/30 p-6 text-sm text-muted-foreground">Dashboard laden…</div>;
+  return (
+    <div
+      role="status"
+      className="rounded-card border border-border bg-secondary/30 p-6 text-sm text-muted-foreground"
+    >
+      Loading dashboard…
+    </div>
+  );
 }
 
 function DashboardError({ message }: { message: string }) {
-  return <EmptyState title="Dashboard niet beschikbaar" description={message} />;
+  return <EmptyState title="Dashboard unavailable" description={message} />;
 }
 
-function DashboardProblems({ problems }: { problems: string[] }) {
-  if (problems.length === 0) return null;
-  return <div role="alert" className="rounded-card border border-negative/30 bg-negative/5 p-4 text-sm"><p className="font-semibold">Leesproblemen</p><ul className="mt-2 list-disc space-y-1 pl-5">{problems.map((problem, index) => <li key={`${problem}-${index}`}>{problem}</li>)}</ul></div>;
+/** Every reason the Overview's data may be wrong or stale, as one list for the
+ *  single status line. Broker credentials that cannot be read keep their
+ *  reconnect action. */
+function overviewStatusItems({
+  refreshError,
+  syncProblems,
+  readingProblems,
+  needsAttention,
+}: {
+  refreshError: string | null;
+  syncProblems: readonly string[];
+  readingProblems: readonly string[];
+  needsAttention: boolean;
+}): StatusItem[] {
+  const items: StatusItem[] = [];
+  if (refreshError)
+    items.push({
+      message: `Refresh failed: ${refreshError} Cached data remains visible.`,
+      severity: "warning",
+    });
+  for (const message of syncProblems) items.push({ message, severity: "problem" });
+  for (const message of filterVisibleSyncProblems([...readingProblems]))
+    items.push({
+      message,
+      severity: "problem",
+      action: /credentials cannot be read/i.test(message)
+        ? { to: "/brokers/connect", label: "Reconnect broker" }
+        : undefined,
+    });
+  if (needsAttention)
+    items.push({
+      message: "Broker or price status needs attention.",
+      severity: "warning",
+      action: { to: "/profile#brokers", label: "Review it in Profile" },
+    });
+  return mergeStatusItems(items);
+}
+
+/** The status line for pages that show the dashboard read without the open-time
+ *  sync: refresh failure and reading problems, merged into one line. */
+function DashboardStatus({
+  data,
+  refreshError,
+}: {
+  data: InvestingDashboardData;
+  refreshError?: string;
+}) {
+  return (
+    <OverviewStatus
+      items={overviewStatusItems({
+        refreshError: refreshError ?? null,
+        syncProblems: [],
+        readingProblems: data.problems,
+        needsAttention: false,
+      })}
+    />
+  );
 }
 
 type PositionSort = "instrument" | "value" | "weight" | "return";
@@ -110,485 +153,638 @@ type SortDirection = "asc" | "desc";
 
 const POSITION_SORTS: Array<{ key: PositionSort; label: string }> = [
   { key: "instrument", label: "Instrument" },
-  { key: "value", label: "Waarde" },
-  { key: "weight", label: "% portefeuille" },
-  { key: "return", label: "Totaal rendement" },
+  { key: "value", label: "Value" },
+  { key: "weight", label: "% portfolio" },
+  { key: "return", label: "Total return" },
 ];
 
-function numericCompare(left: number | null, right: number | null, direction: SortDirection): number {
+function numericCompare(
+  left: number | null,
+  right: number | null,
+  direction: SortDirection,
+): number {
   if (left === null) return right === null ? 0 : 1;
   if (right === null) return -1;
   return (left - right) * (direction === "asc" ? 1 : -1);
 }
 
-function PositionList({ positions, currency }: { positions: InvestingDashboardData["positions"]; currency: string }) {
+/** WS4.2: say why a basis is unknown instead of only "return unavailable".
+ *  The code is typed in core (`CostBasisUnknownReason`); copy lives here. */
+function basisUnknownCopy(
+  basis: InvestingDashboardData["positions"][number]["basis"],
+): string | null {
+  switch (basis?.reason) {
+    case "transfer-in":
+      return "Basis unknown: units arrived by transfer, so the purchase price is not known.";
+    case "missing-fx":
+      return "Basis unknown: an FX rate is missing.";
+    case "missing-price":
+      return "Basis unknown: a trade has no price.";
+    case "missing-fee":
+      return "Basis unknown: a trade fee is missing.";
+    case "quantity-mismatch":
+      return "Basis unknown: the trade history does not match the broker quantity.";
+    case "provider-incomplete":
+      return "Basis unknown: the broker reports only part of the position.";
+    case "no-history":
+      return "Basis unknown: there is no trade history for this position.";
+    default:
+      return null;
+  }
+}
+
+function PositionList({
+  positions,
+  currency,
+}: {
+  positions: InvestingDashboardData["positions"];
+  currency: string;
+}) {
   const [searchParams, setSearchParams] = useSearchParams();
   const requestedSort = searchParams.get("sort");
-  const sort: PositionSort = POSITION_SORTS.some(({ key }) => key === requestedSort) ? requestedSort as PositionSort : "value";
+  const sort: PositionSort = POSITION_SORTS.some(({ key }) => key === requestedSort)
+    ? (requestedSort as PositionSort)
+    : "value";
   const direction: SortDirection = searchParams.get("direction") === "asc" ? "asc" : "desc";
-  if (positions.length === 0) return <EmptyState title="Geen posities geladen" description="Koppel een broker of importeer een overzicht om jouw beleggingen te zien." />;
+  if (positions.length === 0)
+    return (
+      <EmptyState
+        title="No positions loaded"
+        description="Connect a broker or import a statement to see your investments."
+      />
+    );
   const sorted = [...positions].sort((left, right) => {
     if (sort === "instrument") {
-      const result = `${left.description ?? left.symbol}\u0000${left.entity}`.localeCompare(`${right.description ?? right.symbol}\u0000${right.entity}`, "nl");
+      const result = `${left.description ?? left.symbol}\u0000${left.entity}`.localeCompare(
+        `${right.description ?? right.symbol}\u0000${right.entity}`,
+        "en",
+      );
       return result * (direction === "asc" ? 1 : -1);
     }
     if (sort === "value") return numericCompare(left.marketValue, right.marketValue, direction);
-    if (sort === "weight") return numericCompare(left.portfolioWeight, right.portfolioWeight, direction);
+    if (sort === "weight")
+      return numericCompare(left.portfolioWeight, right.portfolioWeight, direction);
     return numericCompare(left.returns.totalReturn, right.returns.totalReturn, direction);
   });
-  const money = (value: number) => value.toLocaleString("nl-NL", { style: "currency", currency, maximumFractionDigits: 2, signDisplay: "always" });
-  const percent = (value: number) => value.toLocaleString("nl-NL", { style: "percent", maximumFractionDigits: 1, signDisplay: "always" });
+  const money = (value: number) =>
+    value.toLocaleString("en-GB", {
+      style: "currency",
+      currency,
+      maximumFractionDigits: 2,
+      signDisplay: "always",
+    });
+  const percent = (value: number) =>
+    value.toLocaleString("en-GB", {
+      style: "percent",
+      maximumFractionDigits: 1,
+      signDisplay: "always",
+    });
   function changeSort(next: PositionSort) {
-    const nextDirection: SortDirection = sort === next ? direction === "desc" ? "asc" : "desc" : next === "instrument" ? "asc" : "desc";
+    const nextDirection: SortDirection =
+      sort === next
+        ? direction === "desc"
+          ? "asc"
+          : "desc"
+        : next === "instrument"
+          ? "asc"
+          : "desc";
     setSearchParams({ sort: next, direction: nextDirection });
   }
   const query = searchParams.toString();
-  return <div className="overflow-x-auto rounded-card border border-border" role="table" aria-label="Posities">
-    <div className="min-w-[760px]">
-      <div role="row" className="grid grid-cols-[minmax(220px,1.35fr)_minmax(130px,.8fr)_minmax(130px,.7fr)_minmax(220px,1fr)] bg-secondary/30 px-5 py-3">
-        {POSITION_SORTS.map((column, index) => <div role="columnheader" aria-sort={sort === column.key ? direction === "asc" ? "ascending" : "descending" : "none"} key={column.key} className={index === 0 ? "text-left" : "text-right"}><button type="button" onClick={() => changeSort(column.key)} className="rounded-sm text-xs font-semibold uppercase tracking-wide text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">{column.label}{sort === column.key ? direction === "asc" ? " ↑" : " ↓" : ""}</button></div>)}
-      </div>
-      <div role="rowgroup" className="divide-y divide-border">
-        {sorted.map((position) => <Link role="row" key={`${position.symbol}-${position.entity}`} to={{ pathname: `/positions/${encodeURIComponent(position.symbol)}`, search: query ? `?${query}` : "" }} className="group grid grid-cols-[minmax(220px,1.35fr)_minmax(130px,.8fr)_minmax(130px,.7fr)_minmax(220px,1fr)] items-center px-5 py-4 outline-none hover:bg-secondary/40 focus-visible:bg-secondary/40 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring">
-          <div role="cell" className="min-w-0 pr-4"><span className="block truncate font-semibold text-primary">{position.description ?? position.symbol}</span><span className="block truncate text-xs text-muted-foreground">{position.symbol} · {position.entity} · {position.quantity.toLocaleString("nl-NL")} {position.currency}</span></div>
-          <div role="cell" className="text-right text-sm tabular-nums">{position.marketValue === null ? <span className="text-muted-foreground">{position.priceStatus === "missing-fx" ? "FX-koers ontbreekt" : "Waarde onbekend"}</span> : <><span className="font-semibold">{money(position.marketValue).replace(/^\+/, "")}</span>{position.priceStatus === "forward-filled" && <span className="block text-xs text-warning">Geschatte koers</span>}</>}</div>
-          <div role="cell" className="text-right text-sm tabular-nums">{position.portfolioWeight === null ? <span className="text-muted-foreground">Niet beschikbaar</span> : percent(position.portfolioWeight).replace(/^\+/, "")}</div>
-          <div role="cell" className="pl-4 text-right text-sm tabular-nums">{position.returns.status === "available" && position.returns.totalReturn !== null ? <><span className={position.returns.totalReturn >= 0 ? "font-semibold text-positive" : "font-semibold text-negative"}>{money(position.returns.totalReturn)}{position.returns.totalReturnPercentage === null ? "" : ` (${percent(position.returns.totalReturnPercentage)})`}</span><span className="block text-xs text-muted-foreground">totaal rendement</span></> : <><span className="font-medium text-muted-foreground">{position.returns.status === "missing-fx" ? "FX-koers ontbreekt" : "Rendement niet beschikbaar"}</span>{position.returns.status === "missing-cost" && <span className="block text-xs leading-5 text-muted-foreground">Importeer eerdere transacties of koppel je andere brokers om rendement te berekenen.</span>}</>}</div>
-        </Link>)}
+  return (
+    <div
+      className="overflow-x-auto rounded-card border border-border"
+      role="table"
+      aria-label="Positions"
+    >
+      <div className="min-w-[760px]">
+        <div
+          role="row"
+          className="grid grid-cols-[minmax(220px,1.35fr)_minmax(130px,.8fr)_minmax(130px,.7fr)_minmax(220px,1fr)] bg-secondary/30 px-5 py-3"
+        >
+          {POSITION_SORTS.map((column, index) => (
+            <div
+              role="columnheader"
+              aria-sort={
+                sort === column.key ? (direction === "asc" ? "ascending" : "descending") : "none"
+              }
+              key={column.key}
+              className={index === 0 ? "text-left" : "text-right"}
+            >
+              <button
+                type="button"
+                onClick={() => changeSort(column.key)}
+                className="rounded-chip text-xs font-semibold uppercase tracking-wide text-muted-foreground outline-hidden hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              >
+                {column.label}
+                {sort === column.key ? (direction === "asc" ? " ↑" : " ↓") : ""}
+              </button>
+            </div>
+          ))}
+        </div>
+        <div role="rowgroup" className="divide-y divide-border">
+          {sorted.map((position) => (
+            <Link
+              role="row"
+              key={`${position.symbol}-${position.entity}`}
+              to={{
+                pathname: `/positions/${encodeURIComponent(position.symbol)}`,
+                search: query ? `?${query}` : "",
+              }}
+              className="group grid grid-cols-[minmax(220px,1.35fr)_minmax(130px,.8fr)_minmax(130px,.7fr)_minmax(220px,1fr)] items-center px-5 py-4 outline-hidden hover:bg-secondary/40 focus-visible:bg-secondary/40 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+            >
+              <div role="cell" className="min-w-0 pr-4">
+                <span className="block truncate font-semibold text-accent">
+                  {position.description ?? position.symbol}
+                </span>
+                <span className="block truncate text-xs text-muted-foreground">
+                  {holdingIdentityLine(position)}
+                </span>
+              </div>
+              <div role="cell" className="text-right text-sm tabular-nums">
+                {position.marketValue === null ? (
+                  <span className="text-muted-foreground">
+                    {position.priceStatus === "missing-fx" ? "FX rate missing" : "Value unknown"}
+                  </span>
+                ) : (
+                  <>
+                    <span className="font-semibold">
+                      {money(position.marketValue).replace(/^\+/, "")}
+                    </span>
+                    {position.priceStatus === "forward-filled" && (
+                      <span
+                        className="ml-2 text-xs font-medium text-warning"
+                        title="Price is estimated from latest available market data"
+                      >
+                        · <span aria-hidden="true">est.</span>
+                        <span className="sr-only">Estimated price</span>
+                      </span>
+                    )}
+                  </>
+                )}
+              </div>
+              <div role="cell" className="text-right text-sm tabular-nums">
+                {position.portfolioWeight === null ? (
+                  <span className="text-muted-foreground">Unavailable</span>
+                ) : (
+                  percent(position.portfolioWeight).replace(/^\+/, "")
+                )}
+              </div>
+              <div role="cell" className="pl-4 text-right text-sm tabular-nums">
+                {position.returns.status === "broker-unrealized" &&
+                position.returns.unrealizedGain !== null ? (
+                  <>
+                    <span
+                      className={
+                        position.returns.unrealizedGain >= 0
+                          ? "font-semibold text-positive"
+                          : "font-semibold text-negative"
+                      }
+                    >
+                      {money(position.returns.unrealizedGain)}
+                    </span>
+                    <span className="block text-xs text-muted-foreground">
+                      unrealized return on broker cost
+                    </span>
+                  </>
+                ) : position.returns.status === "available" &&
+                  position.returns.totalReturn !== null ? (
+                  <>
+                    <span
+                      className={
+                        position.returns.totalReturn >= 0
+                          ? "font-semibold text-positive"
+                          : "font-semibold text-negative"
+                      }
+                    >
+                      {money(position.returns.totalReturn)}
+                      {position.returns.totalReturnPercentage === null
+                        ? ""
+                        : ` (${percent(position.returns.totalReturnPercentage)})`}
+                    </span>
+                    <span className="block text-xs text-muted-foreground">total return</span>
+                  </>
+                ) : (
+                  <>
+                    <span className="font-medium text-muted-foreground">
+                      {position.returns.status === "missing-fx"
+                        ? "FX rate missing"
+                        : "Return unavailable"}
+                    </span>
+                    {position.returns.status === "missing-cost" && (
+                      <span className="block text-xs leading-5 text-muted-foreground">
+                        {basisUnknownCopy(position.basis) ??
+                          "Import earlier transactions or connect your other brokers to calculate return."}
+                      </span>
+                    )}
+                  </>
+                )}
+              </div>
+            </Link>
+          ))}
+        </div>
       </div>
     </div>
-  </div>;
+  );
 }
 
 function PortfolioKpis({ data }: { data: InvestingDashboardData }) {
-  const points = data.portfolio.All;
-  const latest = points.at(-1);
-  const previous = points.at(-2);
-  const dailyChange = latest?.value !== null && latest?.value !== undefined && previous?.value !== null && previous?.value !== undefined
-    ? latest.value - previous.value
-    : null;
-  const dailyChangePercentage = dailyChange !== null && previous?.value ? dailyChange / previous.value : null;
-  const totalReturn = buildIndexedSeries(points, [], data.externalCashFlows).at(-1)?.portfolioReturn ?? null;
-  const money = (value: number | null, signDisplay: "auto" | "always" = "auto") => value === null
-    ? "Waarde onbekend"
-    : value.toLocaleString("nl-NL", { style: "currency", currency: data.presentationCurrency, maximumFractionDigits: 2, signDisplay });
-  const percentage = (value: number | null) => value === null ? "Rendement onbekend" : value.toLocaleString("nl-NL", { style: "percent", maximumFractionDigits: 2, signDisplay: "always" });
-  return <section aria-label="Portefeuille-KPI's" className="rounded-card border border-border bg-card p-5 shadow-soft" data-dashboard-section="kpis">
-    <p className="text-xs font-semibold uppercase tracking-[.16em] text-muted-foreground">Kerncijfers</p>
-    <dl className="mt-4 space-y-4">
-      <div><dt className="text-xs text-muted-foreground">Portefeuillewaarde</dt><dd className={`mt-1 font-display text-3xl font-semibold tabular-nums ${latest?.value === null || latest?.value === undefined ? "text-muted-foreground" : ""}`}>{money(latest?.value ?? null)}</dd></div>
-      <div className="border-t border-border pt-4"><dt className="text-xs text-muted-foreground">Dagmutatie</dt><dd className={`mt-1 font-display text-2xl font-semibold tabular-nums ${dailyChange === null ? "text-muted-foreground" : dailyChange >= 0 ? "text-positive" : "text-negative"}`}>{money(dailyChange, "always")}</dd><dd className="text-xs text-muted-foreground">{percentage(dailyChangePercentage)}</dd></div>
-      <div className="border-t border-border pt-4"><dt className="text-xs text-muted-foreground">Totaal rendement</dt><dd className={`mt-1 font-display text-2xl font-semibold tabular-nums ${totalReturn === null ? "text-muted-foreground" : totalReturn >= 0 ? "text-positive" : "text-negative"}`}>{percentage(totalReturn)}</dd><dd className="text-xs text-muted-foreground">TWR na stortingen en opnames</dd></div>
-    </dl>
-    {latest && latest.forwardFilled.length > 0 && <p className="mt-4 text-xs text-muted-foreground">Geschatte koers: {latest.forwardFilled.join(", ")}</p>}
-    {latest && (latest.unpriced.length > 0 || latest.cashUnknown.length > 0) && <div role="status" className="mt-4 rounded-[14px] border border-warning/30 bg-warning/10 px-3 py-2 text-xs leading-5"><p className="font-semibold">Waarde deels onbekend</p>{latest.unpriced.length > 0 && <p>Geen bruikbare koers: {latest.unpriced.join(", ")}</p>}{latest.cashUnknown.length > 0 && <p>Cashhistorie onbekend: {latest.cashUnknown.join(", ")}</p>}</div>}
-  </section>;
+  const figures = portfolioFigures(data);
+  const { portfolioValue, dailyChange, dailyChangePercentage, totalReturn, since } = figures;
+  const money = (value: number | null, signDisplay: "auto" | "always" = "auto") =>
+    value === null ? "Value unknown" : formatMoney(value, data.presentationCurrency, signDisplay);
+  const percentage = (value: number | null) =>
+    value === null ? "Return unknown" : formatSignedPercent(value);
+  return (
+    <section
+      aria-label="Portfolio KPIs"
+      className="rounded-card border border-border bg-card p-5"
+      data-dashboard-section="kpis"
+    >
+      <h3 className="font-sans text-xl font-semibold tracking-tight">Key figures</h3>
+      <dl className="mt-4 space-y-4">
+        <div>
+          <dt className="text-xs text-muted-foreground">Portfolio value</dt>
+          <dd
+            className={`mt-1 text-3xl font-semibold tabular-nums ${portfolioValue === null ? "text-muted-foreground" : ""}`}
+          >
+            {money(portfolioValue)}
+          </dd>
+          {figures.usingPositionsFallback && (
+            <dd className="text-xs text-muted-foreground">
+              Priced positions only; cash and history are still missing.
+            </dd>
+          )}
+        </div>
+        <div className="border-t border-border pt-4">
+          <dt className="text-xs text-muted-foreground">Daily change</dt>
+          <dd
+            className={`mt-1 text-2xl font-semibold tabular-nums ${dailyChange === null ? "text-muted-foreground" : dailyChange >= 0 ? "text-positive" : "text-negative"}`}
+          >
+            {money(dailyChange, "always")}
+          </dd>
+          <dd className="text-xs text-muted-foreground">{percentage(dailyChangePercentage)}</dd>
+        </div>
+        <div className="border-t border-border pt-4">
+          <dt className="text-xs text-muted-foreground">Total return</dt>
+          <dd
+            className={`mt-1 text-2xl font-semibold tabular-nums ${totalReturn === null ? "text-muted-foreground" : totalReturn >= 0 ? "text-positive" : "text-negative"}`}
+          >
+            {percentage(totalReturn)}
+          </dd>
+          <dd className="text-xs text-muted-foreground">
+            {since
+              ? `TWR since ${shortDate(since)}, after deposits and withdrawals`
+              : "TWR after deposits and withdrawals"}
+          </dd>
+        </div>
+      </dl>
+      <PortfolioFigureNotes figures={figures} currency={data.presentationCurrency} />
+    </section>
+  );
 }
 
-type StatusTone = "neutral" | "active" | "success" | "warning" | "problem";
+function AgentView() {
+  const { agentId } = useParams();
+  const dashboard = useDashboard();
+  const { catalog, reload } = useAgentCatalog();
+  const [input, setInput] = useState("");
 
-function StatusChip({ label, value, detail, tone = "neutral", children }: { label: string; value: string; detail?: string; tone?: StatusTone; children?: React.ReactNode }) {
-  const toneClass = tone === "problem" ? "border-negative/30 bg-negative/5" : tone === "warning" ? "border-warning/30 bg-warning/10" : tone === "success" ? "border-positive/30 bg-positive/5" : tone === "active" ? "border-primary/20 bg-secondary/40" : "border-border bg-secondary/20";
-  const dotClass = tone === "problem" ? "bg-negative" : tone === "warning" ? "bg-warning" : tone === "success" ? "bg-positive" : tone === "active" ? "bg-primary" : "bg-muted-foreground";
-  return <div className={`rounded-[14px] border px-3 py-2.5 ${toneClass}`}><div className="flex items-center justify-between gap-3"><span className="flex min-w-0 items-center gap-2 text-xs font-semibold"><span aria-hidden="true" className={`size-2 shrink-0 rounded-full ${dotClass}`} />{label}</span><span className="text-xs font-semibold">{value}</span></div>{detail && <p className="mt-1 truncate pl-4 text-[11px] text-muted-foreground">{detail}</p>}{children}</div>;
-}
+  const agents = catalog.status === "ready" ? catalog.agents : [];
+  const agent = agents.find((item) => item.id === agentId);
+  /* From the URL, not the catalog: the chat is created on first render,
+   *  before the catalog has loaded, and keeps the agent it was made with. */
+  const personaId = agentId ?? "";
+  /* The persona's current thread lives in portfolioAgents; this only
+   *  re-renders when it changes. */
+  const [, setThreadVersion] = useState(0);
+  const threadId = currentThreadId(personaId);
+  const [openError, setOpenError] = useState<string | null>(null);
+  const { messages, sendMessage, status, error } = useChat({
+    chat: portfolioChat(personaId, threadId),
+  });
+  const sending = status === "submitted" || status === "streaming";
+  /* Refetch the list when a turn starts (a new thread appears) and when its
+   * reply settles (the thread moves to the top). */
+  const threadsKey = `${threadId}:${status === "ready" ? messages.length : "busy"}`;
 
-function OverviewStatusRail({ dataVersion }: { dataVersion: number }) {
-  const [broker, setBroker] = useState<BrokerProgress | null>(null);
-  const [price, setPrice] = useState<PriceProgress | null>(null);
-  const [vault, setVault] = useState<"empty" | "locked" | "unlocked" | "unknown">("unknown");
-  const refreshedPriceRun = useRef<string | null>(null);
-  useEffect(() => {
-    let current = true;
-    let timer: number | null = null;
-    const clearTimer = () => {
-      if (timer !== null) window.clearTimeout(timer);
-      timer = null;
-    };
-    const load = async () => {
-      const [brokerResult, priceResult, vaultResult] = await Promise.allSettled([
-        fetch("/api/brokers/sync/status").then(async (response) => response.ok ? await response.json() as BrokerProgress : null),
-        fetch("/api/prices/sync/status").then(async (response) => response.ok ? await response.json() as PriceProgress : null),
-        fetch("/api/brokers/credentials/status").then(async (response) => response.ok ? await response.json() as { status?: string } : null),
-      ]);
-      if (!current) return;
-      let active = false;
-      if (brokerResult.status === "fulfilled" && brokerResult.value && ["idle", "running", "waiting", "completed", "problem"].includes(brokerResult.value.status)) {
-        setBroker(brokerResult.value);
-        active = active || brokerSyncActive(brokerResult.value.status);
-      }
-      if (priceResult.status === "fulfilled" && priceResult.value && ["idle", "running", "waiting", "completed", "problem"].includes(priceResult.value.status)) {
-        setPrice(priceResult.value);
-        active = active || brokerSyncActive(priceResult.value.status);
-        if ((priceResult.value.status === "completed" || priceResult.value.status === "problem") && priceResult.value.updatedAt && refreshedPriceRun.current !== priceResult.value.updatedAt) {
-          refreshedPriceRun.current = priceResult.value.updatedAt;
-          window.dispatchEvent(new Event(DASHBOARD_REFRESH_EVENT));
-        }
-      }
-      if (vaultResult.status === "fulfilled" && ["empty", "locked", "unlocked"].includes(vaultResult.value?.status ?? "")) setVault(vaultResult.value!.status as "empty" | "locked" | "unlocked");
-      if (active) timer = window.setTimeout(load, 1_000);
-    };
-    const wake = () => {
-      clearTimer();
-      void load();
-    };
-    void load();
-    window.addEventListener(BROKER_SYNC_STARTED_EVENT, wake);
-    return () => {
-      current = false;
-      clearTimer();
-      window.removeEventListener(BROKER_SYNC_STARTED_EVENT, wake);
-    };
-  }, []);
-  const brokerValue = broker?.status === "running" ? "Bezig" : broker?.status === "waiting" ? "Wachten" : broker?.status === "completed" ? "Actueel" : broker?.status === "problem" ? "Probleem" : broker?.status === "idle" ? "Gereed" : "Onbekend";
-  const priceValue = price?.status === "running" ? `${price.completed} van ${price.total} geladen` : price?.status === "waiting" ? "Wachten" : price?.status === "completed" ? "Actueel" : price?.status === "problem" ? "Probleem" : price?.status === "idle" ? "Gereed" : "Onbekend";
-  const statusTone = (status?: BrokerProgress["status"]): StatusTone => status === "problem" ? "problem" : status === "waiting" ? "warning" : status === "running" ? "active" : status === "completed" ? "success" : "neutral";
-  return <section aria-label="Operationele status" className="rounded-card border border-border bg-card p-4 shadow-soft" data-dashboard-section="status">
-    <p className="mb-3 text-xs font-semibold uppercase tracking-[.16em] text-muted-foreground">Status</p>
-    <div className="space-y-2" aria-live="polite">
-      <StatusChip label="Brokers" value={brokerValue} tone={statusTone(broker?.status)} detail={broker?.status === "waiting" ? broker.message ?? "API-capaciteit wordt afgewacht" : broker?.status === "problem" ? broker.message ?? "Gecachete gegevens blijven zichtbaar" : undefined} />
-      <StatusChip label="Prijsgeschiedenis" value={priceValue} tone={statusTone(price?.status)} detail={price?.status === "running" ? price.currentSymbol ? `${price.currentSymbol} wordt geladen` : `${price.remainingSymbols.length} symbolen resterend` : price?.status === "problem" ? `${price.problems.length} symboolproblemen; cache blijft beschikbaar` : undefined} />
-      <StatusChip label="Kluis" value={vault === "unlocked" ? "Open" : vault === "locked" ? "Vergrendeld" : vault === "empty" ? "Niet ingesteld" : "Onbekend"} tone={vault === "unlocked" ? "success" : vault === "locked" ? "warning" : "neutral"} />
-      <StatusChip label="Cache" value={`Versie ${dataVersion}`} tone={dataVersion > 0 ? "success" : "neutral"}><div className="mt-2 flex justify-end"><ClearPriceCache /></div></StatusChip>
+  function showThread(next: string) {
+    selectThread(personaId, next);
+    setThreadVersion((value) => value + 1);
+    setOpenError(null);
+  }
+
+  async function openThread(next: string) {
+    if (next === threadId) return;
+    try {
+      portfolioChat(personaId, next, await fetchThreadMessages(next));
+      showThread(next);
+    } catch (reason) {
+      setOpenError(reason instanceof Error ? reason.message : "Conversation could not be opened.");
+    }
+  }
+
+  function threadDeleted(deleted: string) {
+    forgetThread(deleted);
+    if (deleted === threadId) showThread(startNewThread(personaId));
+  }
+  /* A reply that is still in tool steps has no text yet; the status line
+   * stands in for it rather than an empty bubble. */
+  const bubbles = messages
+    .map((message) => ({
+      id: message.id,
+      role: message.role,
+      /* A tagged agent's reply is named; the page's own agent is not. */
+      speaker:
+        agents.find(
+          (item) =>
+            item.id === (message.metadata as { agentId?: unknown } | undefined)?.agentId &&
+            item.id !== agentId,
+        )?.displayName ?? null,
+      text: message.parts.map((part) => (part.type === "text" ? part.text : "")).join(""),
+    }))
+    .filter((message) => message.text.length > 0);
+
+  /* The first tag in the last question answers it, by the same rule the
+   * server uses to pick the responder — full, first or last name. */
+  const lastQuestion = bubbles.filter((message) => message.role === "user").at(-1)?.text ?? "";
+  const responderId = findMentions(lastQuestion, agents)[0]?.id;
+  const responder = agents.find((item) => item.id === responderId) ?? agent;
+
+  function submit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const question = input.trim();
+    if (!agent || !question || sending) return;
+    setInput("");
+    void sendMessage({ text: question });
+  }
+
+  if (dashboard.status === "loading" || catalog.status === "loading") return <DashboardLoading />;
+  if (dashboard.status === "error") return <DashboardError message={dashboard.message} />;
+  if (catalog.status === "error" || catalog.status === "empty") {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Agents unavailable</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <AgentCatalogProblem
+            message={
+              catalog.status === "error" ? catalog.message : "No portfolio agents available."
+            }
+            onRetry={reload}
+          />
+        </CardContent>
+      </Card>
+    );
+  }
+  /* Only a resolved catalog can say an id is unknown. */
+  if (!agent) {
+    return <EmptyState title="Agent not found" description="Choose an agent from the overview." />;
+  }
+
+  const contextPositions = [...dashboard.data.positions].sort(
+    (left, right) => (right.marketValue ?? -Infinity) - (left.marketValue ?? -Infinity),
+  );
+
+  return (
+    <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_280px]">
+      <section className="flex min-h-[620px] flex-col rounded-card border border-border bg-card">
+        <div className="border-b border-border px-5 py-5 sm:px-6">
+          <Link to="/" className="text-sm font-semibold text-accent hover:underline">
+            ← Back to overview
+          </Link>
+          <h2 className="mt-6 font-display text-5xl">{agent.displayName}</h2>
+          <p className="mt-2 text-sm leading-6 text-muted-foreground">{agent.investingStyle}</p>
+        </div>
+        <div className="flex-1 space-y-4 overflow-y-auto px-5 py-6 sm:px-6" aria-live="polite">
+          <div className="flex justify-start">
+            <p className="max-w-[86%] whitespace-pre-line rounded-tile bg-secondary px-4 py-3 text-sm leading-6 text-foreground">
+              I am {agent.displayName}. I look at your positions through this lens. Ask a question
+              about a holding, concentration, return or risk.
+            </p>
+          </div>
+          {bubbles.map((message) => (
+            <div
+              key={message.id}
+              className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}
+            >
+              {message.role === "user" ? (
+                <p className="max-w-[86%] whitespace-pre-line rounded-tile bg-accent px-4 py-3 text-sm leading-6 text-accent-foreground">
+                  <MentionText text={message.text} agents={agents} />
+                </p>
+              ) : (
+                <div className="max-w-[86%] rounded-tile bg-secondary px-4 py-3 text-sm leading-6 text-foreground">
+                  {message.speaker && (
+                    <p className="mb-1 text-xs font-semibold text-accent">{message.speaker}</p>
+                  )}
+                  <AgentMessageText text={message.text} />
+                </div>
+              )}
+            </div>
+          ))}
+          {sending && bubbles.at(-1)?.role !== "assistant" && (
+            <p role="status" className="text-sm text-muted-foreground">
+              {responder?.displayName ?? agent.displayName} is reading positions…
+            </p>
+          )}
+        </div>
+        <form onSubmit={submit} className="border-t border-border p-4 sm:p-5">
+          <label htmlFor="agent-message" className="sr-only">
+            Ask {agent.displayName}
+          </label>
+          <div className="rounded-tile border border-border bg-background p-2 focus-within:ring-2 focus-within:ring-ring">
+            <MentionInput
+              id="agent-message"
+              value={input}
+              onChange={setInput}
+              agents={agents}
+              selfId={agent.id}
+              placeholder="Ask about your positions… or @ another agent"
+              className="block max-h-40 w-full resize-none bg-transparent px-2 py-1.5 text-sm leading-6 outline-hidden"
+              disabled={sending}
+            />
+            <div className="mt-1 flex justify-end">
+              <Button type="submit" size="sm" disabled={sending || input.trim().length === 0}>
+                Send
+              </Button>
+            </div>
+          </div>
+          {error && (
+            <p role="alert" className="mt-3 text-sm text-negative">
+              {chatErrorMessage(error)}
+            </p>
+          )}
+          {openError && (
+            <p role="alert" className="mt-3 text-sm text-negative">
+              {openError}
+            </p>
+          )}
+          <p className="mt-3 text-xs text-muted-foreground">
+            Educational analysis. No personal investment advice.
+          </p>
+        </form>
+      </section>
+      <aside
+        aria-label="Conversation context"
+        className="flex min-h-0 flex-col rounded-card border border-border bg-card p-5 lg:sticky lg:top-5 lg:max-h-[calc(100vh-2.5rem)]"
+      >
+        <AgentThreads
+          agentId={agent.id}
+          activeThreadId={threadId}
+          refreshKey={threadsKey}
+          onOpen={(next) => void openThread(next)}
+          onNew={() => showThread(startNewThread(agent.id))}
+          onDeleted={threadDeleted}
+        />
+        <div className="flex items-end justify-between gap-3">
+          <div>
+            <h3 className="font-display text-3xl">Your positions</h3>
+          </div>
+          <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
+            {contextPositions.length}
+          </span>
+        </div>
+        <div className="mt-4 min-h-0 max-h-96 flex-1 space-y-1.5 overflow-y-auto pr-1 lg:max-h-none">
+          {contextPositions.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No positions available.</p>
+          ) : (
+            contextPositions.map((position) => (
+              <Link
+                key={`${position.symbol}-${position.entity}`}
+                to={`/positions/${encodeURIComponent(position.symbol)}`}
+                className="pressable flex items-center justify-between gap-3 rounded-tile bg-secondary/60 px-3 py-2.5 hover:bg-secondary"
+              >
+                <span className="min-w-0">
+                  <span className="block truncate text-sm font-semibold">
+                    {position.description ?? position.symbol}
+                  </span>
+                  <span className="mt-0.5 block truncate text-xs text-muted-foreground">
+                    {position.symbol} · {position.quantity.toLocaleString("en-GB")} shares
+                  </span>
+                </span>
+                <span className="shrink-0 text-right text-xs font-semibold tabular-nums">
+                  {position.marketValue === null
+                    ? "Unknown"
+                    : position.marketValue.toLocaleString("en-GB", {
+                        style: "currency",
+                        currency: dashboard.data.presentationCurrency,
+                        maximumFractionDigits: 0,
+                      })}
+                </span>
+              </Link>
+            ))
+          )}
+        </div>
+        <Link
+          to="/positions"
+          className="pressable mt-3 shrink-0 text-center text-xs font-semibold text-accent hover:underline"
+        >
+          View all positions →
+        </Link>
+      </aside>
     </div>
-  </section>;
+  );
 }
 
-function AppOpenSync() {
+/** Runs the open-time sync and owns the Yahoo consent prompt. Its problems are
+ *  reported up through `onProblems` and shown in the Overview's one status
+ *  line; the consent prompt keeps showing its own error because that is the
+ *  reader's next action. */
+function AppOpenSync({ onProblems }: { onProblems: (problems: string[]) => void }) {
   const [problems, setProblems] = useState<string[]>([]);
   const [consent, setConsent] = useState<"checking" | "required" | "accepted">("checking");
   const [consentBusy, setConsentBusy] = useState(false);
+  useEffect(() => {
+    onProblems(consent === "required" ? [] : problems);
+  }, [consent, problems, onProblems]);
   const runSync = useCallback(async (current: () => boolean) => {
     try {
-      notifyBrokerSyncStarted();
-      const brokerResponse = await fetch("/api/brokers/sync", { method: "POST" });
-      const brokerResult = await brokerResponse.json() as { problems?: string[] };
-      window.dispatchEvent(new Event(DASHBOARD_REFRESH_EVENT));
-      if (current()) setProblems([...(brokerResult.problems ?? [])]);
-    } catch { if (current()) setProblems(["Brokersynchronisatie mislukt."]); }
+      /* ONE intent. The server owns the run from here; the state poll shows
+       * its progress, and the tab may close. */
+      const result = await requestRefresh();
+      if (current()) setProblems(filterVisibleSyncProblems(result?.problems ?? []));
+    } catch {
+      if (current()) setProblems(["Broker sync failed."]);
+    }
   }, []);
   useEffect(() => {
     let current = true;
+    const verificationMode = new URLSearchParams(window.location.search).has("verify");
     const prepare = async () => {
       try {
         const response = await fetch("/api/market-data/consent");
-        const decision = await response.json() as { accepted?: boolean };
-        if (!response.ok) throw new Error("Toestemming kon niet worden gelezen.");
+        const decision = (await response.json()) as { accepted?: boolean };
+        if (!response.ok) throw new Error("Consent could not be read.");
         if (!current) return;
-        if (!decision.accepted) { setConsent("required"); return; }
+        if (!decision.accepted) {
+          setConsent("required");
+          return;
+        }
         setConsent("accepted");
+        if (verificationMode) return;
         await runSync(() => current);
       } catch (error) {
-        if (current) setProblems([error instanceof Error ? error.message : "Toestemming kon niet worden gelezen."]);
+        if (current)
+          setProblems([error instanceof Error ? error.message : "Consent could not be read."]);
       }
     };
     void prepare();
-    return () => { current = false; };
-  }, [runSync]);
-  async function acceptYahoo() {
-    setConsentBusy(true); setProblems([]);
-    try {
-      const response = await fetch("/api/market-data/consent", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ accepted: true }) });
-      if (!response.ok) throw new Error("Toestemming opslaan mislukt.");
-      setConsent("accepted");
-      await runSync(() => true);
-    } catch (error) { setProblems([error instanceof Error ? error.message : "Toestemming opslaan mislukt."]); }
-    finally { setConsentBusy(false); }
-  }
-  if (consent === "required") return <section aria-labelledby="yahoo-consent-title" className="rounded-card border border-warning/30 bg-warning/10 p-5 text-sm">
-    <h3 id="yahoo-consent-title" className="font-semibold">Yahoo Finance-toestemming</h3>
-    <p className="mt-2 leading-6 text-muted-foreground">LaVega stuurt tickers en zoektermen naar Yahoo Finance om koershistorie en benchmarks op te halen. Keuze blijft lokaal bewaard. Zonder toestemming blijven gecachete gegevens zichtbaar.</p>
-    <Button type="button" className="mt-4" onClick={acceptYahoo} disabled={consentBusy}>{consentBusy ? "Opslaan…" : "Yahoo Finance toestaan"}</Button>
-    {problems.length > 0 && <p role="alert" className="mt-3 text-negative">{problems[0]}</p>}
-  </section>;
-  if (consent === "checking" && problems.length === 0) return <div role="status" className="rounded-card border border-border bg-card p-4 text-sm text-muted-foreground">Marktdata-toestemming controleren…</div>;
-  if (problems.length === 0) return null;
-  return <div role="alert" className="rounded-card border border-negative/30 bg-negative/5 p-4 text-sm"><p className="font-semibold">Synchronisatieproblemen</p><ul className="mt-2 list-disc space-y-1 pl-5">{problems.map((problem, index) => <li key={`${problem}-${index}`}>{problem}</li>)}</ul></div>;
-}
-
-function ClearPriceCache() {
-  const [busy, setBusy] = useState(false);
-  const [confirming, setConfirming] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
-  async function clear() { setBusy(true); setMessage(null); try { const response = await fetch("/api/prices/cache", { method: "DELETE" }); if (!response.ok) throw new Error("Wissen mislukt"); setMessage("Prijsgegevens verwijderd"); } catch (error) { setMessage(error instanceof Error ? error.message : "Wissen mislukt"); } finally { setBusy(false); } }
-  if (confirming) return <div className="flex flex-wrap items-center justify-end gap-3" role="alert"><span className="text-xs text-negative">Dit verwijdert alle lokaal opgeslagen prijsgegevens.</span><Button type="button" variant="outline" size="sm" onClick={() => setConfirming(false)} disabled={busy}>Annuleren</Button><Button type="button" variant="destructive" size="sm" onClick={clear} disabled={busy}>{busy ? "Wissen…" : "Ja, alles verwijderen"}</Button></div>;
-  return <div className="flex items-center gap-3"><Button type="button" variant="outline" size="sm" onClick={() => setConfirming(true)} disabled={busy}>Prijsgegevens wissen</Button>{message && <span role="status" className="text-xs text-muted-foreground">{message}</span>}</div>;
-}
-
-function BrokerSetupCard({
-  name,
-  eyebrow,
-  description,
-  fields,
-  steps,
-  warning,
-}: {
-  name: string;
-  eyebrow: string;
-  description: string;
-  fields: string[];
-  steps: string[];
-  warning?: string;
-}) {
-  return <article className="rounded-card border border-border bg-card p-5 shadow-soft sm:p-6">
-    <p className="text-xs font-semibold uppercase tracking-[.16em] text-primary">{eyebrow}</p>
-    <h3 className="mt-2 font-display text-3xl font-semibold">{name}</h3>
-    <p className="mt-2 text-sm leading-6 text-muted-foreground">{description}</p>
-    <div className="mt-6 border-t border-border pt-5">
-      <p className="text-sm font-semibold">Gegevens die je nodig hebt</p>
-      <ul className="mt-3 space-y-2 text-sm text-muted-foreground">{fields.map((field) => <li key={field} className="flex gap-2"><span className="text-primary">✓</span><span>{field}</span></li>)}</ul>
-    </div>
-    <div className="mt-6 border-t border-border pt-5">
-      <p className="text-sm font-semibold">Zo vind je ze</p>
-      <ol className="mt-3 list-decimal space-y-3 pl-5 text-sm leading-6 text-muted-foreground">{steps.map((step) => <li key={step}>{step}</li>)}</ol>
-    </div>
-    {warning && <p role="note" className="mt-6 rounded-[14px] bg-warning/10 px-4 py-3 text-xs leading-5 text-foreground">{warning}</p>}
-  </article>;
-}
-
-function BrokerSyncAction() {
-  const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
-  const [problems, setProblems] = useState<string[]>([]);
-
-  async function sync() {
-    setStatus("loading");
-    setProblems([]);
-    try {
-      notifyBrokerSyncStarted();
-      const response = await fetch("/api/brokers/sync?force=true", { method: "POST" });
-      const result = await response.json() as { problems?: string[] };
-      if (!response.ok) throw new Error(result.problems?.[0] ?? "Broker synchronisatie mislukt.");
-      const nextProblems = result.problems ?? [];
-      setProblems(nextProblems);
-      setStatus(nextProblems.length > 0 ? "error" : "success");
-      if (nextProblems.length === 0) window.dispatchEvent(new Event(DASHBOARD_REFRESH_EVENT));
-    } catch (error) {
-      setProblems([error instanceof Error ? error.message : "Broker synchronisatie mislukt."]);
-      setStatus("error");
-    }
-  }
-
-  return <div className="rounded-card border border-border bg-secondary/40 p-5 sm:flex sm:items-center sm:justify-between sm:gap-6">
-    <div>
-      <p className="text-sm font-semibold">Gegevens opgeslagen?</p>
-      <p className="mt-1 text-sm leading-6 text-muted-foreground">Start direct nieuwe broker-synchronisatie. Dit omzeilt dagelijkse sync-cache.</p>
-    </div>
-    <div className="mt-4 shrink-0 sm:mt-0">
-      <Button type="button" onClick={sync} disabled={status === "loading"}>{status === "loading" ? "Synchroniseren…" : "Synchronisatie starten"}</Button>
-    </div>
-    {status === "success" && <p role="status" className="mt-3 text-sm text-positive sm:mt-0">Synchronisatie voltooid.</p>}
-    {problems.length > 0 && <div role="alert" className="mt-4 basis-full rounded-[14px] border border-negative/20 bg-negative/5 px-4 py-3 text-sm"><p className="font-semibold">Synchronisatie niet voltooid</p><ul className="mt-2 list-disc space-y-1 pl-5">{problems.map((problem, index) => <li key={`${problem}-${index}`}>{problem}</li>)}</ul></div>}
-  </div>;
-}
-
-function BrokerSyncProgressCard() {
-  const [progress, setProgress] = useState<BrokerProgress | null>(null);
-
-  useEffect(() => {
-    let current = true;
-    let timer: number | null = null;
-    const clearTimer = () => {
-      if (timer !== null) window.clearTimeout(timer);
-      timer = null;
-    };
-    const load = async () => {
-      try {
-        const response = await fetch("/api/brokers/sync/status");
-        if (!response.ok) return;
-        const next = await response.json() as Partial<BrokerProgress>;
-        if (!current || !["idle", "running", "waiting", "completed", "problem"].includes(next.status ?? "")) return;
-        setProgress(next as BrokerProgress);
-        if (brokerSyncActive(next.status)) timer = window.setTimeout(load, 1_000);
-      } catch { /* Existing sync result surfaces network errors. */ }
-    };
-    const wake = () => {
-      clearTimer();
-      void load();
-    };
-    void load();
-    window.addEventListener(BROKER_SYNC_STARTED_EVENT, wake);
     return () => {
       current = false;
-      clearTimer();
-      window.removeEventListener(BROKER_SYNC_STARTED_EVENT, wake);
     };
-  }, []);
-
-  if (!progress || progress.status === "idle" || progress.status === "problem") return null;
-  const waiting = progress.status === "waiting";
-  const completed = progress.status === "completed";
-  const seconds = progress.waitUntil ? Math.max(0, Math.ceil((Date.parse(progress.waitUntil) - Date.now()) / 1_000)) : null;
-  return <section aria-live="polite" className={`rounded-card border p-5 ${completed ? "border-positive/30 bg-positive/5" : waiting ? "border-warning/30 bg-warning/10" : "border-primary/20 bg-secondary/40"}`}>
-    <div className="flex flex-wrap items-start justify-between gap-4">
-      <div>
-        <p className="text-xs font-semibold uppercase tracking-[.16em] text-primary">Brokersynchronisatie</p>
-        <h3 className="mt-2 font-display text-2xl font-semibold">{completed ? "Trading 212 gesynchroniseerd" : "Trading 212 synchroniseert"}</h3>
-        <p className="mt-2 text-sm text-muted-foreground">{progress.pages} pagina’s · {progress.ordersRead.toLocaleString("nl-NL")} orders gelezen · {progress.positionsRead} posities</p>
-      </div>
-      <span className={`rounded-pill px-3 py-1.5 text-xs font-semibold ${completed ? "bg-positive/10 text-positive" : waiting ? "bg-warning/20 text-foreground" : "bg-primary/10 text-primary"}`}>{completed ? "Voltooid" : waiting ? "API-pauze" : "Bezig"}</span>
-    </div>
-    {waiting && <p className="mt-4 text-sm font-medium">Wacht op nieuwe API-capaciteit{seconds !== null ? ` · verder over ${seconds} sec.` : ""}</p>}
-    {!waiting && !completed && <p className="mt-4 text-sm text-muted-foreground">Volledige orderhistorie wordt geladen. Venster mag open blijven, maar hoeft niet.</p>}
-  </section>;
-}
-
-/**
- * Whether this runtime's vault is opened by a passphrase the user types.
- * A vault the server holds the key to has nothing to ask for, so the field and
- * every promise around it have to disappear rather than sit there unused.
- */
-function useVaultPassphraseMode(): "checking" | "required" | "unused" {
-  const [mode, setMode] = useState<"checking" | "required" | "unused">("checking");
-  useEffect(() => {
-    let current = true;
-    void fetch("/api/brokers/credentials/status")
-      .then(async (response) => response.ok ? await response.json() as { passphrase?: string } : {})
-      .then((result) => { if (current) setMode(result.passphrase === "unused" ? "unused" : "required"); })
-      .catch(() => { if (current) setMode("required"); });
-    return () => { current = false; };
-  }, []);
-  return mode;
-}
-
-function BrokerVaultUnlock() {
-  const [vaultStatus, setVaultStatus] = useState<"checking" | "hidden" | "locked" | "unlocked">("checking");
-  const [passphrase, setPassphrase] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
-
-  useEffect(() => {
-    let current = true;
-    void fetch("/api/brokers/credentials/status")
-      .then(async (response) => response.ok ? await response.json() as { status?: string } : {})
-      .then((result) => { if (current) setVaultStatus(result.status === "locked" ? "locked" : "hidden"); })
-      .catch(() => { if (current) setVaultStatus("hidden"); });
-    return () => { current = false; };
-  }, []);
-
-  async function unlock(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setBusy(true); setMessage(null);
+  }, [runSync]);
+  async function acceptYahoo() {
+    setConsentBusy(true);
+    setProblems([]);
     try {
-      const unlockResponse = await fetch("/api/brokers/credentials/unlock", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ passphrase }) });
-      const unlockResult = await unlockResponse.json().catch(() => ({})) as { problems?: string[] };
-      if (!unlockResponse.ok) throw new Error(unlockResult.problems?.[0] ?? "Kluis ontgrendelen mislukt.");
-      setPassphrase("");
-      notifyBrokerSyncStarted();
-      const syncResponse = await fetch("/api/brokers/sync?force=true", { method: "POST" });
-      const syncResult = await readSyncResult(syncResponse);
-      if (!syncResult) {
-        setVaultStatus("unlocked");
-        setMessage(`Kluis ontgrendeld. ${SYNC_BACKGROUND_MESSAGE}`);
-        window.dispatchEvent(new Event(DASHBOARD_REFRESH_EVENT));
-        return;
-      }
-      if (!syncResponse.ok) throw new Error(syncResult.problems?.[0] ?? "Broker synchronisatie mislukt.");
-      setVaultStatus("unlocked");
-      setMessage((syncResult.problems ?? []).length === 0 ? "Kluis ontgrendeld. Synchronisatie voltooid." : `Kluis ontgrendeld. ${syncResult.problems?.join(" · ")}`);
-      window.dispatchEvent(new Event(DASHBOARD_REFRESH_EVENT));
+      const response = await fetch("/api/market-data/consent", {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ accepted: true }),
+      });
+      if (!response.ok) throw new Error("Failed to save consent.");
+      setConsent("accepted");
+      await runSync(() => true);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Kluis ontgrendelen mislukt.");
+      setProblems([error instanceof Error ? error.message : "Failed to save consent."]);
     } finally {
-      setBusy(false);
+      setConsentBusy(false);
     }
   }
-
-  if (vaultStatus === "checking" || vaultStatus === "hidden") return null;
-  if (vaultStatus === "unlocked") return <p role="status" className="rounded-card border border-positive/30 bg-positive/5 p-4 text-sm text-positive">{message}</p>;
-  return <form onSubmit={unlock} className="rounded-card border border-warning/30 bg-warning/10 p-5 sm:flex sm:items-end sm:gap-4 sm:p-6">
-    <div className="min-w-0 flex-1">
-      <p className="text-xs font-semibold uppercase tracking-[.16em] text-primary">Bestaande kluis</p>
-      <h3 className="mt-2 font-display text-2xl font-semibold">Kluis ontgrendelen</h3>
-      <p className="mt-2 text-sm leading-6 text-muted-foreground">Inloggegevens staan versleuteld op schijf. Voer alleen kluiswachtwoord in; brokersleutels hoeven niet opnieuw.</p>
-      <label className="mt-4 block text-sm font-semibold">Kluiswachtwoord<input required name="unlockPassphrase" type="password" autoComplete="current-password" value={passphrase} onChange={(event) => setPassphrase(event.target.value)} className="mt-2 block w-full rounded-[14px] border border-input bg-background px-3 py-2.5 text-sm font-normal" /></label>
-      {message && <p role="alert" className="mt-3 text-sm text-negative">{message}</p>}
-    </div>
-    <Button data-action="unlock-vault" type="submit" disabled={busy} className="mt-4 shrink-0 sm:mt-0">{busy ? "Ontgrendelen…" : "Ontgrendelen en synchroniseren"}</Button>
-  </form>;
-}
-
-function BrokerCredentialForm() {
-  const [broker, setBroker] = useState<"ibkr" | "trading212">("ibkr");
-  const [token, setToken] = useState("");
-  const [queryId, setQueryId] = useState("");
-  const [secret, setSecret] = useState("");
-  const [passphrase, setPassphrase] = useState("");
-  const passphraseMode = useVaultPassphraseMode();
-  const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
-  const [message, setMessage] = useState<string | null>(null);
-
-  function resetBroker(next: "ibkr" | "trading212") {
-    setBroker(next); setToken(""); setQueryId(""); setSecret(""); setMessage(null); setStatus("idle");
-  }
-
-  async function submit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setStatus("loading"); setMessage(null);
-    const payload = { broker, token, ...(broker === "ibkr" ? { queryId } : { secret }), ...(passphraseMode === "unused" ? {} : { passphrase }) };
-    try {
-      const saveResponse = await fetch("/api/brokers/credentials", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(payload) });
-      const saveResult = await saveResponse.json().catch(() => ({})) as { problems?: string[] };
-      if (!saveResponse.ok) throw new Error(saveResult.problems?.[0] ?? "Inloggegevens opslaan mislukt.");
-      notifyBrokerSyncStarted();
-      const syncResponse = await fetch("/api/brokers/sync?force=true", { method: "POST" });
-      const syncResult = await readSyncResult(syncResponse);
-      if (!syncResult) {
-        setStatus("success"); setMessage(`Inloggegevens opgeslagen. ${SYNC_BACKGROUND_MESSAGE}`);
-        setToken(""); setQueryId(""); setSecret(""); setPassphrase("");
-        window.dispatchEvent(new Event(DASHBOARD_REFRESH_EVENT));
-        return;
-      }
-      const blocking = (syncResult.problems ?? []).filter((problem) => !otherBrokerUnconfigured(problem, broker));
-      if (!syncResponse.ok || blocking.length > 0) throw new Error(blocking[0] ?? syncResult.problems?.[0] ?? "Broker synchronisatie mislukt.");
-      setStatus("success"); setMessage("Inloggegevens opgeslagen. Synchronisatie voltooid."); setToken(""); setQueryId(""); setSecret(""); setPassphrase("");
-      window.dispatchEvent(new Event(DASHBOARD_REFRESH_EVENT));
-    } catch (error) {
-      setStatus("error"); setMessage(error instanceof Error ? error.message : "Broker koppelen mislukt.");
-    }
-  }
-
-  return <form onSubmit={submit} className="rounded-card border border-border bg-card p-5 shadow-soft sm:p-6">
-    <div className="flex flex-wrap items-start justify-between gap-4"><div><p className="text-xs font-semibold uppercase tracking-[.16em] text-primary">Stap 2</p><h3 className="mt-2 font-display text-3xl font-semibold">Inloggegevens opslaan</h3><p className="mt-2 text-sm leading-6 text-muted-foreground">{passphraseMode === "unused" ? "LaVega versleutelt deze gegevens met de serversleutel voordat ze worden opgeslagen. Daarna start synchronisatie automatisch." : "LaVega versleutelt deze gegevens in lokale kluis. Daarna start synchronisatie automatisch."}</p></div><label className="text-sm font-semibold">Broker<select aria-label="Broker" value={broker} onChange={(event) => resetBroker(event.target.value as "ibkr" | "trading212")} className="mt-2 block rounded-pill border border-input bg-background px-3 py-2 text-sm font-normal"><option value="ibkr">Interactive Brokers</option><option value="trading212">Trading 212</option></select></label></div>
-    <div className="mt-6 grid gap-4 sm:grid-cols-2">
-      <label className="text-sm font-semibold">{broker === "ibkr" ? "Flex-token" : "API key"}<input required name="token" type="password" autoComplete="off" value={token} onChange={(event) => setToken(event.target.value)} className="mt-2 block w-full rounded-[14px] border border-input bg-background px-3 py-2.5 text-sm font-normal" /></label>
-      {broker === "ibkr" ? <label className="text-sm font-semibold">Query ID<input required name="queryId" inputMode="numeric" value={queryId} onChange={(event) => setQueryId(event.target.value)} className="mt-2 block w-full rounded-[14px] border border-input bg-background px-3 py-2.5 text-sm font-normal" /></label> : <label className="text-sm font-semibold">API secret<input required name="secret" type="password" autoComplete="off" value={secret} onChange={(event) => setSecret(event.target.value)} className="mt-2 block w-full rounded-[14px] border border-input bg-background px-3 py-2.5 text-sm font-normal" /></label>}
-      {passphraseMode !== "unused" && <label className="text-sm font-semibold sm:col-span-2">Kluiswachtwoord<input required name="passphrase" type="password" autoComplete="new-password" value={passphrase} onChange={(event) => setPassphrase(event.target.value)} className="mt-2 block w-full rounded-[14px] border border-input bg-background px-3 py-2.5 text-sm font-normal" /><span className="mt-2 block text-xs font-normal text-muted-foreground">Nieuwe kluis? Dit wachtwoord wordt kluissleutel. Bewaar het veilig; LaVega kan het niet herstellen.</span></label>}
-    </div>
-    <div className="mt-6 flex flex-wrap items-center gap-4"><Button type="submit" disabled={status === "loading"}>{status === "loading" ? "Opslaan en synchroniseren…" : "Opslaan en synchroniseren"}</Button>{status === "success" && <span role="status" className="text-sm text-positive">{message}</span>}{status === "error" && <span role="alert" className="text-sm text-negative">{message}</span>}</div>
-  </form>;
-}
-
-function BrokerConnect() {
-  return <div className="mx-auto max-w-5xl space-y-8">
-    <div className="max-w-2xl">
-      <Link to="/" className="text-sm font-semibold text-primary hover:underline">← Terug naar overzicht</Link>
-      <p className="mb-2 mt-8 text-sm font-medium text-primary">Veilige lokale koppeling</p>
-      <h2 className="font-display text-4xl font-semibold tracking-tight sm:text-5xl">Broker koppelen</h2>
-      <p className="mt-4 text-base leading-7 text-muted-foreground">Volg instructies voor jouw broker. LaVega gebruikt alleen read-only gegevens en bewaart credentials lokaal.</p>
-    </div>
-    <BrokerVaultUnlock />
-    <BrokerSyncProgressCard />
-    <div className="grid gap-5 lg:grid-cols-2">
-      <BrokerSetupCard
-        name="Interactive Brokers"
-        eyebrow="IBKR"
-        description="Gebruik IBKR Flex Web Service. Dit werkt met dagelijks bijgewerkte rapporten, zonder lokale gateway of browser-login."
-        fields={["Flex-token", "Numeriek Query ID", "Flex Query met Open Positions, Trades, Cash Report en Statement of Funds"]}
-        steps={["Open Client Portal van Interactive Brokers.", "Ga naar Performance & Reports → Flex Queries.", "Maak één query met Open Positions, Trades, Cash Report en Statement of Funds.", "Sla query op en noteer het numerieke Query ID.", "Ga naar Flex Web Service en genereer token. Noteer token direct; IBKR toont deze beperkt."]}
-      />
-      <BrokerSetupCard
-        name="Trading 212"
-        eyebrow="Trading 212"
-        description="Gebruik de officiële Trading 212 API. LaVega leest posities en orders via jouw eigen API-credentials."
-        fields={["API key", "API secret"]}
-        steps={["Open de Trading 212-app.", "Ga naar Menu → Settings → API (of API management).", "Maak een API-key voor jouw Invest- of Stocks ISA-account.", "Kies read-only scope als Trading 212 die optie toont.", "Kopieer API key en API secret. Het secret kan daarna niet opnieuw zichtbaar zijn."]}
-        warning="Controleer scope vóór opslaan. Een key zonder read-only beperking kan mogelijk orders plaatsen."
-      />
-    </div>
-    <BrokerCredentialForm />
-    <BrokerSyncAction />
-    <p className="rounded-card border border-border bg-secondary/40 p-4 text-sm leading-6 text-muted-foreground">Credentials blijven op jouw machine. Deel Flex-tokens, API keys of API secrets nooit in chat, screenshots, issues of git.</p>
-  </div>;
+  if (consent === "required")
+    return (
+      <section
+        aria-labelledby="yahoo-consent-title"
+        className="rounded-card border border-warning/30 bg-warning/10 p-5 text-sm"
+      >
+        <h3 id="yahoo-consent-title" className="text-xl">
+          Yahoo Finance consent
+        </h3>
+        <p className="mt-2 leading-6 text-muted-foreground">
+          LaVega sends tickers and search terms to Yahoo Finance to fetch price history and
+          benchmarks. Your choice is stored locally. Without consent, cached data remains visible.
+        </p>
+        <Button type="button" className="mt-4" onClick={acceptYahoo} disabled={consentBusy}>
+          {consentBusy ? "Saving…" : "Allow Yahoo Finance"}
+        </Button>
+        {problems.length > 0 && (
+          <p role="alert" className="mt-3 text-negative">
+            {problems[0]}
+          </p>
+        )}
+      </section>
+    );
+  if (consent === "checking" && problems.length === 0)
+    return (
+      <div
+        role="status"
+        className="rounded-card border border-border bg-card p-4 text-sm text-muted-foreground"
+      >
+        Checking your market data settings…
+      </div>
+    );
+  return null;
 }
 
 export function HealthStatus() {
@@ -599,75 +795,842 @@ export function HealthStatus() {
    * the CDN serves as the SPA shell: the check parsed a page as JSON and
    * reported the server down while every API route was answering. Deploys
    * differ in what owns the origin root, so /health is not it either. */
-  useEffect(() => { fetch("/api/investing/health").then(async (response) => { if (!response.ok) throw new Error(`Gezondheidscontrole mislukt: ${response.status}`); return await response.json().catch(() => { throw new Error("Gezondheidscontrole gaf geen serverantwoord"); }) as Health; }).then(setHealth).catch((reason: unknown) => setError(reason instanceof Error ? reason.message : "Gezondheidscontrole mislukt")); }, []);
-  if (error) return <span className="text-negative">Server niet beschikbaar: {error}</span>;
-  if (!health) return <span>Verbinden met investeringsserver…</span>;
-  return <span>{health.service ?? "server"}: {health.ok ? "beschikbaar" : "niet beschikbaar"}</span>;
+  useEffect(() => {
+    fetch("/api/investing/health")
+      .then(async (response) => {
+        if (!response.ok) throw new Error(`Health check failed: ${response.status}`);
+        return (await response.json().catch(() => {
+          throw new Error("Health check returned no server response");
+        })) as Health;
+      })
+      .then(setHealth)
+      .catch((reason: unknown) =>
+        setError(reason instanceof Error ? reason.message : "Health check failed"),
+      );
+  }, []);
+  /* Operator status stays out of the user's way: silent while the server is
+   * fine, one plain line when it is not. */
+  if (error || (health && !health.ok))
+    return <span>Investing data is offline. Figures may be out of date.</span>;
+  if (!health) return <span>Connecting to your investing data…</span>;
+  return null;
 }
 
-function SignOutLink() {
-  const navigate = useNavigate();
-  async function handleSignOut() {
-    await signOut();
-    navigate("/sign-in", { replace: true });
-  }
-  return <button type="button" onClick={handleSignOut} className="pressable rounded-sm font-semibold text-primary underline-offset-2 hover:underline">Uitloggen</button>;
+function ModuleRoute({
+  moduleId,
+  children,
+}: {
+  moduleId: Exclude<ReturnType<typeof useInvestingLayout>["modules"][number], typeof HOME_MODULE>;
+  children: React.ReactNode;
+}) {
+  const layout = useInvestingLayout();
+  if (layout.status === "loading") return null;
+  if (!layout.modules.includes(moduleId)) return <Navigate to="/" replace />;
+  return <>{children}</>;
+}
+
+/** The module pill track. On a phone it scrolls sideways: an edge fade says
+ *  more is off-screen, and the active pill is scrolled into view on navigation. */
+function ModuleNav({ moduleIds }: { moduleIds: Parameters<typeof investingModulePath>[0][] }) {
+  const ref = useRef<HTMLElement>(null);
+  const location = useLocation();
+  const [fade, setFade] = useState<"none" | "start" | "end" | "both">("none");
+  const measure = useCallback(() => {
+    const nav = ref.current;
+    if (!nav) return;
+    const start = nav.scrollLeft > 1;
+    const end = nav.scrollWidth - nav.clientWidth - nav.scrollLeft > 1;
+    setFade(start && end ? "both" : start ? "start" : end ? "end" : "none");
+  }, []);
+  useEffect(() => {
+    const nav = ref.current;
+    if (!nav) return;
+    const active = nav.querySelector<HTMLElement>('[aria-current="page"]');
+    // Not every environment (jsdom) implements scrollIntoView.
+    if (typeof active?.scrollIntoView === "function")
+      active.scrollIntoView({ inline: "center", block: "nearest" });
+    measure();
+    const frame = requestAnimationFrame(measure);
+    window.addEventListener("resize", measure);
+    return () => {
+      cancelAnimationFrame(frame);
+      window.removeEventListener("resize", measure);
+    };
+  }, [location.pathname, moduleIds.length, measure]);
+  return (
+    <nav
+      ref={ref}
+      aria-label="Main navigation"
+      data-fade={fade}
+      onScroll={measure}
+      className="scroll-fade-x flex max-w-full items-center gap-1 overflow-x-auto rounded-pill bg-secondary p-1 [scrollbar-width:none]"
+    >
+      {moduleIds.map((id) => (
+        <NavLink
+          key={id}
+          to={investingModulePath(id)}
+          end={id === HOME_MODULE}
+          className={({ isActive }) =>
+            `flex min-h-11 items-center rounded-pill px-4 text-sm font-semibold whitespace-nowrap transition-colors ${isActive ? "bg-foreground text-background" : "text-muted-foreground hover:bg-background/40 hover:text-foreground"}`
+          }
+        >
+          {MODULES.find((m) => m.id === id)?.label ?? id}
+        </NavLink>
+      ))}
+    </nav>
+  );
 }
 
 function Layout() {
   const location = useLocation();
+  const navigate = useNavigate();
+  const layout = useInvestingLayout();
   const detail = location.pathname.startsWith("/positions/");
-  const connect = location.pathname === "/brokers/connect";
-  return <div className="min-h-screen p-3 sm:p-6"><div className="mx-auto min-h-[calc(100vh-1.5rem)] max-w-6xl overflow-hidden rounded-frame bg-background shadow-float sm:min-h-[calc(100vh-3rem)]"><header className="flex flex-col gap-6 border-b border-border px-5 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-8"><Link to="/" className="pressable group"><span className="text-xs font-semibold uppercase tracking-[.2em] text-primary">LaVega</span><h1 className="font-display text-3xl font-semibold leading-none">Investeren</h1></Link><nav aria-label="Hoofdnavigatie" className="flex items-center gap-1 rounded-pill bg-secondary p-1"><NavLink to="/" end className={({ isActive }) => `rounded-pill px-4 py-2 text-sm font-semibold transition-colors ${isActive ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground"}`}>Overzicht</NavLink><NavLink to="/positions" className={({ isActive }) => `rounded-pill px-4 py-2 text-sm font-semibold transition-colors ${isActive ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground"}`}>Posities</NavLink></nav></header><main className="px-5 py-8 sm:px-8 sm:py-12">{!connect && <div className="mb-8 flex items-end justify-between gap-4"><div><p className="mb-2 text-sm font-medium text-primary">{detail ? "Positiedetail" : "Jouw financiële overzicht"}</p><h2 className="font-display text-4xl font-semibold tracking-tight sm:text-5xl">{detail ? "Positie" : "Overzicht"}</h2></div>{!detail && <Link to="/brokers/connect" className="pressable inline-flex items-center justify-center whitespace-nowrap rounded-pill border border-border bg-card px-3 py-2 text-xs font-semibold transition-colors hover:bg-secondary">Broker koppelen</Link>}</div>}<Outlet /></main><footer className="flex items-center justify-between border-t border-border px-5 py-5 text-xs text-muted-foreground sm:px-8"><span role="status"><HealthStatus /></span><SignOutLink /></footer></div></div>;
+  const positionsList = location.pathname === "/positions";
+  const agentView = location.pathname.startsWith("/agents/");
+  const isStockResearch = location.pathname === "/agents/research";
+  const pageTitle = detail
+    ? "Position"
+    : agentView
+      ? "Agent"
+      : positionsList
+        ? "Positions"
+        : location.pathname === "/net-worth"
+          ? "Net worth"
+          : location.pathname === "/agents"
+            ? "Agents"
+            : location.pathname === "/reports"
+              ? "Reports"
+              : null;
+  const isProfile = location.pathname === "/profile";
+  const isOverview = location.pathname === "/";
+  return (
+    <div className="min-h-screen p-3 sm:p-6">
+      <div className="mx-auto min-h-[calc(100vh-1.5rem)] overflow-hidden rounded-frame bg-background sm:min-h-[calc(100vh-3rem)]">
+        <header className="flex flex-col gap-6 border-b border-border px-5 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-8">
+          <Link to="/" className="pressable group flex items-baseline gap-3">
+            <span className="font-display text-3xl">LaVega</span>
+            <h1 className="font-sans text-sm font-medium leading-none text-muted-foreground">
+              Investing
+            </h1>
+          </Link>
+          <div className="flex items-center gap-2">
+            <ModuleNav moduleIds={layout.status === "loading" ? [HOME_MODULE] : layout.modules} />
+            <NavLink
+              to="/reports"
+              className={({ isActive }) =>
+                `flex min-h-11 items-center rounded-pill px-4 text-sm font-semibold whitespace-nowrap transition-colors ${isActive ? "bg-foreground text-background" : "text-muted-foreground hover:bg-secondary hover:text-foreground"}`
+              }
+            >
+              Reports
+            </NavLink>
+          </div>
+          <div className="ml-auto flex items-center gap-2">
+            {/* DE WEG TERUG. Spiegelt de investing-knop in apps/web's NavBar: een
+                gewone cross-document link, want de persoonlijke app is een eigen
+                deploy en geen route hierbinnen. Zonder dit was de oversteek
+                eenrichtingsverkeer — je kwam hier vanuit de kluis en moest daarna
+                terug via de browserknop of een getypte URL. */}
+            {PERSONAL_URL && (
+              <a
+                href={PERSONAL_URL}
+                className="flex min-h-11 items-center gap-2 rounded-pill px-4 text-sm font-semibold text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+              >
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M19 12H5" />
+                  <path d="m12 19-7-7 7-7" />
+                </svg>
+                <span>Personal</span>
+              </a>
+            )}
+            {isOverview && (
+              <button
+                type="button"
+                onClick={() => navigate("/profile#widgets")}
+                className="pressable min-h-11 rounded-pill border border-border bg-card px-4 text-xs font-semibold transition-colors hover:bg-secondary"
+              >
+                <span aria-hidden="true">+</span> Add widget
+              </button>
+            )}
+            <ThemeToggle />
+            <Link
+              to="/profile"
+              aria-label="Profile"
+              className={`pressable flex size-11 items-center justify-center rounded-pill border border-border transition-colors hover:bg-secondary ${isProfile ? "bg-secondary" : ""}`}
+            >
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.6"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <circle cx="12" cy="8.5" r="3.5" />
+                <path d="M5 20c0-3.3 3.1-5.5 7-5.5s7 2.2 7 5.5" />
+              </svg>
+            </Link>
+          </div>
+        </header>
+        <main className="px-5 py-8 sm:px-8 sm:py-12">
+          {/* Overview has no title here: the headline figures are its title, and the
+              nav already says where you are. Its heading stays in the page for
+              screen readers. */}
+          {!isProfile && !isStockResearch && pageTitle && (
+            <h2 className="mb-8 font-display text-5xl sm:text-6xl">{pageTitle}</h2>
+          )}
+          <Outlet />
+        </main>
+        <footer className="flex items-center justify-between border-t border-border px-5 py-5 text-xs text-muted-foreground sm:px-8">
+          <span role="status">
+            <HealthStatus />
+          </span>
+        </footer>
+      </div>
+    </div>
+  );
 }
+
+/* HET SCHERM TERWIJL DE EERSTE GESCHIEDENIS NOG BINNENKOMT.
+ *
+ * Niet de cijfers met een spinner erbij, maar in plaats van de cijfers. Zie
+ * `historyGate`: met de helft van de transacties is het rendement niet
+ * onvolledig maar fout, en het zou er met twee decimalen bij staan alsof dat
+ * niet zo is. Wat er wel staat is wat er tot nu toe is binnengehaald, zodat
+ * zichtbaar blijft dat er iets gebeurt. */
+function HistoryLoading({ brokers }: { brokers: string[] }) {
+  const { broker } = useSyncSession();
+  const names = brokers.map(brokerLabel).join(" and ");
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Still loading your history</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="flex flex-col gap-3 text-sm leading-6 text-muted-foreground">
+          <p>
+            {names} {brokers.length > 1 ? "are" : "is"} still sending transactions. LaVega fetches
+            them a page at a time and picks up where it left off, so this survives a timeout — it
+            may take a few runs on a large account.
+          </p>
+          <p>
+            Your figures stay hidden until it finishes. Returns and cost basis are worked out from
+            the full transaction history, so a half-loaded one would not be a smaller answer — it
+            would be a wrong one.
+          </p>
+          {broker && (
+            <dl className="m-0 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 font-mono text-xs tabular-nums">
+              <dt>pages</dt>
+              <dd className="m-0">{broker.pages}</dd>
+              <dt>orders</dt>
+              <dd className="m-0">{broker.ordersRead}</dd>
+              <dt>positions</dt>
+              <dd className="m-0">{broker.positionsRead}</dd>
+            </dl>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function OverviewEmptyState() {
+  const navigate = useNavigate();
+  return (
+    <div className="rounded-card border border-dashed border-border bg-transparent p-10 text-center">
+      <p className="text-sm text-muted-foreground">
+        Every Overview card is switched off. Add one to see your portfolio here.
+      </p>
+      <Button type="button" className="mt-4" onClick={() => navigate("/profile#widgets")}>
+        <span aria-hidden="true">+</span> Add widget
+      </Button>
+    </div>
+  );
+}
+
+const LETTER_AGENT_ID = "charlie_munger";
 
 function Overview() {
   const state = useDashboard();
-  return <div className="space-y-5"><AppOpenSync />{state.status === "loading" ? <DashboardLoading /> : state.status === "error" ? <DashboardError message={state.message} /> : <>{state.refreshError && <div role="alert" className="rounded-card border border-warning/30 bg-warning/10 p-4 text-sm"><p className="font-semibold">Vernieuwen mislukt</p><p className="mt-1 text-muted-foreground">{state.refreshError} Gecachete gegevens blijven zichtbaar.</p></div>}<DashboardProblems problems={state.data.problems} /><div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(260px,320px)]" data-dashboard-layout="overview"><div className="min-w-0" data-dashboard-section="performance"><PortfolioBenchmarkChart data={state.data.portfolio} benchmarks={state.data.benchmarks ?? []} externalCashFlows={state.data.externalCashFlows} currency={state.data.presentationCurrency} /></div><aside aria-label="Portefeuilleoverzicht" className="space-y-5"><PortfolioKpis data={state.data} /><div data-dashboard-section="allocation"><AllocationDonut instrument={state.data.allocation.instrument} entity={state.data.allocation.entity} currency={state.data.presentationCurrency} /></div><PortfolioSummaryCard currency={state.data.presentationCurrency} /><OverviewStatusRail dataVersion={state.data.dataVersion} /></aside></div><section aria-labelledby="positions-heading" data-dashboard-section="positions"><h3 id="positions-heading" className="mb-3 font-display text-2xl font-semibold">Posities</h3><PositionList positions={state.data.positions} currency={state.data.presentationCurrency} /></section><NetWorthChart data={state.data.portfolio} currency={state.data.presentationCurrency} /></>}</div>;
+  const navigate = useNavigate();
+  const { broker, price, priceProblem, connection, vault } = useSyncSession();
+  const layout = useInvestingLayout();
+  const [syncProblems, setSyncProblems] = useState<string[]>([]);
+  const gate = historyGate(broker?.history);
+  /* Until the layout loads, the registry defaults would flash widgets the
+   * reader switched off and start their reads, so none render yet. */
+  const layoutReady = layout.status === "ready";
+  const widgets = new Set(layoutReady ? layout.widgets : []);
+  const showRisk = widgets.has("risk");
+  const showSectors = widgets.has("sectors");
+  /* Overview owns the range/benchmark selection. Risk and composition are
+   * projections of the one dashboard read (#216/#223), so the controls select
+   * from the model already held and switching a range or benchmark does not
+   * fetch. Sectors come from their own tenant-scoped read (#223), keyed on the
+   * sector-store revision server-side, so the page makes one dashboard read
+   * plus the sector read only while a sector widget is on screen. */
+  const dashboardReady = state.status === "ready" && gate.kind === "ready";
+  const dataVersion = dashboardReady ? state.data.dataVersion : 0;
+  const benchmarksRevision = dashboardReady
+    ? state.data.benchmarks.map((item) => item.symbol).join(",")
+    : "";
+  const [range, setRange] = useState<RiskRange>("1Y");
+  const [benchmarkSelection, setBenchmarkSelection] = useState({
+    value: "",
+    revision: benchmarksRevision,
+  });
+  const benchmark =
+    benchmarkSelection.revision === benchmarksRevision ? benchmarkSelection.value : "";
+  /* The range/benchmark the reader picked, resolved against the projection's
+   * default exactly as the summary route resolves it, and read from the held
+   * dashboard payload. */
+  const riskProjection = state.status === "ready" ? state.data.risk : undefined;
+  const riskKey = benchmark || riskProjection?.defaultBenchmark || "";
+  const riskReport =
+    riskProjection?.byBenchmark?.[riskKey]?.[range] ?? riskProjection?.byBenchmark?.[""]?.[range];
+  const summaryState: SummaryState =
+    state.status === "ready" && riskReport
+      ? {
+          status: "ready",
+          data: {
+            metrics: riskReport.metrics,
+            risk: riskReport.risk,
+            composition: state.data.composition,
+          },
+        }
+      : state.status === "error"
+        ? { status: "error", message: state.message }
+        : { status: "loading" };
+  const refreshRisk = () => readDashboard();
+  const { state: sectorState, refresh: refreshSectors } = useSectors(
+    dashboardReady && showSectors,
+    `${dataVersion}`,
+  );
+
+  const showLetter = widgets.has("agent");
+  const letter = useLatestLetter(dashboardReady && showLetter);
+  function discussLetter() {
+    if (letter.state.status !== "ready") return;
+    const threadId = startNewThread(LETTER_AGENT_ID);
+    void portfolioChat(LETTER_AGENT_ID, threadId).sendMessage({
+      text: letterToText(letter.state.letter),
+    });
+    navigate(`/agents/${LETTER_AGENT_ID}`);
+  }
+  const needsAttention =
+    connection !== "online" ||
+    broker?.status === "problem" ||
+    price?.status === "problem" ||
+    !!priceProblem ||
+    vault === "locked";
+  const statusItems =
+    state.status === "ready" && gate.kind === "ready"
+      ? overviewStatusItems({
+          refreshError: state.refreshError ?? null,
+          syncProblems,
+          readingProblems: state.data.problems,
+          needsAttention,
+        })
+      : [];
+  return (
+    <div className="space-y-6">
+      <h2 className="sr-only">Overview</h2>
+      {state.status === "ready" && gate.kind === "ready" && <PortfolioKpiRow data={state.data} />}
+      <OverviewStatus items={statusItems} />
+      <AppOpenSync onProblems={setSyncProblems} />
+      {state.status === "loading" ? (
+        <DashboardLoading />
+      ) : state.status === "error" ? (
+        <DashboardError message={state.message} />
+      ) : gate.kind === "first-sync" ? (
+        <HistoryLoading brokers={gate.brokers} />
+      ) : !layoutReady ? null : widgets.size === 0 ? (
+        <OverviewEmptyState />
+      ) : (
+        <>
+          {/* Left stack: the wide, time-based cards. Right rail: the narrow,
+              read-and-act cards. Two stacks (not one shared row grid) so a tall
+              letter never leaves a hole under a short chart, and any subset a
+              saved layout switches on still packs from the top. */}
+          <div
+            className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(320px,400px)]"
+            data-dashboard-layout="overview"
+          >
+            <div className="min-w-0 space-y-5">
+              {widgets.has("performance") && (
+                <div data-dashboard-section="performance">
+                  <PortfolioBenchmarkChart
+                    data={state.data.portfolio}
+                    benchmarks={state.data.benchmarks}
+                    externalCashFlows={state.data.externalCashFlows}
+                    currency={state.data.presentationCurrency}
+                  />
+                </div>
+              )}
+              {widgets.has("allocation") && (
+                <div data-dashboard-section="allocation">
+                  <AllocationDonut
+                    instrument={state.data.allocation.instrument}
+                    entity={state.data.allocation.entity}
+                    {...(state.data.allocation.ladder
+                      ? { ladder: state.data.allocation.ladder }
+                      : {})}
+                    currency={state.data.presentationCurrency}
+                  />
+                </div>
+              )}
+              {showSectors && (
+                <SectorAllocationCard
+                  currency={state.data.presentationCurrency}
+                  state={sectorState}
+                  refresh={refreshSectors}
+                />
+              )}
+            </div>
+            <aside aria-label="Portfolio overview" className="min-w-0 space-y-5">
+              {widgets.has("kpis") && <PortfolioKpis data={state.data} />}
+              {showRisk && (
+                <PortfolioSummaryCard
+                  /* De kaart is presentational; of er nog iets binnenkomt weet
+                     dit scherm, dat de sync-sessie toch al leest. */
+                  stillLoading={
+                    gate.updating.length > 0 ||
+                    broker?.status === "running" ||
+                    broker?.status === "waiting" ||
+                    price?.status === "running" ||
+                    price?.status === "paused" ||
+                    (price?.remainingSymbols?.length ?? 0) > 0
+                  }
+                  currency={state.data.presentationCurrency}
+                  state={summaryState}
+                  refresh={refreshRisk}
+                  range={range}
+                  onRangeChange={setRange}
+                  benchmark={benchmark}
+                  onBenchmarkChange={(value) =>
+                    setBenchmarkSelection({ value, revision: benchmarksRevision })
+                  }
+                />
+              )}
+              {showLetter && (
+                <PortfolioLetterCard
+                  state={letter.state}
+                  writeState={letter.writeState}
+                  onDiscuss={discussLetter}
+                  onWrite={letter.write}
+                />
+              )}
+              {widgets.has("agent") && <PortfolioAgentCard />}
+            </aside>
+          </div>
+        </>
+      )}
+    </div>
+  );
 }
 
 function Positions() {
   const state = useDashboard();
   if (state.status === "loading") return <DashboardLoading />;
   if (state.status === "error") return <DashboardError message={state.message} />;
-  return <><DashboardProblems problems={state.data.problems} /><PositionList positions={state.data.positions} currency={state.data.presentationCurrency} /></>;
+  return (
+    <>
+      <DashboardStatus data={state.data} refreshError={state.refreshError} />
+      <PositionList positions={state.data.positions} currency={state.data.presentationCurrency} />
+    </>
+  );
 }
 
-const detailDate = (value: string) => new Date(`${value}T00:00:00Z`).toLocaleDateString("nl-NL", { day: "numeric", month: "long", year: "numeric" });
+/** Realised-gain + income report (plan §3 WS4.3/WS4.4, #296). The report rides
+ *  the dashboard payload, so this page reads one resource and no extra fetch.
+ *  A dashboard stored before the report existed renders the empty state until
+ *  the next refresh builds it. */
+function Reports() {
+  const state = useDashboard();
+  const [saveError, setSaveError] = useState<string | null>(null);
+  if (state.status === "loading") return <DashboardLoading />;
+  if (state.status === "error") return <DashboardError message={state.message} />;
+  const report = state.data.realized;
+  if (!report)
+    return (
+      <EmptyState
+        title="Realised report not ready"
+        description="Refresh the dashboard to build the realised-gain and income report from the current broker snapshot."
+      />
+    );
+  const entries = report.accounts.map((account) => ({
+    broker: account.broker,
+    account: account.account,
+    wrapper: account.wrapper,
+  }));
+  const setWrapper = async (entry: {
+    broker: string;
+    account: string;
+    wrapper: Parameters<typeof withWrapper>[3];
+  }) => {
+    const saved = await saveAccountWrappers(
+      withWrapper(entries, entry.broker, entry.account, entry.wrapper),
+    );
+    if (!saved) {
+      setSaveError("Could not save the account type. Try again.");
+      return;
+    }
+    setSaveError(null);
+    readDashboard();
+  };
+  return (
+    <>
+      <DashboardStatus data={state.data} refreshError={state.refreshError} />
+      {saveError && (
+        <p
+          role="status"
+          className="mb-4 rounded-tile border border-warning/30 bg-warning/10 px-4 py-3 text-sm"
+        >
+          {saveError}
+        </p>
+      )}
+      <RealizedReport report={report} onSetWrapper={setWrapper} />
+    </>
+  );
+}
+
+const detailDate = longDate;
 
 function PositionDetailSummary({ position }: { position: InvestingPositionDetail }) {
   const [quantityOpen, setQuantityOpen] = useState(false);
-  const money = (value: number | null) => value === null ? "Niet beschikbaar" : value.toLocaleString("nl-NL", { style: "currency", currency: position.currency, maximumFractionDigits: 2, signDisplay: "always" });
-  const percent = (value: number | null) => value === null ? "Niet beschikbaar" : value.toLocaleString("nl-NL", { style: "percent", maximumFractionDigits: 1, signDisplay: "always" });
+  const money = (value: number | null) =>
+    value === null
+      ? "Unavailable"
+      : value.toLocaleString("en-GB", {
+          style: "currency",
+          currency: position.currency,
+          maximumFractionDigits: 2,
+          signDisplay: "always",
+        });
+  const percent = (value: number | null) =>
+    value === null
+      ? "Unavailable"
+      : value.toLocaleString("en-GB", {
+          style: "percent",
+          maximumFractionDigits: 1,
+          signDisplay: "always",
+        });
   const available = position.returnStatus === "available";
-  return <section aria-labelledby="position-title" className="rounded-card border border-border bg-card p-5 shadow-soft sm:p-6">
-    <div className="flex flex-wrap items-start justify-between gap-4"><div><p className="text-xs font-semibold uppercase tracking-[.16em] text-primary">{position.status === "closed" ? "Gesloten positie" : "Open positie"}</p><h3 id="position-title" className="mt-1 font-display text-3xl font-semibold">{position.description ?? position.symbol}</h3><p className="mt-1 text-sm text-muted-foreground">{position.symbol} · bedragen in {position.currency}</p></div><span className={`rounded-pill px-3 py-1.5 text-xs font-semibold ${position.status === "closed" ? "bg-secondary text-muted-foreground" : "bg-positive/10 text-positive"}`}>{position.status === "closed" ? "Gesloten" : "Open"}</span></div>
-    <dl className={`mt-6 grid gap-3 ${position.status === "closed" ? "sm:grid-cols-2" : "sm:grid-cols-3"}`}>
-      {position.status === "open" && <div className="rounded-[14px] bg-secondary/40 p-4"><dt className="text-xs font-semibold text-muted-foreground">Huidige waarde</dt><dd className="mt-1 text-xl font-semibold tabular-nums">{money(position.currentValue).replace(/^\+/, "")}</dd></div>}
-      {position.status === "open" && <div className="rounded-[14px] bg-secondary/40 p-4"><dt className="text-xs font-semibold text-muted-foreground">Dagverandering</dt><dd className={`mt-1 text-xl font-semibold tabular-nums ${position.dailyChange === null ? "text-muted-foreground" : position.dailyChange >= 0 ? "text-positive" : "text-negative"}`}>{money(position.dailyChange)}{position.dailyChangePercentage === null ? "" : ` (${percent(position.dailyChangePercentage)})`}</dd></div>}
-      <div className="rounded-[14px] bg-secondary/40 p-4"><dt className="text-xs font-semibold text-muted-foreground">Totaal rendement</dt><dd className={`mt-1 text-xl font-semibold tabular-nums ${!available || position.returns.totalReturn === null ? "text-muted-foreground" : position.returns.totalReturn >= 0 ? "text-positive" : "text-negative"}`}>{available ? `${money(position.returns.totalReturn)}${position.returns.totalReturnPercentage === null ? "" : ` (${percent(position.returns.totalReturnPercentage)})`}` : "Niet beschikbaar"}</dd></div>
-      {position.status === "closed" && <div className="rounded-[14px] bg-secondary/40 p-4"><dt className="text-xs font-semibold text-muted-foreground">Eindstatus</dt><dd className="mt-1 text-xl font-semibold">0 stuks · gesloten</dd></div>}
-    </dl>
-    {!available && <p role="status" className="mt-4 rounded-[14px] border border-warning/30 bg-warning/10 px-4 py-3 text-sm">{position.returnStatus === "missing-fx" ? "FX-koers ontbreekt. Rendement kan niet worden berekend." : "Importeer eerdere transacties of koppel je andere brokers om rendement te berekenen."}</p>}
-    <dl className="mt-6 grid gap-x-6 gap-y-4 border-t border-border pt-5 text-sm sm:grid-cols-2 lg:grid-cols-4">
-      <div><dt className="text-muted-foreground">Aantal</dt><dd className="mt-1 font-semibold tabular-nums">{position.quantity.toLocaleString("nl-NL")}</dd><button type="button" aria-expanded={quantityOpen} aria-controls="quantity-history" onClick={() => setQuantityOpen((open) => !open)} className="pressable mt-1 rounded-sm text-xs font-semibold text-primary underline-offset-2 hover:underline">{quantityOpen ? "Historie verbergen" : "Aantalhistorie tonen"}</button></div>
-      {position.status === "open" && <><div><dt className="text-muted-foreground">Gemiddelde kostprijs</dt><dd className="mt-1 font-semibold tabular-nums">{money(position.averageCost).replace(/^\+/, "")}</dd></div><div><dt className="text-muted-foreground">Huidige koers</dt><dd className="mt-1 font-semibold tabular-nums">{money(position.currentPrice).replace(/^\+/, "")}</dd></div><div><dt className="text-muted-foreground">Ongerealiseerd</dt><dd className="mt-1 font-semibold tabular-nums">{money(position.returns.unrealizedGain)}{position.returns.remainingCostBasis && position.returns.unrealizedGain !== null ? ` (${percent(position.returns.unrealizedGain / position.returns.remainingCostBasis)})` : ""}</dd></div></>}
-      <div><dt className="text-muted-foreground">Gerealiseerd</dt><dd className="mt-1 font-semibold tabular-nums">{money(position.returns.realizedGain)}</dd></div><div><dt className="text-muted-foreground">Dividend ontvangen</dt><dd className="mt-1 font-semibold tabular-nums">{money(position.returns.dividendsReceived)}</dd></div><div><dt className="text-muted-foreground">Eerste aankoop</dt><dd className="mt-1 font-semibold">{position.firstBuyDate ? detailDate(position.firstBuyDate) : "Niet beschikbaar"}</dd></div>
-    </dl>
-    {position.firstBuyDate && <p className="mt-5 border-t border-border pt-4 text-sm text-muted-foreground">Sinds eerste aankoop: <strong className={position.returns.sinceFirstBuyPercentage === null ? "text-muted-foreground" : position.returns.sinceFirstBuyPercentage >= 0 ? "text-positive" : "text-negative"}>{percent(position.returns.sinceFirstBuyPercentage)}</strong> vanaf {position.firstBuyDate}</p>}
-    {quantityOpen && <ol id="quantity-history" className="mt-5 space-y-2 border-t border-border pt-4 text-sm">{position.quantityHistory.length === 0 ? <li className="text-muted-foreground">Geen volledige aantalhistorie beschikbaar.</li> : position.quantityHistory.map((change) => <li key={`${change.date}-${change.sourceOrder}`} className="flex flex-wrap justify-between gap-2"><span>{detailDate(change.date)} · {change.reason === "buy" ? "Koop" : "Verkoop"}</span><span className="font-semibold tabular-nums">{change.delta > 0 ? "+" : ""}{change.delta.toLocaleString("nl-NL")} → {change.quantity.toLocaleString("nl-NL")}</span></li>)}</ol>}
-  </section>;
+  const brokerUnrealized = position.returnStatus === "broker-unrealized";
+  return (
+    <section
+      aria-labelledby="position-title"
+      className="rounded-card border border-border bg-card p-5 sm:p-6"
+    >
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h3 id="position-title" className="font-display text-4xl">
+            {position.description ?? position.symbol}
+          </h3>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {position.symbol} · amounts in {position.currency}
+          </p>
+        </div>
+        <span
+          className={`rounded-pill px-3 py-1.5 text-xs font-semibold ${position.status === "closed" ? "bg-secondary text-muted-foreground" : "bg-positive/10 text-positive"}`}
+        >
+          {position.status === "closed" ? "Closed" : "Open"}
+        </span>
+      </div>
+      <dl
+        className={`mt-6 grid gap-3 ${position.status === "closed" ? "sm:grid-cols-2" : "sm:grid-cols-3"}`}
+      >
+        {position.status === "open" && (
+          <div className="rounded-tile bg-secondary/40 p-4">
+            <dt className="text-xs font-semibold text-muted-foreground">Current value</dt>
+            <dd className="mt-1 text-xl font-semibold tabular-nums">
+              {position.currentValue === null ? (
+                <span className="text-base text-muted-foreground">
+                  {position.priceStatus === "missing-fx" ? "FX rate missing" : "Value unknown"}
+                </span>
+              ) : (
+                money(position.currentValue).replace(/^\+/, "")
+              )}
+            </dd>
+            {position.priceStatus === "forward-filled" && position.quoteDate && (
+              <p className="mt-1 text-xs text-warning">Estimated price of {position.quoteDate}</p>
+            )}
+          </div>
+        )}
+        {position.status === "open" && (
+          <div className="rounded-tile bg-secondary/40 p-4">
+            <dt className="text-xs font-semibold text-muted-foreground">Daily change</dt>
+            <dd
+              className={`mt-1 text-xl font-semibold tabular-nums ${position.dailyChange === null ? "text-muted-foreground" : position.dailyChange >= 0 ? "text-positive" : "text-negative"}`}
+            >
+              {money(position.dailyChange)}
+              {position.dailyChangePercentage === null
+                ? ""
+                : ` (${percent(position.dailyChangePercentage)})`}
+            </dd>
+          </div>
+        )}
+        <div className="rounded-tile bg-secondary/40 p-4">
+          <dt className="text-xs font-semibold text-muted-foreground">
+            {brokerUnrealized ? "Unrealized return" : "Total return"}
+          </dt>
+          <dd
+            className={`mt-1 text-xl font-semibold tabular-nums ${brokerUnrealized && position.returns.unrealizedGain !== null ? (position.returns.unrealizedGain >= 0 ? "text-positive" : "text-negative") : !available || position.returns.totalReturn === null ? "text-muted-foreground" : position.returns.totalReturn >= 0 ? "text-positive" : "text-negative"}`}
+          >
+            {brokerUnrealized
+              ? money(position.returns.unrealizedGain)
+              : available
+                ? `${money(position.returns.totalReturn)}${position.returns.totalReturnPercentage === null ? "" : ` (${percent(position.returns.totalReturnPercentage)})`}`
+                : "Unavailable"}
+          </dd>
+        </div>
+        {position.status === "closed" && (
+          <div className="rounded-tile bg-secondary/40 p-4">
+            <dt className="text-xs font-semibold text-muted-foreground">Final status</dt>
+            <dd className="mt-1 text-xl font-semibold">0 shares · closed</dd>
+          </div>
+        )}
+      </dl>
+      {!available && !brokerUnrealized && (
+        <p
+          role="status"
+          className="mt-4 rounded-tile border border-warning/30 bg-warning/10 px-4 py-3 text-sm"
+        >
+          {position.returnStatus === "missing-fx"
+            ? "FX rate missing. Return cannot be calculated."
+            : (basisUnknownCopy(position.basis) ??
+              "Import earlier transactions or connect your other brokers to calculate return.")}
+        </p>
+      )}
+      {brokerUnrealized && (
+        <p
+          role="status"
+          className="mt-4 rounded-tile border border-warning/30 bg-warning/10 px-4 py-3 text-sm"
+        >
+          Unrealized return uses your broker's current cost basis. Lifetime return remains
+          unavailable because trade history is incomplete.
+        </p>
+      )}
+      <dl className="mt-6 grid gap-x-6 gap-y-4 border-t border-border pt-5 text-sm sm:grid-cols-2 lg:grid-cols-4">
+        <div>
+          <dt className="text-muted-foreground">Quantity</dt>
+          <dd className="mt-1 font-semibold tabular-nums">
+            {position.quantity.toLocaleString("en-GB")}
+          </dd>
+          <button
+            type="button"
+            aria-expanded={quantityOpen}
+            aria-controls="quantity-history"
+            onClick={() => setQuantityOpen((open) => !open)}
+            className="pressable mt-1 rounded-chip text-xs font-semibold text-accent underline-offset-2 hover:underline"
+          >
+            {quantityOpen ? "Hide history" : "Show quantity history"}
+          </button>
+        </div>
+        {position.status === "open" && (
+          <>
+            <div>
+              <dt className="text-muted-foreground">
+                Average cost
+                {position.basis?.source === "manual" && position.basis.locked && (
+                  <span
+                    className="ml-2 text-xs font-medium text-muted-foreground"
+                    title="A locked manual cost basis survives broker syncs"
+                  >
+                    · locked
+                  </span>
+                )}
+              </dt>
+              <dd className="mt-1 font-semibold tabular-nums">
+                {money(position.averageCost).replace(/^\+/, "")}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-muted-foreground">Current price</dt>
+              <dd className="mt-1 font-semibold tabular-nums">
+                {money(position.currentPrice).replace(/^\+/, "")}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-muted-foreground">Unrealised</dt>
+              <dd className="mt-1 font-semibold tabular-nums">
+                {money(position.returns.unrealizedGain)}
+                {position.returns.remainingCostBasis && position.returns.unrealizedGain !== null
+                  ? ` (${percent(position.returns.unrealizedGain / position.returns.remainingCostBasis)})`
+                  : ""}
+              </dd>
+            </div>
+          </>
+        )}
+        <div>
+          <dt className="text-muted-foreground">Realised</dt>
+          <dd className="mt-1 font-semibold tabular-nums">
+            {money(position.returns.realizedGain)}
+          </dd>
+          {position.realized && (
+            <Link
+              to="/reports"
+              className="mt-1 inline-block text-xs font-semibold text-accent underline-offset-2 hover:underline"
+            >
+              {position.realized.disposals} disposal
+              {position.realized.disposals === 1 ? "" : "s"} in the realised report
+            </Link>
+          )}
+        </div>
+        <div>
+          <dt className="text-muted-foreground">Dividends received</dt>
+          <dd className="mt-1 font-semibold tabular-nums">
+            {money(position.returns.dividendsReceived)}
+          </dd>
+        </div>
+        <div>
+          <dt className="text-muted-foreground">First purchase</dt>
+          <dd className="mt-1 font-semibold">
+            {position.firstBuyDate ? detailDate(position.firstBuyDate) : "Unavailable"}
+          </dd>
+        </div>
+      </dl>
+      {position.firstBuyDate && (
+        <p className="mt-5 border-t border-border pt-4 text-sm text-muted-foreground">
+          Since first purchase:{" "}
+          <strong
+            className={
+              position.returns.sinceFirstBuyPercentage === null
+                ? "text-muted-foreground"
+                : position.returns.sinceFirstBuyPercentage >= 0
+                  ? "text-positive"
+                  : "text-negative"
+            }
+          >
+            {percent(position.returns.sinceFirstBuyPercentage)}
+          </strong>{" "}
+          since {position.firstBuyDate}
+        </p>
+      )}
+      {quantityOpen && (
+        <ol id="quantity-history" className="mt-5 space-y-2 border-t border-border pt-4 text-sm">
+          {position.quantityHistory.length === 0 ? (
+            <li className="text-muted-foreground">No full quantity history available.</li>
+          ) : (
+            position.quantityHistory.map((change) => (
+              <li
+                key={`${change.date}-${change.sourceOrder}`}
+                className="flex flex-wrap justify-between gap-2"
+              >
+                <span>
+                  {detailDate(change.date)} · {change.reason === "buy" ? "Buy" : "Sell"}
+                </span>
+                <span className="font-semibold tabular-nums">
+                  {change.delta > 0 ? "+" : ""}
+                  {change.delta.toLocaleString("en-GB")} → {change.quantity.toLocaleString("en-GB")}
+                </span>
+              </li>
+            ))
+          )}
+        </ol>
+      )}
+      <PositionSectorControl symbol={position.symbol} />
+    </section>
+  );
 }
 
 function PositionActivityTable({ position }: { position: InvestingPositionDetail }) {
   const dates = [...new Set(position.activity.map((item) => item.date))];
-  const number = (value: number | null | undefined) => value == null ? "—" : value.toLocaleString("nl-NL", { maximumFractionDigits: 4 });
-  return <section aria-labelledby="activity-title" className="rounded-card border border-border bg-card p-5 shadow-soft sm:p-6"><h3 id="activity-title" className="font-display text-2xl font-semibold">Activiteit</h3>{dates.length === 0 ? <p className="mt-3 text-sm text-muted-foreground">Geen transactie- of dividendhistorie beschikbaar.</p> : <div className="mt-4 overflow-x-auto"><div role="table" aria-label="Positieactiviteit" className="min-w-[760px] text-sm"><div role="row" className="grid grid-cols-[150px_100px_90px_120px_120px_110px_70px] border-b border-border pb-2 text-xs font-semibold text-muted-foreground"><span>Datum</span><span>Type</span><span className="text-right">Aantal</span><span className="text-right">Koers</span><span className="text-right">Bedrag</span><span className="text-right">Commissie</span><span className="text-right">Valuta</span></div>{dates.map((date) => <div key={date} id={`activity-${date}`} tabIndex={-1} className="scroll-mt-4 border-b border-border/70 py-2 outline-none focus-visible:ring-2 focus-visible:ring-ring">{position.activity.filter((item) => item.date === date).map((item) => <div role="row" key={`${item.kind}-${item.sourceOrder}`} className="grid grid-cols-[150px_100px_90px_120px_120px_110px_70px] py-1.5 tabular-nums"><span>{detailDate(date)}</span><span className="font-semibold">{item.kind === "buy" ? "Koop" : item.kind === "sell" ? "Verkoop" : "Dividend"}</span><span className="text-right">{number(item.quantity)}</span><span className="text-right">{number(item.executionPrice)}</span><span className="text-right">{number(item.amount)}</span><span className="text-right">{number(item.commission)}</span><span className="text-right">{item.currency}</span></div>)}</div>)}</div></div>}</section>;
+  const number = (value: number | null | undefined) =>
+    value == null ? "—" : value.toLocaleString("en-GB", { maximumFractionDigits: 4 });
+  return (
+    <section
+      aria-labelledby="activity-title"
+      className="rounded-card border border-border bg-card p-5 sm:p-6"
+    >
+      <h3 id="activity-title" className="font-display text-3xl">
+        Activity
+      </h3>
+      {dates.length === 0 ? (
+        <p className="mt-3 text-sm text-muted-foreground">
+          No transaction or dividend history available.
+        </p>
+      ) : (
+        <div className="mt-4 overflow-x-auto">
+          <div role="table" aria-label="Position activity" className="min-w-[760px] text-sm">
+            <div
+              role="row"
+              className="grid grid-cols-[150px_100px_90px_120px_120px_110px_70px] border-b border-border pb-2 text-xs font-semibold text-muted-foreground"
+            >
+              <span>Date</span>
+              <span>Type</span>
+              <span className="text-right">Quantity</span>
+              <span className="text-right">Price</span>
+              <span className="text-right">Amount</span>
+              <span className="text-right">Commission</span>
+              <span className="text-right">Currency</span>
+            </div>
+            {dates.map((date) => (
+              <div
+                key={date}
+                id={`activity-${date}`}
+                tabIndex={-1}
+                className="scroll-mt-4 border-b border-border/70 py-2 outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                {position.activity
+                  .filter((item) => item.date === date)
+                  .map((item) => (
+                    <div
+                      role="row"
+                      key={`${item.kind}-${item.sourceOrder}`}
+                      className="grid grid-cols-[150px_100px_90px_120px_120px_110px_70px] py-1.5 tabular-nums"
+                    >
+                      <span>{detailDate(date)}</span>
+                      <span className="font-semibold">
+                        {item.kind === "buy" ? "Buy" : item.kind === "sell" ? "Sell" : "Dividend"}
+                      </span>
+                      <span className="text-right">{number(item.quantity)}</span>
+                      <span className="text-right">{number(item.executionPrice)}</span>
+                      <span className="text-right">{number(item.amount)}</span>
+                      <span className="text-right">{number(item.commission)}</span>
+                      <span className="text-right">{item.currency}</span>
+                    </div>
+                  ))}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </section>
+  );
 }
 
 function CompletePositionDetail({ position }: { position: InvestingPositionDetail }) {
-  const activate = (date: string) => { const row = document.getElementById(`activity-${date}`); row?.scrollIntoView?.({ block: "nearest" }); row?.focus(); };
-  return <><PositionDetailSummary position={position} /><PositionPriceChart symbol={position.symbol} currency={position.priceCurrency} points={position.points} onMarkerActivate={activate} /><PositionActivityTable position={position} /></>;
+  const activate = (date: string) => {
+    const row = document.getElementById(`activity-${date}`);
+    row?.scrollIntoView?.({ block: "nearest" });
+    row?.focus();
+  };
+  return (
+    <>
+      <PositionDetailSummary position={position} />
+      <PositionPriceChart
+        symbol={position.symbol}
+        currency={position.priceCurrency}
+        points={position.points}
+        onMarkerActivate={activate}
+      />
+      <PositionActivityTable position={position} />
+    </>
+  );
 }
 
 function PositionDetail() {
@@ -676,7 +1639,105 @@ function PositionDetail() {
   const positionSymbol = symbol?.trim().toUpperCase() ?? "";
   const state = useDashboard(positionSymbol || undefined);
   const query = searchParams.toString();
-  return <div className="space-y-5"><Link to={{ pathname: "/positions", search: query ? `?${query}` : "" }} className="text-sm font-semibold text-primary hover:underline">← Terug naar posities</Link>{!positionSymbol ? <EmptyState title="Geen positie gekozen" description="Kies een positie om koershistorie te bekijken." /> : state.status === "loading" ? <DashboardLoading /> : state.status === "error" ? <DashboardError message={state.message} /> : state.data.position?.symbol.toUpperCase() === positionSymbol ? <><DashboardProblems problems={state.data.problems} /><CompletePositionDetail position={state.data.position} /></> : <EmptyState title="Positie niet gevonden" description="Deze positie staat niet in het lokale dashboardmodel." />}</div>;
+  return (
+    <div className="space-y-5">
+      <Link
+        to={{ pathname: "/positions", search: query ? `?${query}` : "" }}
+        className="text-sm font-semibold text-accent hover:underline"
+      >
+        ← Back to positions
+      </Link>
+      {!positionSymbol ? (
+        <EmptyState
+          title="No position selected"
+          description="Choose a position to view price history."
+        />
+      ) : state.status === "loading" ? (
+        <DashboardLoading />
+      ) : state.status === "error" ? (
+        <DashboardError message={state.message} />
+      ) : state.data.position?.symbol.toUpperCase() === positionSymbol ? (
+        <>
+          <DashboardStatus data={state.data} refreshError={state.refreshError} />
+          <CompletePositionDetail position={state.data.position} />
+        </>
+      ) : (
+        <EmptyState
+          title="Position not found"
+          description="This position is not in the local dashboard model."
+        />
+      )}
+    </div>
+  );
 }
 
-export function App() { return <Routes><Route path="/sign-in" element={<AuthForm />} /><Route element={<RequireAuth />}><Route element={<Layout />}><Route path="/" element={<Overview />} /><Route path="/positions" element={<Positions />} /><Route path="/positions/:symbol" element={<PositionDetail />} /><Route path="/brokers/connect" element={<BrokerConnect />} /></Route></Route></Routes>; }
+export function App() {
+  return (
+    <Routes>
+      <Route path="/sign-up" element={<AuthForm mode="sign-up" />} />
+      <Route path="/sign-in" element={<AuthForm mode="sign-in" />} />
+      <Route path="/check-email" element={<CheckEmailPage />} />
+      <Route path="/email-confirmed" element={<EmailConfirmedPage />} />
+      <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+      <Route path="/reset-password" element={<ResetPasswordPage />} />
+      <Route element={<RequireAuth />}>
+        <Route element={<Layout />}>
+          <Route path="/" element={<Overview />} />
+          <Route
+            path="/positions"
+            element={
+              <ModuleRoute moduleId="positions">
+                <Positions />
+              </ModuleRoute>
+            }
+          />
+          <Route
+            path="/positions/:symbol"
+            element={
+              <ModuleRoute moduleId="positions">
+                <PositionDetail />
+              </ModuleRoute>
+            }
+          />
+          <Route
+            path="/net-worth"
+            element={
+              <ModuleRoute moduleId="net-worth">
+                <NetWorthPage />
+              </ModuleRoute>
+            }
+          />
+          {/* Reports is always available: a stored layout has no id for it, so
+              making it a toggleable module would change every saved layout. */}
+          <Route path="/reports" element={<Reports />} />
+          <Route
+            path="/agents"
+            element={
+              <ModuleRoute moduleId="agents">
+                <AgentsList />
+              </ModuleRoute>
+            }
+          />
+          <Route
+            path="/agents/research"
+            element={
+              <ModuleRoute moduleId="agents">
+                <StockResearch />
+              </ModuleRoute>
+            }
+          />
+          <Route
+            path="/agents/:agentId"
+            element={
+              <ModuleRoute moduleId="agents">
+                <AgentView />
+              </ModuleRoute>
+            }
+          />
+          <Route path="/profile" element={<Profile />} />
+          <Route path="/brokers/connect" element={<Navigate to="/profile#brokers" replace />} />
+        </Route>
+      </Route>
+    </Routes>
+  );
+}

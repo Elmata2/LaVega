@@ -1,0 +1,288 @@
+import type { LlmProvider, LlmUsage } from "./provider.js";
+import { MISTRAL_OCR } from "./models.js";
+import { captureAiGeneration, type AiObservationContext } from "./aiObservability.js";
+
+const BASE_URL = "https://api.mistral.ai/v1";
+const CITATION_KEYS = ["references", "citations", "citation_chunks"] as const;
+const DEFAULT_TIMEOUT_MS = 60_000;
+const SEARCH_TIMEOUT_MS = 240_000;
+
+/** An upstream refusal, carrying the status so a caller can tell a rate limit
+ *  apart from a genuine fault without parsing a message string.
+ *
+ *  This mattered in practice: Mistral answering 429 (a spent spend-cap on the
+ *  workspace) reached the owner as "the AI service gave an error, try again
+ *  later", which is the same sentence a malformed request produces. The real
+ *  cause was only in the server log, and the fix is a billing page rather than
+ *  a retry. */
+export class MistralHttpError extends Error {
+  constructor(
+    readonly status: number,
+    readonly route: string,
+    body: string,
+  ) {
+    super(`mistral ${route} ${status}: ${body}`);
+    this.name = "MistralHttpError";
+  }
+}
+
+async function errorBody(res: Response): Promise<string> {
+  return (await res.text()).slice(0, 2000);
+}
+
+const numberOrUndefined = (...values: unknown[]): number | undefined =>
+  values.find((value): value is number => typeof value === "number" && Number.isFinite(value));
+
+/**
+ * Provider usage, including prompt-cache counts when the provider reports them
+ * (#300, WS5.7 leftover). Mistral has used more than one field name for cache
+ * usage across its API versions, so every documented/observed shape is read and
+ * the first number wins; an absent field stays undefined rather than a guessed
+ * 0, so the ledger can tell "reported zero" from "not reported".
+ */
+export function parseMistralUsage(data: unknown): LlmUsage {
+  const record = isRecord(data) ? data : {};
+  const usage = isRecord(record.usage) ? record.usage : {};
+  const details = isRecord(usage.prompt_tokens_details) ? usage.prompt_tokens_details : {};
+  const cacheWriteTokens = numberOrUndefined(
+    usage.cache_write_tokens,
+    usage.cache_creation_input_tokens,
+    details.cache_write_tokens,
+  );
+  const cacheReadTokens = numberOrUndefined(
+    usage.cached_tokens,
+    details.cached_tokens,
+    usage.cache_read_tokens,
+  );
+  return {
+    input: numberOrUndefined(usage.prompt_tokens) ?? 0,
+    output: numberOrUndefined(usage.completion_tokens) ?? 0,
+    ...(cacheWriteTokens === undefined ? {} : { cacheWriteTokens }),
+    ...(cacheReadTokens === undefined ? {} : { cacheReadTokens }),
+  };
+}
+
+export async function fetchWithTimeout(
+  url: string,
+  init: RequestInit,
+  timeoutMs: number,
+  label: string,
+): Promise<Response> {
+  try {
+    return await fetch(url, { ...init, signal: AbortSignal.timeout(timeoutMs) });
+  } catch (err) {
+    if (err instanceof DOMException && (err.name === "TimeoutError" || err.name === "AbortError")) {
+      throw new Error(`mistral ${label} timeout after ${timeoutMs}ms`);
+    }
+    throw err;
+  }
+}
+
+function isRecord(v: unknown): v is Record<string, unknown> {
+  return typeof v === "object" && v !== null;
+}
+
+// A message.output entry's `content` is an array of typed blocks in the live
+// API (`{type:"text", text}` interleaved with `{type:"tool_reference", url,
+// title, ...}`), not the plain string the docs implied — only the text blocks
+// are the visible answer, so this joins those and drops the rest.
+function blockText(content: unknown): string {
+  if (typeof content === "string") return content;
+  if (!Array.isArray(content)) return "";
+  return content
+    .map((b) => (isRecord(b) && b.type === "text" && typeof b.text === "string" ? b.text : ""))
+    .join("");
+}
+
+function asSource(v: unknown): { url: string; title: string } | undefined {
+  if (!isRecord(v) || typeof v.url !== "string") return undefined;
+  const title = typeof v.title === "string" && v.title ? v.title : v.url;
+  return { url: v.url, title };
+}
+
+// Collects any {url, title?} entries found directly on `value`, in an array
+// `value`, or in a references/citations/citation_chunks array on `value` — the
+// exact citation shape isn't confirmed, so we look for all of these.
+function collectSources(value: unknown, into: Map<string, { url: string; title: string }>) {
+  const direct = asSource(value);
+  if (direct) {
+    if (!into.has(direct.url)) into.set(direct.url, direct);
+    return;
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const s = asSource(item);
+      if (s && !into.has(s.url)) into.set(s.url, s);
+    }
+    return;
+  }
+  if (isRecord(value)) {
+    for (const key of CITATION_KEYS) {
+      const arr = value[key];
+      if (!Array.isArray(arr)) continue;
+      for (const item of arr) {
+        const s = asSource(item);
+        if (s && !into.has(s.url)) into.set(s.url, s);
+      }
+    }
+  }
+}
+
+function extractSources(outputs: unknown[]): { url: string; title: string }[] {
+  const found = new Map<string, { url: string; title: string }>();
+  for (const output of outputs) {
+    collectSources(output, found);
+    if (isRecord(output)) {
+      for (const nested of Object.values(output)) collectSources(nested, found);
+    }
+  }
+  return [...found.values()];
+}
+
+// `model` is a constructor param, not a per-call one: the shared LlmProvider.complete
+// signature has no model field, and different call sites need different models
+// (e.g. mistral-small-latest for categorize/extraction, mistral-medium-latest for
+// travel/chat), so each call site builds its own provider instance.
+export function createMistralProvider(
+  apiKey: string,
+  model: string,
+  observability?: AiObservationContext,
+): LlmProvider {
+  const headers = {
+    Authorization: `Bearer ${apiKey}`,
+    "Content-Type": "application/json",
+  };
+
+  return {
+    async complete({ system, user, json, maxTokens }) {
+      const startedAt = Date.now();
+      const res = await fetchWithTimeout(
+        `${BASE_URL}/chat/completions`,
+        {
+          method: "POST",
+          headers,
+          body: JSON.stringify({
+            model,
+            messages: [
+              { role: "system", content: system },
+              { role: "user", content: user },
+            ],
+            max_tokens: maxTokens,
+            ...(json ? { response_format: { type: "json_object" } } : {}),
+          }),
+        },
+        DEFAULT_TIMEOUT_MS,
+        "chat",
+      );
+      if (!res.ok) throw new MistralHttpError(res.status, "chat", await errorBody(res));
+      const data = await res.json();
+      const content = data.choices?.[0]?.message?.content;
+      if (typeof content !== "string") {
+        console.error(`mistral chat onverwachte respons: ${JSON.stringify(data).slice(0, 2000)}`);
+        throw new Error("onverwachte respons");
+      }
+      const usage = parseMistralUsage(data);
+      await captureAiGeneration(observability, {
+        model,
+        operation: "chat",
+        inputTokens: usage.input,
+        outputTokens: usage.output,
+        latencyMs: Date.now() - startedAt,
+      });
+      return { text: content, usage };
+    },
+
+    async ocrPdf({ pdfBase64, pages }) {
+      const startedAt = Date.now();
+      const res = await fetchWithTimeout(
+        `${BASE_URL}/ocr`,
+        {
+          method: "POST",
+          headers,
+          body: JSON.stringify({
+            model: MISTRAL_OCR,
+            document: {
+              type: "document_url",
+              document_url: `data:application/pdf;base64,${pdfBase64}`,
+            },
+            ...(pages !== undefined ? { pages } : {}),
+          }),
+        },
+        DEFAULT_TIMEOUT_MS,
+        "ocr",
+      );
+      if (!res.ok) throw new MistralHttpError(res.status, "ocr", await errorBody(res));
+      const data = await res.json();
+      if (!Array.isArray(data.pages)) {
+        console.error(`mistral ocr onverwachte respons: ${JSON.stringify(data).slice(0, 2000)}`);
+        throw new Error("onverwachte respons");
+      }
+      const pagesProcessed =
+        typeof data.usage_info?.pages_processed === "number"
+          ? data.usage_info.pages_processed
+          : data.pages.length;
+      await captureAiGeneration(observability, {
+        model: MISTRAL_OCR,
+        operation: "ocr",
+        inputTokens: pagesProcessed,
+        outputTokens: 0,
+        latencyMs: Date.now() - startedAt,
+      });
+      return {
+        markdown: data.pages
+          .map((p: { markdown?: unknown }) => (typeof p?.markdown === "string" ? p.markdown : ""))
+          .join("\n\n"),
+        pages: pagesProcessed,
+      };
+    },
+
+    async chatWithSearch({ system, messages, onDelta, maxTokens }) {
+      const startedAt = Date.now();
+      const body = {
+        model,
+        instructions: system,
+        tools: [{ type: "web_search" }],
+        inputs: messages,
+        stream: false,
+        max_tokens: maxTokens,
+      };
+
+      const res = await fetchWithTimeout(
+        `${BASE_URL}/conversations`,
+        {
+          method: "POST",
+          headers,
+          body: JSON.stringify(body),
+        },
+        SEARCH_TIMEOUT_MS,
+        "conversation",
+      );
+      if (!res.ok) throw new MistralHttpError(res.status, "conversation", await errorBody(res));
+      const data = await res.json();
+
+      const outputs: unknown[] = Array.isArray(data.outputs) ? data.outputs : [];
+      const text = outputs
+        .map((o) => {
+          if (!isRecord(o)) return "";
+          // Only message entries carry user-visible text — tool/function/handoff
+          // entries (e.g. the web_search step) can also have a `content` field,
+          // but it's internal and must not leak into the answer.
+          if (typeof o.type === "string" && o.type !== "message.output") return "";
+          return blockText(o.content);
+        })
+        .join("");
+      const sources = extractSources(outputs);
+      const usage = parseMistralUsage(data);
+
+      await captureAiGeneration(observability, {
+        model,
+        operation: "conversation",
+        inputTokens: usage.input,
+        outputTokens: usage.output,
+        latencyMs: Date.now() - startedAt,
+      });
+      onDelta(text);
+      return { text, sources, usage };
+    },
+  };
+}

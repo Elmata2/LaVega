@@ -2,10 +2,66 @@
 import { StrictMode, act, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import type { Invoice, Tx } from "@lavega/core";
+import type { Invoice, N8nAutoBooked, Tx } from "@lavega/core";
+import type { VaultStorage } from "@lavega/adapters";
 import Facturen, { PULL_INTERVAL_MS } from "./views/Facturen";
 import type { N8nNotice, PendingInvoice } from "./n8n";
-import { getHandledInvoiceMessageIds, setN8nInvoiceToken, setN8nInvoiceUrl } from "./settings";
+import { getHandledInvoiceMessageIds } from "./settings";
+import { adminCopy } from "./copy/admin.js";
+import { TEST_POLL_MS, emptyGuideState } from "./forwardingGuide.js";
+import { TOONMEER_CLASS } from "./components/ToonMeer";
+
+/** An in-memory vault, enough for Facturen's n8n block: the auto-booked
+ *  fallback log and the pending rows/notices (privacy/security review
+ *  2026-08-28, M4/L6 — both moved out of localStorage into the vault
+ *  2026-09-08). Whether n8n is configured is no longer a vault field — the
+ *  server answers that via GET /api/n8n/forward-address, which the fetchImpl
+ *  fixtures below simulate directly (see `localPart` on `serving` and its
+ *  siblings). */
+function fakeVault(): VaultStorage {
+  const state = {
+    autoBooked: [] as N8nAutoBooked[],
+    pendingInvoices: [] as unknown[],
+    pendingNotices: [] as unknown[],
+  };
+  return {
+    getAutoBookedInvoices: async () => [...state.autoBooked],
+    putAutoBookedInvoices: async (list: N8nAutoBooked[]) => {
+      state.autoBooked = [...list];
+    },
+    getPendingInvoices: async () => [...state.pendingInvoices],
+    putPendingInvoices: async (list: unknown[]) => {
+      state.pendingInvoices = [...list];
+    },
+    getPendingNotices: async () => [...state.pendingNotices],
+    getBills: async () => [],
+    getBillOccurrences: async () => [],
+    getBillDecisions: async () => ({
+      matches: [],
+      marks: [],
+      rejections: [],
+      priceChanges: [],
+    }),
+    putBillPlan: async () => {},
+    getValuations: async () => [],
+    putValuations: async () => {},
+    getDocuments: async () => [],
+    putDocuments: async () => {},
+    getImportSessions: async () => [],
+    putImportSessions: async () => {},
+    putDocumentBytes: async () => {},
+    getDocumentBytes: async () => null,
+    hasDocumentBytes: async () => false,
+    deleteDocumentBytes: async () => {},
+    listDocumentBytes: async () => [],
+    deleteAllDocumentBytes: async () => {},
+    exportBundle: async () => null,
+    eraseDocuments: async () => 0,
+    putPendingNotices: async (list: unknown[]) => {
+      state.pendingNotices = [...list];
+    },
+  } as unknown as VaultStorage;
+}
 
 /* The confirm-first review queue in Facturen. What matters here is not the
  * markup but the promises the feature makes: a fetched row is only ever a
@@ -31,12 +87,13 @@ const ROW = {
 let root: Root | null = null;
 let container: HTMLElement | null = null;
 let saved: Invoice[][] = [];
+let vault: VaultStorage;
 
 beforeEach(() => {
   localStorage.clear();
+  document.cookie = "lavega_locale=nl; Path=/";
   saved = [];
-  setN8nInvoiceUrl("https://n8n.example/webhook/lavega-facturen");
-  setN8nInvoiceToken("sekret");
+  vault = fakeVault();
 });
 
 afterEach(() => {
@@ -44,13 +101,27 @@ afterEach(() => {
   container?.remove();
   root = null;
   container = null;
+  document.cookie = "lavega_locale=; Path=/; Max-Age=0";
 });
 
-/** Serves `bodies[n]` on the n-th call — the real webhook empties its queue, so
- *  a second fetch legitimately returns something different. */
-function serving(bodies: unknown[]) {
+/** Every fetchImpl fixture below is shared between the queue fetch AND the
+ *  auto-poll's forward-address probe (Facturen.tsx's `configured()`), because
+ *  both now go through the same injected `fetchImpl`. Route on the request URL
+ *  so the probe never advances a queue-only call counter or body sequence. */
+function urlOf(input: RequestInfo | URL): string {
+  return typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+}
+
+/** Serves `bodies[n]` on the n-th QUEUE call — the real webhook empties its
+ *  queue, so a second fetch legitimately returns something different. Answers
+ *  the forward-address probe separately, with `localPart` (a configured
+ *  address by default), never counting it as a queue call. */
+function serving(bodies: unknown[], localPart: string | null = "ale") {
   let call = 0;
-  return (async () => {
+  return (async (input: RequestInfo | URL) => {
+    if (urlOf(input).includes("/api/n8n/forward-address")) {
+      return { ok: true, status: 200, json: async () => ({ localPart }) };
+    }
     const body = bodies[Math.min(call++, bodies.length - 1)];
     return { ok: true, status: 200, json: async () => body };
   }) as unknown as typeof fetch;
@@ -58,12 +129,25 @@ function serving(bodies: unknown[]) {
 
 /** Facturen gets its pending rows from App (they must survive the view
  *  unmounting), so the test owns that state exactly like App does. */
-function Harness({ fetchImpl, invoices, txs, entities }: { fetchImpl: typeof fetch; invoices: Invoice[]; txs: Tx[]; entities: string[] }) {
+function Harness({
+  fetchImpl,
+  invoices,
+  txs,
+  entities,
+  storage,
+}: {
+  fetchImpl: typeof fetch;
+  invoices: Invoice[];
+  txs: Tx[];
+  entities: string[];
+  storage?: VaultStorage;
+}) {
   const [pending, setPending] = useState<PendingInvoice[]>([]);
   const [notices, setNotices] = useState<N8nNotice[]>([]);
   return (
     <Facturen
       entities={entities}
+      ownIbans={[]}
       invoices={invoices}
       txs={txs}
       asOf="2026-08-16"
@@ -76,22 +160,39 @@ function Harness({ fetchImpl, invoices, txs, entities }: { fetchImpl: typeof fet
       onNoticesChange={setNotices}
       onNavigate={() => {}}
       fetchImpl={fetchImpl}
+      storage={storage ?? vault}
     />
   );
 }
 
-function render(fetchImpl: typeof fetch, invoices: Invoice[] = [], txs: Tx[] = [], entities: string[] = ["BV1"]) {
+function render(
+  fetchImpl: typeof fetch,
+  invoices: Invoice[] = [],
+  txs: Tx[] = [],
+  entities: string[] = ["BV1"],
+  storage?: VaultStorage,
+) {
   container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);
   act(() => {
-    root!.render(<Harness fetchImpl={fetchImpl} invoices={invoices} txs={txs} entities={entities} />);
+    root!.render(
+      <Harness
+        fetchImpl={fetchImpl}
+        invoices={invoices}
+        txs={txs}
+        entities={entities}
+        storage={storage}
+      />,
+    );
   });
   return container;
 }
 
 function byText(selector: string, text: string): HTMLElement {
-  const hit = [...container!.querySelectorAll(selector)].find((n) => (n.textContent ?? "").includes(text));
+  const hit = [...container!.querySelectorAll(selector)].find((n) =>
+    (n.textContent ?? "").includes(text),
+  );
   if (!hit) throw new Error(`no ${selector} containing "${text}"`);
   return hit as HTMLElement;
 }
@@ -109,19 +210,31 @@ function click(el: Element) {
 }
 
 function setNativeValue(el: HTMLInputElement | HTMLSelectElement, value: string) {
-  const proto = el instanceof HTMLSelectElement ? HTMLSelectElement.prototype : HTMLInputElement.prototype;
+  const proto =
+    el instanceof HTMLSelectElement ? HTMLSelectElement.prototype : HTMLInputElement.prototype;
   Object.getOwnPropertyDescriptor(proto, "value")!.set!.call(el, value);
   el.dispatchEvent(new Event("input", { bubbles: true }));
   el.dispatchEvent(new Event("change", { bubbles: true }));
 }
 
-/** Fresh tree, one press of "Ophalen uit n8n". Each call replaces the previous
+/** The guide lives in a modal: the row's button opens it. */
+async function openGuide() {
+  await clickAsync(byText("button", adminCopy.nl.facturen.guide.openButton));
+}
+
+/** Fresh tree, one press of "Nieuwe facturen ophalen". Each call replaces the previous
  *  render so a test that fetches twice isn't reading a stale DOM. */
-async function fetchOnce(fetchImpl: typeof fetch, invoices: Invoice[] = [], txs: Tx[] = [], entities: string[] = ["BV1"]) {
+async function fetchOnce(
+  fetchImpl: typeof fetch,
+  invoices: Invoice[] = [],
+  txs: Tx[] = [],
+  entities: string[] = ["BV1"],
+  storage?: VaultStorage,
+) {
   if (root) act(() => root!.unmount());
   container?.remove();
-  const c = render(fetchImpl, invoices, txs, entities);
-  await clickAsync(byText("button", "Ophalen uit n8n"));
+  const c = render(fetchImpl, invoices, txs, entities, storage);
+  await clickAsync(byText("button", "Nieuwe facturen ophalen"));
   return c;
 }
 
@@ -134,12 +247,13 @@ test("a fetched row renders as an editable proposal, and nothing is booked yet",
   expect(c.textContent).toContain("Factuur juli 2026");
 
   const value = (label: string) =>
-    (c.querySelector(`.n8n-row [aria-label="${label}"]`) as HTMLInputElement | HTMLSelectElement).value;
-  expect(value("Relatie (n8n)")).toBe("ACME BV");
-  expect(value("Bedrag (n8n)")).toBe("121.00");
-  expect(value("Btw (n8n)")).toBe("21.00");
-  expect(value("Vervaldatum (n8n)")).toBe("2026-07-31");
-  expect(value("Richting (n8n)")).toBe("out"); // expense -> AP
+    (c.querySelector(`.n8n-row [aria-label="${label}"]`) as HTMLInputElement | HTMLSelectElement)
+      .value;
+  expect(value("Relatie (te bevestigen)")).toBe("ACME BV");
+  expect(value("Bedrag (te bevestigen)")).toBe("121.00");
+  expect(value("Btw (te bevestigen)")).toBe("21.00");
+  expect(value("Vervaldatum (te bevestigen)")).toBe("2026-07-31");
+  expect(value("Richting (te bevestigen)")).toBe("out"); // expense -> AP
 
   // The row is a proposal: no invoice exists until he confirms.
   expect(saved).toHaveLength(0);
@@ -151,7 +265,7 @@ test("a fetched row renders as an editable proposal, and nothing is booked yet",
 test("bevestigen is the one path to a real invoice — with the edits he made", async () => {
   const c = await fetchOnce(serving([{ invoices: [ROW] }]));
 
-  const cp = c.querySelector('.n8n-row [aria-label="Relatie (n8n)"]') as HTMLInputElement;
+  const cp = c.querySelector('.n8n-row [aria-label="Relatie (te bevestigen)"]') as HTMLInputElement;
   act(() => setNativeValue(cp, "ACME Nederland BV"));
   click(byText(".n8n-row button", "Bevestigen"));
 
@@ -186,7 +300,7 @@ test("a messageId that was already decided is not offered a second time", async 
   click(byText(".n8n-row button", "Verwerpen"));
   expect(c.querySelectorAll(".n8n-row")).toHaveLength(0);
 
-  await clickAsync(byText("button", "Ophalen uit n8n"));
+  await clickAsync(byText("button", "Nieuwe facturen ophalen"));
   expect(c.querySelectorAll(".n8n-row")).toHaveLength(0);
   expect(c.textContent).toContain("Niets nieuws");
   expect(c.textContent).toContain("1 regel(s) kende LaVega al");
@@ -195,22 +309,21 @@ test("a messageId that was already decided is not offered a second time", async 
 
 test("a second fetch does not duplicate a row that is still awaiting a decision", async () => {
   const c = await fetchOnce(serving([{ invoices: [ROW] }, { invoices: [ROW] }]));
-  await clickAsync(byText("button", "Ophalen uit n8n"));
+  await clickAsync(byText("button", "Nieuwe facturen ophalen"));
   expect(c.querySelectorAll(".n8n-row")).toHaveLength(1);
 });
 
 test("a row whose invoice is already stored is not booked twice", async () => {
-  const c = await fetchOnce(serving([{ invoices: [ROW] }]));
+  await fetchOnce(serving([{ invoices: [ROW] }]));
   // Confirm once to learn the exact invoice this row produces.
   click(byText(".n8n-row button", "Bevestigen"));
   const existing = saved[0];
   expect(existing).toHaveLength(1);
 
   // Same mail again, on a browser that has forgotten it handled this messageId
-  // (so the row IS offered), but with that invoice already in the vault.
+  // (so the row IS offered), but with that invoice already in the vault. The
+  // vault fixture (unlike the old localStorage keys) is untouched by this clear.
   localStorage.clear();
-  setN8nInvoiceUrl("https://n8n.example/webhook/lavega-facturen");
-  setN8nInvoiceToken("sekret");
   saved = [];
   const c2 = await fetchOnce(serving([{ invoices: [ROW] }]), existing);
   expect(c2.querySelectorAll(".n8n-row")).toHaveLength(1);
@@ -222,7 +335,10 @@ test("a row whose invoice is already stored is not booked twice", async () => {
 
 test("a missing due date blocks confirming instead of inventing a payment term", async () => {
   const c = await fetchOnce(serving([{ invoices: [{ ...ROW, dueDate: null }] }]));
-  expect((c.querySelector('.n8n-row [aria-label="Vervaldatum (n8n)"]') as HTMLInputElement).value).toBe("");
+  expect(
+    (c.querySelector('.n8n-row [aria-label="Vervaldatum (te bevestigen)"]') as HTMLInputElement)
+      .value,
+  ).toBe("");
   expect(c.textContent).toContain("Geen vervaldatum gevonden");
 
   click(byText(".n8n-row button", "Bevestigen"));
@@ -230,7 +346,9 @@ test("a missing due date blocks confirming instead of inventing a payment term",
   expect(c.querySelectorAll(".n8n-row")).toHaveLength(1); // the row is kept, not lost
   expect(c.textContent).toContain("Vul een vervaldatum in");
 
-  const due = c.querySelector('.n8n-row [aria-label="Vervaldatum (n8n)"]') as HTMLInputElement;
+  const due = c.querySelector(
+    '.n8n-row [aria-label="Vervaldatum (te bevestigen)"]',
+  ) as HTMLInputElement;
   act(() => setNativeValue(due, "2026-08-15"));
   click(byText(".n8n-row button", "Bevestigen"));
   expect(saved[0][0].dueDate).toBe("2026-08-15");
@@ -238,35 +356,87 @@ test("a missing due date blocks confirming instead of inventing a payment term",
 
 test("an empty queue, a refused token and a dead connection each say their own thing", async () => {
   const c = await fetchOnce(serving([{ invoices: [] }]));
-  expect(c.textContent).toContain("De wachtrij in n8n was leeg");
+  expect(c.textContent).toContain("Er waren geen nieuwe facturen");
   expect(c.querySelectorAll(".n8n-row")).toHaveLength(0);
 
-  const denied = (async () => ({ ok: false, status: 401, json: async () => ({}) })) as unknown as typeof fetch;
+  const denied = (async () => ({
+    ok: false,
+    status: 401,
+    json: async () => ({}),
+  })) as unknown as typeof fetch;
   const c2 = await fetchOnce(denied);
-  expect(c2.textContent).toContain("weigerde het token (401)");
+  expect(c2.textContent).toContain("Je bent uitgelogd");
   expect(c2.textContent).toContain("Er is niets opgehaald");
 
   const dead = (async () => {
     throw new TypeError("Failed to fetch");
   }) as unknown as typeof fetch;
   const c3 = await fetchOnce(dead);
-  expect(c3.textContent).toContain("Geen antwoord van n8n");
+  expect(c3.textContent).toContain("Geen antwoord van de LaVega-server");
 
-  const garbled = (async () => ({ ok: true, status: 200, json: async () => ({ message: "Workflow started" }) })) as unknown as typeof fetch;
+  const garbled = (async () => ({
+    ok: true,
+    status: 200,
+    json: async () => ({ message: "Workflow started" }),
+  })) as unknown as typeof fetch;
   const c4 = await fetchOnce(garbled);
   expect(c4.textContent).toContain("niet te lezen");
-  expect(c4.textContent).toContain("kan die rij verloren zijn");
+  expect(c4.textContent).toContain("kan een regel verloren zijn");
 });
 
-test("without a URL and token nothing is fetched, and it says so", async () => {
-  localStorage.clear();
-  let called = 0;
-  const counting = (async () => {
-    called++;
-    return { ok: true, status: 200, json: async () => ({ invoices: [] }) };
+test("the token-refused and network notices lead with a short line and fold the diagnosis behind ToonMeer", async () => {
+  const denied = (async () => ({
+    ok: false,
+    status: 401,
+    json: async () => ({}),
+  })) as unknown as typeof fetch;
+  const c = await fetchOnce(denied);
+  const unauthorizedDetails = [
+    ...c.querySelectorAll<HTMLDetailsElement>(`.${TOONMEER_CLASS.root}`),
+  ];
+  expect(unauthorizedDetails).toHaveLength(1);
+  // Closed by default — dicht betekent niet weg, zie ToonMeer.tsx.
+  expect(unauthorizedDetails[0].open).toBe(false);
+  expect(unauthorizedDetails[0].textContent).toContain("Er is niets van je mailbox gehaald");
+  // The short line is a sibling <p>, not itself inside the closed <details>.
+  const shortLine = byText("p.cell-sub", "Je bent uitgelogd");
+  expect(shortLine.closest("details")).toBeNull();
+  expect(shortLine.textContent).toContain("Er is niets opgehaald");
+  // Opens on a click of its own summary, like every other ToonMeer.
+  click(unauthorizedDetails[0].querySelector(`.${TOONMEER_CLASS.summary}`)!);
+  expect(unauthorizedDetails[0].open).toBe(true);
+
+  const dead = (async () => {
+    throw new TypeError("Failed to fetch");
   }) as unknown as typeof fetch;
-  const c = await fetchOnce(counting);
-  expect(called).toBe(0);
+  const c2 = await fetchOnce(dead);
+  const networkDetails = [...c2.querySelectorAll<HTMLDetailsElement>(`.${TOONMEER_CLASS.root}`)];
+  expect(networkDetails).toHaveLength(1);
+  expect(networkDetails[0].open).toBe(false);
+  expect(networkDetails[0].textContent).toContain("verbindingsprobleem met LaVega zelf");
+  const networkShort = byText("p.cell-sub", "Geen antwoord van de LaVega-server");
+  expect(networkShort.closest("details")).toBeNull();
+  expect(networkShort.textContent).toContain("hier is niets binnengekomen");
+});
+
+test("without the server configured nothing is fetched successfully, and it says so", async () => {
+  // The manual button now always calls LaVega's own server — the vault no
+  // longer gates it (docs/adr/0006-invoice-queue-server-proxy.md). Whether
+  // the queue is configured is the SERVER's answer (503), not a client-side
+  // read of now-vestigial vault fields.
+  // `called` must count only the QUEUE request this test is about — the
+  // auto-poll's forward-address probe also fires on mount (same injected
+  // fetchImpl) and is routed away here so it can't inflate this count.
+  let called = 0;
+  const notConfigured = (async (input: RequestInfo | URL) => {
+    if (urlOf(input).includes("/api/n8n/forward-address")) {
+      return { ok: true, status: 200, json: async () => ({ localPart: null }) };
+    }
+    called++;
+    return { ok: false, status: 503, json: async () => ({ error: "not configured" }) };
+  }) as unknown as typeof fetch;
+  const c = await fetchOnce(notConfigured, [], [], ["BV1"], fakeVault());
+  expect(called).toBe(1);
   expect(c.textContent).toContain("Nog niet ingesteld");
 });
 
@@ -321,14 +491,19 @@ test("Gedaan files the notice as handled so the hourly re-scan can't put it back
  * begon vóór een beslissing zou die beslissing kunnen terugdraaien. */
 
 /** A fetch whose response the test decides when to deliver, so a second caller
- *  can arrive while the first is still in flight. */
-function deferredFetch() {
+ *  can arrive while the first is still in flight. `calls` counts QUEUE calls
+ *  only — the forward-address probe is answered immediately and separately,
+ *  from `localPart`, so it can't itself hang on `deliver`. */
+function deferredFetch(localPart: string | null = "ale") {
   let deliver: (body: unknown) => void = () => {};
   const pending = new Promise<unknown>((resolve) => {
     deliver = resolve;
   });
   let calls = 0;
-  const fetchImpl = (async () => {
+  const fetchImpl = (async (input: RequestInfo | URL) => {
+    if (urlOf(input).includes("/api/n8n/forward-address")) {
+      return { ok: true, status: 200, json: async () => ({ localPart }) };
+    }
     calls++;
     const body = await pending;
     return { ok: true, status: 200, json: async () => body };
@@ -337,14 +512,18 @@ function deferredFetch() {
 }
 
 /** Serves the first body at once and then hands over to a deferred second call —
- *  the shape needed to decide on a row WHILE a later pull is in flight. */
-function servingThenDeferred(first: unknown) {
+ *  the shape needed to decide on a row WHILE a later pull is in flight. Same
+ *  forward-address routing as `deferredFetch`: the probe never counts as call 1. */
+function servingThenDeferred(first: unknown, localPart: string | null = "ale") {
   let deliver: (body: unknown) => void = () => {};
   const later = new Promise<unknown>((resolve) => {
     deliver = resolve;
   });
   let calls = 0;
-  const fetchImpl = (async () => {
+  const fetchImpl = (async (input: RequestInfo | URL) => {
+    if (urlOf(input).includes("/api/n8n/forward-address")) {
+      return { ok: true, status: 200, json: async () => ({ localPart }) };
+    }
     calls++;
     const body = calls === 1 ? first : await later;
     return { ok: true, status: 200, json: async () => body };
@@ -381,13 +560,14 @@ test("de wachtrij wordt opgehaald zodra Facturen opent — zonder dat hij iets i
 test("openen haalt precies ÉÉN keer op, ook onder StrictMode en ook als hij intussen op de knop drukt", async () => {
   const { fetchImpl, calls, deliver } = deferredFetch();
   const c = renderStrict(fetchImpl);
+  await flush(); // the auto-pull now reads the vault before deciding to fetch
   // React 18 monteert een StrictMode-boom twee keer. Twee GET's zouden hier één
   // wachtrij over twee antwoorden verdelen.
   expect(calls()).toBe(1);
 
   // En een druk op de knop terwijl er al één loopt, start er geen tweede: hij
   // krijgt hetzelfde verzoek terug.
-  click(byText("button", "Ophalen uit n8n"));
+  click(byText("button", "Nieuwe facturen ophalen"));
   expect(calls()).toBe(1);
 
   deliver({ invoices: [ROW] });
@@ -396,13 +576,12 @@ test("openen haalt precies ÉÉN keer op, ook onder StrictMode en ook als hij in
   expect(c.querySelectorAll(".n8n-row")).toHaveLength(1);
 });
 
-test("zonder URL en token wordt er bij het openen niets opgehaald", async () => {
-  localStorage.clear();
-  const { fetchImpl, calls } = deferredFetch();
-  render(fetchImpl);
+test("zonder een adres bij n8n wordt er bij het openen niets opgehaald", async () => {
+  const { fetchImpl, calls } = deferredFetch(null);
+  render(fetchImpl, [], [], ["BV1"], fakeVault());
   await flush();
-  // Geen verzoek, en dus ook geen rode melding op een scherm waar hij hem niet
-  // kan oplossen — de knop "Koppelingen instellen" staat er wel.
+  // Geen wachtrij-verzoek, en dus ook geen rode melding op een scherm waar hij
+  // hem niet kan oplossen — de knop "Koppelingen instellen" staat er wel.
   expect(calls()).toBe(0);
 });
 
@@ -411,7 +590,7 @@ test("de timer haalt opnieuw op zolang het scherm open staat, en stopt als het s
   try {
     const c = render(serving([{ invoices: [] }, { invoices: [ROW] }]));
     await act(async () => {});
-    expect(c.textContent).toContain("De wachtrij in n8n was leeg");
+    expect(c.textContent).toContain("Er waren geen nieuwe facturen");
 
     await act(async () => {
       vi.advanceTimersByTime(PULL_INTERVAL_MS);
@@ -432,7 +611,7 @@ test("een regel die hij afhandelt terwijl er een ophaalactie loopt, komt niet te
   await flush();
   expect(c.querySelectorAll(".n8n-row")).toHaveLength(1);
 
-  await clickAsync(byText("button", "Ophalen uit n8n")); // start #2, blijft hangen
+  await clickAsync(byText("button", "Nieuwe facturen ophalen")); // start #2, blijft hangen
   click(byText(".n8n-row button", "Verwerpen"));
   expect(c.querySelectorAll(".n8n-row")).toHaveLength(0);
 
@@ -450,7 +629,7 @@ test("een regel die hij bevestigt terwijl er een ophaalactie loopt, wordt niet o
   const c = render(fetchImpl);
   await flush();
 
-  await clickAsync(byText("button", "Ophalen uit n8n")); // start #2, blijft hangen
+  await clickAsync(byText("button", "Nieuwe facturen ophalen")); // start #2, blijft hangen
   click(byText(".n8n-row button", "Bevestigen"));
   expect(saved).toHaveLength(1);
 
@@ -483,8 +662,16 @@ const FORWARDED = {
 };
 
 const bankTx = (o: Partial<Tx> = {}): Tx => ({
-  id: "t1", accountKey: "A", date: "2026-07-30", amount: -121, currency: "EUR",
-  counterparty: "ACME BV", description: "", category: "", manual: false, ...o,
+  id: "t1",
+  accountKey: "A",
+  date: "2026-07-30",
+  amount: -121,
+  currency: "EUR",
+  counterparty: "ACME BV",
+  description: "",
+  category: "",
+  manual: false,
+  ...o,
 });
 
 test("een geverifieerde, complete factuur boekt zichzelf — hij hoeft niets in te drukken", async () => {
@@ -498,7 +685,7 @@ test("een geverifieerde, complete factuur boekt zichzelf — hij hoeft niets in 
   // Geen wachtende regel: er was niets meer te beslissen.
   expect(c.querySelectorAll(".n8n-row")).toHaveLength(0);
   // En het staat er met zoveel woorden, want stil zijn boeken veranderen mag niet.
-  expect(c.textContent).toContain("automatisch geboekt");
+  expect(c.textContent).toContain("zonder jouw klik geboekt");
   // Afgehandeld, dus n8n's volgende ronde biedt hem niet opnieuw aan.
   expect(getHandledInvoiceMessageIds()).toContain("fwd-1");
 });
@@ -520,7 +707,19 @@ test("bevestigen koppelt óók meteen — niet pas bij de volgende import", asyn
 });
 
 test("een afzender die de controle niet haalde blijft een voorstel, met de echte reden erbij", async () => {
-  const c = await fetchOnce(serving([{ invoices: [{ ...FORWARDED, senderCheck: "failed", senderChecks: { spf: "fail", dkim: "fail", dmarc: "fail" } }] }]));
+  const c = await fetchOnce(
+    serving([
+      {
+        invoices: [
+          {
+            ...FORWARDED,
+            senderCheck: "failed",
+            senderChecks: { spf: "fail", dkim: "fail", dmarc: "fail" },
+          },
+        ],
+      },
+    ]),
+  );
   expect(saved).toHaveLength(0);
   expect(c.querySelectorAll(".n8n-row")).toHaveLength(1);
   // De regel zelf noemt de echte uitslag, en noemt hem nergens geverifieerd:
@@ -531,10 +730,10 @@ test("een afzender die de controle niet haalde blijft een voorstel, met de echte
   expect(row).not.toContain("geverifieerd");
 });
 
-test("zonder afzendercontrole wacht hij, en de melding zegt dat geen controle geen goedkeuring is", async () => {
+test("zonder afzendercontrole wacht hij, en de melding zegt dat LaVega de afzender niet kan nagaan", async () => {
   const c = await fetchOnce(serving([{ invoices: [ROW] }]));
   expect(saved).toHaveLength(0);
-  expect(c.textContent).toContain("geen afzendercontrole");
+  expect(c.textContent).toContain("niet nagaan wie de afzender is");
 });
 
 test("bij meer dan één onderneming boekt niets zichzelf — de BV is een echte keuze", async () => {
@@ -553,7 +752,7 @@ test("zonder ondernemingen boekt hij wél — nul keuzes is geen openstaande vra
   expect(saved).toHaveLength(1);
   expect(saved[0][0].entity).toBe("BV1");
   expect(c.querySelectorAll(".n8n-row")).toHaveLength(0);
-  expect(c.textContent).toContain("automatisch geboekt");
+  expect(c.textContent).toContain("zonder jouw klik geboekt");
   expect(c.textContent).not.toContain("onderneming");
 });
 
@@ -583,16 +782,435 @@ test("een automatisch geboekte factuur is als zodanig te zien en met één klik 
   expect(c).toBeTruthy();
 });
 
+test("the lavega_locale cookie switches the n8n surface to English", async () => {
+  document.cookie = "lavega_locale=en; Path=/";
+  const en = adminCopy.en.facturen;
+
+  const c = render(serving([{ invoices: [] }]));
+  await flush();
+  expect(c.textContent).toContain(en.n8nNotices.emptyQueue);
+
+  if (root) act(() => root!.unmount());
+  container?.remove();
+  const c2 = render(serving([{ invoices: [ROW] }]));
+  await flush();
+  expect(c2.textContent).toContain(en.queue.heading);
+  expect(c2.textContent).toContain(en.queue.eyebrow(1));
+});
+
 test("twee keer dezelfde factuur boekt één keer, ook automatisch", async () => {
   await fetchOnce(serving([{ invoices: [FORWARDED] }]));
   const booked = saved[0];
   saved = [];
   // Zelfde mail, browser die het messageId vergeten is, factuur al in de kluis.
+  // De kluis-fixture (anders dan de oude localStorage-sleutels) overleeft dit.
   localStorage.clear();
-  setN8nInvoiceUrl("https://n8n.example/webhook/lavega-facturen");
-  setN8nInvoiceToken("sekret");
   const c = await fetchOnce(serving([{ invoices: [FORWARDED] }]), booked);
   expect(saved).toHaveLength(0);
   expect(c.querySelectorAll(".n8n-row")).toHaveLength(0);
   expect(c.textContent).toContain("stond al in LaVega");
+});
+
+/* ── De doorstuurgids: setup-mails, polling, groen na het venster ─────────── */
+
+const GUIDE_ADDRESS = "lavega-abcdefghij@invoices.lavega.dev";
+const GUIDE_KEY = "lavega.forwardingGuide.v1";
+
+function storedGuide() {
+  return JSON.parse(localStorage.getItem(GUIDE_KEY)!);
+}
+
+test("setup signals update the guide and are NOT listed under Zelf ophalen", async () => {
+  localStorage.setItem("lavega.invoiceForwardAddress", GUIDE_ADDRESS);
+  const c = await fetchOnce(
+    serving([
+      {
+        invoices: [],
+        notices: [{ messageId: "g1", kind: "forwarding-confirmation", code: "424242" }],
+      },
+    ]),
+  );
+  expect(c.textContent).not.toContain(adminCopy.nl.facturen.notices.heading);
+  expect(storedGuide().confirmation.code).toBe("424242");
+  expect((await vault.getPendingNotices()).length).toBe(0);
+  expect(c.querySelectorAll("[data-noticeid]")).toHaveLength(0);
+});
+
+test("the code shows once it arrived, even though the wait began before the fetch", async () => {
+  localStorage.setItem("lavega.invoiceForwardAddress", GUIDE_ADDRESS);
+  const c = render(
+    serving([
+      {
+        invoices: [],
+        notices: [{ messageId: "g1", kind: "forwarding-confirmation", code: "424242" }],
+      },
+    ]),
+  );
+  await openGuide(); // opening on the Gmail tab starts the wait
+  await clickAsync(byText("button", "Nieuwe facturen ophalen"));
+  expect(c.textContent).toContain(adminCopy.nl.facturen.guide.gmail.step2Code("424242"));
+});
+
+test("a setup notice next to a real notice only lists the real one", async () => {
+  localStorage.setItem("lavega.invoiceForwardAddress", GUIDE_ADDRESS);
+  const c = await fetchOnce(
+    serving([
+      {
+        invoices: [],
+        notices: [{ messageId: "g1", kind: "setup-test", code: "k3x9" }, NOTICE],
+      },
+    ]),
+  );
+  expect(c.textContent).toContain(adminCopy.nl.facturen.notices.heading);
+  expect(c.querySelectorAll("[data-noticeid]")).toHaveLength(1);
+  expect(c.querySelector('[data-noticeid="msg-kpn"]')).not.toBeNull();
+  expect((await vault.getPendingNotices()).length).toBe(1);
+});
+
+test("an unreadable setup mail shows the notice and it can be dismissed", async () => {
+  localStorage.setItem("lavega.invoiceForwardAddress", GUIDE_ADDRESS);
+  const g = adminCopy.nl.facturen.guide;
+  const c = await fetchOnce(
+    serving([{ invoices: [], notices: [{ messageId: "g1", kind: "setup-test", code: "!!" }] }]),
+  );
+  await openGuide();
+  expect(c.textContent).toContain(g.setupUnreadable.message);
+  await clickAsync(byText("button", g.setupUnreadable.dismiss));
+  expect(c.textContent).not.toContain(g.setupUnreadable.message);
+});
+
+function pollingFixture() {
+  let queueCalls = 0;
+  const impl = (async (input: RequestInfo | URL) => {
+    if (urlOf(input).includes("/api/n8n/forward-address"))
+      return { ok: true, status: 200, json: async () => ({ localPart: "lavega-abcdefghij" }) };
+    queueCalls++;
+    return { ok: true, status: 200, json: async () => ({ invoices: [], notices: [] }) };
+  }) as unknown as typeof fetch;
+  return { impl, calls: () => queueCalls };
+}
+
+test("while a test is pending Facturen fetches every 20 seconds and stops after 10 minutes", async () => {
+  vi.useFakeTimers();
+  try {
+    localStorage.setItem("lavega.invoiceForwardAddress", GUIDE_ADDRESS);
+    // Outlook tab: no code wait, so only the test drives polling.
+    localStorage.setItem(
+      GUIDE_KEY,
+      JSON.stringify({ ...emptyGuideState(), tab: "outlook", setupUnreadable: 0 }),
+    );
+    const fx = pollingFixture();
+    const c = render(fx.impl);
+    await act(async () => {});
+    const idle = fx.calls();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(60_000);
+    });
+    expect(fx.calls()).toBe(idle); // nothing to wait for, no 20 s polling
+    await openGuide(); // Outlook tab: opening starts no wait
+    click(byText("button", adminCopy.nl.facturen.guide.test.startButton));
+    const before = fx.calls();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(60_000);
+    });
+    expect(fx.calls() - before).toBe(3);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(11 * 60_000);
+    });
+    const after = fx.calls();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(60_000);
+    });
+    expect(fx.calls()).toBe(after);
+    expect(c.textContent).toContain(adminCopy.nl.facturen.guide.test.timedOut);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test("the Gmail tab waits for the code with the same 20 second poll, and unmount stops it", async () => {
+  vi.useFakeTimers();
+  try {
+    localStorage.setItem("lavega.invoiceForwardAddress", GUIDE_ADDRESS);
+    const fx = pollingFixture();
+    render(fx.impl);
+    await act(async () => {});
+    await openGuide();
+    const before = fx.calls();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(60_000);
+    });
+    expect(fx.calls() - before).toBe(3);
+    act(() => root!.unmount());
+    root = null;
+    const after = fx.calls();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5 * 60_000);
+    });
+    expect(fx.calls()).toBe(after);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test("a result that lands after the window still turns the guide green", async () => {
+  localStorage.setItem("lavega.invoiceForwardAddress", GUIDE_ADDRESS);
+  const twentyMinutesAgo = Date.now() - 20 * 60 * 1000;
+  localStorage.setItem(
+    GUIDE_KEY,
+    JSON.stringify({
+      ...emptyGuideState(),
+      test: { code: "k3x9", startedAtMs: twentyMinutesAgo, receivedAtMs: null, receivedCode: null },
+    }),
+  );
+  const c = await fetchOnce(
+    serving([{ invoices: [], notices: [{ messageId: "t1", kind: "setup-test", code: "k3x9" }] }]),
+  );
+  const g = adminCopy.nl.facturen.guide;
+  expect(c.textContent).not.toContain(g.test.timedOut);
+  expect(c.textContent).toContain(g.rowPassed("").trim());
+});
+
+/* ── Fix round 1: no lost code, quiet background polls ────────────────────── */
+
+test("a code fetched while the Gmail tab appears survives the wait start", async () => {
+  localStorage.setItem("lavega.invoiceForwardAddress", GUIDE_ADDRESS);
+  // The open-the-screen pull races the card's mount effect (which starts the wait).
+  const c = render(
+    serving([
+      {
+        invoices: [],
+        notices: [{ messageId: "g1", kind: "forwarding-confirmation", code: "424242" }],
+      },
+    ]),
+  );
+  await openGuide(); // the wait starts while the open-the-screen pull is in flight
+  await flush();
+  expect(c.textContent).toContain(adminCopy.nl.facturen.guide.gmail.step2Code("424242"));
+  expect(storedGuide().confirmation.code).toBe("424242");
+});
+
+test("a background poll leaves the status line and the fetch button alone, and a hidden tab skips it", async () => {
+  vi.useFakeTimers();
+  const hidden = vi.spyOn(document, "hidden", "get");
+  try {
+    localStorage.setItem("lavega.invoiceForwardAddress", GUIDE_ADDRESS);
+    const fx = pollingFixture();
+    const c = render(fx.impl);
+    await act(async () => {});
+    await openGuide();
+    const note = adminCopy.nl.facturen.n8nNotices;
+    expect(c.textContent).toContain(note.emptyQueue); // the open-pull's own result
+    const button = byText("button", "Nieuwe facturen ophalen") as HTMLButtonElement;
+    // Hold the next queue response open: while a background poll is in flight,
+    // nothing may flip to "fetching" or disable the button.
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    let queueCalls = 0;
+    const slow = (async (input: RequestInfo | URL) => {
+      if (urlOf(input).includes("/api/n8n/forward-address"))
+        return { ok: true, status: 200, json: async () => ({ localPart: "x" }) };
+      if (queueCalls++ > 0) await gate; // the open-pull answers; the poll hangs
+      return { ok: true, status: 200, json: async () => ({ invoices: [], notices: [] }) };
+    }) as unknown as typeof fetch;
+    act(() => root!.unmount());
+    root = null;
+    const c2 = render(slow);
+    await act(async () => {});
+    await openGuide();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(TEST_POLL_MS);
+    });
+    expect(c2.textContent).not.toContain(note.fetching);
+    expect((byText("button", "Nieuwe facturen ophalen") as HTMLButtonElement).disabled).toBe(false);
+    release();
+    await act(async () => {});
+    void button;
+
+    // A hidden tab does not poll.
+    act(() => root!.unmount());
+    root = null;
+    const fx2 = pollingFixture();
+    render(fx2.impl);
+    await act(async () => {});
+    await openGuide();
+    hidden.mockReturnValue(true);
+    const before = fx2.calls();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(60_000);
+    });
+    expect(fx2.calls()).toBe(before);
+    hidden.mockReturnValue(false);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(TEST_POLL_MS);
+    });
+    expect(fx2.calls()).toBe(before + 1);
+  } finally {
+    hidden.mockRestore();
+    vi.useRealTimers();
+  }
+});
+
+test("the guide poll is one 20 s interval, created once and cleared on unmount", async () => {
+  vi.useFakeTimers();
+  try {
+    localStorage.setItem("lavega.invoiceForwardAddress", GUIDE_ADDRESS);
+    const setSpy = vi.spyOn(globalThis, "setInterval");
+    const clearSpy = vi.spyOn(globalThis, "clearInterval");
+    render(pollingFixture().impl);
+    await act(async () => {});
+    await openGuide();
+    const polls = () => setSpy.mock.calls.filter((a) => a[1] === TEST_POLL_MS);
+    expect(polls()).toHaveLength(1);
+    const pollId =
+      setSpy.mock.results[setSpy.mock.calls.findIndex((a) => a[1] === TEST_POLL_MS)].value;
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(3 * TEST_POLL_MS);
+    });
+    expect(polls()).toHaveLength(1); // clock updates did not recreate it
+    act(() => root!.unmount());
+    root = null;
+    expect(clearSpy.mock.calls.some((a) => a[0] === pollId)).toBe(true);
+    setSpy.mockRestore();
+    clearSpy.mockRestore();
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test("a click that joins a held-open background poll upgrades it: note shown, button re-enabled", async () => {
+  vi.useFakeTimers();
+  try {
+    localStorage.setItem("lavega.invoiceForwardAddress", GUIDE_ADDRESS);
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    let queueCalls = 0;
+    const slow = (async (input: RequestInfo | URL) => {
+      if (urlOf(input).includes("/api/n8n/forward-address"))
+        return { ok: true, status: 200, json: async () => ({ localPart: "x" }) };
+      if (queueCalls++ > 0) await gate;
+      return { ok: true, status: 200, json: async () => ({ invoices: [], notices: [] }) };
+    }) as unknown as typeof fetch;
+    const c = render(slow);
+    await act(async () => {});
+    await openGuide();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(TEST_POLL_MS);
+    });
+    const note = adminCopy.nl.facturen.n8nNotices;
+    expect(c.textContent).not.toContain(note.fetching);
+    const button = () => byText("button", "Nieuwe facturen ophalen") as HTMLButtonElement;
+    await clickAsync(button());
+    expect(c.textContent).toContain(note.fetching);
+    expect(button().disabled).toBe(true);
+    release();
+    await act(async () => {});
+    expect(button().disabled).toBe(false);
+    expect(c.textContent).not.toContain(note.fetching);
+    expect(c.textContent).toContain(note.emptyQueue);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+/* ── The guide is a modal: closing it must not stop or lose anything ──────── */
+
+function guideDialog(): HTMLDialogElement {
+  return container!.querySelector("dialog")!;
+}
+
+function codeAfterFirstPull() {
+  let queueCalls = 0;
+  return (async (input: RequestInfo | URL) => {
+    if (urlOf(input).includes("/api/n8n/forward-address"))
+      return { ok: true, status: 200, json: async () => ({ localPart: "lavega-abcdefghij" }) };
+    const notices =
+      queueCalls++ === 0
+        ? []
+        : [{ messageId: "g1", kind: "forwarding-confirmation", code: "424242" }];
+    return { ok: true, status: 200, json: async () => ({ invoices: [], notices }) };
+  }) as unknown as typeof fetch;
+}
+
+test("a code fetched while the modal is closed survives, shows in the row and in the reopened modal", async () => {
+  vi.useFakeTimers();
+  try {
+    localStorage.setItem("lavega.invoiceForwardAddress", GUIDE_ADDRESS);
+    const g = adminCopy.nl.facturen.guide;
+    const c = render(codeAfterFirstPull());
+    await act(async () => {});
+    await openGuide(); // Gmail tab: the wait starts
+    await clickAsync(c.querySelector(`button[aria-label="${g.closeButton}"]`)!);
+    expect(guideDialog().open).toBe(false);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(TEST_POLL_MS); // the poll keeps running while closed
+    });
+    expect(storedGuide().confirmation.code).toBe("424242");
+    expect(c.querySelector('section[aria-label] [role="status"]')?.textContent).toBe(
+      g.rowStatus["code-shown"],
+    );
+    expect(c.textContent).not.toContain(g.gmail.step2Code("424242")); // not rendered while closed
+    await openGuide();
+    expect(guideDialog().open).toBe(true);
+    expect(c.textContent).toContain(g.gmail.step2Code("424242"));
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test("closing the modal does not stop a pending test from polling", async () => {
+  vi.useFakeTimers();
+  try {
+    localStorage.setItem("lavega.invoiceForwardAddress", GUIDE_ADDRESS);
+    localStorage.setItem(
+      GUIDE_KEY,
+      JSON.stringify({ ...emptyGuideState(), tab: "outlook", setupUnreadable: 0 }),
+    );
+    const g = adminCopy.nl.facturen.guide;
+    const fx = pollingFixture();
+    const c = render(fx.impl);
+    await act(async () => {});
+    await openGuide();
+    click(byText("button", g.test.startButton));
+    await clickAsync(c.querySelector(`button[aria-label="${g.closeButton}"]`)!);
+    expect(guideDialog().open).toBe(false);
+    const before = fx.calls();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(60_000);
+    });
+    expect(fx.calls() - before).toBe(3);
+    expect(c.querySelector('section[aria-label] [role="status"]')?.textContent).toBe(
+      g.rowStatus["test-pending"],
+    );
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test("arriving on #forwarding-guide opens the modal on the Gmail tab and starts the code wait", async () => {
+  localStorage.setItem("lavega.invoiceForwardAddress", GUIDE_ADDRESS);
+  window.history.replaceState(null, "", `${window.location.pathname}#forwarding-guide`);
+  const c = render(serving([{ invoices: [] }]));
+  await flush();
+  expect(guideDialog().open).toBe(true);
+  expect(window.location.hash).toBe("");
+  expect(c.textContent).toContain(adminCopy.nl.facturen.guide.gmail.step2Waiting);
+  expect(storedGuide().codeWaitStartedAtMs).not.toBeNull();
+});
+
+test("a code pulled before the modal opens is current once it opens", async () => {
+  localStorage.setItem("lavega.invoiceForwardAddress", GUIDE_ADDRESS);
+  const g = adminCopy.nl.facturen.guide;
+  const c = render(
+    serving([
+      {
+        invoices: [],
+        notices: [{ messageId: "g1", kind: "forwarding-confirmation", code: "424242" }],
+      },
+    ]),
+  );
+  await flush();
+  expect(c.querySelector('section [role="status"]')?.textContent).toBe(g.rowStatus["code-shown"]);
+  await openGuide();
+  expect(c.textContent).toContain(g.gmail.step2Code("424242"));
 });

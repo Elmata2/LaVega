@@ -220,10 +220,30 @@ export function urlValtBinnen(match: string, url: string): boolean {
  *  staat en ook geen bekende kop-TLD is, levert `null` op — geen domein, dus
  *  geen koppeling, dus niets op het scherm. Onbekend is hier zwijgen. */
 const MEERDELIGE_SUFFIXEN: readonly string[] = [
-  "co.uk", "org.uk", "me.uk", "ac.uk", "gov.uk", "ltd.uk", "plc.uk",
-  "com.au", "net.au", "org.au",
-  "co.nz", "co.za", "co.jp", "co.kr", "co.in", "com.br", "com.mx", "com.tr",
-  "com.sg", "com.hk", "com.cn", "com.pl", "com.pt", "com.es",
+  "co.uk",
+  "org.uk",
+  "me.uk",
+  "ac.uk",
+  "gov.uk",
+  "ltd.uk",
+  "plc.uk",
+  "com.au",
+  "net.au",
+  "org.au",
+  "co.nz",
+  "co.za",
+  "co.jp",
+  "co.kr",
+  "co.in",
+  "com.br",
+  "com.mx",
+  "com.tr",
+  "com.sg",
+  "com.hk",
+  "com.cn",
+  "com.pl",
+  "com.pt",
+  "com.es",
 ];
 
 /** Kop-TLD's van één deel die we vertrouwen om een domein uit te rekenen.
@@ -233,10 +253,56 @@ const MEERDELIGE_SUFFIXEN: readonly string[] = [
  *  aanbieding die niet verschijnt dan een aanbieding die bij de verkeerde winkel
  *  verschijnt: aan de kassa is dat tweede erger. */
 const ENKELE_TLDS: readonly string[] = [
-  "nl", "be", "de", "fr", "es", "it", "at", "ch", "dk", "se", "no", "fi", "pl",
-  "pt", "ie", "lu", "cz", "sk", "hu", "ro", "gr", "bg", "hr", "si", "lt", "lv",
-  "ee", "eu", "uk", "us", "ca", "au", "nz", "jp", "kr", "in", "br", "mx", "tr",
-  "com", "net", "org", "info", "biz", "shop", "store", "nu", "io", "app", "dev",
+  "nl",
+  "be",
+  "de",
+  "fr",
+  "es",
+  "it",
+  "at",
+  "ch",
+  "dk",
+  "se",
+  "no",
+  "fi",
+  "pl",
+  "pt",
+  "ie",
+  "lu",
+  "cz",
+  "sk",
+  "hu",
+  "ro",
+  "gr",
+  "bg",
+  "hr",
+  "si",
+  "lt",
+  "lv",
+  "ee",
+  "eu",
+  "uk",
+  "us",
+  "ca",
+  "au",
+  "nz",
+  "jp",
+  "kr",
+  "in",
+  "br",
+  "mx",
+  "tr",
+  "com",
+  "net",
+  "org",
+  "info",
+  "biz",
+  "shop",
+  "store",
+  "nu",
+  "io",
+  "app",
+  "dev",
 ];
 
 /** Het domein waarop we mogen vergelijken: één label plus het achtervoegsel.
@@ -417,13 +483,18 @@ const PRODUCT_MATCH_KLEUREN = new Set([
  *  Zo blijft de fout die `hoortBijWinkel` afwees ook hier uitgesloten: er is
  *  nooit een match op één los, algemeen woord. */
 export function mogelijkeProductMatch(aanbieding: Aanbieding, productNaam: string): boolean {
-  const alle = aanbieding.winkel.toLowerCase().split(/[^a-zà-ÿ0-9]+/i).filter((w) => w !== "");
+  const alle = aanbieding.winkel
+    .toLowerCase()
+    .split(/[^a-zà-ÿ0-9]+/i)
+    .filter((w) => w !== "");
   const merk = alle[0];
   if (merk === undefined || merk.length < 3) return false;
 
   const onderscheidend = alle
     .slice(1)
-    .filter((w) => w.length >= 4 && !PRODUCT_MATCH_STOPWOORDEN.has(w) && !PRODUCT_MATCH_KLEUREN.has(w));
+    .filter(
+      (w) => w.length >= 4 && !PRODUCT_MATCH_STOPWOORDEN.has(w) && !PRODUCT_MATCH_KLEUREN.has(w),
+    );
   if (onderscheidend.length === 0) return false;
 
   const naam = productNaam.toLowerCase();
@@ -598,18 +669,40 @@ export type Lezing = {
 /* ─────────────────────────── de datum uitlezen ────────────────────────────── */
 
 const MAAND_NAMEN: Record<string, number> = {
-  januari: 1, january: 1, jan: 1,
-  februari: 2, february: 2, feb: 2,
-  maart: 3, march: 3, mrt: 3, mar: 3,
-  april: 4, apr: 4,
-  mei: 5, may: 5,
-  juni: 6, june: 6, jun: 6,
-  juli: 7, july: 7, jul: 7,
-  augustus: 8, august: 8, aug: 8,
-  september: 9, sep: 9, sept: 9,
-  oktober: 10, october: 10, okt: 10, oct: 10,
-  november: 11, nov: 11,
-  december: 12, dec: 12,
+  januari: 1,
+  january: 1,
+  jan: 1,
+  februari: 2,
+  february: 2,
+  feb: 2,
+  maart: 3,
+  march: 3,
+  mrt: 3,
+  mar: 3,
+  april: 4,
+  apr: 4,
+  mei: 5,
+  may: 5,
+  juni: 6,
+  june: 6,
+  jun: 6,
+  juli: 7,
+  july: 7,
+  jul: 7,
+  augustus: 8,
+  august: 8,
+  aug: 8,
+  september: 9,
+  sep: 9,
+  sept: 9,
+  oktober: 10,
+  october: 10,
+  okt: 10,
+  oct: 10,
+  november: 11,
+  nov: 11,
+  december: 12,
+  dec: 12,
 };
 
 function isoUit(jaar: number, maand: number, dag: number): string | null {
@@ -663,7 +756,9 @@ export function leesEinddatum(ruw: string, asOf: string): string | null {
   if (rel) {
     const basis = /^(\d{4})-(\d{2})-(\d{2})$/.exec(asOf.trim());
     if (!basis) return null;
-    const ms = Date.UTC(Number(basis[1]), Number(basis[2]) - 1, Number(basis[3])) + Number(rel[1]) * 86_400_000;
+    const ms =
+      Date.UTC(Number(basis[1]), Number(basis[2]) - 1, Number(basis[3])) +
+      Number(rel[1]) * 86_400_000;
     const d = new Date(ms);
     return isoUit(d.getUTCFullYear(), d.getUTCMonth() + 1, d.getUTCDate());
   }
@@ -677,7 +772,7 @@ export function leesEinddatum(ruw: string, asOf: string): string | null {
    * er wel iets. Zou die eerst draaien, dan kwam er een datum uit een tekst die
    * juist geweigerd hoort te worden. Wat cijfers zijn, wordt als cijfers
    * behandeld, en cijfers moeten zichzelf eenduidig maken. */
-  const cijfers = /(\d{1,2})\s*[\/.\-]\s*(\d{1,2})\s*[\/.\-]\s*(\d{4}|\d{2})\b/.exec(t);
+  const cijfers = /(\d{1,2})\s*[/.-]\s*(\d{1,2})\s*[/.-]\s*(\d{4}|\d{2})\b/.exec(t);
   if (cijfers) {
     const a = Number(cijfers[1]);
     const b = Number(cijfers[2]);
@@ -738,7 +833,12 @@ export function leesPuntenprijs(ruw: string): Puntenprijs | null {
   const m = /(\d{1,3}(?:[. ]\d{3})*|\d+)\s*(?:ing[\s-]?)?punten\b/i.exec(t);
   if (!m) return null;
   const punten = Number(m[1]!.replace(/[. ]/g, ""));
-  if (!Number.isFinite(punten) || !Number.isInteger(punten) || punten <= 0 || punten > 100_000_000) {
+  if (
+    !Number.isFinite(punten) ||
+    !Number.isInteger(punten) ||
+    punten <= 0 ||
+    punten > 100_000_000
+  ) {
     return null;
   }
 
@@ -765,7 +865,10 @@ export function leesPuntenprijs(ruw: string): Puntenprijs | null {
  *  hostnaam staat. Het verschil: hier wordt niets aan de tekst toegevoegd of
  *  geraden — er staat een punt en een bekend achtervoegsel in, of niet. */
 function hostUitNaam(naam: string): string | null {
-  const t = naam.trim().toLowerCase().replace(/^www\./, "");
+  const t = naam
+    .trim()
+    .toLowerCase()
+    .replace(/^www\./, "");
   if (!/^[a-z0-9][a-z0-9-]*(\.[a-z0-9][a-z0-9-]*)+$/.test(t)) return null;
   return registreerbaarDomein(t);
 }
@@ -868,7 +971,10 @@ export function leesAanbod(
       uitkomst,
       aantal: aanbiedingen.length,
       op: asOf,
-      citaat: uitkomst === "uitgesproken-geen-aanbiedingen" ? ruw.geenAanbiedingen.trim().slice(0, 120) : "",
+      citaat:
+        uitkomst === "uitgesproken-geen-aanbiedingen"
+          ? ruw.geenAanbiedingen.trim().slice(0, 120)
+          : "",
     },
     aanbiedingen,
   };
@@ -904,13 +1010,25 @@ export type AanbodUitkomst =
    *  aanbieding, alleen een mogelijke match op tekst. `matches` is afgekapt op
    *  `MOGELIJKE_MATCH_MAX`; `totaal` telt ongekapt, zodat een afgekapte lijst
    *  dat ook zegt in plaats van te verzwijgen. */
-  | { soort: "mogelijke-merknaam-match"; op: string; dagen: number; matches: readonly Aanbieding[]; totaal: number }
+  | {
+      soort: "mogelijke-merknaam-match";
+      op: string;
+      dagen: number;
+      matches: readonly Aanbieding[];
+      totaal: number;
+    }
   /** Zelfde soort zwakke koppeling als hierboven, maar op de PAGINA-INHOUD in
    *  plaats van de winkelnaam (zie `mogelijkeProductMatch`) — dit is de tak die
    *  ook op een marktplaats vuurt die het artikel van een ander merk verkoopt.
    *  Wordt pas geprobeerd als de merknaam-match niets vond: een match op de
    *  winkelnaam zelf is minstens zo specifiek en gaat voor. */
-  | { soort: "mogelijke-product-match"; op: string; dagen: number; matches: readonly Aanbieding[]; totaal: number }
+  | {
+      soort: "mogelijke-product-match";
+      op: string;
+      dagen: number;
+      matches: readonly Aanbieding[];
+      totaal: number;
+    }
   | {
       soort: "gevonden";
       op: string;
@@ -982,7 +1100,9 @@ export function aanbodVoorWinkel(
      * comment bij `hoortBijWinkel` om vraagt: bij een KORTING-bron zou dit de
      * Nike/nike-outlet-fake.nl-fout terugbrengen. */
     if (bron.prijsSoort === "punten") {
-      const merknaamMatches = toestand.aanbiedingen.filter((a) => mogelijkeMerknaamMatch(a, winkelHost));
+      const merknaamMatches = toestand.aanbiedingen.filter((a) =>
+        mogelijkeMerknaamMatch(a, winkelHost),
+      );
       if (merknaamMatches.length > 0) {
         return {
           soort: "mogelijke-merknaam-match",
@@ -997,7 +1117,9 @@ export function aanbodVoorWinkel(
        * daarom voor. Zie `mogelijkeProductMatch` voor waarom dit er apart naast
        * staat en niet in de plaats van komt. */
       if (productNaam !== null) {
-        const productMatches = toestand.aanbiedingen.filter((a) => mogelijkeProductMatch(a, productNaam));
+        const productMatches = toestand.aanbiedingen.filter((a) =>
+          mogelijkeProductMatch(a, productNaam),
+        );
         if (productMatches.length > 0) {
           return {
             soort: "mogelijke-product-match",

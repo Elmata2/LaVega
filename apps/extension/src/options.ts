@@ -30,8 +30,8 @@
 import {
   getHeldIds,
   setHeldIds,
-  getKassaOveralAan,
-  setKassaOveralAan,
+  getEnabledSiteIds,
+  setEnabledSiteIds,
   getPointsBalances,
   setPointsBalances,
   getBronAan,
@@ -40,6 +40,7 @@ import {
   getBronLezing,
   wisBron,
 } from "./store.js";
+import { SITES, type Site } from "./sites.js";
 import type { AanbodToestand, Bron } from "./aanbod-kern.js";
 import { BRONNEN } from "./bronnen.js";
 import { aanbodLijst } from "./panel.js";
@@ -47,7 +48,12 @@ import { CHECKOUT_CARDS, CATALOG_GENERATED_AT } from "./generated/catalog.genera
 import { POINTS_RATES } from "./generated/points-rates.generated.js";
 import { pct, dateNL, euro, eurosToCents, getal } from "./money.js";
 import { leesVoorwaarden } from "./rank.js";
-import { normaliseerProgramma, zoekKoers, VEROUDERD_NA_DAGEN, type PointsBalance } from "./points.js";
+import {
+  normaliseerProgramma,
+  zoekKoers,
+  VEROUDERD_NA_DAGEN,
+  type PointsBalance,
+} from "./points.js";
 import { citaat, aanbodGrensRegel } from "./lines.js";
 import type { CheckoutCard } from "./types.js";
 
@@ -83,7 +89,8 @@ function voorwaardeNoot(bron: { value: number; conditions: string | null } | nul
   if (!bron) return "";
   const vw = leesVoorwaarden(bron.conditions, "kaartkosten", bron.value, CATALOG_GENERATED_AT);
   if (vw.length === 0) return "";
-  if (vw.some((v) => v.soort === "voorwaardelijke-nul")) return " (deze nul geldt alleen onder voorwaarden)";
+  if (vw.some((v) => v.soort === "voorwaardelijke-nul"))
+    return " (deze nul geldt alleen onder voorwaarden)";
   /* Bewust zwak geformuleerd. Bij twintig van de zevenentwintig kaarten met een
    * prijs is de voorwaardentekst een herkomstnotitie ("de datum is het
    * versiestempel …") en geen beperking. "Er staat een voorwaarde bij" is dan
@@ -102,8 +109,16 @@ function voorwaardeNoot(bron: { value: number; conditions: string | null } | nul
  *  en niet te onderscheiden van € 37,05. */
 function watWeWeten(c: CheckoutCard): string {
   const bits: string[] = [];
-  bits.push(c.fxFeePct ? `koersopslag ${pct(c.fxFeePct.value)}${voorwaardeNoot(c.fxFeePct)}` : "koersopslag onbekend");
-  bits.push(c.cashbackPct ? `cashback ${pct(c.cashbackPct.value)}${voorwaardeNoot(c.cashbackPct)}` : "cashback onbekend");
+  bits.push(
+    c.fxFeePct
+      ? `koersopslag ${pct(c.fxFeePct.value)}${voorwaardeNoot(c.fxFeePct)}`
+      : "koersopslag onbekend",
+  );
+  bits.push(
+    c.cashbackPct
+      ? `cashback ${pct(c.cashbackPct.value)}${voorwaardeNoot(c.cashbackPct)}`
+      : "cashback onbekend",
+  );
   /* Door money.ts, net als de bedragen ernaast. Hier stond
    * `${c.pointsPerEuro.value}` en dat gaf op een Nederlands scherm "0.5 punt(en)
    * per euro" — een Engelse punt, en bij vier van de eenenvijftig kaarten met
@@ -248,7 +263,8 @@ async function zetSaldo(programma: string, punten: number | null): Promise<void>
  *  niet één ding is. */
 function koersNoot(programma: string): string {
   const rate = POINTS_RATES.find((r) => r.program === programma);
-  if (!rate) return "We kennen geen koers voor dit programma. LaVega toont dan alleen dát je punten hebt.";
+  if (!rate)
+    return "We kennen geen koers voor dit programma. LaVega toont dan alleen dát je punten hebt.";
   switch (rate.soort) {
     case "koers":
       return `Koers bekend: ${citaat(rate.quote)} Geldt voor ${rate.scope}, gelezen ${dateNL(rate.gelezenOp)}.`;
@@ -278,7 +294,9 @@ function tekenPunten(): void {
   /* Eerst de programma's waarvan we iets weten, in de volgorde van het
    * gegenereerde bestand. Daarna alles wat hij zelf heeft toegevoegd. */
   const bekend = POINTS_RATES.map((r) => r.program);
-  const eigen = saldi.map((b) => b.program).filter((naam) => zoekKoers(naam, POINTS_RATES) === null);
+  const eigen = saldi
+    .map((b) => b.program)
+    .filter((naam) => zoekKoers(naam, POINTS_RATES) === null);
   const namen = [...bekend, ...eigen];
 
   for (const naam of namen) {
@@ -306,8 +324,7 @@ function tekenPunten(): void {
       }
       const n = leesAantal(ruw);
       if (n === null) {
-        puntenMelding.textContent =
-          `"${ruw}" is geen aantal punten. Alleen hele getallen; een duizendpunt mag ("42.000").`;
+        puntenMelding.textContent = `"${ruw}" is geen aantal punten. Alleen hele getallen; een duizendpunt mag ("42.000").`;
         puntenMelding.className = "hint fout";
         return;
       }
@@ -366,7 +383,8 @@ puntenFormulier.addEventListener("submit", (e) => {
   const naam = puntenNaam.value.trim();
   const n = leesAantal(puntenAantal.value);
   if (naam === "") {
-    puntenMelding.textContent = "Vul een naam in, anders weet LaVega niet waar dit saldo bij hoort.";
+    puntenMelding.textContent =
+      "Vul een naam in, anders weet LaVega niet waar dit saldo bij hoort.";
     puntenMelding.className = "hint fout";
     return;
   }
@@ -382,54 +400,83 @@ puntenFormulier.addEventListener("submit", (e) => {
   void zetSaldo(naam, n);
 });
 
-/* ───────────────────────────── de kassa ──────────────────────────────────── */
+/* ───────────────────────────── de winkels ────────────────────────────────── */
 
-const KASSA_MATCH = "<all_urls>";
-const kassaVink = document.getElementById("kassa-overal") as HTMLInputElement;
-const kassaMelding = document.getElementById("kassa-melding") as HTMLParagraphElement;
+const sitesLijst = document.getElementById("siteslijst") as HTMLDivElement;
+const sitesMelding = document.getElementById("sites-melding") as HTMLParagraphElement;
 
 function meld(tekst: string, fout = false): void {
-  kassaMelding.textContent = tekst;
-  kassaMelding.className = fout ? "hint fout" : "hint";
+  sitesMelding.textContent = tekst;
+  sitesMelding.className = fout ? "hint fout" : "hint";
 }
 
-async function zetKassaOveral(aan: boolean): Promise<void> {
-  await setKassaOveralAan(aan);
-  kassaVink.checked = aan;
+async function zetSite(site: Site, aan: boolean, vink: HTMLInputElement): Promise<void> {
+  const ids = new Set(await getEnabledSiteIds());
   if (aan) {
-    meld("Aan. Herlaad een openstaande winkelpagina om het paneel te zien.");
+    ids.add(site.id);
+    await setEnabledSiteIds([...ids]);
+    meld(`${site.label} staat aan. Herlaad een openstaande winkelpagina om het paneel te zien.`);
   } else {
+    ids.delete(site.id);
+    await setEnabledSiteIds([...ids]);
     /* Pas ná het vinkje: zie de kop van dit bestand. */
-    await chrome.permissions.remove({ origins: [KASSA_MATCH] });
-    meld("Uit. De leestoestemming is ingetrokken.");
+    await chrome.permissions.remove({ origins: [site.match] });
+    meld(`${site.label} staat uit. De leestoestemming is ingetrokken.`);
   }
+  vink.checked = aan;
 }
 
-kassaVink.addEventListener("change", () => {
-  const wil = kassaVink.checked;
-  if (!wil) {
-    void zetKassaOveral(false);
-    return;
-  }
-  /* EERSTE REGEL, zonder await ervoor: zie de kop van dit bestand. */
-  chrome.permissions
-    .request({ origins: [KASSA_MATCH] })
-    .then((gegeven) => {
-      if (!gegeven) {
-        kassaVink.checked = false;
-        meld(
-          "Zonder deze toestemming kan het paneel nergens verschijnen. Het handmatige veld in het werkbalkvenster werkt wel gewoon.",
-          true,
-        );
+function tekenSites(aangevinkt: Set<string>, toegestaan: Set<string>): void {
+  leeg(sitesLijst);
+  for (const site of SITES) {
+    const rij = el("div", "vinkrij");
+    const vink = document.createElement("input");
+    vink.type = "checkbox";
+    vink.id = `site-${site.id}`;
+    /* Aan is aan ALS beide waar zijn. Staat het vinkje in de opslag maar heeft
+     * Chrome de toestemming niet (meer), dan is de waarheid "uit" — en die tonen
+     * we, want een vinkje dat aanstaat bij een site waar niets gebeurt, laat hem
+     * zoeken naar een fout die er niet is. */
+    vink.checked = aangevinkt.has(site.id) && toegestaan.has(site.id);
+
+    vink.addEventListener("change", () => {
+      const wil = vink.checked;
+      if (!wil) {
+        void zetSite(site, false, vink);
         return;
       }
-      return zetKassaOveral(true);
-    })
-    .catch(() => {
-      kassaVink.checked = false;
-      meld("Chrome heeft het toestemmingsverzoek afgebroken. Probeer het opnieuw.", true);
+      /* EERSTE REGEL van de afhandelaar, zonder await ervoor: anders is het
+       * gebruikersgebaar voorbij en weigert Chrome het verzoek. */
+      chrome.permissions
+        .request({ origins: [site.match] })
+        .then((gegeven) => {
+          if (!gegeven) {
+            vink.checked = false;
+            meld(
+              `Zonder toestemming voor ${site.match} kan het paneel daar niet verschijnen. Het handmatige veld in het werkbalkvenster werkt wel gewoon.`,
+              true,
+            );
+            return;
+          }
+          return zetSite(site, true, vink);
+        })
+        .catch(() => {
+          vink.checked = false;
+          meld("Chrome heeft het toestemmingsverzoek afgebroken. Probeer het opnieuw.", true);
+        });
     });
-});
+
+    const tekst = document.createElement("label");
+    tekst.htmlFor = vink.id;
+    tekst.appendChild(el("div", "titel", site.label));
+    tekst.appendChild(el("div", "noot", `${site.match} — ${site.scope}`));
+    tekst.appendChild(el("div", "noot", site.evidence));
+
+    rij.appendChild(vink);
+    rij.appendChild(tekst);
+    sitesLijst.appendChild(rij);
+  }
+}
 
 /* ─────────────────── de aanbiedingenbronnen, één blok per bron ────────────── */
 
@@ -596,7 +643,11 @@ function tekenBronBlok(bron: Bron, aan: boolean, toegestaan: boolean): void {
       })
       .catch(() => {
         vink.checked = false;
-        meldBron(bron, "Chrome heeft het toestemmingsverzoek afgebroken. Probeer het opnieuw.", true);
+        meldBron(
+          bron,
+          "Chrome heeft het toestemmingsverzoek afgebroken. Probeer het opnieuw.",
+          true,
+        );
       });
   });
 
@@ -657,8 +708,12 @@ async function start(): Promise<void> {
     await tekenBronLijst(bron);
   }
 
-  kassaVink.checked =
-    (await getKassaOveralAan()) && (await chrome.permissions.contains({ origins: [KASSA_MATCH] }));
+  const aangevinkteSites = new Set<string>(await getEnabledSiteIds());
+  const toegestaan = new Set<string>();
+  for (const site of SITES) {
+    if (await chrome.permissions.contains({ origins: [site.match] })) toegestaan.add(site.id);
+  }
+  tekenSites(aangevinkteSites, toegestaan);
 }
 
 void start();

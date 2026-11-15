@@ -1,31 +1,46 @@
 // @vitest-environment jsdom
 import { beforeEach, expect, test } from "vitest";
+import { adminCopy } from "./copy/admin.js";
+import { API_BASE } from "./api.js";
+import type { N8nAutoBooked } from "@lavega/core";
+import type { VaultStorage } from "@lavega/adapters";
 import {
   autoBookDecision,
   bookingEntity,
+  fetchForwardAddress,
   fetchQueue,
   forgetAutoBooked,
   getAutoBookedInvoices,
   parseQueue,
   pendingToInvoice,
+  recordForwardAddress,
   rememberAutoBooked,
   toPending,
-  NOTICE_LABELS,
   AUTO_BOOK_CEILING_CENTS,
   type N8nInvoiceRow,
 } from "./n8n.js";
 import {
   addHandledInvoiceMessageIds,
+  clearLegacyN8nLocalStorage,
   getHandledInvoiceMessageIds,
-  getN8nInvoiceToken,
-  getN8nInvoiceUrl,
-  setN8nInvoiceToken,
-  setN8nInvoiceUrl,
 } from "./settings.js";
 
 beforeEach(() => {
   localStorage.clear();
 });
+
+/** An in-memory vault, enough for n8n.ts's n8n-related calls. */
+function fakeVault(): VaultStorage {
+  const state = {
+    autoBooked: [] as N8nAutoBooked[],
+  };
+  return {
+    getAutoBookedInvoices: async () => [...state.autoBooked],
+    putAutoBookedInvoices: async (list: N8nAutoBooked[]) => {
+      state.autoBooked = [...list];
+    },
+  } as unknown as VaultStorage;
+}
 
 const ROW = {
   source: "gmail",
@@ -42,10 +57,18 @@ const ROW = {
 };
 
 /** A fetch stand-in: no network, exact status/body control. */
-function fakeFetch(status: number, body: unknown, opts: { throws?: boolean; badJson?: boolean } = {}) {
-  const calls: Array<{ url: string; token: string | undefined }> = [];
+function fakeFetch(
+  status: number,
+  body: unknown,
+  opts: { throws?: boolean; badJson?: boolean } = {},
+) {
+  const calls: Array<{ url: string; method: string | undefined; token: string | undefined }> = [];
   const impl = (async (url: string, init?: RequestInit) => {
-    calls.push({ url, token: (init?.headers as Record<string, string> | undefined)?.["x-lavega-token"] });
+    calls.push({
+      url,
+      method: init?.method,
+      token: (init?.headers as Record<string, string> | undefined)?.["x-lavega-token"],
+    });
     if (opts.throws) throw new TypeError("Failed to fetch");
     return {
       ok: status >= 200 && status < 300,
@@ -80,7 +103,9 @@ test("an unstated VAT stays null — never 0", () => {
 });
 
 test("a row without a usable amount or messageId is counted, not silently swallowed", () => {
-  const parsed = parseQueue({ invoices: [ROW, { ...ROW, messageId: "x", amountCents: null }, { messageId: "" }] });
+  const parsed = parseQueue({
+    invoices: [ROW, { ...ROW, messageId: "x", amountCents: null }, { messageId: "" }],
+  });
   expect(parsed!.rows).toHaveLength(1);
   expect(parsed!.dropped).toBe(2);
 });
@@ -90,29 +115,57 @@ test("a body that isn't the documented shape is a failure, not an empty queue", 
   expect(parseQueue("nope")).toBeNull();
   expect(parseQueue(null)).toBeNull();
   // An actually empty queue is a different thing and parses fine.
-  expect(parseQueue({ invoices: [] })).toEqual({ rows: [], notices: [], dropped: 0 });
+  expect(parseQueue({ invoices: [] })).toEqual({
+    rows: [],
+    notices: [],
+    setup: [],
+    setupDropped: 0,
+    dropped: 0,
+  });
 });
 
-test("fetchQueue sends the token in x-lavega-token and returns the rows", async () => {
+test("fetchQueue calls LaVega's own server, never n8n directly", async () => {
   const { impl, calls } = fakeFetch(200, { invoices: [ROW] });
-  const out = await fetchQueue("https://n8n.example/webhook/lavega-facturen", "sekret", impl);
+  const out = await fetchQueue(impl);
   expect(out.kind).toBe("ok");
   expect(out.kind === "ok" && out.rows).toHaveLength(1);
-  expect(calls[0].url).toBe("https://n8n.example/webhook/lavega-facturen");
-  expect(calls[0].token).toBe("sekret");
+  expect(calls[0].url).toBe(`${API_BASE}/api/n8n/queue`);
 });
 
+/* M4 (2026-10-17): the drain DELETES what it returns, and a GET is reachable
+ * from another site through the lax session cookie. The client must ask with
+ * POST so the server's same-origin check applies and a link cannot drain. */
+test("fetchQueue POSTs the drain — a GET was CSRF-able", async () => {
+  const { impl, calls } = fakeFetch(200, { invoices: [] });
+  await fetchQueue(impl);
+  expect(calls[0].method).toBe("POST");
+});
+
+/* Which queueKey the server sends to n8n is now a server-side decision, made
+ * from the caller's own session — see apps/server/src/n8n-routes.test.ts.
+ * This module no longer has a `key` parameter to test. */
+
 test("every failure mode is its own outcome, and none of them is 'ok'", async () => {
-  expect(await fetchQueue("", "", fakeFetch(200, {}).impl)).toEqual({ kind: "not-configured" });
-  expect(await fetchQueue("https://x", "", fakeFetch(200, {}).impl)).toEqual({ kind: "not-configured" });
-  expect(await fetchQueue("https://x", "t", fakeFetch(401, {}).impl)).toEqual({ kind: "unauthorized", status: 401 });
-  expect(await fetchQueue("https://x", "t", fakeFetch(403, {}).impl)).toEqual({ kind: "unauthorized", status: 403 });
-  expect(await fetchQueue("https://x", "t", fakeFetch(404, {}).impl)).toEqual({ kind: "http-error", status: 404 });
-  expect(await fetchQueue("https://x", "t", fakeFetch(200, {}, { throws: true }).impl)).toEqual({ kind: "network" });
-  expect(await fetchQueue("https://x", "t", fakeFetch(200, {}, { badJson: true }).impl)).toEqual({ kind: "unreadable" });
-  expect(await fetchQueue("https://x", "t", fakeFetch(200, { ok: true }).impl)).toEqual({ kind: "unreadable" });
-  // The empty queue IS ok — it just carries no rows.
-  expect(await fetchQueue("https://x", "t", fakeFetch(200, { invoices: [] }).impl)).toEqual({ kind: "ok", rows: [], notices: [], dropped: 0 });
+  expect(await fetchQueue(fakeFetch(503, {}).impl)).toEqual({ kind: "not-configured" });
+  expect(await fetchQueue(fakeFetch(401, {}).impl)).toEqual({ kind: "unauthorized", status: 401 });
+  expect(await fetchQueue(fakeFetch(403, {}).impl)).toEqual({ kind: "unauthorized", status: 403 });
+  expect(await fetchQueue(fakeFetch(500, {}).impl)).toEqual({ kind: "http-error", status: 500 });
+  expect(await fetchQueue(fakeFetch(200, {}, { throws: true }).impl)).toEqual({ kind: "network" });
+  expect(await fetchQueue(fakeFetch(200, {}, { badJson: true }).impl)).toEqual({
+    kind: "unreadable",
+  });
+  expect(await fetchQueue(fakeFetch(200, { ok: true }).impl)).toEqual({ kind: "unreadable" });
+  expect(
+    await fetchQueue(fakeFetch(200, { invoices: [], notices: [], noAddress: true }).impl),
+  ).toEqual({ kind: "no-address" });
+  expect(await fetchQueue(fakeFetch(200, { invoices: [] }).impl)).toEqual({
+    kind: "ok",
+    rows: [],
+    notices: [],
+    setup: [],
+    setupDropped: 0,
+    dropped: 0,
+  });
 });
 
 test("pendingToInvoice refuses what it cannot know, and marks what a model read", () => {
@@ -122,7 +175,7 @@ test("pendingToInvoice refuses what it cannot know, and marks what a model read"
   expect(pending.dueDate).toBe("");
   const blocked = pendingToInvoice(pending);
   expect(blocked.ok).toBe(false);
-  expect(blocked.ok === false && blocked.error).toContain("vervaldatum");
+  expect(blocked.ok === false && blocked.gap).toBe("due-date");
 
   const done = pendingToInvoice({ ...pending, dueDate: "2026-07-31" });
   expect(done.ok).toBe(true);
@@ -143,19 +196,30 @@ test("an empty VAT field stays unknown on the invoice instead of becoming zero",
   expect(out.ok === true && out.invoice.vatAmount).toBeUndefined();
 });
 
-test("URL, token and handled ids are local preferences, and default to empty", () => {
-  expect(getN8nInvoiceUrl()).toBe("");
-  expect(getN8nInvoiceToken()).toBe("");
+test("handled invoice message ids stay a local preference, deduped", () => {
   expect(getHandledInvoiceMessageIds()).toEqual([]);
-  setN8nInvoiceUrl("  https://n8n.example/webhook/x  ");
-  setN8nInvoiceToken(" tok ");
-  expect(getN8nInvoiceUrl()).toBe("https://n8n.example/webhook/x");
-  expect(getN8nInvoiceToken()).toBe("tok");
   addHandledInvoiceMessageIds(["a", "b"]);
   addHandledInvoiceMessageIds(["b", "c"]);
   expect(getHandledInvoiceMessageIds()).toEqual(["a", "b", "c"]);
-  // Nothing sensitive rides along: only the opaque ids are stored.
   expect(localStorage.getItem("lavega.n8nHandledMessageIds")).toBe('["a","b","c"]');
+});
+
+test("clearLegacyN8nLocalStorage deletes a pre-vault-migration plaintext webhook URL/token, and any leftover provisioning keys", () => {
+  // Regression: `migrateLegacyN8nSettings` used to be the only code that ever
+  // deleted these — it is gone along with the whole vault-backed webhook
+  // feature, so nothing else in the app still cleans up a plaintext token
+  // left over from before 2026-09-08.
+  localStorage.setItem("lavega.n8nInvoiceUrl", "https://n8n.example/webhook/legacy");
+  localStorage.setItem("lavega.n8nInvoiceToken", "legacy-tok");
+  localStorage.setItem("lavega.n8nBaseUrl", "https://n8n.example");
+  localStorage.setItem("lavega.n8nApiKey", "n8n-api-key");
+  clearLegacyN8nLocalStorage();
+  expect(localStorage.getItem("lavega.n8nInvoiceUrl")).toBeNull();
+  expect(localStorage.getItem("lavega.n8nInvoiceToken")).toBeNull();
+  expect(localStorage.getItem("lavega.n8nBaseUrl")).toBeNull();
+  expect(localStorage.getItem("lavega.n8nApiKey")).toBeNull();
+  // Idempotent: a second call with nothing left to clean up is a no-op, not a throw.
+  expect(() => clearLegacyN8nLocalStorage()).not.toThrow();
 });
 
 test("an unreadable currency stays empty and blocks the row — a USD invoice is never booked as euros", () => {
@@ -166,7 +230,7 @@ test("an unreadable currency stays empty and blocks the row — a USD invoice is
   const pending = toPending(parsed!.rows[0], "BV1");
   const blocked = pendingToInvoice(pending);
   expect(blocked.ok).toBe(false);
-  if (!blocked.ok) expect(blocked.error).toContain("valuta");
+  if (!blocked.ok) expect(blocked.gap).toBe("currency");
 
   // ...and it books once he says which currency it is.
   const done = pendingToInvoice({ ...pending, currency: "usd" });
@@ -205,7 +269,10 @@ test("a workflow that sends no notices is not an error — the owner hasn't re-i
 test("a notice without a messageId or with an unknown kind is not shown at all", () => {
   const parsed = parseQueue({
     invoices: [],
-    notices: [{ ...NOTICE, messageId: "" }, { ...NOTICE, kind: "iets-nieuws" }],
+    notices: [
+      { ...NOTICE, messageId: "" },
+      { ...NOTICE, kind: "iets-nieuws" },
+    ],
   });
   expect(parsed!.notices).toEqual([]);
 });
@@ -218,16 +285,53 @@ test("a link that does not go to his own mailbox is dropped, not shown", () => {
   expect(parsed!.notices[0].mailUrl).toBe("");
 });
 
-test("every notice kind has a Dutch label", () => {
+test("every notice kind has a label in both languages", () => {
   for (const kind of ["notification", "reminder", "no-amount", "unreadable"] as const) {
-    expect(NOTICE_LABELS[kind].length).toBeGreaterThan(0);
+    expect(adminCopy.nl.facturen.notices.kindLabels[kind].length).toBeGreaterThan(0);
+    expect(adminCopy.en.facturen.notices.kindLabels[kind].length).toBeGreaterThan(0);
   }
 });
 
 test("fetchQueue hands the notices through", async () => {
   const { impl } = fakeFetch(200, { invoices: [ROW], notices: [NOTICE] });
-  const out = await fetchQueue("https://n8n.example/webhook/lavega-facturen", "sekret", impl);
+  const out = await fetchQueue(impl);
   expect(out.kind === "ok" && out.notices).toHaveLength(1);
+});
+
+/* ── het doorstuuradres: lezen en zetten ───────────────────────────────── */
+
+test("fetchForwardAddress reads a localPart the server already has", async () => {
+  const { impl } = fakeFetch(200, { localPart: "facturen" });
+  expect(await fetchForwardAddress(impl)).toEqual({ kind: "ok", localPart: "facturen" });
+});
+
+test("fetchForwardAddress reads null when no address is set yet", async () => {
+  const { impl } = fakeFetch(200, { localPart: null });
+  expect(await fetchForwardAddress(impl)).toEqual({ kind: "ok", localPart: null });
+});
+
+test("fetchForwardAddress maps a network failure to its own outcome", async () => {
+  const { impl } = fakeFetch(200, {}, { throws: true });
+  expect(await fetchForwardAddress(impl)).toEqual({ kind: "network" });
+});
+
+test("recordForwardAddress: 409 means the local part is already taken", async () => {
+  const { impl } = fakeFetch(409, {});
+  expect(await recordForwardAddress("facturen", impl)).toEqual({ kind: "taken" });
+});
+
+test("recordForwardAddress: 400 means the local part is invalid", async () => {
+  const { impl } = fakeFetch(400, {});
+  expect(await recordForwardAddress("!!!", impl)).toEqual({ kind: "invalid" });
+});
+
+test("recordForwardAddress returns the stored localPart on success", async () => {
+  const { impl, calls } = fakeFetch(200, { localPart: "facturen" });
+  expect(await recordForwardAddress("facturen", impl)).toEqual({
+    kind: "stored",
+    localPart: "facturen",
+  });
+  expect(calls[0].url).toBe(`${API_BASE}/api/n8n/forward-address`);
 });
 
 /* ── Herkomst en de grens van wat zichzelf mag boeken ──────────────────────
@@ -267,24 +371,36 @@ test("een regel zonder afzendercontrole krijgt 'unknown', nooit 'passed'", () =>
   expect(row.senderCheck).toBe("unknown");
   expect(row.deliveredTo).toBeUndefined();
   // En een verzonnen waarde ook niet.
-  expect(parseQueue({ invoices: [{ ...FORWARDED, senderCheck: "prima hoor" }] })!.rows[0].senderCheck).toBe("unknown");
+  expect(
+    parseQueue({ invoices: [{ ...FORWARDED, senderCheck: "prima hoor" }] })!.rows[0].senderCheck,
+  ).toBe("unknown");
 });
 
 test("autoBookDecision: geverifieerde afzender + complete factuur + één onderneming = boekt zichzelf", () => {
   const row = parseQueue({ invoices: [FORWARDED] })!.rows[0];
-  expect(autoBookDecision(row, { entityChoices: ["BV1"], defaultEntity: "BV1" })).toEqual({ book: true });
+  expect(autoBookDecision(row, { entityChoices: ["BV1"], defaultEntity: "BV1" })).toEqual({
+    book: true,
+  });
 });
 
 test("autoBookDecision: een afzender die de controle niet haalt of niet had, boekt niets", () => {
-  const failed = parseQueue({ invoices: [{ ...FORWARDED, senderCheck: "failed", senderChecks: { spf: "fail", dkim: "fail", dmarc: "fail" } }] })!.rows[0];
+  const failed = parseQueue({
+    invoices: [
+      {
+        ...FORWARDED,
+        senderCheck: "failed",
+        senderChecks: { spf: "fail", dkim: "fail", dmarc: "fail" },
+      },
+    ],
+  })!.rows[0];
   const d1 = autoBookDecision(failed, { entityChoices: ["BV1"], defaultEntity: "BV1" });
   expect(d1.book).toBe(false);
-  expect(d1.book === false && d1.reason).toContain("SPF");
+  expect(d1.book === false && d1.hold.kind).toBe("sender-failed");
 
   const unchecked = parseQueue({ invoices: [ROW] })!.rows[0];
   const d2 = autoBookDecision(unchecked, { entityChoices: ["BV1"], defaultEntity: "BV1" });
   expect(d2.book).toBe(false);
-  expect(d2.book === false && d2.reason).toContain("geen afzendercontrole");
+  expect(d2.book === false && d2.hold.kind).toBe("sender-unchecked");
 });
 
 test("autoBookDecision: zonder ondernemingen valt er niets te gokken, dus knijpt de poort niet", () => {
@@ -292,7 +408,9 @@ test("autoBookDecision: zonder ondernemingen valt er niets te gokken, dus knijpt
   // GEEN openstaande vraag — het is het antwoord: alles staat op hem. De eis
   // "precies één" hield hem hier tegen op een keuze die niet bestond.
   const row = parseQueue({ invoices: [FORWARDED] })!.rows[0];
-  expect(autoBookDecision(row, { entityChoices: [], defaultEntity: "Persoonlijk" })).toEqual({ book: true });
+  expect(autoBookDecision(row, { entityChoices: [], defaultEntity: "Persoonlijk" })).toEqual({
+    book: true,
+  });
 });
 
 test("bookingEntity: de poort en de boeking gebruiken dezelfde regel", () => {
@@ -306,32 +424,55 @@ test("autoBookDecision: bij meer dan één onderneming wordt er niet gegokt welk
   const row = parseQueue({ invoices: [FORWARDED] })!.rows[0];
   const d = autoBookDecision(row, { entityChoices: ["BV1", "BV2"], defaultEntity: "BV1" });
   expect(d.book).toBe(false);
-  expect(d.book === false && d.reason).toContain("onderneming");
+  expect(d.book === false && d.hold.kind).toBe("entity-ambiguous");
 });
 
 test("autoBookDecision: een incomplete factuur boekt niet, en noemt precies wat er mist", () => {
   const noDue = parseQueue({ invoices: [{ ...FORWARDED, dueDate: null }] })!.rows[0];
   const d1 = autoBookDecision(noDue, { entityChoices: ["BV1"], defaultEntity: "BV1" });
-  expect(d1.book === false && d1.reason).toContain("vervaldatum");
+  expect(d1.book === false && d1.hold.kind === "incomplete" && d1.hold.gap).toBe("due-date");
 
   const noCcy = parseQueue({ invoices: [{ ...FORWARDED, currency: "euro's" }] })!.rows[0];
   const d2 = autoBookDecision(noCcy, { entityChoices: ["BV1"], defaultEntity: "BV1" });
-  expect(d2.book === false && d2.reason).toContain("valuta");
+  expect(d2.book === false && d2.hold.kind === "incomplete" && d2.hold.gap).toBe("currency");
 
   const noCp = parseQueue({ invoices: [{ ...FORWARDED, counterparty: null }] })!.rows[0];
   const d3 = autoBookDecision(noCp, { entityChoices: ["BV1"], defaultEntity: "BV1" });
-  expect(d3.book === false && d3.reason).toContain("relatie");
+  expect(d3.book === false && d3.hold.kind === "incomplete" && d3.hold.gap).toBe("counterparty");
 });
 
-test("de lijst automatisch geboekte facturen overleeft een herlaad en is te wissen", () => {
-  expect(getAutoBookedInvoices()).toEqual([]);
-  rememberAutoBooked({ invoiceId: "inv-1", messageId: "msg-1", subject: "Factuur juli" });
-  rememberAutoBooked({ invoiceId: "inv-1", messageId: "msg-1", subject: "Factuur juli" }); // idempotent
-  rememberAutoBooked({ invoiceId: "inv-2", messageId: "msg-2" });
-  expect(getAutoBookedInvoices().map((a) => a.invoiceId)).toEqual(["inv-1", "inv-2"]);
-  expect(getAutoBookedInvoices()[0].subject).toBe("Factuur juli");
-  forgetAutoBooked("inv-1");
-  expect(getAutoBookedInvoices().map((a) => a.invoiceId)).toEqual(["inv-2"]);
+test("de lijst automatisch geboekte facturen overleeft een herlaad en is te wissen", async () => {
+  const vault = fakeVault();
+  expect(await getAutoBookedInvoices(vault)).toEqual([]);
+  await rememberAutoBooked(vault, {
+    invoiceId: "inv-1",
+    messageId: "msg-1",
+    subject: "Factuur juli",
+  });
+  await rememberAutoBooked(vault, {
+    invoiceId: "inv-1",
+    messageId: "msg-1",
+    subject: "Factuur juli",
+  }); // idempotent
+  await rememberAutoBooked(vault, { invoiceId: "inv-2", messageId: "msg-2" });
+  const list = await getAutoBookedInvoices(vault);
+  expect(list.map((a) => a.invoiceId)).toEqual(["inv-1", "inv-2"]);
+  expect(list[0].subject).toBe("Factuur juli");
+  await forgetAutoBooked(vault, "inv-1");
+  expect((await getAutoBookedInvoices(vault)).map((a) => a.invoiceId)).toEqual(["inv-2"]);
+});
+
+test("een oude localStorage-lijst met auto-boekingen wordt eenmalig naar de kluis gemigreerd", async () => {
+  localStorage.setItem(
+    "lavega.n8n.autoBooked.v1",
+    JSON.stringify([{ invoiceId: "legacy-1", messageId: "msg-legacy", subject: "Oude factuur" }]),
+  );
+  const vault = fakeVault();
+  const list = await getAutoBookedInvoices(vault);
+  expect(list).toEqual([
+    { invoiceId: "legacy-1", messageId: "msg-legacy", subject: "Oude factuur" },
+  ]);
+  expect(localStorage.getItem("lavega.n8n.autoBooked.v1")).toBeNull();
 });
 
 /** Een geverifieerde rij zoals de app hem krijgt: via parseQueue, niet met de hand
@@ -355,19 +496,22 @@ test("boven het plafond boekt niets zichzelf, ook niet van een geverifieerde afz
   // typechecker niets. Zonder dit compileert de test niet, en dat is de bedoeling
   // van die union — de reden bestaat alleen als er niet geboekt wordt.
   if (boven.book) throw new Error("verwacht dat het plafond dit tegenhoudt");
-  expect(boven.reason).toContain("10.000");
+  expect(boven.hold).toEqual({ kind: "over-ceiling", ceilingCents: AUTO_BOOK_CEILING_CENTS });
 });
 
 test("bij een gespoofte afzender gaat het over de afzender, niet over het bedrag", () => {
   // De volgorde van de poorten bepaalt welke melding hij leest, en bij een
   // nagemaakte afzender van € 50.000 is "de afzender klopt niet" het nuttige feit.
   const d = autoBookDecision(
-    { ...verifiedRow({ amountCents: 5_000_000 }), senderCheck: "failed", senderChecks: { spf: "fail", dkim: "fail", dmarc: "fail" } },
+    {
+      ...verifiedRow({ amountCents: 5_000_000 }),
+      senderCheck: "failed",
+      senderChecks: { spf: "fail", dkim: "fail", dmarc: "fail" },
+    },
     { entityChoices: ["BV1"], defaultEntity: "BV1" },
   );
   if (d.book) throw new Error("verwacht dat een gespoofte afzender dit tegenhoudt");
-  expect(d.reason).toContain("afzender");
-  expect(d.reason).not.toContain("10.000");
+  expect(d.hold.kind).toBe("sender-failed");
 });
 
 /* DOORGESTUURD IS IETS ANDERS DAN NAGEMAAKT, en het verschil staat in de reden.
@@ -386,8 +530,7 @@ test("een doorgestuurde mail krijgt de reden die klopt, niet de verdenking", () 
   if (d.book) throw new Error("de poort hoort dicht te blijven");
   // Let op de ONTKENNING: de tekst noemt "nagemaakte afzender" juist om te zeggen
   // dat het dat NIET is. Toetsen op de kale woorden zou hier dus altijd falen.
-  expect(d.reason).toContain("niet bij een nagemaakte afzender");
-  expect(d.reason).toContain("DOORGESTUURDE");
+  expect(d.hold.kind).toBe("sender-forwarded");
 });
 
 test("een echt nagemaakte afzender houdt de verdenking wél", () => {
@@ -398,8 +541,7 @@ test("een echt nagemaakte afzender houdt de verdenking wél", () => {
   });
   const d = autoBookDecision(nep, { entityChoices: [], defaultEntity: "Prive" });
   if (d.book) throw new Error("de poort hoort dicht te blijven");
-  expect(d.reason).toContain("óf een nagemaakte afzender");
-  expect(d.reason).not.toContain("DOORGESTUURDE");
+  expect(d.hold.kind).toBe("sender-failed");
 });
 
 test("de poort gaat niet open van een geldige DKIM alleen", () => {
@@ -407,8 +549,111 @@ test("de poort gaat niet open van een geldige DKIM alleen", () => {
    * is veranderd; het zegt niets over wie het doorstuurde. Zou deze test omvallen,
    * dan is er een tekstwijziging uitgelopen op een besluit over veiligheid. */
   const d = autoBookDecision(
-    verifiedRow({ senderCheck: "failed", senderChecks: { spf: "fail", dkim: "pass", dmarc: "pass" } }),
+    verifiedRow({
+      senderCheck: "failed",
+      senderChecks: { spf: "fail", dkim: "pass", dmarc: "pass" },
+    }),
     { entityChoices: [], defaultEntity: "Prive" },
   );
   expect(d.book).toBe(false);
+});
+
+/* DOORGESTUURD IS IETS ANDERS DAN NAGEMAAKT, en het verschil moet in de ZIN
+ * staan, niet alleen in de beslissing. Wie een doorstuurregel aanzet kreeg
+ * vroeger bij elke factuur te lezen dat zijn leverancier verdacht was. De
+ * beslissing hierboven kent het verschil; deze test bewaakt dat de tekst het
+ * ook zegt, in allebei de talen. */
+test("de doorgestuurd-melding ontkent de verdenking, de gespoofte bevestigt hem", () => {
+  const checks = { spf: "softfail", dkim: "pass", dmarc: "fail" };
+  for (const locale of ["nl", "en"] as const) {
+    const h = adminCopy[locale].facturen.queue.holds;
+    expect(h.senderForwarded(checks)).toContain("(SPF softfail, DKIM pass, DMARC fail)");
+    expect(h.senderForwarded(null)).not.toContain("(SPF");
+  }
+  expect(adminCopy.nl.facturen.queue.holds.senderForwarded(checks)).toContain(
+    "niet bij een nagemaakte afzender",
+  );
+  expect(adminCopy.nl.facturen.queue.holds.senderFailed(checks)).toContain(
+    "óf een nagemaakte afzender",
+  );
+  expect(adminCopy.en.facturen.queue.holds.senderForwarded(checks)).toContain("not to a faked");
+  expect(adminCopy.en.facturen.queue.holds.senderFailed(checks)).toContain("or a faked sender");
+});
+
+test("het plafond staat in de zin, in de opmaak van de taal", () => {
+  expect(adminCopy.nl.facturen.queue.holds.overCeiling(1_000_000)).toContain("€ 10.000");
+  expect(adminCopy.en.facturen.queue.holds.overCeiling(1_000_000)).toContain("€10,000");
+});
+
+/* Elke reden die de validatie kan geven moet in allebei de talen bestaan. Het
+ * type dwingt de sleutels af; deze test dwingt af dat er ook iets in staat. */
+test("elke ontbrekende factuurregel heeft een zin in beide talen", () => {
+  for (const gap of [
+    "counterparty",
+    "issue-date",
+    "due-date",
+    "amount",
+    "currency",
+    "vat",
+  ] as const) {
+    expect(adminCopy.nl.facturen.queue.holds.gaps[gap].length).toBeGreaterThan(0);
+    expect(adminCopy.en.facturen.queue.holds.gaps[gap].length).toBeGreaterThan(0);
+  }
+});
+
+test("setup notices are parsed into their own list and never into notices", () => {
+  const parsed = parseQueue({
+    invoices: [],
+    notices: [
+      {
+        messageId: "a",
+        kind: "forwarding-confirmation",
+        code: "123456789",
+        receivedAt: "2026-10-21T10:00:00Z",
+        subject: "x",
+        from: "y",
+        mailUrl: "https://mail.google.com/z",
+      },
+      { messageId: "b", kind: "setup-test", code: "k3x9" },
+      { messageId: "c", kind: "unreadable", reason: "x", mailUrl: "" },
+    ],
+  })!;
+  expect(parsed.setup).toEqual([
+    { kind: "forwarding-confirmation", code: "123456789", receivedAt: "2026-10-21T10:00:00Z" },
+    { kind: "setup-test", code: "k3x9" },
+  ]);
+  expect(parsed.notices.map((n) => n.kind)).toEqual(["unreadable"]);
+  expect(parsed.dropped).toBe(0);
+  expect(parsed.setupDropped).toBe(0);
+});
+
+test("a malformed setup code is counted in setupDropped, never trusted, never an invoice loss", () => {
+  const parsed = parseQueue({
+    invoices: [],
+    notices: [
+      { messageId: "a", kind: "forwarding-confirmation", code: "12ab" },
+      { messageId: "b", kind: "forwarding-confirmation", code: "1".repeat(21) },
+      { messageId: "c", kind: "forwarding-confirmation" },
+      { messageId: "d", kind: "setup-test", code: "K3X9" },
+      { messageId: "e", kind: "setup-test", code: "k3x" },
+      { messageId: "f", kind: "setup-test", code: "https://evil.example" },
+    ],
+  })!;
+  expect(parsed.setup).toEqual([]);
+  expect(parsed.setupDropped).toBe(6);
+  expect(parsed.dropped).toBe(0);
+  expect(parsed.notices).toEqual([]);
+});
+
+test("fetchQueue hands the setup signals through", async () => {
+  const { impl } = fakeFetch(200, {
+    invoices: [],
+    notices: [
+      { messageId: "a", kind: "setup-test", code: "k3x9" },
+      { messageId: "b", kind: "setup-test", code: "BAD" },
+    ],
+  });
+  const out = await fetchQueue(impl);
+  expect(out.kind === "ok" && out.setup).toEqual([{ kind: "setup-test", code: "k3x9" }]);
+  expect(out.kind === "ok" && out.setupDropped).toBe(1);
 });

@@ -42,13 +42,33 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import Anthropic from "@anthropic-ai/sdk";
-import { readIngTariffs, readDocumentDate, coverage, isCovered, mergeCatalogEntries, type CatalogValue, type CatalogRoute, type CatalogField } from "@lavega/core";
+import {
+  readIngTariffs,
+  readDocumentDate,
+  coverage,
+  isCovered,
+  mergeCatalogEntries,
+  type CatalogValue,
+  type CatalogRoute,
+  type CatalogField,
+} from "@lavega/core";
 import { runLadder, type RouteAttempt } from "./catalog/catalogRoutes.js";
-import { buildExtractPrompt, EXTRACT_TOOL, parseExtractReply, type ExtractedFigure } from "./catalog/catalogExtract.js";
-import { buildInterestPrompt, INTEREST_TOOL, parseInterestReply, type ExtractedRate } from "./catalog/catalogInterest.js";
+import {
+  buildExtractPrompt,
+  EXTRACT_TOOL,
+  parseExtractReply,
+  type ExtractedFigure,
+} from "./catalog/catalogExtract.js";
+import {
+  buildInterestPrompt,
+  INTEREST_TOOL,
+  parseInterestReply,
+  type ExtractedRate,
+} from "./catalog/catalogInterest.js";
 import { sliceForExtraction } from "./catalog/catalogSlice.js";
 
-const UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36";
+const UA =
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36";
 const STATE = "docs/catalog/state.json";
 const CATALOG = "docs/catalog/catalog.json";
 const today = new Date().toISOString().slice(0, 10);
@@ -63,7 +83,9 @@ const args = process.argv.slice(2);
 // document was deliberately unpinned, and pay Opus to re-read a marketing page
 // nobody wanted read. Any token matching as a substring is enough.
 const onlyList = (args.includes("--only") ? args[args.indexOf("--only") + 1] : "")
-  .split(",").map((t) => t.trim()).filter(Boolean);
+  .split(",")
+  .map((t) => t.trim())
+  .filter(Boolean);
 const only = onlyList.length ? onlyList.join(",") : null;
 const matchesOnly = (id: string) => onlyList.some((t) => id.includes(t));
 const dry = args.includes("--dry");
@@ -138,7 +160,14 @@ let modelCalls = 0;
 /** What this run spent, per model, from the API's own usage numbers rather than a
  *  guess. Printed at the end: a rung that costs money and reports only coverage
  *  is a rung nobody can decide the cadence for. */
-type Spend = { calls: number; input: number; output: number; cacheRead: number; cacheWrite: number; searches: number };
+type Spend = {
+  calls: number;
+  input: number;
+  output: number;
+  cacheRead: number;
+  cacheWrite: number;
+  searches: number;
+};
 const spend = new Map<string, Spend>();
 /** Anthropic list prices per million tokens, 2026-08. Sonnet 5's introductory
  *  $2/$10 runs to 2026-08-31, so today this OVER-states the search rung slightly.
@@ -156,16 +185,31 @@ function stopIfOverBudget(): void {
   if (!MAX_USD) return;
   const spent = spendTotalUsd();
   if (spent < MAX_USD) return;
-  console.error(`\nSTOPPING: spend ≈ $${spent.toFixed(2)} reached the $${MAX_USD.toFixed(2)} ceiling (CATALOG_MAX_USD).`);
+  console.error(
+    `\nSTOPPING: spend ≈ $${spent.toFixed(2)} reached the $${MAX_USD.toFixed(2)} ceiling (CATALOG_MAX_USD).`,
+  );
   if (onFatal) {
-    try { onFatal(); } catch (e) { console.error(`  (could not save partial results: ${(e as Error).message})`); }
+    try {
+      onFatal();
+    } catch (e) {
+      console.error(`  (could not save partial results: ${(e as Error).message})`);
+    }
   }
-  console.error("Products already read are kept; the rest are untouched. Raise CATALOG_MAX_USD to continue.");
+  console.error(
+    "Products already read are kept; the rest are untouched. Raise CATALOG_MAX_USD to continue.",
+  );
   process.exit(1);
 }
 
 function recordSpend(model: string, usage: Anthropic.Usage): void {
-  const s = spend.get(model) ?? { calls: 0, input: 0, output: 0, cacheRead: 0, cacheWrite: 0, searches: 0 };
+  const s = spend.get(model) ?? {
+    calls: 0,
+    input: 0,
+    output: 0,
+    cacheRead: 0,
+    cacheWrite: 0,
+    searches: 0,
+  };
   s.calls++;
   s.input += usage.input_tokens ?? 0;
   s.output += usage.output_tokens ?? 0;
@@ -203,7 +247,8 @@ function spendLines(): string[] {
         `${s.searches ? ` + ${s.searches} web search(es)` : ""}  ≈ $${usd.toFixed(2)}`,
     );
   }
-  if (out.length) out.push(`  ${"total".padEnd(16)} ≈ $${total.toFixed(2)} (list prices, estimate)`);
+  if (out.length)
+    out.push(`  ${"total".padEnd(16)} ≈ $${total.toFixed(2)} (list prices, estimate)`);
   return out;
 }
 
@@ -212,16 +257,6 @@ function spendLines(): string[] {
  *  the bottom, which is the difference between "nothing is readable today" and
  *  "committing an empty catalogue at 05:00 on a Monday". */
 let httpResponses = 0;
-
-async function getText(url: string): Promise<string> {
-  const res = await fetch(url, {
-    headers: { "User-Agent": UA, "Accept-Language": "nl-NL,nl;q=0.9" },
-    signal: AbortSignal.timeout(TIMEOUT_MS),
-  });
-  httpResponses++;
-  if (!res.ok) throw new Error(`${res.status}`);
-  return res.text();
-}
 
 /** pdftotext exists on the sweep machine. It is deliberately NOT a runtime
  *  dependency of the server. */
@@ -242,7 +277,10 @@ async function getPdfText(url: string): Promise<string> {
 
 /** HTML with its tags gone, which is what both the regex rung and the model read. */
 function strip(html: string): string {
-  return html.replace(/<(script|style)[\s\S]*?<\/\1>/gi, " ").replace(/<[^>]+>/g, " ").replace(/[ \t]+/g, " ");
+  return html
+    .replace(/<(script|style)[\s\S]*?<\/\1>/gi, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/[ \t]+/g, " ");
 }
 
 /** Two rungs now read the same URL — the regex and the model — and 82 URLs serve
@@ -314,7 +352,10 @@ async function archiveFetch(url: string): Promise<Response> {
     archiveLastHit = Date.now();
     let res: Response;
     try {
-      res = await fetch(url, { headers: { "User-Agent": UA }, signal: AbortSignal.timeout(ARCHIVE_TIMEOUT_MS) });
+      res = await fetch(url, {
+        headers: { "User-Agent": UA },
+        signal: AbortSignal.timeout(ARCHIVE_TIMEOUT_MS),
+      });
     } catch (e) {
       if (attempt >= ARCHIVE_BACKOFF_MS.length) throw e;
       await sleep(ARCHIVE_BACKOFF_MS[attempt]);
@@ -323,7 +364,9 @@ async function archiveFetch(url: string): Promise<Response> {
     httpResponses++;
     if (res.status !== 429 && res.status !== 503) return res;
     if (attempt >= ARCHIVE_BACKOFF_MS.length) {
-      throw new Error(`web.archive.org ${res.status} after ${attempt + 1} tries — rate limited, not "not archived"`);
+      throw new Error(
+        `web.archive.org ${res.status} after ${attempt + 1} tries — rate limited, not "not archived"`,
+      );
     }
     await sleep(ARCHIVE_BACKOFF_MS[attempt]);
   }
@@ -335,7 +378,12 @@ type Snapshot = { stamp: string; date: string; original: string; mime: string };
  *  for the LAST four rather than the first four — the default order is oldest
  *  first, and Rabobank's index starts in 2022. */
 async function cdxSnapshots(url: string): Promise<Snapshot[]> {
-  const q = new URLSearchParams({ url, output: "json", limit: "-4", fl: "timestamp,original,mimetype" });
+  const q = new URLSearchParams({
+    url,
+    output: "json",
+    limit: "-4",
+    fl: "timestamp,original,mimetype",
+  });
   q.append("filter", "statuscode:200");
   // A revisit record is a pointer to an identical earlier capture, not a body.
   q.append("filter", "!mimetype:warc/revisit");
@@ -358,7 +406,9 @@ async function cdxSnapshots(url: string): Promise<Snapshot[]> {
 /** Newest usable snapshot as text, or null for "nothing archived / nothing in it".
  *  `id_` asks for the original bytes without the archive's own banner and script,
  *  so the text handed to the model is the page as the provider served it. */
-async function readArchived(url: string): Promise<{ text: string; url: string; date: string } | null> {
+async function readArchived(
+  url: string,
+): Promise<{ text: string; url: string; date: string } | null> {
   const snaps = (await cdxSnapshots(url)).reverse();
   for (const s of snaps.slice(0, 2)) {
     const archiveUrl = `https://web.archive.org/web/${s.stamp}id_/${s.original}`;
@@ -404,7 +454,15 @@ function abortIfKeyUnusable(e: unknown): void {
   // Matched on the MESSAGE, not the status: the API answers billing failures with
   // 400 invalid_request_error, the same status as a genuinely malformed request,
   // and only the text separates "top up your account" from "this page was too big".
-  const fatal = ["credit balance", "billing", "quota", "authentication", "invalid x-api-key", "permission", "disabled"];
+  const fatal = [
+    "credit balance",
+    "billing",
+    "quota",
+    "authentication",
+    "invalid x-api-key",
+    "permission",
+    "disabled",
+  ];
   if (!fatal.some((f) => msg.includes(f))) return;
   console.error(`\nFATAL - the Anthropic key cannot be used: ${raw}`);
   // SAVE WHAT WAS ALREADY READ, then die. The first version of this guard wrote
@@ -417,9 +475,15 @@ function abortIfKeyUnusable(e: unknown): void {
   // Products still unswept keep their previous entry, because this merges rather
   // than replaces. The run still exits RED so nobody mistakes it for complete.
   if (onFatal) {
-    try { onFatal(); } catch (e) { console.error(`  (could not save partial results: ${(e as Error).message})`); }
+    try {
+      onFatal();
+    } catch (e) {
+      console.error(`  (could not save partial results: ${(e as Error).message})`);
+    }
   }
-  console.error("Exiting red. Top up and re-run; products already read are kept, the rest are untouched.");
+  console.error(
+    "Exiting red. Top up and re-run; products already read are kept, the rest are untouched.",
+  );
   process.exit(1);
 }
 
@@ -438,9 +502,15 @@ async function createGuarded(
   }
 }
 
-async function askModel(product: string, sourceUrl: string, text: string): Promise<ExtractedFigure | null> {
+async function askModel(
+  product: string,
+  sourceUrl: string,
+  text: string,
+): Promise<ExtractedFigure | null> {
   if (text.length > MAX_MODEL_CHARS) {
-    throw new Error(`page is ${Math.round(text.length / 1000)}k chars — refusing to send a truncated document`);
+    throw new Error(
+      `page is ${Math.round(text.length / 1000)}k chars — refusing to send a truncated document`,
+    );
   }
   // Send the relevant regions, not the whole document. Measured: 39% of a tariff
   // document sits near a currency term, and Amex's agreement is 12%. The slice
@@ -450,12 +520,15 @@ async function askModel(product: string, sourceUrl: string, text: string): Promi
   // figure to refused with no error to show for it.
   const cut = sliceForExtraction(text);
   if (!cut.whole) {
-    console.log(`    sliced ${Math.round(text.length / 1000)}k -> ${Math.round(cut.text.length / 1000)}k chars (${cut.regions} regions)`);
+    console.log(
+      `    sliced ${Math.round(text.length / 1000)}k -> ${Math.round(cut.text.length / 1000)}k chars (${cut.regions} regions)`,
+    );
   }
   const req = { product, sourceUrl, text: cut.text };
   const { system, user } = buildExtractPrompt(req);
   const client = new Anthropic({ apiKey: apiKey ?? undefined });
-  const res = await createGuarded(client, 
+  const res = await createGuarded(
+    client,
     {
       model: EXTRACT_MODEL,
       max_tokens: 8192,
@@ -525,7 +598,11 @@ function rateToValue(
       ? `Actierente ${String(rate.promoPct).replace(".", ",")}%${rate.promoUntil ? ` ${rate.promoUntil}` : ""}, daarna ${String(rate.standardPct).replace(".", ",")}%.`
       : null;
   const withdrawal =
-    rate.freeWithdrawal === false ? "Niet vrij opneembaar." : rate.freeWithdrawal === null ? "Opnamevoorwaarden niet vermeld." : null;
+    rate.freeWithdrawal === false
+      ? "Niet vrij opneembaar."
+      : rate.freeWithdrawal === null
+        ? "Opnamevoorwaarden niet vermeld."
+        : null;
   const parts = [rate.conditions, promo, withdrawal].filter(Boolean);
   return {
     value: rate.standardPct,
@@ -540,13 +617,21 @@ function rateToValue(
 /** The savings question. Separate model call, separate tool, same discipline: the
  *  quote is checked against the text we sent and a rate outside a plausible range
  *  is refused. */
-async function askRateModel(product: string, sourceUrl: string, text: string): Promise<ExtractedRate | null> {
+async function askRateModel(
+  product: string,
+  sourceUrl: string,
+  text: string,
+): Promise<ExtractedRate | null> {
   if (text.length > MAX_MODEL_CHARS) {
-    throw new Error(`document is ${Math.round(text.length / 1000)}k chars — refusing to send a truncated one`);
+    throw new Error(
+      `document is ${Math.round(text.length / 1000)}k chars — refusing to send a truncated one`,
+    );
   }
   const cut = sliceForExtraction(text);
   if (!cut.whole) {
-    console.log(`    sliced ${Math.round(text.length / 1000)}k -> ${Math.round(cut.text.length / 1000)}k chars (${cut.regions} regions)`);
+    console.log(
+      `    sliced ${Math.round(text.length / 1000)}k -> ${Math.round(cut.text.length / 1000)}k chars (${cut.regions} regions)`,
+    );
   }
   const req = { product, sourceUrl, text: cut.text };
   const { system, user } = buildInterestPrompt(req);
@@ -597,23 +682,35 @@ const FIND_TOOL: { name: string; description: string; input_schema: object } = {
     properties: {
       product: {
         type: "string",
-        description: "The product you were asked about, copied back exactly. The reply is discarded if it names a different one.",
+        description:
+          "The product you were asked about, copied back exactly. The reply is discarded if it names a different one.",
       },
       url: {
         type: "string",
         description:
           "Absolute https URL of the provider's own page or PDF. Its own site, its own asset/CDN host, or the issuer that runs the card for it. Never a comparison site, blog, forum, news article or summary.",
       },
-      kind: { type: "string", enum: ["html", "pdf"], description: "Whether that URL serves HTML or a PDF." },
+      kind: {
+        type: "string",
+        enum: ["html", "pdf"],
+        description: "Whether that URL serves HTML or a PDF.",
+      },
       publisher: { type: "string", description: "The organisation that publishes that URL." },
-      why: { type: "string", description: "One sentence: what makes this the document that states the surcharge." },
+      why: {
+        type: "string",
+        description: "One sentence: what makes this the document that states the surcharge.",
+      },
     },
     required: ["product", "url", "kind", "publisher"],
     additionalProperties: false,
   },
 };
 
-function buildFindPrompt(product: string, issuer: string, knownUrl: string | null): { system: string; user: string } {
+function buildFindPrompt(
+  product: string,
+  issuer: string,
+  knownUrl: string | null,
+): { system: string; user: string } {
   const system = [
     "You are looking for ONE document: the page or PDF, published by the provider itself, that states what this",
     "product charges as a surcharge on a foreign-currency payment — koersopslag, wisselkoersopslag,",
@@ -640,7 +737,9 @@ function buildFindPrompt(product: string, issuer: string, knownUrl: string | nul
   const user = [
     `Product: ${product}`,
     `Aanbieder: ${issuer}`,
-    knownUrl ? `Page we already know about (we may be unable to read it): ${knownUrl}` : "We have no URL for this product at all.",
+    knownUrl
+      ? `Page we already know about (we may be unable to read it): ${knownUrl}`
+      : "We have no URL for this product at all.",
   ].join("\n");
   return { system, user };
 }
@@ -649,11 +748,57 @@ function buildFindPrompt(product: string, issuer: string, knownUrl: string | nul
  *  They are in every product name and in no useful host, so they must not be what
  *  a host is matched on — otherwise "bank" matches every bank on earth. */
 const NOT_A_BRAND = new Set([
-  "betaalpas", "creditcard", "card", "kaart", "spaarrekening", "beleggingsrekening", "rekening", "prepaid",
-  "bank", "banking", "bankieren", "nederland", "netherlands", "international", "group", "holding",
-  "the", "van", "een", "and", "der", "nv", "bv", "sa", "plc", "ltd", "gmbh", "inc", "com",
-  "gold", "gouden", "goud", "platinum", "premium", "standard", "plus", "metal", "classic", "basis",
-  "sparen", "spaar", "rente", "internet", "direct", "online", "flex", "vrij", "pay", "cash", "credit", "debit",
+  "betaalpas",
+  "creditcard",
+  "card",
+  "kaart",
+  "spaarrekening",
+  "beleggingsrekening",
+  "rekening",
+  "prepaid",
+  "bank",
+  "banking",
+  "bankieren",
+  "nederland",
+  "netherlands",
+  "international",
+  "group",
+  "holding",
+  "the",
+  "van",
+  "een",
+  "and",
+  "der",
+  "nv",
+  "bv",
+  "sa",
+  "plc",
+  "ltd",
+  "gmbh",
+  "inc",
+  "com",
+  "gold",
+  "gouden",
+  "goud",
+  "platinum",
+  "premium",
+  "standard",
+  "plus",
+  "metal",
+  "classic",
+  "basis",
+  "sparen",
+  "spaar",
+  "rente",
+  "internet",
+  "direct",
+  "online",
+  "flex",
+  "vrij",
+  "pay",
+  "cash",
+  "credit",
+  "debit",
 ]);
 
 /** Does this URL plausibly belong to the provider we asked about?
@@ -665,7 +810,12 @@ const NOT_A_BRAND = new Set([
  *  than the whole string is what lets "ING" (three letters) match assets.ing.com
  *  without also matching every host with "ing" somewhere in it — which is most of
  *  them, "spaarrekening" included. */
-function looksLikeProvider(url: string, product: string, issuer: string, knownUrl: string | null): boolean {
+function looksLikeProvider(
+  url: string,
+  product: string,
+  issuer: string,
+  knownUrl: string | null,
+): boolean {
   let host: string;
   try {
     const u = new URL(url);
@@ -713,7 +863,8 @@ async function findSource(
   // came back made the expensive failures free, which is the wrong way round —
   // ing-creditcard timed out and left the counter reading "0/10 searches".
   searchesUsed++;
-  const res = await createGuarded(client, 
+  const res = await createGuarded(
+    client,
     {
       model: FIND_MODEL,
       max_tokens: 2048,
@@ -739,7 +890,11 @@ async function findSource(
 
   // Pinned to the product asked about, the second finding travel.ts paid for: a
   // reply is only usable if it is about the row we asked for.
-  const norm = (s: unknown) => String(s ?? "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  const norm = (s: unknown) =>
+    String(s ?? "")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, " ")
+      .trim();
   const said = norm(r.product);
   const asked = norm(product);
   if (!said || (!said.includes(asked) && !asked.includes(said))) return null;
@@ -767,13 +922,21 @@ const ids: string[] = Object.keys(state.products).filter((id) => !only || matche
 const figuresBefore = ids.filter((id) => state.products[id].lastValue != null).length;
 let attemptsMade = 0;
 
-const entries: { id: string; product: string; issuer?: string; kind?: string; fields: Partial<Record<CatalogField, CatalogValue>> }[] = [];
+const entries: {
+  id: string;
+  product: string;
+  issuer?: string;
+  kind?: string;
+  fields: Partial<Record<CatalogField, CatalogValue>>;
+}[] = [];
 
 /** THE FIGURE A PRODUCT ANSWERS WITH, whichever question it was asked. Counting
  *  fxFeePct alone made a savings sweep report "covered 0/3" while printing three
  *  ticks — the extraction had worked and the counter had not caught up. A number
  *  that disagrees with the lines above it is worse than no number. */
-function figureOf(e: { fields: Partial<Record<CatalogField, CatalogValue>> }): CatalogValue | undefined {
+function figureOf(e: {
+  fields: Partial<Record<CatalogField, CatalogValue>>;
+}): CatalogValue | undefined {
   return e.fields.fxFeePct ?? e.fields.interestPct;
 }
 
@@ -790,9 +953,15 @@ function mergeSubset(rows: typeof entries): number {
   // heeft weerlegd, en een geweigerd cijfer verdringt geen gedekt cijfer — en
   // die tweede geldt PER VELD. Op entry-niveau hield één zwak veld het hele
   // product tegen, inclusief een goed cijfer ernaast.
-  const { entries: merged, kept } = mergeCatalogEntries(prev.entries, rows, Object.keys(state.products));
+  const { entries: merged, kept } = mergeCatalogEntries(
+    prev.entries,
+    rows,
+    Object.keys(state.products),
+  );
   if (kept.length) {
-    console.log(`  kept ${kept.length} existing covered figure(s) rather than demote them: ${kept.join(", ")}`);
+    console.log(
+      `  kept ${kept.length} existing covered figure(s) rather than demote them: ${kept.join(", ")}`,
+    );
   }
   writeFileSync(CATALOG, JSON.stringify({ generatedAt: today, entries: merged }, null, 2) + "\n");
   writeFileSync(STATE, JSON.stringify(state, null, 2) + "\n");
@@ -801,10 +970,15 @@ function mergeSubset(rows: typeof entries): number {
 
 // From here on a billing failure keeps what has been read rather than discarding it.
 onFatal = () => {
-  if (!entries.length) { console.error("  (nothing had been read yet, so nothing to save)"); return; }
+  if (!entries.length) {
+    console.error("  (nothing had been read yet, so nothing to save)");
+    return;
+  }
   const total = mergeSubset(entries);
   const covered = entries.filter((e) => isCovered(figureOf(e))).length;
-  console.error(`  SAVED ${entries.length} product(s) read before the failure (${covered} covered) into ${CATALOG} (${total} total).`);
+  console.error(
+    `  SAVED ${entries.length} product(s) read before the failure (${covered} covered) into ${CATALOG} (${total} total).`,
+  );
 };
 const changes: string[] = [];
 /** Sources the search rung found this run. Worth their own block in the output:
@@ -844,7 +1018,6 @@ for (const id of ids) {
     }
   }
 
-
   if (!savings && p.pdfUrl) {
     attempts.push({
       route: "provider-pdf",
@@ -854,7 +1027,9 @@ for (const id of ids) {
         const f = figures.find((x) => x.field === "fxFeePct");
         if (!f) return null;
         return {
-          value: f.value, route: "provider-pdf", sourceUrl: p.pdfUrl,
+          value: f.value,
+          route: "provider-pdf",
+          sourceUrl: p.pdfUrl,
           // The document states its own validity date ("Deze brochure is geldig
           // vanaf 15 juni 2026"), so read it rather than trusting a constant
           // typed into state.json: ING reuses this asset URL across editions, and
@@ -867,7 +1042,8 @@ for (const id of ids) {
           // the conflation the Revolut incident is named after, and this very
           // document contains a capped 0% that the regex cannot see (the cap is
           // in a footnote). See packages/core/src/pdfText.ts.
-          conditions: f.conditions, conditionsKnown: f.conditionsKnown,
+          conditions: f.conditions,
+          conditionsKnown: f.conditionsKnown,
         };
       },
     });
@@ -879,15 +1055,24 @@ for (const id of ids) {
         // The cache hands back tag-stripped text with its line breaks intact (the
         // model rung needs them to see headings); this rung wants one flat line.
         const text = (await readPage(p.termsUrl, "html")).replace(/\s+/g, " ");
-        const m = /(\d{1,2})[,.](\d{1,2})\s*%[^.]{0,40}koersopslag|koersopslag[^.]{0,40}?(\d{1,2})[,.](\d{1,2})\s*%/i.exec(text);
+        const m =
+          /(\d{1,2})[,.](\d{1,2})\s*%[^.]{0,40}koersopslag|koersopslag[^.]{0,40}?(\d{1,2})[,.](\d{1,2})\s*%/i.exec(
+            text,
+          );
         if (!m) return null;
         const value = Number(`${m[1] ?? m[3]}.${m[2] ?? m[4]}`);
         if (!Number.isFinite(value)) return null;
         // Conditions are NOT established by this crude read, and saying so is the
         // point: an unconditional-looking rate that was never checked for a cap
         // is exactly how Revolut shipped at 0%.
-        return { value, route: "provider-page", sourceUrl: p.termsUrl, checkedAt: today,
-                 conditions: null, conditionsKnown: false };
+        return {
+          value,
+          route: "provider-page",
+          sourceUrl: p.termsUrl,
+          checkedAt: today,
+          conditions: null,
+          conditionsKnown: false,
+        };
       },
     });
   }
@@ -945,7 +1130,10 @@ for (const id of ids) {
         // docFetch records how to reach it.
         if (p.docUrl) {
           const via = p.docFetch === "jina" ? `https://r.jina.ai/${p.docUrl}` : p.docUrl;
-          sources.push({ url: via, kind: p.docFetch === "jina" ? "html" : p.docKind === "html" ? "html" : "pdf" });
+          sources.push({
+            url: via,
+            kind: p.docFetch === "jina" ? "html" : p.docKind === "html" ? "html" : "pdf",
+          });
         }
         if (p.pdfUrl) sources.push({ url: p.pdfUrl, kind: "pdf" });
         if (p.termsUrl && p.readable === "yes") sources.push({ url: p.termsUrl, kind: "html" });
@@ -981,7 +1169,11 @@ for (const id of ids) {
   // The search rung asks the FX question too, so a savings product must not reach
   // it — it would spend a search finding a document and then ask it the wrong
   // thing.
-  if (!savings && useAgent && (p.foundUrl || (useSearch && searchable && searchesUsed < searchBudget))) {
+  if (
+    !savings &&
+    useAgent &&
+    (p.foundUrl || (useSearch && searchable && searchesUsed < searchBudget))
+  ) {
     attempts.push({
       route: "agent",
       run: async () => {
@@ -1037,7 +1229,9 @@ for (const id of ids) {
   // came back empty.
   const reason =
     ladderReason ??
-    (attempts.length ? null : `no route wired (readable=${p.readable}, pdfUrl=${p.pdfUrl ? "yes" : "none"})`);
+    (attempts.length
+      ? null
+      : `no route wired (readable=${p.readable}, pdfUrl=${p.pdfUrl ? "yes" : "none"})`);
   const prev = state.products[id].lastValue ?? null;
   if (value && prev !== null && prev !== value.value) {
     changes.push(`${p.product}: ${prev} → ${value.value} (${value.route})`);
@@ -1055,7 +1249,13 @@ for (const id of ids) {
   // it cannot be read on its own — the web app would have to bundle the 117 kB
   // state file just to learn that "ABN AMRO Direct Sparen" is ABN AMRO's, and a
   // consumer of a published catalogue should not need our working notes.
-  entries.push({ id, product: p.product, issuer: p.issuer, kind: p.kind, fields: value ? { [field]: value } : {} });
+  entries.push({
+    id,
+    product: p.product,
+    issuer: p.issuer,
+    kind: p.kind,
+    fields: value ? { [field]: value } : {},
+  });
   // The figure and its conditions are printed, not just a tick. --dry writes
   // nothing, so this console line is the ONLY artifact of a dry run, and
   // "✓ ING creditcard  provider-pdf" does not tell you WHICH number it believed —
@@ -1079,12 +1279,18 @@ const c = {
   covered: cFx.covered + cInt.covered,
   total: entries.length,
   byRoute: Object.fromEntries(
-    (Object.keys(cFx.byRoute) as (keyof typeof cFx.byRoute)[]).map((k) => [k, cFx.byRoute[k] + cInt.byRoute[k]]),
+    (Object.keys(cFx.byRoute) as (keyof typeof cFx.byRoute)[]).map((k) => [
+      k,
+      cFx.byRoute[k] + cInt.byRoute[k],
+    ]),
   ) as typeof cFx.byRoute,
 };
 console.log(`\ncovered ${c.covered}/${c.total}  by route: ${JSON.stringify(c.byRoute)}`);
 if (changes.length) console.log(`\nCHANGED:\n  ${changes.join("\n  ")}`);
-if (discovered.length) console.log(`\nDISCOVERED SOURCES (cached in ${STATE}, free from now on):\n  ${discovered.join("\n  ")}`);
+if (discovered.length)
+  console.log(
+    `\nDISCOVERED SOURCES (cached in ${STATE}, free from now on):\n  ${discovered.join("\n  ")}`,
+  );
 
 const figuresFound = entries.filter((e) => figureOf(e)).length;
 // Two counts, not a ratio: one route can make several requests (the archive costs
@@ -1111,7 +1317,10 @@ console.log(
 // and reports only coverage is a rung nobody can set a cadence for.
 if (spend.size) console.log(`spend:\n${spendLines().join("\n")}`);
 
-if (dry) { console.log("\n--dry: nothing written"); process.exit(0); }
+if (dry) {
+  console.log("\n--dry: nothing written");
+  process.exit(0);
+}
 
 // THE BLACKOUT GUARD. Every network error is caught inside runLadder — correctly,
 // so one dead host does not cost the other routes — which means a machine with no
@@ -1126,7 +1335,9 @@ if (dry) { console.log("\n--dry: nothing written"); process.exit(0); }
 // vanished at once. Either way the run goes RED and writes nothing, because a
 // failed sweep must not be indistinguishable from a swept-and-found-nothing one.
 if (attemptsMade > 0 && httpResponses === 0) {
-  console.error(`\nREFUSING TO WRITE: ${attemptsMade} routes attempted, not one fetch answered. That is this machine's network, not the providers'.`);
+  console.error(
+    `\nREFUSING TO WRITE: ${attemptsMade} routes attempted, not one fetch answered. That is this machine's network, not the providers'.`,
+  );
   process.exit(1);
 }
 // The same failure one layer out: the model was ASKED for and never once answered
@@ -1134,11 +1345,15 @@ if (attemptsMade > 0 && httpResponses === 0) {
 // are the regex's, and the regex is the thing the model exists to correct - ABN
 // AMRO's betaalpas reads 2% there when the page says 1,2%.
 if (useAgent && modelCalls === 0) {
-  console.error(`\nREFUSING TO WRITE: the model rung was enabled and not one of its calls came back.`);
+  console.error(
+    `\nREFUSING TO WRITE: the model rung was enabled and not one of its calls came back.`,
+  );
   process.exit(1);
 }
 if (figuresBefore > 0 && figuresFound === 0) {
-  console.error(`\nREFUSING TO WRITE: the previous run held ${figuresBefore} figures and this one found none. Something broke between here and the sources; an empty catalogue is not a finding.`);
+  console.error(
+    `\nREFUSING TO WRITE: the previous run held ${figuresBefore} figures and this one found none. Something broke between here and the sources; an empty catalogue is not a finding.`,
+  );
   process.exit(1);
 }
 // A --only run swept a SUBSET, so `entries` is a subset. Writing it to CATALOG
@@ -1151,7 +1366,9 @@ if (only) {
   // became its own trap — figures were paid for and stranded in state.json,
   // reachable only by a full sweep.
   const total = mergeSubset(entries);
-  console.log(`\nwrote ${STATE} and merged ${entries.length} swept product(s) into ${CATALOG} (${total} total).`);
+  console.log(
+    `\nwrote ${STATE} and merged ${entries.length} swept product(s) into ${CATALOG} (${total} total).`,
+  );
   process.exit(0);
 }
 state.lastRun = today;

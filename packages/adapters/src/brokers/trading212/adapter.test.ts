@@ -1,19 +1,47 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
-import { afterEach, expect, test } from "vitest";
-import { createTrading212Adapter } from "./adapter.js";
+import { afterEach, expect, test, vi } from "vitest";
+import { computePortfolioValueSeries } from "@lavega/core";
+import type { CashBalance, CashFlow, Dividend, TradeWithoutId } from "@lavega/core";
+import {
+  createTrading212Adapter as createPacedTrading212Adapter,
+  resolveTrading212CashHistory,
+  type Trading212Config,
+} from "./adapter.js";
+import { createImmediatePartnerBudget } from "../../partnerBudget/fakes.js";
+import { stableTradeId } from "../brokerSnapshot.js";
+
+/** The id the snapshot stores for a cash/dividend row (the adapter's own
+ *  `stableId` shape). */
+function stableIdFor(entity: string, kind: "cash" | "dividend", reference: string): string {
+  return `trading212:${encodeURIComponent(entity)}:${kind}:${reference}`;
+}
+
+/* These tests are about what the adapter reads and maps, over a real loopback
+ * server on real timers. Pacing has its own tests (rateLimit.test.ts), so here
+ * every slot is granted at once. */
+const createTrading212Adapter = (config: Trading212Config) =>
+  createPacedTrading212Adapter({ partnerBudget: createImmediatePartnerBudget(), ...config });
 
 const servers: ReturnType<typeof createServer>[] = [];
 
 afterEach(async () => {
-  await Promise.all(servers.splice(0).map((server) => new Promise<void>((resolve) => server.close(() => resolve()))));
+  vi.useRealTimers();
+  await Promise.all(
+    servers
+      .splice(0)
+      .map((server) => new Promise<void>((resolve) => server.close(() => resolve()))),
+  );
 });
 
-async function serve(handler: (request: IncomingMessage, response: ServerResponse) => void): Promise<string> {
+async function serve(
+  handler: (request: IncomingMessage, response: ServerResponse) => void,
+): Promise<string> {
   const server = createServer(handler);
   servers.push(server);
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   const address = server.address();
-  if (!address || typeof address === "string") throw new Error("Loopback server did not open a port");
+  if (!address || typeof address === "string")
+    throw new Error("Loopback server did not open a port");
   return `http://127.0.0.1:${address.port}`;
 }
 
@@ -46,7 +74,7 @@ function order(id: number, ticker: string, direction = "BUY") {
 function holding(ticker: string) {
   return {
     averagePricePaid: 150.25,
-    createdAt: "2026-08-18T12:00:00Z",
+    createdAt: "2024-03-11T12:00:00Z",
     currentPrice: 175.5,
     instrument: {
       ticker,
@@ -76,27 +104,40 @@ function json(response: ServerResponse, status: number, body: unknown) {
   response.end(JSON.stringify(body));
 }
 
-function standardNonOrder(request: IncomingMessage, response: ServerResponse, positions = [holding("AAPL")]) {
+function standardNonOrder(
+  request: IncomingMessage,
+  response: ServerResponse,
+  positions = [holding("AAPL")],
+) {
   if (isPositions(request)) return json(response, 200, positions);
   if (request.url === "/api/v0/equity/account/summary") {
-    return json(response, 200, { currency: "EUR", cash: { availableToTrade: 100, inPies: 0, reservedForOrders: 0 } });
+    return json(response, 200, {
+      currency: "EUR",
+      cash: { availableToTrade: 100, inPies: 0, reservedForOrders: 0 },
+    });
   }
   return json(response, 200, { items: [], nextPagePath: null });
 }
 
 test("sync follows nextPagePath, sends Basic auth, and maps every order", async () => {
+  vi.useFakeTimers({ now: new Date("2026-08-21T09:00:00Z"), shouldAdvanceTime: true });
   const paths: string[] = [];
   const baseUrl = await serve((request, response) => {
     paths.push(request.url ?? "");
-    expect(request.headers.authorization).toBe(`Basic ${Buffer.from("token:secret").toString("base64")}`);
+    expect(request.headers.authorization).toBe(
+      `Basic ${Buffer.from("token:secret").toString("base64")}`,
+    );
     if (isOrderHistory(request)) {
-      json(response, 200, { items: [order(1, "AAPL")] , nextPagePath: "/next" });
+      json(response, 200, { items: [order(1, "AAPL")], nextPagePath: "/next" });
     } else if (request.url === "/next") {
       json(response, 200, { items: [order(2, "MSFT", "SELL")] });
     } else standardNonOrder(request, response);
   });
 
-  const result = await createTrading212Adapter({ token: "token", secret: "secret", baseUrl }).sync({ entity: "Holding BV" });
+  const result = await createTrading212Adapter({ token: "token", secret: "secret", baseUrl }).sync({
+    lanes: ["holdings", "history"],
+    entity: "Holding BV",
+  });
 
   expect(paths).toEqual([
     "/api/v0/equity/positions",
@@ -108,12 +149,35 @@ test("sync follows nextPagePath, sends Basic auth, and maps every order", async 
   ]);
   expect(result.source).toBe("trading-212");
   expect(result.problems).toEqual([]);
-  expect(result.positions).toMatchObject([{ entity: "Holding BV", symbol: "AAPL", isin: "US0378331005", quantity: 3, averagePrice: 150.25, marketPrice: 175.5, marketValue: 526.5, currency: "USD", asOf: "2026-08-18" }]);
-  expect(result.trades).toMatchObject([
-    { entity: "Holding BV", symbol: "AAPL", side: "buy", quantity: 2, price: 10, amount: 20, brokerTradeId: "10" },
+  // `asOf` is the date the broker was read, not the date the holding was opened.
+  expect(result.sections.positions.rows).toMatchObject([
+    {
+      entity: "Holding BV",
+      symbol: "AAPL",
+      isin: "US0378331005",
+      quantity: 3,
+      averagePrice: 150.25,
+      marketPrice: 175.5,
+      marketValue: 526.5,
+      currency: "USD",
+      asOf: "2026-08-21",
+    },
+  ]);
+  expect(result.sections.trades.rows).toMatchObject([
+    {
+      entity: "Holding BV",
+      symbol: "AAPL",
+      side: "buy",
+      quantity: 2,
+      price: 10,
+      amount: 20,
+      brokerTradeId: "10",
+    },
     { entity: "Holding BV", symbol: "MSFT", side: "sell" },
   ]);
-  expect(result.cashBalances).toMatchObject([{ broker: "trading212", entity: "Holding BV", currency: "EUR", amount: 100 }]);
+  expect(result.sections.cashBalances.rows).toMatchObject([
+    { broker: "trading212", entity: "Holding BV", currency: "EUR", amount: 100 },
+  ]);
 });
 
 test("maps one trade per fill and does not use order-level filledValue as fill amount", async () => {
@@ -122,24 +186,33 @@ test("maps one trade per fill and does not use order-level filledValue as fill a
     else standardNonOrder(request, response);
   });
 
-  const result = await createTrading212Adapter({ token: "token", secret: "secret", baseUrl }).sync({ entity: "BV" });
+  const result = await createTrading212Adapter({ token: "token", secret: "secret", baseUrl }).sync({
+    lanes: ["holdings", "history"],
+    entity: "BV",
+  });
 
   expect(result.problems).toEqual([]);
-  expect(result.trades).toMatchObject([{ symbol: "AAPL", quantity: 2, price: 10, amount: 20 }]);
+  expect(result.sections.trades.rows).toMatchObject([
+    { symbol: "AAPL", quantity: 2, price: 10, amount: 20 },
+  ]);
 });
 
 test("sync returns collected trades and problem when later page fails", async () => {
   const baseUrl = await serve((request, response) => {
-    if (isOrderHistory(request)) json(response, 200, { items: [order(1, "AAPL")], nextPagePath: "/next" });
+    if (isOrderHistory(request))
+      json(response, 200, { items: [order(1, "AAPL")], nextPagePath: "/next" });
     else if (request.url === "/next") json(response, 503, { error: "unavailable" });
     else standardNonOrder(request, response);
   });
 
-  const result = await createTrading212Adapter({ token: "token", secret: "secret", baseUrl }).sync({ entity: "BV" });
+  const result = await createTrading212Adapter({ token: "token", secret: "secret", baseUrl }).sync({
+    lanes: ["holdings", "history"],
+    entity: "BV",
+  });
 
-  expect(result.trades).toHaveLength(1);
-  expect(result.tradesComplete).toBe(false);
-  expect(result.problems).toEqual(["Trading 212 request failed with HTTP 503"]);
+  expect(result.sections.trades.rows).toHaveLength(1);
+  expect(result.sections.trades.status).toBe("partial");
+  expect(result.problems).toEqual(["Trading 212 order-history request failed with HTTP 503"]);
   expect(result.resume?.ordersNextPagePath).toContain("/next");
 });
 
@@ -147,21 +220,26 @@ test("the next sync continues order history from the stored nextPagePath", async
   const paths: string[] = [];
   const baseUrl = await serve((request, response) => {
     paths.push(request.url ?? "");
-    if (isOrderHistory(request)) json(response, 200, { items: [order(1, "AAPL")], nextPagePath: "/next" });
+    if (isOrderHistory(request))
+      json(response, 200, { items: [order(1, "AAPL")], nextPagePath: "/next" });
     else if (request.url === "/next") json(response, 200, { items: [order(2, "MSFT", "SELL")] });
     else standardNonOrder(request, response);
   });
   const adapter = createTrading212Adapter({ token: "token", secret: "secret", baseUrl });
-  const first = await adapter.sync({ entity: "BV" });
-  expect(first.trades).toHaveLength(2);
+  const first = await adapter.sync({ lanes: ["holdings", "history"], entity: "BV" });
+  expect(first.sections.trades.rows).toHaveLength(2);
 
   paths.length = 0;
-  const second = await adapter.sync({ entity: "BV", resume: { ordersNextPagePath: `${baseUrl}/next`, ordersComplete: false } });
+  const second = await adapter.sync({
+    lanes: ["holdings", "history"],
+    entity: "BV",
+    resume: { ordersNextPagePath: `${baseUrl}/next`, ordersComplete: false },
+  });
 
   expect(paths.filter((path) => path.startsWith("/api/v0/equity/history/orders"))).toEqual([]);
   expect(paths).toContain("/next");
-  expect(second.trades).toMatchObject([{ symbol: "MSFT", side: "sell" }]);
-  expect(second.tradesComplete).toBe(true);
+  expect(second.sections.trades.rows).toMatchObject([{ symbol: "MSFT", side: "sell" }]);
+  expect(second.sections.trades.status).toBe("complete");
   expect(second.resume).toBeUndefined();
 });
 
@@ -171,22 +249,15 @@ test("holdings failure returns trades and holdings problem", async () => {
     else if (isPositions(request)) json(response, 503, { error: "unavailable" });
     else standardNonOrder(request, response);
   });
-  const result = await createTrading212Adapter({ token: "token", secret: "secret", baseUrl }).sync({ entity: "BV" });
-  expect(result.trades).toHaveLength(1);
-  expect(result.positions).toEqual([]);
-  expect(result.positionsComplete).toBe(false);
-  expect(result.tradesComplete).toBe(true);
+  const result = await createTrading212Adapter({ token: "token", secret: "secret", baseUrl }).sync({
+    lanes: ["holdings", "history"],
+    entity: "BV",
+  });
+  expect(result.sections.trades.rows).toHaveLength(1);
+  expect(result.sections.positions.rows).toEqual([]);
+  expect(result.sections.positions.status).toBe("unavailable");
+  expect(result.sections.trades.status).toBe("complete");
   expect(result.problems).toEqual(["Trading 212 holdings request failed with HTTP 503"]);
-});
-
-test("rejected credentials return empty arrays and Trading 212 problem", async () => {
-  const baseUrl = await serve((_request, response) => json(response, 401, { error: "unauthorized" }));
-
-  const result = await createTrading212Adapter({ token: "wrong", secret: "wrong", baseUrl }).sync({ entity: "BV" });
-
-  expect(result.positions).toEqual([]);
-  expect(result.trades).toEqual([]);
-  expect(result.problems[0]).toContain("Trading 212");
 });
 
 test("retries rate-limited order-history request using Retry-After", async () => {
@@ -204,11 +275,14 @@ test("retries rate-limited order-history request using Retry-After", async () =>
     return standardNonOrder(request, response);
   });
 
-  const result = await createTrading212Adapter({ token: "token", secret: "secret", baseUrl }).sync({ entity: "BV" });
+  const result = await createTrading212Adapter({ token: "token", secret: "secret", baseUrl }).sync({
+    lanes: ["holdings", "history"],
+    entity: "BV",
+  });
 
   expect(orderRequests).toBe(3);
   expect(result.problems).toEqual([]);
-  expect(result.trades).toHaveLength(1);
+  expect(result.sections.trades.rows).toHaveLength(1);
 });
 
 test("malformed order-history payload becomes a problem without throwing", async () => {
@@ -217,23 +291,127 @@ test("malformed order-history payload becomes a problem without throwing", async
     else standardNonOrder(request, response);
   });
 
-  const result = await createTrading212Adapter({ token: "token", secret: "secret", baseUrl }).sync({ entity: "BV" });
+  const result = await createTrading212Adapter({ token: "token", secret: "secret", baseUrl }).sync({
+    lanes: ["holdings", "history"],
+    entity: "BV",
+  });
 
-  expect(result.trades).toEqual([]);
+  expect(result.sections.trades.rows).toEqual([]);
   expect(result.problems).toEqual(["Trading 212 order-history response is malformed"]);
 });
 
 test("maps sell fills with negative quantities to positive quantity and side sell", async () => {
   const baseUrl = await serve((request, response) => {
     if (isOrderHistory(request)) {
-      json(response, 200, { items: [{ fill: { id: 3, type: "TRADE", filledAt: "2026-08-18T10:15:00Z", price: 12, quantity: -1.5 }, order: { id: 3, ticker: "AAPL", side: "SELL", currency: "USD", instrument: { ticker: "AAPL", currency: "USD" } } }] });
+      json(response, 200, {
+        items: [
+          {
+            fill: {
+              id: 3,
+              type: "TRADE",
+              filledAt: "2026-08-18T10:15:00Z",
+              price: 12,
+              quantity: -1.5,
+            },
+            order: {
+              id: 3,
+              ticker: "AAPL",
+              side: "SELL",
+              currency: "USD",
+              instrument: { ticker: "AAPL", currency: "USD" },
+            },
+          },
+        ],
+      });
     } else standardNonOrder(request, response);
   });
 
-  const result = await createTrading212Adapter({ token: "token", secret: "secret", baseUrl }).sync({ entity: "BV" });
+  const result = await createTrading212Adapter({ token: "token", secret: "secret", baseUrl }).sync({
+    lanes: ["holdings", "history"],
+    entity: "BV",
+  });
 
   expect(result.problems).toEqual([]);
-  expect(result.trades).toMatchObject([{ side: "sell", quantity: 1.5, amount: 18 }]);
+  expect(result.sections.trades.rows).toMatchObject([
+    {
+      side: "sell",
+      quantity: 1.5,
+      amount: 18,
+      date: "2026-08-18",
+      executionAt: "2026-08-18T10:15:00.000Z",
+    },
+  ]);
+});
+
+test("a rejected API key fails the whole sync and says how to fix it", async () => {
+  const baseUrl = await serve((_request, response) =>
+    json(response, 401, { code: "Unauthorized" }),
+  );
+
+  await expect(
+    createTrading212Adapter({ token: "token", secret: "secret", baseUrl }).sync({
+      lanes: ["holdings", "history"],
+      entity: "BV",
+      resume: { ordersComplete: true, transactionsNextPagePath: `${baseUrl}/next` },
+    }),
+  ).rejects.toThrow(
+    "Trading 212 rejected the API key (HTTP 401). Create a new key in Trading 212 and save it again.",
+  );
+});
+
+test("maps the fill wallet impact to the cash the trade moved in the account currency", async () => {
+  const baseUrl = await serve((request, response) => {
+    if (isOrderHistory(request)) {
+      json(response, 200, {
+        items: [
+          {
+            fill: {
+              id: 4,
+              type: "TRADE",
+              filledAt: "2026-08-18T10:15:00Z",
+              price: 110,
+              quantity: 1,
+              walletImpact: { currency: "EUR", netValue: 100.15, fxRate: 1.1, taxes: [] },
+            },
+            order: {
+              id: 4,
+              ticker: "AAPL",
+              side: "BUY",
+              currency: "USD",
+              instrument: { ticker: "AAPL", currency: "USD" },
+            },
+          },
+          {
+            fill: {
+              id: 5,
+              type: "TRADE",
+              filledAt: "2026-08-19T10:15:00Z",
+              price: 120,
+              quantity: -1,
+              walletImpact: { currency: "EUR", netValue: -108.9, fxRate: 1.1, taxes: [] },
+            },
+            order: {
+              id: 5,
+              ticker: "AAPL",
+              side: "SELL",
+              currency: "USD",
+              instrument: { ticker: "AAPL", currency: "USD" },
+            },
+          },
+        ],
+      });
+    } else standardNonOrder(request, response);
+  });
+
+  const result = await createTrading212Adapter({ token: "token", secret: "secret", baseUrl }).sync({
+    lanes: ["holdings", "history"],
+    entity: "BV",
+  });
+
+  expect(result.sections.trades.rows).toMatchObject([
+    { side: "buy", settlement: { currency: "EUR", amount: -100.15 } },
+    { side: "sell", settlement: { currency: "EUR", amount: 108.9 } },
+  ]);
 });
 
 test("ignores non-trade fill rows and maps nested instruments", async () => {
@@ -241,37 +419,83 @@ test("ignores non-trade fill rows and maps nested instruments", async () => {
     if (isOrderHistory(request)) {
       json(response, 200, {
         items: [
-          { fill: { id: 1, type: "STOCK_SPLIT", filledAt: "2026-08-18T10:15:00Z", price: 0, quantity: 1 }, order: { id: 1, ticker: "AAPL", side: "BUY", currency: "USD", instrument: { ticker: "AAPL", currency: "USD" } } },
-          { fill: { id: 2, type: "TRADE", filledAt: "2026-08-18T10:15:00Z", price: 10, quantity: 1 }, order: { id: 2, ticker: "AAPL", side: "BUY", currency: "USD", instrument: { ticker: "AAPL", isin: "US0378331005", currency: "USD" } } },
+          {
+            fill: {
+              id: 1,
+              type: "STOCK_SPLIT",
+              filledAt: "2026-08-18T10:15:00Z",
+              price: 0,
+              quantity: 1,
+            },
+            order: {
+              id: 1,
+              ticker: "AAPL",
+              side: "BUY",
+              currency: "USD",
+              instrument: { ticker: "AAPL", currency: "USD" },
+            },
+          },
+          {
+            fill: {
+              id: 2,
+              type: "TRADE",
+              filledAt: "2026-08-18T10:15:00Z",
+              price: 10,
+              quantity: 1,
+            },
+            order: {
+              id: 2,
+              ticker: "AAPL",
+              side: "BUY",
+              currency: "USD",
+              instrument: { ticker: "AAPL", isin: "US0378331005", currency: "USD" },
+            },
+          },
         ],
       });
     } else standardNonOrder(request, response);
   });
 
-  const result = await createTrading212Adapter({ token: "token", secret: "secret", baseUrl }).sync({ entity: "BV" });
+  const result = await createTrading212Adapter({ token: "token", secret: "secret", baseUrl }).sync({
+    lanes: ["holdings", "history"],
+    entity: "BV",
+  });
 
   expect(result.problems).toEqual([]);
-  expect(result.trades).toMatchObject([{ symbol: "AAPL", isin: "US0378331005" }]);
+  expect(result.sections.trades.rows).toMatchObject([{ symbol: "AAPL", isin: "US0378331005" }]);
 });
 
 test("schema-mismatched order rows become problems instead of silent empty success", async () => {
   const baseUrl = await serve((request, response) => {
-    if (isOrderHistory(request)) json(response, 200, { items: [{ id: 1, ticker: "AAPL", filledQuantity: 1, fillPrice: 10 }] });
+    if (isOrderHistory(request))
+      json(response, 200, { items: [{ id: 1, ticker: "AAPL", filledQuantity: 1, fillPrice: 10 }] });
     else standardNonOrder(request, response);
   });
-  const result = await createTrading212Adapter({ token: "token", secret: "secret", baseUrl }).sync({ entity: "BV" });
-  expect(result.trades).toEqual([]);
+  const result = await createTrading212Adapter({ token: "token", secret: "secret", baseUrl }).sync({
+    lanes: ["holdings", "history"],
+    entity: "BV",
+  });
+  expect(result.sections.trades.rows).toEqual([]);
   expect(result.problems).toEqual(["Trading 212 historical order fill is missing or invalid"]);
 });
 
 test("a pending order without a fill is skipped, not reported as a problem", async () => {
   const baseUrl = await serve((request, response) => {
-    if (isOrderHistory(request)) json(response, 200, { items: [{ order: { id: 7, ticker: "AAPL", side: "BUY", currency: "EUR", status: "NEW" } }, order(1, "AAPL")] });
+    if (isOrderHistory(request))
+      json(response, 200, {
+        items: [
+          { order: { id: 7, ticker: "AAPL", side: "BUY", currency: "EUR", status: "NEW" } },
+          order(1, "AAPL"),
+        ],
+      });
     else standardNonOrder(request, response);
   });
-  const result = await createTrading212Adapter({ token: "token", secret: "secret", baseUrl }).sync({ entity: "BV" });
+  const result = await createTrading212Adapter({ token: "token", secret: "secret", baseUrl }).sync({
+    lanes: ["holdings", "history"],
+    entity: "BV",
+  });
   expect(result.problems).toEqual([]);
-  expect(result.trades).toMatchObject([{ symbol: "AAPL" }]);
+  expect(result.sections.trades.rows).toMatchObject([{ symbol: "AAPL" }]);
 });
 
 test("malformed holdings rows become problems without taking trades down", async () => {
@@ -280,9 +504,12 @@ test("malformed holdings rows become problems without taking trades down", async
     else if (isPositions(request)) json(response, 200, [{ ticker: "", quantity: "not-a-number" }]);
     else standardNonOrder(request, response);
   });
-  const result = await createTrading212Adapter({ token: "token", secret: "secret", baseUrl }).sync({ entity: "BV" });
-  expect(result.trades).toHaveLength(1);
-  expect(result.positions).toEqual([]);
+  const result = await createTrading212Adapter({ token: "token", secret: "secret", baseUrl }).sync({
+    lanes: ["holdings", "history"],
+    entity: "BV",
+  });
+  expect(result.sections.trades.rows).toHaveLength(1);
+  expect(result.sections.positions.rows).toEqual([]);
   expect(result.problems).toEqual(["Trading 212 position instrument is missing or invalid"]);
 });
 
@@ -293,57 +520,326 @@ test("maps paginated cash and dividends, deduplicates references, and falls back
     if (isOrderHistory(request)) return json(response, 200, { items: [] });
     if (isPositions(request)) return json(response, 200, []);
     if (request.url === "/api/v0/equity/account/summary") {
-      return json(response, 200, { id: 7, currency: "EUR", cash: { availableToTrade: 250, inPies: 0, reservedForOrders: 0 }, ignored: "future-field" });
+      return json(response, 200, {
+        id: 7,
+        currency: "EUR",
+        cash: { availableToTrade: 250, inPies: 0, reservedForOrders: 0 },
+        ignored: "future-field",
+      });
     }
     if ((request.url ?? "").startsWith("/api/v0/equity/history/transactions")) {
       return json(response, 200, {
         items: [
-          { amount: 100, currency: "EUR", dateTime: "2026-08-01T10:00:00Z", reference: "deposit-1", type: "DEPOSIT", ignored: true },
+          {
+            amount: 100,
+            currency: "EUR",
+            dateTime: "2026-08-01T10:00:00Z",
+            reference: "deposit-1",
+            type: "DEPOSIT",
+            ignored: true,
+          },
           { amount: 2, dateTime: "2026-08-02T10:00:00Z", reference: "fee-1", type: "FEE" },
-          { amount: -1, dateTime: "2026-08-02T11:00:00Z", reference: "deposit-reversal", type: "DEPOSIT" },
+          {
+            amount: -1,
+            dateTime: "2026-08-02T11:00:00Z",
+            reference: "deposit-reversal",
+            type: "DEPOSIT",
+          },
         ],
         nextPagePath: "/cash-page-2?cursor=opaque",
       });
     }
     if (request.url === "/cash-page-2?cursor=opaque") {
-      return json(response, 200, { items: [
-        { amount: 100, currency: "EUR", dateTime: "2026-08-01T10:00:00Z", reference: "deposit-1", type: "DEPOSIT" },
-        { amount: 10, currency: "EUR", dateTime: "2026-08-03T10:00:00Z", reference: "withdraw-1", type: "WITHDRAW" },
-      ], nextPagePath: null });
+      return json(response, 200, {
+        items: [
+          {
+            amount: 100,
+            currency: "EUR",
+            dateTime: "2026-08-01T10:00:00Z",
+            reference: "deposit-1",
+            type: "DEPOSIT",
+          },
+          {
+            amount: 10,
+            currency: "EUR",
+            dateTime: "2026-08-03T10:00:00Z",
+            reference: "withdraw-1",
+            type: "WITHDRAW",
+          },
+        ],
+        nextPagePath: null,
+      });
     }
     if ((request.url ?? "").startsWith("/api/v0/equity/history/dividends")) {
-      return json(response, 200, { items: [{
-        amount: 3.5,
-        paidOn: "2026-08-04T10:00:00Z",
-        reference: "dividend-1",
-        ticker: "AAPL_US_EQ",
-        type: "ORDINARY",
-        instrument: { ticker: "AAPL_US_EQ", isin: "US0378331005", name: "Apple", currency: "USD" },
-        grossAmountPerShare: 99,
-      }], nextPagePath: null });
+      return json(response, 200, {
+        items: [
+          {
+            amount: 3.5,
+            paidOn: "2026-08-04T10:00:00Z",
+            reference: "dividend-1",
+            ticker: "AAPL_US_EQ",
+            type: "ORDINARY",
+            instrument: {
+              ticker: "AAPL_US_EQ",
+              isin: "US0378331005",
+              name: "Apple",
+              currency: "USD",
+            },
+            grossAmountPerShare: 99,
+          },
+        ],
+        nextPagePath: null,
+      });
     }
     return json(response, 404, {});
   });
 
-  const result = await createTrading212Adapter({ token: "token", secret: "secret", baseUrl }).sync({ entity: "Holding BV" });
+  const result = await createTrading212Adapter({ token: "token", secret: "secret", baseUrl }).sync({
+    lanes: ["holdings", "history"],
+    entity: "Holding BV",
+  });
 
   expect(result.problems).toEqual([]);
-  expect(result.cashBalances).toMatchObject([{ amount: 250, currency: "EUR", broker: "trading212" }]);
-  expect(result.cashFlows).toMatchObject([
+  expect(result.sections.cashBalances.rows).toMatchObject([
+    { amount: 250, currency: "EUR", broker: "trading212" },
+  ]);
+  expect(result.sections.cashFlows.rows).toMatchObject([
     { brokerFlowId: "deposit-1", amount: 100, kind: "deposit", currency: "EUR" },
     { brokerFlowId: "fee-1", amount: -2, kind: "fee", currency: "EUR" },
     { brokerFlowId: "deposit-reversal", amount: -1, kind: "deposit", currency: "EUR" },
     { brokerFlowId: "withdraw-1", amount: -10, kind: "withdrawal", currency: "EUR" },
   ]);
-  expect(result.dividends).toMatchObject([{
-    brokerDividendId: "dividend-1",
+  expect(result.sections.dividends.rows).toMatchObject([
+    {
+      brokerDividendId: "dividend-1",
+      broker: "trading212",
+      amount: 3.5,
+      currency: "EUR",
+      symbol: "AAPL_US_EQ",
+      isin: "US0378331005",
+    },
+  ]);
+  expect(paths).toContain("/cash-page-2?cursor=opaque");
+  // The adapter reports no window of its own: Trading 212 exposes no statement
+  // period, so the runtime proves it from the merged history on the read path.
+  expect(result.cashHistory).toBeUndefined();
+});
+
+const proofBalance: CashBalance = {
+  entity: "e",
+  broker: "trading212",
+  currency: "EUR",
+  amount: 43.5,
+  asOf: "2026-08-05",
+};
+const proofCashFlows: CashFlow[] = [
+  {
+    id: "d1",
+    entity: "e",
     broker: "trading212",
+    date: "2026-08-01",
+    currency: "EUR",
+    amount: 100,
+    kind: "deposit",
+  },
+  {
+    id: "w1",
+    entity: "e",
+    broker: "trading212",
+    date: "2026-08-03",
+    currency: "EUR",
+    amount: -10,
+    kind: "withdrawal",
+  },
+];
+const proofDividends: Dividend[] = [
+  {
+    id: "div1",
+    entity: "e",
+    broker: "trading212",
+    date: "2026-08-04",
+    symbol: "AAPL",
     amount: 3.5,
     currency: "EUR",
-    symbol: "AAPL_US_EQ",
-    isin: "US0378331005",
-  }]);
-  expect(paths).toContain("/cash-page-2?cursor=opaque");
+  },
+];
+const proofTrade: TradeWithoutId = {
+  entity: "e",
+  broker: "trading212",
+  date: "2026-08-02",
+  symbol: "AAPL",
+  side: "buy",
+  quantity: 1,
+  price: 50,
+  amount: 50,
+  currency: "USD",
+  commission: 0,
+  settlement: { currency: "EUR", amount: -50 },
+};
+
+test("proves the cash window when every movement reconciles to the balance", () => {
+  const { coverage } = resolveTrading212CashHistory({
+    entity: "e",
+    fxRates: undefined,
+    historyComplete: true,
+    balance: proofBalance,
+    cashFlows: proofCashFlows,
+    dividends: proofDividends,
+    trades: [proofTrade],
+  });
+  expect(coverage).toMatchObject({
+    entity: "e",
+    broker: "trading212",
+    tradeCash: "trade-settlement",
+    status: "complete",
+    from: "2026-08-01",
+    to: "2026-08-05",
+  });
+});
+
+test("resolves an ambiguous transfer from the balance", () => {
+  const { coverage, cashFlows } = resolveTrading212CashHistory({
+    entity: "e",
+    fxRates: undefined,
+    historyComplete: true,
+    balance: { ...proofBalance, amount: 37 },
+    cashFlows: [
+      ...proofCashFlows,
+      {
+        id: "transfer-1",
+        entity: "e",
+        broker: "trading212",
+        date: "2026-08-02",
+        currency: "EUR",
+        amount: null,
+        kind: "other",
+        unsignedAmount: 6.5,
+      },
+    ],
+    dividends: proofDividends,
+    trades: [proofTrade],
+  });
+  expect(coverage.status).toBe("complete");
+  expect(cashFlows.find((flow) => flow.id === "transfer-1")?.amount).toBe(-6.5);
+});
+
+test("converts a foreign movement into the account currency before reconciling", () => {
+  const { coverage } = resolveTrading212CashHistory({
+    entity: "e",
+    fxRates: { base: "EUR", date: "2026-08-01", rates: { USD: 1.25 } },
+    historyComplete: true,
+    balance: { ...proofBalance, amount: 63.5 },
+    cashFlows: [
+      ...proofCashFlows,
+      {
+        id: "usd-1",
+        entity: "e",
+        broker: "trading212",
+        date: "2026-08-02",
+        currency: "USD",
+        amount: 25,
+        kind: "deposit",
+      },
+    ],
+    dividends: proofDividends,
+    trades: [proofTrade],
+  });
+  expect(coverage.status).toBe("complete");
+});
+
+test("excludes a directionless transfer the balance says is not a wallet movement", () => {
+  const { coverage, cashFlows } = resolveTrading212CashHistory({
+    entity: "e",
+    fxRates: undefined,
+    historyComplete: true,
+    balance: proofBalance,
+    cashFlows: [
+      ...proofCashFlows,
+      {
+        id: "transfer-2",
+        entity: "e",
+        broker: "trading212",
+        date: "2026-08-02",
+        currency: "EUR",
+        amount: null,
+        kind: "other",
+        unsignedAmount: 9.5,
+      },
+    ],
+    dividends: proofDividends,
+    trades: [proofTrade],
+  });
+  expect(coverage.status).toBe("complete");
+  expect(cashFlows.find((flow) => flow.id === "transfer-2")?.amount).toBe(0);
+});
+
+test("leaves cash unknown when the balance does not reconcile to the movements", () => {
+  const { coverage } = resolveTrading212CashHistory({
+    entity: "e",
+    fxRates: undefined,
+    historyComplete: true,
+    balance: { ...proofBalance, amount: 1000 },
+    cashFlows: proofCashFlows,
+    dividends: proofDividends,
+    trades: [proofTrade],
+  });
+  expect(coverage.status).toBe("unknown");
+  expect(coverage.status === "unknown" && coverage.reason).toContain("do not reconcile");
+});
+
+test("leaves cash unknown when a trade settlement is missing", () => {
+  const { coverage } = resolveTrading212CashHistory({
+    entity: "e",
+    fxRates: undefined,
+    historyComplete: true,
+    balance: proofBalance,
+    cashFlows: proofCashFlows,
+    dividends: proofDividends,
+    trades: [{ ...proofTrade, settlement: undefined }],
+  });
+  expect(coverage.status).toBe("unknown");
+  expect(coverage.status === "unknown" && coverage.reason).toContain("has no settlement");
+});
+
+test("leaves cash unknown when an ambiguous transfer has no size", () => {
+  const { coverage } = resolveTrading212CashHistory({
+    entity: "e",
+    fxRates: undefined,
+    historyComplete: true,
+    balance: proofBalance,
+    cashFlows: [...proofCashFlows, { ...proofCashFlows[0]!, id: "m1", amount: null }],
+    dividends: proofDividends,
+    trades: [proofTrade],
+  });
+  expect(coverage.status).toBe("unknown");
+  expect(coverage.status === "unknown" && coverage.reason).toContain("size is missing");
+});
+
+test("leaves cash unknown when the balance is missing", () => {
+  const { coverage } = resolveTrading212CashHistory({
+    entity: "e",
+    fxRates: undefined,
+    historyComplete: true,
+    balance: null,
+    cashFlows: proofCashFlows,
+    dividends: proofDividends,
+    trades: [],
+  });
+  expect(coverage.status).toBe("unknown");
+});
+
+test("leaves cash unknown while pagination is unfinished", () => {
+  const { coverage } = resolveTrading212CashHistory({
+    entity: "e",
+    fxRates: undefined,
+    historyComplete: false,
+    balance: proofBalance,
+    cashFlows: proofCashFlows,
+    dividends: proofDividends,
+    trades: [proofTrade],
+  });
+  expect(coverage.status).toBe("unknown");
+  expect(coverage.status === "unknown" && coverage.reason).toContain("not complete");
 });
 
 test("counts inPies and reservedForOrders toward the balance instead of discarding it", async () => {
@@ -351,41 +847,490 @@ test("counts inPies and reservedForOrders toward the balance instead of discardi
     if (isOrderHistory(request)) return json(response, 200, { items: [] });
     if (isPositions(request)) return json(response, 200, []);
     if (request.url === "/api/v0/equity/account/summary") {
-      return json(response, 200, { currency: "EUR", cash: { availableToTrade: 100, inPies: 5, reservedForOrders: 2 } });
+      return json(response, 200, {
+        currency: "EUR",
+        cash: { availableToTrade: 100, inPies: 5, reservedForOrders: 2 },
+      });
     }
     if ((request.url ?? "").startsWith("/api/v0/equity/history/transactions")) {
-      return json(response, 200, { items: [
-        { amount: 10, currency: "EUR", dateTime: "2026-08-01T10:00:00Z", reference: "transfer-1", type: "TRANSFER" },
-        { amount: -4, currency: "EUR", dateTime: "2026-08-02T10:00:00Z", reference: "future-1", type: "NEW_KIND", extra: "kept-compatible" },
-        { amount: "invalid", dateTime: "bad", reference: "bad-1", type: "DEPOSIT" },
-      ] });
+      return json(response, 200, {
+        items: [
+          {
+            amount: 10,
+            currency: "EUR",
+            dateTime: "2026-08-01T10:00:00Z",
+            reference: "transfer-1",
+            type: "TRANSFER",
+          },
+          {
+            amount: -4,
+            currency: "EUR",
+            dateTime: "2026-08-02T10:00:00Z",
+            reference: "future-1",
+            type: "NEW_KIND",
+            extra: "kept-compatible",
+          },
+          { amount: "invalid", dateTime: "bad", reference: "bad-1", type: "DEPOSIT" },
+        ],
+      });
     }
     return json(response, 200, { items: [] });
   });
 
-  const result = await createTrading212Adapter({ token: "token", secret: "secret", baseUrl }).sync({ entity: "BV" });
+  const result = await createTrading212Adapter({ token: "token", secret: "secret", baseUrl }).sync({
+    lanes: ["holdings", "history"],
+    entity: "BV",
+  });
 
-  expect(result.cashBalances).toEqual([
+  expect(result.sections.cashBalances.rows).toEqual([
     expect.objectContaining({ broker: "trading212", currency: "EUR", amount: 107 }),
   ]);
-  expect(result.cashFlows).toMatchObject([{ brokerFlowId: "future-1", amount: -4, kind: "other" }]);
-  expect(result.problems).toEqual(expect.arrayContaining([
-    "Trading 212 transaction transfer-1 has ambiguous TRANSFER direction",
+  expect(result.sections.cashFlows.rows).toMatchObject([
+    { brokerFlowId: "transfer-1", amount: null, kind: "other", unsignedAmount: 10 },
+    { brokerFlowId: "future-1", amount: -4, kind: "other" },
+  ]);
+  expect(result.problems).toEqual([
     "Trading 212 transaction future-1 has unknown type NEW_KIND; provider sign was preserved",
     "Trading 212 transaction amount is missing or invalid",
-  ]));
+  ]);
+});
+
+test("a negative-amount TRANSFER is unambiguously an outflow and keeps its sign", async () => {
+  const baseUrl = await serve((request, response) => {
+    if (isOrderHistory(request)) return json(response, 200, { items: [] });
+    if (isPositions(request)) return json(response, 200, []);
+    if (request.url === "/api/v0/equity/account/summary") {
+      return json(response, 200, { currency: "EUR", cash: { availableToTrade: 0 } });
+    }
+    if ((request.url ?? "").startsWith("/api/v0/equity/history/transactions")) {
+      return json(response, 200, {
+        items: [
+          {
+            amount: -75,
+            currency: "EUR",
+            dateTime: "2026-08-01T10:00:00Z",
+            reference: "transfer-out",
+            type: "TRANSFER",
+          },
+        ],
+      });
+    }
+    return json(response, 200, { items: [] });
+  });
+
+  const result = await createTrading212Adapter({ token: "token", secret: "secret", baseUrl }).sync({
+    lanes: ["holdings", "history"],
+    entity: "BV",
+  });
+
+  expect(result.sections.cashFlows.rows).toMatchObject([
+    { brokerFlowId: "transfer-out", amount: -75, kind: "withdrawal" },
+  ]);
+  expect(result.problems).toEqual([]);
+});
+
+/* Measured on the owner's real account: the balance went from EUR 9.54 to EUR
+ * 11,116.34 on 2025-08-11. Trading 212 reported one EUR 150 deposit that day;
+ * the other ~EUR 10,960 arrived as a TRANSFER row the adapter used to throw
+ * away. Dropping the row removed the explanation and the return calculation
+ * booked the money as performance. Keeping the row with amount: null must let
+ * the portfolio series say the day is unmeasurable instead. */
+test("an ambiguous TRANSFER reaches the portfolio series as unknown cash, not as invented performance", async () => {
+  const baseUrl = await serve((request, response) => {
+    if (isOrderHistory(request)) return json(response, 200, { items: [] });
+    if (isPositions(request)) return json(response, 200, []);
+    if (request.url === "/api/v0/equity/account/summary") {
+      return json(response, 200, { currency: "EUR", cash: { availableToTrade: 11_116.34 } });
+    }
+    if ((request.url ?? "").startsWith("/api/v0/equity/history/transactions")) {
+      return json(response, 200, {
+        items: [
+          {
+            amount: 150,
+            currency: "EUR",
+            dateTime: "2025-08-11T09:00:00Z",
+            reference: "deposit-1",
+            type: "DEPOSIT",
+          },
+          {
+            amount: 10_966.34,
+            currency: "EUR",
+            dateTime: "2025-08-11T09:05:00Z",
+            reference: "transfer-1",
+            type: "TRANSFER",
+          },
+        ],
+      });
+    }
+    return json(response, 200, { items: [] });
+  });
+
+  const result = await createTrading212Adapter({ token: "token", secret: "secret", baseUrl }).sync({
+    lanes: ["holdings", "history"],
+    entity: "BV",
+  });
+  const transfer = result.sections.cashFlows.rows.find(
+    (flow) => flow.brokerFlowId === "transfer-1",
+  );
+  expect(transfer).toMatchObject({ amount: null, kind: "other", unsignedAmount: 10_966.34 });
+  expect(result.problems).toEqual([]);
+
+  const series = computePortfolioValueSeries([], [], [], "EUR", undefined, {
+    cashBalances: [
+      { entity: "BV", broker: "trading212", currency: "EUR", amount: 9.54, asOf: "2025-08-09" },
+    ],
+    cashFlows: result.sections.cashFlows.rows,
+    today: "2025-08-12",
+  });
+  const day = series.find((point) => point.date === "2025-08-12");
+  expect(day?.cashUnknown).not.toEqual([]);
+  expect(day?.cashValue).toBeNull();
 });
 
 test("repeated cash-history nextPagePath stops with an explicit partial-history problem", async () => {
   const baseUrl = await serve((request, response) => {
     if (isOrderHistory(request)) return json(response, 200, { items: [] });
     if (isPositions(request)) return json(response, 200, []);
-    if (request.url === "/api/v0/equity/account/summary") return json(response, 200, { currency: "EUR", cash: { availableToTrade: 1, inPies: 0, reservedForOrders: 0 } });
-    if ((request.url ?? "").startsWith("/api/v0/equity/history/transactions")) return json(response, 200, { items: [], nextPagePath: "/loop" });
+    if (request.url === "/api/v0/equity/account/summary")
+      return json(response, 200, {
+        currency: "EUR",
+        cash: { availableToTrade: 1, inPies: 0, reservedForOrders: 0 },
+      });
+    if ((request.url ?? "").startsWith("/api/v0/equity/history/transactions"))
+      return json(response, 200, { items: [], nextPagePath: "/loop" });
     if (request.url === "/loop") return json(response, 200, { items: [], nextPagePath: "/loop" });
     return json(response, 200, { items: [] });
   });
 
-  const result = await createTrading212Adapter({ token: "token", secret: "secret", baseUrl }).sync({ entity: "BV" });
+  const result = await createTrading212Adapter({ token: "token", secret: "secret", baseUrl }).sync({
+    lanes: ["holdings", "history"],
+    entity: "BV",
+  });
   expect(result.problems).toContain("Trading 212 transactions pagination repeated nextPagePath");
+});
+
+test("repeated order-history nextPagePath stops with an explicit partial-history problem", async () => {
+  const baseUrl = await serve((request, response) => {
+    if (isOrderHistory(request))
+      return json(response, 200, { items: [order(1, "AAPL")], nextPagePath: "/loop" });
+    if (request.url === "/loop")
+      return json(response, 200, { items: [order(2, "MSFT")], nextPagePath: "/loop" });
+    return standardNonOrder(request, response);
+  });
+
+  const result = await createTrading212Adapter({ token: "token", secret: "secret", baseUrl }).sync({
+    lanes: ["holdings", "history"],
+    entity: "BV",
+  });
+  expect(result.sections.trades.status).toBe("partial");
+  expect(result.problems).toContain("Trading 212 orders pagination repeated nextPagePath");
+});
+
+test("skipped non-trade fills are counted per page in diagnostics", async () => {
+  const events: Array<{ type: string; skipped?: number; skippedTypes?: string[] }> = [];
+  const baseUrl = await serve((request, response) => {
+    if (isOrderHistory(request)) {
+      return json(response, 200, {
+        items: [
+          {
+            fill: {
+              id: 1,
+              type: "STOCK_SPLIT",
+              filledAt: "2026-08-18T10:15:00Z",
+              price: 0,
+              quantity: 1,
+            },
+            order: {
+              id: 1,
+              ticker: "AAPL",
+              side: "BUY",
+              currency: "USD",
+              instrument: { ticker: "AAPL", currency: "USD" },
+            },
+          },
+          order(2, "AAPL"),
+        ],
+      });
+    }
+    return standardNonOrder(request, response);
+  });
+
+  const result = await createTrading212Adapter({
+    token: "token",
+    secret: "secret",
+    baseUrl,
+    diagnostics: (event) => {
+      if (event.type === "history-page")
+        events.push({ type: event.type, skipped: event.skipped, skippedTypes: event.skippedTypes });
+    },
+  }).sync({ lanes: ["holdings", "history"], entity: "BV" });
+
+  expect(result.sections.trades.rows).toHaveLength(1);
+  expect(events).toEqual([{ type: "history-page", skipped: 1, skippedTypes: ["STOCK_SPLIT"] }]);
+});
+
+test("wallet total cost keeps wallet denomination when averagePricePaid is missing", async () => {
+  const baseUrl = await serve((request, response) => {
+    if (isOrderHistory(request)) return json(response, 200, { items: [] });
+    if (isPositions(request)) {
+      return json(response, 200, [
+        {
+          quantity: 1,
+          currentPrice: 175.5,
+          instrument: { ticker: "AAPL", currency: "USD" },
+          walletImpact: { currency: "EUR", currentValue: 526.5, totalCost: 90 },
+        },
+      ]);
+    }
+    return standardNonOrder(request, response, []);
+  });
+
+  const result = await createTrading212Adapter({ token: "token", secret: "secret", baseUrl }).sync({
+    lanes: ["holdings", "history"],
+    entity: "BV",
+  });
+  expect(result.sections.positions.rows).toMatchObject([
+    {
+      symbol: "AAPL",
+      averagePrice: null,
+      brokerCost: { status: "known", amount: 90, currency: "EUR" },
+    },
+  ]);
+});
+
+/* --- freshness lanes (#304) ------------------------------------------------- */
+
+test("the holdings lane reads exactly positions and the account summary", async () => {
+  const paths: string[] = [];
+  const baseUrl = await serve((request, response) => {
+    paths.push(request.url ?? "");
+    standardNonOrder(request, response);
+  });
+
+  const result = await createTrading212Adapter({ token: "token", secret: "secret", baseUrl }).sync({
+    lanes: ["holdings"],
+    entity: "BV",
+  });
+
+  // Two requests, no history endpoint touched: this is the lane an app open runs.
+  expect(paths).toEqual(["/api/v0/equity/positions", "/api/v0/equity/account/summary"]);
+  expect(result.sections.positions.status).toBe("complete");
+  expect(result.sections.cashBalances.status).toBe("complete");
+  expect(result.sections.trades.status).toBe("unavailable");
+  expect(result.sections.dividends.status).toBe("unavailable");
+  expect(result.sections.cashFlows.status).toBe("unavailable");
+  expect(result.resume).toBeUndefined();
+  expect(result.historyMode).toBeUndefined();
+});
+
+test("the history lane does not read holdings, cash, or the account summary", async () => {
+  const paths: string[] = [];
+  const baseUrl = await serve((request, response) => {
+    paths.push(request.url ?? "");
+    standardNonOrder(request, response);
+  });
+
+  const result = await createTrading212Adapter({ token: "token", secret: "secret", baseUrl }).sync({
+    lanes: ["history"],
+    entity: "BV",
+    fullReadStreams: ["orders", "transactions", "dividends"],
+  });
+
+  expect(paths).toEqual([
+    "/api/v0/equity/history/orders?limit=50",
+    "/api/v0/equity/history/transactions?limit=50",
+    "/api/v0/equity/history/dividends?limit=50",
+  ]);
+  expect(result.sections.positions.status).toBe("unavailable");
+  expect(result.sections.cashBalances.status).toBe("unavailable");
+  expect(result.sections.trades.status).toBe("complete");
+});
+
+test("a tail run with a stored history and nothing new reads one page per stream and merges", async () => {
+  const [knownOrder] = [order(1, "AAPL")];
+  const knownTrade = {
+    entity: "BV",
+    date: "2026-08-18",
+    symbol: "AAPL",
+    side: "buy" as const,
+    quantity: 2,
+    price: 10,
+    amount: 20,
+    currency: "EUR",
+    commission: 0,
+    brokerTradeId: "10",
+  };
+  const knownIds = new Set([`trading212:${stableTradeId(knownTrade)}`]);
+  const paths: string[] = [];
+  const baseUrl = await serve((request, response) => {
+    const url = request.url ?? "";
+    paths.push(url);
+    if (url.startsWith("/api/v0/equity/history/orders"))
+      return json(response, 200, {
+        items: [knownOrder],
+        nextPagePath: "/api/v0/equity/history/orders?cursor=2",
+      });
+    if (url.startsWith("/api/v0/equity/history/transactions"))
+      return json(response, 200, {
+        items: [
+          {
+            amount: 100,
+            currency: "EUR",
+            dateTime: "2026-08-01T10:00:00Z",
+            reference: "deposit-known",
+            type: "DEPOSIT",
+          },
+        ],
+        nextPagePath: "/api/v0/equity/history/transactions?cursor=2",
+      });
+    if (url.startsWith("/api/v0/equity/history/dividends"))
+      return json(response, 200, {
+        items: [
+          {
+            amount: 3.5,
+            currency: "EUR",
+            paidOn: "2026-08-04T10:00:00Z",
+            reference: "div-known",
+            ticker: "AAPL_US_EQ",
+            type: "ORDINARY",
+            instrument: {
+              ticker: "AAPL_US_EQ",
+              isin: "US0378331005",
+              name: "Apple",
+              currency: "EUR",
+            },
+          },
+        ],
+        nextPagePath: "/api/v0/equity/history/dividends?cursor=2",
+      });
+    return json(response, 404, {});
+  });
+
+  const result = await createTrading212Adapter({ token: "token", secret: "secret", baseUrl }).sync({
+    lanes: ["history"],
+    entity: "BV",
+    fullReadStreams: [],
+    knownHistory: {
+      tradeIds: knownIds,
+      cashFlowIds: new Set([stableIdFor("BV", "cash", "deposit-known")]),
+      dividendIds: new Set([stableIdFor("BV", "dividend", "div-known")]),
+    },
+  });
+
+  // One request per stream: the first page is fully known, so there is no tail
+  // to read and the cursor is never followed.
+  expect(paths).toEqual([
+    "/api/v0/equity/history/orders?limit=50",
+    "/api/v0/equity/history/transactions?limit=50",
+    "/api/v0/equity/history/dividends?limit=50",
+  ]);
+  expect(result.historyMode).toBe("incremental");
+  expect(result.fullStreams).toEqual([]);
+  expect(result.sections.trades.status).toBe("complete");
+});
+
+test("a tail page with an unknown row keeps paging and reads the new rows", async () => {
+  const knownTrade = {
+    entity: "BV",
+    date: "2026-08-18",
+    symbol: "AAPL",
+    side: "buy" as const,
+    quantity: 2,
+    price: 10,
+    amount: 20,
+    currency: "EUR",
+    commission: 0,
+    brokerTradeId: "10",
+  };
+  const paths: string[] = [];
+  const baseUrl = await serve((request, response) => {
+    const url = request.url ?? "";
+    paths.push(url);
+    if (url === "/api/v0/equity/history/orders?cursor=2")
+      return json(response, 200, { items: [order(3, "VWRL")], nextPagePath: null });
+    if (isOrderHistory(request))
+      return json(response, 200, {
+        items: [order(2, "MSFT"), order(1, "AAPL")],
+        nextPagePath: "/api/v0/equity/history/orders?cursor=2",
+      });
+    return json(response, 200, { items: [], nextPagePath: null });
+  });
+
+  const result = await createTrading212Adapter({ token: "token", secret: "secret", baseUrl }).sync({
+    lanes: ["history"],
+    entity: "BV",
+    fullReadStreams: [],
+    knownHistory: { tradeIds: new Set([`trading212:${stableTradeId(knownTrade)}`]) },
+  });
+
+  expect(paths.filter((path) => path.startsWith("/api/v0/equity/history/orders"))).toHaveLength(2);
+  expect(result.sections.trades.rows).toHaveLength(3);
+  // The two empty streams were read in full (there was nothing to tail on);
+  // orders was a tail, so it must not replace the stored collection.
+  expect(result.fullStreams).toEqual(["transactions", "dividends"]);
+});
+
+test("60 new orders at the head of a 1,500-order history cost exactly 3 order requests", async () => {
+  // Stored: 1,500 known trades (fill ids 1..1500, the brokerTradeId the adapter
+  // maps to). New: 60 trades (fill ids 2000..2059) at the newest end.
+  const known = new Set<string>();
+  for (let id = 1; id <= 1500; id += 1) {
+    known.add(
+      `trading212:${stableTradeId({
+        entity: "BV",
+        date: "2026-08-18",
+        symbol: "AAPL",
+        side: "buy",
+        quantity: 2,
+        price: 10,
+        amount: 20,
+        currency: "EUR",
+        commission: 0,
+        brokerTradeId: String(id),
+      })}`,
+    );
+  }
+  const orderWithFill = (fillId: number) => {
+    const base = order(fillId, "AAPL");
+    return { ...base, fill: { ...base.fill, id: fillId } };
+  };
+  const newOrders = Array.from({ length: 60 }, (_, index) => orderWithFill(2000 + index));
+  const storedOrders = Array.from({ length: 50 }, (_, index) => orderWithFill(1 + index));
+  const pages: Array<Record<string, unknown>> = [
+    // Page 1: 50 new rows.
+    { items: newOrders.slice(0, 50), nextPagePath: "/orders-page-2" },
+    // Page 2: 10 new rows, then 40 already-stored rows.
+    {
+      items: [...newOrders.slice(50), ...storedOrders.slice(0, 40)],
+      nextPagePath: "/orders-page-3",
+    },
+    // Page 3: 50 already-stored rows, so the tail stops here.
+    {
+      items: storedOrders.slice(40, 50).concat(storedOrders.slice(0, 40)),
+      nextPagePath: "/orders-page-4",
+    },
+    { items: storedOrders, nextPagePath: null },
+  ];
+  let orderRequests = 0;
+  const baseUrl = await serve((request, response) => {
+    const url = request.url ?? "";
+    if (url.startsWith("/api/v0/equity/history/orders") || url.startsWith("/orders-page-")) {
+      const index =
+        url === "/api/v0/equity/history/orders?limit=50" ? 0 : Number(url.split("-").at(-1)) - 1;
+      orderRequests += 1;
+      return json(response, 200, pages[Math.min(index, pages.length - 1)]);
+    }
+    return json(response, 200, { items: [], nextPagePath: null });
+  });
+
+  const result = await createTrading212Adapter({ token: "token", secret: "secret", baseUrl }).sync({
+    lanes: ["history"],
+    entity: "BV",
+    fullReadStreams: [],
+    knownHistory: { tradeIds: known },
+  });
+
+  expect(orderRequests).toBe(3);
+  expect(result.historyMode).toBe("incremental");
+  expect(result.fullStreams).not.toContain("orders");
 });

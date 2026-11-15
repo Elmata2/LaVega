@@ -1,4 +1,11 @@
-import type { CashBalance, CashFlow, Dividend, Position, Trade } from "@lavega/core";
+import type {
+  CashBalance,
+  CashFlow,
+  CashHistoryCoverage,
+  Dividend,
+  Position,
+  Trade,
+} from "@lavega/core";
 
 /** Cursor so a later invocation can continue a history that did not finish. */
 export type BrokerSyncResume = {
@@ -10,31 +17,79 @@ export type BrokerSyncResume = {
   dividendsComplete?: boolean;
 };
 
+/** Which freshness lane a sync call reads. There is no default: every call
+ *  site states its intent, so holdings can be refreshed without dragging the
+ *  expensive history streams along. */
+export type BrokerSyncLane = "holdings" | "history";
+
+/** A history stream a broker can page through. */
+export type BrokerHistoryStream = "orders" | "transactions" | "dividends";
+
+/** Ids of history rows already stored. A tail read stops at the first page
+ *  that adds none. Absent means a full read. */
+export type BrokerKnownHistory = {
+  tradeIds?: ReadonlySet<string>;
+  cashFlowIds?: ReadonlySet<string>;
+  dividendIds?: ReadonlySet<string>;
+};
+
+export type BrokerSyncRequest = {
+  entity: string;
+  /** Which lanes this call reads. */
+  lanes: readonly BrokerSyncLane[];
+  /** Present = tail read. Absent = full read. Ignored when `resume` is set. */
+  knownHistory?: BrokerKnownHistory;
+  /** Streams to read to their last page; every other tail-capable stream runs
+   *  as a tail read. Absent means the caller did not decide, and the adapter
+   *  keeps its full-read behaviour. */
+  fullReadStreams?: readonly BrokerHistoryStream[];
+  resume?: BrokerSyncResume;
+  /** Absolute Unix time. Undefined keeps local sync unlimited. */
+  deadlineMs?: number;
+};
+
+/** Leave time for snapshot and cursor persistence before the host stops the request. */
+export const BROKER_SYNC_PERSISTENCE_MARGIN_MS = 5_000;
+
+export function hasBrokerSyncTime(
+  deadlineMs: number | undefined,
+  workMs = 0,
+  now = Date.now(),
+): boolean {
+  return deadlineMs === undefined || deadlineMs - now - BROKER_SYNC_PERSISTENCE_MARGIN_MS > workMs;
+}
+
+export type BrokerSectionStatus = "complete" | "partial" | "unavailable";
+
+export type BrokerSection<T> = {
+  status: BrokerSectionStatus;
+  rows: T[];
+};
+
+export type BrokerSections = {
+  positions: BrokerSection<Position>;
+  trades: BrokerSection<Omit<Trade, "id">>;
+  dividends: BrokerSection<Dividend>;
+  cashBalances: BrokerSection<CashBalance>;
+  cashFlows: BrokerSection<CashFlow>;
+};
+
 export type BrokerResult = {
-  positions: Position[];
-  trades: Omit<Trade, "id">[];
-  /** Optional until each broker adapter maps its dividend records. */
-  dividends?: Dividend[];
-  cashBalances?: CashBalance[];
-  cashFlows?: CashFlow[];
+  sections: BrokerSections;
+  /** What these sections prove about past cash. Absent means unknown. */
+  cashHistory?: CashHistoryCoverage;
+  historyMode?: "snapshot" | "incremental";
+  /** History streams this run read in full to their last page. The snapshot
+   *  replaces only those collections; every other read merges by row id. */
+  fullStreams?: readonly BrokerHistoryStream[];
+  /** Inclusive dates the history sections cover, when the broker states them. */
+  period?: { from: string; to: string };
+  /** Accounts the statement covers; rows of other accounts are not its to replace. */
+  accounts?: string[];
+  /** Latest end date of the statements read, even when their periods differ. */
+  statementTo?: string;
   source: string;
   problems: string[];
-  /**
-   * False when the trade history could not be fully read (pagination failed
-   * mid-chain). Callers must then keep their existing trades instead of
-   * overwriting them with a truncated set. Defaults to true (complete).
-   */
-  tradesComplete?: boolean;
-  /**
-   * False when the holdings endpoint failed. Callers must then keep last-good
-   * positions instead of replacing them with an empty array. Defaults to true.
-   */
-  positionsComplete?: boolean;
-  /**
-   * False when the account-summary endpoint failed. Callers must then keep
-   * last-good cash instead of replacing it with empty. Defaults to true.
-   */
-  cashBalancesComplete?: boolean;
   /**
    * ISO timestamp before which the broker refused further requests. Set only
    * when the provider rate-limited the sync, so the scheduler can hold off
@@ -46,24 +101,27 @@ export type BrokerResult = {
 };
 
 export interface BrokerAccessAdapter {
-  sync(input: { entity: string; resume?: BrokerSyncResume }): Promise<BrokerResult>;
-}
-
-export function tradesComplete(result: BrokerResult): boolean {
-  return result.tradesComplete ?? true;
-}
-
-export function positionsComplete(result: BrokerResult): boolean {
-  return result.positionsComplete ?? true;
-}
-
-export function cashBalancesComplete(result: BrokerResult): boolean {
-  return result.cashBalancesComplete ?? true;
+  sync(input: BrokerSyncRequest): Promise<BrokerResult>;
 }
 
 /** True when some history still has pages left to read. */
 export function historyPending(resume: BrokerSyncResume | null | undefined): boolean {
   if (!resume) return false;
-  if (resume.ordersNextPagePath || resume.transactionsNextPagePath || resume.dividendsNextPagePath) return true;
-  return resume.ordersComplete !== true || resume.transactionsComplete !== true || resume.dividendsComplete !== true;
+  if (resume.ordersNextPagePath || resume.transactionsNextPagePath || resume.dividendsNextPagePath)
+    return true;
+  return (
+    resume.ordersComplete !== true ||
+    resume.transactionsComplete !== true ||
+    resume.dividendsComplete !== true
+  );
+}
+
+export function allSections(status: BrokerSectionStatus): BrokerSections {
+  return {
+    positions: { status, rows: [] },
+    trades: { status, rows: [] },
+    dividends: { status, rows: [] },
+    cashBalances: { status, rows: [] },
+    cashFlows: { status, rows: [] },
+  };
 }

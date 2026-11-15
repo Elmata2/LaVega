@@ -1,7 +1,13 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import type { Alert, AlertSeverity } from "@lavega/core";
 import Module from "../Module.js";
 import { useWidgetEnabled } from "../moduleRegistry";
+import Badge from "../ui/Badge.js";
+import CardLink from "../ui/CardLink.js";
+import SaldoInput from "../ui/SaldoInput.js";
+import StatusLine, { StatusIcon } from "../ui/StatusLine.js";
+import { useAppLocale } from "../../appLocale.js";
+import { moneyCopy } from "../../copy/money.js";
 
 /* Aandacht — the alert centre plus the buffer that defines "too low".
  *
@@ -28,10 +34,11 @@ import { useWidgetEnabled } from "../moduleRegistry";
  *
  * What it still cannot do: show the money at stake as a figure, sort within a
  * tier by urgency, or turn "vul in bij Rekeningen" into a link. `Alert` is
- * `{ id, severity, title, detail }` and every euro and date is baked into the
- * detail STRING, so nothing here can rank, format or act on them. Parsing them
- * back out of Dutch prose would be invented depth, so it is not done — see
- * docs/BACKLOG.md B1 for what core would have to carry instead. */
+ * `{ id, severity, body }`, with `body` a discriminated `AlertBody` carrying
+ * the facts (dates, cents, counterparty) core computed — the title/detail
+ * SENTENCE is rendered here via `copy/money.ts`'s `aandacht.alert`, per
+ * locale. Ranking within a tier or acting on the money is possible now that
+ * the facts are structured; it just isn't built yet. */
 
 type AandachtBlockProps = {
   alerts: Alert[];
@@ -40,47 +47,50 @@ type AandachtBlockProps = {
   onBufferChange: (cents: number) => void;
 };
 
-type Tier = { severity: AlertSeverity; icon: string; label: string };
+type Tier = { severity: AlertSeverity };
 
 /** Ranked hardest-first, the same order core sorts in. The word is the label;
- *  the circle only reinforces it, so it stays aria-hidden. */
-const TIERS: Tier[] = [
-  { severity: "critical", icon: "🔴", label: "Kritiek" },
-  { severity: "warning", icon: "🟠", label: "Let op" },
-  { severity: "info", icon: "🟡", label: "Ter info" },
-];
-
-/** Everything the alert centre looks at, in the owner's words. Printed when
- *  there is nothing to report, because "no alerts" is only reassuring if you
- *  know what was actually examined. Kept in step with `computeAlerts`. */
-const CHECKS = [
-  "een verwacht tekort tegenover je buffer",
-  "een terugkerende betaling of inkomst die uitblijft",
-  "BTW- en belastingdeadlines binnen 30 dagen",
-  "handmatig bijgehouden saldi die verouderd zijn",
-  "rekeningen zonder saldo",
-];
+ *  the icon shape (cross, triangle, "i") and the border style (solid, dashed,
+ *  none) reinforce it where the tints cannot, e.g. in the black-and-white theme. */
+const TIERS: Tier[] = [{ severity: "critical" }, { severity: "warning" }, { severity: "info" }];
 
 /** Below this, folding costs more than it saves: the "Toon 2 ter info" button
  *  takes the same line the two rows would have. */
 const INFO_FOLD_MIN = 3;
 
 export default function AandachtBlock({ alerts, bufferCents, onBufferChange }: AandachtBlockProps) {
-  // Draft while typing, commit on blur. Resyncs when the stored buffer changes
-  // elsewhere (e.g. a restored back-up).
+  const [locale] = useAppLocale();
+  const c = moneyCopy[locale].aandacht;
+  const tierLabel: Record<AlertSeverity, string> = {
+    critical: c.kritiek,
+    warning: c.letOp,
+    info: c.terInfo,
+  };
   const [draft, setDraft] = useState(bufferCents ? String(bufferCents / 100) : "");
-  useEffect(() => setDraft(bufferCents ? String(bufferCents / 100) : ""), [bufferCents]);
+  const [prevBuffer, setPrevBuffer] = useState(bufferCents);
+  if (bufferCents !== prevBuffer) {
+    setPrevBuffer(bufferCents);
+    setDraft(bufferCents ? String(bufferCents / 100) : "");
+  }
 
   const [showInfo, setShowInfo] = useState(false);
 
   function commit() {
-    const t = draft.trim().replace(/[€\s]/g, "").replace(",", ".");
+    const t = draft
+      .trim()
+      .replace(/[€\s]/g, "")
+      .replace(",", ".");
     const n = t === "" ? 0 : Number(t);
     if (Number.isFinite(n) && n >= 0) onBufferChange(Math.round(n * 100));
   }
 
-  const byTier = TIERS.map((tier) => ({ tier, rows: alerts.filter((a) => a.severity === tier.severity) }));
-  const pressing = byTier.filter((g) => g.tier.severity !== "info").reduce((n, g) => n + g.rows.length, 0);
+  const byTier = TIERS.map((tier) => ({
+    tier,
+    rows: alerts.filter((a) => a.severity === tier.severity),
+  }));
+  const pressing = byTier
+    .filter((g) => g.tier.severity !== "info")
+    .reduce((n, g) => n + g.rows.length, 0);
   const infoCount = byTier.find((g) => g.tier.severity === "info")?.rows.length ?? 0;
   // Only fold the info tier, and only when something above it is competing for
   // the same glance. On its own it is the whole block, so it stays open.
@@ -102,59 +112,71 @@ export default function AandachtBlock({ alerts, bufferCents, onBufferChange }: A
       className="module-hug module-head-wrap"
       menu={
         <label className="buffer-field eyebrow">
-          Waarschuw onder buffer €{" "}
-          <input
-            className="saldo-input"
+          {c.waarschuwOnderBuffer}{" "}
+          <SaldoInput
             inputMode="decimal"
             placeholder="0"
-            aria-label="Waarschuwingsbuffer in euro"
+            aria-label={c.waarschuwingsbufferAria}
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             onBlur={commit}
           />
         </label>
       }
-      footer={
-        zeroBuffer ? (
-          <span className="cell-sub">
-            Je buffer staat op € 0, dus je hoort pas iets als je verwachte saldo onder nul zakt. Zet er een bedrag in
-            om eerder gewaarschuwd te worden.
-          </span>
-        ) : undefined
-      }
+      footer={zeroBuffer ? <span className="cell-sub">{c.bufferZeroNote}</span> : undefined}
     >
       {alerts.length === 0 ? (
         /* Not "alles is in orde" — that is a claim about the data, and an empty
          * vault produces exactly this same empty list. State the scope instead. */
-        <div className="alert-empty">
-          <p className="block-empty text-pos">Niets gevonden om je op te wijzen.</p>
-          <p className="cell-sub">
-            LaVega keek naar: {CHECKS.join(", ")}. Dat is alleen zo compleet als wat je hebt geïmporteerd — over een
-            rekening die er niet in zit kan LaVega niets zeggen.
-          </p>
+        <div className="flex flex-col gap-2">
+          <StatusLine tone="success" className="block-empty m-0 leading-[1.5]">
+            {c.nietsGevondenOmJeOpTeWijzen}
+          </StatusLine>
+          <p className="cell-sub m-0 leading-[1.5]">{c.lavegaKeekNaar(c.checks.join(", "))}</p>
         </div>
       ) : (
-        <div className="alert-tiers">
+        <div className="flex flex-col gap-4">
           {byTier.map(({ tier, rows }) => {
             if (rows.length === 0) return null;
             const folded = tier.severity === "info" && foldInfo;
             return (
-              <section className="alert-tier" key={tier.severity} aria-label={`${tier.label} (${rows.length})`}>
-                <h3 className={`alert-tier-head alert-tier-${tier.severity}`}>
-                  <span aria-hidden="true">{tier.icon}</span>
-                  {tier.label}
-                  <span className="alert-tier-count">{rows.length}</span>
+              <section
+                className="flex flex-col gap-2"
+                data-testid="alert-tier"
+                key={tier.severity}
+                aria-label={`${tierLabel[tier.severity]} (${rows.length})`}
+              >
+                <h3 className="flex items-center gap-2 m-0 font-mono text-[0.72rem] font-semibold tracking-[0.06em] uppercase text-muted">
+                  {tier.severity === "info" ? (
+                    <span className="inline-flex items-center">
+                      <StatusIcon tone="info" />
+                      {tierLabel.info}
+                    </span>
+                  ) : (
+                    <Badge tone={tier.severity === "critical" ? "problem" : "warning"}>
+                      {tierLabel[tier.severity]}
+                    </Badge>
+                  )}
+                  <span className="inline-flex items-center justify-center min-w-[1.25rem] py-0 px-[5px] rounded-pill border border-line bg-surface-2 text-muted text-[0.7rem] tabular-nums">
+                    {rows.length}
+                  </span>
                 </h3>
                 {folded ? (
-                  <button type="button" className="card-link" onClick={() => setShowInfo(true)}>
-                    Toon {rows.length} ter info
-                  </button>
+                  <CardLink onClick={() => setShowInfo(true)}>
+                    {c.toonNTerInfo(rows.length)}
+                  </CardLink>
                 ) : (
-                  <div className="alert-rows">
+                  <div className="flex flex-col">
                     {rows.map((a) => (
-                      <div className="alert-row" key={a.id}>
-                        <div className="alert-row-title">{a.title}</div>
-                        <div className="cell-sub">{a.detail}</div>
+                      <div
+                        className="py-3 px-0 border-b border-line first:pt-0 last:border-b-0 last:pb-0"
+                        data-testid="alert-row"
+                        key={a.id}
+                      >
+                        <div className="flex items-center gap-2 font-semibold">
+                          {c.alert.title(a.body)}
+                        </div>
+                        <div className="cell-sub">{c.alert.detail(a.body)}</div>
                       </div>
                     ))}
                   </div>

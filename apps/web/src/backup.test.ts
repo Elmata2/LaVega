@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 import type { CipherBlob } from "@lavega/adapters";
-import { backupFilename, serializeBackup, parseBackup } from "./backup.js";
+import { backupCarriesDocuments, backupFilename, parseBackup, serializeBackup } from "./backup.js";
 
 const validBlob: CipherBlob = {
   v: 1,
@@ -37,4 +37,27 @@ test("parseBackup throws on well-formed JSON that isn't shaped like a CipherBlob
 test("parseBackup rejects an absurd iteration count (DoS guard) and a sub-1 count", () => {
   expect(() => parseBackup(JSON.stringify({ ...validBlob, iterations: 999_999_999 }))).toThrow();
   expect(() => parseBackup(JSON.stringify({ ...validBlob, iterations: 0 }))).toThrow();
+});
+
+const vaultOnly = { v: 2, kdf: "account-key", iv: "aXY=", ct: "Y3Q=" } as const;
+const bundle = { v: 3, kdf: "account-key", iv: "aXY=", ct: "YnVuZGxl" } as const;
+
+test("a vault-only (v2) backup still parses and is known to carry no documents", () => {
+  const parsed = parseBackup(JSON.stringify(vaultOnly));
+  expect(parsed).toEqual(vaultOnly);
+  expect(backupCarriesDocuments(parsed)).toBe(false);
+});
+
+test("a full bundle (v3) parses and is known to carry the sealed documents", () => {
+  const parsed = parseBackup(serializeBackup(bundle));
+  expect(parsed).toEqual(bundle);
+  expect(backupCarriesDocuments(parsed)).toBe(true);
+});
+
+test("a malformed v3 bundle is refused like any other malformed file", () => {
+  expect(() => parseBackup(JSON.stringify({ ...bundle, ct: 5 }))).toThrow();
+  expect(() => parseBackup(JSON.stringify({ ...bundle, kdf: "PBKDF2-SHA256" }))).toThrow();
+  expect(() =>
+    parseBackup(JSON.stringify({ v: 4, kdf: "account-key", iv: "a", ct: "b" })),
+  ).toThrow();
 });

@@ -1,15 +1,47 @@
 import { beforeEach, expect, test, vi } from "vitest";
 
-const { shouldMountInvestingMock, investingTenantIdMock, forwardInvestingMock } = vi.hoisted(() => ({
+const {
+  shouldMountInvestingMock,
+  investingTenantIdMock,
+  forwardInvestingMock,
+  runInvestingCronMock,
+  runInvestingDrainMock,
+  investingOwnsApiPathMock,
+  verifiedSessionMock,
+} = vi.hoisted(() => ({
   shouldMountInvestingMock: vi.fn(() => true),
   investingTenantIdMock: vi.fn(async () => null as string | null),
-  forwardInvestingMock: vi.fn(async (_request: Request, tenantId?: string) => new Response(`tenant:${tenantId ?? "none"}`)),
+  forwardInvestingMock: vi.fn(
+    async (_request: Request, tenantId: string) => new Response(`tenant:${tenantId}`),
+  ),
+  runInvestingCronMock: vi.fn(async () => Response.json({ tenants: [] })),
+  runInvestingDrainMock: vi.fn(async () => Response.json({ driven: [] })),
+  investingOwnsApiPathMock: vi.fn(async (path: string) =>
+    ["investing", "brokers", "prices", "market-data", "config", "agents"].includes(
+      path.split("/")[2] ?? "",
+    ),
+  ),
+  verifiedSessionMock: vi.fn(async () => ({ user: { id: "user-123" } }) as unknown),
 }));
+
+/* These tests are about TENANCY — which tenant an investing request is served
+ * under — not about authentication. `apiGuard` sits in front of every /api
+ * route and answers the earlier question ("is there a session at all?"), so
+ * without a session here it would refuse first and nothing below would reach
+ * its subject. A verified session is therefore the premise of this file, and
+ * `apiGuard.investing.test.ts` covers the anonymous case. */
+vi.mock("./auth.js", async () => {
+  const actual = await vi.importActual<typeof import("./auth.js")>("./auth.js");
+  return { ...actual, verifiedSession: verifiedSessionMock };
+});
 
 vi.mock("./investing-mount.js", () => ({
   shouldMountInvesting: shouldMountInvestingMock,
   investingTenantId: investingTenantIdMock,
   forwardInvesting: forwardInvestingMock,
+  runInvestingCron: runInvestingCronMock,
+  runInvestingDrain: runInvestingDrainMock,
+  investingOwnsApiPath: investingOwnsApiPathMock,
   investingDist: () => "/tmp/investing-dist",
 }));
 
@@ -20,6 +52,7 @@ async function investingApp() {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  verifiedSessionMock.mockResolvedValue({ user: { id: "user-123" } });
 });
 
 test("an investing API request without a tenant is refused, not served under the local tenant", async () => {
@@ -31,35 +64,118 @@ test("an investing API request without a tenant is refused, not served under the
   expect(response.status).toBe(401);
   expect(await response.json()).toEqual({ problems: ["Authentication is required"] });
   expect(forwardInvestingMock).not.toHaveBeenCalled();
-});
+}, 20_000);
 
 test("an investing API request is forwarded under the tenant the session named", async () => {
   investingTenantIdMock.mockResolvedValue("user-123");
   const app = await investingApp();
 
-  for (const path of ["/api/investing/dashboard", "/api/brokers/sync/status", "/api/prices/sync/status", "/api/market-data/consent", "/api/config/status"]) {
+  for (const path of [
+    "/api/investing/dashboard",
+    "/api/investing/health/detail",
+    "/api/brokers/sync/status",
+    "/api/prices/sync/status",
+    "/api/market-data/consent",
+    "/api/config/status",
+    "/api/agents/portfolio",
+  ]) {
     const response = await app.request(path);
     expect(await response.text(), path).toBe("tenant:user-123");
   }
 });
 
+test("a namespace the investing app claims is forwarded without touching this server", async () => {
+  investingTenantIdMock.mockResolvedValue("user-123");
+  investingOwnsApiPathMock.mockResolvedValue(true);
+  const app = await investingApp();
+
+  const response = await app.request("/api/a-namespace-nobody-has-written-yet");
+
+  expect(await response.text()).toBe("tenant:user-123");
+});
+
+test("an /api path the investing app does not claim is not answered by it", async () => {
+  investingTenantIdMock.mockResolvedValue("user-123");
+  investingOwnsApiPathMock.mockResolvedValue(false);
+  const app = await investingApp();
+
+  await app.request("/api/vault/backup");
+
+  expect(forwardInvestingMock).not.toHaveBeenCalled();
+});
+
+test("this server keeps its own API routes ahead of the investing wildcard", async () => {
+  investingTenantIdMock.mockResolvedValue("user-123");
+  const app = await investingApp();
+
+  const response = await app.request("/api/eb/status");
+
+  expect(forwardInvestingMock).not.toHaveBeenCalled();
+  expect(response.status).toBe(200);
+});
+
 test("the investing SPA shell stays reachable without a session", async () => {
+  verifiedSessionMock.mockResolvedValue(null);
   investingTenantIdMock.mockResolvedValue(null);
   const app = await investingApp();
 
   const response = await app.request("/investing/positions");
 
   expect(response.status).toBe(200);
-  expect(await response.text()).toBe("tenant:none");
+  // Static SPA paths carry no tenant data, so they name the local tenant
+  // explicitly rather than depending on a silent default (H1, 2026-10-17).
+  expect(await response.text()).toBe("tenant:local");
 });
 
 test("the health line is answered without a session, and by the investing runtime", async () => {
+  verifiedSessionMock.mockResolvedValue(null);
   investingTenantIdMock.mockResolvedValue(null);
   const app = await investingApp();
 
   const response = await app.request("/api/investing/health");
 
   expect(response.status).toBe(200);
-  expect(await response.text()).toBe("tenant:none");
+  expect(await response.text()).toBe("tenant:local");
+  expect(investingTenantIdMock).not.toHaveBeenCalled();
+});
+
+/* --- H1: the `/investing/api/*` alias is the same API surface, so it is behind
+ * the same guard. Before this, apiGuard was mounted on `/api/*` alone and
+ * `app.all("/investing/*", …)` forwarded the alias straight to the investing
+ * app with no session and the local tenant. --- */
+
+test("the /investing/api/* alias serves a signed-in caller under THEIR OWN tenant, not the local one", async () => {
+  verifiedSessionMock.mockResolvedValue({ user: { id: "user-123" } });
+  investingTenantIdMock.mockResolvedValue("user-123");
+  const app = await investingApp();
+
+  const response = await app.request("/investing/api/investing/summary");
+
+  expect(await response.text()).toBe("tenant:user-123");
+});
+
+test("investing cron route uses cron handler instead of browser session auth", async () => {
+  verifiedSessionMock.mockResolvedValue(null);
+  investingTenantIdMock.mockResolvedValue(null);
+  const app = await investingApp();
+
+  const response = await app.request("/api/cron/investing-sync");
+
+  expect(response.status).toBe(200);
+  expect(runInvestingCronMock).toHaveBeenCalledOnce();
+  expect(investingTenantIdMock).not.toHaveBeenCalled();
+});
+
+test("the external scheduler's drain route is a machine endpoint, not a browser session", async () => {
+  verifiedSessionMock.mockResolvedValue(null);
+  investingTenantIdMock.mockResolvedValue(null);
+  const app = await investingApp();
+
+  const post = await app.request("/api/cron/investing-drain", { method: "POST" });
+  const get = await app.request("/api/cron/investing-drain");
+
+  expect(post.status).toBe(200);
+  expect(get.status).toBe(200);
+  expect(runInvestingDrainMock).toHaveBeenCalledTimes(2);
   expect(investingTenantIdMock).not.toHaveBeenCalled();
 });

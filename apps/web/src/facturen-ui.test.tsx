@@ -5,6 +5,7 @@ import { afterEach, beforeEach, expect, test } from "vitest";
 import { makeInvoice, type Invoice } from "@lavega/core";
 import Facturen from "./views/Facturen";
 import type { N8nNotice, PendingInvoice } from "./n8n";
+import { adminCopy } from "./copy/admin.js";
 
 /* The rebuilt Facturen surface (UI review, 2026-08-16).
  *
@@ -21,6 +22,7 @@ let saved: Invoice[][] = [];
 
 beforeEach(() => {
   localStorage.clear();
+  document.cookie = "lavega_locale=nl; Path=/";
   saved = [];
 });
 
@@ -29,6 +31,7 @@ afterEach(() => {
   container?.remove();
   root = null;
   container = null;
+  document.cookie = "lavega_locale=; Path=/; Max-Age=0";
 });
 
 function Harness({
@@ -36,12 +39,18 @@ function Harness({
   pending: seed,
   entities = ["BV1"],
   defaultEntity = "BV1",
-}: { invoices: Invoice[]; pending: PendingInvoice[]; entities?: string[]; defaultEntity?: string }) {
+}: {
+  invoices: Invoice[];
+  pending: PendingInvoice[];
+  entities?: string[];
+  defaultEntity?: string;
+}) {
   const [pending, setPending] = useState<PendingInvoice[]>(seed);
   const [notices, setNotices] = useState<N8nNotice[]>([]);
   return (
     <Facturen
       entities={entities}
+      ownIbans={[]}
       invoices={invoices}
       txs={[]}
       asOf="2026-08-16"
@@ -53,7 +62,13 @@ function Harness({
       notices={notices}
       onNoticesChange={setNotices}
       onNavigate={() => {}}
-      fetchImpl={(async () => ({ ok: true, status: 200, json: async () => ({ invoices: [] }) })) as unknown as typeof fetch}
+      fetchImpl={
+        (async () => ({
+          ok: true,
+          status: 200,
+          json: async () => ({ invoices: [] }),
+        })) as unknown as typeof fetch
+      }
     />
   );
 }
@@ -69,7 +84,12 @@ function render(
   root = createRoot(container);
   act(() => {
     root!.render(
-      <Harness invoices={invoices} pending={pending} entities={entities} defaultEntity={defaultEntity} />,
+      <Harness
+        invoices={invoices}
+        pending={pending}
+        entities={entities}
+        defaultEntity={defaultEntity}
+      />,
     );
   });
   return container;
@@ -80,7 +100,8 @@ function click(el: Element) {
 }
 
 function setNativeValue(el: HTMLInputElement | HTMLSelectElement, value: string) {
-  const proto = el instanceof HTMLSelectElement ? HTMLSelectElement.prototype : HTMLInputElement.prototype;
+  const proto =
+    el instanceof HTMLSelectElement ? HTMLSelectElement.prototype : HTMLInputElement.prototype;
   Object.getOwnPropertyDescriptor(proto, "value")!.set!.call(el, value);
   el.dispatchEvent(new Event("input", { bubbles: true }));
   el.dispatchEvent(new Event("change", { bubbles: true }));
@@ -91,7 +112,9 @@ function field(label: string): HTMLInputElement {
 }
 
 function byText(selector: string, text: string): HTMLElement {
-  const hit = [...container!.querySelectorAll(selector)].find((n) => (n.textContent ?? "").includes(text));
+  const hit = [...container!.querySelectorAll(selector)].find((n) =>
+    (n.textContent ?? "").includes(text),
+  );
   if (!hit) throw new Error(`no ${selector} containing "${text}"`);
   return hit as HTMLElement;
 }
@@ -107,7 +130,11 @@ function drop(zone: Element, file: File) {
 }
 
 /** Fill a valid manual invoice, minus whatever the test wants to leave broken. */
-function fillManual(overrides: Partial<Record<"Relatie" | "Factuurdatum" | "Vervaldatum" | "Bedrag" | "Valuta", string>> = {}) {
+function fillManual(
+  overrides: Partial<
+    Record<"Relatie" | "Factuurdatum" | "Vervaldatum" | "Bedrag" | "Valuta", string>
+  > = {},
+) {
   const values = {
     Relatie: "ACME BV",
     Factuurdatum: "2026-08-01",
@@ -124,11 +151,7 @@ function fillManual(overrides: Partial<Record<"Relatie" | "Factuurdatum" | "Verv
 test("the surface is exactly three ways in, and nothing else", () => {
   const c = render();
   const titles = [...c.querySelectorAll(".module-title")].map((n) => n.textContent);
-  expect(titles).toEqual([
-    "1 · Automatisch",
-    "2 · Slepen",
-    "3 · Handmatig",
-  ]);
+  expect(titles).toEqual(["1 · Automatisch", "2 · Slepen", "3 · Handmatig"]);
 
   // Exactly one file control, inside the dropzone — the separate "CSV of
   // UBL/XML importeren" and "PDF-factuur lezen met AI" pickers are gone.
@@ -137,8 +160,8 @@ test("the surface is exactly three ways in, and nothing else", () => {
   expect(fileInputs[0].getAttribute("aria-label")).toBe("Factuurbestand kiezen");
   expect(c.textContent).not.toContain("CSV of UBL/XML importeren");
 
-  expect(c.querySelector(".dropzone")).not.toBeNull();
-  expect(byText("button", "Ophalen uit n8n")).toBeTruthy();
+  expect(c.querySelector("[data-testid=dropzone]")).not.toBeNull();
+  expect(byText("button", "Nieuwe facturen ophalen")).toBeTruthy();
 });
 
 test("a manual invoice without an amount is refused, out loud, and nothing is booked", () => {
@@ -156,7 +179,7 @@ test("a blank currency blocks the invoice instead of silently becoming EUR", () 
   click(byText("button", "Toevoegen"));
 
   expect(saved).toHaveLength(0);
-  expect(c.textContent).toContain("LaVega gokt geen euro's");
+  expect(c.textContent).toContain("gokt geen euro's");
 
   // Filled in, it books — with the currency he actually typed.
   fillManual({ Valuta: "USD" });
@@ -169,10 +192,11 @@ test("a blank currency blocks the invoice instead of silently becoming EUR", () 
 
 test("dropping a CSV imports its invoices through the same parser", async () => {
   const c = render();
-  const csv = "Relatie,Bedrag,Factuurdatum,Vervaldatum,Richting\nACME BV,121.00,2026-08-01,2026-08-31,uitgaand\n";
+  const csv =
+    "Relatie,Bedrag,Factuurdatum,Vervaldatum,Richting\nACME BV,121.00,2026-08-01,2026-08-31,uitgaand\n";
   const file = new File([csv], "facturen.csv", { type: "text/csv" });
 
-  drop(c.querySelector(".dropzone")!, file);
+  drop(c.querySelector("[data-testid=dropzone]")!, file);
   // handleImportFile reads the file asynchronously.
   await act(async () => {
     await Promise.resolve();
@@ -188,7 +212,7 @@ test("dropping a CSV imports its invoices through the same parser", async () => 
 test("a dropped PDF sends nothing while the AI opt-in is off", () => {
   const c = render();
   const file = new File(["%PDF-1.4"], "factuur.pdf", { type: "application/pdf" });
-  drop(c.querySelector(".dropzone")!, file);
+  drop(c.querySelector("[data-testid=dropzone]")!, file);
 
   expect(saved).toHaveLength(0);
   expect(c.textContent).toContain("Er is niets verstuurd");
@@ -217,7 +241,7 @@ test("the confirm-first queue still stands between an n8n row and a booking", ()
   expect(c.textContent).toContain("Geen valuta gevonden");
   click(byText(".n8n-row button", "Bevestigen"));
   expect(saved).toHaveLength(0);
-  expect(c.textContent).toContain("LaVega gokt geen euro's");
+  expect(c.textContent).toContain("gokt geen euro's");
   expect(c.querySelectorAll(".n8n-row")).toHaveLength(1); // kept, not lost
 });
 
@@ -271,7 +295,7 @@ test("zonder ondernemingen vraagt ook een n8n-regel er niet naar", () => {
     currency: "EUR",
   };
   const c = render([], [row], [], "Persoonlijk");
-  expect(c.querySelector('[aria-label="Entiteit (n8n)"]')).toBeNull();
+  expect(c.querySelector('[aria-label="Entiteit (te bevestigen)"]')).toBeNull();
 
   // Bevestigen boekt hem nog steeds, op diezelfde standaard.
   click(byText("button", "Bevestigen"));
@@ -286,19 +310,18 @@ test("met meerdere ondernemingen zegt de tabel bij welke een factuur hoort", () 
     ["Holding BV", "Werk BV"],
     "Holding BV",
   );
-  const headers = [...c.querySelectorAll("table.table th")].map((n) => n.textContent);
+  const headers = [...c.querySelectorAll("[data-testid=table] th")].map((n) => n.textContent);
   expect(headers).toContain("Onderneming");
-  expect([...c.querySelectorAll('td[data-label="Onderneming"]')].map((n) => n.textContent)).toEqual([
-    "Holding BV",
-    "Werk BV",
-  ]);
+  expect([...c.querySelectorAll('td[data-label="Onderneming"]')].map((n) => n.textContent)).toEqual(
+    ["Holding BV", "Werk BV"],
+  );
   // En daar is de keuze wél een echte vraag, dus staat de keuzelijst er.
   expect(c.querySelector('[aria-label="Entiteit"]')).not.toBeNull();
 });
 
 test("met één onderneming blijft die kolom weg: hij zou op elke regel hetzelfde zeggen", () => {
   const c = render([invoice("BV1", "ACME BV")]);
-  const headers = [...c.querySelectorAll("table.table th")].map((n) => n.textContent);
+  const headers = [...c.querySelectorAll("[data-testid=table] th")].map((n) => n.textContent);
   expect(headers).not.toContain("Onderneming");
 });
 
@@ -315,17 +338,31 @@ test("de keuzelijst laat nooit iets anders zien dan waarop geboekt wordt", () =>
   expect(saved[0][0].entity).toBe("Holding BV");
 });
 
-test("met meerdere ondernemingen belooft het scherm geen automatische boeking", () => {
-  // De uitleg somt op waaróm iets zichzelf boekt. Met meer dan één onderneming
-  // gebeurt dat nooit, dus mag daar niet "je hebt één onderneming" staan — dat
-  // is een voorwaarde afvinken die juist níet klopt, en dan wacht hij op een
-  // boeking die niet komt.
-  const c = render([], [], ["Holding BV", "Werk BV"], "Holding BV");
-  expect(c.textContent).not.toContain("je hebt één onderneming");
-  expect(c.textContent).toContain("meer dan één onderneming");
+test("het scherm belooft nergens dat iets zichzelf boekt, ongeacht het aantal ondernemingen", () => {
+  const gate = adminCopy.nl.facturen.forms.auto.gateNote;
+  expect(render().textContent).toContain(gate);
+  expect(render([], [], ["Holding BV", "Werk BV"], "Holding BV").textContent).toContain(gate);
+  expect(gate).toContain("LaVega boekt niets zelf");
 });
 
-test("met één onderneming staat die voorwaarde er wél, want dan klopt hij", () => {
+test("the lavega_locale cookie switches the surface to English", () => {
+  document.cookie = "lavega_locale=en; Path=/";
   const c = render();
-  expect(c.textContent).toContain("je hebt één onderneming");
+  const en = adminCopy.en.facturen;
+
+  const titles = [...c.querySelectorAll(".module-title")].map((n) => n.textContent);
+  expect(titles).toEqual([
+    en.forms.auto.moduleTitle,
+    en.forms.drop.moduleTitle,
+    en.forms.manual.moduleTitle,
+  ]);
+  expect(byText("button", en.forms.auto.fetchButton)).toBeTruthy();
+
+  act(() => setNativeValue(field(en.forms.manual.counterpartyAriaLabel), "ACME BV"));
+  act(() => setNativeValue(field(en.forms.manual.issueDateAriaLabel), "2026-08-01"));
+  act(() => setNativeValue(field(en.forms.manual.dueDateAriaLabel), "2026-08-31"));
+  act(() => setNativeValue(field(en.forms.manual.currencyAriaLabel), "EUR"));
+  click(byText("button", en.forms.manual.addButton));
+  expect(saved).toHaveLength(0);
+  expect(c.textContent).toContain(en.manualErrors.missingAmount);
 });

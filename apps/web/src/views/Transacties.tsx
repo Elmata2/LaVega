@@ -1,41 +1,65 @@
 import { useMemo, useState } from "react";
-import type { Account, OwnAccounts, Rule, Tx, CategoryDecision, UnknownReason, AiCategorizeItem } from "@lavega/core";
-import {
-  enrichTxs, filterTxs, categorize, uncategorizedByMonth, CATEGORY_OPTIONS,
-  unknownBreakdown, unknownReason, foreignCode, aiCategorizeItems,
+import type {
+  Account,
+  OwnAccounts,
+  Rule,
+  Tx,
+  CategoryDecision,
+  UnknownReason,
+  AiCategorizeItem,
+  TransferPair,
+  TransferCandidate,
 } from "@lavega/core";
-import { formatEuro } from "../format";
+import {
+  enrichTxs,
+  filterTxs,
+  categorize,
+  uncategorizedByMonth,
+  CATEGORY_OPTIONS,
+  unknownBreakdown,
+  unknownReason,
+  foreignCode,
+  aiCategorizeItems,
+  isEurCurrency,
+  toEur,
+} from "@lavega/core";
+import {
+  formatEuroIn,
+  formatCurrencyIn,
+  formatSignedCurrencyIn,
+  formatSignedEuroIn,
+  formatDate,
+} from "../format";
 import { categorizeTxs } from "../api";
-import { getAiCategorizeEnabled, setAiCategorizeEnabled } from "../settings";
+import { useAppLocale, pick } from "../appLocale";
+import { moneyCopy, categoryLabel } from "../copy/money";
+import { getAiCategorizeEnabled, setAiCategorizeEnabled, type ConversionMode } from "../settings";
 import { toDecisions, MAX_CATEGORIZE_BATCH } from "../categorize-ui";
+import Badge from "../components/ui/Badge.js";
+import Button from "../components/ui/Button.js";
+import Card from "../components/ui/Card.js";
+import Pill from "../components/ui/Pill.js";
+import { Table, TableWrap, Th, Td } from "../components/ui/Table.js";
 
-/* What each "onbekend" reason means and what the owner can DO about it. Written
- * out rather than left as a bare label because the review's complaint was not
- * that the number was wrong — it was that "onbekend" said nothing at all. The
- * `ai` flag decides whether we may claim the AI pass can help: for a row whose
- * only surviving text is account numbers it CANNOT, and saying otherwise would
- * send him round a loop that can never close. */
-const REASON_TEXT: Record<UnknownReason, { label: string; what: string; ai: boolean }> = {
-  buitenland: {
-    label: "buitenlandse betaling",
-    what: "Kaartbetalingen in het buitenland. De naam van de winkel staat er wel bij, maar staat in geen enkele regel.",
-    ai: true,
-  },
-  "onbekende-tegenpartij": {
-    label: "geen regel",
-    what: "Er staat een tegenpartij in de transactie, maar geen regel en geen ingebouwde categorie past erop.",
-    ai: true,
-  },
-  "alleen-nummers": {
-    label: "alleen nummers",
-    what: "Na het weghalen van rekeningnummers en bedragen blijft er geen leesbare tekst over. Hier valt niets te lezen — ook niet voor de AI. Geef deze zelf een categorie.",
-    ai: false,
-  },
-  "geen-tekst": {
-    label: "geen tekst",
-    what: "De export gaf geen tegenpartij en geen omschrijving mee. Geef deze zelf een categorie.",
-    ai: false,
-  },
+/* Which UnknownReason maps to which moneyCopy.transacties.reason entry, and
+ * whether the AI pass can help with that reason. The `ai` flag stays local —
+ * it is not text, it is a capability gate: for a row whose only surviving
+ * text is account numbers the AI CANNOT place it, and saying otherwise would
+ * send the owner round a loop that can never close. */
+const REASON_KEY: Record<
+  UnknownReason,
+  "buitenland" | "onbekendeTegenpartij" | "alleenNummers" | "geenTekst"
+> = {
+  buitenland: "buitenland",
+  "onbekende-tegenpartij": "onbekendeTegenpartij",
+  "alleen-nummers": "alleenNummers",
+  "geen-tekst": "geenTekst",
+};
+const REASON_AI: Record<UnknownReason, boolean> = {
+  buitenland: true,
+  "onbekende-tegenpartij": true,
+  "alleen-nummers": false,
+  "geen-tekst": false,
 };
 
 type TransactiesProps = {
@@ -43,6 +67,11 @@ type TransactiesProps = {
   scopedTxs: Tx[];
   rules: Rule[];
   own: OwnAccounts;
+  /** ECB daily rates, and whether a non-EUR row shows its € equivalent
+   *  alongside its original amount ("convert") or the original amount only,
+   *  as before FX support existed ("separate"). */
+  fxHistory: Record<string, Record<string, number>>;
+  mode: ConversionMode;
   entityOptions: string[];
   entityScope: string;
   fEntity: string;
@@ -57,12 +86,20 @@ type TransactiesProps = {
   onFToChange: (to: string) => void;
   fCategory: string;
   onFCategoryChange: (category: string) => void;
-  /** Whether the server has an Anthropic key — gates the "Categoriseer met AI"
+  /** Whether the server has a Mistral key — gates the "Categoriseer met AI"
    *  button. When false the button is hidden entirely. */
   configured: boolean;
   /** Apply confirmed AI-category decisions against the full tx + rules lists
    *  (App owns that + persistence). */
   onApplyCategories: (decisions: CategoryDecision[]) => Promise<void>;
+  /** Stored transfer decisions. A confirmed pair's two legs get the "Transfer"
+   *  badge; a rejected pair is the matcher's memory and is never proposed. */
+  transfers: TransferPair[];
+  /** Pairs DERIVED from the current ledger: suggestions, never decisions. The
+   *  panel below is the only place they become one. */
+  suggestions: TransferCandidate[];
+  onConfirmTransfer: (pair: TransferPair) => void;
+  onRejectTransfer: (pair: TransferPair) => void;
 };
 
 export default function Transacties({
@@ -70,6 +107,8 @@ export default function Transacties({
   scopedTxs,
   rules,
   own,
+  fxHistory,
+  mode,
   entityOptions,
   entityScope,
   fEntity,
@@ -86,7 +125,45 @@ export default function Transacties({
   onFCategoryChange,
   configured,
   onApplyCategories,
+  transfers,
+  suggestions,
+  onConfirmTransfer,
+  onRejectTransfer,
 }: TransactiesProps) {
+  const [locale] = useAppLocale();
+  const c = moneyCopy[locale];
+
+  // One row is at most one leg of one pair, so a map from leg id answers "does
+  // this row carry a badge" without scanning the pair list per row. Confirmed
+  // wins over suggested by construction (the matcher never re-proposes a
+  // decided leg), but the cell checks confirmed first anyway so a stale
+  // suggestion can never paint over a stored decision.
+  const confirmedByTxId = useMemo(() => {
+    const m = new Map<string, TransferPair>();
+    for (const p of transfers)
+      if (p.status === "confirmed") {
+        m.set(p.outflowTxId, p);
+        m.set(p.inflowTxId, p);
+      }
+    return m;
+  }, [transfers]);
+  const suggestedByTxId = useMemo(() => {
+    const m = new Map<string, TransferPair>();
+    for (const s of suggestions) {
+      m.set(s.pair.outflowTxId, s.pair);
+      m.set(s.pair.inflowTxId, s.pair);
+    }
+    return m;
+  }, [suggestions]);
+  // App scopes `suggestions` to pairs whose BOTH legs are in this half (naming
+  // an account from the other half would cross the line this switch draws), so
+  // the rows and accounts this view already has are the whole lookup.
+  const txById = useMemo(() => new Map(scopedTxs.map((t) => [t.id, t])), [scopedTxs]);
+  const accountNameByKey = useMemo(
+    () => new Map(accounts.map((a) => [a.key, a.name || a.key])),
+    [accounts],
+  );
+
   // Rows after the non-category filters — the category dropdown's options are
   // derived from these, so it always offers the categories actually present
   // under the current entity/account/search/date selection.
@@ -141,7 +218,7 @@ export default function Transacties({
       for (const t of m.txs) {
         if (items.length >= MAX_CATEGORIZE_BATCH) return { txs, items };
         const [item] = aiCategorizeItems([t]);
-        if (!item) continue; // nothing to read — see REASON_TEXT["alleen-nummers"]
+        if (!item) continue; // nothing to read — see REASON_KEY["alleen-nummers"]
         txs.push(t);
         items.push(item);
       }
@@ -167,14 +244,14 @@ export default function Transacties({
         .map((t) => ({ tx: t, category: byId.get(t.id)! }));
       if (proposed.length === 0) {
         setAiPhase("idle");
-        setAiNote("De AI kon geen van de onbekende transacties indelen.");
+        setAiNote(c.transacties.aiKonGeenIndelen);
         return;
       }
       setProposals(proposed);
       setAiPhase("review");
     } catch (e) {
       setAiPhase("idle");
-      setAiNote(e instanceof Error ? e.message : "categorisatie mislukt");
+      setAiNote(e instanceof Error ? e.message : c.transacties.categorisatieMislukt);
     }
   }
 
@@ -197,11 +274,11 @@ export default function Transacties({
       setAiPhase("idle");
       setAiNote(
         decisions.length > 0
-          ? `${decisions.length} ${decisions.length === 1 ? "transactie" : "transacties"} gecategoriseerd.`
-          : "Niets toegepast.",
+          ? c.transacties.gecategoriseerdNote(decisions.length)
+          : c.transacties.nietsToegepast,
       );
     } catch (e) {
-      setAiNote(e instanceof Error ? e.message : "opslaan mislukt");
+      setAiNote(e instanceof Error ? e.message : c.transacties.opslaanMislukt);
     }
   }
 
@@ -213,26 +290,59 @@ export default function Transacties({
   /** The Categorie cell. For a placed row that is just the category; for an
    *  "onbekend" row it also names WHY — with the country code when the export
    *  gave us one, since that is the single most useful thing we already know
-   *  about a row we cannot place. */
+   *  about a row we cannot place.
+   *
+   *  A row that is one leg of a transfer pair carries the badge here too: the
+   *  category now reads "Eigen overboeking" because the pair SAYS so, and the
+   *  badge names the pair behind that. A suggestion stays visually quieter
+   *  ("Mogelijk") — it is not a decision yet, and it must not read as one. */
   function categoryCell(t: Tx) {
     const category = categorize(t, rules, own);
-    if (category !== "onbekend") return category;
-    const reason = unknownReason(t);
-    const cc = reason === "buitenland" ? foreignCode(t) : null;
+    const confirmed = confirmedByTxId.get(t.id);
+    const suggested = confirmed ? undefined : suggestedByTxId.get(t.id);
+    const transferBadge = confirmed ? (
+      <Badge data-testid="transfer-badge" title={c.transacties.transferKinds[confirmed.kind]}>
+        {c.transacties.transferBadge}
+      </Badge>
+    ) : suggested ? (
+      <Badge
+        data-testid="possible-transfer-badge"
+        className="opacity-70"
+        title={c.transacties.transferKinds[suggested.kind]}
+      >
+        {c.transacties.possibleTransferBadge}
+      </Badge>
+    ) : null;
+    const rest =
+      category !== "onbekend" ? (
+        categoryLabel(locale, category)
+      ) : (
+        <>
+          {c.transacties.onbekendLabel}{" "}
+          {(() => {
+            const reason = unknownReason(t);
+            const reasonCopy = c.transacties.reason[REASON_KEY[reason]];
+            const cc = reason === "buitenland" ? foreignCode(t) : null;
+            return (
+              <Badge title={reasonCopy.what}>
+                {reasonCopy.label}
+                {cc ? ` ${cc}` : ""}
+              </Badge>
+            );
+          })()}
+        </>
+      );
     return (
       <>
-        onbekend{" "}
-        <span className="badge" title={REASON_TEXT[reason].what}>
-          {REASON_TEXT[reason].label}
-          {cc ? ` ${cc}` : ""}
-        </span>
+        {rest}
+        {transferBadge ? <> {transferBadge}</> : null}
       </>
     );
   }
 
   return (
-    <section className="card" aria-label="Transacties">
-      <h2 style={{ margin: 0 }}>Transacties</h2>
+    <Card as="section" aria-label={c.transacties.heading}>
+      <h2 style={{ margin: 0 }}>{c.transacties.heading}</h2>
 
       {aiNote && aiPhase === "idle" && <p className="cell-sub">{aiNote}</p>}
 
@@ -244,72 +354,72 @@ export default function Transacties({
         <div className="ai-extract" style={{ margin: "var(--sp-3) 0" }}>
           <div
             style={{
-              display: "flex", alignItems: "baseline", justifyContent: "space-between",
-              gap: "var(--sp-3)", flexWrap: "wrap",
+              display: "flex",
+              alignItems: "baseline",
+              justifyContent: "space-between",
+              gap: "var(--sp-3)",
+              flexWrap: "wrap",
             }}
           >
             <div>
-              <div className="cell-sub">Onbekend</div>
+              <div className="cell-sub">{pick(locale, "Onbekend", "Uncategorised")}</div>
               <strong style={{ fontVariantNumeric: "tabular-nums" }}>
-                {unknown.count} {unknown.count === 1 ? "transactie" : "transacties"} ·{" "}
-                <span className={unknown.amount >= 0 ? "text-pos" : "text-neg"}>{formatEuro(unknown.amount)}</span>
+                {unknown.count} {c.rekeningen.transactieWoord(unknown.count)} ·{" "}
+                <span className={`whitespace-nowrap ${unknown.amount >= 0 ? "text-pos" : "text-neg"}`}>
+                  {formatSignedEuroIn(locale, unknown.amount)}
+                </span>
               </strong>
             </div>
             <div style={{ display: "flex", gap: "var(--sp-2)", flexWrap: "wrap" }}>
-              <button
-                type="button"
-                className={"pill" + (fCategory === "onbekend" ? " pill-active" : "")}
+              <Pill
+                active={fCategory === "onbekend"}
                 onClick={() => onFCategoryChange(fCategory === "onbekend" ? "" : "onbekend")}
               >
-                {fCategory === "onbekend" ? "Toon alles" : "Toon alleen onbekend"}
-              </button>
+                {fCategory === "onbekend"
+                  ? c.transacties.toonAlles
+                  : c.transacties.toonAlleenOnbekend}
+              </Pill>
               {configured && batch.items.length > 0 && (
-                <button
-                  type="button"
-                  className="btn btn-primary"
+                <Button
+                  variant="primary"
                   onClick={onCategorizeClick}
-                  aria-label="Laat de AI de onbekende transacties lezen"
+                  aria-label={c.transacties.laatDeAiLezenAria}
                 >
                   {/* The honest count: how many go out THIS run, out of how many
                       there are. The batch is capped at 200 per request. */}
-                  Laat de AI ze lezen
-                  {batch.items.length < unknown.count ? ` (${batch.items.length} van ${unknown.count})` : ` (${batch.items.length})`}
-                </button>
+                  {c.transacties.laatDeAiZeLezen}
+                  {c.transacties.batchCountSuffix(batch.items.length, unknown.count)}
+                </Button>
               )}
             </div>
           </div>
 
           <ul style={{ listStyle: "none", padding: 0, margin: "var(--sp-3) 0 0" }}>
             {unknown.byReason.map((b) => {
-              const t = REASON_TEXT[b.reason];
+              const t = c.transacties.reason[REASON_KEY[b.reason]];
               return (
                 <li key={b.reason} style={{ marginBottom: "var(--sp-2)" }}>
-                  <span className="badge">{t.label}</span>{" "}
+                  <Badge>{t.label}</Badge>{" "}
                   <span style={{ fontVariantNumeric: "tabular-nums" }}>
-                    {b.count}× · {formatEuro(b.amount)}
+                    {b.count}× · {formatEuroIn(locale, b.amount)}
                   </span>
-                  {b.countries.length > 0 && <span className="cell-sub"> · {b.countries.join(", ")}</span>}
+                  {b.countries.length > 0 && (
+                    <span className="cell-sub"> · {b.countries.join(", ")}</span>
+                  )}
                   <div className="cell-sub">{t.what}</div>
                 </li>
               );
             })}
           </ul>
 
-          {!configured && unknown.byReason.some((b) => REASON_TEXT[b.reason].ai) && (
+          {!configured && unknown.byReason.some((b) => REASON_AI[b.reason]) && (
             /* Name the real cause. The AI route is not "unavailable" in the
-               abstract — the server has no Anthropic key set. Anything vaguer
+               abstract — the server has no Mistral key set. Anything vaguer
                sends someone looking in the wrong place. */
-            <p className="cell-sub">
-              De AI-route staat uit: op de server is geen Anthropic-sleutel ingesteld. Tot die er is
-              kun je deze transacties indelen met een eigen regel onder Regels, of ze hier per stuk
-              een categorie geven.
-            </p>
+            <p className="cell-sub">{c.transacties.aiRouteUit}</p>
           )}
           {configured && batch.items.length === 0 && (
-            <p className="cell-sub">
-              Geen van deze transacties heeft tekst die de AI kan lezen — hier helpt alleen een eigen
-              regel of een categorie die je zelf geeft.
-            </p>
+            <p className="cell-sub">{c.transacties.geenLeesbareTekst}</p>
           )}
         </div>
       )}
@@ -317,85 +427,159 @@ export default function Transacties({
       {aiPhase === "consent" && (
         <div className="ai-extract" style={{ margin: "var(--sp-3) 0" }}>
           <p className="cell-sub">
-            Alleen de <strong>tegenpartij + omschrijving</strong> en de richting (in/uit) van je
-            onbekende transacties gaan via onze server naar Claude — nooit je bedragen, saldi,
-            rekeningnummers of datums als apart veld, en we filteren herkenbare IBANs, bedragen
-            en datums ook uit die tekst voordat we hem versturen. Je bekijkt en bevestigt elk
-            voorstel voordat er iets verandert.
+            {c.transacties.consentBefore}
+            <strong>{c.transacties.consentStrong}</strong>
+            {c.transacties.consentAfter}
           </p>
-          <button type="button" className="btn btn-primary" onClick={enableAndRun}>
-            Aanzetten en categoriseren
-          </button>{" "}
-          <button type="button" className="btn" onClick={() => setAiPhase("idle")}>
-            Annuleer
-          </button>
+          <Button variant="primary" onClick={enableAndRun}>
+            {c.transacties.aanzettenEnCategoriseren}
+          </Button>{" "}
+          <Button onClick={() => setAiPhase("idle")}>{c.transacties.annuleer}</Button>
         </div>
       )}
 
-      {aiPhase === "loading" && <p className="cell-sub">Bezig met categoriseren…</p>}
+      {aiPhase === "loading" && <p className="cell-sub">{c.transacties.bezigMetCategoriseren}</p>}
 
       {aiPhase === "review" && (
         <div className="ai-extract" style={{ margin: "var(--sp-3) 0" }}>
           <p className="cell-sub">
-            {proposals.length} voorstel{proposals.length === 1 ? "" : "len"} — pas aan of zet op
-            "Sla over", en bevestig. Toegepaste categorieën worden ook als regel opgeslagen voor
-            volgende imports.
+            {c.transacties.voorstellenCount(proposals.length)}
+            {c.transacties.voorstellenRest}
           </p>
-          <div className="table-wrap table-cards">
-            <table className="table">
+          <TableWrap>
+            <Table cards>
               <thead>
                 <tr>
-                  <th>Tegenpartij</th>
-                  <th>Omschrijving</th>
-                  <th>Bedrag</th>
-                  <th>Categorie</th>
+                  <Th>{c.transacties.tegenpartij}</Th>
+                  <Th>{c.transacties.omschrijving}</Th>
+                  <Th>{c.transacties.bedrag}</Th>
+                  <Th>{c.transacties.categorie}</Th>
                 </tr>
               </thead>
               <tbody>
                 {proposals.map((p, i) => (
                   <tr key={p.tx.id}>
-                    <td data-label="Tegenpartij">{p.tx.counterparty}</td>
-                    <td data-label="Omschrijving">{p.tx.description}</td>
-                    <td data-label="Bedrag">
-                      <span className={p.tx.amount >= 0 ? "text-pos" : "text-neg"}>
-                        {formatEuro(p.tx.amount)}
+                    <Td data-label={c.transacties.tegenpartij}>{p.tx.counterparty}</Td>
+                    <Td data-label={c.transacties.omschrijving}>{p.tx.description}</Td>
+                    <Td data-label={c.transacties.bedrag}>
+                      <span className={`whitespace-nowrap ${p.tx.amount >= 0 ? "text-pos" : "text-neg"}`}>
+                        {formatSignedEuroIn(locale, p.tx.amount)}
                       </span>
-                    </td>
-                    <td data-label="Categorie">
+                    </Td>
+                    <Td data-label={c.transacties.categorie}>
                       <select
                         value={p.category}
-                        aria-label={`Categorie voor ${p.tx.counterparty}`}
+                        aria-label={c.transacties.categorieVoor(p.tx.counterparty)}
                         onChange={(e) => {
                           const v = e.target.value;
-                          setProposals((prev) => prev.map((q, j) => (j === i ? { ...q, category: v } : q)));
+                          setProposals((prev) =>
+                            prev.map((q, j) => (j === i ? { ...q, category: v } : q)),
+                          );
                         }}
                       >
-                        <option value="">Sla over</option>
-                        {CATEGORY_OPTIONS.map((c) => (
-                          <option key={c} value={c}>
-                            {c}
+                        <option value="">{c.transacties.slaOver}</option>
+                        {CATEGORY_OPTIONS.map((cat) => (
+                          <option key={cat} value={cat}>
+                            {categoryLabel(locale, cat)}
                           </option>
                         ))}
                       </select>
-                    </td>
+                    </Td>
                   </tr>
                 ))}
               </tbody>
-            </table>
-          </div>
+            </Table>
+          </TableWrap>
           {aiNote && (
             <p className="cell-sub" role="alert">
               {aiNote}
             </p>
           )}
-          <button type="button" className="btn btn-primary" onClick={() => void applyReview()}>
-            Toepassen
-          </button>{" "}
-          <button type="button" className="btn" onClick={cancelReview}>
-            Annuleer
-          </button>
+          <Button variant="primary" onClick={() => void applyReview()}>
+            {c.transacties.toepassen}
+          </Button>{" "}
+          <Button onClick={cancelReview}>{c.transacties.annuleer}</Button>
         </div>
       )}
+      {/* --- Possible transfers. DERIVED, not stored: the matcher runs over the
+          current ledger every unlock, so a re-import can drop a candidate
+          instead of leaving a stale claim behind. This panel is the only place
+          a suggestion can become a decision, and nothing here happens by
+          itself — the footnote says so, because confirming CHANGES the spend
+          totals and the owner has to know that. --- */}
+      {suggestions.length > 0 && (
+        <div
+          className="ai-extract"
+          style={{ margin: "var(--sp-3) 0" }}
+          data-testid="possible-transfers"
+        >
+          <strong>{c.transacties.possibleTransfersHeading}</strong>
+          <p className="cell-sub">{c.transacties.possibleTransfersIntro}</p>
+          <ul style={{ listStyle: "none", padding: 0, margin: "var(--sp-3) 0 0" }}>
+            {suggestions.map(({ pair, ambiguous }) => {
+              const out = txById.get(pair.outflowTxId);
+              const inn = txById.get(pair.inflowTxId);
+              // The pair's own ids are the identity; a leg missing from the
+              // lookup can only happen for a stale row, so fall back to the id
+              // rather than hiding the candidate.
+              const from = out
+                ? (accountNameByKey.get(out.accountKey) ?? out.accountKey)
+                : pair.outflowTxId;
+              const to = inn
+                ? (accountNameByKey.get(inn.accountKey) ?? inn.accountKey)
+                : pair.inflowTxId;
+              return (
+                <li key={pair.id} style={{ marginBottom: "var(--sp-3)" }}>
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "baseline",
+                      gap: "var(--sp-2)",
+                      flexWrap: "wrap",
+                    }}
+                  >
+                    <span className="cell-sub">{out ? formatDate(locale, out.date) : ""}</span>
+                    <strong style={{ fontVariantNumeric: "tabular-nums" }}>
+                      {from} → {to}
+                    </strong>
+                    <span style={{ fontVariantNumeric: "tabular-nums" }}>
+                      {formatCurrencyIn(locale, pair.amountCents / 100, pair.currency)}
+                    </span>
+                    <span className="cell-sub">
+                      {c.transacties.possibleTransferDayGap(
+                        Math.abs(pair.evidence?.dateDiffDays ?? 0),
+                      )}
+                    </span>
+                    <Badge>{c.transacties.transferKinds[pair.kind]}</Badge>
+                    {ambiguous && (
+                      <Badge tone="warning">{c.transacties.possibleTransferAmbiguous}</Badge>
+                    )}
+                  </div>
+                  <div style={{ display: "flex", gap: "var(--sp-2)", marginTop: "var(--sp-2)" }}>
+                    <Button
+                      variant="primary"
+                      data-testid="transfer-confirm"
+                      aria-label={c.transacties.possibleTransferConfirmAria(from, to)}
+                      onClick={() => onConfirmTransfer(pair)}
+                    >
+                      {c.transacties.possibleTransferConfirm}
+                    </Button>
+                    <Button
+                      data-testid="transfer-reject"
+                      aria-label={c.transacties.possibleTransferRejectAria(from, to)}
+                      onClick={() => onRejectTransfer(pair)}
+                    >
+                      {c.transacties.possibleTransferReject}
+                    </Button>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+          <p className="cell-sub">{c.transacties.possibleTransfersFootnote}</p>
+        </div>
+      )}
+
       {/* Task-1 scope fix: with a top-bar entity scope active, this dropdown
           used to list ALL entities — picking an out-of-scope one silently
           yielded 0 rows with no explanation. The scope pill already constrains
@@ -407,9 +591,9 @@ export default function Transacties({
       <div className="filter-bar">
         {entityScope === "" && (
           <label>
-            Entiteit{" "}
+            {c.transacties.entiteitLabel}{" "}
             <select value={fEntity} onChange={(e) => onFEntityChange(e.target.value)}>
-              <option value="">Alle entiteiten</option>
+              <option value="">{c.transacties.alleEntiteiten}</option>
               {entityOptions.map((e) => (
                 <option key={e} value={e}>
                   {e}
@@ -419,9 +603,9 @@ export default function Transacties({
           </label>
         )}
         <label>
-          Rekening{" "}
+          {c.transacties.rekeningLabel}{" "}
           <select value={fAccount} onChange={(e) => onFAccountChange(e.target.value)}>
-            <option value="">Alle rekeningen</option>
+            <option value="">{c.transacties.alleRekeningen}</option>
             {accounts.map((a) => (
               <option key={a.key} value={a.key}>
                 {a.bank} · {a.key}
@@ -430,76 +614,90 @@ export default function Transacties({
           </select>
         </label>
         <label>
-          Categorie{" "}
+          {c.transacties.categorieLabel}{" "}
           <select value={fCategory} onChange={(e) => onFCategoryChange(e.target.value)}>
-            <option value="">Alle categorieën</option>
+            <option value="">{c.transacties.alleCategorieen}</option>
             {/* Keep a selected category visible even if the other filters leave it
                 with zero rows (so the dropdown reflects state, e.g. after a click
                 from Overzicht + a scope change). */}
             {fCategory && !categoryOptions.includes(fCategory) && (
-              <option value={fCategory}>{fCategory}</option>
+              <option value={fCategory}>{categoryLabel(locale, fCategory)}</option>
             )}
-            {categoryOptions.map((c) => (
-              <option key={c} value={c}>
-                {c}
+            {categoryOptions.map((cat) => (
+              <option key={cat} value={cat}>
+                {categoryLabel(locale, cat)}
               </option>
             ))}
           </select>
         </label>
         <label className="filter-grow">
-          Zoeken{" "}
+          {c.transacties.zoekenLabel}{" "}
           <input
             value={fSearch}
             onChange={(e) => onFSearchChange(e.target.value)}
-            placeholder="Tegenpartij of omschrijving"
+            placeholder={c.transacties.zoekenPlaceholder}
           />
         </label>
         <label>
-          Van <input type="date" value={fFrom} onChange={(e) => onFFromChange(e.target.value)} />
+          {c.transacties.van}{" "}
+          <input type="date" value={fFrom} onChange={(e) => onFFromChange(e.target.value)} />
         </label>
         <label>
-          Tot <input type="date" value={fTo} onChange={(e) => onFToChange(e.target.value)} />
+          {c.transacties.tot}{" "}
+          <input type="date" value={fTo} onChange={(e) => onFToChange(e.target.value)} />
         </label>
       </div>
 
-      <p>{rows.length} transacties</p>
+      <p>{c.transacties.transactiesCount(rows.length)}</p>
 
       {rows.length === 0 ? (
-        <p>Geen transacties.</p>
+        <p>{c.transacties.geenTransacties}</p>
       ) : (
-        <div className="table-wrap table-cards">
-          <table className="table">
+        <TableWrap>
+          <Table cards>
             <thead>
               <tr>
-                <th>Datum</th>
-                <th>Tegenpartij</th>
-                <th>Omschrijving</th>
-                <th>Rekening</th>
-                <th>Bedrag</th>
-                <th>Entiteit</th>
-                <th>Categorie</th>
+                <Th>{c.transacties.tableDatum}</Th>
+                <Th>{c.transacties.tableTegenpartij}</Th>
+                <Th>{c.transacties.tableOmschrijving}</Th>
+                <Th>{c.transacties.tableRekening}</Th>
+                <Th>{c.transacties.tableBedrag}</Th>
+                <Th>{c.transacties.tableEntiteit}</Th>
+                <Th>{c.transacties.tableCategorie}</Th>
               </tr>
             </thead>
             <tbody>
               {rows.map((t) => (
                 <tr key={t.id}>
-                  <td data-label="Datum">{t.date}</td>
-                  <td data-label="Tegenpartij">{t.counterparty}</td>
-                  <td data-label="Omschrijving">{t.description}</td>
-                  <td data-label="Rekening">{t.bank} · {t.accountKey}</td>
-                  <td data-label="Bedrag">
-                    <span className={t.amount >= 0 ? "text-pos" : "text-neg"}>
-                      {formatEuro(t.amount)}
+                  <Td data-label={c.transacties.tableDatum}>{t.date}</Td>
+                  <Td data-label={c.transacties.tableTegenpartij}>{t.counterparty}</Td>
+                  <Td data-label={c.transacties.tableOmschrijving}>{t.description}</Td>
+                  <Td data-label={c.transacties.tableRekening}>
+                    {t.bank} · {t.accountKey}
+                  </Td>
+                  <Td data-label={c.transacties.tableBedrag}>
+                    <span className={`whitespace-nowrap ${t.amount >= 0 ? "text-pos" : "text-neg"}`}>
+                      {isEurCurrency(t.currency)
+                        ? formatSignedEuroIn(locale, t.amount)
+                        : formatSignedCurrencyIn(locale, t.amount, t.currency)}
                     </span>
-                  </td>
-                  <td data-label="Entiteit">{t.entity}</td>
-                  <td data-label="Categorie">{categoryCell(t)}</td>
+                    {!isEurCurrency(t.currency) &&
+                      mode === "convert" &&
+                      (() => {
+                        const eur = toEur(t.amount, t.currency, t.date, fxHistory);
+                        return eur === null ? null : (
+                          <span className="cell-sub"> ≈ {formatEuroIn(locale, eur)}</span>
+                        );
+                      })()}
+                  </Td>
+                  <Td data-label={c.transacties.tableEntiteit}>{t.entity}</Td>
+                  <Td data-label={c.transacties.tableCategorie}>{categoryCell(t)}</Td>
                 </tr>
               ))}
             </tbody>
-          </table>
-        </div>
+          </Table>
+        </TableWrap>
       )}
-    </section>
+    </Card>
   );
 }

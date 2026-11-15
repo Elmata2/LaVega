@@ -5,36 +5,186 @@ Vercel serves the web application and Hono API. Neon project `lavega`
 `personal` and `investing` schemas. Personal vault data must be encrypted before
 storage. Better Auth integration remains pending.
 
+## Migrations
+
+`db/migrations/*.sql` is applied by `scripts/migrate.ts`, which records each
+file in `public.schema_migrations`. Migrations used to be applied by hand, and
+`0006_broker_sync_lease.sql` was committed but never run: the Brokers page then
+failed with `column "credential_generation" does not exist` for weeks. The
+ledger replaces remembering with checking.
+
+```
+pnpm db:migrate           # apply everything pending
+pnpm db:migrate:check     # exit 1 if a migration is unapplied — run before a deploy
+pnpm db:migrate:status    # how far this database is
+pnpm db:migrate:baseline  # record every file as applied, executing none
+pnpm db:migrate:adopt     # run every file, then record them — for an unknown database
+```
+
+`baseline` is for a database you know is current. `adopt` is for one you do not:
+it runs every migration, which is safe because each is rerunnable, and then
+records them. The preview branch needed `adopt`; `main` needed `baseline`.
+
+Connect as the **schema owner**, not `lavega_runtime`, which cannot ALTER the
+tables it reads:
+
+```
+MIGRATION_DATABASE_URL=$(neonctl connection-string main \
+  --project-id royal-surf-52181032 --role-name lavega_owner --database-name lavega) \
+  pnpm db:migrate
+```
+
+`MIGRATION_DATABASE_URL` is read first; `DATABASE_URL` only when it is unset, so
+the runtime connection string in `apps/server/.env` is never used by accident.
+
+Rules the runner enforces:
+
+- **Every migration must be rerunnable.** A file and its ledger row cannot share
+  one transaction, because the files open their own, so a crash between the two
+  costs one repeated apply. `packages/database/src/migrate.test.ts` applies the
+  whole directory twice to keep this true.
+- **Never edit an applied migration.** The checksum in the ledger would no
+  longer match and the next run refuses to start. Write a new file instead.
+- **No two files may share a numeric prefix**, which is why the purge migration
+  is `0003a_purge_local_price_bars.sql` — lexical order is apply order, and two
+  `0003_` files have no order at all.
+
+**The Vercel build runs `db:migrate:check` before it builds anything.** A deploy
+whose database is missing a migration fails there, with the file named, instead
+of shipping and breaking a page — which is exactly how 0006 got to production.
+The build reads the ledger with `DATABASE_URL` (the `lavega_runtime` role, which
+`0007_migration_ledger_grants.sql` grants SELECT on it); it never applies
+anything, because a rolled-back deploy must not leave the schema ahead of the
+code. A build with no `DATABASE_URL` skips the check and says so.
+
+So the order for a schema change is: merge, `pnpm db:migrate`, then deploy. Out
+of order, the deploy fails closed rather than half-working.
+
+Production (`main`) and preview branches that predate the runner are baselined
+already. A **new** database — a fresh Neon branch, a self-host — runs
+`pnpm db:migrate` from empty instead; `baseline` on an empty database is
+refused.
+
+Both long-lived branches were at the head of `db/migrations` on 2026-10-05
+(`24/24 applied`, `pnpm db:migrate:check` exits 0 on each); `0024` has been added
+since, so run `pnpm db:migrate:check` for the current state. The project is
+`royal-surf-52181032`; `main` is `br-fragrant-cake-b1ylflhu` and `preview` is
+`br-orange-tree-b1b7kdwm`.
+
+**Renaming an applied migration leaves its old ledger row behind.** `preview`
+was adopted before the portfolio-letter file moved from
+`0022_portfolio_letters.sql` to `0023_portfolio_letters.sql`, and ran an
+`0019_agent_memory.sql` that was committed later as `0020_agent_memory.sql`. Its
+ledger therefore held 26 rows for the 24 files then present: the two old names survive as
+orphans, and each renumbered file ran again under its new name — safe, because
+every migration is rerunnable. The runner matches only the names present in
+`db/migrations`, so it ignores the orphans and reports no drift. `main`, baselined
+after the renumbering, held exactly 24. Orphans are harmless but leave the
+ledger disagreeing with the directory; removing them is a manual `DELETE` from
+`public.schema_migrations`, which the runner never does.
+
 ## What's already wired
+
 - `vercel.json` — Vercel build command, SPA rewrites, and API function entrypoint.
 - `db/migrations/0001_lavega.sql` — applied to Neon. Creates six tables and six
   RLS policies.
 - `db/migrations/0002_auth.sql` — Better Auth tables and the `lavega_runtime`
   grants.
+- `db/migrations/0003_eb_flow.sql` — the Enable Banking flow's two intermediate
+  stores. **Must be applied to Neon before EB is switched on**, or `/api/eb/auth`
+  fails on its first insert. They were module-scope `Map`s, which worked on
+  Railway (one long-lived container) and cannot work on Vercel: `/auth` may write
+  the state in one function instance and the bank's redirect to `/callback` land
+  on another. `personal.eb_pending_auth` deliberately has NO row-level security —
+  the callback arrives cross-site from the bank and may carry no session cookie,
+  so its unguessable single-use `state` is the credential and the row is where
+  the user's identity comes back from. `personal.eb_sessions` holds the account
+  list, so it is encrypted and RLS-scoped like everything else.
+- `db/migrations/0004_eb_grants.sql` — `0003_eb_flow.sql` granted nothing to
+  `lavega_runtime` and left `eb_sessions` without `FORCE ROW LEVEL SECURITY`;
+  this migration adds both, plus a default-privilege grant on `personal` and
+  `investing` so a future table in either schema is not missed again. Apply it
+  before the first live EB connection, alongside `0003_eb_flow.sql`.
 - `docs/adr/0004-neon-data-boundaries.md` — personal/investing data boundary.
-- Better Auth is mounted at `/api/auth/*` and guards the investing API: with
-  `DATABASE_URL` and `BETTER_AUTH_SECRET` set, `/api/investing`, `/api/brokers`,
-  `/api/prices`, `/api/market-data` and `/api/config/status` answer `401`
-  without a session. The `/investing/*` SPA shell stays public.
+- Better Auth is mounted at `/api/auth/*`, and `apiGuard` (`apps/server/src/apiGuard.ts`)
+  puts **every** `/api/*` route behind it — not just investing. **The investing SPA's
+  `/investing/api/*` prefix is the same API surface and is behind the same guard**
+  (`rewriteInvestingRequest` strips `/investing`, so `/investing/api/<ns>/…` becomes
+  `/api/<ns>/…`; security review 2026-10-17, H1). Closed unless the
+  path is on the public list (`/api/auth/*`, `/api/rates`, `/api/fx/rate`, the two
+  `status` probes, `/api/investing/health`, and the two machine endpoints that
+  carry their own secret: the card-terms ingest and `/api/cron/investing-sync`)
+  or the request has a verified session. Everything else answers
+  `401`, including the routes that spend the Mistral key (`/api/agent/*`), the
+  bank flow (`/api/eb/*`) and the encrypted vault backup (`/api/vault/backup`).
+  Investing keeps a second, later check on top: `investingTenantId` decides
+  _which tenant_ the request is served under, and `forwardInvesting` requires that
+  tenant explicitly — there is no `LOCAL_TENANT_ID` default for a future call site
+  to inherit. The `/investing/*` SPA shell and
+  the personal SPA stay public — they have to load before anyone can sign in.
+- **The guard fails closed.** Without `DATABASE_URL` and `BETTER_AUTH_SECRET`
+  there are no sessions to verify, so a deployment with those unset refuses every
+  non-public API call. That is deliberate: a flag defaulting to open would
+  reproduce the hole the guard exists to close. A run that genuinely has no
+  authentication — `pnpm dev`, or a single-user self-host — opens it explicitly
+  with `LAVEGA_ALLOW_UNAUTHENTICATED=1`. `pnpm dev` already sets it; `pnpm start`
+  deliberately does not. **A hosted deployment refuses the flag outright**
+  (`NODE_ENV=production`, or Vercel's `VERCEL_ENV`/`VERCEL`), so a value left in
+  a platform's environment UI cannot publish the vault (security review
+  2026-10-17, A1).
+
+### Investing health
+
+`GET /api/investing/health` is public **liveness only**: it proves that Vercel
+ran the investing service. It does not prove that a broker, Neon, or stored
+positions work.
+
+`GET /api/investing/health/detail` requires a signed-in session and checks the
+caller's actual tenant. It reports only status and counts — never credentials,
+tokens, holdings, or user IDs — for Neon reachability, migration-ledger
+presence, vault/key readability, Trading 212 credential presence, durable sync
+freshness (stale after 26 hours), and stored Trading 212 snapshot position
+count. It returns `200` only when all checks are healthy; `503` when degraded
+or down. Use this endpoint to diagnose an empty Trading 212 portfolio.
+
+- **Sign-up is open.** A new account is its own tenant (`session.user.id`) and
+  cannot read another account's vault, brokers, or holdings. Sign-in waits until
+  the address is confirmed. `RESEND_API_KEY` and `AUTH_EMAIL_FROM` send that
+  mail. Accounts that existed before confirmation was required are marked
+  verified by `db/migrations/0014_verify_existing_users.sql`.
 - With `DATABASE_URL` set, every user-scoped store is in Neon and survives the
   invocation:
 
-  | Store | Table |
-  | --- | --- |
-  | Broker credentials and snapshots | `investing.broker_vaults` (encrypted) |
-  | Daily price bars | `investing.price_bars` |
-  | Benchmarks and market-data consent | `investing.preferences` |
-  | Broker sync state | `investing.sync_state` |
-  | Latest portfolio agent run | `investing.agent_runs` |
+  | Store                              | Table                                 |
+  | ---------------------------------- | ------------------------------------- |
+  | Broker credentials and snapshots   | `investing.broker_vaults` (encrypted) |
+  | Daily price bars (shared)          | `investing.instrument_price_bars`     |
+  | Benchmarks and market-data consent | `investing.preferences`               |
+  | Broker sync state                  | `investing.sync_state` (per broker)   |
+  | Price sync progress                | `investing.sync_state` (key `prices`) |
+  | Latest portfolio agent run         | `investing.agent_runs`                |
 
   Without `DATABASE_URL` each of these falls back to its file store, which is
   what local and self-hosted runs want.
+
+- `personal.rate_limit_buckets` holds the agent routes' shared rate-limit
+  counters (#246). Each row is one fixed window for one SHA-256 digest of route
+  plus user id or address, so the table never stores an address in the clear.
+  It deliberately has no row-level security: the limiter has to count an
+  anonymous caller before a session exists. The same statement that counts a
+  hit deletes every window that has passed. Without `DATABASE_URL` the limit
+  falls back to the bounded process-local Map and logs once; on Vercel that
+  means the ceiling multiplies by the warm instance count again. Deploy the
+  migration before the code, or a request falls back to that same local Map
+  until the table exists.
+
 - Sector profiles are the one exception, still `/tmp/lavega-sectors.json`. They
   are a cache of public Yahoo data keyed by symbol, not user data, so a cold
   start costs a re-fetch and nothing else. `INVESTING_SECTOR_STORE_FILE` in
   `vercel.json` is therefore the only `/tmp` path left.
 
 ## Deploy steps
+
 1. Vercel project `lavega` uses repository `Elmata2/LaVega`.
 2. Vercel reads `vercel.json` and runs the configured build command.
 3. Add `lavega.dev` under Vercel **Settings → Domains**.
@@ -43,7 +193,7 @@ storage. Better Auth integration remains pending.
    - Name: `@`
    - Target: the Vercel target shown in the Domains screen
    - Proxy status: **DNS only** (grey cloud) until Vercel has issued its TLS
-   certificate; Cloudflare may be enabled afterwards if desired.
+     certificate; Cloudflare may be enabled afterwards if desired.
 5. Add Neon connection variables only after runtime adapters and authentication
    are implemented. Never put connection strings in repository files.
 
@@ -53,32 +203,47 @@ storage. Better Auth integration remains pending.
 
    Vercel's generated hostname can remain enabled for troubleshooting, but do
    not use it in public integrations.
+
 6. Verify:
    - `https://lavega.dev/` → landing
    - `https://lavega.dev/app` → personal vault (Overzicht)
    - `https://lavega.dev/app/transactions` → Transacties (same for other modules)
    - `https://lavega.dev/health` → `{"ok":true}`
+   - Signed in: `https://lavega.dev/api/investing/health/detail` → real tenant health
    - `https://lavega.dev/api/rates` → the live savings-rate JSON
    - Landing + app topnav **Investing** → `https://lavega.dev/investing/` (built in)
 
 Personal app paths (SPA; server already serves `index.html` for unknown paths):
 
-| Path | View |
-| --- | --- |
-| `/app` or `/app/overview` | Overzicht |
-| `/app/transactions` | Transacties |
-| `/app/accounts` | Rekeningen |
-| `/app/forecast` | Forecast |
-| `/app/optimalisatie` | Optimalisatie |
-| `/app/valuta` | Valuta |
-| `/app/punten` | Punten |
-| `/app/belasting` | Belasting |
-| `/app/facturen` | Facturen |
-| `/app/profiel` | Profiel |
-| `/app/koppelingen` | Koppelingen |
-| `/app/backup` | Back-up |
+| Path                      | View                        |
+| ------------------------- | --------------------------- |
+| `/`                       | Landing (Dutch — canonical) |
+| `/en`                     | Landing (English)           |
+| `/app` or `/app/overview` | Overzicht                   |
+| `/app/transactions`       | Transacties                 |
+| `/app/accounts`           | Rekeningen                  |
+| `/app/forecast`           | Forecast                    |
+| `/app/optimalisatie`      | Optimalisatie               |
+| `/app/valuta`             | Valuta                      |
+| `/app/punten`             | Punten                      |
+| `/app/belasting`          | Belasting                   |
+| `/app/facturen`           | Facturen                    |
+| `/app/profiel`            | Profiel                     |
+| `/app/koppelingen`        | Koppelingen                 |
+| `/app/backup`             | Back-up                     |
 
 Legacy `/#app` and `/?eb=…` still open the app (rewritten to `/app`).
+
+The landing page is bilingual: Dutch at `/` and English at `/en`, same SPA —
+`Root` reads the locale off the path. **Dutch stays the canonical page.** The
+acquisition plan rests on one Dutch search cluster, so the two are declared to
+search engines as `hreflang` alternates with Dutch as `x-default`, never as
+separate competing pages. `/en` needs its own entry in the Vercel route table
+(`scripts/vercel-build.mjs`); the Hono server needs nothing, since an
+extensionless path already falls through to `index.html`.
+
+The privacy policy and terms stay Dutch on both: they are legal documents of a
+Dutch company and the Dutch text is the operative one.
 
 ## Investing dashboard (same deploy)
 
@@ -97,13 +262,44 @@ Do not add filesystem persistence on Vercel. Anything a user must get back on
 their next visit belongs in Neon, behind a repository in `@lavega/database` that
 runs inside `withTenant` so row-level security applies.
 
+### Investing sync scheduler (GitHub Actions)
+
+A run that needs more than one 240 s budget cannot continue itself: Vercel
+answers the fifth self-request with HTTP 508 (issue #306). The scheduler that
+drains those runs lives outside the request chain:
+`.github/workflows/investing-sync.yml`.
+
+- **Cadence:** every 15 minutes UTC (`*/15 * * * *`), plus `workflow_dispatch`.
+  GitHub can delay a scheduled run; the queue is drained eventually, not on the
+  dot. One call advances the queue by one invocation budget, and the durable
+  `investing.sync_state` cursors resume it on the next call.
+- **Setup:** add repository secret `CRON_SECRET` with the same value as the
+  Vercel `CRON_SECRET`. Vercel stores that variable as a Secret, so an existing
+  value cannot be read or pulled; when it is unknown, rotate it: set a new
+  random value in Vercel (Production), redeploy production so the function
+  reads it, then save the same value as the repository secret. When the
+  deployment is not `https://www.lavega.dev`, add repository variable
+  `INVESTING_SYNC_URL` with the origin to call. The workflow is enabled on the
+  default branch; GitHub disables scheduled workflows after 60 days without
+  repository activity, so re-enable it in the Actions tab if the cadence stops.
+  Until `CRON_SECRET` exists a scheduled tick warns and skips instead of failing
+  every 15 minutes; a manual dispatch fails so the missing setup is visible.
+- **Kill switch:** repository variable `INVESTING_SYNC_SCHEDULER=off` stops the
+  workflow without editing it; Vercel variable `INVESTING_SYNC_SCHEDULER=off`
+  stops the drain route on the server. `INVESTING_SYNC_CHAIN` stays off and is
+  not needed on this path.
+- **Cost:** each tick is one short runner job. Lower the frequency in the
+  workflow file when the budget matters more than background freshness; the
+  daily Vercel cron stays as a backstop.
+
 ## Environments
 
-| | Production | Preview | Local |
-| --- | --- | --- | --- |
-| Neon branch | `main` | `preview` | none |
-| Stores | Neon | Neon | files on disk |
-| Authentication | on | on | off |
+|                | Production                           | Preview                               | Local                                                |
+| -------------- | ------------------------------------ | ------------------------------------- | ---------------------------------------------------- |
+| Neon branch    | `main` (`br-fragrant-cake-b1ylflhu`) | `preview` (`br-orange-tree-b1b7kdwm`) | none                                                 |
+| Stores         | Neon                                 | Neon                                  | files on disk                                        |
+| Authentication | on                                   | on                                    | off                                                  |
+| `/api/*` guard | on                                   | on                                    | off (`LAVEGA_ALLOW_UNAUTHENTICATED=1` in `pnpm dev`) |
 
 Preview has its own `BETTER_AUTH_SECRET` and `LAVEGA_ENCRYPTION_KEY`, not
 production's: a leaked preview key must not open production data. It shares one
@@ -122,19 +318,65 @@ locally, create your own Neon branch and put its connection string, a
 `BETTER_AUTH_SECRET` and a `LAVEGA_ENCRYPTION_KEY` in `apps/server/.env`.
 
 ## Environment variables (Vercel → Settings → Environment Variables)
+
 - `DATABASE_URL` — Neon connection string, server-only. Use the
   `lavega_runtime` role, never the owner.
 - `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, `BETTER_AUTH_TRUSTED_ORIGINS` — session
   signing and the origins allowed to use it.
 - `LAVEGA_ENCRYPTION_KEY` — 32 bytes, hex or base64. Encrypts vault blobs before
-  they reach Neon; Neon never sees the key. Losing it loses every stored
-  credential.
+  they reach Neon; Neon never sees the key. It also seals every account's
+  personal vault key (`personal.vault_keys`, docs/adr/0009). Losing it loses
+  every stored credential and every personal vault. Preview and Production
+  must use the same value.
+- `RESEND_API_KEY`, `AUTH_EMAIL_FROM` — send the account mail: email
+  confirmation, password reset, password changed, and welcome. Each goes out in
+  Dutch or English, chosen by the `lavega_locale` cookie, then
+  `Accept-Language`. Both are required in production. `AUTH_EMAIL_FROM` is a
+  verified Resend sender, for example `LaVega <accounts@lavega.dev>`. The
+  sending domain needs SPF, DKIM, and DMARC records, or Gmail and Outlook file
+  the mail as spam.
+- `LAVEGA_ALLOW_UNAUTHENTICATED` — set to `1` ONLY for a run with no
+  authentication at all (local dev, single-user self-host). Never in production
+  or preview: it opens every `/api/*` route to anyone.
+- `CRON_SECRET` — bearer secret for the machine routes: the daily
+  `/api/cron/investing-sync` pass, the external scheduler's
+  `/api/cron/investing-drain`, and the run's internal `/api/sync/drive` and
+  `/api/sync/continue`. Use a long random value. The same value is a GitHub
+  repository secret for the investing sync workflow (below); without it the
+  external scheduler cannot authenticate and a server-owned run cannot resume.
+- `INVESTING_SYNC_SCHEDULER` — optional. Set to `off` to disable the external
+  scheduler's drain route without touching the workflow (it then answers
+  `{ "enabled": false }`). Unset means on.
+- `MISTRAL_API_KEY` — enables `/api/agent/*` (invoice extraction, chat, AI
+  categorization). Obtained from console.mistral.ai (La Plateforme). Absent
+  means `/api/agent/status` answers `configured: false` and the agent routes
+  answer `503`.
+- `AI_DAILY_BUDGET_CENTS` — daily cap on AI spend per account, in euro cents.
+  Default `400` (€4). The agent routes refuse with 429 once that account's
+  recorded spend for today meets or exceeds this.
+- `AI_MONTHLY_BUDGET_CENTS` — monthly cap on AI spend per account, in euro cents.
+  Default `2000` (€20). Same refusal behaviour, evaluated against the calendar month.
+- Sentry error reporting. The Vercel Sentry integration provisions this
+  automatically (Preview + Production): `SENTRY_DSN` reaches the server's Hono
+  `onError` (flushed before the function returns) and is forwarded to the
+  browser bundles of `apps/web` and `apps/investing-web` as `VITE_SENTRY_DSN` at
+  build time by `scripts/vercel-build.mjs` — set `VITE_SENTRY_DSN` directly only
+  to override, or for a Docker/local build with no integration. `SENTRY_ORG`,
+  `SENTRY_PROJECT` and `SENTRY_AUTH_TOKEN` enable source-map upload; when all
+  three are present the maps are emitted hidden, uploaded, then deleted from
+  `dist` so the served bundle never exposes original source. All of it is
+  optional: with no `SENTRY_DSN` the SDK is not initialised and no request is
+  made. Reports are errors only (no tracing, replay, user, request bodies,
+  cookies or query strings; IBANs, emails and long digit runs are scrubbed in
+  `packages/core/src/sentryScrub.ts`). Events are tagged `app`
+  (`web`, `server`, `investing-web`) and `environment` (`VERCEL_ENV` / Vite mode).
 - `PORT` — local server only. Vercel assigns its own runtime port.
 - (Enable Banking, next phase) `EB_APPLICATION_ID`, and the private key. Never
   commit the `.pem` — add it as a Vercel secret or a mounted local file.
   `config.json`, `*.pem`, `.env*` are git-ignored.
 
 ## Enable Banking (flow is built — needs credentials)
+
 The `/api/eb/*` flow (aspsps → auth → callback → accounts) and the frontend
 "Koppel bank" button are implemented. To switch it on, register the EB app and
 set these Vercel **Environment Variables**:
@@ -143,9 +385,10 @@ set these Vercel **Environment Variables**:
 - `EB_PRIVATE_KEY` — the PEM private key, inline (paste the whole key; literal
   `\n` is accepted). Alternatively `EB_PRIVATE_KEY_FILE` pointing at a mounted file.
 - `EB_REDIRECT_URL` — `https://lavega.dev/api/eb/callback`
-- `EB_PSU_TYPE` — `business` (or `personal`)
+- `EB_PSU_TYPE` — default type of account; the bank picker lets the user pick business or personal per connection
 
 In the Enable Banking dashboard, register the app (start in **Sandbox**) with:
+
 - Redirect URL: `https://lavega.dev/api/eb/callback`
 - Privacy: `https://lavega.dev/privacy`
 - Terms: `https://lavega.dev/terms`
@@ -153,9 +396,26 @@ In the Enable Banking dashboard, register the app (start in **Sandbox**) with:
 Until configured, the EB endpoints return `503 "nog niet geconfigureerd"` and
 the app still works with file imports. Never commit the `.pem` — use the env var.
 
+**Two things to check before the first live connection:**
+
+- Apply `0003_eb_flow.sql` and `0004_eb_grants.sql`. Without a `DATABASE_URL`
+  the EB routes are not registered at all; without the tables the flow fails
+  at `/auth`; without the grants in `0004` every EB statement fails
+  `permission denied` once the app connects as `lavega_runtime` rather than
+  the schema owner.
+- `lavega.dev` now 308-redirects to `www.lavega.dev`. Register the redirect URL
+  against whichever hostname is canonical and test that leg deliberately — an
+  OAuth callback is a bad place to discover an extra hop.
+
 ## Local production test
+
 ```
 pnpm build      # builds apps/web/dist
 pnpm start      # Hono serves web + API on http://localhost:8787
 ```
+
+`pnpm start` runs production semantics, so without `DATABASE_URL` +
+`BETTER_AUTH_SECRET` in `apps/server/.env` the API answers `401` — that is the
+guard working, not a broken build. Prefix with `LAVEGA_ALLOW_UNAUTHENTICATED=1`
+to test the build without auth.
 (For day-to-day dev keep using `pnpm dev` + `pnpm dev:server`.)

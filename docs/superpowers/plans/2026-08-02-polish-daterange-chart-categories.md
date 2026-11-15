@@ -9,6 +9,7 @@
 **Tech stack:** TypeScript, React (Vite), Vitest (+ jsdom + fake-indexeddb for storage/wiring tests — the repo's existing pattern; no component-render library).
 
 ## Global Constraints
+
 - **`packages/core` stays I/O-free** — the new helpers are pure. ESM (`.js` import specifiers).
 - **Don't break existing behavior** — Import (no `accept` filter), Overzicht, Transacties, Rekeningen views and all existing tests stay green. Do NOT change `consolidate`, `ingest`, `tx.id`, or any parser.
 - **Category is derived, not stored on the tx** — `categorize(tx, rules)` computes it at display time; editing a rule re-labels instantly. `Tx.category` is left as-is (reserved for a future manual override, which wins when non-empty). No writes to txs for categorization.
@@ -20,11 +21,13 @@
 ### Task 1: Core helpers — date-range filter, monthly totals, categorize, category totals + `Rule` type
 
 **Files:**
+
 - Modify: `packages/core/src/model.ts` (add `Rule`)
 - Modify: `packages/core/src/views.ts` (extend `TxFilter`/`filterTxs`; add `monthlyTotals`, `categorize`, `categoryTotals`)
 - Modify: `packages/core/src/views.test.ts` (add tests)
 
 **Interfaces produced (later tasks depend on these):**
+
 - `type Rule = { id: string; match: string; category: string }` (in model.ts, re-exported via index)
 - `TxFilter` gains `from?: string; to?: string`
 - `type MonthlyTotal = { month: string; in: number; out: number }`; `monthlyTotals(txs: Tx[]): MonthlyTotal[]`
@@ -34,6 +37,7 @@
 - [ ] **Step 1: Add the `Rule` type to `packages/core/src/model.ts`**
 
 Append:
+
 ```ts
 export type Rule = { id: string; match: string; category: string };
 ```
@@ -45,9 +49,39 @@ import { monthlyTotals, categorize, categoryTotals } from "./views.js";
 import type { Rule } from "./model.js";
 
 const txsForMonths: Tx[] = [
-  { id: "a", accountKey: "A1", date: "2026-06-05", amount: 100, currency: "EUR", counterparty: "Klant", description: "Factuur", category: "", manual: false },
-  { id: "b", accountKey: "A1", date: "2026-06-20", amount: -30, currency: "EUR", counterparty: "Albert Heijn", description: "Boodschappen", category: "", manual: false },
-  { id: "c", accountKey: "A1", date: "2026-07-02", amount: -12.5, currency: "EUR", counterparty: "Coffee", description: "Koffie", category: "", manual: false },
+  {
+    id: "a",
+    accountKey: "A1",
+    date: "2026-06-05",
+    amount: 100,
+    currency: "EUR",
+    counterparty: "Klant",
+    description: "Factuur",
+    category: "",
+    manual: false,
+  },
+  {
+    id: "b",
+    accountKey: "A1",
+    date: "2026-06-20",
+    amount: -30,
+    currency: "EUR",
+    counterparty: "Albert Heijn",
+    description: "Boodschappen",
+    category: "",
+    manual: false,
+  },
+  {
+    id: "c",
+    accountKey: "A1",
+    date: "2026-07-02",
+    amount: -12.5,
+    currency: "EUR",
+    counterparty: "Coffee",
+    description: "Koffie",
+    category: "",
+    manual: false,
+  },
 ];
 
 test("filterTxs: from/to bound the date range (inclusive), combinable with other filters", () => {
@@ -55,7 +89,9 @@ test("filterTxs: from/to bound the date range (inclusive), combinable with other
   expect(filterTxs(e, { from: "2026-07-01" }).map((t) => t.id)).toEqual(["c"]);
   expect(filterTxs(e, { to: "2026-06-30" }).map((t) => t.id)).toEqual(["a", "b"]);
   expect(filterTxs(e, { from: "2026-06-10", to: "2026-06-30" }).map((t) => t.id)).toEqual(["b"]);
-  expect(filterTxs(e, { from: "2026-06-01", to: "2026-07-31", search: "koffie" }).map((t) => t.id)).toEqual(["c"]);
+  expect(
+    filterTxs(e, { from: "2026-06-01", to: "2026-07-31", search: "koffie" }).map((t) => t.id),
+  ).toEqual(["c"]);
 });
 
 test("monthlyTotals: groups by YYYY-MM, sums in/out, sorted ascending by month", () => {
@@ -86,6 +122,7 @@ test("categoryTotals: sums in/out per derived category", () => {
   expect(t["onbekend"]).toEqual({ in: 0, out: -12.5 });
 });
 ```
+
 (The `accounts` const already exists at the top of views.test.ts from Task-1 of the views work.)
 
 - [ ] **Step 3: Run to verify they fail** — `pnpm test` → FAIL (symbols missing).
@@ -93,15 +130,22 @@ test("categoryTotals: sums in/out per derived category", () => {
 - [ ] **Step 4: Implement in `packages/core/src/views.ts`**
 
 Extend `TxFilter` and `filterTxs`:
+
 ```ts
-export type TxFilter = { entity?: string; accountKey?: string; search?: string; from?: string; to?: string };
+export type TxFilter = {
+  entity?: string;
+  accountKey?: string;
+  search?: string;
+  from?: string;
+  to?: string;
+};
 
 export function filterTxs(txs: EnrichedTx[], f: TxFilter): EnrichedTx[] {
   const q = f.search ? norm(f.search) : "";
   return txs.filter((t) => {
     if (f.entity && t.entity !== f.entity) return false;
     if (f.accountKey && t.accountKey !== f.accountKey) return false;
-    if (f.from && t.date < f.from) return false;   // ISO dates compare lexicographically
+    if (f.from && t.date < f.from) return false; // ISO dates compare lexicographically
     if (f.to && t.date > f.to) return false;
     if (q && !(norm(t.counterparty).includes(q) || norm(t.description).includes(q))) return false;
     return true;
@@ -110,6 +154,7 @@ export function filterTxs(txs: EnrichedTx[], f: TxFilter): EnrichedTx[] {
 ```
 
 Append the new helpers (import `Rule` from `./model.js` at the top — the file already imports `Account, Tx`):
+
 ```ts
 export type MonthlyTotal = { month: string; in: number; out: number };
 
@@ -120,7 +165,8 @@ export function monthlyTotals(txs: Tx[]): MonthlyTotal[] {
   for (const t of txs) {
     const m = t.date.slice(0, 7);
     const b = byMonth.get(m) ?? { in: 0, out: 0 };
-    if (t.amount >= 0) b.in += t.amount; else b.out += t.amount;
+    if (t.amount >= 0) b.in += t.amount;
+    else b.out += t.amount;
     byMonth.set(m, b);
   }
   return [...byMonth.entries()]
@@ -141,12 +187,16 @@ export function categorize(tx: Tx, rules: Rule[]): string {
 }
 
 /** In/out totals grouped by derived category (via categorize). */
-export function categoryTotals(txs: Tx[], rules: Rule[]): Record<string, { in: number; out: number }> {
+export function categoryTotals(
+  txs: Tx[],
+  rules: Rule[],
+): Record<string, { in: number; out: number }> {
   const out: Record<string, { in: number; out: number }> = {};
   for (const t of txs) {
     const c = categorize(t, rules);
     const b = (out[c] ??= { in: 0, out: 0 });
-    if (t.amount >= 0) b.in += t.amount; else b.out += t.amount;
+    if (t.amount >= 0) b.in += t.amount;
+    else b.out += t.amount;
   }
   return out;
 }
@@ -161,11 +211,13 @@ export function categoryTotals(txs: Tx[], rules: Rule[]): Record<string, { in: n
 ### Task 2: Storage — rules CRUD (schema-versioned)
 
 **Files:**
+
 - Modify: `packages/adapters/src/storage/StorageAdapter.ts` (add `getRules`/`putRules`)
 - Modify: `packages/adapters/src/storage/indexeddb.ts` (v2 schema + rules store + impl)
 - Create: `packages/adapters/src/storage/rules.test.ts`
 
 **Interfaces:**
+
 - Consumes: `Rule` from `@lavega/core` (Task 1).
 - Produces: `StorageAdapter.getRules(): Promise<Rule[]>`, `StorageAdapter.putRules(rules: Rule[]): Promise<void>` (**replace-all**).
 
@@ -204,7 +256,10 @@ test("rules store: put then get round-trips; putRules replaces the whole set", a
   await storage.putRules(rules);
   const back = await storage.getRules();
   expect(back).toHaveLength(2);
-  expect(back.find((r) => r.id === "r1")).toMatchObject({ match: "albert heijn", category: "Boodschappen" });
+  expect(back.find((r) => r.id === "r1")).toMatchObject({
+    match: "albert heijn",
+    category: "Boodschappen",
+  });
 
   // replace-all: saving a shorter list drops the removed rule
   await storage.putRules([{ id: "r2", match: "salaris", category: "Loon" }]);
@@ -215,7 +270,17 @@ test("rules store: put then get round-trips; putRules replaces the whole set", a
 
 test("existing accounts/txs stores still work after the v2 upgrade adds the rules store", async () => {
   const storage = createIndexedDbStorage();
-  await storage.putAccounts([{ key: "A1", iban: "A1", name: "ING", bank: "ING", entity: "BV1", currency: "EUR", balance: null }]);
+  await storage.putAccounts([
+    {
+      key: "A1",
+      iban: "A1",
+      name: "ING",
+      bank: "ING",
+      entity: "BV1",
+      currency: "EUR",
+      balance: null,
+    },
+  ]);
   expect(await storage.getAccounts()).toHaveLength(1);
 });
 ```
@@ -225,6 +290,7 @@ test("existing accounts/txs stores still work after the v2 upgrade adds the rule
 - [ ] **Step 4: Implement** — `packages/adapters/src/storage/indexeddb.ts`
 
 Bump the version and add the store + methods:
+
 ```ts
 import { openDB, type IDBPDatabase } from "idb";
 import type { Account, Tx, Rule } from "@lavega/core";
@@ -249,7 +315,9 @@ function openLaVegaDb(): Promise<IDBPDatabase> {
   });
 }
 ```
+
 Add these two methods to the returned object (alongside the existing four):
+
 ```ts
     async getRules(): Promise<Rule[]> {
       const db = await openLaVegaDb();
@@ -274,20 +342,26 @@ Add these two methods to the returned object (alongside the existing four):
 ### Task 3: UI — date-range filter (Transacties) + monthly chart (Overzicht)
 
 **Files:**
+
 - Modify: `apps/web/src/App.tsx`
 - Create: `apps/web/src/daterange.test.ts`
 
 **Interfaces:** Consumes `filterTxs` (with from/to), `monthlyTotals`, `MonthlyTotal` from `@lavega/core`.
 
 **Design notes (implementer writes the JSX):**
+
 - Import `monthlyTotals`, and `type MonthlyTotal`, from `@lavega/core`.
 - **Date range:** add `const [fFrom, setFFrom] = useState("");` `const [fTo, setFTo] = useState("");`. Add two `<input type="date">` (labels `Van` / `Tot`) in the Transacties filter row. Add `from: fFrom || undefined, to: fTo || undefined` to the existing `filterTxs(enrichTxs(...), {...})` call, and add `fFrom, fTo` to that `rows` useMemo dependency array.
 - **Monthly chart in Overzicht:** add `const chart = useMemo(() => monthlyTotals(txs), [txs]);` and render a `<MonthlyChart data={chart} />` above the existing Overzicht table (inside the `view === "overview"` block). Define this module-level component in App.tsx:
+
 ```tsx
 function MonthlyChart({ data }: { data: MonthlyTotal[] }) {
   if (data.length === 0) return <p>Nog geen data voor een grafiek.</p>;
   const max = Math.max(1, ...data.map((d) => Math.max(d.in, -d.out)));
-  const barW = 24, gap = 12, midY = 60, h = 120;
+  const barW = 24,
+    gap = 12,
+    midY = 60,
+    h = 120;
   const w = data.length * (barW + gap) + gap;
   const scale = (v: number) => (v / max) * (h / 2 - 10);
   return (
@@ -301,7 +375,9 @@ function MonthlyChart({ data }: { data: MonthlyTotal[] }) {
           <g key={d.month}>
             <rect x={x} y={midY - inH} width={barW} height={inH} fill="green" />
             <rect x={x} y={midY} width={barW} height={outH} fill="crimson" />
-            <text x={x + barW / 2} y={h + 14} fontSize={9} textAnchor="middle">{d.month.slice(2)}</text>
+            <text x={x + barW / 2} y={h + 14} fontSize={9} textAnchor="middle">
+              {d.month.slice(2)}
+            </text>
           </g>
         );
       })}
@@ -318,11 +394,39 @@ import type { Account, Tx } from "@lavega/core";
 import { enrichTxs, filterTxs, monthlyTotals } from "@lavega/core";
 
 const accounts: Account[] = [
-  { key: "A1", iban: "A1", name: "ING", bank: "ING", entity: "BV1", currency: "EUR", balance: null },
+  {
+    key: "A1",
+    iban: "A1",
+    name: "ING",
+    bank: "ING",
+    entity: "BV1",
+    currency: "EUR",
+    balance: null,
+  },
 ];
 const txs: Tx[] = [
-  { id: "t1", accountKey: "A1", date: "2026-06-05", amount: 100, currency: "EUR", counterparty: "Klant", description: "F", category: "", manual: false },
-  { id: "t2", accountKey: "A1", date: "2026-07-05", amount: -20, currency: "EUR", counterparty: "AH", description: "B", category: "", manual: false },
+  {
+    id: "t1",
+    accountKey: "A1",
+    date: "2026-06-05",
+    amount: 100,
+    currency: "EUR",
+    counterparty: "Klant",
+    description: "F",
+    category: "",
+    manual: false,
+  },
+  {
+    id: "t2",
+    accountKey: "A1",
+    date: "2026-07-05",
+    amount: -20,
+    currency: "EUR",
+    counterparty: "AH",
+    description: "B",
+    category: "",
+    manual: false,
+  },
 ];
 
 test("Transacties date-range pipeline: from/to bound the rows", () => {
@@ -351,12 +455,14 @@ test("Overzicht chart data: one bar-pair per month", () => {
 ### Task 4: UI — rules-based categories (Regels tab + Categorie column + Overzicht by-category)
 
 **Files:**
+
 - Modify: `apps/web/src/App.tsx`
 - Create: `apps/web/src/categories.test.ts`
 
 **Interfaces:** Consumes `categorize`, `categoryTotals`, `type Rule` from `@lavega/core`; `storage.getRules`/`putRules` (Task 2).
 
 **Design notes (implementer writes the JSX):**
+
 - Extend the `View` union with `"rules"`; add a 4th nav button `Regels`.
 - Rules state: `const [rules, setRules] = useState<Rule[]>([]);`. Load in the existing mount `useEffect` (add `storage.getRules()` to the `Promise.all` and `setRules(...)`).
 - Save helper:
@@ -381,8 +487,28 @@ import { categorize, categoryTotals } from "@lavega/core";
 import { createIndexedDbStorage } from "@lavega/adapters";
 
 const txs: Tx[] = [
-  { id: "t1", accountKey: "A1", date: "2026-06-05", amount: 2500, currency: "EUR", counterparty: "Salaris", description: "Loon", category: "", manual: false },
-  { id: "t2", accountKey: "A1", date: "2026-06-06", amount: -30, currency: "EUR", counterparty: "Albert Heijn", description: "Boodschappen", category: "", manual: false },
+  {
+    id: "t1",
+    accountKey: "A1",
+    date: "2026-06-05",
+    amount: 2500,
+    currency: "EUR",
+    counterparty: "Salaris",
+    description: "Loon",
+    category: "",
+    manual: false,
+  },
+  {
+    id: "t2",
+    accountKey: "A1",
+    date: "2026-06-06",
+    amount: -30,
+    currency: "EUR",
+    counterparty: "Albert Heijn",
+    description: "Boodschappen",
+    category: "",
+    manual: false,
+  },
 ];
 
 test("Categories wiring: rules persist and drive categorize + categoryTotals", async () => {
@@ -411,7 +537,9 @@ test("Categories wiring: rules persist and drive categorize + categoryTotals", a
 - [ ] **Step 5: Commit** — `feat(web): rules-based categories (Regels tab, Categorie column, Overzicht by-category)`
 
 ## Self-Review checklist
+
 - `core` I/O-free; new helpers pure + unit-tested. `filterTxs` from/to inclusive + combinable. `monthlyTotals` sorted, grouped by YYYY-MM. `categorize` first-match/manual-override/onbekend. Rules persist (v2 schema, replace-all) and existing accounts/txs survive the upgrade. Category is derived, never written to txs. Overzicht/Transacties/Rekeningen + all prior tests still green. No new deps; chart is inline SVG. `pnpm --filter @lavega/web build` succeeds.
 
 ## Notes
+
 - Deferred (not this plan): manual per-tx category override UI (the `tx.category`-wins path exists but no UI sets it); CSV export; per-account drill-down page; category color coding; rule reordering.

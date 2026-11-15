@@ -1,18 +1,52 @@
 import { expect, test, vi } from "vitest";
 import { createNeonCredentialStore } from "./neonCredentialStore.js";
+import type { BrokerAccountSnapshot } from "@lavega/adapters";
 import type { EncryptedBrokerRepository } from "@lavega/database";
+import { UnreadableBrokerCredentialsError } from "@lavega/database";
 
-function fakeRepository(): EncryptedBrokerRepository & { rows: Map<string, { credentials: unknown; snapshot: unknown | null }> } {
-  const rows = new Map<string, { credentials: unknown; snapshot: unknown | null }>();
+type Row = { credentials: unknown; snapshot: unknown | null; credentialGeneration: number };
+
+function fakeRepository(): EncryptedBrokerRepository & { rows: Map<string, Row> } {
+  const rows = new Map<string, Row>();
   return {
     rows,
     async get<T>(broker: string) {
       const row = rows.get(broker);
-      return row ? { credentials: row.credentials as T, snapshot: row.snapshot } : null;
+      return row
+        ? { credentials: row.credentials as T, credentialGeneration: row.credentialGeneration }
+        : null;
+    },
+    async snapshots() {
+      if (rows.size === 0) return null;
+      return Object.fromEntries(
+        [...rows]
+          .filter(([, row]) => row.snapshot !== null)
+          .map(([broker, row]) => [broker, row.snapshot]),
+      );
     },
     async put(broker: string, credentials: unknown, snapshot?: unknown) {
       const existing = rows.get(broker);
-      rows.set(broker, { credentials, snapshot: snapshot === undefined ? existing?.snapshot ?? null : snapshot });
+      rows.set(broker, {
+        credentials,
+        snapshot: snapshot === undefined ? (existing?.snapshot ?? null) : snapshot,
+        credentialGeneration: (existing?.credentialGeneration ?? 0) + 1,
+      });
+    },
+    async putSnapshotOnly(broker: string, snapshot: unknown) {
+      const existing = rows.get(broker);
+      if (existing?.credentials != null) return false;
+      rows.set(broker, {
+        credentials: null,
+        snapshot,
+        credentialGeneration: existing?.credentialGeneration ?? 1,
+      });
+      return true;
+    },
+    async putSnapshot(broker: string, snapshot: unknown, credentialGeneration: number) {
+      const existing = rows.get(broker);
+      if (!existing || existing.credentialGeneration !== credentialGeneration) return false;
+      rows.set(broker, { ...existing, snapshot });
+      return true;
     },
   };
 }
@@ -40,7 +74,9 @@ test("the vault refuses to read or write another tenant's credentials", async ()
   const store = createNeonCredentialStore(fakeRepository(), "user-123");
 
   await expect(store.getCredentials("user-456", "trading212")).rejects.toThrow(/tenant/i);
-  await expect(store.putCredentials({ ...trading212, tenantId: "user-456" })).rejects.toThrow(/tenant/i);
+  await expect(store.putCredentials({ ...trading212, tenantId: "user-456" })).rejects.toThrow(
+    /tenant/i,
+  );
 });
 
 test("the server key means there is nothing to unlock", async () => {
@@ -61,7 +97,9 @@ test("broker snapshots round-trip per broker and leave credentials intact", asyn
 
   await store.putBrokerData({ trading212: { positions: [], trades: [], dividends: [] } });
 
-  expect(await store.getBrokerData()).toEqual({ trading212: { positions: [], trades: [], dividends: [] } });
+  expect(await store.getBrokerData()).toEqual({
+    trading212: { positions: [], trades: [], dividends: [] },
+  });
   expect(await store.getCredentials("user-123", "trading212")).toEqual(trading212);
 });
 
@@ -72,21 +110,93 @@ test("a snapshot for a broker with no credentials is dropped rather than inventi
   await store.putBrokerData({ ibkr: { positions: [], trades: [], dividends: [] } });
 
   expect(repository.rows.size).toBe(0);
-  expect(await store.getBrokerData()).toEqual({});
+  expect(await store.getBrokerData()).toBeNull();
 });
 
-test("an empty vault reports no broker data instead of failing", async () => {
+test("an empty vault reads as no vault, so the runtime needs no separate status read", async () => {
   const store = createNeonCredentialStore(fakeRepository(), "user-123");
+
+  expect(await store.getBrokerData()).toBeNull();
+});
+
+test("a connected broker without synced data reads as an open vault with no data", async () => {
+  const repository = fakeRepository();
+  const store = createNeonCredentialStore(repository, "user-123");
+  await repository.put("trading212", { broker: "trading212" });
 
   expect(await store.getBrokerData()).toEqual({});
 });
 
 test("an unreadable hosted broker row does not block reconnecting", async () => {
   const repository = fakeRepository();
+  await repository.put("trading212", { broker: "trading212" });
   repository.get = vi.fn(async () => {
-    throw new Error("Stored broker credentials cannot be read with the current LAVEGA_ENCRYPTION_KEY");
+    throw new UnreadableBrokerCredentialsError();
   });
   const store = createNeonCredentialStore(repository, "user-123");
 
-  expect(await store.status()).toBe("empty");
+  expect(await store.status()).toBe("unlocked");
+  expect(await store.brokerReadability()).toEqual({ ibkr: "unreadable", trading212: "unreadable" });
+  expect(await store.getBrokerData()).toEqual({});
+});
+
+test("one unreadable row leaves the other broker snapshot available", async () => {
+  const repository = fakeRepository();
+  await repository.put("ibkr", { broker: "ibkr", tenantId: "user-123", token: "t", queryId: "q" });
+  await repository.putSnapshot("ibkr", { positions: [], trades: [], dividends: [] }, 1);
+  const get = repository.get.bind(repository);
+  repository.get = vi.fn(async (broker) => {
+    if (broker === "trading212") throw new UnreadableBrokerCredentialsError();
+    return get(broker);
+  }) as typeof repository.get;
+  const store = createNeonCredentialStore(repository, "user-123");
+
+  expect(await store.brokerReadability()).toEqual({ ibkr: "readable", trading212: "unreadable" });
+  expect(await store.getBrokerData()).toHaveProperty("ibkr");
+  expect(await store.getBrokerData()).not.toHaveProperty("trading212");
+});
+
+test("database errors remain availability errors", async () => {
+  const repository = fakeRepository();
+  repository.get = vi.fn(async () => {
+    throw new Error("database unavailable");
+  });
+  repository.snapshots = vi.fn(async () => {
+    throw new Error("database unavailable");
+  });
+  const store = createNeonCredentialStore(repository, "user-123");
+
+  await expect(store.status()).rejects.toThrow("database unavailable");
+  await expect(store.getBrokerData()).rejects.toThrow("database unavailable");
+});
+
+const importSnapshot: BrokerAccountSnapshot = {
+  positions: [],
+  trades: [],
+  dividends: [],
+  lastImport: {
+    importedAt: "2026-11-13T12:00:00.000Z",
+    files: [{ filename: "Account.csv", sha256: "0".repeat(64) }],
+  },
+};
+
+test("an import-only broker's snapshot is stored without credentials and read back", async () => {
+  const repository = fakeRepository();
+  const store = createNeonCredentialStore(repository, "user-123");
+
+  await store.putBrokerData({ degiro: importSnapshot });
+
+  expect(repository.rows.get("degiro")?.credentials).toBeNull();
+  expect(await store.getBrokerData()).toEqual({ degiro: importSnapshot });
+});
+
+test("a direct import write refuses a credential broker and stores an import-only one", async () => {
+  const repository = fakeRepository();
+  const store = createNeonCredentialStore(repository, "user-123");
+  await store.putCredentials(trading212);
+
+  await expect(store.putBrokerSnapshot("trading212", importSnapshot)).rejects.toThrow(/sync/i);
+
+  await store.putBrokerSnapshot("degiro", importSnapshot);
+  expect(await store.getBrokerData()).toEqual({ degiro: importSnapshot });
 });

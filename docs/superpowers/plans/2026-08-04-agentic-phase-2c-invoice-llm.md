@@ -10,7 +10,7 @@
 
 ## Global Constraints
 
-- **Privacy boundary (owner-approved):** an opted-in PDF is sent (base64) via the owner's server proxy to Anthropic. The redaction boundary must make it *impossible* for anything other than the single document + the fixed extraction schema to reach the API. Default OFF; per-document; confirm-first.
+- **Privacy boundary (owner-approved):** an opted-in PDF is sent (base64) via the owner's server proxy to Anthropic. The redaction boundary must make it _impossible_ for anything other than the single document + the fixed extraction schema to reach the API. Default OFF; per-document; confirm-first.
 - LLM lives ONLY on the server (`apps/server`). `@anthropic-ai/sdk` must NOT be imported anywhere in `apps/web`. Model: `claude-opus-4-8`. Structured output via a forced tool (`tool_choice: {type:"tool", name:"record_invoice"}`).
 - Returns `503 "AI-extractie niet geconfigureerd"` until `ANTHROPIC_API_KEY` is set — the app keeps working (manual + CSV/UBL) without it.
 - Pure core stays pure; the money math (amount→invoice) stays deterministic — the LLM only proposes field values the owner confirms.
@@ -48,7 +48,8 @@ test("loadLlmConfig: configured only when ANTHROPIC_API_KEY is set", () => {
   expect(loadLlmConfig()).toEqual({ configured: false, apiKey: null });
   process.env.ANTHROPIC_API_KEY = "sk-ant-test";
   expect(loadLlmConfig()).toEqual({ configured: true, apiKey: "sk-ant-test" });
-  if (prev === undefined) delete process.env.ANTHROPIC_API_KEY; else process.env.ANTHROPIC_API_KEY = prev;
+  if (prev === undefined) delete process.env.ANTHROPIC_API_KEY;
+  else process.env.ANTHROPIC_API_KEY = prev;
 });
 ```
 
@@ -72,6 +73,7 @@ export function loadLlmConfig(): { configured: boolean; apiKey: string | null } 
 **Files:** Create `apps/server/src/agent/redaction.ts`, `apps/server/src/agent/redaction.test.ts`.
 
 **Interfaces produced:**
+
 - `type InvoiceExtractInput = { pdfBase64?: string; text?: string; filename?: string; mediaType?: string }`.
 - `sanitizeExtractInput(raw: unknown): InvoiceExtractInput` — copies ONLY those 4 keys, enforces size caps, requires at least one of pdf/text, throws on violation. Anything else in `raw` (e.g. `transactions`, `balance`) is dropped.
 - `INVOICE_TOOL` (Anthropic tool spec: name `record_invoice`, `input_schema` with the 7 fields) + `EXTRACT_PROMPT` (fixed Dutch/English instruction).
@@ -83,7 +85,13 @@ import { expect, test } from "vitest";
 import { sanitizeExtractInput, INVOICE_TOOL } from "./redaction.js";
 
 test("sanitizeExtractInput passes only the allowed doc fields — never anything else", () => {
-  const out = sanitizeExtractInput({ pdfBase64: "AAAA", filename: "f.pdf", transactions: [1, 2, 3], balance: 99999, apiKey: "leak" } as unknown);
+  const out = sanitizeExtractInput({
+    pdfBase64: "AAAA",
+    filename: "f.pdf",
+    transactions: [1, 2, 3],
+    balance: 99999,
+    apiKey: "leak",
+  } as unknown);
   expect(out).toEqual({ pdfBase64: "AAAA", filename: "f.pdf" });
   expect((out as Record<string, unknown>).transactions).toBeUndefined();
   expect((out as Record<string, unknown>).balance).toBeUndefined();
@@ -97,7 +105,17 @@ test("sanitizeExtractInput enforces size caps and requires a document", () => {
 
 test("INVOICE_TOOL forces exactly the 7 invoice fields", () => {
   const props = Object.keys(INVOICE_TOOL.input_schema.properties);
-  expect(new Set(props)).toEqual(new Set(["counterparty", "amount", "currency", "issueDate", "dueDate", "direction", "vatAmount"]));
+  expect(new Set(props)).toEqual(
+    new Set([
+      "counterparty",
+      "amount",
+      "currency",
+      "issueDate",
+      "dueDate",
+      "direction",
+      "vatAmount",
+    ]),
+  );
 });
 ```
 
@@ -105,7 +123,12 @@ test("INVOICE_TOOL forces exactly the 7 invoice fields", () => {
 - [ ] **Step 3: Create `apps/server/src/agent/redaction.ts`:**
 
 ```ts
-export type InvoiceExtractInput = { pdfBase64?: string; text?: string; filename?: string; mediaType?: string };
+export type InvoiceExtractInput = {
+  pdfBase64?: string;
+  text?: string;
+  filename?: string;
+  mediaType?: string;
+};
 
 const MAX_PDF_B64 = 14_000_000; // ~10 MB of base64
 const MAX_TEXT = 200_000;
@@ -137,12 +160,23 @@ export const INVOICE_TOOL = {
   input_schema: {
     type: "object",
     properties: {
-      counterparty: { type: "string", description: "Naam van de wederpartij (leverancier bij inkoop, klant bij verkoop)" },
+      counterparty: {
+        type: "string",
+        description: "Naam van de wederpartij (leverancier bij inkoop, klant bij verkoop)",
+      },
       amount: { type: "number", description: "Totaalbedrag incl. btw, in de factuurvaluta" },
       currency: { type: "string", description: "ISO-valuta, bv. EUR" },
       issueDate: { type: "string", description: "Factuurdatum, ISO YYYY-MM-DD" },
-      dueDate: { type: "string", description: "Vervaldatum, ISO YYYY-MM-DD (indien afwezig: gelijk aan factuurdatum)" },
-      direction: { type: "string", enum: ["in", "out"], description: "'in' = jij ontvangt geld (verkoopfactuur); 'out' = jij betaalt (inkoopfactuur)" },
+      dueDate: {
+        type: "string",
+        description: "Vervaldatum, ISO YYYY-MM-DD (indien afwezig: gelijk aan factuurdatum)",
+      },
+      direction: {
+        type: "string",
+        enum: ["in", "out"],
+        description:
+          "'in' = jij ontvangt geld (verkoopfactuur); 'out' = jij betaalt (inkoopfactuur)",
+      },
       vatAmount: { type: "number", description: "Btw-bedrag indien vermeld" },
     },
     required: ["counterparty", "amount", "currency", "issueDate", "dueDate", "direction"],
@@ -164,6 +198,7 @@ export const EXTRACT_PROMPT =
 **Files:** Create `apps/server/src/agent/anthropicExtract.ts`, `apps/server/src/agent/rateLimit.ts`, `apps/server/src/agent-routes.ts`, and tests `apps/server/src/agent-routes.test.ts`, `apps/server/src/agent/rateLimit.test.ts`; Modify `apps/server/src/index.ts` (register).
 
 **Interfaces produced:**
+
 - `extractInvoiceFields(input: InvoiceExtractInput, apiKey: string): Promise<{ fields: ExtractedInvoice; confidence: number }>` where `ExtractedInvoice = { counterparty; amount; currency; issueDate; dueDate; direction: "in"|"out"; vatAmount? }`.
 - `createRateLimiter(max: number, windowMs: number)` → `(key: string) => boolean` (true = allowed).
 - `registerAgentRoutes(app, deps?)` where `deps.extract` is injectable (defaults to `extractInvoiceFields`) — so the route is testable without a network call.
@@ -171,13 +206,22 @@ export const EXTRACT_PROMPT =
 - [ ] **Step 1: rateLimit test + impl.** `rateLimit.test.ts`: a limiter of `max:2, window:1000` allows 2 then blocks the 3rd for the same key; `now` is injectable. Implement `apps/server/src/agent/rateLimit.ts`:
 
 ```ts
-export function createRateLimiter(max: number, windowMs: number, now: () => number = () => Date.now()) {
+export function createRateLimiter(
+  max: number,
+  windowMs: number,
+  now: () => number = () => Date.now(),
+) {
   const hits = new Map<string, number[]>();
   return (key: string): boolean => {
     const t = now();
     const arr = (hits.get(key) ?? []).filter((ts) => t - ts < windowMs);
-    if (arr.length >= max) { hits.set(key, arr); return false; }
-    arr.push(t); hits.set(key, arr); return true;
+    if (arr.length >= max) {
+      hits.set(key, arr);
+      return false;
+    }
+    arr.push(t);
+    hits.set(key, arr);
+    return true;
   };
 }
 ```
@@ -189,12 +233,31 @@ import Anthropic from "@anthropic-ai/sdk";
 import type { InvoiceExtractInput } from "./redaction.js";
 import { INVOICE_TOOL, EXTRACT_PROMPT } from "./redaction.js";
 
-export type ExtractedInvoice = { counterparty: string; amount: number; currency: string; issueDate: string; dueDate: string; direction: "in" | "out"; vatAmount?: number };
+export type ExtractedInvoice = {
+  counterparty: string;
+  amount: number;
+  currency: string;
+  issueDate: string;
+  dueDate: string;
+  direction: "in" | "out";
+  vatAmount?: number;
+};
 
-export async function extractInvoiceFields(input: InvoiceExtractInput, apiKey: string): Promise<{ fields: ExtractedInvoice; confidence: number }> {
+export async function extractInvoiceFields(
+  input: InvoiceExtractInput,
+  apiKey: string,
+): Promise<{ fields: ExtractedInvoice; confidence: number }> {
   const client = new Anthropic({ apiKey });
   const content: Anthropic.ContentBlockParam[] = [];
-  if (input.pdfBase64) content.push({ type: "document", source: { type: "base64", media_type: (input.mediaType as "application/pdf") || "application/pdf", data: input.pdfBase64 } });
+  if (input.pdfBase64)
+    content.push({
+      type: "document",
+      source: {
+        type: "base64",
+        media_type: (input.mediaType as "application/pdf") || "application/pdf",
+        data: input.pdfBase64,
+      },
+    });
   if (input.text) content.push({ type: "text", text: `Factuurtekst:\n${input.text}` });
   content.push({ type: "text", text: EXTRACT_PROMPT });
   const res = await client.messages.create({
@@ -219,6 +282,7 @@ export async function extractInvoiceFields(input: InvoiceExtractInput, apiKey: s
   return { fields, confidence: 0.8 };
 }
 ```
+
 (The exact SDK types may differ slightly — the implementer must read `@anthropic-ai/sdk`'s current `messages.create` + content-block types and adapt so it typechecks. Keep the shape: PDF document block + a forced `record_invoice` tool.)
 
 - [ ] **Step 3: `agent-routes.ts`:**
@@ -238,11 +302,20 @@ export function registerAgentRoutes(app: Hono, deps: Deps = {}): void {
   app.get("/api/agent/status", (c) => c.json({ configured: loadLlmConfig().configured }));
   app.post("/api/agent/extract-invoice", async (c) => {
     const { configured, apiKey } = loadLlmConfig();
-    if (!configured || !apiKey) return c.json({ error: "AI-extractie is niet geconfigureerd op de server." }, 503);
+    if (!configured || !apiKey)
+      return c.json({ error: "AI-extractie is niet geconfigureerd op de server." }, 503);
     if (!limit("extract")) return c.json({ error: "Even wachten — te veel AI-verzoeken." }, 429);
     let input;
-    try { input = sanitizeExtractInput(await c.req.json()); } catch (e) { return c.json({ error: e instanceof Error ? e.message : "ongeldige invoer" }, 400); }
-    try { return c.json(await extract(input, apiKey)); } catch (e) { return c.json({ error: e instanceof Error ? e.message : "extractie mislukt" }, 502); }
+    try {
+      input = sanitizeExtractInput(await c.req.json());
+    } catch (e) {
+      return c.json({ error: e instanceof Error ? e.message : "ongeldige invoer" }, 400);
+    }
+    try {
+      return c.json(await extract(input, apiKey));
+    } catch (e) {
+      return c.json({ error: e instanceof Error ? e.message : "extractie mislukt" }, 502);
+    }
   });
 }
 ```
@@ -263,10 +336,18 @@ export function registerAgentRoutes(app: Hono, deps: Deps = {}): void {
 ```ts
 const AI_KEY = "lavega.aiExtraction";
 export function getAiExtractionEnabled(): boolean {
-  try { return typeof localStorage !== "undefined" && localStorage.getItem(AI_KEY) === "1"; } catch { return false; }
+  try {
+    return typeof localStorage !== "undefined" && localStorage.getItem(AI_KEY) === "1";
+  } catch {
+    return false;
+  }
 }
 export function setAiExtractionEnabled(on: boolean): void {
-  try { if (typeof localStorage !== "undefined") localStorage.setItem(AI_KEY, on ? "1" : "0"); } catch { /* ignore */ }
+  try {
+    if (typeof localStorage !== "undefined") localStorage.setItem(AI_KEY, on ? "1" : "0");
+  } catch {
+    /* ignore */
+  }
 }
 ```
 
@@ -279,9 +360,11 @@ export function setAiExtractionEnabled(on: boolean): void {
 - [ ] **Step 5: Verify** — `pnpm test`, `pnpm typecheck`, `pnpm --filter @lavega/web build`. Also grep the built web bundle to confirm `@anthropic-ai/sdk` / "anthropic" is NOT present. **Step 6: Commit** (`model.ts`, `settings.ts`, `Facturen.tsx`, test): `feat(web): opt-in AI PDF invoice extraction (confirm-first)`.
 
 ## Deployment note (after merge)
+
 2c returns 503 until the owner sets `ANTHROPIC_API_KEY` in Railway (their account/cost) and enables the opt-in toggle in the app. Advise the owner to set Anthropic org data-retention to minimum + no training before the first real call.
 
 ## Self-Review notes
+
 - Redaction boundary is a dedicated, tested pure function (Task 2) that the route MUST call before anything reaches the SDK; Task 3's route test (c) asserts extra keys never reach the extractor.
 - LLM only proposes; the owner confirms before any invoice becomes an `expected` flow (Task 4) — so a hallucinated field can't silently move the forecast.
 - `@anthropic-ai/sdk` stays server-only (Task 4 Step 5 greps the web bundle to prove it).

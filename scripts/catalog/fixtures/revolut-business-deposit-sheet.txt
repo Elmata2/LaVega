@@ -1,0 +1,68 @@
+Title: Deposit Information Sheet | Revolut Netherlands
+
+URL Source: https://www.revolut.com/en-NL/legal/business-deposit-information-sheet/
+
+Markdown Content:
+You’re on the Netherlands website. Choose your country or region to see location-specific content
+
+## Business Instant Access Savings
+
+## Deposit Information Sheet
+
+**Effective date**: Document was changed on 12 October 2026 and will take effect on 12 October 2026. If you would like to see a document that is valid until 12 October 2026 please click [here](https://cdn.revolut.com/terms_and_conditions/pdf/deposit_information_sheet_b3260b81_1.3.0_1783007479_en.pdf).
+
+This document contains a summary of the most important features of the Business Instant Access Savings demand deposit product.
+
+**Product data**
+Product Business Instant Access Savings
+Bank Revolut Bank UAB, acting via its branch in the Netherlands (our “Netherlands Branch”)
+
+Establishment number 000053153170
+
+Address: Barbara Strozzilaan 101, 1083HN Amsterdam, the Netherlands.
+
+Revolut bank UAB Address: Konstitucijos ave 21B, LT-08130, Vilnius, Lithuania Company No: 304580906
+Product type Demand deposit
+Currency Indefinite. The account can be closed at any time.
+Deposit amount No minimum deposit amount.
+
+The total amount of money you can add to your Instant Access Savings (and cumulatively across all your savings with Revolut) is limited to €50.000.000.
+
+In case you have several accounts with Revolut Bank UAB all your deposits held with Revolut Bank UAB are aggregated and the insurance coverage limit of EUR 100,000 applies to the total amount of your deposits. Please also note that some exceptions apply. More information can be found in the [Deposit Insurance Information Document](https://www.revolut.com/en-NL/legal/deposit-insurance-information/)
+Deposit start date The date when the money is received in the Instant Access Savings. This happens immediately after you deposit funds from your Business account to the Instant Access Savings.
+**Risks**
+Risk in the event of insolvency of the bank Deposits held with Revolut Bank UAB are insured by the Lithuanian Public Institution "Deposit and Investment Insurance". Insurance coverage limit: up to EUR 100.000 for a single depositor for all their deposits held with Revolut Bank UAB. In case you have several accounts with Revolut Bank UAB all your deposits held with Revolut Bank UAB are aggregated and the insurance coverage limit of EUR 100,000 applies to the total amount of your deposits. Please also note that some exceptions apply. More information can be found in the [Deposit Insurance Information Document](https://www.revolut.com/en-NL/legal/deposit-insurance-information/).
+**Interest**
+Interest type Variable. This means that we may change the interest rate from time to time as described in the Business Instant Access Savings Terms.
+Interest rate (Basic)1,25% per annum (p.a.)
+Interest rate (Grow)1,55% per annum (p.a.)
+Interest rate (Scale)2,00% per annum (p.a.)
+Interest rate (Enterprise)2,50% per annum (p.a.)
+Interest calculation and payment The interest is calculated based on the actual number of days in a year, and the actual number of days in a month.
+
+The interest is calculated daily on the balance of the Instant Access Savings and paid daily to this account.
+
+The interest will begin accruing on the same calendar day after you deposit funds from your Business account to your Instant Access Savings.
+
+You’ll earn interest on your balance in the Instant Access Savings until the calendar day prior to you withdrawing the funds from the Instant Access Savings.
+Interest rate change Revolut has the right to change the interest rate. If the rate is decreased, then we’ll let you know at least **7 (seven) calendar days** before the change is made.
+
+If the rate is increased, Revolut can make the change immediately. We may notify you about it prior or after the change.
+**Costs**
+Total costs You can open the Instant Access Savings and deposit and withdraw funds free of charge.
+**Availability**
+During the term You can deposit and withdraw funds from the Instant Access Savings at any time from within the Revolut Business app.
+**Taxation**
+Tax Revolut Bank does not charge any tax that applies to you for and in relation to Revolut Bank services under this agreement.
+
+**You have sole responsibility for the management of your tax and legal obligations.**
+
+Under Dutch tax regulations, Revolut is required to keep records of, and report to the Dutch authorities, information pertaining to the Business Instant Access Savings . Under these reporting obligations
+
+(“**RENSAGEG reporting**”), Revolut are obligated to provide certain details such as the interest payments made to the account.
+
+Further information regarding general conditions of this product can be found in the Business Instant Access Savings Terms.
+**Other deposit requirements**
+Rejection of deposit Revolut reserves the right to reject deposits without giving any reasons.
+
+Further information regarding general conditions of this product can be found in the Business Instant Access Savings Terms.

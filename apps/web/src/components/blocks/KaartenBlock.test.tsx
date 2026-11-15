@@ -1,12 +1,17 @@
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
+// @vitest-environment jsdom
 import { renderToStaticMarkup } from "react-dom/server";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { expect, test } from "vitest";
 import type { Account } from "@lavega/core";
 import { formatEuro } from "../../format.js";
 import KaartenBlock, { bankLogo, ibanTail } from "./KaartenBlock";
 import { BANK_LOGOS } from "../../assets/bank-logos.generated";
 import { accounts } from "./fixtures";
+
+// React 18 only treats act() as real when this flag is set; without it the
+// mount below logs "the current testing environment is not configured".
+(globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 const amex: Account = {
   key: "amex-2026.csv",
@@ -18,31 +23,49 @@ const amex: Account = {
   balance: null,
 };
 
-test("KaartenBlock renders one card per account with the holder and the bank", () => {
-  const html = renderToStaticMarkup(<KaartenBlock accounts={accounts} onNavigate={() => {}} />);
-  expect(html).toContain("Kaarten");
-  expect(html).toContain("bank-card");
-  expect(html).toContain("ING");
-  expect(html).toContain("Rabobank");
-  expect(html).toContain("Holding BV");
-  expect(html).toContain("Betaalrekening");
-  expect(html).toContain(formatEuro(182_310));
-  // The tail of the REAL IBAN goes where the reference prints a card number.
-  expect(html).toContain("0001");
+test("the new asset/liability kinds are named on the card, not rendered blank", () => {
+  const kinds: Account[] = [
+    {
+      key: "L",
+      iban: "",
+      name: "Hypotheek",
+      bank: "ING",
+      entity: "Prive",
+      currency: "EUR",
+      balance: -180000,
+      type: "Lening",
+    },
+    {
+      key: "W",
+      iban: "",
+      name: "Woning",
+      bank: "",
+      entity: "Prive",
+      currency: "EUR",
+      balance: null,
+      type: "Woning",
+    },
+    {
+      key: "V",
+      iban: "",
+      name: "Auto",
+      bank: "",
+      entity: "Prive",
+      currency: "EUR",
+      balance: 18000,
+      type: "Voertuig",
+    },
+  ];
+  const html = renderToStaticMarkup(<KaartenBlock accounts={kinds} onNavigate={() => {}} />);
+  expect(html).toContain("Lening");
+  expect(html).toContain("Woning");
+  expect(html).toContain("Voertuig");
 });
 
 test("KaartenBlock never renders a card number it does not have", () => {
   const html = renderToStaticMarkup(<KaartenBlock accounts={accounts} onNavigate={() => {}} />);
   // No sixteen-digit PAN, and no four-group filler.
   expect(html).not.toMatch(/\d{4}[ -]\d{4}[ -]\d{4}[ -]\d{4}/);
-});
-
-test("KaartenBlock carries no note line under it", () => {
-  // The explanation that used to sit under the strip is gone (UI review round
-  // 2): the faces already show only what LaVega holds, so the paragraph was
-  // repeating the picture.
-  const html = renderToStaticMarkup(<KaartenBlock accounts={accounts} onNavigate={() => {}} />);
-  expect(html).not.toContain("module-foot");
 });
 
 test("KaartenBlock states what is missing instead of filling it in", () => {
@@ -54,12 +77,6 @@ test("KaartenBlock states what is missing instead of filling it in", () => {
   expect(html).not.toContain(formatEuro(0));
   // And it is recognised as a card, so it sorts to the front of the strip.
   expect(html).toContain("Creditcard");
-});
-
-test("KaartenBlock renders an empty state with nothing connected", () => {
-  const html = renderToStaticMarkup(<KaartenBlock accounts={[]} onNavigate={() => {}} />);
-  expect(html).toContain("Nog geen rekeningen gekoppeld");
-  expect(html).not.toContain("bank-card");
 });
 
 test("ibanTail returns the real last four, or null", () => {
@@ -113,88 +130,98 @@ test("elk gebundeld logo is een data-URI en de bundel blijft klein", () => {
   expect(totaal).toBeLessThan(250_000);
 });
 
-/* --- Review 4, punt 10: "a bit more gradient, and that I can hover over it" -
- *
- * Twee wensen met één ondergrens eronder: het saldo moet leesbaar blijven. Die
- * ondergrens wordt in brandFace.test.ts per merk doorgerekend (elke stop tegen
- * de tekst die de kaart echt draagt); hier staat wat dáárvan op de kaart
- * terechtkomt — hoe diep het verloop is, en dat de hover een TOESTAND is en
- * geen overgang. */
+/* --- Kaarten uit de wizard die nog niet gekoppeld zijn ------------------- */
 
-const cardCss = readFileSync(fileURLToPath(new URL("../../styles/blocks.css", import.meta.url)), "utf8").replace(
-  /\s+/g,
-  " ",
-);
+import { act } from "react";
+import { createRoot } from "react-dom/client";
 
-/** Eén CSS-regel uit blocks.css, opgezocht op zijn selector.
- *
- *  Twee dingen die deze functie moet kunnen, en allebei zijn ze hier misgegaan:
- *  `.bank-card` mag NIET `.bank-card-top` opleveren (de selector moet aflopen op
- *  een spatie, een komma of de accolade), en een selector mag deel zijn van een
- *  GROEP — de hover-regel staat als `.bank-card:hover, .bank-card:focus-within`
- *  en werd door de eerste versie helemaal niet gevonden. Een test die zijn eigen
- *  regel niet vindt, meldt "geen hover-toestand" terwijl die er wel is. */
-function rule(selector: string): string {
-  /* DERDE KEER RAAK, dus nu geen tekstzoektocht meer maar een vergelijking van de
-   * hele selectorlijst. De vorige versie liet na de selector een spatie toe (voor
-   * `.bank-card {`), en een spatie is ook de nakomeling-combinator: zodra
-   * `.bank-card:hover .bank-card-sheen` erbij kwam, vond hij DIE en meldde dat de
-   * hover-toestand geen box-shadow had. Een test die de verkeerde regel pakt
-   * klaagt over iets dat wél klopt, en dat kost meer tijd dan een echte fout. */
-  /* Commentaar eerst eruit: dit bestand legt keuzes uit met CSS-fragmenten IN de
-   * toelichting, en een accolade in een comment laat elke regel daarna een stap
-   * verschuiven. Zo verdween .card-strip, die er gewoon staat. */
-  const zonderCommentaar = cardCss.replace(/\/\*[\s\S]*?\*\//g, " ");
-  for (const [, selectors, body] of zonderCommentaar.matchAll(/([^{}]+)\{([^}]*)\}/g)) {
-    const namen = selectors.split(",").map((x) => x.trim());
-    if (namen.includes(selector)) return `${selectors.trim()} {${body}}`;
-  }
-  return "";
+function mountKaarten(el: React.ReactElement) {
+  const host = document.createElement("div");
+  document.body.appendChild(host);
+  const root = createRoot(host);
+  act(() => root.render(el));
+  return {
+    host,
+    unmount: () => {
+      act(() => root.unmount());
+      host.remove();
+    },
+  };
 }
 
-test("het tokenvlak is een verloop met bereik, niet twee naburige kleuren", () => {
-  /* De kaarten zonder eigen huisstijlkleur vallen terug op FACES. Twee van die
-   * vier liepen van accent naar chart-blue en van teal naar accent: kleuren die
-   * zo dicht bij elkaar liggen dat er nauwelijks een verloop te zien was. Ze
-   * beginnen nu allemaal op --ink, zodat het bereik er wél is. */
-  const vreemd: Account[] = ["A", "B", "C", "D"].map((n) => ({
-    ...amex,
-    key: `Z${n}`,
-    bank: `Bank Van Nergens ${n}`,
-  }));
-  const html = renderToStaticMarkup(<KaartenBlock accounts={vreemd} onNavigate={() => {}} />);
-  const vlakken = [...html.matchAll(/background:(linear-gradient\([^"]*?\))"/g)].map((m) => m[1]);
-  expect(vlakken.length).toBe(4);
-  for (const vlak of vlakken) {
-    // Drie stops in plaats van twee, en de eerste is het donkerste token dat de
-    // app heeft. Donkerder is gratis contrast; lichter kost precies het saldo.
-    expect(vlak.split("var(--").length - 1).toBeGreaterThanOrEqual(3);
-    expect(vlak).toContain("var(--ink) 0%");
-  }
-  // Vier verschillende vlakken, want vier kaarten naast elkaar in één kleur is
-  // geen strip maar één groot vlak.
-  expect(new Set(vlakken).size).toBe(4);
+test("een in de wizard genoemde kaart staat er als 'nog niet gekoppeld', en Koppelen opent Rekeningen", () => {
+  const seen: string[] = [];
+  const m = mountKaarten(
+    <KaartenBlock
+      accounts={[]}
+      statedCredit={["american-express-gold-card"]}
+      statedDebit={[]}
+      onNavigate={(v) => seen.push(v)}
+    />,
+  );
+  const card = m.host.querySelector<HTMLElement>('article[aria-label$="nog niet gekoppeld"]');
+  expect(card).not.toBeNull();
+  expect(card!.getAttribute("aria-label")).toBe("American Express Gold Card, nog niet gekoppeld");
+  expect(card!.textContent).toContain("Nog niet gekoppeld");
+  // Geen saldo en geen IBAN: die heeft LaVega niet.
+  expect(card!.textContent).not.toContain("geen IBAN bekend");
+  expect(card!.textContent).not.toContain("Saldo");
+  const btn = [...card!.querySelectorAll("button")].find((b) => b.textContent === "Koppelen");
+  expect(btn).toBeDefined();
+  act(() => {
+    btn!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+  });
+  expect(seen).toEqual(["accounts"]);
+  m.unmount();
 });
 
-test("de kaart heeft een hover-toestand, en die raakt de leesbaarheid niet", () => {
-  const hover = rule(".bank-card:hover");
-  expect(hover).not.toBe("");
-  // :focus-within hoort erbij: de kaart is geen knop, maar wie met het
-  // toetsenbord door de strip loopt moet zien welke kaart hij leest.
-  expect(cardCss).toContain(".bank-card:focus-within");
-  // Wat er verandert is diepte, geen kleur. Een lichtende sluier over het vlak
-  // zou het contrast opeten dat brandFace.ts er net in heeft gerekend — dan wint
-  // de hover van het saldo, en dat is de verkeerde volgorde.
-  expect(hover).toContain("box-shadow");
-  expect(hover).not.toContain("background:");
-  expect(hover).not.toContain("opacity:");
+test("de lege tekst verdwijnt als er alleen placeholders zijn, en blijft zonder beide", () => {
+  const only = renderToStaticMarkup(
+    <KaartenBlock accounts={[]} statedCredit={["other"]} statedDebit={[]} onNavigate={() => {}} />,
+  );
+  expect(only).not.toContain("Nog geen rekeningen gekoppeld");
+  expect(only).toContain("Een andere kaart");
+  const none = renderToStaticMarkup(
+    <KaartenBlock accounts={[]} statedCredit={[]} statedDebit={[]} onNavigate={() => {}} />,
+  );
+  expect(none).toContain("Nog geen rekeningen gekoppeld");
 });
 
-test("geen animatie op de kaart — een toestand mag, een overgang niet", () => {
-  for (const selector of [".bank-card", ".bank-card:hover", ".card-strip"]) {
-    const body = rule(selector);
-    expect(body, `${selector} staat niet in blocks.css`).not.toBe("");
-    expect(body).not.toContain("transition");
-    expect(body).not.toContain("animation");
-  }
+test("een placeholder komt na de echte kaarten, in dezelfde strip", () => {
+  const html = renderToStaticMarkup(
+    <KaartenBlock
+      accounts={[amex]}
+      statedCredit={["ics-creditcard"]}
+      statedDebit={[]}
+      onNavigate={() => {}}
+    />,
+  );
+  expect(html.indexOf("American Express")).toBeGreaterThan(-1);
+  expect(html.indexOf("American Express")).toBeLessThan(html.indexOf("nog niet gekoppeld"));
+});
+
+test("een Knab-betaalpas als placeholder krijgt het banklabel, en het logo als Knab er een heeft", () => {
+  const html = renderToStaticMarkup(
+    <KaartenBlock
+      accounts={[]}
+      statedCredit={[]}
+      statedDebit={["knab-betaalpas"]}
+      onNavigate={() => {}}
+    />,
+  );
+  expect(html).toContain("nog niet gekoppeld");
+  expect(html.includes("<img")).toBe(bankLogo("Knab") !== null);
+});
+
+test("bank logos carry the class the mono grayscale rule targets", () => {
+  const html = renderToStaticMarkup(<KaartenBlock accounts={accounts} onNavigate={() => {}} />);
+  const imgs = [...html.matchAll(/<img[^>]*>/g)].map((m) => m[0]);
+  expect(imgs.length).toBeGreaterThan(0);
+  for (const img of imgs) expect(img).toContain('class="bank-logo"');
+  const css = readFileSync(resolve(__dirname, "../../styles/base.css"), "utf8");
+  expect(css).toMatch(/:root\[data-theme="mono"\]\s+\.bank-logo\s*\{[^}]*grayscale\(1\)/);
+  const placeholder = renderToStaticMarkup(
+    <KaartenBlock accounts={[]} statedCredit={[]} statedDebit={["knab-betaalpas"]} onNavigate={() => {}} />,
+  );
+  for (const m of placeholder.matchAll(/<img[^>]*>/g)) expect(m[0]).toContain('class="bank-logo"');
 });

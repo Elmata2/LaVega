@@ -1,21 +1,21 @@
 import { describe, expect, test } from "vitest";
-import { assignTradeIds } from "@lavega/core";
+import { assignTradeIds, calculatePositionReturn } from "@lavega/core";
 import { parseFlexStatement } from "./flexParser.js";
 
 const xml = `<FlexStatements><FlexStatement><OpenPositions>
   <OpenPosition symbol="AAPL" isin="US0378331005" position="2" avgPrice="100" markPrice="110" positionValue="220" currency="USD" reportDate="20260818" description="Apple &amp; Co" />
 </OpenPositions><Trades>
   <Trade symbol="AAPL" transactionID="tx-1" tradeDate="20260818;101500" buySell="BUY" quantity="2" tradePrice="100" proceeds="-200" ibCommission="1" currency="USD" />
-</Trades><CashReport>
+</Trades><Transfers></Transfers><CorporateActions></CorporateActions><CashReport>
   <CashReportCurrency accountId="U1" currency="USD" toDate="20260818" endingCash="125.50" />
   <CashReportCurrency accountId="U2" currency="USD" toDate="20260818" endingCash="24.50" />
   <CashReportCurrency accountId="U1" currency="EUR" toDate="20260818" endingCash="80" />
   <CashReportCurrency accountId="U1" currency="Base Summary" toDate="20260818" endingCash="250" />
 </CashReport><StatementOfFunds>
   <StatementOfFundsLine accountId="U1" transactionID="deposit-1" date="20260810" currency="USD" activityCode="DEP" activityDescription="Deposit" amount="100" />
-  <StatementOfFundsLine accountId="U1" transactionID="withdrawal-1" date="20260811" currency="USD" activityCode="WTH" activityDescription="Withdrawal" amount="50" />
+  <StatementOfFundsLine accountId="U1" transactionID="withdrawal-1" date="20260811" currency="USD" activityCode="WTH" activityDescription="Withdrawal" amount="-50" />
   <StatementOfFundsLine accountId="U1" transactionID="interest-1" date="20260812" currency="USD" activityCode="BINT" activityDescription="Broker interest paid" amount="1.25" />
-  <StatementOfFundsLine accountId="U1" transactionID="fee-1" date="20260813" currency="USD" activityCode="FEE" activityDescription="Data fee" amount="3" />
+  <StatementOfFundsLine accountId="U1" transactionID="fee-1" date="20260813" currency="USD" activityCode="FEE" activityDescription="Data fee" amount="-3" />
   <StatementOfFundsLine accountId="U1" transactionID="trade-cash-1" date="20260814" currency="USD" activityCode="BUY" activityDescription="AAPL purchase" amount="-200" />
   <StatementOfFundsLine accountId="U1" transactionID="dividend-1" date="20260815" currency="USD" activityCode="DIV" activityDescription="AAPL dividend" symbol="AAPL" isin="US0378331005" amount="2.50" />
   <StatementOfFundsLine accountId="U1" transactionID="deposit-1" date="20260810" currency="USD" activityCode="DEP" activityDescription="Deposit" amount="100" />
@@ -26,55 +26,225 @@ describe("parseFlexStatement", () => {
     const result = parseFlexStatement(xml, "personal");
 
     expect(result.problems).toEqual([]);
-    expect(result.positions).toEqual([expect.objectContaining({
-      entity: "personal",
-      symbol: "AAPL",
-      isin: "US0378331005",
-      quantity: 2,
-      marketValue: 220,
-      asOf: "2026-08-18",
-      description: "Apple & Co",
-    })]);
-    expect(result.trades).toEqual([expect.objectContaining({
-      entity: "personal",
-      side: "buy",
-      date: "2026-08-18",
-      quantity: 2,
-      amount: -200,
-      brokerTradeId: "tx-1",
-    })]);
-    expect(result.cashBalances).toEqual([
+    expect(Object.values(result.sections).every((value) => value.status === "complete")).toBe(true);
+    expect(result.sections.positions.rows).toEqual([
+      expect.objectContaining({
+        entity: "personal",
+        symbol: "AAPL",
+        isin: "US0378331005",
+        quantity: 2,
+        marketValue: 220,
+        asOf: "2026-08-18",
+        description: "Apple & Co",
+      }),
+    ]);
+    expect(result.sections.trades.rows).toEqual([
+      expect.objectContaining({
+        entity: "personal",
+        side: "buy",
+        date: "2026-08-18",
+        executionAt: "2026-08-18T10:15:00",
+        quantity: 2,
+        amount: -200,
+        brokerTradeId: "tx-1",
+      }),
+    ]);
+    expect(result.sections.cashBalances.rows).toEqual([
       expect.objectContaining({ broker: "ibkr", currency: "USD", amount: 150, asOf: "2026-08-18" }),
       expect.objectContaining({ broker: "ibkr", currency: "EUR", amount: 80, asOf: "2026-08-18" }),
     ]);
-    expect(result.cashFlows).toEqual([
+    expect(result.sections.cashFlows.rows).toEqual([
       expect.objectContaining({ brokerFlowId: "U1:deposit-1", kind: "deposit", amount: 100 }),
       expect.objectContaining({ brokerFlowId: "U1:withdrawal-1", kind: "withdrawal", amount: -50 }),
       expect.objectContaining({ brokerFlowId: "U1:interest-1", kind: "interest", amount: 1.25 }),
       expect.objectContaining({ brokerFlowId: "U1:fee-1", kind: "fee", amount: -3 }),
       expect.objectContaining({ brokerFlowId: "U1:trade-cash-1", kind: "other", amount: -200 }),
     ]);
-    expect(result.dividends).toEqual([expect.objectContaining({
-      broker: "ibkr",
-      brokerDividendId: "U1:dividend-1",
-      symbol: "AAPL",
-      amount: 2.5,
-    })]);
+    expect(result.sections.dividends.rows).toEqual([
+      expect.objectContaining({
+        broker: "ibkr",
+        brokerDividendId: "U1:dividend-1",
+        symbol: "AAPL",
+        amount: 2.5,
+      }),
+    ]);
   });
 
   test("keeps valid rows when one row is malformed", () => {
-    const result = parseFlexStatement(xml.replace('symbol="AAPL" transactionID', 'transactionID'), "personal");
+    const result = parseFlexStatement(
+      xml.replace('symbol="AAPL" transactionID', "transactionID"),
+      "personal",
+    );
 
-    expect(result.positions).toHaveLength(1);
-    expect(result.trades).toHaveLength(0);
+    expect(result.sections.positions.rows).toHaveLength(1);
+    expect(result.sections.trades.rows).toHaveLength(0);
+    expect(result.sections.trades.status).toBe("partial");
     expect(result.problems).toEqual(["IBKR Flex Trade symbol is missing"]);
   });
 
   test("uses core identity assignment for repeated trades", () => {
     const result = parseFlexStatement(xml, "personal");
-    const [withId] = assignTradeIds(result.trades);
+    const [withId] = assignTradeIds(result.sections.trades.rows);
     expect(withId?.id).toBeTruthy();
   });
+
+  test("normalizes a signed sell and reconstructs same-day fills by execution time", () => {
+    const result = parseFlexStatement(
+      `<FlexStatements><FlexStatement><Trades>
+        <Trade symbol="AAPL" transactionID="sell" tradeDate="20260818;100000" buySell="SELL" quantity="-2" tradePrice="12" proceeds="24" ibCommission="0" currency="EUR" />
+        <Trade symbol="AAPL" transactionID="buy" tradeDate="20260818;090000" buySell="BUY" quantity="10" tradePrice="10" proceeds="-100" ibCommission="0" currency="EUR" />
+      </Trades></FlexStatement></FlexStatements>`,
+      "personal",
+    );
+    const trades = assignTradeIds(result.sections.trades.rows);
+
+    expect(result.problems).toEqual([]);
+    expect(
+      trades.map(({ side, quantity, date, executionAt }) => ({
+        side,
+        quantity,
+        date,
+        executionAt,
+      })),
+    ).toEqual([
+      {
+        side: "sell",
+        quantity: 2,
+        date: "2026-08-18",
+        executionAt: "2026-08-18T10:00:00",
+      },
+      {
+        side: "buy",
+        quantity: 10,
+        date: "2026-08-18",
+        executionAt: "2026-08-18T09:00:00",
+      },
+    ]);
+    expect(calculatePositionReturn(8, 80, trades, [], "EUR", [])).toMatchObject({
+      status: "available",
+      remainingCostBasis: 80,
+      realizedCostBasisRemoved: 20,
+      realizedGain: 4,
+    });
+  });
+
+  test("keeps date-only trades without inventing an execution timestamp", () => {
+    const result = parseFlexStatement(
+      `<FlexStatements><FlexStatement><Trades>
+        <Trade symbol="AAPL" tradeDate="20260818" buySell="BUY" quantity="1" tradePrice="10" proceeds="-10" ibCommission="0" currency="EUR" />
+      </Trades></FlexStatement></FlexStatements>`,
+      "personal",
+    );
+
+    expect(result.sections.trades.rows[0]).toMatchObject({ date: "2026-08-18", quantity: 1 });
+    expect(result.sections.trades.rows[0]).not.toHaveProperty("executionAt");
+  });
+
+  const body = xml.slice(
+    xml.indexOf("<FlexStatement>") + "<FlexStatement>".length,
+    xml.indexOf("</FlexStatement>"),
+  );
+  const statements = (...accounts: [string, string, string, string][]) =>
+    `<FlexStatements>${accounts
+      .map(
+        ([account, from, to, content]) =>
+          `<FlexStatement accountId="${account}" fromDate="${from}" toDate="${to}">${content}</FlexStatement>`,
+      )
+      .join("")}</FlexStatements>`;
+  const withoutFunds = body.slice(0, body.indexOf("<StatementOfFunds>"));
+
+  test.each([
+    ["without a statement period", xml, { status: "unknown" }],
+    [
+      "for one account statement period",
+      statements(["U1", "20260801", "20260818", body]),
+      { status: "complete", from: "2026-08-01", to: "2026-08-18", tradeCash: "cash-flows" },
+    ],
+    [
+      "when every account statement covers the same period",
+      statements(["U1", "20260801", "20260818", body], ["U2", "20260801", "20260818", body]),
+      { status: "complete", from: "2026-08-01", to: "2026-08-18", tradeCash: "cash-flows" },
+    ],
+    [
+      "not when one account statement lacks Statement of Funds",
+      statements(
+        ["U1", "20260801", "20260818", body],
+        ["U2", "20260801", "20260818", withoutFunds],
+      ),
+      { status: "unknown" },
+    ],
+    [
+      "not when account statements start on different dates",
+      statements(["U1", "20260803", "20260818", body], ["U2", "20260801", "20260818", body]),
+      { status: "unknown" },
+    ],
+    [
+      "not when account statements end on different dates",
+      statements(["U1", "20260801", "20260818", body], ["U2", "20260801", "20260817", body]),
+      { status: "unknown" },
+    ],
+    [
+      "not with a partial Statement of Funds",
+      statements(["U1", "20260801", "20260818", body.replace('amount="-3"', "")]),
+      { status: "unknown" },
+    ],
+  ])("proves cash history %s", (_, statement, expected) => {
+    expect(parseFlexStatement(statement, "personal").cashHistory).toMatchObject({
+      entity: "personal",
+      broker: "ibkr",
+      ...expected,
+    });
+  });
+
+  test("proves quantity history only when every statement lists Trades, Transfers and CorporateActions with no transfer or corporate-action rows", () => {
+    const cash = (flex: string) => parseFlexStatement(flex, "personal").cashHistory;
+    const without = (tag: string) => body.replace(new RegExp(`<${tag}>[\\s\\S]*?</${tag}>`), "");
+    const withRows = (tag: string, row: string) =>
+      body.replace(`<${tag}></${tag}>`, `<${tag}>${row}</${tag}>`);
+    const one = (content: string) => cash(statements(["U1", "20260801", "20260818", content]));
+    expect(body).toContain("<Transfers></Transfers><CorporateActions></CorporateActions>");
+
+    expect(one(body)).toMatchObject({ status: "complete", quantityProvenFrom: "2026-08-01" });
+    expect(one(body.replace("<Transfers></Transfers>", "<Transfers />"))).toHaveProperty(
+      "quantityProvenFrom",
+    );
+    for (const missing of ["Trades", "Transfers", "CorporateActions"])
+      expect(one(without(missing)), missing).not.toHaveProperty("quantityProvenFrom");
+    expect(
+      one(withRows("Transfers", '<Transfer symbol="VUSA" quantity="93" direction="IN" />')),
+    ).not.toHaveProperty("quantityProvenFrom");
+    expect(
+      one(withRows("CorporateActions", '<CorporateAction symbol="VUSA" quantity="5" />')),
+    ).not.toHaveProperty("quantityProvenFrom");
+    expect(
+      cash(
+        statements(
+          ["U1", "20260801", "20260818", body],
+          ["U2", "20260801", "20260818", without("CorporateActions")],
+        ),
+      ),
+    ).not.toHaveProperty("quantityProvenFrom");
+  });
+
+  test("recognises self-closed Trades, Transfers and CorporateActions tags", () => {
+    const flex =
+      '<FlexStatements><FlexStatement accountId="U1" fromDate="20260801" toDate="20260818"><OpenPositions></OpenPositions><Trades/><Transfers/><CorporateActions/><CashReport></CashReport><StatementOfFunds></StatementOfFunds></FlexStatement></FlexStatements>';
+    const result = parseFlexStatement(flex, "personal");
+    expect(result.sections.trades.status).toBe("complete");
+    expect(result.cashHistory).toHaveProperty("quantityProvenFrom", "2026-08-01");
+  });
+
+  test.each(["Base Summary", "BASE_SUMMARY"])(
+    "leaves the %s Cash Report row out of the cash balances",
+    (summary) => {
+      const result = parseFlexStatement(
+        xml.replace('currency="Base Summary"', `currency="${summary}"`),
+        "personal",
+      );
+
+      expect(result.sections.cashBalances.rows.map((row) => row.currency)).toEqual(["USD", "EUR"]);
+    },
+  );
 
   test("keeps partial cash history and reports invalid cash rows", () => {
     const partial = `<FlexStatements><FlexStatement><CashReport>
@@ -85,8 +255,123 @@ describe("parseFlexStatement", () => {
     </StatementOfFunds></FlexStatement></FlexStatements>`;
     const result = parseFlexStatement(partial, "personal");
 
-    expect(result.cashBalances).toEqual([expect.objectContaining({ currency: "GBP", amount: 25 })]);
-    expect(result.cashFlows).toEqual([expect.objectContaining({ brokerFlowId: "ok", kind: "deposit" })]);
+    expect(result.sections.cashBalances.rows).toEqual([
+      expect.objectContaining({ currency: "GBP", amount: 25 }),
+    ]);
+    expect(result.sections.cashFlows.rows).toEqual([
+      expect.objectContaining({ brokerFlowId: "ok", kind: "deposit" }),
+    ]);
     expect(result.problems).toEqual(["IBKR Flex Statement of Funds amount is missing or invalid"]);
+    expect(result.sections.cashBalances.status).toBe("complete");
+    expect(result.sections.cashFlows.status).toBe("partial");
+  });
+});
+
+describe("parseFlexStatement position date", () => {
+  const position = `<OpenPosition accountId="U1" symbol="AAPL" position="2" currency="USD" />`;
+
+  test("falls back to the enclosing statement's toDate", () => {
+    const result = parseFlexStatement(
+      `<FlexStatements><FlexStatement accountId="U1" toDate="20261002"><OpenPositions>${position}</OpenPositions></FlexStatement></FlexStatements>`,
+      "personal",
+    );
+    expect(result.sections.positions.rows).toEqual([
+      expect.objectContaining({ symbol: "AAPL", asOf: "2026-10-02" }),
+    ]);
+  });
+
+  test("uses each statement's own toDate", () => {
+    const result = parseFlexStatement(
+      `<FlexStatements><FlexStatement accountId="U1" toDate="20261002"><OpenPositions><OpenPosition accountId="U1" symbol="AAPL" position="2" currency="USD" /></OpenPositions></FlexStatement><FlexStatement accountId="U2" toDate="20261001"><OpenPositions><OpenPosition accountId="U2" symbol="MSFT" position="3" currency="USD" /></OpenPositions></FlexStatement></FlexStatements>`,
+      "personal",
+    );
+    expect(result.problems).toEqual([]);
+    expect(result.sections.positions.rows.map((row) => [row.symbol, row.asOf])).toEqual([
+      ["AAPL", "2026-10-02"],
+      ["MSFT", "2026-10-01"],
+    ]);
+  });
+
+  test("says the date is missing and names the column when no date exists", () => {
+    const result = parseFlexStatement(
+      `<FlexStatements><FlexStatement accountId="U1"><OpenPositions>${position}</OpenPositions></FlexStatement></FlexStatements>`,
+      "personal",
+    );
+    expect(result.sections.positions.rows).toEqual([]);
+    expect(result.problems).toHaveLength(1);
+    expect(result.problems[0]).toMatch(/missing/);
+    expect(result.problems[0]).toMatch(/Report Date/);
+  });
+
+  test("keeps saying invalid for a malformed reportDate", () => {
+    const result = parseFlexStatement(
+      `<FlexStatements><FlexStatement toDate="20261002"><OpenPositions><OpenPosition symbol="AAPL" position="2" reportDate="soon" /></OpenPositions></FlexStatement></FlexStatements>`,
+      "personal",
+    );
+    expect(result.problems[0]).toMatch(/invalid date/);
+  });
+});
+
+describe("parseFlexStatement currency pairs", () => {
+  const stk = `<OpenPosition accountId="U1" assetCategory="STK" symbol="AAPL" position="2" currency="USD" reportDate="20261002" />`;
+  const fx = `<OpenPosition accountId="U1" assetCategory="CASH" symbol="EUR.USD" position="500" currency="USD" reportDate="20261002" />`;
+  const stkTrade = `<Trade accountId="U1" assetCategory="STK" symbol="AAPL" transactionID="t-1" tradeDate="20261001" buySell="BUY" quantity="2" tradePrice="100" currency="USD" />`;
+  const fxTrade = `<Trade accountId="U1" assetCategory="cash" symbol="EUR.USD" transactionID="t-2" tradeDate="20261001" buySell="BUY" quantity="500" tradePrice="1.1" currency="USD" />`;
+
+  test("skips CASH open positions without reporting a problem", () => {
+    const result = parseFlexStatement(
+      `<FlexStatements><FlexStatement><OpenPositions>${stk}${fx}</OpenPositions></FlexStatement></FlexStatements>`,
+      "personal",
+    );
+    expect(result.problems).toEqual([]);
+    expect(result.sections.positions.rows.map((row) => row.symbol)).toEqual(["AAPL"]);
+  });
+
+  test("skips CASH trades without reporting a problem", () => {
+    const result = parseFlexStatement(
+      `<FlexStatements><FlexStatement><Trades>${stkTrade}${fxTrade}</Trades></FlexStatement></FlexStatements>`,
+      "personal",
+    );
+    expect(result.problems).toEqual([]);
+    expect(result.sections.trades.rows.map((row) => row.symbol)).toEqual(["AAPL"]);
+  });
+
+  test("keeps rows that carry no assetCategory", () => {
+    const result = parseFlexStatement(
+      `<FlexStatements><FlexStatement><OpenPositions><OpenPosition symbol="AAPL" position="2" currency="USD" reportDate="20261002" /></OpenPositions><Trades><Trade symbol="AAPL" transactionID="t-1" tradeDate="20261001" buySell="BUY" quantity="2" tradePrice="100" currency="USD" /></Trades></FlexStatement></FlexStatements>`,
+      "personal",
+    );
+    expect(result.sections.positions.rows).toHaveLength(1);
+    expect(result.sections.trades.rows).toHaveLength(1);
+  });
+});
+
+describe("IBKR cost basis columns", () => {
+  const parse = (attrs: string) =>
+    parseFlexStatement(
+      `<FlexStatements><FlexStatement accountId="U1" toDate="20261002"><OpenPositions><OpenPosition accountId="U1" symbol="VUSA" position="4" currency="EUR" ${attrs} /></OpenPositions></FlexStatement></FlexStatements>`,
+      "personal",
+    ).sections.positions.rows[0];
+
+  test("costBasisPrice and costBasisMoney give a known cost", () => {
+    const position = parse('costBasisPrice="50" costBasisMoney="210"');
+    expect(position?.averagePrice).toBe(50);
+    expect(position?.brokerCost).toEqual({ status: "known", amount: 210, currency: "EUR" });
+  });
+
+  test("costBasisMoney alone derives the average price", () => {
+    const position = parse('costBasisMoney="200"');
+    expect(position?.averagePrice).toBe(50);
+    expect(position?.brokerCost).toEqual({ status: "known", amount: 200, currency: "EUR" });
+  });
+
+  test("costBasisMoney alone does not derive a per-unit price for an option", () => {
+    const position = parse('assetCategory="OPT" costBasisMoney="2000"');
+    expect(position?.averagePrice).toBeNull();
+    expect(position?.brokerCost).toEqual({ status: "known", amount: 2000, currency: "EUR" });
+  });
+
+  test("costBasisMoney still derives the price for a stock", () => {
+    expect(parse('assetCategory="STK" costBasisMoney="200"')?.averagePrice).toBe(50);
   });
 });

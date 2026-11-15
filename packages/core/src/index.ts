@@ -1,9 +1,20 @@
 export const VERSION = "0.0.0";
 export * from "./model.js";
 export * from "./balance.js";
+export * from "./balanceSeries.js";
+export * from "./reports.js";
+export * from "./statements/index.js";
 export * from "./hash.js";
+export * from "./money.js";
+export * from "./budget.js";
+export * from "./transfers.js";
+export * from "./labels.js";
 export * from "./ingest.js";
+export * from "./csvImport.js";
 export * from "./views.js";
+/* Rules evaluator v2. Deliberately does NOT export `categorize` (views.ts owns
+ * it); its barrel exports only the engine, the types and the dry run. */
+export * from "./rules/index.js";
 export * from "./accounts.js";
 export * from "./entities.js";
 export * from "./tracking.js";
@@ -15,6 +26,7 @@ export * from "./catalog.js";
 export * from "./catalogMerge.js";
 export * from "./pdfText.js";
 export * from "./catalogRates.js";
+export * from "./businessSavings.js";
 export * from "./accountCosts.js";
 export * from "./netBenefit.js";
 export * from "./categorize.js";
@@ -40,6 +52,53 @@ export * from "./parsers/invoiceUbl.js";
 export * from "./parsers/parseInvoiceFile.js";
 export * from "./parsers/mt940.js";
 export * from "./parsers/parseBankFile.js";
+export * from "./parsers/degiro/read.js";
+export * from "./parsers/degiro/profiles.js";
+/* `AccountClassification` in this package already means asset vs liability
+ * (`./balance.ts`), so the DeGiro row bucket is exported under its own name. */
+export {
+  classifyAccountRow,
+  type AccountBucket,
+  type AccountRowRef,
+} from "./parsers/degiro/classify.js";
+export type { AccountClassification as DeGiroRowClassification } from "./parsers/degiro/classify.js";
+export * from "./parsers/degiro/saldo.js";
+export * from "./parsers/degiro/account.js";
+export * from "./parsers/degiro/dividends.js";
+export * from "./parsers/degiro/trades.js";
+export * from "./parsers/degiro/accountProfile.js";
 export * from "./parsers/parseBrokerFile.js";
 export * from "./fxRoutes.js";
+export * from "./n8nSettings.js";
 export * from "./spendPercentile.js";
+export * from "./plan/index.js";
+export * from "./localeRedirect.js";
+export * from "./redact.js";
+export * from "./agentTools.js";
+export * from "./provenance.js";
+export * from "./sentryScrub.js";
+export * from "./advisor/evidence.js";
+export * from "./advisor/profile.js";
+export * from "./advisor/profileSummary.js";
+export * from "./advisor/vaultSections.js";
+export * from "./advisor/publicFact.js";
+export * from "./advice/language.js";
+export * from "./advisor/months.js";
+export * from "./advisor/room.js";
+export * from "./advisor/proposals.js";
+export * from "./advisor/scopePersonal.js";
+export * from "./advisor/lenders.js";
+export * from "./advisor/incomeStreams.js";
+export * from "./advisor/housingProposal.js";
+export * from "./advisor/fixedCosts.js";
+export * from "./advisor/debts.js";
+export * from "./advisor/savings.js";
+export * from "./advisor/childSignal.js";
+export * from "./advisor/thresholds.js";
+export * from "./advisor/capacity.js";
+export * from "./advisor/riskScale.js";
+export * from "./advisor/knowledge.js";
+export * from "./advisor/resolve.js";
+export * from "./bills/index.js";
+export * from "./interop/index.js";
+export * from "./assistant.js";

@@ -2,9 +2,11 @@ import { useMemo, useState } from "react";
 import type { Account, OwnAccounts, Rule, Tx } from "@lavega/core";
 import { categorize, enrichTxs } from "@lavega/core";
 import type { View } from "../../App";
-import { formatEuro } from "../../format.js";
+import { formatSignedEuroIn } from "../../format.js";
 import Module from "../Module.js";
-import { dayLabelNL } from "./dates.js";
+import CardLink from "../ui/CardLink.js";
+import { useAppLocale } from "../../appLocale.js";
+import { moneyCopy, dayLabelIn, categoryLabel } from "../../copy/money.js";
 
 /* Recente transacties — `desktop homeview inspo.png`: the counterparty, the
  * date, our category chip, a search, and "bekijk alles".
@@ -30,7 +32,10 @@ const ROWS = 7;
 
 /** Does this row match what was typed? Counterparty, description and the
  *  derived category, case-insensitively. */
-export function matchesSearch(row: { counterparty: string; description: string; category: string }, q: string): boolean {
+export function matchesSearch(
+  row: { counterparty: string; description: string; category: string },
+  q: string,
+): boolean {
   const needle = q.trim().toLowerCase();
   if (needle === "") return true;
   return `${row.counterparty} ${row.description} ${row.category}`.toLowerCase().includes(needle);
@@ -53,6 +58,8 @@ export default function RecenteTransactiesBlock({
   onNavigate,
   onSelectCategory,
 }: RecenteTransactiesBlockProps) {
+  const [locale] = useAppLocale();
+  const c = moneyCopy[locale].recenteTransacties;
   const [query, setQuery] = useState("");
 
   const all = useMemo(
@@ -72,59 +79,57 @@ export default function RecenteTransactiesBlock({
 
   return (
     <Module
-      title="Recente transacties"
+      title={c.title}
       span={2}
       height="tall"
       period={
         <input
           type="search"
-          className="tx-search"
-          placeholder="Zoek op naam of categorie"
-          aria-label="Zoek in recente transacties"
+          className="w-60 max-w-full rounded-pill py-[6px] px-[14px] text-[0.8rem] min-w-0 [@media(max-width:520px)]:w-auto [@media(max-width:520px)]:flex-1"
+          data-testid="tx-search"
+          placeholder={c.zoekPlaceholder}
+          aria-label={c.zoekenAria}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
       }
-      menu={
-        <button type="button" className="card-link" onClick={() => onNavigate("transactions")}>
-          Bekijk alles →
-        </button>
-      }
+      menu={<CardLink onClick={() => onNavigate("transactions")}>{c.bekijkAlles}</CardLink>}
     >
       {all.length === 0 ? (
-        <p className="block-empty">Nog geen transacties.</p>
+        <p className="block-empty">{c.nogGeenTransacties}</p>
       ) : recent.length === 0 ? (
-        <p className="block-empty">Geen transactie gevonden voor “{query.trim()}”.</p>
+        <p className="block-empty">{c.geenTransactieGevondenVoor(query.trim())}</p>
       ) : (
         <div className="tx-list">
           {recent.map(({ tx, category }) => {
-            const name = tx.counterparty || tx.description || "Onbekende tegenpartij";
+            const name = tx.counterparty || tx.description || c.onbekendeTegenpartij;
             return (
               <div className="tx-row" key={tx.id}>
                 <div className="tx-row-info">
                   <div className="tx-desc">{name}</div>
                   <div className="eyebrow tx-meta">
-                    {dayLabelNL(tx.date)}
+                    {dayLabelIn(locale, tx.date)}
                     {/* Where the account sits is context, not identity. On a
                         phone it is what gives way so the merchant name and the
                         amount keep their line. */}
-                    <span className="tx-meta-extra">
+                    <span className="[@media(max-width:520px)]:hidden">
                       {" · "}
                       {tx.entity} · {tx.bank}
                     </span>
                   </div>
                 </div>
-                <div className="tx-row-right">
+                <div className="flex items-center gap-3 flex-none [@media(max-width:420px)]:flex-col-reverse [@media(max-width:420px)]:items-end [@media(max-width:420px)]:gap-1">
                   <button
                     type="button"
-                    className="tx-chip tx-chip-button"
-                    title={`Bekijk transacties in ${category}`}
+                    className="inline-flex items-center flex-none rounded-pill border border-line bg-surface-2 text-muted text-[0.72rem] py-[3px] px-[10px] whitespace-nowrap [@media(max-width:520px)]:text-[0.68rem] [@media(max-width:520px)]:px-2 cursor-pointer hover:text-ink hover:border-accent"
+                    data-testid="tx-chip"
+                    title={c.bekijkTransactiesIn(categoryLabel(locale, category))}
                     onClick={() => onSelectCategory(category)}
                   >
-                    {category}
+                    {categoryLabel(locale, category)}
                   </button>
                   <span className={`tx-amount ${tx.amount >= 0 ? "text-pos" : "text-neg"}`}>
-                    {formatEuro(tx.amount)}
+                    {formatSignedEuroIn(locale, tx.amount)}
                   </span>
                 </div>
               </div>

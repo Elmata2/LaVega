@@ -1,8 +1,28 @@
 import { afterEach, expect, test } from "vitest";
-import { createAgentRunRepository, createBrokerRepository, createOpaqueVaultRepository, createPreferencesRepository, createPriceBarRepository, createSyncStateRepository, decryptBlob, encryptBlob, requireUserId, withTenant } from "./index.js";
+import {
+  eraseUserData,
+  createAgentRunRepository,
+  createAiUsageRepository,
+  createBrokerRepository,
+  createDatabase,
+  createEbFlowRepository,
+  createN8nForwardingRepository,
+  createOpaqueVaultRepository,
+  createPreferencesRepository,
+  createPriceSyncStateRepository,
+  createSyncStateRepository,
+  decryptBlob,
+  encryptBlob,
+  requireUserId,
+  withTenant,
+  withTenantStatement,
+} from "./index.js";
 import type { QueryResultRow } from "@neondatabase/serverless";
+import { databaseOver } from "./testing.js";
 
-afterEach(() => { delete process.env.LAVEGA_ENCRYPTION_KEY; });
+afterEach(() => {
+  delete process.env.LAVEGA_ENCRYPTION_KEY;
+});
 
 test("encrypted blobs round-trip and do not contain plaintext", () => {
   process.env.LAVEGA_ENCRYPTION_KEY = "00".repeat(32);
@@ -17,6 +37,26 @@ test("encryption rejects missing or invalid key", () => {
   expect(() => encryptBlob({ value: 1 })).toThrow("32 bytes");
 });
 
+test("an idle socket error stays in the pool", async () => {
+  const db = createDatabase("postgres://user:pass@127.0.0.1/lavega");
+  const logged: string[] = [];
+  const write = console.error;
+  console.error = (line?: unknown) => {
+    logged.push(String(line));
+  };
+  try {
+    expect(db.emit("error", { message: "" })).toBe(true);
+    expect(db.emit("error", new Error("Connection terminated unexpectedly"))).toBe(true);
+  } finally {
+    console.error = write;
+    await db.end();
+  }
+  expect(logged).toEqual([
+    "database pool: connection closed",
+    "database pool: Connection terminated unexpectedly",
+  ]);
+});
+
 test("tenant identity is mandatory", () => {
   expect(() => requireUserId(undefined)).toThrow("Authenticated user identity is required");
   expect(() => requireUserId(" ")).toThrow("Authenticated user identity is required");
@@ -25,12 +65,24 @@ test("tenant identity is mandatory", () => {
 test("withTenant sets transaction-local identity and rolls back on failure", async () => {
   const calls: string[] = [];
   const client = {
-    query: async (sql: string) => { calls.push(sql); return { rows: [] }; },
+    query: async (sql: string) => {
+      calls.push(sql);
+      return { rows: [] };
+    },
     release: () => calls.push("release"),
   } as never;
-  const db = { connect: async () => client } as never;
-  await expect(withTenant(db, "user-1", async () => { throw new Error("fail"); })).rejects.toThrow("fail");
-  expect(calls).toEqual(["BEGIN", "SELECT set_config('app.user_id', $1, true)", "ROLLBACK", "release"]);
+  const db = databaseOver(async () => client);
+  await expect(
+    withTenant(db, "user-1", async () => {
+      throw new Error("fail");
+    }),
+  ).rejects.toThrow("fail");
+  expect(calls).toEqual([
+    "BEGIN",
+    "SELECT set_config('app.user_id', $1, true)",
+    "ROLLBACK",
+    "release",
+  ]);
 });
 
 function fakeDatabase(rows: QueryResultRow[] = []) {
@@ -42,67 +94,20 @@ function fakeDatabase(rows: QueryResultRow[] = []) {
     },
     release: () => undefined,
   } as never;
-  return { db: { connect: async () => client } as never, calls };
+  return { db: databaseOver(async () => client), calls };
 }
 
 const executed = (calls: Array<{ sql: string; values?: unknown[] }>) =>
-  calls.filter((call) => !["BEGIN", "COMMIT", "ROLLBACK"].includes(call.sql) && !call.sql.startsWith("SELECT set_config"));
-
-test("an unbounded price bar read asks for no date range at all", async () => {
-  /* The whole history used to be spelled '0000-01-01'..'9999-12-31'. Postgres has
-   * no year zero, so that read threw and every dashboard behind it came back
-   * empty. Omitting a bound has to mean "no bound", not a sentinel date. */
-  const { db, calls } = fakeDatabase();
-  const repository = createPriceBarRepository(db, "user-123");
-
-  await repository.getRange("AAPL");
-
-  const query = executed(calls)[0];
-  expect(query?.values).toEqual(["AAPL"]);
-  expect(query?.sql).not.toMatch(/BETWEEN|\$2/);
-});
-
-test("a half-open price bar read keeps only the bound it was given", async () => {
-  const { db, calls } = fakeDatabase();
-  const repository = createPriceBarRepository(db, "user-123");
-
-  await repository.getRange("AAPL", "2026-01-01");
-
-  const query = executed(calls)[0];
-  expect(query?.values).toEqual(["AAPL", "2026-01-01"]);
-  expect(query?.sql).toContain("date >= $2");
-  expect(query?.sql).not.toContain("date <= ");
-});
-
-test("price bars are read, written and purged inside the tenant transaction", async () => {
-  const { db, calls } = fakeDatabase([{ symbol: "AAPL", date: "2026-01-02", close: "120.50", currency: "USD" }]);
-  const repository = createPriceBarRepository(db, "user-123");
-
-  const bars = await repository.getRange("AAPL", "2026-01-01", "2026-01-31");
-
-  expect(bars).toEqual([{ tenantId: "user-123", symbol: "AAPL", date: "2026-01-02", close: 120.5, currency: "USD" }]);
-  expect(calls[1]).toEqual({ sql: "SELECT set_config('app.user_id', $1, true)", values: ["user-123"] });
-  expect(executed(calls)[0]?.values).toEqual(["AAPL", "2026-01-01", "2026-01-31"]);
-});
-
-test("price bar writes refuse a bar belonging to another tenant", async () => {
-  const { db } = fakeDatabase();
-  const repository = createPriceBarRepository(db, "user-123");
-
-  await expect(repository.upsert([{ tenantId: "user-456", symbol: "AAPL", date: "2026-01-02", close: 1, currency: "USD" }]))
-    .rejects.toThrow(/tenant/i);
-});
-
-test("an empty price bar write touches the database not at all", async () => {
-  const { db, calls } = fakeDatabase();
-
-  await createPriceBarRepository(db, "user-123").upsert([]);
-
-  expect(calls).toEqual([]);
-});
+  calls.filter(
+    (call) =>
+      !["BEGIN", "COMMIT", "ROLLBACK"].includes(call.sql) &&
+      !call.sql.startsWith("SELECT set_config"),
+  );
 
 test("preferences keep benchmarks and consent in one row without overwriting each other", async () => {
-  const { db, calls } = fakeDatabase([{ benchmark_symbols: ["^AEX"], market_data_consent: { accepted: true } }]);
+  const { db, calls } = fakeDatabase([
+    { benchmark_symbols: ["^AEX"], market_data_consent: { accepted: true } },
+  ]);
   const repository = createPreferencesRepository(db, "user-123");
 
   expect(await repository.getBenchmarkSymbols()).toEqual(["^AEX"]);
@@ -122,42 +127,220 @@ test("a tenant with no preferences row reads empty rather than throwing", async 
   expect(await repository.getMarketDataConsent()).toBeNull();
 });
 
+test("layout shares the preferences row and round-trips independently of benchmarks", async () => {
+  const { db, calls } = fakeDatabase([
+    { benchmark_symbols: ["^AEX"], layout: { modules: { positions: false }, widgets: {} } },
+  ]);
+  const repository = createPreferencesRepository(db, "user-123");
+
+  expect(await repository.getLayout()).toEqual({ modules: { positions: false }, widgets: {} });
+
+  await repository.setLayout({ modules: {}, widgets: { agent: false } });
+  const write = executed(calls).at(-1)!;
+  expect(write.sql).toContain("layout");
+  expect(write.sql).not.toContain("benchmark_symbols");
+  expect(write.values).toEqual([JSON.stringify({ modules: {}, widgets: { agent: false } })]);
+});
+
+test("a tenant with no preferences row reads an empty layout rather than throwing", async () => {
+  const repository = createPreferencesRepository(fakeDatabase().db, "user-123");
+  expect(await repository.getLayout()).toBeNull();
+});
+
+test("account wrappers share the preferences row and round-trip independently of the layout", async () => {
+  const { db, calls } = fakeDatabase([
+    { layout: { modules: { positions: false } }, account_wrappers: [] },
+  ]);
+  const repository = createPreferencesRepository(db, "user-123");
+
+  expect(await repository.getAccountWrappers()).toEqual([]);
+
+  await repository.setAccountWrappers([{ broker: "trading212", account: "ISA", wrapper: "isa" }]);
+  const write = executed(calls).at(-1)!;
+  expect(write.sql).toContain("account_wrappers");
+  expect(write.sql).not.toContain("layout");
+  expect(write.values).toEqual([
+    JSON.stringify([{ broker: "trading212", account: "ISA", wrapper: "isa" }]),
+  ]);
+});
+
+test("sector corrections round-trip upper-cased and merge into the existing map without touching other columns", async () => {
+  const { db, calls } = fakeDatabase([{ sector_corrections: { AAPL: "Technology" } }]);
+  const repository = createPreferencesRepository(db, "user-123");
+
+  expect(await repository.getSectorCorrections()).toEqual({ AAPL: "Technology" });
+
+  await repository.setSectorCorrection("msft", "Technology");
+  const write = executed(calls).at(-1)!;
+  expect(write.sql).toContain("sector_corrections");
+  expect(write.sql).not.toContain("benchmark_symbols");
+  expect(write.values).toEqual([JSON.stringify({ AAPL: "Technology", MSFT: "Technology" })]);
+});
+
+test("clearing a sector correction removes only that symbol, case-insensitively", async () => {
+  const { db, calls } = fakeDatabase([
+    { sector_corrections: { AAPL: "Technology", MSFT: "Technology" } },
+  ]);
+  const repository = createPreferencesRepository(db, "user-123");
+
+  await repository.clearSectorCorrection("aapl");
+
+  const write = executed(calls).at(-1)!;
+  expect(write.values).toEqual([JSON.stringify({ MSFT: "Technology" })]);
+});
+
+test("a tenant with no preferences row reads no sector corrections rather than throwing", async () => {
+  const repository = createPreferencesRepository(fakeDatabase().db, "user-123");
+  expect(await repository.getSectorCorrections()).toEqual({});
+});
+
+test("sector inference defaults off and round-trips as a plain boolean, not jsonb", async () => {
+  const { db, calls } = fakeDatabase([{ sector_inference_enabled: true }]);
+  const repository = createPreferencesRepository(db, "user-123");
+
+  expect(await repository.getSectorInferenceEnabled()).toBe(true);
+
+  await repository.setSectorInferenceEnabled(false);
+  const write = executed(calls).at(-1)!;
+  expect(write.sql).toContain("sector_inference_enabled");
+  expect(write.sql).not.toContain("::jsonb");
+  expect(write.values).toEqual([false]);
+});
+
+test("a tenant with no preferences row reads sector inference as disabled rather than throwing", async () => {
+  const repository = createPreferencesRepository(fakeDatabase().db, "user-123");
+  expect(await repository.getSectorInferenceEnabled()).toBe(false);
+});
+
 test("broker sync state round-trips per broker", async () => {
-  const { db, calls } = fakeDatabase([{ state: { lastSyncedAt: "2026-01-02T00:00:00.000Z", retryAfter: null } }]);
+  const { db, calls } = fakeDatabase([
+    { state: { lastSyncedAt: "2026-01-02T00:00:00.000Z", retryAfter: null } },
+  ]);
   const repository = createSyncStateRepository(db, "user-123");
 
-  expect(await repository.get("trading212")).toEqual({ lastSyncedAt: "2026-01-02T00:00:00.000Z", retryAfter: null });
+  expect(await repository.get("trading212")).toEqual({
+    lastSyncedAt: "2026-01-02T00:00:00.000Z",
+    retryAfter: null,
+  });
 
-  await repository.put("trading212", { lastSyncedAt: "2026-01-03T00:00:00.000Z", retryAfter: null });
-  expect(executed(calls).at(-1)?.values).toEqual(["trading212", JSON.stringify({ lastSyncedAt: "2026-01-03T00:00:00.000Z", retryAfter: null }), "2026-01-03T00:00:00.000Z"]);
+  await repository.put("trading212", {
+    lastSyncedAt: "2026-01-03T00:00:00.000Z",
+    retryAfter: null,
+  });
+  expect(executed(calls).at(-1)?.values).toEqual([
+    "trading212",
+    JSON.stringify({ lastSyncedAt: "2026-01-03T00:00:00.000Z", retryAfter: null }),
+    "2026-01-03T00:00:00.000Z",
+  ]);
+});
+
+test("price sync claim returns the active row when another invocation owns a fresh lease", async () => {
+  const active = { status: "running", leaseId: "older", updatedAt: "2026-09-03T10:00:00.000Z" };
+  const { db, calls } = fakeDatabase([{ state: active, claimed: false }]);
+  const repository = createPriceSyncStateRepository(db, "user-123");
+
+  await expect(
+    repository.claim(
+      { status: "running", leaseId: "newer", updatedAt: "2026-09-03T10:00:10.000Z" },
+      "running",
+      "2026-09-03T09:59:30.000Z",
+    ),
+  ).resolves.toEqual(active);
+
+  const claim = executed(calls).at(-1)!;
+  expect(claim.sql).toContain("ON CONFLICT");
+  expect(claim.sql).toContain("state->>'updatedAt'");
+  expect(claim.values).toEqual([
+    "prices",
+    "running",
+    JSON.stringify({ status: "running", leaseId: "newer", updatedAt: "2026-09-03T10:00:10.000Z" }),
+    "2026-09-03T09:59:30.000Z",
+  ]);
+});
+
+test("price sync writes require the lease that claimed the row", async () => {
+  const { db, calls } = fakeDatabase();
+  const repository = createPriceSyncStateRepository(db, "user-123");
+
+  await expect(repository.put({ status: "completed" }, "completed", "")).rejects.toThrow(
+    "requires a lease",
+  );
+  expect(executed(calls)).toHaveLength(0);
+
+  await expect(
+    repository.put({ status: "paused", leaseId: "mine", problems: [] }, "paused", "mine"),
+  ).resolves.toBe(false);
+
+  const write = executed(calls).at(-1)!;
+  expect(write.sql).toContain("WHERE broker = $1 AND state->>'leaseId' = $4");
+  expect(write.values?.slice(0, 4)).toEqual([
+    "prices",
+    "partial",
+    JSON.stringify({ status: "paused", leaseId: "mine", problems: [] }),
+    "mine",
+  ]);
 });
 
 test("agent run status is mapped onto the values the table allows", async () => {
   const { db, calls } = fakeDatabase();
   const repository = createAgentRunRepository(db, "user-123");
 
-  await repository.put({ id: "run-1", startedAt: "2026-01-02T00:00:00.000Z", finishedAt: "2026-01-02T00:01:00.000Z", status: "done", summary: "fine", error: null });
+  await repository.start({
+    id: "run-1",
+    agentId: "bill_ackman",
+    startedAt: "2026-01-02T00:00:00.000Z",
+    finishedAt: "2026-01-02T00:01:00.000Z",
+    status: "done",
+    summary: "fine",
+    error: null,
+    result: { signal: "neutral" },
+  });
 
   const values = executed(calls).at(-1)?.values as unknown[];
   expect(values[1]).toBe("succeeded");
-  expect(JSON.parse(values[2] as string)).toEqual({ summary: "fine", error: null });
+  expect(executed(calls).at(-1)?.sql).toContain(
+    "investing.agent_runs.started_at < EXCLUDED.started_at",
+  );
+  expect(JSON.parse(values[2] as string)).toEqual({
+    agentId: "bill_ackman",
+    summary: "fine",
+    error: null,
+    result: { signal: "neutral" },
+  });
 });
 
 test("agent runs are read back in the runtime's own vocabulary", async () => {
-  const { db } = fakeDatabase([{ run_id: "run-1", status: "failed", run_result: { summary: null, error: "boom" }, started_at: new Date("2026-01-02T00:00:00.000Z"), finished_at: null }]);
+  const { db } = fakeDatabase([
+    {
+      run_id: "run-1",
+      status: "failed",
+      run_result: {
+        agentId: "bill_ackman",
+        summary: null,
+        error: "boom",
+        result: { signal: "neutral" },
+      },
+      started_at: new Date("2026-01-02T00:00:00.000Z"),
+      finished_at: null,
+    },
+  ]);
 
   expect(await createAgentRunRepository(db, "user-123").get()).toEqual({
     id: "run-1",
+    agentId: "bill_ackman",
     startedAt: "2026-01-02T00:00:00.000Z",
     finishedAt: null,
     status: "error",
     summary: null,
     error: "boom",
+    result: { signal: "neutral" },
   });
 });
 
 test("the personal vault stores bytes the server never decrypts", async () => {
-  const { db, calls } = fakeDatabase([{ vault_blob: Buffer.from("opaque-ciphertext"), updated_at: "2026-08-31T00:00:00.000000Z" }]);
+  const { db, calls } = fakeDatabase([
+    { vault_blob: Buffer.from("opaque-ciphertext"), updated_at: "2026-08-31T00:00:00.000000Z" },
+  ]);
   const repository = createOpaqueVaultRepository(db, "user-123");
 
   const stored = await repository.get();
@@ -172,7 +355,10 @@ test("the personal vault stores bytes the server never decrypts", async () => {
 test("a vault write that is not based on the current server copy is refused", async () => {
   const { db } = fakeDatabase([]);
 
-  const outcome = await createOpaqueVaultRepository(db, "user-123").put(Buffer.from("new"), "2026-01-01T00:00:00.000Z");
+  const outcome = await createOpaqueVaultRepository(db, "user-123").put(
+    Buffer.from("new"),
+    "2026-01-01T00:00:00.000Z",
+  );
 
   expect(outcome).toEqual({ status: "conflict" });
 });
@@ -180,7 +366,10 @@ test("a vault write that is not based on the current server copy is refused", as
 test("a vault write based on the current server copy is accepted", async () => {
   const { db, calls } = fakeDatabase([{ updated_at: "2026-08-31T12:00:00.000000Z" }]);
 
-  const outcome = await createOpaqueVaultRepository(db, "user-123").put(Buffer.from("new"), "2026-08-31T00:00:00.000000Z");
+  const outcome = await createOpaqueVaultRepository(db, "user-123").put(
+    Buffer.from("new"),
+    "2026-08-31T00:00:00.000000Z",
+  );
 
   expect(outcome).toEqual({ status: "stored", updatedAt: "2026-08-31T12:00:00.000000Z" });
   expect(calls.at(-2)?.values).toEqual([Buffer.from("new"), "2026-08-31T00:00:00.000000Z"]);
@@ -189,22 +378,51 @@ test("a vault write based on the current server copy is accepted", async () => {
 test("an empty vault blob is refused before it reaches the table's own check", async () => {
   const { db, calls } = fakeDatabase();
 
-  await expect(createOpaqueVaultRepository(db, "user-123").put(Buffer.alloc(0), null)).rejects.toThrow(/empty/i);
+  await expect(
+    createOpaqueVaultRepository(db, "user-123").put(Buffer.alloc(0), null),
+  ).rejects.toThrow(/empty/i);
   expect(calls).toEqual([]);
 });
 
 test("a snapshot sealed under an older key reads as absent instead of crashing the runtime", async () => {
   process.env.LAVEGA_ENCRYPTION_KEY = "11".repeat(32);
-  const staleSnapshot = encryptBlob({ trading212: { positions: [] } });
+  const staleSnapshot = encryptBlob({ positions: [] });
+  process.env.LAVEGA_ENCRYPTION_KEY = "22".repeat(32);
+  const freshSnapshot = encryptBlob({ positions: [{ symbol: "AAPL" }] });
+  const { db } = fakeDatabase([
+    { broker: "ibkr", snapshot_blob: staleSnapshot },
+    { broker: "trading212", snapshot_blob: freshSnapshot },
+  ]);
+
+  // The snapshot is a cache of broker data; a sync rebuilds it. Losing one must
+  // not take the other broker's data down with it.
+  expect(await createBrokerRepository(db, "user-123").snapshots()).toEqual({
+    trading212: { positions: [{ symbol: "AAPL" }] },
+  });
+});
+
+test("broker snapshots tell an empty vault from a broker with no data yet", async () => {
+  const empty = fakeDatabase([]);
+  expect(await createBrokerRepository(empty.db, "user-123").snapshots()).toBeNull();
+
+  const connected = fakeDatabase([{ broker: "trading212", snapshot_blob: null }]);
+  expect(await createBrokerRepository(connected.db, "user-123").snapshots()).toEqual({});
+});
+
+test("credential reads leave the snapshot blob in the table", async () => {
   process.env.LAVEGA_ENCRYPTION_KEY = "22".repeat(32);
   const credentials = encryptBlob({ broker: "trading212", token: "t" });
-  const { db } = fakeDatabase([{ credentials_blob: credentials, snapshot_blob: staleSnapshot }]);
+  const { db, calls } = fakeDatabase([{ credentials_blob: credentials }]);
 
-  const row = await createBrokerRepository(db, "user-123").get("trading212");
-
-  // The snapshot is a cache of broker data; a sync rebuilds it. Losing it must
-  // not take the credentials — and the whole account — down with it.
-  expect(row).toEqual({ credentials: { broker: "trading212", token: "t" }, snapshot: null });
+  expect(await createBrokerRepository(db, "user-123").get("trading212")).toEqual({
+    credentials: { broker: "trading212", token: "t" },
+    credentialGeneration: 1,
+  });
+  expect(
+    executed(calls)
+      .map((call) => call.sql)
+      .join(),
+  ).not.toMatch(/snapshot_blob/);
 });
 
 test("credentials sealed under an older key fail loudly, naming the key", async () => {
@@ -216,5 +434,303 @@ test("credentials sealed under an older key fail loudly, naming the key", async 
   /* Deliberately not "no credentials": that would send the user off to re-enter
    * their broker tokens, and the write would overwrite ciphertext that a fixed
    * key could still have opened. */
-  await expect(createBrokerRepository(db, "user-123").get("trading212")).rejects.toThrow(/LAVEGA_ENCRYPTION_KEY/);
+  await expect(createBrokerRepository(db, "user-123").get("trading212")).rejects.toThrow(
+    /LAVEGA_ENCRYPTION_KEY/,
+  );
+});
+
+test("an invalid local part is rejected before any query is issued", async () => {
+  const { db, calls } = fakeDatabase();
+
+  const outcome = await createN8nForwardingRepository(db).setLocalPart("user-123", "Alice 7f3a");
+
+  expect(outcome).toEqual({ status: "invalid" });
+  expect(calls).toEqual([]);
+});
+
+test("a local part is trimmed and lowercased before both the write and the returned value", async () => {
+  const { db, calls } = fakeDatabase();
+
+  const outcome = await createN8nForwardingRepository(db).setLocalPart("user-123", " Ale-7f3a ");
+
+  expect(outcome).toEqual({ status: "stored", localPart: "ale-7f3a" });
+  expect(
+    calls.find((call) => call.sql.includes("INSERT INTO personal.n8n_forwarding"))?.values,
+  ).toEqual(["user-123", "ale-7f3a"]);
+});
+
+test("a local part colliding on the unique index is reported, not thrown", async () => {
+  const client = {
+    query: async (sql: string) => {
+      if (sql.includes("INSERT INTO personal.n8n_forwarding")) {
+        const err = new Error("duplicate key value violates unique constraint") as Error & {
+          code: string;
+        };
+        err.code = "23505";
+        throw err;
+      }
+      return { rows: [] };
+    },
+    release: () => undefined,
+  } as never;
+  const db = databaseOver(async () => client);
+
+  const outcome = await createN8nForwardingRepository(db).setLocalPart("user-123", "ale-7f3a");
+
+  expect(outcome).toEqual({ status: "taken" });
+});
+
+/* Erasure (GDPR art. 17). A fake that reports rowCount, which the shared
+ * `fakeDatabase` above has no reason to. */
+function erasureDatabase(rowCount = 1, failOn?: string) {
+  const calls: string[] = [];
+  const paramCalls: Array<{ sql: string; values?: unknown[] }> = [];
+  const client = {
+    query: async (sql: string, values?: unknown[]) => {
+      calls.push(sql);
+      paramCalls.push({ sql, values });
+      if (failOn && sql.includes(failOn)) throw new Error("boom");
+      return { rows: [], rowCount };
+    },
+    release: () => undefined,
+  } as never;
+  return { db: databaseOver(async () => client), calls, paramCalls };
+}
+
+test("erasure clears every table that holds personal data, in one transaction", async () => {
+  const { db, calls } = erasureDatabase(3);
+
+  const report = await eraseUserData(db, "user-123");
+
+  expect(calls[0]).toBe("BEGIN");
+  expect(calls[1]).toBe("SELECT set_config('app.user_id', $1, true)");
+  expect(calls.at(-1)).toBe("COMMIT");
+  expect(calls.filter((sql) => sql.startsWith("DELETE FROM"))).toEqual([
+    "DELETE FROM personal.eb_sessions WHERE user_id = $1",
+    "DELETE FROM personal.eb_pending_auth WHERE user_id = $1",
+    "DELETE FROM personal.n8n_forwarding WHERE user_id = $1",
+    "DELETE FROM investing.portfolio_letters WHERE user_id = $1",
+    "DELETE FROM investing.agent_observations WHERE user_id = $1",
+    "DELETE FROM investing.agent_messages WHERE user_id = $1",
+    "DELETE FROM investing.goals WHERE user_id = $1",
+    "DELETE FROM investing.theses WHERE user_id = $1",
+    "DELETE FROM investing.agent_threads WHERE user_id = $1",
+    "DELETE FROM investing.agent_runs WHERE user_id = $1",
+    "DELETE FROM investing.sync_state WHERE user_id = $1",
+    "DELETE FROM investing.preferences WHERE user_id = $1",
+    "DELETE FROM investing.broker_vaults WHERE user_id = $1",
+    "DELETE FROM investing.dashboard_snapshots WHERE user_id = $1",
+    "DELETE FROM investing.dashboard_sources WHERE user_id = $1",
+    "DELETE FROM personal.vaults WHERE user_id = $1",
+    "DELETE FROM personal.vault_keys WHERE user_id = $1",
+    "DELETE FROM personal.net_worth_totals WHERE user_id = $1",
+    // The spend ledger became per-account in 0013; it was not being erased.
+    "DELETE FROM personal.ai_usage WHERE user_id = $1",
+    // The Better Auth identity, in `public` and keyed by "userId"/identifier.
+    'DELETE FROM public.session WHERE "userId" = $1',
+    'DELETE FROM public.account WHERE "userId" = $1',
+    "DELETE FROM public.verification WHERE identifier = $1 OR identifier = $2",
+    'DELETE FROM public."user" WHERE id = $1',
+  ]);
+  // The personal vault — the one thing the server cannot read — is still erasable.
+  expect(report).toContainEqual({ table: "personal.vaults", rows: 3 });
+  expect(report).toHaveLength(23);
+});
+
+test("erasure deletes the Better Auth identity in the SAME transaction, matching verification tokens by user id when no address is found", async () => {
+  /* The route deleted application rows only, so the password still
+   * authenticated and a fresh sign-in recreated a vault: the person was
+   * forgotten and could still sign in as themselves. Identity and data now
+   * share one transaction, which is what makes "either every table is cleared
+   * or none is" true of the account too. */
+  const { db, calls, paramCalls } = erasureDatabase(1);
+
+  await eraseUserData(db, "user-123");
+
+  // One transaction, opened before the first delete and closed after the last.
+  expect(calls[0]).toBe("BEGIN");
+  expect(calls.at(-1)).toBe("COMMIT");
+  expect(calls.filter((sql) => sql === "BEGIN")).toHaveLength(1);
+
+  const select = paramCalls.find((call) => call.sql.startsWith('SELECT email FROM public."user"'));
+  expect(select?.values).toEqual(["user-123"]);
+  const userDelete = paramCalls.find((call) => call.sql.startsWith('DELETE FROM public."user"'));
+  expect(userDelete?.values).toEqual(["user-123"]);
+  // `verification` has no user column: both the id and the address are matched.
+  const verification = paramCalls.find((call) =>
+    call.sql.startsWith("DELETE FROM public.verification"),
+  );
+  expect(verification?.values).toEqual(["user-123", "user-123"]);
+});
+
+test("erasure scopes personal.eb_pending_auth by user_id — that table has no RLS to fall back on", async () => {
+  // 0003_eb_flow.sql leaves eb_pending_auth deliberately without RLS (the bank
+  // callback cannot be relied on to carry a session cookie). An unscoped
+  // DELETE against it during erasure would empty every user's pending bank
+  // authorisations, not just the identity being erased.
+  const { db, paramCalls } = erasureDatabase(1);
+
+  await eraseUserData(db, "user-123");
+
+  const pendingAuthDelete = paramCalls.find((call) =>
+    call.sql.startsWith("DELETE FROM personal.eb_pending_auth"),
+  );
+  expect(pendingAuthDelete?.sql).toBe("DELETE FROM personal.eb_pending_auth WHERE user_id = $1");
+  expect(pendingAuthDelete?.values).toEqual(["user-123"]);
+});
+
+test("erasure reports zero rows rather than pretending it did not run", async () => {
+  const { db } = erasureDatabase(0);
+  const report = await eraseUserData(db, "user-123");
+  expect(report.every((entry) => entry.rows === 0)).toBe(true);
+  expect(report).toHaveLength(23);
+});
+
+test("a half-erased account rolls back — the caller is never told they are gone when they are not", async () => {
+  // Fail on the LAST table, so five deletes have already 'succeeded'.
+  const { db, calls } = erasureDatabase(1, "personal.vaults");
+
+  await expect(eraseUserData(db, "user-123")).rejects.toThrow("boom");
+
+  expect(calls).toContain("ROLLBACK");
+  expect(calls).not.toContain("COMMIT");
+});
+
+test("erasure refuses without an authenticated identity", async () => {
+  const { db, calls } = erasureDatabase();
+  await expect(eraseUserData(db, undefined)).rejects.toThrow(
+    "Authenticated user identity is required",
+  );
+  await expect(eraseUserData(db, " ")).rejects.toThrow("Authenticated user identity is required");
+  // Nothing was even connected to, let alone deleted.
+  expect(calls).toEqual([]);
+});
+
+/* eb_sessions carries FORCE ROW LEVEL SECURITY (0004_eb_grants.sql), scoped to
+ * app.user_id. The runtime role has no BYPASSRLS, so — unlike eb_pending_auth's
+ * sweepAuth — an unscoped DELETE here would only ever see the caller's own
+ * rows. sweepSessions runs inside withTenant for exactly that reason. */
+test("sweepSessions drops one user's own stale eb_sessions, scoped through withTenant", async () => {
+  const { db, calls, paramCalls } = erasureDatabase(2);
+  const repository = createEbFlowRepository(db);
+
+  const removed = await repository.sweepSessions("user-123", 60 * 60 * 1000);
+
+  expect(removed).toBe(2);
+  expect(calls[0]).toBe("BEGIN");
+  expect(paramCalls[1]).toEqual({
+    sql: "SELECT set_config('app.user_id', $1, true)",
+    values: ["user-123"],
+  });
+  const deleteCall = paramCalls.find((call) =>
+    call.sql.startsWith("DELETE FROM personal.eb_sessions"),
+  );
+  expect(deleteCall?.sql).toBe(
+    "DELETE FROM personal.eb_sessions WHERE created_at <= CURRENT_TIMESTAMP - ($1::bigint * INTERVAL '1 millisecond')",
+  );
+  expect(deleteCall?.values).toEqual(["3600000"]);
+  expect(calls.at(-1)).toBe("COMMIT");
+});
+
+test("sweepSessions reports zero rather than pretending it did not run", async () => {
+  const { db } = erasureDatabase(0);
+  const removed = await createEbFlowRepository(db).sweepSessions("user-123", 60 * 60 * 1000);
+  expect(removed).toBe(0);
+});
+
+test("AiUsage.record inserts every ledger column in order (cache, outcome and error defaults included), as the account, in one tenant transaction", async () => {
+  const { db, calls } = fakeDatabase();
+  await createAiUsageRepository(db).record({
+    day: "2026-09-08",
+    route: "categorize",
+    model: "mistral-small-latest",
+    inputTokens: 120,
+    outputTokens: 40,
+    pages: 0,
+    searches: 0,
+    costCents: 2,
+    userId: "user-a",
+  });
+  // 0025 forces RLS on this table, so the write carries its own identity.
+  expect(calls[0]?.sql).toBe("BEGIN");
+  expect(calls[1]).toEqual({
+    sql: "SELECT set_config('app.user_id', $1, true)",
+    values: ["user-a"],
+  });
+  expect(executed(calls)).toEqual([
+    {
+      sql: `INSERT INTO personal.ai_usage
+             (day, route, model, input_tokens, output_tokens, pages, searches, cost_cents,
+              cache_write_tokens, cache_read_tokens, outcome, error_code, http_status, user_id)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
+      values: [
+        "2026-09-08",
+        "categorize",
+        "mistral-small-latest",
+        120,
+        40,
+        0,
+        0,
+        2,
+        0,
+        0,
+        "ok",
+        null,
+        null,
+        "user-a",
+      ],
+    },
+  ]);
+  expect(calls.at(-1)?.sql).toBe("COMMIT");
+});
+
+/* listSessions returns EVERY row it is allowed to see, which is what makes it
+ * different from `getSession` — that one at least needs an unguessable id
+ * before it says anything. So the tenant predicate is written into the SQL as
+ * well as enforced by RLS, the same belt-and-braces `eraseUserData` uses, and
+ * it is asserted HERE rather than only against the route's fake store: a test
+ * that proves a JavaScript `.filter()` filters proves nothing about the query.
+ *
+ * The LIMIT is part of the same contract. Nothing else bounds this table —
+ * every reconnect mints a new session_id and putSession upserts on that id
+ * alone — and the refresh path calls the bank once per account per row. */
+test("listSessions scopes by user_id in the SQL, not only by RLS, and is bounded", async () => {
+  process.env.LAVEGA_ENCRYPTION_KEY = "00".repeat(32);
+  const { db, calls, paramCalls } = erasureDatabase(0);
+  await createEbFlowRepository(db).listSessions("user-123", 90 * 86_400_000);
+
+  expect(calls[0]).toBe("BEGIN");
+  expect(paramCalls[1]).toEqual({
+    sql: "SELECT set_config('app.user_id', $1, true)",
+    values: ["user-123"],
+  });
+  const select = paramCalls.find((call) => call.sql.startsWith("SELECT session_id"));
+  expect(select?.sql).toContain("WHERE user_id = $1");
+  expect(select?.sql).toContain("LIMIT $3");
+  expect(select?.values?.[0]).toBe("user-123");
+  expect(calls.at(-1)).toBe("COMMIT");
+});
+
+test("listSessions refuses without an authenticated identity", async () => {
+  const { db, calls } = erasureDatabase(0);
+  await expect(createEbFlowRepository(db).listSessions(" ", 1000)).rejects.toThrow(
+    "Authenticated user identity is required",
+  );
+  expect(calls).toEqual([]); // not even a connection was opened
+});
+
+test("a tenant statement sends set_config and the statement in one transaction, and only one", async () => {
+  const { db, calls } = fakeDatabase([{ ok: 1 }]);
+
+  await withTenantStatement(db, "user-1", async (client) => {
+    await client.query("SELECT 1");
+    await expect(client.query("SELECT 2")).rejects.toThrow("one statement");
+  });
+
+  expect(calls.map((call) => call.sql)).toEqual([
+    "BEGIN",
+    "SELECT set_config('app.user_id', $1, true)",
+    "SELECT 1",
+    "COMMIT",
+  ]);
 });

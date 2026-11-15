@@ -25,20 +25,25 @@
  *      `from` (wie hem stuurde) mee tot in de wachtrij: hij moet een regel die
  *      hij niet verwachtte kunnen beoordelen.
  *
- *   2. DE AFZENDER IS NIET GECONTROLEERD. `senderChecks` is wat Cloudflare in
- *      de header `Authentication-Results` zette, letterlijk doorgegeven.
- *      `senderCheck` vat dat samen in drie standen — 'passed', 'failed',
- *      'unknown' — en 'passed' betekent uitsluitend dat het DOMEIN de controle
- *      doorstond, niet dat de factuur echt is. Een mail die zakt wordt GEMARKEERD,
- *      niet weggegooid: wegggooien is het enige wat erger is dan een nepfactuur
- *      tonen, want dan mist hij een echte zonder het te weten.
+ *   2. DE AFZENDER IS NIET HIER GECONTROLEERD. Cloudflare toetst SPF/DKIM/DMARC
+ *      vóór aflevering aan de Worker, maar geeft die gemeten uitslagen niet via
+ *      de Worker-API door. `Authentication-Results` is afzendertekst en kan
+ *      nagemaakt zijn. De Worker stuurt daarom voor alle drie controles
+ *      `unknown`; `senderCheck` blijft ook `unknown`. In Cloudflare's Activity
+ *      log staan de echte uitslagen, niet in deze wachtrij.
  *
  *   3. GEEN GMAIL-LINK. `toQueueEntry` zet `mailUrl` alleen voor bron 'gmail'.
  *      Een mail-id uit een doorgestuurd bericht in een Gmail-URL plakken levert
  *      een link op die naar niets wijst; dat is een advies dat niet kan werken.
  */
 
-import { MAX_TEXT_CHARS, MIN_TEXT_CHARS, asString, pickBody, pickPdfs } from './normalizeGmailMessage.js';
+import {
+  MAX_TEXT_CHARS,
+  MIN_TEXT_CHARS,
+  asString,
+  pickBody,
+  pickPdfs,
+} from "./normalizeGmailMessage.js";
 
 /** @typedef {import('./normalizeGmailMessage.js').InvoicePdf} InvoicePdf */
 
@@ -49,9 +54,9 @@ import { MAX_TEXT_CHARS, MIN_TEXT_CHARS, asString, pickBody, pickPdfs } from './
  */
 
 /**
- * De uitslag van SPF/DKIM/DMARC zoals Cloudflare hem in `Authentication-Results`
- * zet. Een waarde die we niet kennen — of een ontbrekende header — wordt
- * 'unknown'. NOOIT 'pass': onbekend is geen goedkeuring.
+ * SPF/DKIM/DMARC-waarden in het webhook-contract. De huidige Worker stuurt
+ * altijd 'unknown': Cloudflare geeft zijn echte uitslagen niet als vertrouwde
+ * Worker-metadata door. Een onbekende waarde blijft ook 'unknown'.
  * @typedef {'pass'|'fail'|'softfail'|'neutral'|'none'|'temperror'|'permerror'|'unknown'} AuthResult
  */
 
@@ -75,6 +80,11 @@ import { MAX_TEXT_CHARS, MIN_TEXT_CHARS, asString, pickBody, pickPdfs } from './
  */
 
 /**
+ * Wat de klassifier van een setup-mail zegt: welk soort, en ALLEEN de code.
+ * @typedef {{ kind: 'forwarding-confirmation'|'setup-test', code: string }} SetupSignal
+ */
+
+/**
  * Precies de gedeelde vorm uit normalizeGmailMessage.js, plus de herkomst. Dit
  * is met opzet een UITBREIDING en geen eigen typedef: zodra de twee vormen los
  * van elkaar opgeschreven staan, kunnen ze los van elkaar veranderen.
@@ -83,12 +93,13 @@ import { MAX_TEXT_CHARS, MIN_TEXT_CHARS, asString, pickBody, pickPdfs } from './
  *   deliveredTo: string,
  *   queueKey: string,
  *   senderChecks: SenderChecks,
- *   senderCheck: 'passed'|'failed'|'unknown'
+ *   senderCheck: 'passed'|'failed'|'unknown',
+ *   setup: SetupSignal|null
  * }} NormalizedInboundMessage
  */
 
 /** De uitslagen die SPF/DKIM/DMARC volgens RFC 7601 kunnen geven. */
-const AUTH_RESULTS = ['pass', 'fail', 'softfail', 'neutral', 'none', 'temperror', 'permerror'];
+const AUTH_RESULTS = ["pass", "fail", "softfail", "neutral", "none", "temperror", "permerror"];
 
 /**
  * Alles wat we niet als geldige uitslag herkennen wordt 'unknown'. Dit is de
@@ -100,7 +111,7 @@ const AUTH_RESULTS = ['pass', 'fail', 'softfail', 'neutral', 'none', 'temperror'
  */
 function readAuthResult(v) {
   const value = asString(v).toLowerCase().trim();
-  return AUTH_RESULTS.indexOf(value) >= 0 ? /** @type {AuthResult} */ (value) : 'unknown';
+  return AUTH_RESULTS.indexOf(value) >= 0 ? /** @type {AuthResult} */ (value) : "unknown";
 }
 
 /**
@@ -108,8 +119,12 @@ function readAuthResult(v) {
  * @returns {SenderChecks}
  */
 function readSenderChecks(v) {
-  const o = /** @type {Record<string, unknown>} */ (v && typeof v === 'object' ? v : {});
-  return { spf: readAuthResult(o.spf), dkim: readAuthResult(o.dkim), dmarc: readAuthResult(o.dmarc) };
+  const o = /** @type {Record<string, unknown>} */ (v && typeof v === "object" ? v : {});
+  return {
+    spf: readAuthResult(o.spf),
+    dkim: readAuthResult(o.dkim),
+    dmarc: readAuthResult(o.dmarc),
+  };
 }
 
 /**
@@ -126,12 +141,16 @@ function readSenderChecks(v) {
  * @returns {'passed'|'failed'|'unknown'}
  */
 function senderCheckOf(checks) {
-  const bad = ['fail', 'softfail', 'permerror'];
-  if (bad.indexOf(checks.spf) >= 0 || bad.indexOf(checks.dkim) >= 0 || bad.indexOf(checks.dmarc) >= 0) {
-    return 'failed';
+  const bad = ["fail", "softfail", "permerror"];
+  if (
+    bad.indexOf(checks.spf) >= 0 ||
+    bad.indexOf(checks.dkim) >= 0 ||
+    bad.indexOf(checks.dmarc) >= 0
+  ) {
+    return "failed";
   }
-  if (checks.spf === 'pass' || checks.dkim === 'pass') return 'passed';
-  return 'unknown';
+  if (checks.spf === "pass" || checks.dkim === "pass") return "passed";
+  return "unknown";
 }
 
 /**
@@ -145,19 +164,98 @@ function senderCheckOf(checks) {
  */
 function reasonForUnreadable(textChars, skipped, attachmentCount) {
   if (skipped.length > 0) {
-    return 'Geen leesbare tekst, en de bijlage ging niet mee — ' + skipped.join('; ') + '.';
+    return "Geen leesbare tekst, en de bijlage ging niet mee — " + skipped.join("; ") + ".";
   }
   if (textChars > 0) {
-    return 'Maar ' + textChars + ' tekens tekst en geen PDF-bijlage in de doorgestuurde mail.';
+    return "Maar " + textChars + " tekens tekst en geen PDF-bijlage in de doorgestuurde mail.";
   }
   if (attachmentCount > 0) {
     return (
-      'Geen leesbare tekst, en van de ' +
+      "Geen leesbare tekst, en van de " +
       attachmentCount +
-      ' bijlage(n) was er geen enkele een PDF. Een gescande bon als afbeelding wordt niet gelezen; stuur de PDF door.'
+      " bijlage(n) was er geen enkele een PDF. Een gescande bon als afbeelding wordt niet gelezen; stuur de PDF door."
     );
   }
-  return 'Geen leesbare tekst en geen bijlage in de doorgestuurde mail.';
+  return "Geen leesbare tekst en geen bijlage in de doorgestuurde mail.";
+}
+
+/* SETUP-MAILS: het ene soort mail dat nooit naar het model gaat.
+ *
+ * 1. De bevestigingsmail van Gmail. Gmail stuurt een doorstuuradres pas
+ *    door nadat de eigenaar een code uit een mail AAN DAT ADRES heeft ingevoerd.
+ *    Die mail kwam tot nu toe in n8n's uitvoeringslog terecht. Hij wordt nu
+ *    herkend en als code-only melding doorgegeven.
+ * 2. De testmail "LaVega test factuur <vier tekens>" uit de handleiding
+ *    ("factuur " mag ontbreken).
+ *
+ * ALLEEN DE CODE REIST MEE. De Worker kan afzenders niet controleren (#260),
+ * dus iedereen kan een mail maken die op die van Google lijkt. Een link uit
+ * zo'n mail tonen leent hem het vertrouwen van LaVega; een cijfercode die
+ * nergens op past wordt door Gmail zelf geweigerd en kost niets.
+ *
+ * DE VORM VAN GOOGLES MAIL IS NIET HIER GEVERIFIEERD. Zie
+ * __fixtures__/gmail-forwarding-confirmation*.json: de tests lezen die, niet
+ * een tekst in dit bestand. */
+const GMAIL_CONFIRMATION_SENDER = "forwarding-noreply@google.com";
+const MAX_CODE_DIGITS = 20;
+/* Voorvoegsels als Fwd:/FW:/Re: mogen ervoor. Precies vier tekens, en direct
+ * daarna geen letter of cijfer meer, zodat "ab123" niet als "ab12" telt. */
+const TEST_SUBJECT =
+  /^\s*(?:(?:re|fwd?)\s*:\s*)*lavega test (?:factuur )?([a-z0-9]{4})(?![a-z0-9])/i;
+
+/**
+ * Het kale adres uit "Naam <adres>" of uit een los adres, kleine letters.
+ * @param {unknown} from
+ * @returns {string}
+ */
+function addressOf(from) {
+  const s = asString(from).trim().toLowerCase();
+  const m = s.match(/<([^<>\s]+)>\s*$/);
+  return m ? m[1] : s;
+}
+
+/**
+ * Alleen cijfers, 1 tot en met 20 stuks. Alles anders is "".
+ * @param {unknown} v
+ * @returns {string}
+ */
+function digitsCode(v) {
+  const s = asString(v);
+  return /^[0-9]+$/.test(s) && s.length <= MAX_CODE_DIGITS ? s : "";
+}
+
+/**
+ * De code uit onderwerp en/of tekst. Een gelabelde code met letters, een
+ * onderwerpcode met letters, of twee verschillende codes: allemaal "".
+ * @param {unknown} subject
+ * @param {unknown} text
+ * @returns {string}
+ */
+function confirmationCodeOf(subject, text) {
+  const labelled = asString(text).match(
+    /(?:confirmation code|bevestigingscode)[ \t]{0,3}:?[ \t]{0,3}([A-Za-z0-9]+)/i,
+  );
+  const inSubject = asString(subject).match(/^\s*\(#([A-Za-z0-9]+)\)/);
+  const fromBody = labelled ? digitsCode(labelled[1]) : "";
+  const fromSubject = inSubject ? digitsCode(inSubject[1]) : "";
+  if (labelled && !fromBody) return "";
+  if (inSubject && !fromSubject) return "";
+  if (fromBody && fromSubject && fromBody !== fromSubject) return "";
+  return fromBody || fromSubject;
+}
+
+/**
+ * @param {{ from: unknown, subject: unknown, text: unknown }} mail
+ * @returns {SetupSignal|null}
+ */
+function classifySetupMail(mail) {
+  if (addressOf(mail.from) === GMAIL_CONFIRMATION_SENDER) {
+    const code = confirmationCodeOf(mail.subject, mail.text);
+    if (code) return { kind: "forwarding-confirmation", code: code };
+  }
+  const t = asString(mail.subject).match(TEST_SUBJECT);
+  if (t) return { kind: "setup-test", code: t[1].toLowerCase() };
+  return null;
 }
 
 /**
@@ -165,7 +263,9 @@ function reasonForUnreadable(textChars, skipped, attachmentCount) {
  * @returns {NormalizedInboundMessage}
  */
 function normalizeInboundMail(payload) {
-  const p = /** @type {Record<string, unknown>} */ (payload && typeof payload === 'object' ? payload : {});
+  const p = /** @type {Record<string, unknown>} */ (
+    payload && typeof payload === "object" ? payload : {}
+  );
 
   // pickBody kijkt naar text / textAsHtml / html en pakt de LANGSTE. Bij gelijke
   // lengte wint text/plain, want die staat vooraan in zijn kandidatenlijst — en
@@ -178,38 +278,48 @@ function normalizeInboundMail(payload) {
 
   const rawAttachments = Array.isArray(p.attachments) ? p.attachments : [];
   const attachments = rawAttachments.map(function (a, index) {
-    const o = /** @type {Record<string, unknown>} */ (a && typeof a === 'object' ? a : {});
+    const o = /** @type {Record<string, unknown>} */ (a && typeof a === "object" ? a : {});
     return {
-      key: 'attachment_' + index,
+      key: "attachment_" + index,
       fileName: asString(o.fileName),
       mimeType: asString(o.mimeType),
       data: asString(o.data),
     };
   });
-  const picked = pickPdfs(attachments, 'inbound-mail');
+  const picked = pickPdfs(attachments, "inbound-mail");
 
   const ok = picked.pdfs.length > 0 || text.length >= MIN_TEXT_CHARS;
   const senderChecks = readSenderChecks(p.auth);
+  const setup = classifySetupMail({ from: p.from, subject: p.subject, text: text });
 
   return {
-    source: 'inbound-mail',
+    source: "inbound-mail",
     messageId: asString(p.messageId),
     subject: asString(p.subject),
     from: asString(p.from),
     date: asString(p.date),
     text: text,
-    textSource: textChars === 0 ? 'none' : body.textSource,
+    textSource: textChars === 0 ? "none" : body.textSource,
     textChars: textChars,
     truncated: textChars > text.length,
     pdfs: picked.pdfs,
     skipped: picked.skipped,
-    ok: ok,
-    reason: ok ? '' : reasonForUnreadable(textChars, picked.skipped, attachments.length),
+    // Bij een setup-mail betekent ok:false "niet voor het model", niet "onleesbaar".
+    ok: setup ? false : ok,
+    reason: setup || ok ? "" : reasonForUnreadable(textChars, picked.skipped, attachments.length),
     deliveredTo: asString(p.to),
     queueKey: asString(p.queueKey),
     senderChecks: senderChecks,
     senderCheck: senderCheckOf(senderChecks),
+    setup: setup,
   };
 }
 
-export { AUTH_RESULTS, readAuthResult, readSenderChecks, senderCheckOf, normalizeInboundMail };
+export {
+  AUTH_RESULTS,
+  readAuthResult,
+  readSenderChecks,
+  senderCheckOf,
+  classifySetupMail,
+  normalizeInboundMail,
+};

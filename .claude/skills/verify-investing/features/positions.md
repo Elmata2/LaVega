@@ -2,39 +2,98 @@
 
 The holdings table and the per-instrument page behind it.
 
-## Sub-features
+## Reach
 
-- positions table (`Posities`) — instrument, quantity, market value, return.
-- open and closed positions (`Open positie`, `Gesloten positie`, `Gesloten`).
-- position detail (`Positiedetail`) at `/positions/:symbol` — price chart, position activity
-  (`Positieactiviteit`), buys and dividends (`Koop`, `Dividend`).
-- quantity history toggle (`Aantalhistorie tonen` / `Historie verbergen`).
-- empty and missing states: `Geen posities geladen`, `Positie niet gevonden`,
-  `Geen positie gekozen`.
+Standalone server: `http://127.0.0.1:8799/positions` (eyebrow `Positions`, heading `Positions`).
+Mounted app: `https://www.lavega.dev/investing/positions` after sign-in. Main navigation link
+text is `Positions`. A row links to `/positions/<symbol>` (mounted: `/investing/positions/<symbol>`).
+Deep link `AAPL` is `/investing/positions/AAPL`. Detail back link: `← Back to positions`.
 
-## How to get to it (user POV)
+Column headers, verbatim: `Instrument`, `Value`, `% portfolio`, `Total return`. The instrument
+cell ends with `<quantity> shares`. Detail eyebrow is `Position detail`, heading `Position`.
+Activity table accessible name: `Position activity`. Kinds: `Buy`, `Sell`, `Dividend`.
+Quantity toggle: `Show quantity history` / `Hide history`. Open/closed: `Open position`,
+`Closed position`, `Open`, `Closed`. The table lists open holdings only (net quantity not 0).
+A closed holding is not a row. `/positions/:symbol` still opens it and shows `Closed position`.
 
-`Posities` in the main navigation, then a row to open its detail page. Deep links work:
-`/investing/positions/AAPL`.
+Empty and missing copy, verbatim:
 
-## Driving it with control-investing
+- no rows: `No positions loaded`
+- description under that title: `Connect a broker or import a statement to see your investments.`
+- unknown symbol: heading `Position not found`, description
+  `This position is not in the local dashboard model.`
+- URL without a symbol: `No position selected`
+- list, unpriced value cell: `Value unknown`
+- list, forward-filled value: visible `est.`, screen-reader `Estimated price`
+- list, missing FX: `FX rate missing`
+- list, null `% portfolio`: `Unavailable`
+- list, missing return: `Return unavailable`
+- detail current value uses the same `FX rate missing` or `Value unknown`
+- detail total return, when it cannot be calculated, is `Unavailable`
+- detail missing-FX banner: `FX rate missing. Return cannot be calculated.`
+
+On a position that exists, the detail also shows sector. `Sector: <label>`, badge `inferred`
+(with a percent when confidence is set) or `your correction`. The select is
+`aria-label="Correct sector"` (`Choose…`, then GICS labels). Buttons: `Save` (`Saving…`),
+and `Reset to automatic` (`Resetting…`) when the source is a correction. A fund hides that
+select and says `Split across its holdings' sectors — correct the underlying holdings instead.`
+Errors: `Couldn't save — try again.` and `Couldn't reset — try again.`
+`PUT`/`DELETE /api/investing/positions/:symbol/sector`. `Position not found` does not show
+this control.
+
+## Drive
 
 ```bash
 C=".claude/skills/verify-investing/control-investing.mjs"
-node $C dashboard --target prod --raw                    # positions[] is the table's source
-node $C dashboard --target prod --symbol AAPL            # detail page's request
-node $C assets --target prod --path /investing/positions/AAPL
+E="/tmp/lavega-verify-investing/evidence"
+node $C dashboard --out "$E/positions-dashboard.json"
+node $C dashboard --raw --out "$E/positions-dashboard-raw.json"
+node $C dashboard --symbol AAPL --raw --out "$E/positions-aapl.json"
+node $C browser open
+node $C browser wait-settle
+node $C browser snapshot --interactive --out "$E/positions-snapshot.json"
+node $C browser goto /positions
+node $C browser text --out "$E/positions-text.json"
 ```
 
-The detail page adds `?symbol=` to the same dashboard endpoint, so a broken detail page and a
-broken overview usually share one cause.
+Mounted paths need `--target preview` or `--target prod` and a session. Detail uses the same
+dashboard endpoint with `?symbol=`. Symbol match is case-insensitive.
+
+## Observable success
+
+Exit 0, and one of these is true. Assert the field. Do not treat a loaded page as success.
+
+1. **Rows.** `positions-dashboard.json` field `positions` is a number ≥ 1, and `problems` is
+   `[]`. `--raw` field `positions` is an array of that length. Each element has `symbol` and
+   `quantity`. A priced row has `marketValue` not null and `priceStatus` `priced` or
+   `forward-filled`. `doctor` check `positionsPriced` is `ok: true`.
+2. **Empty state.** `positions` is `0`, `problems` is `[]`, and browser text contains the
+   verbatim string `No positions loaded`. That is success for an empty book. It is not success
+   for a filled table.
+3. **Missing detail.** `dashboard --symbol <missing> --raw` has no `position.symbol` equal to
+   that symbol, and the visible heading is `Position not found`. The document title stays
+   `LaVega Investing`.
+
+## Verified-unreachable
+
+- Preview or prod with no session: every `/api/*` is 401. On preview, `login` loads
+  `LAVEGA_VERIFY_EMAIL` and `LAVEGA_VERIFY_PASSWORD` with `vercel env pull`. Prerequisite
+  when that pull fails: those two env vars in the process, or `vercel link` plus
+  `vercel login`. Then `login` exit 0, `whoami` `state` `authenticated`, and report `page`.
+  Do not write `auth.preview.json`. Do not invent an account.
+- Row count ≥ 1 with no broker holdings: prerequisite is `sync-status` `positionsRead` > 0
+  after `sync --wait`, or a vault that already holds holdings. Until then only observable
+  success 2 (the verbatim empty copy) can pass.
+- `Value unknown` on a row that exists: the table rendered. Pricing did not. Prerequisite:
+  consent `accepted: true`, then `sync --wait` and `prices sync --wait`, until
+  `positionsPriced` is ok. See [prices-and-market-data.md](prices-and-market-data.md).
 
 ## Gotchas
 
 - A position with `marketValue: null` is unpriced, not missing. It is excluded from totals,
   weights and the KPI block, which is why a filled positions table can still show an empty
   donut — check the price store before the positions code.
-- `FX-koers ontbreekt` means the position is priced in a currency with no FX rate, not that
+- `FX rate missing` means the position is priced in a currency with no FX rate, not that
   the position failed to sync.
 - Symbols in the URL are matched case-insensitively; a symbol containing a dot is a real deep
   link and must not be treated as a file request by the static fallback.

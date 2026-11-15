@@ -12,7 +12,9 @@ import type { Invoice } from "../model.js";
 // Grabs the first <(ns:)?tag ...>content</(ns:)?tag> leaf anywhere in `xml`
 // (tolerant of a namespace prefix and attributes on the opening tag).
 function tag(xml: string, name: string): { value: string; attrs: string } | null {
-  const m = xml.match(new RegExp(`<(?:[a-zA-Z0-9]+:)?${name}\\b([^>]*)>([^<]*)</(?:[a-zA-Z0-9]+:)?${name}>`));
+  const m = xml.match(
+    new RegExp(`<(?:[a-zA-Z0-9]+:)?${name}\\b([^>]*)>([^<]*)</(?:[a-zA-Z0-9]+:)?${name}>`),
+  );
   return m ? { value: m[2].trim(), attrs: m[1] } : null;
 }
 
@@ -20,7 +22,9 @@ function tag(xml: string, name: string): { value: string; attrs: string } | null
 // (non-greedy), so a tag() lookup can be scoped to inside e.g.
 // cac:LegalMonetaryTotal instead of matching the first occurrence anywhere.
 function section(xml: string, name: string): string | null {
-  const m = xml.match(new RegExp(`<(?:[a-zA-Z0-9]+:)?${name}\\b[^>]*>([\\s\\S]*?)</(?:[a-zA-Z0-9]+:)?${name}>`));
+  const m = xml.match(
+    new RegExp(`<(?:[a-zA-Z0-9]+:)?${name}\\b[^>]*>([\\s\\S]*?)</(?:[a-zA-Z0-9]+:)?${name}>`),
+  );
   return m ? m[1] : null;
 }
 

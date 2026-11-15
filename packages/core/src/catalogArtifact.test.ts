@@ -1,6 +1,11 @@
 import { readFileSync } from "node:fs";
 import { expect, test } from "vitest";
-import { accountCosts, accountFees, readAccountFee, type AccountFeeEntryLike } from "./accountCosts.js";
+import {
+  accountCosts,
+  accountFees,
+  readAccountFee,
+  type AccountFeeEntryLike,
+} from "./accountCosts.js";
 import { catalogueCandidates } from "./travel.js";
 // CatalogueEntryLike woont in catalogRates.ts; travel.ts importeert hem daar zelf
 // vandaan en exporteert hem niet door. Uit travel.js halen gaf TS2459.
@@ -31,8 +36,12 @@ import type { Account } from "./model.js";
 const REPO = new URL("../../../", import.meta.url);
 const read = (p: string) => JSON.parse(readFileSync(new URL(p, REPO), "utf8"));
 
-const state = read("docs/catalog/state.json") as { products: Record<string, { product: string; kind: string }> };
-const catalog = read("docs/catalog/catalog.json") as { entries: (AccountFeeEntryLike & CatalogueEntryLike)[] };
+const state = read("docs/catalog/state.json") as {
+  products: Record<string, { product: string; kind: string }>;
+};
+const catalog = read("docs/catalog/catalog.json") as {
+  entries: (AccountFeeEntryLike & CatalogueEntryLike)[];
+};
 
 const stateIds = Object.keys(state.products);
 const catalogIds = catalog.entries.map((e) => e.id);
@@ -57,7 +66,11 @@ test("elk product draagt in beide bestanden dezelfde naam en dezelfde soort", ()
   // `kind` bepaalt of een rij op Reizen (betaalpas/creditcard) of op
   // Optimalisatie (betaalpakket/betaalrekening) landt.
   for (const e of catalog.entries) {
-    expect([e.id, e.product, e.kind]).toEqual([e.id, state.products[e.id].product, state.products[e.id].kind]);
+    expect([e.id, e.product, e.kind]).toEqual([
+      e.id,
+      state.products[e.id].product,
+      state.products[e.id].kind,
+    ]);
   }
 });
 
@@ -163,8 +176,16 @@ test("de catalogus kent per bank één betaalpas en één creditcard waar hij er
   // dan één SNS creditcard en die rekenen niet hetzelfde" — een bewering die geen
   // van de twee documenten doet. Zelfde verhaal voor de Openbank-pas met Travel+,
   // waarvan de prijs al in de voorwaarden van de pas zelf staat.
-  for (const product of ["SNS creditcard", "RegioBank creditcard", "ASN creditcard", "Openbank betaalpas"]) {
-    expect(catalogueCandidates(catalog.entries, product).map((e) => e.product), product).toHaveLength(1);
+  for (const product of [
+    "SNS creditcard",
+    "RegioBank creditcard",
+    "ASN creditcard",
+    "Openbank betaalpas",
+  ]) {
+    expect(
+      catalogueCandidates(catalog.entries, product).map((e) => e.product),
+      product,
+    ).toHaveLength(1);
   }
 });
 
@@ -181,7 +202,12 @@ test("een ING-rekening die zijn pakket noemt krijgt het bedrag, en een die dat n
   const named = accountCosts([{ ...base, name: "ING Go" }], catalog.entries).rows[0];
   expect(named.cost.kind).toBe("known");
   if (named.cost.kind === "known") {
-    expect(named.cost.amount).toEqual({ cents: 400, period: "maand", perYearCents: 4800, perYearDerived: true });
+    expect(named.cost.amount).toEqual({
+      cents: 400,
+      period: "maand",
+      perYearCents: 4800,
+      perYearDerived: true,
+    });
     expect(named.cost.asOf).toBe("2026-06-15");
   }
 

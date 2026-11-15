@@ -42,7 +42,8 @@ export const DE_TAX_PACK = {
     // reservation errs high rather than low — the failure this pack exists to
     // prevent is reserving too little.
     defaultRatePct: 30,
-    rateBasis: "15% KSt + 5,5% Soli daarover + Gewerbesteuer bij Hebesatz 400% ≈ 29,8% — afgerond op 30%.",
+    rateBasis:
+      "15% KSt + 5,5% Soli daarover + Gewerbesteuer bij Hebesatz 400% ≈ 29,8% — afgerond op 30%.",
     prepayDates: ["03-10", "06-10", "09-10", "12-10"],
     what: "Duitsland laat winstbelasting vooruitbetalen op vier vaste data. Wat de vooruitbetalingen niet dekken, komt als Nachzahlung kort na afloop van het jaar — dat is het bedrag waar ondernemers op stuklopen.",
   },

@@ -1,3 +1,5 @@
+import { isArchivedView } from "./archive";
+
 /* Personal SPA paths. Landing stays at `/`. The vault app lives under `/app`
  * with one segment per view so a URL can open Overzicht, Transacties, etc.
  * Legacy `/#app` and `/?eb=…` still enter the app (Root normalises them). */
@@ -8,6 +10,7 @@ export type View =
   | "accounts"
   | "rules"
   | "forecast"
+  | "bills"
   | "optimalisatie"
   | "valuta"
   | "belasting"
@@ -15,7 +18,10 @@ export type View =
   | "punten"
   | "koppelingen"
   | "backup"
-  | "profiel";
+  | "profiel"
+  | "intake"
+  | "about-you"
+  | "plan";
 
 export const APP_BASE = "/app";
 
@@ -25,6 +31,7 @@ const VIEW_BY_SEGMENT: Record<string, View> = {
   accounts: "accounts",
   rules: "rules",
   forecast: "forecast",
+  bills: "bills",
   optimalisatie: "optimalisatie",
   valuta: "valuta",
   belasting: "belasting",
@@ -33,6 +40,9 @@ const VIEW_BY_SEGMENT: Record<string, View> = {
   koppelingen: "koppelingen",
   backup: "backup",
   profiel: "profiel",
+  intake: "intake",
+  "about-you": "about-you",
+  plan: "plan",
 };
 
 /** Path for a view. Overview is `/app` (and also `/app/overview`). */
@@ -46,7 +56,9 @@ export function viewFromPathname(pathname: string): View | null {
   if (path === APP_BASE || path === `${APP_BASE}/overview`) return "overview";
   if (!path.startsWith(`${APP_BASE}/`)) return null;
   const segment = path.slice(APP_BASE.length + 1).split("/")[0] ?? "";
-  return VIEW_BY_SEGMENT[segment] ?? null;
+  const view = VIEW_BY_SEGMENT[segment] ?? null;
+  if (view !== null && isArchivedView(view)) return "overview";
+  return view;
 }
 
 /** True when this pathname should mount the vault app (known or unknown /app/…). */
@@ -55,17 +67,63 @@ export function isAppPathname(pathname: string): boolean {
   return path === APP_BASE || path.startsWith(`${APP_BASE}/`);
 }
 
-/** Rewrite legacy `#app` / `/?eb=` into `/app` paths. Safe to call on every load. */
+export type PendingEbParams = { session: string | null; error: string | null };
+
+/* The Enable Banking session id (and any eb_error) travel back from the
+ * server as a URL query param. That leaves them in browser history and any
+ * referrer until something strips the URL, so normalizeAppLocation captures
+ * them here the moment they're read and never writes them back to the URL.
+ * App.tsx collects them later, once the vault is unlocked, via
+ * takePendingEbParams — a one-shot, in-memory handoff that a page reload
+ * naturally clears (the URL has already been stripped by then). */
+let pendingEbParams: PendingEbParams | null = null;
+
+/** Consume the pending Enable Banking params captured by normalizeAppLocation,
+ *  or null if none are pending. Clears them so a re-render never re-processes
+ *  the same callback twice. */
+export function takePendingEbParams(): PendingEbParams | null {
+  const params = pendingEbParams;
+  pendingEbParams = null;
+  return params;
+}
+
+let linkFailed = false;
+
+/** True when better-auth redirected a signed-out visitor to `/app?error=…`
+ *  (an invalid or expired confirmation link). Not consumed on read, so a
+ *  StrictMode double render sees the same answer. */
+export function authLinkFailed(): boolean {
+  return linkFailed;
+}
+
+export function resetAuthLinkFailure(): void {
+  linkFailed = false;
+}
+
+/** Rewrite legacy `#app` into `/app`, and strip `eb=`/`eb_error=` off the URL
+ *  immediately (see PendingEbParams above). Safe to call on every load. */
 export function normalizeAppLocation(
   loc: Pick<Location, "pathname" | "search" | "hash"> = window.location,
   replace: (url: string) => void = (url) => window.history.replaceState({}, "", url),
 ): void {
   const { pathname, search, hash } = loc;
-  if (hash === "#app") {
-    replace(`${APP_BASE}${search}`);
-    return;
+  const params = new URLSearchParams(search);
+  const ebSession = params.get("eb");
+  const ebError = params.get("eb_error");
+  const hasEb = ebSession !== null || ebError !== null;
+  const legacyHash = hash === "#app";
+  const authError = isAppPathname(pathname) && params.has("error");
+  if (authError) {
+    linkFailed = true;
+    params.delete("error");
   }
-  if ((search.includes("eb=") || search.includes("eb_error=")) && !isAppPathname(pathname)) {
-    replace(`${APP_BASE}${search}`);
+  if (!hasEb && !legacyHash && !authError) return;
+  if (hasEb) {
+    pendingEbParams = { session: ebSession, error: ebError };
+    params.delete("eb");
+    params.delete("eb_error");
   }
+  const rest = params.toString();
+  const target = !legacyHash && isAppPathname(pathname) ? pathname : APP_BASE;
+  replace(`${target}${rest ? `?${rest}` : ""}`);
 }

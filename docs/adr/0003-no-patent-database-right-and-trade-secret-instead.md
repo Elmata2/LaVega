@@ -5,7 +5,7 @@ that around 2030 every bank will have to expose an API and the access side becom
 a commodity?
 
 **No patent.** Not because the timing is wrong, but because what LaVega does is
-mostly not patentable subject matter in Europe, and the instruments that *do* fit
+mostly not patentable subject matter in Europe, and the instruments that _do_ fit
 are cheaper, faster and already partly in place.
 
 This is not legal advice and nobody here is a patent attorney. A filing decision
@@ -15,7 +15,7 @@ not have to be re-litigated from scratch.
 ## The one thing that would have been fatal, and is not
 
 Article 54 EPC applies **absolute novelty**: any disclosure anywhere, by anyone
-*including the inventor*, before the filing date destroys it. Unlike the United
+_including the inventor_, before the filing date destroys it. Unlike the United
 States there is no grace period.
 
 Checked on 21 August 2026: the GitHub repository is **private**, and the landing
@@ -47,7 +47,7 @@ winning.
 five years to grant, then per-country translation and renewal costs. And
 publication at 18 months is not optional — the application discloses the method to
 every competitor in exchange for a right that may not be granted. For a catalogue
-whose value is partly in *which routes work*, that trade is bad on its own terms.
+whose value is partly in _which routes work_, that trade is bad on its own terms.
 
 ## Why the PSD3 argument points the other way
 
@@ -62,8 +62,8 @@ restated. The catalogue, however, fits a different right almost perfectly.
 ## What we use instead
 
 **The EU database right** (Directive 96/9/EC, implemented in the Dutch
-Databankenwet). It protects a substantial investment in *obtaining, verifying or
-presenting* the contents of a database — which is a literal description of the
+Databankenwet). It protects a substantial investment in _obtaining, verifying or
+presenting_ the contents of a database — which is a literal description of the
 sweep, including the verification pass and the refusals. Fifteen years from
 completion, renewed by substantial changes, **no registration and no fee**. It
 does not protect the idea, and it does not need to: it protects the asset that
@@ -74,7 +74,7 @@ static PDFs, the site's own payload JSON, the reader proxy, Wayback CDX) and the
 recorded dead ends (headless Chrome, Apify, restcountries) are the most valuable
 thing in the repository, because they are what a competitor would have to spend
 the same weeks to rediscover. Keeping the repository private is already this
-measure; it is worth knowing that it *is* a measure and not just a default.
+measure; it is worth knowing that it _is_ a measure and not just a default.
 
 **A trademark** on LaVega. Around €850 at the EUIPO, genuinely enforceable, and
 useful immediately rather than in four years.

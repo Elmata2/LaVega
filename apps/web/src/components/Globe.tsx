@@ -1,5 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import ToonMeer from "./ToonMeer";
+import Button from "./ui/Button.js";
+import { useAppLocale } from "../appLocale.js";
+import { optimiseCopy } from "../copy/optimise.js";
+import type { ValutaCopy } from "../copy/optimise.js";
+import type { Locale } from "../locale.js";
 import {
   WORLD_LATLON_BOUNDS,
   WORLD_MAP_FILL_RULE,
@@ -212,7 +217,8 @@ let PREPARED: { c: WorldCountry; rings: PreparedRing[] }[] | null = null;
 let GRID: PreparedRing[] | null = null;
 
 function preparedLands(): { c: WorldCountry; rings: PreparedRing[] }[] {
-  if (!PREPARED) PREPARED = mapCountries().map((c) => ({ c, rings: c.rings.map((r) => prepareRing(r)) }));
+  if (!PREPARED)
+    PREPARED = mapCountries().map((c) => ({ c, rings: c.rings.map((r) => prepareRing(r)) }));
   return PREPARED;
 }
 function preparedGrid(): PreparedRing[] {
@@ -272,17 +278,18 @@ function resolve(id: string, canPrice: (c: WorldCurrency) => boolean): Effect {
  *  komt uit `WORLD_LATLON_BOUNDS` en wordt hier dus omgezet en niet overgetypt —
  *  dat overtypen is precies wat er de vorige keer verouderde toen de bundel
  *  veranderde. */
-function latitudeText(lat: number): string {
-  const n = Math.abs(lat).toFixed(1).replace(/\.0$/, "").replace(".", ",");
-  return `${n}° ${lat < 0 ? "zuiderbreedte" : "noorderbreedte"}`;
+function latitudeText(lat: number, locale: Locale, lc: ValutaCopy["globe"]["latitude"]): string {
+  const abs = Math.abs(lat).toFixed(1).replace(/\.0$/, "");
+  const n = locale === "nl" ? abs.replace(".", ",") : abs;
+  return `${n}° ${lat < 0 ? lc.south : lc.north}`;
 }
 
 /** "Amerikaanse dollar (USD)", of gewoon "USD" als het platform de code niet
  *  kent. Nooit een lege string: een melding zonder de code erin is voor de
  *  gebruiker niet na te trekken. */
-function currencyLabel(code: string): string {
+function currencyLabel(code: string, locale: Locale): string {
   try {
-    const name = new Intl.DisplayNames(["nl"], { type: "currency" }).of(code);
+    const name = new Intl.DisplayNames([locale], { type: "currency" }).of(code);
     return name && name.toUpperCase() !== code ? `${name} (${code})` : code;
   } catch {
     return code;
@@ -298,9 +305,13 @@ function currencyLabel(code: string): string {
  *  `conversionFor`) en ze tóch hetzelfde moeten zeggen. Eén tekst voor een leeg
  *  lijstje zou dat onmogelijk maken: leeg kan "er is geen munt" of "wij weten het
  *  niet" betekenen, en dat is precies het onderscheid dat deze tab moet maken. */
-function moneyLine(currencies: readonly WorldCurrency[], noTender: boolean): string {
+function moneyLine(
+  currencies: readonly WorldCurrency[],
+  noTender: boolean,
+  mc: ValutaCopy["globe"]["moneyLine"],
+): string {
   if (currencies.length > 0) return currencies.map((x) => x.code).join(" / ");
-  return noTender ? "geen betaalmiddel" : "valuta onbekend";
+  return noTender ? mc.noTender : mc.unknown;
 }
 
 /* --- kleuren -------------------------------------------------------------- */
@@ -321,7 +332,18 @@ function moneyLine(currencies: readonly WorldCurrency[], noTender: boolean): str
  *  browser tot een stijlberekening, en dat per sleepbeeld doen kost meer dan het
  *  hele tekenen. De app heeft vandaag één thema; komt er een tweede, dan hoort
  *  hier een herlezing bij het omschakelen. */
-const INK_ROLES = ["sea", "grid", "rim", "euro", "rate", "norate", "notender", "hover", "selected", "pin"] as const;
+const INK_ROLES = [
+  "sea",
+  "grid",
+  "rim",
+  "euro",
+  "rate",
+  "norate",
+  "notender",
+  "hover",
+  "selected",
+  "pin",
+] as const;
 type Palette = Record<(typeof INK_ROLES)[number], string>;
 
 function readPalette(host: HTMLElement): Palette | null {
@@ -342,6 +364,8 @@ function readPalette(host: HTMLElement): Palette | null {
 /* --- de component --------------------------------------------------------- */
 
 export default function Globe({ value, onPick, from = "EUR", supported }: GlobeProps) {
+  const [locale] = useAppLocale();
+  const c = optimiseCopy[locale].valuta.globe;
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [hoverId, setHoverId] = useState<string | null>(null);
   /** Bij een land met meer dan één valuta: welke de gebruiker aanwees. Null is
@@ -374,7 +398,8 @@ export default function Globe({ value, onPick, from = "EUR", supported }: GlobeP
   const dragRef = useRef({ active: false, sx: 0, sy: 0, rot: START_ROTATION, moved: false });
 
   const supportedSet = useMemo(
-    () => (supported && supported.length > 0 ? new Set(supported.map((c) => c.toUpperCase())) : null),
+    () =>
+      supported && supported.length > 0 ? new Set(supported.map((c) => c.toUpperCase())) : null,
     [supported],
   );
   const canPrice = useMemo(
@@ -402,6 +427,9 @@ export default function Globe({ value, onPick, from = "EUR", supported }: GlobeP
    * state stond, dus ik kan niet zeggen hoeveel het kost, alleen dat het niets
    * oplevert. Wat wél gemeten is, staat in de kop: 0,34 ms per beeld voor de
    * meetkunde. */
+  // Paint callback must refresh every render; globe stand lives in refs so drag
+  // does not re-render the 250-row list beside it.
+  // oxlint-disable-next-line react/refs
   paintRef.current = () => {
     const canvas = canvasRef.current;
     const host = figureRef.current;
@@ -466,12 +494,14 @@ export default function Globe({ value, onPick, from = "EUR", supported }: GlobeP
       ctx.stroke();
     };
 
-    for (const land of lands) if (land.c.id !== hoverId && land.c.id !== selectedId) paint(land, palette[land.tone]);
+    for (const land of lands)
+      if (land.c.id !== hoverId && land.c.id !== selectedId) paint(land, palette[land.tone]);
     /* Aangewezen en gekozen gaan er bovenop, en in die volgorde: het gekozen land
      * blijft het gekozen land ook als de muis ergens anders hangt. Ze apart
      * overtekenen in plaats van in de lus mee te kleuren scheelt niets in
      * rekenwerk en voorkomt dat de stroke van een buurland eroverheen valt. */
-    for (const land of lands) if (land.c.id === hoverId && land.c.id !== selectedId) paint(land, palette.hover);
+    for (const land of lands)
+      if (land.c.id === hoverId && land.c.id !== selectedId) paint(land, palette.hover);
     for (const land of lands) if (land.c.id === selectedId) paint(land, palette.selected);
 
     /* De speld. Voor een land dat te klein is om te zien en voor de dertien
@@ -479,10 +509,10 @@ export default function Globe({ value, onPick, from = "EUR", supported }: GlobeP
      * zichtbaar op de bol. */
     if (selectedId) {
       const focus = countryFocus(selectedId);
-      const c = lands.find((l) => l.c.id === selectedId)?.c;
+      const pinCountry = lands.find((l) => l.c.id === selectedId)?.c;
       const tiny = !focus?.span || Math.max(focus.span[0], focus.span[1]) < PIN_MAX_SPAN;
-      const at = c?.pin ?? focus?.center ?? null;
-      if (at && (tiny || !c)) {
+      const at = pinCountry?.pin ?? focus?.center ?? null;
+      if (at && (tiny || !pinCountry)) {
         const p = project(at[0], at[1], frame);
         if (p.front) {
           ctx.beginPath();
@@ -529,10 +559,24 @@ export default function Globe({ value, onPick, from = "EUR", supported }: GlobeP
 
   useEffect(
     () => () => {
-      if (rafRef.current !== null && typeof cancelAnimationFrame === "function") cancelAnimationFrame(rafRef.current);
+      if (rafRef.current !== null && typeof cancelAnimationFrame === "function")
+        cancelAnimationFrame(rafRef.current);
     },
     [],
   );
+
+  /* Het palet wordt één keer per doek gelezen, dus een themawissel (data-theme op
+   * <html>) moet het weggooien en opnieuw tekenen, anders blijft de bol in de
+   * kleuren van het vorige thema staan. */
+  useEffect(() => {
+    if (typeof MutationObserver !== "function") return;
+    const mo = new MutationObserver(() => {
+      paletteRef.current = null;
+      paintRef.current();
+    });
+    mo.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+    return () => mo.disconnect();
+  }, []);
 
   /* De maat van het doek volgt de kolom waarin hij staat. ResizeObserver en niet
    * een window-resize-luisteraar: de kolom kan ook smaller worden zonder dat het
@@ -579,9 +623,9 @@ export default function Globe({ value, onPick, from = "EUR", supported }: GlobeP
   /** Een valuta uit het keuzelijstje. Onprijsbaar mag óók aangewezen worden — dan
    *  legt het paneel uit waarom er niets verandert. Een knop die niets doet en
    *  niets zegt is de derde regel schenden. */
-  function pickCurrency(c: WorldCurrency) {
-    setPickedCode(c.code);
-    if (canPrice(c)) onPick(c.code);
+  function pickCurrency(cur: WorldCurrency) {
+    setPickedCode(cur.code);
+    if (canPrice(cur)) onPick(cur.code);
   }
 
   /* --- de bol aanwijzen en draaien --------------------------------------- */
@@ -599,11 +643,14 @@ export default function Globe({ value, onPick, from = "EUR", supported }: GlobeP
     return { x: (e.clientX - rect.left) * scale, y: (e.clientY - rect.top) * scale };
   }
 
-  function countryAtPoint(x: number, y: number): { id: string | null; miss: "off" | "sea" | "beyond" | null } {
+  function countryAtPoint(
+    x: number,
+    y: number,
+  ): { id: string | null; miss: "off" | "sea" | "beyond" | null } {
     const at = unproject(x, y, globeFrame(rotRef.current, view));
     if (!at) return { id: null, miss: "off" };
-    const c = countryAtLonLat(at[0], at[1]);
-    if (c) return { id: c.id, miss: null };
+    const found = countryAtLonLat(at[0], at[1]);
+    if (found) return { id: found.id, miss: null };
     /* Buiten de breedtegraden van de bundel houdt onze data op. Dat is een ander
      * antwoord dan "hier is zee": wij hebben daar niets, en wat er wél ligt kan
      * deze tabel niet zeggen. De melding zegt dus wat ONS mankeert en niet wat
@@ -692,19 +739,30 @@ export default function Globe({ value, onPick, from = "EUR", supported }: GlobeP
    *  lijst die pas iets laat zien als je het juiste woord al weet, is geen
    *  besturing. */
   const everything = useMemo(
-    () => [...allCountries()].sort((a, b) => (countryLabel(a.id) || a.id).localeCompare(countryLabel(b.id) || b.id, "nl")),
-    [],
+    () =>
+      [...allCountries()].sort((a, b) =>
+        (countryLabel(locale, a.id) || a.id).localeCompare(
+          countryLabel(locale, b.id) || b.id,
+          locale,
+        ),
+      ),
+    [locale],
   );
   const results = useMemo(
-    () => (query.trim() === "" ? everything : searchCountries(query, everything.length)),
-    [query, everything],
+    () => (query.trim() === "" ? everything : searchCountries(locale, query, everything.length)),
+    [locale, query, everything],
   );
 
   const optionId = (id: string) => `lv-globe-opt-${id}`;
 
   function moveActive(step: number) {
     if (results.length === 0) return;
-    const next = activeIndex < 0 ? (step > 0 ? 0 : results.length - 1) : (activeIndex + step + results.length) % results.length;
+    const next =
+      activeIndex < 0
+        ? step > 0
+          ? 0
+          : results.length - 1
+        : (activeIndex + step + results.length) % results.length;
     setActiveIndex(next);
     const el = listRef.current?.querySelector<HTMLElement>(`[data-country="${results[next].id}"]`);
     // Zonder smooth: dat zou een animatie zijn, en de lijst hoeft alleen te staan
@@ -719,10 +777,10 @@ export default function Globe({ value, onPick, from = "EUR", supported }: GlobeP
       return;
     }
     if (e.key === "Enter") {
-      const c = results[activeIndex] ?? (results.length === 1 ? results[0] : null);
-      if (!c) return;
+      const picked = results[activeIndex] ?? (results.length === 1 ? results[0] : null);
+      if (!picked) return;
       e.preventDefault();
-      select(c.id, true);
+      select(picked.id, true);
       return;
     }
     if (e.key === "Escape" && query !== "") {
@@ -741,7 +799,7 @@ export default function Globe({ value, onPick, from = "EUR", supported }: GlobeP
   const readout = readoutId ? conversionFor(readoutId) : null;
 
   const effect = selectedId ? resolve(selectedId, canPrice) : null;
-  const label = selectedId ? countryLabel(selectedId) || selectedId : "";
+  const label = selectedId ? countryLabel(locale, selectedId) || selectedId : "";
   const focus = selectedId ? countryFocus(selectedId) : null;
   const dpr = pixelRatio();
 
@@ -749,29 +807,36 @@ export default function Globe({ value, onPick, from = "EUR", supported }: GlobeP
     /* Eén kolom: de bol, de legenda eronder, dan het antwoord op de laatste keuze,
      * en onderaan het zoekveld met de landenlijst. Punt 6 in de kop legt uit waarom
      * het antwoord tussen de legenda en het zoekveld staat. */
-    <div className="lv-globe">
-      <div className="lv-globe-figure" ref={figureRef}>
-        <p className="lv-globe-readout" data-testid="bol-readout">
+    <div className="lv-globe flex flex-col gap-4 min-w-0">
+      <div className="lv-globe-figure flex flex-col gap-3 min-w-0" ref={figureRef}>
+        <p
+          className="lv-globe-readout flex items-baseline justify-between gap-3 m-0 min-h-[1.5rem] text-[0.95rem]"
+          data-testid="bol-readout"
+        >
           {readoutId ? (
             <>
-              <span className="lv-globe-readout-name">{countryLabel(readoutId) || readoutId}</span>
+              <span className="lv-globe-readout-name font-semibold text-ink">
+                {countryLabel(locale, readoutId) || readoutId}
+              </span>
               {/* Niet `currencies.length ? codes : "onbekend"`: een leeg lijstje is
                   hier twee verschillende antwoorden, en `kind` is het enige dat
                   weet welke. Zie moneyLine. */}
-              <span className="lv-globe-readout-ccy">
-                {readout ? moneyLine(readout.currencies, readout.kind === "noTender") : "valuta onbekend"}
+              <span className="lv-globe-readout-ccy font-mono text-[0.8rem] tracking-[0.04em] text-muted">
+                {readout
+                  ? moneyLine(readout.currencies, readout.kind === "noTender", c.moneyLine)
+                  : c.moneyLine.unknown}
               </span>
             </>
           ) : (
-            <span className="lv-globe-readout-empty">
-              Draai de bol en wijs een land aan, of kies er een uit de lijst eronder.
+            <span className="lv-globe-readout-empty text-muted text-[0.88rem]">
+              {c.readoutEmpty}
             </span>
           )}
         </p>
 
         <canvas
           ref={canvasRef}
-          className="lv-globe-canvas"
+          className='lv-globe-canvas block my-0 mx-auto max-w-full rounded-[50%] touch-none cursor-grab data-[dragging="1"]:cursor-grabbing focus-visible:outline-2 focus-visible:outline-[var(--ink)] focus-visible:outline-offset-[3px]'
           data-testid="bol-canvas"
           data-dragging={dragging ? "1" : undefined}
           width={Math.round(size * dpr)}
@@ -782,7 +847,7 @@ export default function Globe({ value, onPick, from = "EUR", supported }: GlobeP
           /* "eronder" en niet "hiernaast": de lijst is verhuisd, en een
              beschrijving die naar de verkeerde kant wijst helpt precies degene
              niet die het doek niet ziet. */
-          aria-label="Wereldbol met de bestemmingen. Slepen of de pijltjestoetsen draaien de bol; klikken kiest het land eronder. Elk land is ook te kiezen in de landenlijst onder aan dit blok."
+          aria-label={c.canvasAriaLabel}
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
           onPointerUp={(e) => endDrag(e, true)}
@@ -791,21 +856,46 @@ export default function Globe({ value, onPick, from = "EUR", supported }: GlobeP
           onKeyDown={onCanvasKeyDown}
         />
 
-        <ul className="lv-globe-legend">
-          <li>
-            <span className="lv-globe-swatch" data-tone="euro" aria-hidden="true" /> euro — niets te wisselen
+        <ul className="lv-globe-legend flex flex-wrap gap-y-2 gap-x-4 m-0 p-0 list-none text-[0.78rem] text-muted">
+          <li className="flex items-center gap-2">
+            <span
+              className="lv-globe-swatch w-[11px] h-[11px] rounded-[3px] border border-line bg-[var(--lv-globe-euro)]"
+              data-tone="euro"
+              aria-hidden="true"
+            />{" "}
+            {c.legend.euro}
           </li>
-          <li>
-            <span className="lv-globe-swatch" data-tone="rate" aria-hidden="true" /> LaVega heeft een koers
+          <li className="flex items-center gap-2">
+            <span
+              className="lv-globe-swatch w-[11px] h-[11px] rounded-[3px] border border-line bg-[var(--lv-globe-rate)]"
+              data-tone="rate"
+              aria-hidden="true"
+            />{" "}
+            {c.legend.rate}
           </li>
-          <li>
-            <span className="lv-globe-swatch" data-tone="norate" aria-hidden="true" /> geen koers bij LaVega
+          <li className="flex items-center gap-2">
+            <span
+              className="lv-globe-swatch w-[11px] h-[11px] rounded-[3px] border border-line bg-[var(--lv-globe-norate)]"
+              data-tone="norate"
+              aria-hidden="true"
+            />{" "}
+            {c.legend.noRate}
           </li>
-          <li>
-            <span className="lv-globe-swatch" data-tone="notender" aria-hidden="true" /> geen wettig betaalmiddel
+          <li className="flex items-center gap-2">
+            <span
+              className="lv-globe-swatch w-[11px] h-[11px] rounded-[3px] border border-line bg-[var(--lv-globe-notender)]"
+              data-tone="notender"
+              aria-hidden="true"
+            />{" "}
+            {c.legend.noTender}
           </li>
-          <li>
-            <span className="lv-globe-swatch" data-tone="selected" aria-hidden="true" /> gekozen
+          <li className="flex items-center gap-2">
+            <span
+              className="lv-globe-swatch w-[11px] h-[11px] rounded-[3px] border border-line bg-[var(--lv-globe-selected)]"
+              data-tone="selected"
+              aria-hidden="true"
+            />{" "}
+            {c.legend.selected}
           </li>
         </ul>
 
@@ -817,53 +907,52 @@ export default function Globe({ value, onPick, from = "EUR", supported }: GlobeP
         </span>
       </div>
 
-      <div className="lv-globe-answer" data-testid="bol-antwoord" aria-live="polite">
+      <div
+        className="lv-globe-answer py-3 px-4 border border-line border-l-[3px] border-l-accent rounded-sm bg-surface-2 text-[0.9rem] leading-[1.5]"
+        data-testid="bol-antwoord"
+        aria-live="polite"
+      >
         {miss ? (
-          <p className="lv-globe-miss" data-testid="bol-misser">
+          <p className="lv-globe-miss text-muted" data-testid="bol-misser">
             {miss === "off"
-              ? "Dat punt ligt naast de bol, dus er is daar geen land."
+              ? c.miss.off
               : miss === "beyond"
-                ? `Dat punt ligt buiten de band waarover onze gebundelde grenzen iets zeggen: die loopt van ${latitudeText(WORLD_LATLON_BOUNDS[1])} tot ${latitudeText(WORLD_LATLON_BOUNDS[3])}. Wat daarbuiten ligt kan LaVega niet zeggen — het staat niet in de tabel.`
-                : "Daar ligt geen land in onze grenzen: zee, of een land dat op deze schaal geen eigen vlak heeft. Die laatste staan wel in de lijst."}
-            {effect ? ` Er is niets veranderd; ${label} blijft gekozen.` : ""}
+                ? c.miss.beyond(
+                    latitudeText(WORLD_LATLON_BOUNDS[1], locale, c.latitude),
+                    latitudeText(WORLD_LATLON_BOUNDS[3], locale, c.latitude),
+                  )
+                : c.miss.sea}
+            {effect ? c.miss.stillSelected(label) : ""}
           </p>
         ) : null}
         {!effect ? (
-          <p>
-            Kies een land op de bol of uit de lijst om de doelvaluta te zetten. De berekening staat nu op{" "}
-            <strong>{value}</strong>.
-          </p>
+          <p>{c.noSelection(value)}</p>
         ) : effect.kind === "euro" ? (
           <>
-            <p className="lv-globe-answer-lead">{label} — euro</p>
+            <p className="lv-globe-answer-lead font-body text-[1.1rem] text-ink">
+              {label} {c.effectEuro.leadSuffix}
+            </p>
             {from.toUpperCase() === "EUR" ? (
-              <p>
-                Daar betaal je met euro's, net als hier. Er valt niets om te wisselen: er is geen omwisseling, en dus
-                ook geen tarief om te vergelijken.
-              </p>
+              <p>{c.effectEuro.sameCurrency}</p>
             ) : (
-              <p>
-                Daar betaal je met euro's. Je zet {from.toUpperCase()} over, dus dit is wél een omwisseling. De
-                doelvaluta staat nu op EUR.
-              </p>
+              <p>{c.effectEuro.differentCurrency(from.toUpperCase())}</p>
             )}
           </>
         ) : effect.kind === "set" ? (
           <>
-            <p className="lv-globe-answer-lead">
-              {label} — {currencyLabel(effect.code)}
+            <p className="lv-globe-answer-lead font-body text-[1.1rem] text-ink">
+              {label} — {currencyLabel(effect.code, locale)}
             </p>
             {/* "de rekenmachine" en niet "hierboven": de bol staat op een breed
                 scherm naast het rekenblok en op een smal scherm eronder, dus een
                 richting in de zin is de helft van de tijd onwaar. */}
-            <p>
-              De doelvaluta staat nu op <strong>{effect.code}</strong>. LaVega heeft daar een koers van, dus de
-              rekenmachine rekent er verder mee.
-            </p>
+            <p>{c.effectSet.body(effect.code)}</p>
           </>
         ) : effect.kind === "noRate" ? (
           <>
-            <p className="lv-globe-answer-lead">{label} — geen koers</p>
+            <p className="lv-globe-answer-lead font-body text-[1.1rem] text-ink">
+              {label} {c.effectNoRate.leadSuffix}
+            </p>
             <p>
               {/* Zonder de zin "dat is een leemte bij ons en het is geen nul", op
                   zijn verzoek. Wat die zin deed was ONS uitleggen, en dat is
@@ -872,70 +961,57 @@ export default function Globe({ value, onPick, from = "EUR", supported }: GlobeP
                   bedrag niet kunnen uitrekenen. De KLEUR op de bol en de
                   legenda-regel dragen het onderscheid met een nul; daar is geen
                   zin voor nodig. */}
-              Daar betaal je met {currencyLabel(effect.code)}. Van die valuta heeft LaVega geen koers, dus wat er
-              aankomt kan LaVega niet uitrekenen.
+              {c.effectNoRate.body(currencyLabel(effect.code, locale))}
             </p>
-            <p className="cell-sub">De doelvaluta is niet veranderd; die staat nog op {value}.</p>
+            <p className="cell-sub">{c.effectNoRate.unchanged(value)}</p>
           </>
         ) : effect.kind === "noTender" ? (
           <>
-            <p className="lv-globe-answer-lead">{label} — geen wettig betaalmiddel</p>
+            <p className="lv-globe-answer-lead font-body text-[1.1rem] text-ink">
+              {label} {c.effectNoTender.leadSuffix}
+            </p>
             {/* Geen praktische tip erbij ("neem dollars mee", "je betaalt bij je
                 vervoerder"). Dat klinkt behulpzaam, maar de afwezigheid van een
                 munt kan zo'n bewering niet dragen — en dit paneel is de plek waar
                 dat verschil bewaakt hoort te worden. De laatste zin zegt daarom
                 waar onze kennis ophoudt in plaats van hem aan te vullen. */}
-            <p>
-              Daar is geen munt: de gebundelde bron noemt er geen wettig betaalmiddel. Dat is iets anders dan een
-              koers die LaVega mist — er is niets om een koers van te hebben, en dus ook niets om te wisselen. Waarmee
-              er op een onderzoeksstation dan wél wordt afgerekend, staat niet in deze tabel.
-            </p>
+            <p>{c.effectNoTender.body}</p>
             {/* "ook geen nul" en niet "ook geen 0%": op een scherm dat iemand
                 scant is het teken % het enige dat blijft hangen, en dan staat er
                 dus juist wél een nultarief. */}
-            <p className="cell-sub">
-              De doelvaluta is niet veranderd; die staat nog op {value}. Er is hier geen tarief om te tonen — ook geen
-              nul.
-            </p>
+            <p className="cell-sub">{c.effectNoTender.footer(value)}</p>
           </>
         ) : effect.kind === "choice" ? (
           <>
-            <p className="lv-globe-answer-lead">{label} — meer dan één valuta</p>
-            <p>
-              Daar wordt met meer dan één valuta betaald. LaVega kiest er geen voor je, want dat verandert het
-              antwoord. Welke bedoel je?
+            <p className="lv-globe-answer-lead font-body text-[1.1rem] text-ink">
+              {label} {c.effectChoice.leadSuffix}
             </p>
-            <ul className="lv-globe-choice">
-              {effect.currencies.map((c) => (
-                <li key={c.code}>
-                  <button type="button" className="btn" aria-pressed={pickedCode === c.code} onClick={() => pickCurrency(c)}>
-                    {c.code}
-                    {canPrice(c) ? "" : " — geen koers"}
-                  </button>
+            <p>{c.effectChoice.prompt}</p>
+            <ul className="lv-globe-choice flex flex-wrap gap-2 mb-2 p-0 list-none">
+              {effect.currencies.map((cur) => (
+                <li key={cur.code}>
+                  <Button aria-pressed={pickedCode === cur.code} onClick={() => pickCurrency(cur)}>
+                    {cur.code}
+                    {canPrice(cur) ? "" : c.effectChoice.noRateSuffix}
+                  </Button>
                 </li>
               ))}
             </ul>
             {pickedCode ? (
-              effect.currencies.some((c) => c.code === pickedCode && canPrice(c)) ? (
-                <p>
-                  De doelvaluta staat nu op <strong>{pickedCode}</strong>.
-                </p>
+              effect.currencies.some((cur) => cur.code === pickedCode && canPrice(cur)) ? (
+                <p>{c.effectChoice.picked(pickedCode)}</p>
               ) : (
-                <p>
-                  Van {currencyLabel(pickedCode)} heeft LaVega geen koers, dus de doelvaluta blijft op {value} staan.
-                  Dat is een leemte bij ons en het is geen nul.
-                </p>
+                <p>{c.effectChoice.pickedNoRate(currencyLabel(pickedCode, locale), value)}</p>
               )
             ) : null}
           </>
         ) : (
           <>
-            <p className="lv-globe-answer-lead">{label} — valuta onbekend</p>
-            <p>
-              De gebundelde bron noemt voor dit land geen valuta, dus LaVega weet niet waarin je daar betaalt. Dat is
-              wat wij niet weten; het betekent niet dat er geen kosten zijn.
+            <p className="lv-globe-answer-lead font-body text-[1.1rem] text-ink">
+              {label} {c.effectUnknown.leadSuffix}
             </p>
-            <p className="cell-sub">De doelvaluta is niet veranderd; die staat nog op {value}.</p>
+            <p>{c.effectUnknown.body}</p>
+            <p className="cell-sub">{c.effectUnknown.unchanged(value)}</p>
           </>
         )}
         {/* Waar de bol wél of niet naartoe kon draaien. Dit hoort bij het antwoord
@@ -947,24 +1023,22 @@ export default function Globe({ value, onPick, from = "EUR", supported }: GlobeP
             met deze mededeling erbij, want anders is een keuze uit de lijst een
             klik waarna er zichtbaar niets gebeurt. */}
         {effect && !focus ? (
-          <p className="cell-sub">
-            Waar dit land ligt weet LaVega niet: de gebundelde bron heeft er vlak noch punt voor. De bol is daarom
-            niet gedraaid, en aanwijzen op de bol kan hier ook niet. Wat er hierboven over de valuta staat, staat daar
-            los van en blijft gelden.
-          </p>
+          <p className="cell-sub">{c.offMap.noFocus}</p>
         ) : effect && focus?.from === "pin" ? (
-          <p className="cell-sub">
-            Dit land wordt op deze schaal niet getekend. De bol staat op de plek waar de bron het neerzet; de speld is
-            het enige wat je er ziet.
-          </p>
+          <p className="cell-sub">{c.offMap.pinOnly}</p>
         ) : null}
       </div>
 
       {/* Het zoekveld met de landenlijst, onderaan zoals gevraagd. Geen eigen
           kolomwikkel meer: er is nog maar één kolom, en een <div> die niets doet
           is een <div> die iemand later gaat stylen. */}
-      <div className="lv-globe-search">
-        <label htmlFor="lv-globe-q">Zoek of kies een land</label>
+      <div className="lv-globe-search flex flex-col gap-2 min-w-0">
+        <label
+          htmlFor="lv-globe-q"
+          className="text-[0.78rem] tracking-[0.06em] uppercase text-muted"
+        >
+          {c.search.label}
+        </label>
         <input
           id="lv-globe-q"
           type="search"
@@ -972,9 +1046,11 @@ export default function Globe({ value, onPick, from = "EUR", supported }: GlobeP
           role="combobox"
           aria-expanded="true"
           aria-controls="lv-globe-list"
-          aria-activedescendant={activeIndex >= 0 && results[activeIndex] ? optionId(results[activeIndex].id) : undefined}
+          aria-activedescendant={
+            activeIndex >= 0 && results[activeIndex] ? optionId(results[activeIndex].id) : undefined
+          }
           value={query}
-          placeholder="Nederland, Japan, Singapore…"
+          placeholder={c.search.placeholder}
           onChange={(e) => {
             setQuery(e.target.value);
             setActiveIndex(-1);
@@ -984,33 +1060,49 @@ export default function Globe({ value, onPick, from = "EUR", supported }: GlobeP
         <ul
           id="lv-globe-list"
           ref={listRef}
-          className="lv-globe-results"
+          className="lv-globe-results flex flex-col gap-1 m-0 p-1 list-none max-h-[18rem] overflow-y-auto border border-line rounded-sm bg-surface"
           role="listbox"
-          aria-label="Landen"
+          aria-label={c.search.resultsAriaLabel}
           data-testid="bol-landen"
         >
           {results.length === 0 ? (
-            <li className="lv-globe-results-empty">Geen land met die naam of code in de gebundelde lijst.</li>
+            <li className="lv-globe-results-empty py-2 px-3 text-muted text-[0.88rem]">
+              {c.search.emptyResults}
+            </li>
           ) : (
-            results.map((c, i) => (
+            results.map((country, i) => (
               <li
-                key={c.id}
-                id={optionId(c.id)}
+                key={country.id}
+                id={optionId(country.id)}
                 role="option"
-                aria-selected={c.id === selectedId}
-                data-country={c.id}
+                aria-selected={country.id === selectedId}
+                data-country={country.id}
                 data-active={i === activeIndex ? "1" : undefined}
-                onClick={() => select(c.id, true)}
+                onClick={() => select(country.id, true)}
+                /* `bg-accent-soft` staat op een samengestelde variant en niet op
+                   `data-[active="1"]:`, want anders wint hij van
+                   `aria-selected:bg-surface-2` zodra beide gelden — in de oude CSS
+                   won aria-selected daar altijd (latere regel, gelijke
+                   specificiteit); Tailwinds eigen volgorde van gegenereerde
+                   utilities garandeert dat niet. `:not([aria-selected="true"])`
+                   maakt de twee voorwaarden weer wederzijds uitsluitend, zoals ze
+                   in de bron ook waren. De rand kleurt wel gewoon door — die
+                   eigenschap raakte aria-selected nooit. */
+                className='flex items-baseline justify-between gap-3 py-2 px-3 border border-transparent rounded-sm text-ink text-[0.9rem] cursor-pointer hover:border-accent data-[active="1"]:border-accent [&[data-active="1"]:not([aria-selected="true"])]:bg-accent-soft aria-selected:bg-surface-2 aria-selected:font-semibold'
               >
-                <span>{countryLabel(c.id) || c.name}</span>
+                <span>{countryLabel(locale, country.id) || country.name}</span>
                 {/* Twee verschillende dingen en dus twee verschillende teksten. Een
                     land zonder vlak MET een speld kan de bol wel vinden — daar staat
                     straks een stip. Een land zonder speld kan hij niet vinden, en dan
                     hoort dat hier al te staan en niet pas nadat je erop hebt geklikt
                     en er niets gebeurde. */}
-                <span className="cell-sub">
-                  {moneyLine(c.currencies, c.noTender === true)}
-                  {c.rings !== null ? "" : c.pin ? " · geen vlak, wel een plek" : " · geen vlak, plek onbekend"}
+                <span className="cell-sub mt-0 whitespace-nowrap">
+                  {moneyLine(country.currencies, country.noTender === true, c.moneyLine)}
+                  {country.rings !== null
+                    ? ""
+                    : country.pin
+                      ? c.search.pinOnlySuffix
+                      : c.search.pinUnknownSuffix}
                 </span>
               </li>
             ))
@@ -1018,12 +1110,16 @@ export default function Globe({ value, onPick, from = "EUR", supported }: GlobeP
         </ul>
       </div>
 
-      <ToonMeer className="lv-globe-source" summary="Waar de grenzen en valuta's vandaan komen">
+      <ToonMeer
+        className="lv-globe-source m-0 text-muted text-[0.75rem] leading-[1.45]"
+        summary={c.source.summary}
+      >
         <p>
-          Grenzen en valuta's zijn meegebundeld (Natural Earth, CLDR), opgehaald op {WORLD_MAP_SOURCES.fetchedAt}. Er
-          wordt niets opgehaald terwijl je aan de bol draait. De grenzen lopen van {latitudeText(WORLD_LATLON_BOUNDS[1])}{" "}
-          tot {latitudeText(WORLD_LATLON_BOUNDS[3])}: Antarctica staat erop, boven de noordpunt van Groenland staat er
-          niets meer in de tabel. Dat laatste is een gat in onze data en geen uitspraak over wat daar ligt.
+          {c.source.body(
+            WORLD_MAP_SOURCES.fetchedAt,
+            latitudeText(WORLD_LATLON_BOUNDS[1], locale, c.latitude),
+            latitudeText(WORLD_LATLON_BOUNDS[3], locale, c.latitude),
+          )}
         </p>
       </ToonMeer>
     </div>

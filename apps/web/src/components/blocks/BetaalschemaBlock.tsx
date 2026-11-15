@@ -1,10 +1,13 @@
 import { useMemo, useState } from "react";
-import type { ScheduledFlow, Tx } from "@lavega/core";
+import type { PaycheckPreview, ScheduledFlow, Tx } from "@lavega/core";
 import { detectScheduleStreams } from "@lavega/core";
-import { formatEuro, monthShortNL } from "../../format.js";
+import { formatDate, formatEuroIn, formatSignedEuroIn, monthShort } from "../../format.js";
 import Module from "../Module.js";
 import { useWidgetEnabled } from "../moduleRegistry";
 import { daysBetween, shiftDate } from "./dates.js";
+import type { Locale } from "../../locale.js";
+import { useAppLocale } from "../../appLocale.js";
+import { moneyCopy } from "../../copy/money.js";
 
 /* Betaalagenda — the reference's "Payment schedule": what is due next, with a
  * date tile per row.
@@ -31,7 +34,9 @@ import { daysBetween, shiftDate } from "./dates.js";
  * exactly as much as an outgoing one — DUO paying him is a date he can count on.
  *
  * LaVega never pays anything, so there is no action here — only the date, the
- * amount, where the row came from and whether it is late. */
+ * amount and where the row came from. A planned date that has already passed
+ * is not on the agenda: it is not "next", and six stale rows pushed every real
+ * upcoming date off the block (21 Oct 2026). */
 
 const ROWS = 6;
 
@@ -39,26 +44,18 @@ const ROWS = 6;
  *  quarter the list stops being an agenda and becomes a subscription report. */
 const HORIZON_DAYS = 92;
 
-/** Dutch label for a flow's status. `paid`/`cancelled` never reach the list. */
-const STATUS_LABEL: Record<ScheduledFlow["status"], string> = {
-  expected: "verwacht",
-  confirmed: "bevestigd",
-  paid: "betaald",
-  cancelled: "vervallen",
-};
-
-/** How a detected cadence reads in Dutch. Covers every cadence
- *  `detectScheduleStreams` can return, plus the two short ones an older stream
- *  may still carry. */
-export function cadenceLabel(days: number): string {
-  if (days === 7) return "wekelijks";
-  if (days === 14) return "elke 2 weken";
-  if (days === 30) return "maandelijks";
-  if (days === 61) return "tweemaandelijks";
-  if (days === 91) return "elk kwartaal";
-  if (days === 182) return "halfjaarlijks";
-  if (days === 365) return "jaarlijks";
-  return `elke ${days} dagen`;
+/** How a detected cadence reads. Covers every cadence `detectScheduleStreams`
+ *  can return, plus the two short ones an older stream may still carry. */
+export function cadenceLabel(days: number, locale: Locale = "nl"): string {
+  const c = moneyCopy[locale].betaalschema.cadence;
+  if (days === 7) return c.wekelijks;
+  if (days === 14) return c.elke2Weken;
+  if (days === 30) return c.maandelijks;
+  if (days === 61) return c.tweemaandelijks;
+  if (days === 91) return c.elkKwartaal;
+  if (days === 182) return c.halfjaarlijks;
+  if (days === 365) return c.jaarlijks;
+  return c.elkeNDagen(days);
 }
 
 export type AgendaRow = {
@@ -81,17 +78,24 @@ export function nextOccurrence(lastDate: string, cadenceDays: number, asOf: stri
   return shiftDate(lastDate, steps * cadenceDays);
 }
 
-/** Planned flows and detected recurring payments, merged and sorted by date.
- *  Pure — `asOf` decides what is late, never the clock. */
-export function agendaRows(scheduledFlows: ScheduledFlow[], txs: Tx[], asOf: string, limit = ROWS): AgendaRow[] {
+/** Planned flows due on or after `asOf` and detected recurring payments,
+ *  merged and sorted by date. Pure — `asOf` decides what is past, never the clock. */
+export function agendaRows(
+  scheduledFlows: ScheduledFlow[],
+  txs: Tx[],
+  asOf: string,
+  limit = ROWS,
+  locale: Locale = "nl",
+): AgendaRow[] {
+  const c = moneyCopy[locale].betaalschema;
   const planned: AgendaRow[] = scheduledFlows
-    .filter((f) => f.status !== "paid" && f.status !== "cancelled")
+    .filter((f) => f.status !== "paid" && f.status !== "cancelled" && f.dueDate >= asOf)
     .map((f) => ({
       id: `flow:${f.id}`,
       date: f.dueDate,
-      label: f.label,
+      label: c.flowLabel(f),
       amount: (f.sign * f.amountCents) / 100,
-      note: `${f.entity ? `${f.entity} · ` : ""}${STATUS_LABEL[f.status]}`,
+      note: `${f.entity ? `${f.entity} · ` : ""}${c.status[f.status]}`,
       predicted: false,
     }));
 
@@ -104,12 +108,14 @@ export function agendaRows(scheduledFlows: ScheduledFlow[], txs: Tx[], asOf: str
       date,
       label: s.label,
       amount: (s.sign * s.amountCents) / 100,
-      note: `${cadenceLabel(s.cadenceDays)} · ${s.occurrences}× gezien`,
+      note: `${cadenceLabel(s.cadenceDays, locale)} · ${c.xGezien(s.occurrences)}`,
       predicted: true,
     }));
 
   return [...planned, ...recurring]
-    .sort((a, b) => (a.date === b.date ? a.label.localeCompare(b.label) : a.date.localeCompare(b.date)))
+    .sort((a, b) =>
+      a.date === b.date ? a.label.localeCompare(b.label) : a.date.localeCompare(b.date),
+    )
     .slice(0, limit);
 }
 
@@ -117,14 +123,20 @@ type BetaalschemaBlockProps = {
   scheduledFlows: ScheduledFlow[];
   /** Needed for the recurring detection; the same list Overzicht already has. */
   txs: Tx[];
-  /** Today, ISO — a date before it makes a row overdue. */
+  /** Today, ISO — a planned date before it is left off the agenda. */
   asOf: string;
+  /** The declared-income paycheck preview (#288). Absent means the bills lane
+   *  has not been wired here, and the agenda keeps its #286 behaviour. */
+  paycheck?: PaycheckPreview;
 };
 
-export function BetaalschemaBlock({ scheduledFlows, txs, asOf }: BetaalschemaBlockProps) {
-  const upcoming = useMemo(() => agendaRows(scheduledFlows, txs, asOf), [scheduledFlows, txs, asOf]);
-  const overdueCount = upcoming.filter((r) => r.date < asOf).length;
-  const predictedCount = upcoming.filter((r) => r.predicted).length;
+export function BetaalschemaBlock({ scheduledFlows, txs, asOf, paycheck }: BetaalschemaBlockProps) {
+  const [locale] = useAppLocale();
+  const c = moneyCopy[locale].betaalschema;
+  const upcoming = useMemo(
+    () => agendaRows(scheduledFlows, txs, asOf, ROWS, locale),
+    [scheduledFlows, txs, asOf, locale],
+  );
   /* De rij die OPEN staat, en waarom dat een toestand is en geen tooltip.
    *
    * REVIEW 4, PUNT 7 — EERST GEMETEN, EN DE UITKOMST IS DEELS EEN NEE. Hij noemde
@@ -159,28 +171,49 @@ export function BetaalschemaBlock({ scheduledFlows, txs, asOf }: BetaalschemaBlo
   const [open, setOpen] = useState<string | null>(null);
 
   return (
-    <Module
-      title="Betaalagenda"
-      height="tall"
-      footer={
-        upcoming.length > 0 ? (
-          <>
-            {overdueCount > 0 && `${overdueCount} datum${overdueCount === 1 ? "" : "s"} al verstreken. `}
-            {predictedCount > 0
-              ? `${predictedCount} regel${predictedCount === 1 ? "" : "s"} voorspeld uit je eigen geschiedenis, niet bevestigd.`
-              : "Alle regels zijn ingeplande bedragen."}
-          </>
-        ) : undefined
-      }
-    >
+    <Module title={c.title} height="tall">
+      {paycheck != null && (
+        <div
+          data-testid="betaalschema-paycheck"
+          className="flex flex-wrap items-baseline gap-x-3 gap-y-1 mb-2 text-[0.8rem] text-muted"
+        >
+          {!paycheck.hasIncome ? (
+            <span>{c.paycheck.noIncome}</span>
+          ) : (
+            <>
+              <span>{c.paycheck.until(formatDate(locale, paycheck.coversUntil))}</span>
+              <span className="tabular-nums">
+                {c.paycheck.due(formatEuroIn(locale, paycheck.dueBeforePaydayCents / 100))}
+              </span>
+              {paycheck.reservedCents > 0 && (
+                <span className="tabular-nums">
+                  {c.paycheck.reserved(formatEuroIn(locale, paycheck.reservedCents / 100))}
+                </span>
+              )}
+              <span
+                className={
+                  paycheck.shortfallCents == null
+                    ? ""
+                    : paycheck.shortfallCents > 0
+                      ? "text-neg"
+                      : "text-pos"
+                }
+              >
+                {paycheck.shortfallUnknown || paycheck.shortfallCents == null
+                  ? c.paycheck.unknown
+                  : paycheck.shortfallCents > 0
+                    ? c.paycheck.short(formatEuroIn(locale, paycheck.shortfallCents / 100))
+                    : c.paycheck.covered}
+              </span>
+            </>
+          )}
+        </div>
+      )}
       {upcoming.length === 0 ? (
-        <p className="block-empty">
-          Niets ingepland — hier komen je BTW-reserveringen, openstaande facturen en herkende vaste lasten te staan.
-        </p>
+        <p className="block-empty">{c.nietsIngepland}</p>
       ) : (
-        <div className="pay-list">
+        <div className="flex flex-col">
           {upcoming.map((r) => {
-            const overdue = r.date < asOf;
             const isOpen = open === r.id;
             return (
               /* De hele rij is de knop, niet alleen de naam: hij vroeg om te
@@ -189,7 +222,12 @@ export function BetaalschemaBlock({ scheduledFlows, txs, asOf }: BetaalschemaBlo
                  is een knop, ook een korte naam die nergens afgekapt wordt —
                  welke naam past hangt van de vensterbreedte af en die kan dit
                  component niet meten, dus één gedrag voor alle rijen is het
-                 enige dat niet soms liegt. */
+                 enige dat niet soms liegt.
+                 pay-row and pay-name stay hand-written CSS: the hover/focus/tap
+                 reveal is `.pay-row:hover .pay-name` — a descendant combinator
+                 resolveStyle cannot express, so its assertions in
+                 BetaalschemaBlock.test.tsx read blocks.css directly and are left
+                 as-is (see docs/adr/0005). */
               <button
                 type="button"
                 className="pay-row"
@@ -198,12 +236,19 @@ export function BetaalschemaBlock({ scheduledFlows, txs, asOf }: BetaalschemaBlo
                 aria-expanded={isOpen}
                 onClick={() => setOpen((cur) => (cur === r.id ? null : r.id))}
               >
-                <span className={`pay-date ${overdue ? "pay-date-overdue" : ""}`} aria-hidden="true">
-                  <span className="pay-date-day">{r.date.slice(8, 10)}</span>
-                  <span className="pay-date-month">{monthShortNL(r.date)}</span>
+                <span
+                  className="flex flex-col items-center justify-center flex-none w-[42px] py-1 px-0 rounded-sm leading-[1.1] bg-surface-2 border border-line"
+                  aria-hidden="true"
+                >
+                  <span className="font-bold text-[0.95rem] tabular-nums">
+                    {r.date.slice(8, 10)}
+                  </span>
+                  <span className="font-mono text-[0.62rem] uppercase tracking-[0.06em] text-muted">
+                    {monthShort(locale, r.date)}
+                  </span>
                 </span>
-                <span className="pay-info">
-                  <span className="pay-label">
+                <span className="flex-1 min-w-0 flex flex-col items-start">
+                  <span className="flex items-baseline gap-x-2 w-full min-w-0 font-semibold [@media(max-width:420px)]:flex-wrap">
                     {/* De naam staat in een eigen span, en dat is niet
                         cosmetisch: het afkappen zat op hetzelfde vakje als de
                         "voorspeld"-pil, dus bij een lange naam viel die pil
@@ -213,14 +258,24 @@ export function BetaalschemaBlock({ scheduledFlows, txs, asOf }: BetaalschemaBlo
                     <span className="pay-name" title={r.label}>
                       {r.label}
                     </span>
-                    {r.predicted && <span className="pay-tag">voorspeld</span>}
+                    {r.predicted && (
+                      <span
+                        data-testid="pay-tag"
+                        className="flex-none rounded-pill border border-line bg-surface-2 text-muted text-[0.65rem] font-medium py-0.5 px-2 whitespace-nowrap"
+                      >
+                        {c.voorspeldTag}
+                      </span>
+                    )}
                   </span>
-                  <span className="eyebrow pay-meta">
+                  <span className="eyebrow w-full">
                     {r.date} · {r.note}
-                    {overdue ? " · te laat" : ""}
                   </span>
                 </span>
-                <span className={`pay-amount ${r.amount >= 0 ? "text-pos" : "text-neg"}`}>{formatEuro(r.amount)}</span>
+                <span
+                  className={`flex-none font-semibold tabular-nums ${r.amount >= 0 ? "text-pos" : "text-neg"}`}
+                >
+                  {formatSignedEuroIn(locale, r.amount)}
+                </span>
               </button>
             );
           })}

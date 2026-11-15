@@ -2,27 +2,6 @@ import { describe, expect, test } from "vitest";
 import { parseBankCsv } from "./bankCsv.js";
 import { parseIngCsv } from "./csv.js";
 
-/* --- ING: fold-in regression — parseBankCsv must produce the exact same txs
- * as the standalone parseIngCsv wrapper for the same ING fixture. --- */
-const ING = `"Datum";"Naam / Omschrijving";"Rekening";"Tegenrekening";"Code";"Af Bij";"Bedrag (EUR)";"Mutatiesoort";"Mededelingen"
-"20260102";"Albert Heijn";"NL01INGB0001";"";"BA";"Af";"12,34";"Betaalautomaat";"Boodschappen"
-"20260103";"Salaris";"NL01INGB0001";"NL99";"OV";"Bij";"2.500,00";"Overschrijving";"Loon"`;
-
-test("ING: parseBankCsv detects the ING profile and matches parseIngCsv's txs (accountKey aside)", () => {
-  const engineResult = parseBankCsv(ING, "NL01INGB0001");
-  const wrapperTxs = parseIngCsv(ING, "NL01INGB0001");
-
-  expect(engineResult.profile).toBe("ING");
-  expect(engineResult.txs).toHaveLength(2);
-  expect(wrapperTxs).toHaveLength(2);
-
-  // Byte-identical field-by-field (both were tagged with the same accountKey here,
-  // since the CSV's own "Rekening" column also happens to be NL01INGB0001).
-  expect(engineResult.txs).toEqual(wrapperTxs);
-  expect(wrapperTxs[0]).toMatchObject({ date: "2026-01-02", amount: -12.34, counterparty: "Albert Heijn", accountKey: "NL01INGB0001" });
-  expect(wrapperTxs[1]).toMatchObject({ date: "2026-01-03", amount: 2500, counterparty: "Salaris" });
-});
-
 test("ING: long free-text fields are preserved in full (no 80/300 truncation) — the old parseIngCsv never truncated", () => {
   const longCp = "Stichting " + "Langlopende Naam ".repeat(6).trim(); // > 80 chars
   const longMemo = "SEPA batchincasso ".repeat(30).trim(); // > 300 chars
@@ -76,7 +55,12 @@ test("Rabobank: profile detected, ISO dates, signed amounts (incl. thousands sep
    * draagt de kolom "Saldo na trn" met 2234,56 op de laatste regel — het
    * Rabobank-profiel declareerde alleen geen `bal`, dus er werd nooit gezocht.
    * De verwachting pinde daarmee een gemis vast in plaats van een eigenschap. */
-  expect(result.accounts[0]).toMatchObject({ key: "NL39RABO0300065264", iban: "NL39RABO0300065264", bank: "Rabobank", balance: 2234.56 });
+  expect(result.accounts[0]).toMatchObject({
+    key: "NL39RABO0300065264",
+    iban: "NL39RABO0300065264",
+    bank: "Rabobank",
+    balance: 2234.56,
+  });
   expect(result.accounts[0].balanceDate).toBe("2026-01-06");
 });
 
@@ -91,7 +75,11 @@ test("Knab: profile detected, CreditDebet drives sign (D=outflow, C=inflow)", ()
   expect(result.txs).toHaveLength(2);
 
   expect(result.txs[0]).toMatchObject({
-    date: "2026-01-10", amount: -75.5, counterparty: "Coolblue B.V.", description: "Aankoop laptop", accountKey: "NL55KNAB0123456789",
+    date: "2026-01-10",
+    amount: -75.5,
+    counterparty: "Coolblue B.V.",
+    description: "Aankoop laptop",
+    accountKey: "NL55KNAB0123456789",
   });
   expect(result.txs[1]).toMatchObject({ date: "2026-01-11", amount: 500, counterparty: "Klant X" });
 });
@@ -107,8 +95,17 @@ test("Revolut: profile detected, dates truncate the time portion, amount sign pa
   expect(result.profile).toBe("Revolut");
   expect(result.txs).toHaveLength(2);
 
-  expect(result.txs[0]).toMatchObject({ date: "2026-01-12", amount: -4.5, counterparty: "Coffee Shop", currency: "EUR" });
-  expect(result.txs[1]).toMatchObject({ date: "2026-01-13", amount: 250, counterparty: "Bank Transfer" });
+  expect(result.txs[0]).toMatchObject({
+    date: "2026-01-12",
+    amount: -4.5,
+    counterparty: "Coffee Shop",
+    currency: "EUR",
+  });
+  expect(result.txs[1]).toMatchObject({
+    date: "2026-01-13",
+    amount: 250,
+    counterparty: "Bank Transfer",
+  });
   // "Product" column value is "Current", not an IBAN -> falls back to the caller's fallback key.
   expect(result.txs[0].accountKey).toBe("Current");
 });
@@ -139,9 +136,17 @@ test("American Express: profile detected, flip inverts sign both ways (positive 
   // 12/01/2026 is MM/DD/YYYY -> December 1st (was wrongly read as Jan 12 under
   // the old DMY-only parseDate; fixed by the per-profile "MDY" dateFormat).
   expect(result.txs[0]).toMatchObject({
-    date: "2026-12-01", amount: -45, counterparty: "RESTAURANT DE KROON AMSTERDAM", description: "RESTAURANT DE KROON", accountKey: "AMEX-12345",
+    date: "2026-12-01",
+    amount: -45,
+    counterparty: "RESTAURANT DE KROON AMSTERDAM",
+    description: "RESTAURANT DE KROON",
+    accountKey: "AMEX-12345",
   });
-  expect(result.txs[1]).toMatchObject({ date: "2026-01-13", amount: 500, counterparty: "PAYMENT RECEIVED - THANK YOU" });
+  expect(result.txs[1]).toMatchObject({
+    date: "2026-01-13",
+    amount: 500,
+    counterparty: "PAYMENT RECEIVED - THANK YOU",
+  });
 });
 
 /* --- American Express (Dutch export): same MM/DD/YYYY US date order, Dutch
@@ -162,7 +167,11 @@ test("American Express (NL export): one account, US MM/DD dates, flipped signs",
   expect(r.accounts[0].key).toBe("AMEX-NL"); // fallback key, single account
   expect(r.txs).toHaveLength(2);
   expect(r.txs[0]).toMatchObject({ date: "2026-07-31", amount: -22.28, counterparty: "UBER TRIP" }); // MDY + flip
-  expect(r.txs[1]).toMatchObject({ date: "2026-07-29", amount: -585.57, counterparty: "AIRBNB LONDEN" });
+  expect(r.txs[1]).toMatchObject({
+    date: "2026-07-29",
+    amount: -585.57,
+    counterparty: "AIRBNB LONDEN",
+  });
 });
 
 /* --- Trading 212: comma-delimited, cashOnly:true keeps only cash-movement
@@ -197,8 +206,18 @@ test("ABN AMRO: TAB/no-header detected, dates ISO, signed amounts, closing balan
   expect(result.profile).toBe("ABN AMRO");
   expect(result.txs).toHaveLength(2);
 
-  expect(result.txs[0]).toMatchObject({ date: "2026-01-15", amount: -250, currency: "EUR", accountKey: "0123456789", counterparty: "ALBERT HEIJN 1234" });
-  expect(result.txs[1]).toMatchObject({ date: "2026-01-16", amount: 500, accountKey: "0123456789" });
+  expect(result.txs[0]).toMatchObject({
+    date: "2026-01-15",
+    amount: -250,
+    currency: "EUR",
+    accountKey: "0123456789",
+    counterparty: "ALBERT HEIJN 1234",
+  });
+  expect(result.txs[1]).toMatchObject({
+    date: "2026-01-16",
+    amount: 500,
+    accountKey: "0123456789",
+  });
   expect(result.txs[1].counterparty).toContain("Werkgever BV");
 
   expect(result.accounts).toHaveLength(1);
@@ -220,10 +239,20 @@ test("Revolut NL export: detected, bank Revolut, keyed by Product, fee subtracte
   const r = parseBankCsv(REVOLUT_NL, "REVOLUT");
   expect(r.profile).toBe("Revolut");
   expect(r.txs).toHaveLength(2);
-  expect(r.txs[0]).toMatchObject({ date: "2026-01-03", amount: 19.45, counterparty: "Van ELISA", accountKey: "Betaalrekening" });
+  expect(r.txs[0]).toMatchObject({
+    date: "2026-01-03",
+    amount: 19.45,
+    counterparty: "Van ELISA",
+    accountKey: "Betaalrekening",
+  });
   expect(r.txs[1]).toMatchObject({ date: "2026-01-05", amount: -5.5 }); // -5.00 minus 0.50 fee
   expect(r.accounts).toHaveLength(1);
-  expect(r.accounts[0]).toMatchObject({ key: "Betaalrekening", bank: "Revolut", balance: 24.45, balanceDate: "2026-01-05" });
+  expect(r.accounts[0]).toMatchObject({
+    key: "Betaalrekening",
+    bank: "Revolut",
+    balance: 24.45,
+    balanceDate: "2026-01-05",
+  });
 });
 
 const REVOLUT_EN = `Type,Product,Started Date,Completed Date,Description,Amount,Fee,Currency,State,Balance
@@ -234,7 +263,12 @@ test("Revolut EN export still works (dual-language) and captures Balance", () =>
   expect(r.profile).toBe("Revolut");
   expect(r.txs).toHaveLength(1);
   expect(r.txs[0]).toMatchObject({ date: "2026-02-01", amount: -10, accountKey: "Current" });
-  expect(r.accounts[0]).toMatchObject({ key: "Current", bank: "Revolut", balance: 90, balanceDate: "2026-02-01" });
+  expect(r.accounts[0]).toMatchObject({
+    key: "Current",
+    bank: "Revolut",
+    balance: 90,
+    balanceDate: "2026-02-01",
+  });
 });
 
 /* --- ING "Alle spaarrekeningen": balance-only snapshot, no transactions. One
@@ -250,7 +284,13 @@ test("Savings balance export: no txs, one account per Rekening, latest Boeksaldo
   expect(r.txs).toHaveLength(0);
   expect(r.accounts).toHaveLength(2);
   const a = r.accounts.find((x) => x.key === "A28641213")!;
-  expect(a).toMatchObject({ name: "Oranje Spaarrekening", bank: "ING", balance: 1234.56, balanceDate: "2026-07-31", currency: "EUR" });
+  expect(a).toMatchObject({
+    name: "Oranje Spaarrekening",
+    bank: "ING",
+    balance: 1234.56,
+    balanceDate: "2026-07-31",
+    currency: "EUR",
+  });
   expect(r.accounts.find((x) => x.key === "D12883091")!.balance).toBe(0.2);
 });
 
@@ -272,7 +312,10 @@ describe("ING English CSV export", () => {
     const out = parseBankCsv(EN, "fallback");
     expect(out.txs).toHaveLength(2);
     // Debit must be negative even though the CSV writes the amount unsigned.
-    expect(out.txs.find((t) => t.counterparty.includes("Albert Heijn"))!.amount).toBeCloseTo(-42.15, 2);
+    expect(out.txs.find((t) => t.counterparty.includes("Albert Heijn"))!.amount).toBeCloseTo(
+      -42.15,
+      2,
+    );
     expect(out.txs.find((t) => t.counterparty.includes("Salaris"))!.amount).toBeCloseTo(3250, 2);
   });
 

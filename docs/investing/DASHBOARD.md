@@ -13,13 +13,14 @@ The dashboard answers four questions:
 3. What does the portfolio hold now?
 4. What produced the return for one position?
 
-The overview contains these views:
+The app is a full-window shell with tabs in a top bar (Overview, and whichever of Positions, Net worth and Agents the owner has switched on) and a profile page for brokers, tabs and cards. See `docs/superpowers/specs/2026-09-28-investing-shell-design.md` for the shell's layout, module and widget model. Overview itself is a grid of independently hideable cards:
 
 - A portfolio chart in EUR value mode or indexed-return mode.
 - A compact allocation donut.
-- A current-positions table.
-- A separate stacked net-worth chart for invested value and cash.
-- A detail page for each open or closed position.
+- Key figures, risk & composition, and sector allocation.
+- A portfolio agent card.
+
+The positions table and the stacked net-worth chart moved to their own tabs (`/positions`, `/net-worth`); they are no longer part of Overview.
 
 All market charts use daily end-of-day data. Do not add candlesticks, OHLC controls, or intraday behavior. The dashboard does not change the personal-finance dashboard.
 
@@ -66,6 +67,7 @@ Broker coverage differs ([Research: broker cash and cash-flow reporting](https:/
 - IBKR Cash Report supplies balance anchors. Statement of Funds supplies dated deposits, withdrawals, fees, and dividends. Users can add both sections to their existing Flex query without changing the token and Query ID setup.
 - Trading 212 `/api/v0/equity/account/summary` supplies current available cash. `/history/transactions` and `/history/dividends` supply dated activity. Official documentation now exposes these schemas. Sanitized live-response verification remains required for provider sign behavior, `TRANSFER` direction, and account-specific history retention. Until verified, ambiguous transfers become explicit problems and non-zero `inPies` or `reservedForOrders` prevents an unsafe total-cash anchor.
 - If flow history cannot reach a requested date, return unknown. Never fabricate an opening cash balance.
+- Flow history reaches a date only inside the window the adapter proves complete (`CashHistoryCoverage`, see `CONNECTORS.md`). IBKR proves its Flex statement period. Trading 212 proves nothing yet, so its cash is known from its latest balance date onwards and unknown before it.
 
 ## Historical portfolio value
 
@@ -80,7 +82,7 @@ Build the date axis from a shared Monday-to-Friday calendar plus all price-bar d
 For a held symbol with no close on a business day:
 
 - Reuse its last close for at most five consecutive business days.
-- Add the symbol to `forwardFilled` while a reused close remains within the cap.
+- Add the symbol to `forwardFilled` only while no later close exists yet (a session still settling). A gap followed by a later close was a closed market, and the reused close is the true value.
 - After five business days, exclude the symbol from `positionsValue` and add it to `unpriced`.
 - Never replace missing value with zero.
 
@@ -121,6 +123,8 @@ Treat dividends, interest, fees, trades, and other internal movements as portfol
 
 Return `null` before cash history becomes reachable. Keep gaps visible. Do not shorten the series by silently moving its start.
 
+Trading 212 reports no statement period, so its cash window is proven by arithmetic. A dated balance must equal every reported movement after it: the transactions, the dividends, and each trade's settlement, with a foreign movement converted at that day's rate (as the engine's own wallet fold does). A `TRANSFER` with no stated direction is resolved from the balance as an inflow, an outflow, or an exclusion when it is a move between the account's own pockets. The window is proven when the residual is within one cent per movement or half a percent of the moved volume, whichever is larger; the second absorbs conversion-rate drift between the provider and the engine's daily rates while a discrete missing movement stays unproven. When a section's pagination is unfinished the window stays unknown, because a short read can still conspire to reconcile. Read the proof on the dashboard read, where every resumed page has merged; the adapter sees one page-set and cannot reconcile.
+
 The crosshair also reports money-weighted return as XIRR. Calculate XIRR from the start of the selected visible window through the hovered date:
 
 - Add a synthetic outflow equal to portfolio value on the window's first date.
@@ -142,19 +146,39 @@ type MwrPoint = { date: string; xirr: number | null };
 
 ## Price backfill and dashboard refresh
 
+Since issue #307 prices live once per instrument for the whole installation: `investing.instrument_price_bars` / `instrument_price_coverage`, keyed by `isin:<ISIN>:<CUR>` or `sym:<ticker>:<CUR>`. The numbers below describe one user's own history under the old per-user tables (358,756 rows for 144 symbols), which issue #310 dropped in migration `0037`; the shared store stores that shape once for any number of users. The first sync after the switch adopts the `sym:` rows an earlier release stored when an `isin:` key appears (alias move), so a symbol upgraded to ISIN identity is not refetched. A per-key claim (120 s) makes two concurrent syncs for one instrument fetch it once; the loser reports the key as pending and completes on its next slice.
+
 Price backfill runs on the server, separate from broker sync ([Backfill set and sync orchestration](https://github.com/Elmata2/LaVega/issues/74)). Remove the browser's page-open `POST /api/prices/sync` call and the hardcoded S&P 500 request.
 
 After broker sync completes, start the price orchestrator. Its symbol set is every traded symbol, including closed positions, plus the selected benchmarks. Backfill a position symbol from its first trade. Backfill a benchmark from the portfolio's first trade.
 
-Run at most one price orchestration per tenant. A trigger received during an active run joins that run instead of starting overlapping Yahoo requests. Trigger after broker sync returns, including a partial or empty result, so existing symbols still receive their daily top-up. Per-broker problems do not suppress price sync for cached symbols.
+**App open sends one refresh intent and reads one state.** The browser posts `POST /api/sync/refresh` once (with `force` when the user asked for one) and then polls `GET /api/sync/state` every 2 s while `active` is true; it no longer holds the sync request open and no longer loops `/api/prices/sync`. The server runs the lanes in order — holdings (two Trading 212 requests, 60 s gate), history (tail-only, 15 min gate) and prices — inside one leased run that continues after the response, so closing the tab does not stop it. The dashboard refreshes when a lane's `syncedAt` changes. [[#304](https://github.com/Elmata2/LaVega/issues/304)] [[#306](https://github.com/Elmata2/LaVega/issues/306)]
+
+Run at most one price orchestration per tenant. A trigger received during an active run joins that run instead of starting overlapping Yahoo requests. The browser waits for that run to settle, then starts a fresh discovery so a benchmark chosen during the run is included. A paused slice also includes selected benchmarks, including ones chosen since the previous slice. Trigger after broker sync returns, including a partial or empty result, so existing symbols still receive their daily top-up. Per-broker problems do not suppress price sync for cached symbols.
 
 Fetch in this order:
 
-1. Current holdings.
-2. Closed holdings.
-3. Benchmarks.
+1. Selected benchmarks.
+2. Current holdings.
+3. Closed holdings.
 
 Wait 300 ms between symbol requests. Keep the existing Yahoo request retry and exponential-backoff behavior. Do not cap the number of symbols in one run.
+
+Trading 212 tickers ending in `_EQ` retain their broker ticker and ISIN during price synchronization. They bypass the preliminary OpenFIGI price mapping because Yahoo already decodes the broker ticker and searches the ISIN. Replacing the broker ticker with OpenFIGI's first listing can lose the venue hint or introduce a ticker that Yahoo does not recognize. Plain tickers still use the existing OpenFIGI mapping.
+
+Decoded Trading 212 tickers use only their encoded venue. They do not try the same ticker on unrelated exchanges. During preview verification, the old suffix sweep mapped Masimo (`MASI_US_EQ`) to Masi Agricola (`MASI.MI`) and Skechers (`SKX_US_EQ`) to Skylark (`SKX.F`). Nonempty price history does not establish security identity. Yahoo's ISIN lookup remains a separate candidate source.
+
+After a genuine listing-not-found result, the default price provider can ask OpenFIGI for an alternate listing of the same ISIN. The returned ISIN must match, and its exchange must have a known Yahoo suffix. Unknown exchanges, invalid tickers, and conflicting suffixes are rejected. The alternate is one explicit symbol, not another suffix sweep. Successful lookup and transport failures do not call this fallback. For example, `TSFAd_EQ` has TSMC ADR ISIN `US8740391003`; OpenFIGI maps that ISIN to US `TSM`, whose Yahoo prices are in USD. The stored broker symbol remains `TSFAd_EQ`.
+
+Yahoo price lookup tries another candidate only after a confirmed listing-not-found response or a chart with no closes. Transport failures stop the candidate loop after the HTTP client's retries; changing the symbol cannot repair an outage or a rate limit. Sector lookup continues after a missing listing, but stops on other request failures. An unresolved listing is not proof that an instrument was delisted, except for one case: a closed (fully sold) position's every candidate confirmed not found. That position will never trade again, so the outcome cannot change; `PriceCoverage.delistedSince` (migration 0021) records the date and price sync stops asking, rather than reporting a problem on every run. A held position with the same confirmed-not-found result still reports a problem, because it is still owed forward price data. `SKX_US_EQ` and `CPRX_US_EQ` above are examples of positions this covers once fully sold.
+
+Each price provider reuses one Yahoo HTTP client for all symbols and explicit fallback requests. Cookie and crumb negotiation happens once per provider session instead of once per symbol, reducing authentication traffic during a large backfill.
+
+Remaining limits: Yahoo ISIN search selects its first symbol and does not return an ISIN equality check or verify the broker venue. Plain tickers with unknown exchanges still have suffix fallbacks. A shared, validated listing resolver for prices, sectors, and fundamentals remains separate work. A delisted security can also require another historical-data source. Previously mismatched cached series need targeted repair; a failed lookup retains cached bars, and complete coverage can skip the provider entirely. Do not purge valid alternate listings merely because their venue differs from the broker venue.
+
+Each symbol's cache records its coverage: the dates the provider answered, and the listing and currency it quoted them in. A sync asks only for the dates before and after that coverage. A day inside it without a bar is a closed market, so it is never asked for again. A failed request keeps the cached bars and coverage, and a failed earlier range does not stop the later range from being stored.
+
+The broker's currency is not evidence of a stale cache, because a listing can quote in another currency. When the provider quotes another listing or currency than the coverage records, or reports a split after it, refetch the whole covered history and make the answer the only rows in that window. A cached session the new answer lacks is deleted, so a holiday on the old listing cannot mark the cache stale on every later sync. This repairs historic GBX-versus-GBP mistakes on the next sync without a manual cache purge. Caches written before coverage existed take it from their bars once.
 
 Expose price progress separately from broker progress at `GET /api/prices/sync/status`. Use the same status vocabulary as `BrokerSyncProgress`. Show remaining symbols and running or waiting state in the dashboard right rail.
 
@@ -164,24 +188,67 @@ Render cached partial data while backfill continues. A failed symbol retries on 
 
 Maintain an in-memory `dataVersion`. Increment it after broker data is applied and after a price-store upsert completes. Cache the last `InvestingDashboardData` with its version. Recompute only when the version changes.
 
+Risk is a projection of the read model, not a per-request computation. `buildInvestingDashboard` calls `buildHistoricalRisk` once for every configured benchmark symbol and each risk range (`6M`, `1Y`, `All`) over the series it has already built, and stores the results on `InvestingDashboardData.risk` as `byBenchmark[symbol][range]` plus a `defaultBenchmark`. `/api/investing/summary` returns the projection entry for its range and benchmark, and the portfolio chat's `get_risk` reads the same entry; neither calls `buildHistoricalRisk` on the request path. The projection travels in the dashboard snapshot, so it is version-keyed with the rest of the read model and rebuilt only when `dataVersion` changes.
+
+Composition is the second projection. `buildInvestingDashboard` also stores `InvestingDashboardData.composition` — the five largest priced positions (weighted against the priced total, `positionsByMarketValueDesc` owns the one ordering the portfolio-agent snapshot shares) and the priced / missing / estimated holding counts (`buildCompositionProjection`). It is a pure function of `positions`, travels in the same version-keyed snapshot, and the Overview reads it from the shared dashboard instead of a second summary request; `/api/investing/summary` now returns its `topPositions` and counts from the projection too.
+
+Sectors are not a projection of the dashboard. They come from tenant stores (market-data consent, corrections, the inference setting) whose writes are not keyed to `dataVersion`. `apps/investing-server/src/sectorRead.ts` is a tenant-scoped Effect read — a sibling of `portfolioRead.ts` — returning `{ sectors, sectorCoverage, revision }`. It caches its per-symbol resolution on a sector-store revision (`sectorRevision.ts`) raised by any write to the correction store or the inference setting, plus the consent/inference visibility flag; a correction therefore appears on the very next read, while a broker or price write re-weights the exposure over the current positions and keeps the resolution. `GET /api/investing/sectors` exposes it, and the Overview reads it only while a sector widget is on screen. The consent gate, the inference-setting gate and the correction precedence (`correction` > `provider` > `inferred` > `unknown`) are identical to the summary route's.
+
+A sector read may call the provider (Yahoo) for a symbol. Three rules in `apps/investing-server/src/sectorResolution.ts` limit that (#309):
+
+1. **Attempt memory.** When a provider fetch returns no profile (or throws), the store records the time of the attempt for that symbol. The provider is not asked again for that symbol for `PROVIDER_RETRY_HOURS` (24 hours). A timeout (rule 3) is not an answer and records nothing. The time lives in the existing JSON row of `investing.sector_profiles` as the key `providerAttemptedAt`. A symbol with no profile gets a row `{"kind": "none", "providerAttemptedAt": ...}`, which `get` reads as no profile; migration `0032_sector_profiles_attempt_rows.sql` allows `kind: "none"` in the table check. Writing a non-provider profile (an inference) keeps the attempt time; writing a provider profile replaces the row. Apply the migration before you deploy this code.
+2. **One freshness rule.** `needsProviderFetch(profile, lastAttempt, now)` is the only test that decides if a symbol needs a provider fetch. A fresh provider profile never needs one (a fund is fresh for `FUND_PROFILE_REFRESH_DAYS`, 90 days). A symbol with no profile, an inferred profile, or a stale or undated provider fund needs one only if the last attempt is missing, unparseable, or older than 24 hours.
+3. **Time budget.** One read spends at most `SECTOR_FETCH_BUDGET_MS` (8 seconds) on provider fetches. Each provider call is raced against the time that is left. After the budget, the remaining symbols resolve from stored data only.
+
+`GET /api/investing/summary` never calls the provider: it resolves sectors from stored profiles only. `GET /api/investing/sectors` still fetches, within these rules. To roll back, revert the change. Rows with `kind: "none"` break the old reader, so also run `DELETE FROM investing.sector_profiles WHERE profile->>'kind' = 'none'; UPDATE investing.sector_profiles SET profile = profile - 'providerAttemptedAt';` (the old table check allows only `stock` and `fund`, so delete the `none` rows before you restore it).
+
+The web app holds one shared dashboard read model per query identity. `apps/investing-web/src/lib/dashboardResource.ts` keeps one entry per identity (the optional position symbol) behind a `useSyncExternalStore`-shaped subscribe function. Every consumer of the same identity subscribes to that one entry: a second widget starts no second request, the refresh event fans out once, only the newest request for an identity may write it, and navigating between Overview, Positions and a position detail reuses the model already held. Overview reads risk from `InvestingDashboardData.risk` and composition from `InvestingDashboardData.composition` in that model, so switching the risk range or benchmark is a client-side view, not a fetch, and the Overview makes one dashboard read. Sectors come from their own `apps/investing-web/src/lib/sectorResource.ts` read (`GET /api/investing/sectors`), which the page makes only while a sector widget is on screen and which never re-fetches the dashboard. `/api/investing/summary` stays server-side for one release but no component calls it.
+
+### Dashboard latency and resumed history
+
+The Neon dashboard reads all requested price histories in one tenant-scoped transaction.
+File and in-memory stores retain the bounded per-symbol reader. A failed bulk read returns
+the existing degraded-data warning rather than issuing a second wave of individual queries.
+Dashboard cache entries expire after 15 seconds. Hosted workers keep only tenant-keyed
+dashboard data across requests. Each request still creates and closes its own Neon pool.
+Broker and price writes invalidate cached data. Concurrent identical dashboard reads share
+one build.
+Frankfurter latest and historical FX calls have a five-second limit. On expiry the dashboard
+uses its cached/fallback FX data and reports the FX problem; it never delays broker positions.
+
+Trading 212 resumed history batches are incremental, including the final batch. Completion
+does not make that final page a full snapshot: earlier trades, dividends, and cash flows
+must remain present. A fresh, complete sync still replaces historical collections. Data
+already lost by the old final-page replacement requires a fresh complete broker sync.
+
+The September 6, 2026 production probe measured a dashboard response at 34.8 seconds before
+these changes. A direct tenant-scoped database read found 358,756 price rows for 144 symbols.
+Broker history also has provider rate limits; rewriting calculation code in Rust does not
+remove those limits. These are baseline measurements, not post-deployment speed claims.
+Production verification requires an authenticated session.
+
+A read-only comparison against those same 358,756 live rows took 24,541 ms with the
+three-worker per-symbol reader and 2,549 ms with the bulk reader (about 9.6 times faster).
+This measures the database read from the development machine, not total browser latency.
+The report is stored at `/tmp/lavega-verify-investing/evidence/price-read-benchmark.json`.
+Broker snapshots are saved before resume cursors advance; failed saves leave the previous
+cursor available for retry. Sync merges the latest persisted snapshot rather than a warm
+instance's older copy. Concurrent broker syncs across server instances still lack a shared
+lease; serial syncs are covered by these changes.
+
 ## Overview layout
 
-Use the chart-and-right-rail layout selected by the dashboard prototype ([Dashboard layout](https://github.com/Elmata2/LaVega/issues/78)).
+The chart-and-right-rail layout from the dashboard prototype ([Dashboard layout](https://github.com/Elmata2/LaVega/issues/78)) shaped the original widget choices; the investing shell (`docs/superpowers/specs/2026-09-28-investing-shell-design.md`) superseded it with an independently hideable widget grid.
 
-Implementation status: production overview uses this responsive reading order. KPI values and broker, price, vault, and cache states stay in the right rail on wide screens and follow the performance chart on narrow screens. Refresh failures keep the last valid dashboard payload visible.
+Implementation status: refresh failures keep the last valid dashboard payload visible.
 
-On wide screens:
-
-- Put the portfolio chart in the main column.
-- Put a compact right rail beside it. Order right-rail content as KPIs, allocation donut, then sync, vault, and price-cache status chips.
-- Put the positions table at full width below the chart and rail.
-- Put the stacked net-worth chart at full width below the positions table.
-
-The KPI block shows current portfolio value, daily change, and total return. Status controls must not compete visually with these values.
-
-On narrow screens, use this order: portfolio chart, KPIs, allocation donut, status chips, positions table, net-worth chart. Keep tables and charts full width. Do not hide required information behind a desktop-only hover state.
+Overview's card order and column placement (left/right/full-width) are owned by the widget registry described in `docs/superpowers/specs/2026-09-28-investing-shell-design.md` §3-4, not by this document. The positions table and the net-worth chart are on their own tabs and are laid out by those tabs' own pages, each full width.
 
 Prototype reference: [`prototype-layout-78`](https://github.com/Elmata2/LaVega/tree/prototype-layout-78).
+
+The per-tenant module and widget toggles persist in `investing.preferences.layout` (migration
+`db/migrations/0016_investing_layout.sql`). Apply it with `pnpm db:migrate` before deploying
+this shell; without it, `GET`/`PUT /api/investing/layout` fail against that tenant's row.
 
 ## Portfolio chart modes
 
@@ -203,9 +270,7 @@ type ChartMode = "euros" | "indexed";
 
 function deriveChartMode(benchmarkIds: string[]): ChartMode;
 
-function computeReturnSeries(
-  points: { date: string; value: number | null }[],
-): ReturnPoint[];
+function computeReturnSeries(points: { date: string; value: number | null }[]): ReturnPoint[];
 
 type IndexedSeriesPoint = {
   date: string;
@@ -224,9 +289,9 @@ If the visible window starts with unknown portfolio value, return `null` until t
 
 ## Benchmark selection
 
-Allow zero to three benchmarks ([Benchmark selection](https://github.com/Elmata2/LaVega/issues/76)). Put a chip row under the portfolio-chart header. `+ Vergelijk` opens an inline combobox. Each selection becomes a removable chip. Hide `+ Vergelijk` when three benchmarks are selected and show it again after removal.
+Allow zero to three stored benchmarks ([Benchmark selection](https://github.com/Elmata2/LaVega/issues/76)). An empty selection is not "compare with nothing": every benchmark read resolves it to MSCI World (`IWDA.AS`, EUR), so beta and alpha are available before the owner has chosen. The default is applied on read and is never written to the store, so removing every benchmark returns the account to it. Put a chip row under the portfolio-chart header. `+ Vergelijk` opens an inline combobox. Each selection becomes a removable chip. Hide `+ Vergelijk` when three benchmarks are selected and show it again after removal.
 
-Implementation status: selection store contract now has one-row-per-tenant IndexedDB storage plus file-backed Docker storage at `.lavega/benchmarks.json` (or `INVESTING_BENCHMARK_STORE_FILE`). Runtime exposes get and replace-whole APIs, searches Yahoo with curated European fallback, includes selected symbols in server price orchestration, and renders EUR or indexed chart mode from selection. Hosted database storage remains a hosted-runtime implementation of same contract.
+Implementation status: selection store contract now has one-row-per-tenant IndexedDB storage plus file-backed Docker storage at `.lavega/benchmarks.json` (or `INVESTING_BENCHMARK_STORE_FILE`). Runtime exposes get and replace-whole APIs, searches Yahoo with curated European fallback, includes selected symbols in server price orchestration, and renders EUR or indexed chart mode from selection. Hosted database storage remains a hosted-runtime implementation of same contract. Every read that needs benchmarks (dashboard risk projection, `GET /api/investing/benchmarks`, price-sync target discovery) resolves an empty selection to MSCI World. The Risk card also carries a `Choose benchmark` action beside an unavailable beta and writes the selection through the same replace-whole API.
 
 Search Yahoo through `GET https://query1.finance.yahoo.com/v1/finance/search`, using the existing `YahooHttpClient` crumb, cookie, retry, and backoff behavior ([Research: Yahoo Finance instrument search](https://github.com/Elmata2/LaVega/issues/69)). Use live search first and the curated European benchmark list as fallback. Search results do not include currency. Confirm EUR denomination with a quote or chart request when required. Update Yahoo consent disclosure to say that accepted use includes interactive search; do not add a second consent gate.
 
@@ -248,6 +313,7 @@ The store is authoritative across reloads. Do not mirror benchmark selection in 
 Assign benchmark colors by current selection order: `chart-blue`, `chart-purple`, then `chart-teal`. Reflow colors when a selection is removed. Keep coral unused because it conflicts with the negative color. The legend shows name and color for the portfolio and each benchmark. A legend entry toggles line visibility. Wrap only when horizontal space is insufficient.
 
 Render missing benchmark history as `null` with disconnected line segments. Keep its legend entry visible while its backfill progresses.
+Price sync requests selected benchmarks before holdings, including when a paused run resumes, so a large portfolio backfill does not leave the comparison line last in the queue.
 
 ## Portfolio chart interaction
 
@@ -263,6 +329,14 @@ The chart supports direct drag-to-zoom, scroll-wheel zoom, and typed date input 
 - Do not add a separate brush strip.
 
 Direct manipulation must respond during the gesture. Capture the pointer so dragging continues outside plot bounds. Keep the interaction interruptible. Range or zoom changes update the visible window and indexed-return anchor together.
+
+Window transitions follow these rules. `chartWindowReducer` in `useChartWindow.ts` owns them, and each chart keeps its own instance.
+
+- Zooming out never narrows the window. It stops at full history and stays there; it does not jump back to the preset.
+- The wheel ignores a chart that has fewer points than its wheel minimum.
+- Escape and the zoom pill restore the preset the custom window started from.
+- One pointer owns a drag. A second pointer cannot take it over. Pointer cancel and lost pointer capture end the drag without zooming.
+- A drag holds dates, not indices. If the chart data is replaced during a drag, the drag ends without zooming.
 
 The tooltip flips before it reaches the right card edge. Trade markers use click or keyboard activation for drilldown. Hover never performs navigation.
 
@@ -316,6 +390,7 @@ Use these data-quality states:
 - A close forward-filled within five business days remains usable and shows `Geschatte koers`.
 - After the cap, show `Waarde onbekend`; do not show weight.
 - When cost basis is missing, keep value and quantity and show `Rendement niet beschikbaar` with the import action defined below.
+- When every held broker leg has a denominated current cost but trade history is incomplete, show `Ongerealiseerd rendement` only. Do not show total return, realized gain, or return percentage.
 
 ## Position return
 
@@ -328,6 +403,8 @@ Calculate each position in EUR with weighted-average cost ([Position return: ave
 - `realizedGain` is sale proceeds minus removed basis and sell commission.
 - `dividendsReceived` is dividends for the symbol, converted at dividend-date FX.
 - `totalReturn` is unrealized gain plus realized gain plus dividends received.
+
+Broker cost supports current unrealized gain only when every nonzero holding has an explicitly denominated cost. A missing or legacy denomination makes all basis-dependent facts unavailable. Broker cost never establishes realized gain or lifetime total return.
 
 Show `+€X (+Y%) totaal rendement`. Use `remainingCostBasis + realizedCostBasisRemoved` as percentage denominator. This equals cost assigned to all bought shares under the weighted-average model and remains defined after partial sells. Return percentage is unavailable when that denominator is zero. Keep `Sinds eerste aankoop: +Z% vanaf YYYY-MM-DD` separate because it answers a different question.
 
@@ -343,6 +420,13 @@ Implementation status: detail lookup resolves symbols from current snapshots, tr
 
 Show current value, daily change, and total return in EUR as primary values. Show quantity, average cost, current price, unrealized gain in EUR and percent, realized gain, dividends received, and first-buy date as secondary values.
 
+Detail values follow the same valuation freshness policy as the positions table, so one symbol never shows a value on one surface and none on the other ([Apply one valuation freshness policy to list and detail](https://github.com/Elmata2/LaVega/issues/111)).
+
+- Only closes dated at or before today can back a value. A future-dated bar never becomes the current price.
+- A close forward-filled within five business days stays usable and shows its quote date. After the cap, current value, current price, and daily change are all unavailable, while the chart keeps its full history.
+- Daily change needs a prior close that is itself within five business days of the backing close. A multiweek gap between observations yields no daily change rather than a fabricated one-day move.
+- Both closes convert at today's FX rate, so daily change reports price movement rather than same-day FX revaluation.
+
 Quantity expands to a dated history of quantity changes and their reason. Use an explicit control with `aria-expanded`; do not make plain text the only affordance.
 
 The chart shows daily end-of-day price only. Reuse the portfolio chart's range controls, crosshair, zoom model, keyboard behavior, and accessible exact-value list. Do not add position-value or position-return chart modes. Do not compare a position with the portfolio or a benchmark in v1.
@@ -350,6 +434,8 @@ The chart shows daily end-of-day price only. Reuse the portfolio chart's range c
 Show buy, sell, and dividend markers. One date-level tooltip lists the close and every event on that date. Include available quantity, execution price, amount, commission, dividend amount, and currency. Multiple events remain separate rows.
 
 Below the chart, show newest-first activity grouped by date. Columns are date, type, quantity, execution price, amount, commission, and currency. Use timestamps for same-date ordering when available. Otherwise preserve stable broker or import order.
+
+`Trade.date` remains an ISO day for daily grouping. `Trade.executionAt` is optional. Trading 212 values use UTC instants. IBKR values preserve broker-local clock time because Flex does not provide an offset. Date-only trades keep their source slots; LaVega does not invent execution times or order events across incomparable time bases.
 
 A closed position shows closed state, realized gain, dividends, first-buy date, chart, and activity history. Omit current value or show zero only where the label makes that meaning explicit.
 
@@ -367,9 +453,79 @@ The net-worth chart has its own range, crosshair, and zoom state. Do not synchro
 
 Prototype reference: [`prototype-networth-85`](https://github.com/Elmata2/LaVega/tree/prototype-networth-85/apps/investing-chart-prototype).
 
+### Personal's opt-in share (owner's own bank money)
+
+The owner may opt in, from Personal's (`apps/web`) own profile settings, to
+share their Personal bank position into this chart. The figure is
+`positionSeries` (`apps/web/src/totalePositie.ts`) over the accounts that are
+NOT investment accounts: a `Beleggingsrekening` (or an explicitly crypto-typed
+account) is the Investing portfolio's own figure, so adding its Personal
+balance too would count the same euro twice. This is a deliberate difference
+from Overzicht's SaldoBlock, which still sums every account for the Personal
+card; the shared total is the bank half only, and `personalShareAccounts`
+(`@lavega/core`) is the one rule both the share and the transfer
+classification use. A confirmed contribution from a bank account into an
+investment account therefore lowers the shared total and raises the portfolio
+by the same cents, leaving the combined net worth unchanged. Off by default;
+nothing crosses the network until the owner turns the switch on. The switch is
+**per device**: turning it on only shares totals from visits on that browser,
+and a total already shared stays with Investing until the switch is turned off
+again on a device where it is on.
+
+What crosses the boundary, and nothing else: while the switch is on and the
+Personal vault is unlocked, after every sync/import and on unlock, Personal
+computes the current day's total (read fresh at send time, not memoized from
+when the tab loaded) in EUR and sends `PUT /api/personal/net-worth-total` with
+exactly `{ date, totalCents, currency: "EUR" }`. No transaction, account,
+balance breakdown or entity name ever leaves the browser. A day with at least
+one known balance still sends the partial sum, exactly like the card; only a
+day with zero known balances sends nothing. Turning the switch off queues a
+`DELETE /api/personal/net-worth-total`, which removes every total the account
+ever shared; the underlying preference only flips off once that delete
+actually succeeds, retrying on the next unlock or app start otherwise, so a
+failed delete never leaves stale totals behind silently.
+
+The number is stored server-side, in the clear (not end-to-end encrypted like
+the vault backup), in `personal.net_worth_totals` — Personal owns every write;
+Investing only reads. Investing's read side is `GET
+/api/investing/personal-net-worth`, a small per-tenant list kept deliberately
+outside `InvestingDashboardData`'s cache/version machinery (that cache is
+built for the much larger broker/price read model, and folding a second,
+independently-written source into it would risk serving a stale total). The
+net-worth-web client (`NetWorthPage.tsx`) fetches it separately and folds it
+into each range's portfolio series with `mergeInPersonalNetWorth`
+(`@lavega/core`): the latest total on or before a date is carried forward,
+a date before the owner's first shared total gets no Personal part, and the
+chart's own "Total" line and headline figure become portfolio value plus
+Personal value. Because the shared total excludes investment accounts, that
+sum counts each euro once and a confirmed contribution does not change it.
+Returns, risk, and allocation elsewhere keep reading the unmerged,
+portfolio-only series and never include Personal money.
+
+Personal's total always arrives in EUR (the PUT body is hardcoded
+`currency: "EUR"`), so `NetWorthPage.tsx` only performs this merge while
+`presentationCurrency` is `"EUR"`; any other presentation currency skips it,
+the same no-op path an owner who has never shared anything gets — adding raw
+EUR cents onto a converted total would be silently wrong.
+
+When a total exists, the chart adds a third stacked band, "Bank accounts
+(Personal, as of {latest shared date})", alongside Investments and Cash. When
+nothing has ever been shared, `mergeInPersonalNetWorth` and the chart's own
+optional fields make this a no-op: the chart renders exactly as it did before
+this existed.
+
 ## Loading, empty, and error states
 
 Keep broker sync, price sync, vault, cache, market-data, and incomplete-history states distinct. One failed broker or symbol must not hide valid cached data from other sources. Sync-status polling runs only while broker or price sync is active; idle, completed, and problem states must not keep a serverless function warm with one request per second.
+
+One module, `apps/investing-web/src/lib/syncSession.ts`, owns the sync session for the web app. Every start path (app open, manual **Start sync**, credential save, vault unlock, benchmark selection) calls the ONE intent, `requestRefresh(force)`, which posts `POST /api/sync/refresh`; every status reader subscribes to the same snapshot. The server owns the run, so the module keeps these rules:
+
+- At most one state read is in flight. A wake during a read queues one rerun; a wake while a timer waits replaces the timer. Repeated wakes never start parallel loops.
+- While a run is active (`active: true` in the state body), the module reads `GET /api/sync/state` every 2 seconds. That is one request per 2 s and none to the old broker/price status routes. A failed read while a run was active retries with backoff (4, 8, 16, then 30 seconds) and the status rail shows **Connection: Reconnecting**. The next good read returns to the two-second rhythm without a reload.
+- An inactive state stops polling; the module never polls a paused or completed row on its own. A failed read with no run stops and shows **Connection: Offline** until the next wake (a new subscriber or a refresh intent).
+- The dashboard is invalidated once when each lane finishes a read, proven by a changed `holdings.syncedAt`, `history.syncedAt` or `prices.syncedAt`, and nowhere else. A failed read or a recovery does not invalidate.
+- One subscriber that unmounts removes only its listener. Polling stops when the last subscriber leaves.
+- The browser no longer posts price rounds and has no round limit. If the server cannot continue the run, `GET /api/sync/state` keeps reporting the stored lane state and the next refresh intent or scheduled pass resumes it from the durable cursors: the external scheduler calls `POST /api/cron/investing-drain` every 15 minutes, and the daily Vercel cron is the backstop (issue #311).
 
 - Loading: preserve card geometry where practical and expose `role="status"`.
 - No broker data: show broker connection or import action.
@@ -379,6 +535,18 @@ Keep broker sync, price sync, vault, cache, market-data, and incomplete-history 
 - Yahoo consent missing: request consent before the first search or price call. Persist the tenant decision in local server storage, version it with the disclosure, and require a new decision when disclosure changes. Search and price endpoints return HTTP 428 until consent is accepted.
 
 Status changes must not depend on animation. Pressable controls respond immediately. Honor `prefers-reduced-motion`. Preserve visible focus, adequate touch targets, and keyboard equivalence for pointer actions.
+
+## Portfolio agent conversation
+
+The overview agent panel links each investor persona to `/agents/:agentId`. The route keeps a
+conversation on the left and shows the current account positions on the right. Each user message
+calls `POST /api/agents/portfolio/conversation` with selected `agentId`, `prompt`, and recent
+browser-memory history. Server rebuilds tenant-scoped dashboard snapshot, runs TypeSafe System One
+judgment for all six personas, and passes selected typed judgment with full compact position list to
+OpenRouter text model. Response returns written answer with source snapshot hash and model metadata.
+Messages remain in browser memory.
+
+Typed System One `no_view` means no judgment signal. It never replaces written chat answer.
 
 ## Future work
 
@@ -390,6 +558,6 @@ Map-wide future work:
 
 v1 deferrals:
 
-- Broker grouping in the allocation donut or positions table until `Position` has a reliable broker field.
+- Broker grouping in the allocation donut or positions table. `Position.broker` exists but is optional on older persisted snapshots.
 - Position-versus-benchmark or position-versus-portfolio comparison.
 - A separate closed-position history or transaction browser.

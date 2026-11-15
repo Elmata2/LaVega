@@ -31,7 +31,8 @@ export type TrackedBalance = {
   source: TrackedSource;
   /** What to name in the question — the programme name for rewards. */
   label: string;
-  /** What is being counted ("punten"), so the question reads naturally. */
+  /** A TOKEN for what is being counted ("points"), not the word itself —
+   *  the view turns it into a noun in the reader's language. */
   unit: string;
   /** ISO date the number was last confirmed by the owner. */
   updatedAt: string;
@@ -56,9 +57,13 @@ export type TrackedStatus = {
   dueDate: string;
   /** Days past `dueDate`; 0 while still fresh. */
   daysOverdue: number;
-  /** The one-line Dutch question to put in front of the owner. Never contains
-   *  the current or previous value. */
-  question: string;
+  /* De vraag zelf staat NIET meer in dit type. Hij was Nederlands en werd
+   * letterlijk afgedrukt, dus een Engelse lezer kreeg "Hoeveel punten staan er
+   * nu bij ...". `label` en `unit` hierboven dragen alles wat de zin nodig
+   * heeft; `copy/money` maakt er een vraag van, in de taal van de lezer. Dat
+   * hij waardevrij blijft — nooit het laatst bekende getal — is daar geborgd
+   * en hier beschreven, want het is de reden dat deze vraag veilig aan een
+   * melding of aan de assistent gegeven mag worden. */
   snoozedUntil?: string;
 };
 
@@ -81,26 +86,22 @@ function addDays(iso: string, n: number): string {
   return `${t.getUTCFullYear()}-${String(t.getUTCMonth() + 1).padStart(2, "0")}-${String(t.getUTCDate()).padStart(2, "0")}`;
 }
 
-/** The one question to ask, in Dutch, ending in the instruction that makes this
- *  as cheap as replying to a WhatsApp message. Deliberately value-free: it names
- *  the programme and nothing else, so it can be shown in a notification or
- *  handed to the chat assistant without leaking a balance. */
-export function trackingQuestion(t: Pick<TrackedBalance, "label" | "unit">): string {
-  return t.unit === "punten"
-    ? `Hoeveel punten staan er nu bij ${t.label}? Stuur alleen het getal.`
-    : `Wat is het huidige saldo van ${t.label} (${t.unit})? Stuur alleen het getal.`;
-}
-
 /** Where one tracked number stands at `asOf`. `snoozed` only ever masks a number
  *  that WOULD be due — a fresh one is fresh regardless of a snooze. */
 export function trackingStatus(t: TrackedBalance, asOf: string): TrackedStatus {
-  const interval = t.intervalDays != null && t.intervalDays > 0 ? Math.floor(t.intervalDays) : DEFAULT_TRACKING_INTERVAL_DAYS;
+  const interval =
+    t.intervalDays != null && t.intervalDays > 0
+      ? Math.floor(t.intervalDays)
+      : DEFAULT_TRACKING_INTERVAL_DAYS;
   const dueDate = addDays(t.updatedAt, interval);
   const past = daysBetween(dueDate, asOf); // asOf - dueDate
   const state: TrackingState =
-    past < 0 ? "fresh"
-      : t.snoozedUntil != null && asOf < t.snoozedUntil ? "snoozed"
-        : past > TRACKING_OVERDUE_AFTER_DAYS ? "overdue"
+    past < 0
+      ? "fresh"
+      : t.snoozedUntil != null && asOf < t.snoozedUntil
+        ? "snoozed"
+        : past > TRACKING_OVERDUE_AFTER_DAYS
+          ? "overdue"
           : "due";
   return {
     id: t.id,
@@ -112,7 +113,6 @@ export function trackingStatus(t: TrackedBalance, asOf: string): TrackedStatus {
     ageDays: daysBetween(t.updatedAt, asOf),
     dueDate,
     daysOverdue: Math.max(0, past),
-    question: trackingQuestion(t),
     ...(t.snoozedUntil != null ? { snoozedUntil: t.snoozedUntil } : {}),
   };
 }
@@ -177,7 +177,13 @@ function tokenToNumber(token: string): number {
   return neg ? -n : n;
 }
 
-const MULTIPLIERS: Record<string, number> = { k: 1_000, m: 1_000_000, mln: 1_000_000, mio: 1_000_000, miljoen: 1_000_000 };
+const MULTIPLIERS: Record<string, number> = {
+  k: 1_000,
+  m: 1_000_000,
+  mln: 1_000_000,
+  mio: 1_000_000,
+  miljoen: 1_000_000,
+};
 
 /** Read a WhatsApp-style reply that is meant to be *just the number*.
  *
@@ -189,7 +195,11 @@ const MULTIPLIERS: Record<string, number> = { k: 1_000, m: 1_000_000, mln: 1_000
  *  asks again. The sign is preserved; whether a negative makes sense is the
  *  source's business (a points balance rejects it, a card debt would not). */
 export function parseBalanceReply(text: string): number | null {
-  const cleaned = joinSpacedThousands(String(text ?? "").toLowerCase().replace(/[€$£]/g, " "));
+  const cleaned = joinSpacedThousands(
+    String(text ?? "")
+      .toLowerCase()
+      .replace(/[€$£]/g, " "),
+  );
   const re = /(-?\d+(?:[.,]\d+)*)\s*(miljoen|mln|mio|k|m)?(?![a-z])/g;
   const found: number[] = [];
   for (const m of cleaned.matchAll(re)) {
@@ -211,7 +221,9 @@ export function rewardsTracked(balances: readonly RewardsBalance[]): TrackedBala
     id: b.id,
     source: "rewards" as const,
     label: b.program,
-    unit: "punten",
+    // Een TOKEN en geen woord: "points"/"punten" is een zin, en die hoort
+    // aan de andere kant van de grens. De view kiest de taal.
+    unit: "points",
     updatedAt: b.updatedAt,
     ...(b.intervalDays != null ? { intervalDays: b.intervalDays } : {}),
     ...(b.snoozedUntil != null ? { snoozedUntil: b.snoozedUntil } : {}),

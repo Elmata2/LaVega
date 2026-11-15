@@ -1,9 +1,17 @@
 // @vitest-environment jsdom
 import { renderToStaticMarkup } from "react-dom/server";
 import { expect, test } from "vitest";
-import type { Account, CatalogueEntryLike, CatalogValue, RateBenchmark, Rule, Tx } from "@lavega/core";
+import type {
+  Account,
+  CatalogueEntryLike,
+  CatalogValue,
+  RateBenchmark,
+  Rule,
+  Tx,
+} from "@lavega/core";
 import { ownAccounts } from "@lavega/core";
-import Optimalisatie from "./views/Optimalisatie";
+import Optimalisatie, { cadenceName, promoBadgeLabel } from "./views/Optimalisatie";
+import { optimiseCopy } from "./copy/optimise.js";
 
 /* Optimalisatie after the rebalance (UI review, 2026-08-16):
  *   - the interest reasoning is spelled out and ends in a number;
@@ -13,11 +21,29 @@ import Optimalisatie from "./views/Optimalisatie";
  */
 
 const ACCOUNTS: Account[] = [
-  { key: "ABN1", iban: "NL01ABNA", name: "Spaarrekening", bank: "ABN AMRO", entity: "Prive", currency: "EUR", balance: 50_000 },
+  {
+    key: "ABN1",
+    iban: "NL01ABNA",
+    name: "Spaarrekening",
+    bank: "ABN AMRO",
+    entity: "Prive",
+    currency: "EUR",
+    balance: 50_000,
+  },
 ];
 
 function tx(id: string, date: string, amount: number, counterparty: string): Tx {
-  return { id, accountKey: "ABN1", date, amount, currency: "EUR", counterparty, description: "", category: "", manual: false };
+  return {
+    id,
+    accountKey: "ABN1",
+    date,
+    amount,
+    currency: "EUR",
+    counterparty,
+    description: "",
+    category: "",
+    manual: false,
+  };
 }
 
 const RULES: Rule[] = [];
@@ -94,6 +120,21 @@ test("the thin subscriptions half reports what was actually measured, and seeds 
   expect(html).toContain("<details");
 });
 
+/* Part A (self-explanation): the "Wat LaVega per ontvanger zag" table now
+ * carries a "Waarom niet" column naming the exact gate that stopped a merchant
+ * the detector otherwise accepts — reusing `explainMerchant` from core, not a
+ * second UI-side guess. Albert Heijn's two rows here are 17 days apart and
+ * never repeat a band's minimum occurrence, so core reports "te weinig
+ * afschrijvingen (1 < 2)"; the UI's only job is to print that verbatim. */
+test("the empty-state table names WHY an accepted merchant still isn't a subscription", () => {
+  const html = render([
+    tx("a", "2026-07-02", -12.5, "Albert Heijn"),
+    tx("b", "2026-07-19", -31.4, "Albert Heijn"),
+  ]);
+  expect(html).toContain("Waarom niet");
+  expect(html).toContain("te weinig afschrijvingen (1 &lt; 2)");
+});
+
 /* HIER STONDEN DE KOLOMMEN "Per maand" EN "Per jaar" NAAST ELKAAR, en de tweede
  * was de eerste × 12. Voor dít abonnement klopte dat — Netflix wordt maandelijks
  * afgeschreven — maar voor een jaarabonnement niet, want dan is "per maand" zelf
@@ -166,7 +207,9 @@ test("a year of history moves the quarterly window from 'cannot see' to 'can see
 test("woonlasten is gone from Optimalisatie, detected or not", () => {
   const withRent: Tx[] = [];
   for (let m = 1; m <= 6; m++) {
-    withRent.push(tx(`h${m}`, `2026-${String(m).padStart(2, "0")}-01`, -1450, "Woningstichting Rochdale"));
+    withRent.push(
+      tx(`h${m}`, `2026-${String(m).padStart(2, "0")}-01`, -1450, "Woningstichting Rochdale"),
+    );
   }
   for (const html of [render(withRent), render([tx("x1", "2026-08-01", -12.5, "Albert Heijn")])]) {
     expect(html).not.toContain("Woonlasten");
@@ -236,9 +279,20 @@ test("an ING account is never left at a bare 'aangenomen 0%' — the row says wh
   // be right for one of his two ING accounts, but the screen has to name the rate
   // ING does pay and ask which account this is instead of asserting a
   // measurement it never made.
-  const html = render([], [
-    { key: "ING1", iban: "NL88INGB0793113504", name: "NL88INGB0793113504", bank: "ING", entity: "Prive", currency: "EUR", balance: 20_000 },
-  ]);
+  const html = render(
+    [],
+    [
+      {
+        key: "ING1",
+        iban: "NL88INGB0793113504",
+        name: "NL88INGB0793113504",
+        bank: "ING",
+        entity: "Prive",
+        currency: "EUR",
+        balance: 20_000,
+      },
+    ],
+  );
   expect(html).toContain("aangenomen 0%");
   expect(html).toContain("Oranje Spaarrekening");
   expect(html).toContain("1,25%");
@@ -246,9 +300,21 @@ test("an ING account is never left at a bare 'aangenomen 0%' — the row says wh
 });
 
 test("a savings account at ING is estimated from ING's own tariff, and the row names it", () => {
-  const html = render([], [
-    { key: "ING2", iban: "NL95INGB0674843703", name: "NL95INGB0674843703", bank: "ING", entity: "Prive", currency: "EUR", balance: 20_000, type: "Spaarrekening" },
-  ]);
+  const html = render(
+    [],
+    [
+      {
+        key: "ING2",
+        iban: "NL95INGB0674843703",
+        name: "NL95INGB0674843703",
+        bank: "ING",
+        entity: "Prive",
+        currency: "EUR",
+        balance: 20_000,
+        type: "Spaarrekening",
+      },
+    ],
+  );
   expect(html).toContain("geschat via banktarief");
   expect(html).toContain("ING Oranje Spaarrekening");
   expect(html).toContain("1,25%");
@@ -263,7 +329,6 @@ test("the comparison table separates what you get now from what you keep", () =>
   expect(html).toContain("Wat je houdt");
   expect(html).toContain("Rente nu");
 });
-
 
 /* ══════ WAT DE REKENING WAAR HET ADVIES HEEN WIJST ZELF KOST ════════════════
  *
@@ -297,11 +362,24 @@ const row = (html: string, testid: string): string => {
  *  € 25,00 per jaar, en dan eet een pakket van € 4,50 per maand (€ 54,00 per
  *  jaar) de winst op. Zo hangt de uitkomst aan de KOSTEN en niet aan het saldo. */
 const IDLE: Account[] = [
-  { key: "B1", iban: "NL01INGB", name: "Betaalrekening", bank: "ING", entity: "Prive", currency: "EUR", balance: 1000, type: "Betaalrekening" },
+  {
+    key: "B1",
+    iban: "NL01INGB",
+    name: "Betaalrekening",
+    bank: "ING",
+    entity: "Prive",
+    currency: "EUR",
+    balance: 1000,
+    type: "Betaalrekening",
+  },
 ];
 
 const TESTBANK: RateBenchmark = {
-  bank: "Testbank", product: "Spaarrekening", ratePct: 2.5, freeWithdrawal: true, productId: "test-spaar",
+  bank: "Testbank",
+  product: "Spaarrekening",
+  ratePct: 2.5,
+  freeWithdrawal: true,
+  productId: "test-spaar",
 };
 
 /** De catalogusrij achter die rente, met of zonder prijs. De periode staat er
@@ -309,13 +387,20 @@ const TESTBANK: RateBenchmark = {
  *  een factor twaalf, en dat is precies wat hieronder getoetst wordt. */
 const spaar = (fee?: { value: number; period: "maand" | "jaar" }): CatalogueEntryLike[] => [
   {
-    id: "test-spaar", product: "Testbank Spaarrekening", issuer: "Testbank N.V.", kind: "betaalrekening",
+    id: "test-spaar",
+    product: "Testbank Spaarrekening",
+    issuer: "Testbank N.V.",
+    kind: "betaalrekening",
     fields: fee
       ? {
           accountFee: {
-            value: fee.value, period: fee.period, route: "provider-pdf",
-            sourceUrl: "https://example.test/kosten", checkedAt: "2026-08-01",
-            conditions: null, conditionsKnown: true,
+            value: fee.value,
+            period: fee.period,
+            route: "provider-pdf",
+            sourceUrl: "https://example.test/kosten",
+            checkedAt: "2026-08-01",
+            conditions: null,
+            conditionsKnown: true,
           } as unknown as CatalogValue,
         }
       : {},
@@ -323,10 +408,15 @@ const spaar = (fee?: { value: number; period: "maand" | "jaar" }): CatalogueEntr
 ];
 
 test("een renteadvies dat door de rekeningkosten netto negatief wordt is GEEN aanbeveling", () => {
-  const html = render([], IDLE, { initialRates: [TESTBANK], entries: spaar({ value: 4.5, period: "maand" }) });
+  const html = render([], IDLE, {
+    initialRates: [TESTBANK],
+    entries: spaar({ value: 4.5, period: "maand" }),
+  });
   // Het brutobedrag blijft staan — de kaart wordt niet verzwegen — maar het heet
   // nu ook bruto.
-  expect(html).toContain("<strong>€\u00a025,00</strong> per jaar op, vóór wat die rekening zelf kost");
+  expect(html).toContain(
+    "<strong>€\u00a025,00</strong> per jaar op, vóór wat die rekening zelf kost",
+  );
   // 12 × € 4,50 = € 54,00 per jaar, dus € 29,00 achteruit. Hij moet dat kunnen
   // ZIEN staan in plaats van het zelf uit te rekenen.
   expect(row(html, "rente-kosten")).toContain("4,50 per maand");
@@ -342,7 +432,10 @@ test("een renteadvies dat door de rekeningkosten netto negatief wordt is GEEN aa
 test("jaar tegen maand: hetzelfde getal, een ander advies", () => {
   // € 4,50 per maand eet € 25 rente op; € 4,50 per jaar laat € 20,50 staan. Geven
   // deze twee ooit hetzelfde antwoord, dan wordt er ergens een eenheid genegeerd.
-  const perJaar = render([], IDLE, { initialRates: [TESTBANK], entries: spaar({ value: 4.5, period: "jaar" }) });
+  const perJaar = render([], IDLE, {
+    initialRates: [TESTBANK],
+    entries: spaar({ value: 4.5, period: "jaar" }),
+  });
   expect(row(perJaar, "rente-kosten")).toContain("4,50 per jaar");
   // Geen "12 ×": dit bedrag staat zo in het document.
   expect(row(perJaar, "rente-kosten")).not.toContain("12 × ");
@@ -368,7 +461,10 @@ test("onbekende rekeningkosten zijn geen nul, en het woord netto valt daar niet"
 test("een uitgesproken nul is een BEKENDE nul, en dan is bruto ook netto", () => {
   // De keerzijde van "onbekend is geen nul". Openbank zegt letterlijk dat openen,
   // aanhouden en opzeggen gratis is; dat is een gemeten feit.
-  const html = render([], IDLE, { initialRates: [TESTBANK], entries: spaar({ value: 0, period: "maand" }) });
+  const html = render([], IDLE, {
+    initialRates: [TESTBANK],
+    entries: spaar({ value: 0, period: "maand" }),
+  });
   expect(row(html, "rente-kosten")).toContain("0,00 per maand");
   expect(row(html, "rente-netto")).toContain("25,00");
   expect(html).not.toContain("weten we niet");
@@ -377,7 +473,10 @@ test("een uitgesproken nul is een BEKENDE nul, en dan is bruto ook netto", () =>
 test("zonder rentewinst komt er geen leeg kostenblok", () => {
   // "Render geen leeg blok." Is er niets te verplaatsen, dan is er ook niets te
   // verrekenen — en dan hoort er geen zin over rekeningkosten te staan.
-  const html = render([], [{ ...IDLE[0], balance: 0 }], { initialRates: [TESTBANK], entries: spaar({ value: 4.5, period: "maand" }) });
+  const html = render([], [{ ...IDLE[0], balance: 0 }], {
+    initialRates: [TESTBANK],
+    entries: spaar({ value: 4.5, period: "maand" }),
+  });
   expect(html).toContain("Nog geen rentewinst berekend");
   expect(html).not.toContain('data-testid="rente-kosten"');
   expect(html).not.toContain("vóór rekeningkosten");
@@ -404,7 +503,16 @@ test("zonder rentewinst komt er geen leeg kostenblok", () => {
  *  pakket het is. Dan zijn de kosten onbekend — en juist dán moet de gratis
  *  optie in beeld komen. */
 const ING_NAAMLOOS: Account[] = [
-  { key: "B1", iban: "NL01INGB", name: "Betaalrekening", bank: "ING", entity: "Prive", currency: "EUR", balance: 1000, type: "Betaalrekening" },
+  {
+    key: "B1",
+    iban: "NL01INGB",
+    name: "Betaalrekening",
+    bank: "ING",
+    entity: "Prive",
+    currency: "EUR",
+    balance: 1000,
+    type: "Betaalrekening",
+  },
 ];
 
 test("een onherkende ING-rekening ziet de gratis pakketten staan, elk met zijn eis", () => {
@@ -449,4 +557,92 @@ test("heet de rekening ING Student, dan staat de eis náást de nul en niet erac
   // Geen tweede lijst met gratis pakketten: de kosten zijn bekend, dus er valt
   // niets meer te kiezen.
   expect(html).not.toContain('data-testid="gratis-bij-B1"');
+});
+
+/* THE CADENCE WORDS WERE DUTCH IN BOTH LANGUAGES. `CADENCE_LABEL_NL` lived in
+ * packages/core and the view read it straight, so an English reader saw
+ * "maandelijks" on the statement column and "per kwartaal, jaarlijks" in the
+ * sentence about what a short import cannot show. Core holds no prose now; the
+ * names come from `copy/optimise` like every other sentence on this screen. */
+test("the cadence words follow the reader's language", () => {
+  document.cookie = "lavega_locale=en; Path=/";
+  const html = render([
+    tx("n1", "2026-05-08", -15.99, "Netflix"),
+    tx("n2", "2026-06-08", -15.99, "Netflix"),
+    tx("n3", "2026-07-08", -17.99, "Netflix"),
+    tx("n4", "2026-08-08", -17.99, "Netflix"),
+  ]);
+  expect(html).toContain("On your statement");
+  expect(html).toContain("monthly");
+  expect(html).not.toContain("maandelijks");
+});
+
+test("the rhythms a short import cannot see are named in English too", () => {
+  document.cookie = "lavega_locale=en; Path=/";
+  const html = render([
+    tx("a1", "2026-06-14", -12.5, "Albert Heijn"),
+    tx("a2", "2026-07-14", -12.5, "Albert Heijn"),
+  ]);
+  expect(html).toContain("quarterly");
+  expect(html).toContain("annually");
+  expect(html).not.toContain("per kwartaal");
+  expect(html).not.toContain("jaarlijks");
+});
+
+/* DE DODE TAK, TOCH GETEST. `increaseSentence` valt op het ritme terug zodra
+ * een abonnement niet om te rekenen is, en dat gebeurt vandaag nooit: elke
+ * `cadenceDays` is door `CADENCE_BANDS` op één van vijf waarden gezet, dus
+ * `CADENCE_MONTHS` kent hem altijd. De zin stond er daardoor jarenlang stuk in
+ * — "per maandelijks afgeschreven", en in het Engels "charged every every 45
+ * days" zodra er ooit een zesde ritme bijkomt. Eén band erbij mag geen kapotte
+ * zin opleveren, dus de tak wordt hier los nagelopen. */
+test("the fallback sentence reads as a sentence for every cadence name", () => {
+  for (const locale of ["nl", "en"] as const) {
+    const c = optimiseCopy[locale].optimalisatie.subscriptions;
+    for (const days of [30, 61, 91, 182, 365, 45]) {
+      const sentence = c.increaseSentence({
+        name: "Spotify",
+        fromAmount: "9,99",
+        toAmount: "11,99",
+        changePct: 20,
+        unit: locale === "nl" ? "per maand" : "per month",
+        cadence: cadenceName(days, locale),
+      });
+      expect(sentence, `${locale} ${days}`).not.toMatch(/\b(\w+) \1\b/);
+      expect(sentence, `${locale} ${days}`).not.toMatch(
+        /per (maandelijks|tweemaandelijks|halfjaarlijks|jaarlijks)/,
+      );
+    }
+  }
+});
+
+/* DE ACTIERENTE-BADGE CITEERDE DE NEDERLANDSE VOORWAARDEN, in beide talen. De
+ * hoofdzin hierboven deed dat al niet — die bouwt het feit voor een Engelse
+ * lezer op uit `standardRatePct` — maar de badge in de benchmarktabel ontsnapte
+ * daaraan. Nu volgen ze dezelfde regel. */
+test("the promo badge quotes the Dutch terms only to a Dutch reader", () => {
+  const promo = {
+    bank: "Bigbank",
+    product: "Flexibel Sparen",
+    ratePct: 3.1,
+    standardRatePct: 2.1,
+    promo: true,
+    promoNote: "Actierente 6 mnd, daarna 2,10%",
+    freeWithdrawal: true,
+  } as RateBenchmark;
+  const plain = {
+    bank: "Klarna",
+    product: "Sparen",
+    ratePct: 1.95,
+    freeWithdrawal: true,
+  } as RateBenchmark;
+
+  expect(promoBadgeLabel("nl", promo)).toBe("Actierente 6 mnd, daarna 2,10%");
+  // Engels: het feit, niet het citaat — en het post-actietarief staat erin.
+  const en = promoBadgeLabel("en", promo);
+  expect(en).not.toContain("Actierente");
+  expect(en).toContain("2.1");
+  // Geen actie is geen badge, in beide talen.
+  expect(promoBadgeLabel("nl", plain)).toBeNull();
+  expect(promoBadgeLabel("en", plain)).toBeNull();
 });

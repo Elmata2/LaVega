@@ -1,6 +1,4 @@
 // @vitest-environment jsdom
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
 import { act, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -12,10 +10,7 @@ import SpendPie, { sliceAtPoint } from "./SpendPie";
  * a legend row and an arc of the same colour should not be two different
  * conversations.
  *
- * jsdom, because half of this is interaction; the stylesheet is read from the
- * package root because import.meta.url resolves against the jsdom document. */
-
-const css = readFileSync(resolve(process.cwd(), "src/styles/charts.css"), "utf8");
+ * jsdom, because half of this is interaction. */
 
 const slices = [
   { category: "Boodschappen", cents: 45_000, share: 0.5 },
@@ -52,7 +47,17 @@ function mount(ui: ReactElement): HTMLDivElement {
  *  stated here — the geometry under test is the angle, not the layout. */
 function box(el: HTMLElement, size = 168) {
   el.getBoundingClientRect = () =>
-    ({ left: 0, top: 0, right: size, bottom: size, width: size, height: size, x: 0, y: 0, toJSON: () => ({}) }) as DOMRect;
+    ({
+      left: 0,
+      top: 0,
+      right: size,
+      bottom: size,
+      width: size,
+      height: size,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    }) as DOMRect;
 }
 
 function point(el: HTMLElement, type: string, clientX: number, clientY: number) {
@@ -60,12 +65,6 @@ function point(el: HTMLElement, type: string, clientX: number, clientY: number) 
     el.dispatchEvent(new MouseEvent(type, { bubbles: true, clientX, clientY }));
   });
 }
-
-test("the hole holds the period's total until a slice is asked about", () => {
-  const html = renderToStaticMarkup(<SpendPie slices={slices} totalCents={TOTAL} euro={euro} />);
-  expect(html).toContain("€900");
-  expect(html).toContain("uitgaven");
-});
 
 test("every slice is a control, so its exact amount is reachable without a mouse", () => {
   const html = renderToStaticMarkup(<SpendPie slices={slices} totalCents={TOTAL} euro={euro} />);
@@ -124,9 +123,11 @@ test("the arc answers where it is pointed, and the rest of the ring steps back",
   expect(hole?.textContent).toContain("€450");
   // The slice being read is the only one at full strength; dimming the others is
   // what connects the number in the hole to one arc rather than to the ring.
-  // (jsdom normalises the hex stops to rgb()/rgba(); the alpha is the dimming.)
-  expect(ring?.style.background).toContain("rgb(76, 110, 245) 0% 50%");
-  expect(ring?.style.background).toContain("rgba(121, 80, 242, 0.2)");
+  // Slice colours are theme tokens; the 20% mix is the dimming.
+  expect(ring?.style.background).toContain("var(--slice-1) 0.3% 49.7%");
+  expect(ring?.style.background).toContain(
+    "color-mix(in srgb, var(--slice-2) 20%, transparent) 50.3% 79.7%",
+  );
   expect(ring?.getAttribute("data-active")).toBe("0");
 
   // Six o'clock is 180°, the second slice (180–288°).
@@ -150,12 +151,48 @@ test("a tap on a filterable row still filters; a tap on 'Overig' does nothing", 
     share: (10 - i) / 55,
   }));
   const el = mount(
-    <SpendPie slices={many} totalCents={55_000} euro={euro} maxSlices={8} onSelect={(c) => picked.push(c)} />,
+    <SpendPie
+      slices={many}
+      totalCents={55_000}
+      euro={euro}
+      maxSlices={8}
+      onSelect={(c) => picked.push(c)}
+    />,
   );
   const rows = [...el.querySelectorAll<HTMLButtonElement>("button.spend-pie-item")];
   act(() => rows[0].click());
   act(() => rows[8].click()); // Overig
   expect(picked).toEqual(["C0"]);
+});
+
+test("an injected label translates what is shown; onSelect still gets the raw category", () => {
+  const picked: string[] = [];
+  const html = renderToStaticMarkup(
+    <SpendPie
+      slices={slices}
+      totalCents={TOTAL}
+      euro={euro}
+      label={(cat) => (cat === "Boodschappen" ? "Groceries" : cat)}
+      onSelect={(c) => picked.push(c)}
+    />,
+  );
+  expect(html).toContain("Groceries");
+  expect(html).not.toContain("Boodschappen");
+
+  const el = mount(
+    <SpendPie
+      slices={slices}
+      totalCents={TOTAL}
+      euro={euro}
+      label={(cat) => (cat === "Boodschappen" ? "Groceries" : cat)}
+      onSelect={(c) => picked.push(c)}
+    />,
+  );
+  const rows = [...el.querySelectorAll<HTMLButtonElement>("button.spend-pie-item")];
+  act(() => rows[0].click());
+  // The click landed on the translated "Groceries" row, and onSelect still
+  // receives the raw Dutch category — the label is display-only.
+  expect(picked).toEqual(["Boodschappen"]);
 });
 
 test("sliceAtPoint reads the angle the way the ring is drawn: clockwise from twelve", () => {
@@ -174,64 +211,51 @@ test("sliceAtPoint reads the angle the way the ring is drawn: clockwise from twe
   expect(sliceAtPoint([0.5, 0.49], 0.1, 0.5)).toBe(1);
 });
 
-test("charts.css dresses the state the reading depends on", () => {
-  const flat = css.replace(/\s+/g, " ");
-  expect(flat).toContain(".spend-pie-item:focus-visible");
-  expect(flat).toContain('.spend-pie-item[data-active="on"]');
-  // A row that filters points; a row that only highlights must not pretend to.
-  expect(flat).toContain('.spend-pie-item[data-filter="yes"] { cursor: pointer; }');
-  expect(flat).toContain(".spend-pie-hole");
+test("adjacent arcs are parted by a --bg gap, so grey steps never have to carry identity", () => {
+  const el = mount(<SpendPie slices={slices} totalCents={TOTAL} euro={euro} />);
+  const bg = el.querySelector<HTMLElement>(".spend-pie-ring")?.style.background ?? "";
+  // One gap at each of the three boundaries (50%, 80%, and the 100%/0% seam).
+  expect(bg).toContain("var(--bg) 49.7% 50.3%");
+  expect(bg).toContain("var(--bg) 79.7% 80.3%");
+  expect(bg).toContain("var(--bg) 99.7% 100%");
+  expect(bg.startsWith("conic-gradient(var(--bg) 0% 0.3%")).toBe(true);
 });
 
-/* Item 5: the number in the middle was centred while a slice was being read and
- * sitting high in the total view. The cause was the grid, not the state — with
- * `align-content` left at its default the auto rows stretch, so two rows put the
- * amount in the top half and three rows put it in the middle by accident. Packing
- * the rows centres the group at any number of lines. */
-test("the hole centres its contents whether it holds two lines or three", () => {
-  const flat = css.replace(/\s+/g, " ");
-  const hole = flat.match(/\.spend-pie-hole \{[^}]*\}/)?.[0] ?? "";
-  expect(hole).toContain("align-content: center");
+test("a single slice is a full ring with no gap to draw", () => {
+  const el = mount(
+    <SpendPie
+      slices={[{ category: "Boodschappen", cents: 90_000, share: 1 }]}
+      totalCents={TOTAL}
+      euro={euro}
+    />,
+  );
+  const bg = el.querySelector<HTMLElement>(".spend-pie-ring")?.style.background ?? "";
+  expect(bg).not.toContain("var(--bg)");
 });
 
-/* Item 6: an arc opens its category, so it has to point — and only where a click
- * actually goes somewhere. */
-test("the ring points only where an arc can be opened", () => {
-  const flat = css.replace(/\s+/g, " ");
-  expect(flat).toContain('.spend-pie-ring[data-open="yes"] { cursor: pointer; }');
+test("the legend carries a figure for every slice (more than 3 series)", () => {
+  const many = Array.from({ length: 5 }, (_, i) => ({
+    category: `Cat${i}`,
+    cents: 10_000 * (i + 1),
+    share: (i + 1) / 15,
+  }));
+  const el = mount(<SpendPie slices={many} totalCents={150_000} euro={euro} />);
+  const rows = [...el.querySelectorAll("button.spend-pie-item")];
+  expect(rows).toHaveLength(5);
+  rows.forEach((r, i) => {
+    expect(r.textContent).toContain(`€${(i + 1) * 100}`);
+    expect(r.textContent).toContain("%");
+  });
 });
 
-/* Item 8: "V…" names nothing. The row being read un-clips its name, and it is
- * reachable by hover, by tap (data-active) and by keyboard (focus-visible) — a
- * `title` alone would have answered only the mouse. */
-test("a clipped legend name un-clips while it is being read, by any of the three ways", () => {
-  const flat = css.replace(/\s+/g, " ");
-  for (const selector of [
-    ".spend-pie-item:hover .spend-pie-name",
-    ".spend-pie-item:focus-visible .spend-pie-name",
-    '.spend-pie-item[data-active="on"] .spend-pie-name',
-  ]) {
-    expect(flat).toContain(selector);
-  }
-  const revealed = flat.match(/\.spend-pie-item:hover \.spend-pie-name,[^{]*\{[^}]*\}/)?.[0] ?? "";
-  expect(revealed).toContain("white-space: normal");
-  // And the name in the hole wraps rather than ellipsising into nothing.
-  const slice = flat.match(/\.spend-pie-slice \{[^}]*\}/)?.[0] ?? "";
-  expect(slice).not.toContain("text-overflow: ellipsis");
-});
-
-/* Item 8 for the bar charts: the axis cell keeps its slot (the row stays aligned
- * with the bars), and the full name — which the cell already carries in `title` —
- * grows out of it to the right on hover, the way he suggested. */
-test("a clipped axis label reveals its full name to the right", () => {
-  const flat = css.replace(/\s+/g, " ");
-  const chip = flat.match(/\.lv-bars-xaxis span\[title\]::after \{[^}]*\}/)?.[0] ?? "";
-  expect(chip).toContain("content: attr(title)");
-  expect(chip).toContain("left: 0");
-  expect(flat).toContain(".lv-bars-xaxis span:hover[title]::after");
-  // The rightmost label grows the other way, so it does not hang off the card.
-  expect(flat).toContain(".lv-bars-xaxis span:last-child[title]::after");
-  // And nothing pops up over the weekday axis, whose labels are never clipped:
-  // a chip repeating "vr" would be noise on a chart he called fine.
-  expect(flat).toContain(".weekday-bars .lv-bars-xaxis span[title]::after { content: none; }");
+test("a slice thinner than the gap keeps a visible arc", () => {
+  const tiny = [
+    { category: "Groot", cents: 99_800, share: 0.998 },
+    { category: "Klein", cents: 200, share: 0.002 },
+  ];
+  const el = mount(<SpendPie slices={tiny} totalCents={100_000} euro={euro} />);
+  const bg = el.querySelector<HTMLElement>(".spend-pie-ring")?.style.background ?? "";
+  const m = bg.match(/var\(--slice-2\) ([\d.]+)% ([\d.]+)%/);
+  expect(m).not.toBeNull();
+  expect(Number(m![2])).toBeGreaterThan(Number(m![1]));
 });

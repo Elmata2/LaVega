@@ -62,15 +62,17 @@ function kleurOp(x, y, s) {
 
 function crc32(buf) {
   let c;
-  const tabel = crc32.tabel ?? (crc32.tabel = (() => {
-    const t = new Int32Array(256);
-    for (let n = 0; n < 256; n++) {
-      c = n;
-      for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
-      t[n] = c;
-    }
-    return t;
-  })());
+  const tabel =
+    crc32.tabel ??
+    (crc32.tabel = (() => {
+      const t = new Int32Array(256);
+      for (let n = 0; n < 256; n++) {
+        c = n;
+        for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+        t[n] = c;
+      }
+      return t;
+    })());
   let crc = -1;
   for (let i = 0; i < buf.length; i++) crc = tabel[(crc ^ buf[i]) & 0xff] ^ (crc >>> 8);
   return (crc ^ -1) >>> 0;
@@ -94,12 +96,18 @@ export function maakIcoon(s, monsters = 4) {
   for (let y = 0; y < s; y++) {
     rijen[p++] = 0; // filtertype 0: geen filter
     for (let x = 0; x < s; x++) {
-      let r = 0, g = 0, b = 0, a = 0;
+      let r = 0,
+        g = 0,
+        b = 0,
+        a = 0;
       for (let sy = 0; sy < monsters; sy++) {
         for (let sx = 0; sx < monsters; sx++) {
           const k = kleurOp(x + (sx + 0.5) / monsters, y + (sy + 0.5) / monsters, s);
           if (!k) continue;
-          r += k[0]; g += k[1]; b += k[2]; a += 255;
+          r += k[0];
+          g += k[1];
+          b += k[2];
+          a += 255;
         }
       }
       const n = monsters * monsters;
@@ -117,8 +125,8 @@ export function maakIcoon(s, monsters = 4) {
   const ihdr = Buffer.alloc(13);
   ihdr.writeUInt32BE(s, 0);
   ihdr.writeUInt32BE(s, 4);
-  ihdr[8] = 8;  // bitdiepte
-  ihdr[9] = 6;  // kleurtype 6 = RGBA
+  ihdr[8] = 8; // bitdiepte
+  ihdr[9] = 6; // kleurtype 6 = RGBA
   ihdr[10] = 0; // compressie
   ihdr[11] = 0; // filter
   ihdr[12] = 0; // niet interlaced

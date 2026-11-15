@@ -9,11 +9,24 @@ import {
   checkAttachmentCaps,
   handleInboundEmail,
 } from "../src/handler.js";
-import { parseMail } from "../src/parseMail.js";
+import { MAX_PARTS, MAX_PART_DEPTH, parseMail } from "../src/parseMail.js";
 import { fakeFetch, fakeMessage } from "./fakeMessage.js";
-import { RAW_IMAGE_ONLY, RAW_PDF_INVOICE, RAW_PLAIN_TEXT, RAW_SPOOFED } from "./rawMail.js";
+import {
+  RAW_FORGED_AUTH_RESULTS,
+  RAW_FORWARDED_INVOICE,
+  RAW_IMAGE_ONLY,
+  RAW_PDF_INVOICE,
+  RAW_PLAIN_TEXT,
+  RAW_SPOOFED,
+} from "./rawMail.js";
 
-const ENV = { N8N_WEBHOOK_URL: "https://n8n.example/webhook/lavega-mail-in", N8N_SHARED_SECRET: "geheim-123" };
+const ENV = {
+  N8N_WEBHOOK_URL: "https://n8n.example/webhook/lavega-mail-in",
+  N8N_SHARED_SECRET: "geheim-123",
+  // De grens heeft eigen tests in queueLimit.test.ts; hier altijd toestaan, zodat
+  // deze tests niet afhangen van de volgorde waarin de teller waarschuwt.
+  INBOUND_RATE_LIMIT: { limit: async () => ({ success: true }) },
+};
 const QUEUED = { addedInvoices: 1, addedNotices: 0, inQueue: 1, noticesInQueue: 0, remembered: 1 };
 
 /* ── De goede weg ─────────────────────────────────────────────────────────── */
@@ -34,7 +47,7 @@ test("een factuur met PDF gaat naar de webhook, met het geheim en de wachtrijsle
   expect(payload.queueKey).toBe("alexander-7f3a");
   expect(payload.to).toBe("alexander-7f3a@invoices.lavega.dev");
   expect(payload.subject).toBe("Factuur 2026-0207 — meterkast");
-  expect(payload.auth).toEqual({ spf: "pass", dkim: "pass", dmarc: "pass" });
+  expect(payload.auth).toEqual({ spf: "unknown", dkim: "unknown", dmarc: "unknown" });
   expect((payload.attachments as unknown[]).length).toBe(2);
 });
 
@@ -48,20 +61,21 @@ test("een geslaagde mail wordt NIET geweigerd en er wordt niet geantwoord", asyn
   expect(message.replied).toEqual([]);
 });
 
-test("een afzender die SPF/DKIM niet haalt gaat er WEL door, gemarkeerd", async () => {
-  const message = fakeMessage({ raw: RAW_SPOOFED, from: "nep@elders.example" });
+test("mail zonder vertrouwde authenticatiemetadata gaat door, gemarkeerd als onbekend", async () => {
+  const message = fakeMessage({ raw: RAW_PLAIN_TEXT });
   const http = fakeFetch({ body: { ...QUEUED, addedNotices: 1 } });
 
   const verdict = await handleInboundEmail(message, ENV, { fetch: http.fetch });
 
   expect(verdict.kind).toBe("queued");
   expect((http.calls[0].body as Record<string, unknown>).auth).toEqual({
-    spf: "softfail",
-    dkim: "fail",
-    dmarc: "fail",
+    spf: "unknown",
+    dkim: "unknown",
+    dmarc: "unknown",
   });
-  // Wegfilteren zou betekenen dat een ECHTE factuur van een domein met een
-  // slecht ingericht SPF-record verdwijnt zonder dat iemand het merkt.
+  // Een lokale bounce op basis van sender-controlled headers zou echte
+  // doorgestuurde facturen kunnen weigeren. Cloudflare beslist bij SMTP-ingang
+  // over SPF, DKIM en DMARC; de Worker krijgt die uitslagen niet vertrouwd mee.
   expect(message.rejected).toEqual([]);
 });
 
@@ -70,7 +84,11 @@ test("een afzender die SPF/DKIM niet haalt gaat er WEL door, gemarkeerd", async 
 test("N8N_WEBHOOK_URL niet gezet: de bounce noemt die variabele bij naam", async () => {
   const message = fakeMessage({ raw: RAW_PLAIN_TEXT });
   const http = fakeFetch({ body: QUEUED });
-  const verdict = await handleInboundEmail(message, { N8N_SHARED_SECRET: "x" }, { fetch: http.fetch });
+  const verdict = await handleInboundEmail(
+    message,
+    { N8N_SHARED_SECRET: "x" },
+    { fetch: http.fetch },
+  );
 
   expect(verdict.kind).toBe("reject");
   expect(verdict.kind === "reject" && verdict.reason).toContain("N8N_WEBHOOK_URL");
@@ -80,16 +98,22 @@ test("N8N_WEBHOOK_URL niet gezet: de bounce noemt die variabele bij naam", async
 
 test("N8N_SHARED_SECRET niet gezet: idem, met het commando dat het oplost", async () => {
   const message = fakeMessage({ raw: RAW_PLAIN_TEXT });
-  const verdict = await handleInboundEmail(message, { N8N_WEBHOOK_URL: ENV.N8N_WEBHOOK_URL }, {
-    fetch: fakeFetch({ body: QUEUED }).fetch,
-  });
+  const verdict = await handleInboundEmail(
+    message,
+    { N8N_WEBHOOK_URL: ENV.N8N_WEBHOOK_URL },
+    {
+      fetch: fakeFetch({ body: QUEUED }).fetch,
+    },
+  );
   expect(verdict.kind === "reject" && verdict.reason).toContain("N8N_SHARED_SECRET");
   expect(verdict.kind === "reject" && verdict.reason).toContain("wrangler secret put");
 });
 
 test("een adres zonder lokaal deel wordt geweigerd, niet op een verzonnen sleutel gezet", async () => {
   const message = fakeMessage({ raw: RAW_PLAIN_TEXT, to: "invoices.lavega.dev" });
-  const verdict = await handleInboundEmail(message, ENV, { fetch: fakeFetch({ body: QUEUED }).fetch });
+  const verdict = await handleInboundEmail(message, ENV, {
+    fetch: fakeFetch({ body: QUEUED }).fetch,
+  });
   expect(verdict.kind === "reject" && verdict.reason).toContain("geen lokaal deel");
 });
 
@@ -114,14 +138,18 @@ test("n8n onbereikbaar: bounce die zegt dat de mail NIET verwerkt is", async () 
 
 test("401 van n8n: de bounce noemt het geheim en de header, niet 'er ging iets mis'", async () => {
   const message = fakeMessage({ raw: RAW_PLAIN_TEXT });
-  const verdict = await handleInboundEmail(message, ENV, { fetch: fakeFetch({ status: 401 }).fetch });
+  const verdict = await handleInboundEmail(message, ENV, {
+    fetch: fakeFetch({ status: 401 }).fetch,
+  });
   expect(verdict.kind === "reject" && verdict.reason).toContain("N8N_SHARED_SECRET");
   expect(verdict.kind === "reject" && verdict.reason).toContain(SECRET_HEADER);
 });
 
 test("404 van n8n: de bounce noemt de twee echte oorzaken", async () => {
   const message = fakeMessage({ raw: RAW_PLAIN_TEXT });
-  const verdict = await handleInboundEmail(message, ENV, { fetch: fakeFetch({ status: 404 }).fetch });
+  const verdict = await handleInboundEmail(message, ENV, {
+    fetch: fakeFetch({ status: 404 }).fetch,
+  });
   expect(verdict.kind === "reject" && verdict.reason).toContain("niet op Actief");
   expect(verdict.kind === "reject" && verdict.reason).toContain("production-URL");
 });
@@ -129,7 +157,8 @@ test("404 van n8n: de bounce noemt de twee echte oorzaken", async () => {
 test("500 van n8n: status én het begin van het antwoord staan in de bounce", async () => {
   const message = fakeMessage({ raw: RAW_PLAIN_TEXT });
   const verdict = await handleInboundEmail(message, ENV, {
-    fetch: fakeFetch({ status: 500, text: "Alle modelaanroepen mislukten: invalid x-api-key" }).fetch,
+    fetch: fakeFetch({ status: 500, text: "Alle modelaanroepen mislukten: invalid x-api-key" })
+      .fetch,
   });
   expect(verdict.kind === "reject" && verdict.reason).toContain("500");
   expect(verdict.kind === "reject" && verdict.reason).toContain("invalid x-api-key");
@@ -158,7 +187,8 @@ test("een 200 zonder de telling wordt GEEN nul: onbekend is onbekend", async () 
 test("verwerkt maar niets toegevoegd: een ANTWOORD, geen stilte en geen bounce", async () => {
   const message = fakeMessage({ raw: RAW_IMAGE_ONLY });
   const verdict = await handleInboundEmail(message, ENV, {
-    fetch: fakeFetch({ body: { addedInvoices: 0, addedNotices: 0, inQueue: 0, noticesInQueue: 0 } }).fetch,
+    fetch: fakeFetch({ body: { addedInvoices: 0, addedNotices: 0, inQueue: 0, noticesInQueue: 0 } })
+      .fetch,
   });
 
   expect(verdict.kind).toBe("reply");
@@ -215,9 +245,13 @@ test("applyVerdict: een antwoord dat Cloudflare weigert wordt een bounce, met be
 
 test("applyVerdict: een bounce wordt afgekapt op 400 tekens, want dat gaat een SMTP-regel in", async () => {
   const message = fakeMessage({ raw: RAW_PLAIN_TEXT });
-  await applyVerdict(message, { kind: "reject", reason: "x".repeat(900) }, {
-    fetch: fakeFetch({ body: QUEUED }).fetch,
-  });
+  await applyVerdict(
+    message,
+    { kind: "reject", reason: "x".repeat(900) },
+    {
+      fetch: fakeFetch({ body: QUEUED }).fetch,
+    },
+  );
   expect(message.rejected[0].length).toBeLessThanOrEqual(401);
 });
 
@@ -226,7 +260,12 @@ test("applyVerdict: een bounce wordt afgekapt op 400 tekens, want dat gaat een S
 test("checkAttachmentCaps: een PDF boven 4 MB wordt geweigerd MET zijn bestandsnaam", () => {
   const mail = parseMail(RAW_PLAIN_TEXT);
   mail.attachments = [
-    { fileName: "jaarrekening 2025.pdf", mimeType: "application/pdf", data: "", bytes: MAX_PDF_BYTES + 1 },
+    {
+      fileName: "jaarrekening 2025.pdf",
+      mimeType: "application/pdf",
+      data: "",
+      bytes: MAX_PDF_BYTES + 1,
+    },
   ];
   const problem = checkAttachmentCaps(mail);
   expect(problem).toContain("jaarrekening 2025.pdf");
@@ -283,12 +322,210 @@ test("een te grote PDF komt niet bij n8n aan en levert een bounce met de naam op
   expect(http.calls).toEqual([]);
 });
 
-test("buildPayload gebruikt de From:-header en valt terug op de envelop-afzender", () => {
+test("buildPayload laat alleen het ADRES van de afzender staan, niet de weergavenaam", () => {
   const withHeader = fakeMessage({ raw: RAW_PLAIN_TEXT, from: "envelop@voorbeeld.nl" });
-  expect(buildPayload(withHeader, parseMail(RAW_PLAIN_TEXT)).from).toBe(
-    "Hosting Noord <facturen@hostingnoord.nl>",
-  );
+  // De weergavenaam is te verzinnen en belandt in de wachtrij; hij verdwijnt
+  // hier (bevinding A5). Wat overblijft is nog steeds ONGECONTROLEERD.
+  expect(buildPayload(withHeader, parseMail(RAW_PLAIN_TEXT)).from).toBe("facturen@hostingnoord.nl");
 
-  const zonderHeader = fakeMessage({ raw: "Subject: x\r\n\r\ntekst", from: "envelop@voorbeeld.nl" });
-  expect(buildPayload(zonderHeader, parseMail("Subject: x\r\n\r\ntekst")).from).toBe("envelop@voorbeeld.nl");
+  const zonderHeader = fakeMessage({
+    raw: "Subject: x\r\n\r\ntekst",
+    from: "envelop@voorbeeld.nl",
+  });
+  expect(buildPayload(zonderHeader, parseMail("Subject: x\r\n\r\ntekst")).from).toBe(
+    "envelop@voorbeeld.nl",
+  );
+});
+
+/* ── M6: de testfake kan Cloudflare's SMTP-controle niet nabouwen ──────────── */
+
+test("de Worker verzint geen gemeten uitslag voor een nagemaakte afzender", async () => {
+  const message = fakeMessage({ raw: RAW_SPOOFED, from: "nep@elders.example" });
+  const http = fakeFetch({ body: QUEUED });
+
+  const verdict = await handleInboundEmail(message, ENV, { fetch: http.fetch });
+
+  // Deze fake omzeilt de echte SMTP-ingang; hij kan dus geen Cloudflare-reject
+  // bewijzen. Als Cloudflare hem toch doorgeeft, mag de Worker geen `pass`
+  // claimen op basis van de door de afzender geschreven headers.
+  expect(verdict.kind).toBe("queued");
+  expect((http.calls[0].body as Record<string, unknown>).auth).toEqual({
+    spf: "unknown",
+    dkim: "unknown",
+    dmarc: "unknown",
+  });
+});
+
+test("een doorgestuurde factuur (SPF zakt, DKIM klopt) gaat er nog steeds door", async () => {
+  // RAW_PDF_INVOICE_FORWARDED heeft dkim=pass met een gezakte SPF — het
+  // hoofdgebruik van het doorstuuradres. Deze poort mag dat niet raken.
+  const message = fakeMessage({ raw: RAW_FORWARDED_INVOICE });
+  const http = fakeFetch({ body: QUEUED });
+
+  const verdict = await handleInboundEmail(message, ENV, { fetch: http.fetch });
+
+  expect(verdict.kind).toBe("queued");
+  expect(http.calls).toHaveLength(1);
+});
+
+/* ── H2: een meegegeven Authentication-Results verslaat de poort niet ──────── */
+
+test("sender-supplied Cloudflare-looking auth results never become verified payload data", async () => {
+  const raw = RAW_PLAIN_TEXT.replace(
+    "Authentication-Results: mx.cloudflare.net; spf=pass smtp.mailfrom=hostingnoord.nl; dkim=none; dmarc=none",
+    "Authentication-Results: mx.cloudflare.net; spf=fail; dkim=pass header.d=hostingnoord.nl; dmarc=pass header.from=hostingnoord.nl",
+  );
+  const message = fakeMessage({ raw });
+  const http = fakeFetch({ body: QUEUED });
+
+  const verdict = await handleInboundEmail(message, ENV, { fetch: http.fetch });
+
+  expect(verdict.kind).toBe("queued");
+  expect((http.calls[0].body as Record<string, unknown>).auth).toEqual({
+    spf: "unknown",
+    dkim: "unknown",
+    dmarc: "unknown",
+  });
+});
+
+test("samengevoegde Authentication-Results blijven eveneens onbekend", async () => {
+  // Geen van beide regels bewijst wie haar schreef. Een parser kan de echte
+  // Cloudflare-uitslag niet herkennen door de authserv-id of de volgorde.
+  const message = fakeMessage({ raw: RAW_FORGED_AUTH_RESULTS, from: "nep@elders.example" });
+  const http = fakeFetch({ body: QUEUED });
+
+  const verdict = await handleInboundEmail(message, ENV, { fetch: http.fetch });
+
+  expect(verdict.kind).toBe("queued");
+  expect((http.calls[0].body as Record<string, unknown>).auth).toEqual({
+    spf: "unknown",
+    dkim: "unknown",
+    dmarc: "unknown",
+  });
+});
+
+/* ── M12: onbegrensde multipart-recursie krijgt een benoemde uitgang ───────── */
+
+/** Een mail die `depth` lagen multipart/mixed nest, met één tekstdeel onderin.
+ *  De boundaries zijn even lang en geen van hen is een prefix van een ander:
+ *  `split("--b1")` zou anders ook op `--b10` knippen en dan test je de fixture
+ *  in plaats van de parser. */
+function nestedMultipart(depth: number): string {
+  let part = "Content-Type: text/plain\r\n\r\ntekst";
+  for (let level = depth - 1; level >= 0; level--) {
+    const boundary = "b" + String(level).padStart(4, "0");
+    part =
+      'Content-Type: multipart/mixed; boundary="' +
+      boundary +
+      '"\r\n\r\n--' +
+      boundary +
+      "\r\n" +
+      part +
+      "\r\n--" +
+      boundary +
+      "--";
+  }
+  return (
+    [
+      "From: leverancier@voorbeeld.nl",
+      "To: alexander-7f3a@invoices.lavega.dev",
+      "Subject: diep genest",
+      "Message-ID: <diep@voorbeeld.nl>",
+    ].join("\r\n") +
+    "\r\n" +
+    part
+  );
+}
+
+test("de parser meldt dat hij een grens raakte in plaats van stil te stoppen", () => {
+  expect(parseMail(nestedMultipart(MAX_PART_DEPTH + 5)).partsCapped).toBe(true);
+  // Een gewone, ondiepe mail raakt de grens niet.
+  expect(parseMail(RAW_PDF_INVOICE).partsCapped).toBe(false);
+});
+
+test("te diep genest: een BENOEMDE weigering (bounce), geen stil verlies", async () => {
+  const message = fakeMessage({ raw: nestedMultipart(MAX_PART_DEPTH + 5) });
+  const http = fakeFetch({ body: QUEUED });
+
+  const verdict = await handleInboundEmail(message, ENV, { fetch: http.fetch });
+
+  expect(verdict.kind).toBe("reject");
+  expect(verdict.kind === "reject" && verdict.reason).toContain("te diep genest");
+  expect(http.calls).toHaveLength(0);
+
+  // En de uitgang is er echt één: de afzender krijgt de weigering te horen.
+  await applyVerdict(message, verdict, { fetch: http.fetch });
+  expect(message.rejected).toHaveLength(1);
+});
+
+test("te veel delen: dezelfde benoemde uitgang", () => {
+  const parts = Array.from(
+    { length: MAX_PARTS + 5 },
+    (_, i) => "Content-Type: text/plain\r\n\r\nregel " + i,
+  ).join("\r\n--b\r\n");
+  const raw = [
+    "From: leverancier@voorbeeld.nl",
+    "To: alexander-7f3a@invoices.lavega.dev",
+    "Subject: veel delen",
+    'Content-Type: multipart/mixed; boundary="b"',
+    "",
+    "--b\r\n" + parts + "\r\n--b--",
+    "",
+  ].join("\r\n");
+  expect(parseMail(raw).partsCapped).toBe(true);
+});
+
+/* ── M13: niet antwoorden op een automaat of op onszelf ────────────────────── */
+
+test("applyVerdict antwoordt NIET op een no-reply-afzender: dat wordt een bounce", async () => {
+  const message = fakeMessage({ raw: RAW_PLAIN_TEXT, from: "no-reply@elders.example" });
+  await applyVerdict(
+    message,
+    { kind: "reply", body: "Niets toegevoegd.", subject: "Factuur", inReplyTo: "<a@b.nl>" },
+    { fetch: fakeFetch({ body: QUEUED }).fetch, makeReply: (from, to, raw) => ({ from, to, raw }) },
+  );
+  expect(message.replied).toEqual([]);
+  expect(message.rejected).toHaveLength(1);
+  expect(message.rejected[0]).toContain("niet geantwoord");
+});
+
+test("applyVerdict antwoordt NIET op ons eigen domein", async () => {
+  const message = fakeMessage({ raw: RAW_PLAIN_TEXT, from: "iets@invoices.lavega.dev" });
+  await applyVerdict(
+    message,
+    { kind: "reply", body: "Niets toegevoegd.", subject: "Factuur", inReplyTo: "<a@b.nl>" },
+    { fetch: fakeFetch({ body: QUEUED }).fetch, makeReply: (from, to, raw) => ({ from, to, raw }) },
+  );
+  expect(message.replied).toEqual([]);
+  expect(message.rejected).toHaveLength(1);
+});
+
+test("applyVerdict antwoordt NIET op een bulkbericht (Precedence: bulk)", async () => {
+  const raw = "From: nieuwsbrief@elders.example\r\nPrecedence: bulk\r\n\r\ntekst";
+  const message = fakeMessage({ raw, from: "nieuwsbrief@elders.example" });
+  await applyVerdict(
+    message,
+    { kind: "reply", body: "Niets toegevoegd.", subject: "Factuur", inReplyTo: "<a@b.nl>" },
+    { fetch: fakeFetch({ body: QUEUED }).fetch, makeReply: (from, to, raw) => ({ from, to, raw }) },
+  );
+  expect(message.replied).toEqual([]);
+  expect(message.rejected).toHaveLength(1);
+});
+
+/* ── A5: de bestandsnaam komt van buiten en gaat terug naar buiten ─────────── */
+
+test("een bestandsnaam met stuurtekens vervuilt de bounce niet", () => {
+  const mail = parseMail(RAW_PLAIN_TEXT);
+  mail.attachments = [
+    {
+      fileName: "kwaad\r\nBcc: slachtoffer@elders.example.pdf",
+      mimeType: "application/pdf",
+      data: "",
+      bytes: MAX_PDF_BYTES + 1,
+    },
+  ];
+  const problem = checkAttachmentCaps(mail) as string;
+  expect(problem).not.toContain("\r");
+  expect(problem).not.toContain("\n");
+  expect(problem).toContain("kwaad Bcc: slachtoffer@elders.example.pdf");
 });

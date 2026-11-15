@@ -20,13 +20,23 @@ const refused = (value: number): CatalogValue => ({
   conditionsKnown: false,
 });
 
-const entry = (id: string, fields: MergeEntry["fields"]): MergeEntry => ({ id, product: id, fields });
+const entry = (id: string, fields: MergeEntry["fields"]): MergeEntry => ({
+  id,
+  product: id,
+  fields,
+});
 
 test("een veld dat deze run niet mat blijft staan", () => {
   /* De echte zaak: een volledige sweep vraagt alleen fxFeePct en interestPct,
    * terwijl dezelfde producten ook punten, cashback en rekeningkosten dragen.
    * Het oude pad schreef de entries integraal weg en wiste er 68. */
-  const prev = [entry("ing-betaalpas", { fxFeePct: covered(1.4), pointsPerEuro: covered(0.5), accountFee: covered(4.85) })];
+  const prev = [
+    entry("ing-betaalpas", {
+      fxFeePct: covered(1.4),
+      pointsPerEuro: covered(0.5),
+      accountFee: covered(4.85),
+    }),
+  ];
   const rows = [entry("ing-betaalpas", { fxFeePct: covered(1.5) })];
   const { entries } = mergeCatalogEntries(prev, rows, ["ing-betaalpas"]);
   expect(entries[0].fields.fxFeePct?.value).toBe(1.5);

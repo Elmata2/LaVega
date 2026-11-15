@@ -33,4 +33,14 @@ export interface Env {
   /** Hetzelfde geheim als in de Header Auth-credential van die node.
    *  Als secret gezet met `wrangler secret put`, nooit in de repo. */
   N8N_SHARED_SECRET?: string;
+  /** De Workers Rate Limiting-binding uit `[[ratelimits]]` in wrangler.toml.
+   *  Optioneel met opzet: ontbreekt hij, dan gaat de mail door (zie
+   *  src/queueLimit.ts). Een ontbrekende teller mag geen factuur weigeren. */
+  INBOUND_RATE_LIMIT?: RateLimitBinding;
+}
+
+/** De vorm van de Rate Limiting-binding. Geen namespace, geen dependency:
+ *  `limit()` telt per sleutel en zegt alleen of dit verzoek nog mag. */
+export interface RateLimitBinding {
+  limit(input: { key: string }): Promise<{ success: boolean }>;
 }

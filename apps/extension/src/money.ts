@@ -90,8 +90,18 @@ export function points(amountCents: number, perEuro: number): number {
  *  onveranderd doorgegeven in plaats van stil weggelaten: liever "2026-06" op
  *  het scherm dan een lege plek waar de gebruiker een verse meting invult. */
 const MAANDEN = [
-  "januari", "februari", "maart", "april", "mei", "juni",
-  "juli", "augustus", "september", "oktober", "november", "december",
+  "januari",
+  "februari",
+  "maart",
+  "april",
+  "mei",
+  "juni",
+  "juli",
+  "augustus",
+  "september",
+  "oktober",
+  "november",
+  "december",
 ];
 export function dateNL(iso: string): string {
   const m = /^(\d{4})-(\d{2})(?:-(\d{2}))?$/.exec(iso.trim());

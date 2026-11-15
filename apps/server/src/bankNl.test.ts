@@ -6,7 +6,12 @@ import { fetchBankNl, getBankNlTable, resetBankNl, BANK_NL_SNAPSHOT } from "./ba
 /* The real page, saved verbatim on 2026-08-16 (HTTP 200, 96 kB, browser UA).
  * No test here touches the network — `fetchImpl` is injected everywhere. */
 const PAGE = readFileSync(
-  fileURLToPath(new URL("../../../packages/core/src/__fixtures__/bank-nl-betalen-in-buitenland-2026-08-16.html", import.meta.url)),
+  fileURLToPath(
+    new URL(
+      "../../../packages/core/src/__fixtures__/bank-nl-betalen-in-buitenland-2026-08-16.html",
+      import.meta.url,
+    ),
+  ),
   "utf8",
 );
 
@@ -39,11 +44,19 @@ test("the live page parses into the seven banks it actually prices", async () =>
   const table = (await fetchBankNl({ fetchImpl }))!;
   expect(table.checkedAt).toBe("2026-01-15");
   expect([...new Set(table.rows.map((r) => r.bank))]).toEqual([
-    "ABN AMRO", "ING", "Rabobank", "ASN Bank", "Triodos Bank", "Knab", "Bunq",
+    "ABN AMRO",
+    "ING",
+    "Rabobank",
+    "ASN Bank",
+    "Triodos Bank",
+    "Knab",
+    "Bunq",
   ]);
   // Including the two that refuse us directly: ING 403s/hangs, Rabobank 403s.
   expect(table.rows.find((r) => r.bank === "ING" && r.card === "betaalpas")!.fxFeePct).toBe(1.4);
-  expect(table.rows.find((r) => r.bank === "Rabobank" && r.card === "creditcard")!.fxFeePct).toBe(2);
+  expect(table.rows.find((r) => r.bank === "Rabobank" && r.card === "creditcard")!.fxFeePct).toBe(
+    2,
+  );
 });
 
 test("a non-200 answer yields null instead of an exception", async () => {
@@ -52,7 +65,9 @@ test("a non-200 answer yields null instead of an exception", async () => {
 });
 
 test("a network failure yields null instead of taking the caller down", async () => {
-  const failing = (async () => { throw new Error("ECONNRESET"); }) as unknown as typeof fetch;
+  const failing = (async () => {
+    throw new Error("ECONNRESET");
+  }) as unknown as typeof fetch;
   expect(await fetchBankNl({ fetchImpl: failing })).toBeNull();
 });
 
@@ -83,7 +98,9 @@ test("when the fetch fails the last good table is served, not the snapshot", asy
   const realNow = Date.now;
   Date.now = () => realNow() + 8 * 24 * 60 * 60 * 1000;
   try {
-    const failing = (async () => { throw new Error("down"); }) as unknown as typeof fetch;
+    const failing = (async () => {
+      throw new Error("down");
+    }) as unknown as typeof fetch;
     const table = await getBankNlTable({ fetchImpl: failing });
     // Stale but real, and richer than the snapshot (it carries the page's own
     // footnotes) — the same ladder rates.ts uses.
@@ -95,14 +112,17 @@ test("when the fetch fails the last good table is served, not the snapshot", asy
 });
 
 test("with no cache and no network the bundled snapshot is served", async () => {
-  const failing = (async () => { throw new Error("down"); }) as unknown as typeof fetch;
+  const failing = (async () => {
+    throw new Error("down");
+  }) as unknown as typeof fetch;
   expect(await getBankNlTable({ fetchImpl: failing })).toBe(BANK_NL_SNAPSHOT);
 });
 
 test("the bundled snapshot matches what the real page says", async () => {
   const { fetchImpl } = stub(PAGE);
   const live = (await fetchBankNl({ fetchImpl }))!;
-  const key = (r: { bank: string; card: string; fxFeePct: number }) => `${r.bank}|${r.card}|${r.fxFeePct}`;
+  const key = (r: { bank: string; card: string; fxFeePct: number }) =>
+    `${r.bank}|${r.card}|${r.fxFeePct}`;
   // A snapshot that disagrees with the source is worse than no snapshot: it is
   // a wrong figure with a confident face on it.
   expect(BANK_NL_SNAPSHOT.rows.map(key)).toEqual(live.rows.map(key));

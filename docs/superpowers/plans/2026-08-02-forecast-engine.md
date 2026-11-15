@@ -9,6 +9,7 @@
 **Reference (method only — clean-room, do NOT copy code):** the FinnTell design spec at `/Users/alexandersteunenberg/Desktop/My_Code/finntell/docs/superpowers/specs/2026-06-29-finntell-deterministic-forecast-engine-design.md` §6 (algorithms + parameters).
 
 ## Global Constraints
+
 - **`packages/core` stays I/O-free**; ESM (`.js` specifiers); no new deps.
 - **Deterministic** — identical output across runs; no `Date.now()`/`Math.random()` inside the module (the caller passes `asOf`). Integer cents internally; expose euro `number`s only at the boundary if needed (the UI formats).
 - **No changes** to `consolidate`/`ingest`/`tx.id`/parsers/existing views.
@@ -20,27 +21,34 @@
 ### Task 1: Recurring-stream detection
 
 **Files:**
+
 - Create: `packages/core/src/forecast.ts` (types + `detectRecurringStreams`)
 - Create: `packages/core/src/forecast.test.ts`
 - Modify: `packages/core/src/index.ts` (add `export * from "./forecast.js";`)
 
 **Interfaces produced:**
+
 ```ts
 export type RecurringStream = {
-  key: string;             // norm(counterparty) + "|" + (sign > 0 ? "in" : "out")
-  counterparty: string;    // the (raw) counterparty of the first occurrence
-  sign: 1 | -1;            // 1 = inflow, -1 = outflow
-  cadenceDays: number;     // snapped: 7 | 14 | 30 | 91 | 365
-  amountCents: number;     // representative magnitude (median of |amount| in cents), POSITIVE
+  key: string; // norm(counterparty) + "|" + (sign > 0 ? "in" : "out")
+  counterparty: string; // the (raw) counterparty of the first occurrence
+  sign: 1 | -1; // 1 = inflow, -1 = outflow
+  cadenceDays: number; // snapped: 7 | 14 | 30 | 91 | 365
+  amountCents: number; // representative magnitude (median of |amount| in cents), POSITIVE
   occurrences: number;
-  lastDate: string;        // ISO date of the most recent occurrence
-  intervalCv: number;      // std/mean of the day-gaps (0 if <2 gaps)
+  lastDate: string; // ISO date of the most recent occurrence
+  intervalCv: number; // std/mean of the day-gaps (0 if <2 gaps)
 };
-export type DetectOptions = { minOccurrences?: number; maxIntervalCv?: number; amountTolerance?: number };
+export type DetectOptions = {
+  minOccurrences?: number;
+  maxIntervalCv?: number;
+  amountTolerance?: number;
+};
 export function detectRecurringStreams(txs: Tx[], opts?: DetectOptions): RecurringStream[];
 ```
 
 **Algorithm (adapted from spec §6.1):**
+
 - Group by `key = norm(counterparty) + "|" + (amount >= 0 ? "in" : "out")`. Skip txs with `amount === 0`.
 - Within each group: sort by `date` ascending; need `occurrences >= minOccurrences` (default 3).
 - Day-gaps between consecutive dates (whole days via `daysBetween`). `medianGap` = median of gaps.
@@ -61,7 +69,17 @@ import { detectRecurringStreams } from "./forecast.js";
 
 // helper to build a tx quickly
 function tx(id: string, date: string, amount: number, cp: string): Tx {
-  return { id, accountKey: "A1", date, amount, currency: "EUR", counterparty: cp, description: "", category: "", manual: false };
+  return {
+    id,
+    accountKey: "A1",
+    date,
+    amount,
+    currency: "EUR",
+    counterparty: cp,
+    description: "",
+    category: "",
+    manual: false,
+  };
 }
 
 test("detects a monthly salary inflow (3 occurrences, ~30d cadence, stable amount)", () => {
@@ -72,13 +90,23 @@ test("detects a monthly salary inflow (3 occurrences, ~30d cadence, stable amoun
   ];
   const streams = detectRecurringStreams(txs);
   expect(streams).toHaveLength(1);
-  expect(streams[0]).toMatchObject({ sign: 1, cadenceDays: 30, amountCents: 250000, occurrences: 3, lastDate: "2026-06-25" });
+  expect(streams[0]).toMatchObject({
+    sign: 1,
+    cadenceDays: 30,
+    amountCents: 250000,
+    occurrences: 3,
+    lastDate: "2026-06-25",
+  });
 });
 
 test("detects a weekly outflow and separates it from an inflow of the same counterparty (sign in the key)", () => {
   const txs: Tx[] = [
-    tx("1", "2026-06-01", -50, "Spar"), tx("2", "2026-06-08", -50, "Spar"), tx("3", "2026-06-15", -50, "Spar"),
-    tx("4", "2026-06-02", 200, "Spar"), tx("5", "2026-06-09", 200, "Spar"), tx("6", "2026-06-16", 200, "Spar"),
+    tx("1", "2026-06-01", -50, "Spar"),
+    tx("2", "2026-06-08", -50, "Spar"),
+    tx("3", "2026-06-15", -50, "Spar"),
+    tx("4", "2026-06-02", 200, "Spar"),
+    tx("5", "2026-06-09", 200, "Spar"),
+    tx("6", "2026-06-16", 200, "Spar"),
   ];
   const streams = detectRecurringStreams(txs);
   expect(streams).toHaveLength(2);
@@ -92,9 +120,17 @@ test("rejects fewer than 3 occurrences", () => {
 });
 
 test("rejects irregular cadence (no snap band) and wildly variable amounts", () => {
-  const irregular: Tx[] = [tx("1", "2026-06-01", -30, "X"), tx("2", "2026-06-03", -30, "X"), tx("3", "2026-06-20", -30, "X")]; // gaps 2,17 -> median 9.5 no band
+  const irregular: Tx[] = [
+    tx("1", "2026-06-01", -30, "X"),
+    tx("2", "2026-06-03", -30, "X"),
+    tx("3", "2026-06-20", -30, "X"),
+  ]; // gaps 2,17 -> median 9.5 no band
   expect(detectRecurringStreams(irregular)).toHaveLength(0);
-  const variable: Tx[] = [tx("1", "2026-04-01", -10, "Y"), tx("2", "2026-05-01", -500, "Y"), tx("3", "2026-06-01", -10, "Y")]; // amounts vary >25%
+  const variable: Tx[] = [
+    tx("1", "2026-04-01", -10, "Y"),
+    tx("2", "2026-05-01", -500, "Y"),
+    tx("3", "2026-06-01", -10, "Y"),
+  ]; // amounts vary >25%
   expect(detectRecurringStreams(variable)).toHaveLength(0);
 });
 ```
@@ -110,35 +146,41 @@ test("rejects irregular cadence (no snap band) and wildly variable amounts", () 
 ### Task 2: Roll-forward + shortfall + band + orchestrator
 
 **Files:**
+
 - Modify: `packages/core/src/forecast.ts` (add the forecast types + `forecastCashflow`)
 - Modify: `packages/core/src/forecast.test.ts` (add tests)
 
 **Interfaces produced:**
+
 ```ts
 export type ForecastPoint = {
-  date: string;                          // ISO, weekly closing date (asOf + 7,14,...)
-  projectedClosingCents: number | null;  // null when opening is unknown (flow-only)
+  date: string; // ISO, weekly closing date (asOf + 7,14,...)
+  projectedClosingCents: number | null; // null when opening is unknown (flow-only)
   lowerCents: number | null;
   upperCents: number | null;
 };
 export type Shortfall = { date: string; balanceCents: number };
-export type Driver = { label: string; sign: 1 | -1; perWeekCents: number };  // avg weekly contribution
+export type Driver = { label: string; sign: 1 | -1; perWeekCents: number }; // avg weekly contribution
 export type EntityForecast = {
-  scope: string;                 // entity name, or "geconsolideerd"
+  scope: string; // entity name, or "geconsolideerd"
   asOf: string;
   horizonDays: number;
   openingCents: number | null;
-  points: ForecastPoint[];       // weekly closings, length = horizonDays/7
-  shortfall: Shortfall | null;   // null if never below buffer (or opening unknown)
+  points: ForecastPoint[]; // weekly closings, length = horizonDays/7
+  shortfall: Shortfall | null; // null if never below buffer (or opening unknown)
   streams: RecurringStream[];
-  drivers: Driver[];             // top recurring streams by |perWeekCents|, desc
+  drivers: Driver[]; // top recurring streams by |perWeekCents|, desc
 };
 export type ForecastOptions = { asOf: string; horizonDays?: number; bufferCents?: number };
-export function forecastCashflow(txs: Tx[], accounts: Account[], opts: ForecastOptions):
-  { byEntity: Record<string, EntityForecast>; consolidated: EntityForecast };
+export function forecastCashflow(
+  txs: Tx[],
+  accounts: Account[],
+  opts: ForecastOptions,
+): { byEntity: Record<string, EntityForecast>; consolidated: EntityForecast };
 ```
 
 **Algorithm (adapted from spec §6.3, §6.5, §6.6):**
+
 - `asOf` is REQUIRED (caller passes today — keeps the module deterministic). `horizonDays` default 91 (13 weeks); `bufferCents` default 0.
 - Map `accountKey → entity` (via accounts; missing → "onbekend"). Partition txs by entity; also treat ALL txs as the consolidated scope.
 - Per scope, build an `EntityForecast`:
@@ -161,11 +203,29 @@ import { forecastCashflow } from "./forecast.js";
 
 test("roll-forward: monthly salary + monthly rent projects the balance and dates future occurrences from asOf", () => {
   const txs: Tx[] = [
-    tx("1", "2026-04-25", 3000, "Werkgever"), tx("2", "2026-05-25", 3000, "Werkgever"), tx("3", "2026-06-25", 3000, "Werkgever"),
-    tx("4", "2026-04-01", -1000, "Verhuurder"), tx("5", "2026-05-01", -1000, "Verhuurder"), tx("6", "2026-06-01", -1000, "Verhuurder"),
+    tx("1", "2026-04-25", 3000, "Werkgever"),
+    tx("2", "2026-05-25", 3000, "Werkgever"),
+    tx("3", "2026-06-25", 3000, "Werkgever"),
+    tx("4", "2026-04-01", -1000, "Verhuurder"),
+    tx("5", "2026-05-01", -1000, "Verhuurder"),
+    tx("6", "2026-06-01", -1000, "Verhuurder"),
   ];
-  const accounts: Account[] = [{ key: "A1", iban: "A1", name: "ING", bank: "ING", entity: "BV1", currency: "EUR", balance: 5000 }];
-  const { byEntity, consolidated } = forecastCashflow(txs, accounts, { asOf: "2026-07-01", horizonDays: 91, bufferCents: 0 });
+  const accounts: Account[] = [
+    {
+      key: "A1",
+      iban: "A1",
+      name: "ING",
+      bank: "ING",
+      entity: "BV1",
+      currency: "EUR",
+      balance: 5000,
+    },
+  ];
+  const { byEntity, consolidated } = forecastCashflow(txs, accounts, {
+    asOf: "2026-07-01",
+    horizonDays: 91,
+    bufferCents: 0,
+  });
 
   const f = byEntity["BV1"];
   expect(f.openingCents).toBe(500000);
@@ -174,17 +234,25 @@ test("roll-forward: monthly salary + monthly rent projects the balance and dates
   expect(f.streams).toHaveLength(2);
   // net recurring ≈ +2000/month over 13 weeks -> ending balance clearly above opening; no shortfall
   expect(f.shortfall).toBeNull();
-  expect(f.points[12].projectedClosingCents! ).toBeGreaterThan(f.openingCents!);
+  expect(f.points[12].projectedClosingCents!).toBeGreaterThan(f.openingCents!);
   // consolidated mirrors the single entity here
   expect(consolidated.openingCents).toBe(500000);
 });
 
 test("shortfall: a large recurring outflow against a small opening flags the first breach date", () => {
   const txs: Tx[] = [
-    tx("1", "2026-04-05", -2000, "Lening"), tx("2", "2026-05-05", -2000, "Lening"), tx("3", "2026-06-05", -2000, "Lening"),
+    tx("1", "2026-04-05", -2000, "Lening"),
+    tx("2", "2026-05-05", -2000, "Lening"),
+    tx("3", "2026-06-05", -2000, "Lening"),
   ];
-  const accounts: Account[] = [{ key: "A1", iban: "A1", name: "x", bank: "", entity: "BV1", currency: "EUR", balance: 1000 }];
-  const { byEntity } = forecastCashflow(txs, accounts, { asOf: "2026-07-01", horizonDays: 91, bufferCents: 0 });
+  const accounts: Account[] = [
+    { key: "A1", iban: "A1", name: "x", bank: "", entity: "BV1", currency: "EUR", balance: 1000 },
+  ];
+  const { byEntity } = forecastCashflow(txs, accounts, {
+    asOf: "2026-07-01",
+    horizonDays: 91,
+    bufferCents: 0,
+  });
   const f = byEntity["BV1"];
   expect(f.shortfall).not.toBeNull();
   expect(f.shortfall!.balanceCents).toBeLessThan(0);
@@ -193,8 +261,14 @@ test("shortfall: a large recurring outflow against a small opening flags the fir
 });
 
 test("null opening (CSV-only account) -> flow projected but closing/band null, no shortfall", () => {
-  const txs: Tx[] = [tx("1", "2026-04-25", 3000, "W"), tx("2", "2026-05-25", 3000, "W"), tx("3", "2026-06-25", 3000, "W")];
-  const accounts: Account[] = [{ key: "A1", iban: "A1", name: "x", bank: "", entity: "BV1", currency: "EUR", balance: null }];
+  const txs: Tx[] = [
+    tx("1", "2026-04-25", 3000, "W"),
+    tx("2", "2026-05-25", 3000, "W"),
+    tx("3", "2026-06-25", 3000, "W"),
+  ];
+  const accounts: Account[] = [
+    { key: "A1", iban: "A1", name: "x", bank: "", entity: "BV1", currency: "EUR", balance: null },
+  ];
   const { byEntity } = forecastCashflow(txs, accounts, { asOf: "2026-07-01" });
   const f = byEntity["BV1"];
   expect(f.openingCents).toBeNull();
@@ -205,8 +279,14 @@ test("null opening (CSV-only account) -> flow projected but closing/band null, n
 });
 
 test("deterministic: identical output on repeated runs", () => {
-  const txs: Tx[] = [tx("1", "2026-04-25", 3000, "W"), tx("2", "2026-05-25", 3000, "W"), tx("3", "2026-06-25", 3000, "W")];
-  const accounts: Account[] = [{ key: "A1", iban: "A1", name: "x", bank: "", entity: "BV1", currency: "EUR", balance: 5000 }];
+  const txs: Tx[] = [
+    tx("1", "2026-04-25", 3000, "W"),
+    tx("2", "2026-05-25", 3000, "W"),
+    tx("3", "2026-06-25", 3000, "W"),
+  ];
+  const accounts: Account[] = [
+    { key: "A1", iban: "A1", name: "x", bank: "", entity: "BV1", currency: "EUR", balance: 5000 },
+  ];
   const a = forecastCashflow(txs, accounts, { asOf: "2026-07-01" });
   const b = forecastCashflow(txs, accounts, { asOf: "2026-07-01" });
   expect(JSON.stringify(a)).toBe(JSON.stringify(b));
@@ -219,8 +299,10 @@ test("deterministic: identical output on repeated runs", () => {
 - [ ] **Step 5: Commit** — `feat(core): cashflow roll-forward, shortfall flag, band + forecast orchestrator`.
 
 ## Self-Review checklist
+
 - `core` I/O-free, deterministic (no Date.now/random; integer cents; stable order). Detection: ≥3 occ, cadence snap, CV + amount gates. Roll-forward dates future occurrences from `asOf`, weekly closings, incidental baseline, widening band, first-breach shortfall. Null opening → flow-only (null closing), no crash. Consolidated = plain sum. No new deps; no ML/tax/harness. `tx.id`/parsers untouched.
 
 ## Notes
+
 - The forecast VIEW (Overzicht integration, matching FinnTell's `app-forecast.png`: shortfall banner + 13-week median/band/buffer chart + drivers panel) is **Phase 2** (the dark-dashboard UI plan).
 - Thresholds (minOccurrences, cadence bands, CV, amount tolerance, bufferCents, bandK) are options/consts, tunable on real data (spec risk R1).

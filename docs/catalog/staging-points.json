@@ -4,7 +4,7 @@
   "generatedAt": "2026-08-21",
   "usedApiCredits": false,
   "field": "pointsPerEuro",
-  "warning": "Dit bestand is een STAGING-voorstel. Het wijzigt docs/catalog/catalog.json niet. Elke waarde staat hier met de bewijssoort erbij, zodat de hoofdsessie per regel kan besluiten of die bewijssoort sterk genoeg is.",
+  "warning": "Dit bestand is een STAGING-voorstel. Het wijzigt docs/catalog/catalog.json niet. Elke waarde staat hier met de bewijssoort erbij, zodat de hoofdsessie per regel kan besluiten of die bewijssoort sterk genoeg is. De enige openstaande vraag hier — of `enumerated-absence` een nul mag dragen — is op 22 september 2026 door de eigenaar met ja beantwoord; zie `decision` op de betreffende regels. Er staat nu geen voorwaardelijk voorstel meer in dit bestand.",
   "legend": {
     "earnPerEuro": "Punten per bestede euro. null = de aanbieder publiceert geen koers PER EURO. Dat is nadrukkelijk iets anders dan nul: bij ING bestaat het programma wel, maar het beloont drempels en gebeurtenissen, niet een bedrag per euro.",
     "redeemEurPerPoint": "Wat één punt bij inwisselen waard is, in euro. Een apart cijfer van earnPerEuro; 0 mag hier alleen staan als de aanbieder zelf zegt dat punten geen geldwaarde hebben.",
@@ -19,7 +19,8 @@
       "hoog": "letterlijk cijfer of letterlijke ontkenning van de aanbieder zelf",
       "middel": "complete eigen opsomming zonder puntenprogramma; de aanbieder zegt het niet met zoveel woorden",
       "laag": "niet vastgesteld — hoort in deadEnds, niet in de catalogus"
-    }
+    },
+    "enumerated-absence": "De eigen, complete productopsomming van de aanbieder (voordelen/eigenschappen, geen kostendocument) bevat geen puntenprogramma. Zwakker dan stated-absence, en sinds 22 september 2026 aanvaard als grond voor een 0.0 — met `confidence: middel`, omdat de aanbieder het niet met zoveel woorden zegt."
   },
   "programmes": [
     {
@@ -314,11 +315,12 @@
       "pointsPerEuro": 0.0,
       "evidence": "enumerated-absence",
       "confidence": "middel",
-      "proposal": "vul 0.0, mits de hoofdsessie enumerated-absence accepteert",
+      "proposal": "vul 0.0",
       "reason": "De eigen productpagina somt de kaart volledig op onder 'Eigenschappen van de creditcard': jaarlijkse kosten, bestedingslimiet, uitgavenbeheer, digitaal betalen, facturatie en rente, inbegrepen verzekeringen en garanties, services, voorwaarden. Geen puntenprogramma, geen loyaliteitsrubriek. ICS zegt niet met zoveel woorden 'geen punten' — vandaar middel, geen hoog.",
       "note": "De eerdere ronde las dit uit de Algemene Voorwaarden-PDF. Dat is een voorwaardendocument en kan een nul niet dragen; deze bron vervangt die.",
       "sourceUrl": "https://www.icscards.nl/zakelijk/zakelijke-creditcard-aanvragen/visa-world-card-business",
-      "sourceDate": "geen datum in het document (opgehaald 21-08-2026)"
+      "sourceDate": "geen datum in het document (opgehaald 21-08-2026)",
+      "decision": "AANVAARD op 22 september 2026 door de eigenaar. `enumerated-absence` telt als bewijs voor een nul: een aanbieder die zijn eigen product volledig opsomt en daarin geen puntenprogramma noemt, zegt daarmee genoeg. Consistent met ICS, ABN en Rabobank, die op dezelfde grond al op 0.0 staan. Blijft `confidence: middel` — de aanbieder zegt het nog steeds niet met zoveel woorden, en dat verschil hoort zichtbaar te blijven."
     },
     {
       "id": "ics-visa-world-card-business-gold",
@@ -327,10 +329,11 @@
       "pointsPerEuro": 0.0,
       "evidence": "enumerated-absence",
       "confidence": "middel",
-      "proposal": "vul 0.0, mits de hoofdsessie enumerated-absence accepteert",
+      "proposal": "vul 0.0",
       "reason": "Zelfde volledige eigenschappenopsomming, zelfde uitkomst: geen puntenrubriek.",
       "sourceUrl": "https://www.icscards.nl/zakelijk/zakelijke-creditcard-aanvragen/visa-world-card-business-gold",
-      "sourceDate": "geen datum in het document (opgehaald 21-08-2026)"
+      "sourceDate": "geen datum in het document (opgehaald 21-08-2026)",
+      "decision": "AANVAARD op 22 september 2026 door de eigenaar. `enumerated-absence` telt als bewijs voor een nul: een aanbieder die zijn eigen product volledig opsomt en daarin geen puntenprogramma noemt, zegt daarmee genoeg. Consistent met ICS, ABN en Rabobank, die op dezelfde grond al op 0.0 staan. Blijft `confidence: middel` — de aanbieder zegt het nog steeds niet met zoveel woorden, en dat verschil hoort zichtbaar te blijven."
     },
     {
       "id": "ics-mastercard-business",
@@ -339,10 +342,11 @@
       "pointsPerEuro": 0.0,
       "evidence": "enumerated-absence",
       "confidence": "middel",
-      "proposal": "vul 0.0, mits de hoofdsessie enumerated-absence accepteert",
+      "proposal": "vul 0.0",
       "reason": "Zelfde volledige eigenschappenopsomming, zelfde uitkomst: geen puntenrubriek.",
       "sourceUrl": "https://www.icscards.nl/zakelijk/zakelijke-creditcard-aanvragen/mastercard-business",
-      "sourceDate": "geen datum in het document (opgehaald 21-08-2026)"
+      "sourceDate": "geen datum in het document (opgehaald 21-08-2026)",
+      "decision": "AANVAARD op 22 september 2026 door de eigenaar. `enumerated-absence` telt als bewijs voor een nul: een aanbieder die zijn eigen product volledig opsomt en daarin geen puntenprogramma noemt, zegt daarmee genoeg. Consistent met ICS, ABN en Rabobank, die op dezelfde grond al op 0.0 staan. Blijft `confidence: middel` — de aanbieder zegt het nog steeds niet met zoveel woorden, en dat verschil hoort zichtbaar te blijven."
     },
     {
       "id": "ics-mastercard-corporate",
@@ -351,10 +355,11 @@
       "pointsPerEuro": 0.0,
       "evidence": "enumerated-absence",
       "confidence": "middel",
-      "proposal": "vul 0.0, mits de hoofdsessie enumerated-absence accepteert",
+      "proposal": "vul 0.0",
       "reason": "Zelfde volledige eigenschappenopsomming, zelfde uitkomst: geen puntenrubriek.",
       "sourceUrl": "https://www.icscards.nl/zakelijk/zakelijke-creditcard-aanvragen/mastercard-corporate",
-      "sourceDate": "geen datum in het document (opgehaald 21-08-2026)"
+      "sourceDate": "geen datum in het document (opgehaald 21-08-2026)",
+      "decision": "AANVAARD op 22 september 2026 door de eigenaar. `enumerated-absence` telt als bewijs voor een nul: een aanbieder die zijn eigen product volledig opsomt en daarin geen puntenprogramma noemt, zegt daarmee genoeg. Consistent met ICS, ABN en Rabobank, die op dezelfde grond al op 0.0 staan. Blijft `confidence: middel` — de aanbieder zegt het nog steeds niet met zoveel woorden, en dat verschil hoort zichtbaar te blijven."
     },
     {
       "id": "knab-betaalpas",
@@ -363,11 +368,12 @@
       "pointsPerEuro": 0.0,
       "evidence": "enumerated-absence",
       "confidence": "middel",
-      "proposal": "vul 0.0, mits de hoofdsessie enumerated-absence accepteert",
+      "proposal": "vul 0.0",
       "reason": "Knab's eigen negenpunts-opsomming 'Waarom je bankrekening openen bij Knab?' noemt spaarpotjes, spaarrente, vijf betaalrekeningen, Apple/Google Pay, gratis pinnen in Eurolanden, de app en het depositogarantiestelsel. Geen punten, geen spaarprogramma.",
       "note": "De eerdere ronde las dit uit het Informatiedocument Knab Betaalrekening — een kostendocument, dat kan een nul niet dragen.",
       "sourceUrl": "https://www.knab.nl/particulier/betalen/bankrekening-openen",
-      "sourceDate": "geen datum in het document (opgehaald 21-08-2026)"
+      "sourceDate": "geen datum in het document (opgehaald 21-08-2026)",
+      "decision": "AANVAARD op 22 september 2026 door de eigenaar. `enumerated-absence` telt als bewijs voor een nul: een aanbieder die zijn eigen product volledig opsomt en daarin geen puntenprogramma noemt, zegt daarmee genoeg. Consistent met ICS, ABN en Rabobank, die op dezelfde grond al op 0.0 staan. Blijft `confidence: middel` — de aanbieder zegt het nog steeds niet met zoveel woorden, en dat verschil hoort zichtbaar te blijven."
     },
     {
       "id": "triodos-betaalpas",
@@ -376,10 +382,11 @@
       "pointsPerEuro": 0.0,
       "evidence": "enumerated-absence",
       "confidence": "middel",
-      "proposal": "vul 0.0, mits de hoofdsessie enumerated-absence accepteert",
+      "proposal": "vul 0.0",
       "reason": "'Handig om te weten' somt de complete dienstverlening op: Apple/Google Pay, wereldwijd contactloos betalen met de Triodos Betaalpas, Internet Bankieren en de app. Daarnaast een volledige tarieventabel. Geen puntenprogramma.",
       "sourceUrl": "https://www.triodos.nl/betaalrekening",
-      "sourceDate": "tarieven per 01-05-2025 (de voordelenopsomming zelf noemt geen datum)"
+      "sourceDate": "tarieven per 01-05-2025 (de voordelenopsomming zelf noemt geen datum)",
+      "decision": "AANVAARD op 22 september 2026 door de eigenaar. `enumerated-absence` telt als bewijs voor een nul: een aanbieder die zijn eigen product volledig opsomt en daarin geen puntenprogramma noemt, zegt daarmee genoeg. Consistent met ICS, ABN en Rabobank, die op dezelfde grond al op 0.0 staan. Blijft `confidence: middel` — de aanbieder zegt het nog steeds niet met zoveel woorden, en dat verschil hoort zichtbaar te blijven."
     },
     {
       "id": "trade-republic-betaalpas",
@@ -388,11 +395,12 @@
       "pointsPerEuro": 0.0,
       "evidence": "enumerated-absence",
       "confidence": "middel",
-      "proposal": "vul 0.0, mits de hoofdsessie enumerated-absence accepteert",
+      "proposal": "vul 0.0",
       "reason": "De eigen kaartpagina somt alle kaartvoordelen op: 3% rente op kassaldo, 1% Saveback op kaartbetalingen, Round up, geen abonnementskosten, gratis opnames vanaf € 100, wisselkoersen. Geen punten. Saveback is géén puntenprogramma: het is 1% van de kaartbesteding die in een periodieke belegging wordt gestopt, met koersrisico, en hoort in een cashback-/beleggingsveld, niet in pointsPerEuro.",
       "quote": "Verdien 1 % Saveback op kaartbetalingen voor een periodieke belegging.",
       "sourceUrl": "https://traderepublic.com/nl-nl/kaart",
-      "sourceDate": "geen datum in het document (opgehaald 21-08-2026)"
+      "sourceDate": "geen datum in het document (opgehaald 21-08-2026)",
+      "decision": "AANVAARD op 22 september 2026 door de eigenaar. `enumerated-absence` telt als bewijs voor een nul: een aanbieder die zijn eigen product volledig opsomt en daarin geen puntenprogramma noemt, zegt daarmee genoeg. Consistent met ICS, ABN en Rabobank, die op dezelfde grond al op 0.0 staan. Blijft `confidence: middel` — de aanbieder zegt het nog steeds niet met zoveel woorden, en dat verschil hoort zichtbaar te blijven."
     },
     {
       "id": "plutus-card",

@@ -1,6 +1,107 @@
-import { defineConfig } from "vite";
+import { defineConfig } from "vitest/config";
 import react from "@vitejs/plugin-react";
+import { sentryVitePlugin } from "@sentry/vite-plugin";
+import { CSP_FALLBACK_META } from "./src/csp.js";
+import { previewPlugin } from "./vite-preview-plugin";
 
-export default defineConfig({
-  plugins: [react()],
-});
+/* A <meta http-equiv="Content-Security-Policy"> fallback for the built shell,
+ * mirroring the header that `scripts/vercel-build.mjs` sets on the CDN (see
+ * src/csp.ts for why it is the exact same policy). Build-only: applying it in
+ * `vite dev` would block Vite's inline React Refresh preamble. */
+function cspMetaPlugin() {
+  return {
+    name: "lavega-csp-meta",
+    apply: "build" as const,
+    transformIndexHtml() {
+      return [
+        {
+          tag: "meta",
+          attrs: { "http-equiv": "Content-Security-Policy", content: CSP_FALLBACK_META },
+          injectTo: "head-prepend" as const,
+        },
+      ];
+    },
+  };
+}
+
+/* Preload the three faces the first viewport paints: the hero headline
+ * (Instrument Serif, upright + italic) and Geist for everything else. Without
+ * it the browser finds the fonts only after parsing the CSS, and on a slow
+ * connection the hero renders in the fallback and then jumps. The file names
+ * carry Vite's content hash, so they are read from the finished bundle. */
+const PRELOAD_FONTS =
+  /assets\/(instrument-serif-latin-400-(normal|italic)|geist-latin-wght-normal)-[\w-]+\.woff2$/;
+function fontPreloadPlugin() {
+  return {
+    name: "lavega-font-preload",
+    apply: "build" as const,
+    transformIndexHtml: {
+      order: "post" as const,
+      handler(_html: string, ctx: { bundle?: Record<string, unknown> }) {
+        const files = Object.keys(ctx.bundle ?? {}).filter((f) => PRELOAD_FONTS.test(f));
+        if (files.length !== 3)
+          throw new Error(
+            `font preload: expected 3 hero fonts in the bundle, found ${files.length}`,
+          );
+        return files.map((f) => ({
+          tag: "link",
+          attrs: { rel: "preload", href: `/${f}`, as: "font", type: "font/woff2", crossorigin: "" },
+          injectTo: "head" as const,
+        }));
+      },
+    },
+  };
+}
+
+/* Which build is this tab running? Vercel sets VERCEL_GIT_COMMIT_SHA at build
+ * time; a local build says "dev". Shown at the foot of Profiel so a stale
+ * cached bundle is a fact you can read, not a guess. */
+const sha = (process.env.VERCEL_GIT_COMMIT_SHA ?? "dev").slice(0, 7);
+const day = new Date().toISOString().slice(0, 10);
+
+/* The Vercel Sentry integration provisions SENTRY_AUTH_TOKEN / SENTRY_ORG /
+ * SENTRY_PROJECT for the deploy. Source maps are uploaded only when all three
+ * are present, so a local build and the CI test run stay offline and upload
+ * nothing. Maps are emitted hidden (no sourceMappingURL comment) and deleted
+ * from dist after upload, so the served bundle never exposes original source.
+ * `release.inject` attaches the commit SHA to every event, matching the maps. */
+const sentryOrg = process.env.SENTRY_ORG;
+const sentryProject = process.env.SENTRY_PROJECT;
+const sentryAuthToken = process.env.SENTRY_AUTH_TOKEN;
+const uploadSourceMaps = Boolean(sentryOrg && sentryProject && sentryAuthToken);
+
+export default defineConfig(({ isSsrBuild }) => ({
+  plugins: [
+    react(),
+    cspMetaPlugin(),
+    ...(isSsrBuild ? [] : [fontPreloadPlugin()]),
+    ...(process.env.LAVEGA_PREVIEW === "1" ? [previewPlugin()] : []),
+    ...(uploadSourceMaps && !isSsrBuild
+      ? sentryVitePlugin({
+          org: sentryOrg,
+          project: sentryProject,
+          authToken: sentryAuthToken,
+          telemetry: false,
+          release: {
+            name: process.env.VERCEL_GIT_COMMIT_SHA,
+            deploy: false,
+            setCommits: false,
+          },
+          sourcemaps: { filesToDeleteAfterUpload: ["**/*.map"] },
+          errorHandler: (error) => console.warn("sentry source map upload failed:", error),
+        }).map((plugin) => ({ ...plugin, apply: "build" as const }))
+      : []),
+  ],
+  /* The pre-render SSR build (`vite build --ssr`) is a throwaway Node bundle: no
+   * source-map upload and no hidden maps, or it would land under the browser release. */
+  build: { sourcemap: uploadSourceMaps && !isSsrBuild ? "hidden" : false },
+  /* It also gets no VITE_ variables. With the deployment's VITE_POSTHOG_KEY in the
+   * bundle, posthog.ts calls posthog.init at import, which is not a function under
+   * Node, and the deploy failed. The pre-render only emits static markup. */
+  envPrefix: isSsrBuild ? "LAVEGA_PRERENDER_ONLY_" : "VITE_",
+  define: { __LAVEGA_BUILD__: JSON.stringify(`${sha} \u00b7 ${day}`) },
+  test: {
+    setupFiles: ["./src/testSetup.ts"],
+    globalSetup: ["./src/test-support/buildSheet.ts"],
+  },
+}));

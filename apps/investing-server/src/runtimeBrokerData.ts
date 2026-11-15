@@ -1,6 +1,7 @@
-import type { CashBalance, CashFlow, Dividend, Position, Trade } from "@lavega/core";
-
 /* The shape of a broker snapshot, and nothing else.
+ *
+ * The shape itself now lives with the sync that produces it, so this is only the
+ * name the runtime has always used for it.
  *
  * It used to live in fileCredentialStore.ts, next to the code that persists it.
  * That reads naturally and broke the import boundary: devFixture.ts needs only the
@@ -14,15 +15,4 @@ import type { CashBalance, CashFlow, Dividend, Position, Trade } from "@lavega/c
  * belong to the file that happens to write it to disk, and the check stays strict
  * for the case it exists to catch.
  */
-export type RuntimeBrokerDataSnapshot = Partial<
-  Record<
-    "ibkr" | "trading212",
-    {
-      positions: Position[];
-      trades: Trade[];
-      dividends: Dividend[];
-      cashBalances?: CashBalance[];
-      cashFlows?: CashFlow[];
-    }
-  >
->;
+export type { BrokerDataSnapshot as RuntimeBrokerDataSnapshot } from "@lavega/adapters";

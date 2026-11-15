@@ -1,6 +1,6 @@
 import { afterEach, expect, test } from "vitest";
 import { app } from "./index.js";
-import { authBaseUrl, authTrustedOrigins } from "./auth.js";
+import { SIGN_UP_RATE_LIMIT, authBaseUrl, authOptions, authTrustedOrigins } from "./auth.js";
 
 afterEach(() => {
   delete process.env.DATABASE_URL;
@@ -33,7 +33,10 @@ test("an explicit base URL wins over the deployment's own hostname", () => {
   try {
     expect(authBaseUrl()).toBe("https://www.lavega.dev");
     // The deployment still trusts itself, or its own /api/auth calls fail.
-    expect(authTrustedOrigins()).toEqual(["https://www.lavega.dev", "https://lavega-git-feature-abc123.vercel.app"]);
+    expect(authTrustedOrigins()).toEqual([
+      "https://www.lavega.dev",
+      "https://lavega-git-feature-abc123.vercel.app",
+    ]);
   } finally {
     delete process.env.VERCEL_URL;
     delete process.env.BETTER_AUTH_URL;
@@ -49,7 +52,11 @@ test("configured trusted origins are kept alongside the deployment's own", () =>
   process.env.BETTER_AUTH_TRUSTED_ORIGINS = "https://www.lavega.dev, https://lavega.dev";
   process.env.VERCEL_URL = "lavega-git-feature-abc123.vercel.app";
   try {
-    expect(authTrustedOrigins()).toEqual(["https://www.lavega.dev", "https://lavega.dev", "https://lavega-git-feature-abc123.vercel.app"]);
+    expect(authTrustedOrigins()).toEqual([
+      "https://www.lavega.dev",
+      "https://lavega.dev",
+      "https://lavega-git-feature-abc123.vercel.app",
+    ]);
   } finally {
     delete process.env.BETTER_AUTH_TRUSTED_ORIGINS;
     delete process.env.VERCEL_URL;
@@ -71,4 +78,39 @@ test("a preview trusts both the URL you click and the one Vercel built", () => {
     delete process.env.VERCEL_URL;
     delete process.env.VERCEL_BRANCH_URL;
   }
+});
+
+test("sign-up stays open and a session requires a confirmed email", () => {
+  const options = authOptions();
+  expect(options.emailAndPassword.disableSignUp).toBe(false);
+  expect(options.emailAndPassword.requireEmailVerification).toBe(true);
+  expect(options.emailVerification.sendOnSignUp).toBe(true);
+  expect(options.emailVerification.sendOnSignIn).toBe(true);
+  expect(options.emailVerification.expiresIn).toBe(60 * 60);
+  expect(options.emailAndPassword.revokeSessionsOnPasswordReset).toBe(true);
+  expect(options.emailAndPassword.resetPasswordTokenExpiresIn).toBe(60 * 60);
+  expect(options.rateLimit.enabled).toBe(true);
+});
+
+test("sign-up refuses the sixth attempt from one address inside the window", async () => {
+  const body = JSON.stringify({
+    name: "A",
+    email: "a@example.com",
+    password: "correct-horse-battery-staple",
+  });
+  const headers = {
+    "content-type": "application/json",
+    "x-forwarded-for": "198.51.100.8, 203.0.113.7",
+  };
+  const statuses: number[] = [];
+  for (let i = 0; i < SIGN_UP_RATE_LIMIT.max + 1; i++) {
+    const response = await app.request("/api/auth/sign-up/email", {
+      method: "POST",
+      headers,
+      body,
+    });
+    statuses.push(response.status);
+  }
+  expect(statuses.slice(0, SIGN_UP_RATE_LIMIT.max).every((status) => status === 503)).toBe(true);
+  expect(statuses.at(-1)).toBe(429);
 });

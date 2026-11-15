@@ -1,5 +1,4 @@
-import type { Tx, CategoryDecision } from "@lavega/core";
-import type { CategorizeItem } from "./api.js";
+import type { CategoryDecision } from "@lavega/core";
 
 /** Max transactions to send per AI-categorize batch — matches the server's
  *  MAX_ITEMS cap in `agent/categorize.ts`. The view slices onbekend txs to this. */

@@ -2,29 +2,34 @@
  *
  * ── WAT ER NOOIT IN MAG, en dat is de belangrijkste helft van dit bestand ───
  *
- * Geen bedragen. Geen artikelen. Geen winkelwagens. Geen URL's, geen hosts die
- * hij bezocht heeft, geen tijdstippen. Wie wil weten wat iemand koopt, hoeft
- * daarvoor geen bedragen te bewaren — een lijstje "wanneer stond het paneel
- * aan" is al een boodschappenlijst met datums. Daarom staat er niets in dat aan
- * een BEZOEK vastzit; alleen dingen die aan een KEUZE vastzitten.
+ * Geen bedragen van zijn aankopen. Geen artikelen. Geen winkelwagens. Geen
+ * URL's, geen hosts die hij bezocht heeft, geen tijdstippen. Wie wil weten wat
+ * iemand koopt, hoeft daarvoor geen bedragen te bewaren — een lijstje "wanneer
+ * stond het paneel aan" is al een boodschappenlijst met datums. Daarom staat er
+ * niets in dat aan een BEZOEK vastzit; alleen dingen die aan een KEUZE
+ * vastzitten. De prijstekst van een aanbieding is de uitzondering en staat
+ * hieronder uitgelegd.
  *
- * Er staan dus drie soorten dingen in:
+ * Er staan dus vier soorten dingen in:
  *   - welke kaarten hij heeft (zijn keuze, hoort bij hem);
- *   - of het paneel op winkelpagina's mag verschijnen (`kassaOveralAan`, één
- *     boolean voor de brede <all_urls>-toestemming — geen lijst van winkels
- *     meer, want die lijst bestaat niet meer);
- *   - welke puntensaldi hij heeft opgeschreven (zijn eigen opgave over zichzelf).
+ *   - op welke winkels het paneel mag verschijnen (`enabledSiteIds`: de
+ *     aangevinkte id's uit sites.ts — de winkels die we gemeten hebben en
+ *     waarvoor Chrome per stuk toestemming vroeg);
+ *   - welke puntensaldi hij heeft opgeschreven (zijn eigen opgave over zichzelf);
+ *   - de aanbiedingen die hij las op een winkel die hij zelf aanzette
+ *     (`bron.sleutels.aanbod`: winkelnaam, prijstekst, einddatum, leesdag).
  *
- * Alle drie zijn ze na het weghalen van de extensie weg, en alle drie zijn ze in
+ * Alle vier zijn ze na het weghalen van de extensie weg, en alle vier zijn ze in
  * chrome://extensions in te zien. Er is geen tweede plek.
  *
- * ── WAAROM EEN PUNTENSALDO HIER MAG STAAN EN EEN BEDRAG NIET ───────────────
+ * ── WAAROM EEN PUNTENSALDO HIER MAG STAAN EN EEN AANKOOPBEDRAG NIET ─────────
  *
  * Dat lijkt een tegenspraak met de alinea hierboven, dus hij staat er voluit.
  *
- * Wat er niet in mag, is alles wat aan een BEZOEK vastzit: het bedrag op de
- * pagina, het artikel, de winkel, het tijdstip. Dat is data die ONTSTAAT doordat
- * hij ergens kijkt, en bewaren maakt er een boodschappenlijst van.
+ * Wat er niet in mag, is alles wat aan een BEZOEK vastzit als GESCHIEDENIS: het
+ * bedrag dat hij afrekende, het artikel, de winkelwagen, het tijdstip. Dat is
+ * data die ONTSTAAT doordat hij ergens koopt, en bewaren maakt er een
+ * boodschappenlijst van.
  *
  * Een puntensaldo is het tegenovergestelde: het is zijn eigen opgave over
  * zichzelf, hij typt het in op een leeg formulier, en het verandert niet doordat
@@ -36,6 +41,27 @@
  * DIE DERDE IS GEEN OPSMUK. Een saldo dat hij in mei invoerde en dat in augustus
  * als "nu" op het scherm komt, is een stille onwaarheid — en die is aan een
  * kassa duurder dan geen saldo, want hij rekent erop.
+ *
+ * ── WAAROM DIT NIET VERSLEUTELD IS ──────────────────────────────────────────
+ *
+ * Alles hierboven staat ONVERSLEUTELD in chrome.storage.local, en dat is een
+ * keuze met een reden en niet een vergeten stap. De enige sleutel die de browser
+ * ons kan geven is een WebCrypto-sleutel waarvan het materiaal niet meer is uit
+ * te lezen (`extractable: false`). Zo'n sleutel is niet te BEWAREN: hij leeft in
+ * het geheugen van de pagina, en chrome.storage.local is schijfopslag die het
+ * opnieuw starten van de service worker overleeft. Iets op schijf zetten dat met
+ * een niet-uitleesbare sleutel is versleuteld, betekent dus óf het
+ * sleutelmateriaal alsnog opslaan — en dan versleutelt de extensie niets, ze
+ * verbergt het alleen — óf een wachtwoordzin per sessie vragen voor een paneeltje
+ * dat aan een kassa moet verschijnen zonder enige invoer. Geen van beide is een
+ * verbetering.
+ *
+ * De grens is dan ook niet deze code maar de opslag zelf: chrome.storage.local
+ * hoort bij één Chrome-profiel, is alleen voor deze extensie leesbaar, en staat
+ * in chrome://extensions. Wie erbij kan, heeft ook de pagina's gelezen waaruit
+ * het komt. Daarom staat hier niets dat aan een BEZOEK vastzit — geen bedragen,
+ * geen artikelen, geen hosts, geen tijdstippen — en dat is de maatregel die
+ * echt helpt: wat er niet is, kan ook niet uitlekken.
  *
  * ── WAAROM HET SALDO IN DE EXTENSIE WORDT INGEVOERD EN NIET UIT DE KLUIS KOMT
  *
@@ -80,7 +106,7 @@ import type {
 } from "./aanbod-kern.js";
 
 const KEY_KAARTEN = "heldIds";
-const KEY_KASSA_OVERAL = "kassaOveralAan";
+const KEY_SITES = "enabledSiteIds";
 const KEY_PUNTEN = "pointsBalances";
 
 /** Alleen strings, geen lege, geen dubbele. Geen lengtegrens per string omdat de
@@ -144,7 +170,12 @@ function schoonSaldi(v: unknown, max = 50): PointsBalance[] {
     if (program === "") continue;
 
     const punten = typeof r.points === "number" ? r.points : Number.NaN;
-    if (!Number.isFinite(punten) || !Number.isInteger(punten) || punten < 0 || punten > 1_000_000_000) {
+    if (
+      !Number.isFinite(punten) ||
+      !Number.isInteger(punten) ||
+      punten < 0 ||
+      punten > 1_000_000_000
+    ) {
       continue;
     }
 
@@ -199,6 +230,15 @@ export const _schoonSaldi = schoonSaldi;
  * tegen heeft gezegd, met de tekst uit `watWel` erbij. Dat is iets anders dan
  * een spoor van winkels dat als bijvangst ontstaat.
  *
+ * EN ER STAAT EEN PRIJSTEKST IN: de letterlijke tekst die op de aanbieding van
+ * die winkel stond. Dat is een bedrag, en de kop van dit bestand zegt dat die
+ * er niet in horen. Het verschil is herkomst en bereik: dit is de openbare
+ * aanbieding van één winkel die hij zelf heeft aangezet, niet wat hij heeft
+ * uitgegeven. De lijst wordt bij elke lezing VERVANGEN, gaat over één pagina,
+ * en `wisBron` haalt hem weg zodra de schakelaar omgaat. Zonder die tekst kan
+ * het paneel de aanbieding niet tonen; er is geen kleiner gegeven dat hetzelfde
+ * doet. Onversleuteld, om dezelfde reden als de rest van dit bestand.
+ *
  * En hij is weg zodra hij de schakelaar omzet: `wisBron` hieronder haalt de
  * sleutels ECHT weg in plaats van ze op leeg te zetten. Een lege lijst is nog
  * steeds een sleutel met een geschiedenis eraan vast.
@@ -247,16 +287,17 @@ export async function setBronAan(bron: Bron, aan: boolean): Promise<void> {
   await chrome.storage.local.set({ [bron.sleutels.aan]: aan === true });
 }
 
-/** Standaard UIT, net als bij een bron: alles wat geen letterlijke `true` is,
- *  levert false op. Zie de uitleg bij `getBronAan` hierboven — dezelfde regel,
- *  nu voor de brede kassa-toestemming in plaats van per bron. */
-export async function getKassaOveralAan(): Promise<boolean> {
-  const items = await chrome.storage.local.get([KEY_KASSA_OVERAL]);
-  return items[KEY_KASSA_OVERAL] === true;
+/** De winkels die hij heeft aangevinkt, uit sites.ts. Dezelfde zeef als de
+ *  kaart-id's, en om dezelfde reden: een id die niet in SITES bestaat levert
+ *  nergens een registratie op, dus wat er ook in de opslag staat, het kan geen
+ *  extra leestoestemming worden. */
+export async function getEnabledSiteIds(): Promise<string[]> {
+  const items = await chrome.storage.local.get([KEY_SITES]);
+  return schoonLijst(items[KEY_SITES]);
 }
 
-export async function setKassaOveralAan(aan: boolean): Promise<void> {
-  await chrome.storage.local.set({ [KEY_KASSA_OVERAL]: aan === true });
+export async function setEnabledSiteIds(ids: readonly string[]): Promise<void> {
+  await chrome.storage.local.set({ [KEY_SITES]: schoonLijst(ids) });
 }
 
 /** De puntenprijs door de zeef.
@@ -269,7 +310,12 @@ function schoonPrijs(v: unknown): Puntenprijs | null {
   if (!v || typeof v !== "object" || Array.isArray(v)) return null;
   const r = v as Record<string, unknown>;
   const punten = typeof r.punten === "number" ? r.punten : Number.NaN;
-  if (!Number.isFinite(punten) || !Number.isInteger(punten) || punten <= 0 || punten > 100_000_000) {
+  if (
+    !Number.isFinite(punten) ||
+    !Number.isInteger(punten) ||
+    punten <= 0 ||
+    punten > 100_000_000
+  ) {
     return null;
   }
   const bijRuw = typeof r.bij === "string" ? r.bij.trim().slice(0, 20) : "";
@@ -337,7 +383,8 @@ function schoonLezing(v: unknown): Lezing | null {
   if (!UITKOMSTEN.includes(uitkomst as LezingUitkomst)) return null;
   const op = typeof r.op === "string" ? r.op.trim() : "";
   if (!/^\d{4}-\d{2}-\d{2}$/.test(op)) return null;
-  const aantal = typeof r.aantal === "number" && Number.isInteger(r.aantal) && r.aantal >= 0 ? r.aantal : 0;
+  const aantal =
+    typeof r.aantal === "number" && Number.isInteger(r.aantal) && r.aantal >= 0 ? r.aantal : 0;
   const citaat = typeof r.citaat === "string" ? r.citaat.trim().slice(0, 120) : "";
   return { uitkomst: uitkomst as LezingUitkomst, aantal, op, citaat };
 }

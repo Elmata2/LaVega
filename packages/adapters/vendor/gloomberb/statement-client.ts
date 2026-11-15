@@ -13,7 +13,8 @@ export const IBKR_STATEMENT_URL =
   "https://ndcdyn.interactivebrokers.com/AccountManagement/FlexWebService/SendRequest";
 // --- end LaVega edit
 
-const IBKR_STATEMENT_GET_URL = "https://ndcdyn.interactivebrokers.com/AccountManagement/FlexWebService/GetStatement";
+const IBKR_STATEMENT_GET_URL =
+  "https://ndcdyn.interactivebrokers.com/AccountManagement/FlexWebService/GetStatement";
 const FLEX_USER_AGENT = "Gloomberb/1.0 Flex";
 const FLEX_STATEMENT_CACHE_MS = 15 * 60_000;
 const FLEX_STATEMENT_INITIAL_WAIT_MS = 3_000;
@@ -37,7 +38,7 @@ function decodeXmlText(value: string): string {
     .replace(/&amp;/g, "&")
     .replace(/&lt;/g, "<")
     .replace(/&gt;/g, ">")
-    .replace(/&quot;/g, "\"")
+    .replace(/&quot;/g, '"')
     .replace(/&apos;/g, "'");
 }
 
@@ -72,7 +73,10 @@ function resolveFlexGetEndpoint(sendEndpoint: string | undefined): string {
       return url.toString();
     }
     if (url.pathname.endsWith("FlexStatementService.SendRequest")) {
-      url.pathname = url.pathname.replace(/FlexStatementService\.SendRequest$/, "FlexStatementService.GetStatement");
+      url.pathname = url.pathname.replace(
+        /FlexStatementService\.SendRequest$/,
+        "FlexStatementService.GetStatement",
+      );
       return url.toString();
     }
   } catch {
@@ -102,19 +106,23 @@ function endpointName(endpoint: string | undefined): string {
 }
 
 function buildFlexErrorMessage(providerMessage: string, context: FlexErrorContext): string {
-  const phase = context.phase === "request"
-    ? "requesting the statement"
-    : "downloading the generated statement";
+  const phase =
+    context.phase === "request"
+      ? "requesting the statement"
+      : "downloading the generated statement";
   const details = [
     `Endpoint ${endpointName(context.endpoint)}`,
     context.queryId ? `query ID ${context.queryId}` : null,
     context.referenceCode ? `reference code ${context.referenceCode}` : null,
     context.token ? "token configured" : "token missing",
     context.httpStatus && context.httpStatus >= 400 ? `HTTP ${context.httpStatus}` : null,
-  ].filter(Boolean).join(", ");
-  const advice = context.phase === "request"
-    ? "Check that Flex Web Service is enabled, the token is active, and the query ID belongs to that token."
-    : "IBKR accepted the request but did not return the statement; retry shortly or check that the Flex query can generate a statement.";
+  ]
+    .filter(Boolean)
+    .join(", ");
+  const advice =
+    context.phase === "request"
+      ? "Check that Flex Web Service is enabled, the token is active, and the query ID belongs to that token."
+      : "IBKR accepted the request but did not return the statement; retry shortly or check that the Flex query can generate a statement.";
 
   return `IBKR Flex request failed while ${phase}: ${providerMessage}. ${details}. ${advice}`;
 }

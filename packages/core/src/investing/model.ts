@@ -1,12 +1,35 @@
-/** A broker-reported holding at statement time. Monetary values use the
- * instrument currency and quantities use broker units. */
+export type BrokerCost =
+  | { status: "known"; amount: number; currency: string }
+  | { status: "unknown"; reason: "not-reported" | "legacy-denomination" };
+
+/** A user assertion about what this holding cost, persisted with the broker
+ *  snapshot. Source priority is manual > calculated > provider (plan §3 WS4.2,
+ *  Sure `Holding#COST_BASIS_SOURCE_PRIORITY`). `locked` keeps the value through
+ *  provider syncs and recalculation; unlocking lets a calculated basis replace
+ *  it. Integer cents at this persisted boundary (ADR 0011). */
+export type ManualCostBasis = {
+  amountCents: number;
+  currency: string;
+  locked: boolean;
+};
+
+/** A broker-reported holding at statement time. `averagePrice`, market values,
+ * and quantities use instrument units. `brokerCost` carries its own currency. */
 export type Position = {
-  tenantId: string;
   entity: string;
+  /** Which broker reported this holding. Optional because snapshots persisted
+   *  before provenance existed carry none; see `ownershipKey`. */
+  broker?: string;
+  /** Which account at that broker, when the broker distinguishes several. */
+  account?: string;
   symbol: string;
   isin?: string;
   description?: string;
   quantity: number;
+  brokerCost?: BrokerCost;
+  /** A user-entered basis; carried forward by a sync and never replaced while
+   *  locked. See `ManualCostBasis`. */
+  manualCostBasis?: ManualCostBasis;
   averagePrice: number | null;
   marketPrice: number | null;
   marketValue: number | null;
@@ -14,18 +37,21 @@ export type Position = {
   asOf: string;
 };
 
-/** Daily closing price used by investing-side portfolio calculations. */
+/** Daily closing price used by investing-side portfolio calculations. Closes
+ *  are split-adjusted: every bar is in today's share units. */
 export type PriceBar = {
-  tenantId: string;
   symbol: string;
   date: string;
   close: number;
   currency: string;
+  /** Shares after per share before for a split taking effect at this
+   *  session's open; 1 when none. Absent on bars stored before splits were
+   *  recorded, which makes them stale. */
+  split?: number;
 };
 
 /** Broker-reported cash anchor. Amount uses the recorded currency. */
 export type CashBalance = {
-  tenantId: string;
   entity: string;
   broker: string;
   currency: string;
@@ -35,28 +61,178 @@ export type CashBalance = {
 
 export type CashFlowKind = "deposit" | "withdrawal" | "interest" | "fee" | "other";
 
-/** Signed broker cash movement. Positive means cash in; negative means cash out. */
+/** Signed broker cash movement. Positive means cash in; negative means cash
+ *  out. Null means the movement happened but its size or direction is not
+ *  known; callers must treat the period as unmeasurable, never guess a sign. */
 export type CashFlow = {
   id: string;
-  tenantId: string;
   entity: string;
   broker: string;
+  /** Which account at that broker, when the broker distinguishes several. */
+  account?: string;
   date: string;
   currency: string;
-  amount: number;
+  amount: number | null;
   kind: CashFlowKind;
   description?: string;
   brokerFlowId?: string;
+  /** The movement's size when its direction is unknown, so `amount` stays
+   *  null but a dated balance can still resolve the sign later. */
+  unsignedAmount?: number;
 };
+
+/** What a broker proved about one account's cash history.
+ *
+ *  Two separate claims, because they are answerable separately and were not
+ *  when they shared a branch.
+ *
+ *  `tradeCash` names the one stream that records what a trade moved: the
+ *  trade's own settlement, or ledger rows among the cash flows. Counting both
+ *  would double a purchase. Which one it is follows from the shape of the
+ *  broker's API, so it holds for every account there and is known even when
+ *  nothing about this account's history is. Keeping it inside `complete` made
+ *  a broker unable to say where trade cash lives without also claiming a
+ *  window it could not prove, and a reader that does not know where trade
+ *  cash lives cannot count trades at all.
+ *
+ *  `status` is the claim about this account. Complete means every cash
+ *  movement from `from` through `to` is in the reported events. Unknown means
+ *  only a dated broker balance says what cash was; the first retained event
+ *  proves nothing about movements before or between.
+ *
+ *  `quantityProvenFrom` is a narrower claim on a complete window: from that
+ *  date through `to` every change of quantity (executions, transfers, corporate
+ *  actions) is in the reported events. A quantity can be walked back from a
+ *  later snapshot only across such a span; complete cash says nothing about
+ *  quantity. It sits on the stored coverage so it survives merges: see
+ *  mergedCoverage in brokerSnapshot.ts. */
+export type CashHistoryCoverage = {
+  entity: string;
+  broker: string;
+  tradeCash: "trade-settlement" | "cash-flows";
+} & (
+  | { status: "complete"; from: string; to: string; quantityProvenFrom?: string }
+  | { status: "unknown"; reason: string }
+);
+
+/* ---------------------------------------------------------------------------
+ * Account tax treatment (plan §3 WS4.4, #296)
+ *
+ * A grouping label and nothing more. LaVega has no account record of its own —
+ * the broker snapshot is the only place an account exists — so the wrapper is
+ * stored as a map keyed by `(broker, account)`. The taxonomy exists so the
+ * realised/income report can group by treatment; it never decides a tax amount
+ * and the report copy says so. "No tax-filing claims" is an acceptance
+ * criterion, not a disclaimer bolted on later.
+ * ------------------------------------------------------------------------- */
+
+/** The four treatments the plan names, plus `unknown` for an account nobody
+ *  labelled. `unknown` is a real value, not a fallback to `taxable`: guessing
+ *  a treatment would silently group an ISA with a taxable account. */
+export type TaxTreatment = "taxable" | "tax-deferred" | "tax-exempt" | "tax-advantaged" | "unknown";
+
+export const TAX_TREATMENTS: readonly TaxTreatment[] = [
+  "taxable",
+  "tax-deferred",
+  "tax-exempt",
+  "tax-advantaged",
+  "unknown",
+];
+
+/** The wrapper labels the plan names (EU + UK + US), plus the plain taxable
+ *  brokerage account. `unknown` means the user has not labelled the account. */
+export type AccountWrapper =
+  | "brokerage"
+  | "isa"
+  | "lisa"
+  | "sipp"
+  | "pea"
+  | "assurance-vie"
+  | "pillar-3a"
+  | "pillar-3b"
+  | "private-pension"
+  | "ira"
+  | "roth-ira"
+  | "401k"
+  | "unknown";
+
+export const ACCOUNT_WRAPPERS: readonly AccountWrapper[] = [
+  "brokerage",
+  "isa",
+  "lisa",
+  "sipp",
+  "pea",
+  "assurance-vie",
+  "pillar-3a",
+  "pillar-3b",
+  "private-pension",
+  "ira",
+  "roth-ira",
+  "401k",
+  "unknown",
+];
+
+/** One account's label. Keyed by the pair the broker snapshot actually names;
+ *  an account with no entry resolves to `unknown`, never to a guess. */
+export type AccountWrapperEntry = {
+  broker: string;
+  account: string;
+  wrapper: AccountWrapper;
+};
+
+export function isAccountWrapper(value: unknown): value is AccountWrapper {
+  return typeof value === "string" && (ACCOUNT_WRAPPERS as readonly string[]).includes(value);
+}
+
+/** JSON-encoded pair, so no broker or account name can be spelled to collide
+ *  with another pair (the same rule as `ownershipKey`). */
+export function accountWrapperKey(broker: string, account: string): string {
+  return JSON.stringify([broker, account]);
+}
+
+/** Normalizes any JSON value into a well-formed wrapper map: unknown wrapper
+ *  labels and non-string keys are dropped, never rejected, exactly like
+ *  `validateInvestingLayout`. A GET and a PUT therefore agree on what valid
+ *  means. */
+export function validateAccountWrapperMap(input: unknown): AccountWrapperEntry[] {
+  if (!Array.isArray(input)) return [];
+  const seen = new Set<string>();
+  const entries: AccountWrapperEntry[] = [];
+  for (const row of input) {
+    if (!row || typeof row !== "object") continue;
+    const record = row as { broker?: unknown; account?: unknown; wrapper?: unknown };
+    if (typeof record.broker !== "string" || typeof record.account !== "string") continue;
+    if (!isAccountWrapper(record.wrapper)) continue;
+    const key = accountWrapperKey(record.broker, record.account);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    entries.push({ broker: record.broker, account: record.account, wrapper: record.wrapper });
+  }
+  return entries;
+}
+
+/** The wrapper map's persisted shape: one tenant's account labels. */
+export type AccountWrapperSelection = { tenantId: string; entries: AccountWrapperEntry[] };
+
+export interface AccountWrapperStore {
+  get(tenantId: string): Promise<AccountWrapperEntry[]>;
+  set(selection: AccountWrapperSelection): Promise<void>;
+}
 
 export type TradeSide = "buy" | "sell" | "other";
 
-/** A broker-reported execution. `amount` and `commission` use currency. */
+/** A broker-reported execution. `quantity` is a positive magnitude; `side`
+ *  carries direction. `amount` and `commission` use currency. */
 export type Trade = {
   id: string;
-  tenantId: string;
   entity: string;
+  /** Which broker executed this trade. Optional for the same reason as on
+   *  `Position`: persisted trades predate provenance and keep their `id`. */
+  broker?: string;
+  /** Which account at that broker, when the broker distinguishes several. */
+  account?: string;
   date: string;
+  executionAt?: string;
   symbol: string;
   isin?: string;
   description?: string;
@@ -66,5 +242,17 @@ export type Trade = {
   amount: number | null;
   currency: string;
   commission: number | null;
+  /** Signed cash the trade moved in the account wallet, when the broker
+   *  reports it (negative for a buy). Absent means it settled in `currency`
+   *  as amount plus commission. */
+  settlement?: { currency: string; amount: number };
   brokerTradeId?: string;
+  /** The execution venue as printed by the broker, e.g. DeGiro's
+   *  `Uitvoeringsplaats` MIC such as `XLON`. Provenance only: it does not
+   *  change how the trade is valued. */
+  venue?: string;
+  /** Units of the trade currency per 1 EUR, as printed by the broker, e.g.
+   *  DeGiro's `Wisselkoers`. Provenance only; nothing in the portfolio
+   *  calculation reads it. */
+  fxRate?: number;
 };

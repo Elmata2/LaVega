@@ -1,11 +1,27 @@
 import { useState } from "react";
 import type { RewardProgram, RewardsBalance, TrackedStatus, TrackingState } from "@lavega/core";
 import {
-  makeRewardsBalance, REWARD_PROGRAMS, rewardsTracked, trackingStatuses,
-  applyRewardsReply, snoozeTracker, parseBalanceReply, norm,
+  makeRewardsBalance,
+  REWARD_PROGRAMS,
+  rewardsTracked,
+  trackingStatuses,
+  applyRewardsReply,
+  snoozeTracker,
+  parseBalanceReply,
+  norm,
 } from "@lavega/core";
-import { formatEuro } from "../format";
+import { formatEuroIn, localeTag } from "../format.js";
+import { useAppLocale } from "../appLocale.js";
+import { optimiseCopy } from "../copy/optimise.js";
+import type { Locale } from "../locale.js";
+import Badge from "../components/ui/Badge.js";
+import Button from "../components/ui/Button.js";
+import Card from "../components/ui/Card.js";
+import CardLink from "../components/ui/CardLink.js";
+import SaldoInput from "../components/ui/SaldoInput.js";
+import StatusLine, { type StatusTone } from "../components/ui/StatusLine.js";
 import "../styles/views.css";
+import { moneyCopy } from "../copy/money.js";
 
 /* Punten — the hand-kept side of the money picture.
  *
@@ -108,10 +124,19 @@ export type ProgramFacts = {
 const ING_PUNTEN: ProgramFacts = {
   program: "ING Punten",
   earn: [
-    { what: "Elke maand minimaal € 700 bijschrijven op je Betaalrekening", reward: "250 punten per maand" },
+    {
+      what: "Elke maand minimaal € 700 bijschrijven op je Betaalrekening",
+      reward: "250 punten per maand",
+    },
     { what: "10 transacties met je Betaalrekening", reward: "100 punten per maand" },
-    { what: "Meer dan € 100 uitgeven met je ING Creditcard Extra of Max", reward: "250 punten per maand" },
-    { what: "Meer dan € 100 uitgeven met je ING (studenten) Creditcard More", reward: "100 punten per maand" },
+    {
+      what: "Meer dan € 100 uitgeven met je ING Creditcard Extra of Max",
+      reward: "250 punten per maand",
+    },
+    {
+      what: "Meer dan € 100 uitgeven met je ING (studenten) Creditcard More",
+      reward: "100 punten per maand",
+    },
     { what: "Rond af & Spaar actief gebruiken", reward: "100 punten per maand" },
     { what: "Een hypotheek hebben", reward: "250 punten per maand" },
     { what: "Je eerste Betaalrekening openen", reward: "2.500 punten, eenmalig" },
@@ -133,7 +158,8 @@ const ING_PUNTEN: ProgramFacts = {
   noRateShort: "Geen koers per bestede euro: ING beloont drempels per maand, niet wat je uitgeeft.",
   cash: {
     kind: "stated-none",
-    quote: "ING Punten hebben geen geldwaarde. Je kan je ING Punten niet inwisselen voor geld en niet overdragen aan anderen.",
+    quote:
+      "ING Punten hebben geen geldwaarde. Je kan je ING Punten niet inwisselen voor geld en niet overdragen aan anderen.",
     source: "Voorwaarden ING Punten",
     validFrom: "1 oktober 2025",
   },
@@ -149,7 +175,9 @@ const ING_PUNTEN: ProgramFacts = {
 };
 
 /** Programma's die deze view kent en core (nog) niet. Zie de kop hierboven. */
-export const EXTRA_PROGRAMS: readonly RewardProgram[] = [{ name: ING_PUNTEN.program, category: "Bank" }];
+export const EXTRA_PROGRAMS: readonly RewardProgram[] = [
+  { name: ING_PUNTEN.program, category: "Bank" },
+];
 
 /** Alles wat deze view over programma's weet: core eerst, daarna wat deze view
  *  zelf kent, zonder dubbele namen. Dit is de OPZOEKLIJST — categorie, eenheid,
@@ -188,7 +216,9 @@ function describesFacts(p: RewardProgram): boolean {
 }
 
 /** De lijst waaruit hij KIEST: elk programma één keer. */
-export const PICK_PROGRAMS: readonly RewardProgram[] = ALL_PROGRAMS.filter((p) => !describesFacts(p));
+export const PICK_PROGRAMS: readonly RewardProgram[] = ALL_PROGRAMS.filter(
+  (p) => !describesFacts(p),
+);
 
 /** De gepubliceerde regels van dit programma, of null als we ze niet hebben.
  *  Matcht alleen op de canonieke naam: de losse core-regel "ING" kan iets anders
@@ -201,18 +231,14 @@ export function programFacts(program: string): ProgramFacts | null {
 /** De waarde-regel onder het saldo. Drie verschillende zinnen, omdat het drie
  *  verschillende situaties zijn: euro's (het bedrag is de waarde), een bekende
  *  nul aan de geldkant (de aanbieder zegt het zelf, met bron), en onbekend. */
-export function worthLine(program: string, unit: "eur" | "points"): string {
-  if (unit === "eur") {
-    return "Waarde: dit bedrag zelf — dit programma keert uit in euro's, er zit geen omrekening tussen.";
-  }
+export function worthLine(program: string, unit: "eur" | "points", locale: Locale = "nl"): string {
+  const c = optimiseCopy[locale].punten;
+  if (unit === "eur") return c.card.worthEur;
   const facts = programFacts(program);
   if (facts) {
-    return (
-      `In geld: niets. ${facts.cash.source} (geldig vanaf ${facts.cash.validFrom}): “${facts.cash.quote}”` +
-      " Wat één punt aan korting oplevert, is niet gepubliceerd: dat is onbekend en niet nul."
-    );
+    return c.card.worthStatedNone(facts.cash.source, facts.cash.validFrom, facts.cash.quote);
   }
-  return "Waarde: niet vast te stellen zonder te weten waarvoor je ze inwisselt.";
+  return c.card.worthUnknown;
 }
 
 /** De gepubliceerde regels, uitgeschreven. Alles wat hier een euroteken heeft is
@@ -226,11 +252,16 @@ export function worthLine(program: string, unit: "eur" | "points"): string {
  *  de onderbouwing ervan. De onderbouwing blijft volledig en één klik weg; dicht
  *  staat ze nog steeds in de DOM, dus ctrl-F en een schermlezer vinden haar. */
 function ProgramFactsBlock({ facts }: { facts: ProgramFacts }) {
+  const [locale] = useAppLocale();
+  const c = optimiseCopy[locale].punten;
   return (
-    <details className="field-note punt-facts">
+    <details
+      className="mt-3 py-3 px-4 border-t border-r border-b border-t-line border-r-line border-b-line border-l-[3px] border-l-accent rounded-sm bg-surface-2 text-muted text-[0.85rem]"
+      data-testid="punt-facts"
+    >
       <summary className="punt-facts-lead" style={{ cursor: "pointer" }}>
-        <strong>Zo spaar je {facts.program}.</strong> {facts.noRateShort}{" "}
-        <span className="eyebrow">Toon de regels</span>
+        <strong className="text-ink">{c.card.factsLead(facts.program)}</strong> {facts.noRateShort}{" "}
+        <span className="eyebrow">{c.card.factsShowRules}</span>
       </summary>
       <p style={{ margin: "0.5rem 0 0" }}>{facts.noRate}</p>
       <ul className="punt-facts-earn" style={{ margin: "0.5rem 0", paddingLeft: "1.1rem" }}>
@@ -241,7 +272,8 @@ function ProgramFactsBlock({ facts }: { facts: ProgramFacts }) {
         ))}
       </ul>
       <p style={{ margin: "0.5rem 0" }}>
-        Pakket: {facts.packages.join(" · ")}. {facts.caveat}
+        {c.card.factsPackageLabel}
+        {facts.packages.join(" · ")}. {facts.caveat}
       </p>
       {facts.unknowns.map((u) => (
         <p key={u} style={{ margin: "0.5rem 0" }}>
@@ -249,7 +281,8 @@ function ProgramFactsBlock({ facts }: { facts: ProgramFacts }) {
         </p>
       ))}
       <p className="eyebrow" style={{ margin: "0.5rem 0 0" }}>
-        Bron: {facts.sources.join(" — ")}
+        {c.card.factsSourceLabel}
+        {facts.sources.join(" — ")}
       </p>
     </details>
   );
@@ -271,92 +304,6 @@ export function programCategory(program: string): string | null {
   return ALL_PROGRAMS.find((r) => norm(r.name) === norm(program))?.category ?? null;
 }
 
-/* ---------------------------------------------------------------------------
- * ALLE PROGRAMMA'S OP HET SCHERM — waarom dit blok er is.
- *
- * "Waarom staan de ING-punten er niet?" (app review 4, punt 29 — en het is de
- * derde keer dat ING terugkomt). Gemeten voordat er iets veranderde: met een
- * lege puntenlijst kwam het woord ING op dit scherm NERGENS voor. Niet omdat het
- * programma ontbrak — het stond in de keuzelijst, zelfs twee keer — maar omdat
- * de keuzelijst een <datalist> is. Die is onzichtbaar tot je in het veld begint
- * te typen, en dit scherm toonde verder alleen kaarten voor saldi die hij al had
- * ingevoerd. Een programma zonder saldo bestond dus visueel niet, en "ik zie het
- * niet" is dan een juiste waarneming en geen vergissing van hem.
- *
- * Dit blok zet die lijst op het scherm: elk programma dat LaVega kent, met zijn
- * saldo als hij er een heeft en met "nog geen saldo" als hij er geen heeft. Dat
- * antwoordt in één keer op punt 29 (ING is er, en je kunt hem hier kiezen) en op
- * punt 30 (toon Amex en alle andere punten).
- *
- * WAT ER NIET STAAT IS EEN NUL. "Nog geen saldo" is een lege plek, geen 0
- * punten; de eerste is waar en de tweede zou een bewering zijn over een rekening
- * die we nooit hebben gezien.
- * ------------------------------------------------------------------------- */
-
-export type RosterRow = {
-  name: string;
-  /** "Bank", "Airline", … of "eigen programma" voor iets dat hij zelf typte. */
-  category: string;
-  unit: "eur" | "points";
-  /** Zijn eigen ingevoerde saldo, of null — nooit een nul die daarvoor doorgaat. */
-  balance: RewardsBalance | null;
-  /** Eén regel over de koers, alleen waar we er een hebben. Null = we hebben
-   *  hier niets te melden, en dan staat er ook niets. */
-  rateNote: string | null;
-};
-
-/** Wat er over de koers van dit programma te zeggen valt in één regel.
- *
- *  Drie uitkomsten en niet meer: gepubliceerde regels (dan staat er waarom er
- *  geen koers per euro is), een programma dat in euro's uitkeert (dan is het
- *  saldo de waarde), en verder niets. Die laatste is bewust leeg: dezelfde zin
- *  ("wat een punt waard is hangt af van hoe je hem inwisselt") acht keer onder
- *  elkaar is geen informatie meer, en hij staat één keer boven de lijst. */
-function rateNoteFor(program: string, unit: "eur" | "points"): string | null {
-  const facts = programFacts(program);
-  if (facts) return facts.noRateShort;
-  return unit === "eur" ? "Keert uit in euro's; het saldo is de waarde." : null;
-}
-
-/** De lijst zoals hij op het scherm komt: eerst de programma's waar hij een
- *  saldo van heeft, dan de rest in de volgorde van de referentielijst. Programma's
- *  die hij zelf heeft getypt staan er ook bij — anders zou "alle programma's" een
- *  lijst zijn die zijn eigen invoer weglaat.
- *
- *  Geen `asOf` en geen statusberekening hier: dit blok zegt WAT er is en van
- *  wanneer, de kaarten hierboven zeggen wat er moet gebeuren. Twee keer dezelfde
- *  aanmaning op één scherm maakt geen van beide dringender. */
-export function programRoster(balances: readonly RewardsBalance[]): RosterRow[] {
-  const byId = new Map(balances.map((b) => [b.id, b]));
-  const row = (name: string, category: string, balance: RewardsBalance | null): RosterRow => {
-    const unit = programUnit(name);
-    return { name, category, unit, balance, rateNote: rateNoteFor(name, unit) };
-  };
-  const listed = PICK_PROGRAMS.map((p) => row(p.name, p.category, byId.get(norm(p.name)) ?? null));
-  const listedIds = new Set(PICK_PROGRAMS.map((p) => norm(p.name)));
-  const own = balances
-    .filter((b) => !listedIds.has(b.id))
-    .map((b) => row(b.program, programCategory(b.program) ?? "eigen programma", b));
-  const all = [...listed, ...own];
-  return [...all.filter((r) => r.balance !== null), ...all.filter((r) => r.balance === null)];
-}
-
-/** Het cijfer in de regel, met de DATUM eraan vast.
- *
- *  Een saldo zonder datum is niet half zo goed als een saldo met datum, het is
- *  iets anders: niemand kan zien of het van gisteren of van vorig jaar is. Dat
- *  wordt straks nog belangrijker — het idee is dat de extensie deze getallen
- *  gebruikt en af en toe om een verversing vraagt, en "af en toe" heeft een
- *  ijkpunt nodig. */
-export function rosterFigure(r: RosterRow): string {
-  if (r.balance === null) return "nog geen saldo";
-  const amount =
-    r.unit === "eur"
-      ? `${formatEuro(r.balance.points)} cashback`
-      : `${r.balance.points.toLocaleString("nl-NL")} ${r.balance.points === 1 ? "punt" : "punten"}`;
-  return `${amount} — van ${dateNL(r.balance.updatedAt)}`;
-}
-
 /** A programme id (a normalised name, so it carries spaces) turned into
  *  something legal in an HTML id attribute. */
 const slug = (s: string): string => s.replace(/[^a-z0-9]+/gi, "-");
@@ -367,12 +314,53 @@ export function addDaysISO(iso: string, n: number): string {
   return `${t.getUTCFullYear()}-${String(t.getUTCMonth() + 1).padStart(2, "0")}-${String(t.getUTCDate()).padStart(2, "0")}`;
 }
 
-const MONTHS_NL = ["januari", "februari", "maart", "april", "mei", "juni", "juli", "augustus", "september", "oktober", "november", "december"];
+const MONTHS_NL = [
+  "januari",
+  "februari",
+  "maart",
+  "april",
+  "mei",
+  "juni",
+  "juli",
+  "augustus",
+  "september",
+  "oktober",
+  "november",
+  "december",
+];
 
-/** "2026-05-12" → "12 mei 2026". */
+/** "2026-05-12" → "12 mei 2026". Kept single-argument and Dutch-only: exported
+ *  and called directly (without a locale) by punten-ui.test.tsx. `dateIn`
+ *  below adds English without touching this signature. */
 export function dateNL(iso: string): string {
   const [y, m, d] = iso.split("-").map(Number);
   return MONTHS_NL[m - 1] ? `${d} ${MONTHS_NL[m - 1]} ${y}` : iso;
+}
+
+const MONTHS_EN = [
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
+];
+
+/** `dateNL`, but locale-aware: "12 May 2026" in English. `format.ts`'s own
+ *  `formatDate` uses SHORT month names ("31 jul 2026"), which is not the
+ *  wording already on this screen (full month names, e.g. "31 juli 2026") —
+ *  kept local for the same reason Rekeningen.tsx keeps its own `dayFullIn`
+ *  instead of reaching for format.ts. */
+function dateIn(locale: Locale, iso: string): string {
+  if (locale === "nl") return dateNL(iso);
+  const [y, m, d] = iso.split("-").map(Number);
+  return MONTHS_EN[m - 1] ? `${d} ${MONTHS_EN[m - 1]} ${y}` : iso;
 }
 
 export type PuntenRow = { balance: RewardsBalance; status: TrackedStatus; unit: "eur" | "points" };
@@ -394,33 +382,60 @@ export function puntenRows(balances: readonly RewardsBalance[], asOf: string): P
     );
 }
 
-const STATE_LABEL: Record<TrackingState, string> = {
-  fresh: "actueel",
-  due: "bevestigen",
-  overdue: "verouderd",
-  snoozed: "later",
-};
-
 /** How old the number is, in the owner's words — never a claim about the real
  *  balance today, only about when he last confirmed it. */
-function ageSentence(s: TrackedStatus): string {
-  const age = s.ageDays === 0 ? "vandaag ingevoerd" : `${s.ageDays} ${s.ageDays === 1 ? "dag" : "dagen"} geleden ingevoerd`;
-  if (s.state === "fresh") return `${age}. LaVega vraagt hier vanaf ${dateNL(s.dueDate)} weer naar.`;
-  if (s.state === "snoozed") return `${age}. Je vroeg om later — LaVega vraagt weer vanaf ${dateNL(s.snoozedUntil ?? s.dueDate)}.`;
-  if (s.state === "overdue") return `${age}, ${s.daysOverdue} ${s.daysOverdue === 1 ? "dag" : "dagen"} over de afgesproken termijn.`;
-  return `${age}. Tijd om te bevestigen.`;
+function ageSentence(s: TrackedStatus, locale: Locale): string {
+  const c = optimiseCopy[locale].punten;
+  const age = s.ageDays === 0 ? c.card.ageToday : c.card.ageDaysAgo(s.ageDays);
+  if (s.state === "fresh") return c.card.ageFreshTemplate(age, dateIn(locale, s.dueDate));
+  if (s.state === "snoozed")
+    return c.card.ageSnoozedTemplate(age, dateIn(locale, s.snoozedUntil ?? s.dueDate));
+  if (s.state === "overdue") return c.card.ageOverdueTemplate(age, s.daysOverdue);
+  return c.card.ageDueTemplate(age);
 }
 
-const INTERVALS: { days: number; label: string }[] = [
-  { days: 30, label: "elke maand" },
-  { days: 90, label: "elk kwartaal" },
-  { days: 180, label: "elk half jaar" },
-  { days: 365, label: "elk jaar" },
-];
+const INTERVAL_DAYS = [30, 90, 180, 365] as const;
+
+/** Left-edge accent on a punt-card: only a figure that is actually over its
+ *  term or due gets the attention colour (was `.punt-overdue`/`.punt-due` in
+ *  views.css); every other state keeps the plain hairline. Due is dashed so it
+ *  differs from overdue by shape, not only by tint. */
+function puntCardBorderClass(state: TrackingState): string {
+  if (state === "overdue") return "border-l-warn";
+  if (state === "due") return "border-l-accent border-dashed";
+  return "border-l-line";
+}
+
+/** Same rule for the status badge (was `.punt-badge-overdue`/`.punt-badge-due`):
+ *  overdue is a problem (solid border + cross), due a warning (dashed + triangle). */
+function puntBadgeProps(state: TrackingState): { tone?: StatusTone; className?: string } {
+  if (state === "overdue") return { tone: "problem" };
+  if (state === "due") return { tone: "warning" };
+  return {};
+}
 
 export default function Punten({
-  balances, asOf, busy, onSave,
-}: { balances: RewardsBalance[]; asOf: string; busy: boolean; onSave: (next: RewardsBalance[]) => void }) {
+  balances,
+  asOf,
+  busy,
+  onSave,
+  statedPrograms = [],
+}: {
+  balances: RewardsBalance[];
+  asOf: string;
+  busy: boolean;
+  onSave: (next: RewardsBalance[]) => void;
+  /** Programmes named in the intake wizard. Those without a balance get an empty row. */
+  statedPrograms?: readonly string[];
+}) {
+  const [locale] = useAppLocale();
+  const c = optimiseCopy[locale].punten;
+  const intervalLabels: Record<number, string> = {
+    30: c.card.intervalMonthly,
+    90: c.card.intervalQuarterly,
+    180: c.card.intervalHalfYearly,
+    365: c.card.intervalYearly,
+  };
   const [program, setProgram] = useState(REWARD_PROGRAMS[0].name);
   const [points, setPoints] = useState("");
   const [updatedAt, setUpdatedAt] = useState(asOf);
@@ -434,9 +449,41 @@ export default function Punten({
    * one click too. Dropped the moment he writes a figure himself, so the undo can
    * never put an old number back over a newer one. */
   const [removed, setRemoved] = useState<RewardsBalance | null>(null);
+  // Typed text per stated programme (keyed by norm) that has no balance yet.
+  const [statedText, setStatedText] = useState<Record<string, string>>({});
+  const [statedError, setStatedError] = useState<Record<string, string>>({});
+
+  /* Stated programmes with no stored balance, matched on the same norm() the
+   * balance ids use. Nothing is stored for them until he enters a number. */
+  const pendingStated = statedPrograms.filter(
+    (name, i, all) =>
+      name.trim() !== "" &&
+      all.findIndex((n) => norm(n) === norm(name)) === i &&
+      !balances.some((b) => b.id === norm(name)),
+  );
+
+  function saveStated(name: string) {
+    const key = norm(name);
+    const pts = parseBalanceReply(statedText[key] ?? "");
+    if (pts === null || pts < 0) {
+      setStatedError({ ...statedError, [key]: c.addForm.errorAskNoNumber });
+      return;
+    }
+    setStatedError({ ...statedError, [key]: "" });
+    setStatedText({ ...statedText, [key]: "" });
+    setRemoved(null);
+    onSave(
+      upsertBalance(
+        balances,
+        makeRewardsBalance({ program: name.trim(), points: Math.round(pts), updatedAt: asOf }),
+      ),
+    );
+  }
 
   const rows = puntenRows(balances, asOf);
-  const attention = rows.filter((r) => r.status.state === "due" || r.status.state === "overdue").length;
+  const attention = rows.filter(
+    (r) => r.status.state === "due" || r.status.state === "overdue",
+  ).length;
   const addUnit = programUnit(program);
   // De regels van het programma waar dit formulier nú op gericht staat, zodat hij
   // ze ziet vóórdat hij een getal opslaat en niet pas op de kaart erna.
@@ -453,20 +500,25 @@ export default function Punten({
   function add() {
     const pts = parseBalanceReply(points);
     if (pts === null || pts < 0) {
-      setAddError("Ik kon hier geen getal in vinden — vul alleen het saldo in, bijvoorbeeld 245000 of 245k.");
+      setAddError(c.addForm.errorNoNumber);
       return;
     }
     if (!program.trim()) {
-      setAddError("Bij welk programma hoort dit saldo? Kies of typ een programma — anders weet ik niet waar dit getal thuishoort.");
+      setAddError(c.addForm.errorNoProgram);
       return;
     }
     if (!updatedAt) {
-      setAddError("Vul de datum in waarop je dit saldo zag.");
+      setAddError(c.addForm.errorNoDate);
       return;
     }
     setAddError("");
     setRemoved(null);
-    onSave(upsertBalance(balances, makeRewardsBalance({ program: program.trim(), points: Math.round(pts), updatedAt })));
+    onSave(
+      upsertBalance(
+        balances,
+        makeRewardsBalance({ program: program.trim(), points: Math.round(pts), updatedAt }),
+      ),
+    );
     setPoints("");
     // Leave the form aimed at nothing. Keeping the programme he just saved here
     // is what turned the next number he typed into an overwrite of it.
@@ -489,7 +541,11 @@ export default function Punten({
   function submitAsk(id: string) {
     const next = applyRewardsReply(balances, id, ask?.text ?? "", asOf);
     if (next === null) {
-      setAsk({ id, text: ask?.text ?? "", error: "Ik kon daar geen enkel getal in vinden — stuur alleen het saldo." });
+      setAsk({
+        id,
+        text: ask?.text ?? "",
+        error: c.addForm.errorAskNoNumber,
+      });
       return;
     }
     setAsk(null);
@@ -502,18 +558,23 @@ export default function Punten({
   }
 
   return (
-    <section className="card" aria-label="Punten">
-      <div className="view-head">
-        <h2>Punten</h2>
+    <Card as="section" aria-label={c.header.ariaLabel}>
+      <div
+        className="flex items-baseline justify-between gap-4 flex-wrap pb-2 mt-6 mb-4 border-b border-line first:mt-0"
+        data-testid="view-head"
+      >
+        <h2 className="m-0 font-body text-[1.5rem] font-semibold tracking-[-0.01em] text-ink">
+          {c.header.title}
+        </h2>
         {/* SALDI TELLEN, GEEN PROGRAMMA'S. Dit getal telt de rijen waar hij een
             cijfer van heeft ingevoerd, en zolang dat de enige lijst op het scherm
             was, was "programma's" daar het goede woord voor. Sinds de
             programmalijst eronder staat is het dat niet meer: "0 programma's"
             stond boven een scherm dat er tien opsomde, en dan is een van de twee
             fout. Wat er wordt geteld, staat er nu ook. */}
-        <span className="eyebrow">
-          {rows.length} {rows.length === 1 ? "saldo" : "saldi"}
-          {attention > 0 ? ` · ${attention} te bevestigen` : ""}
+        <span className="eyebrow flex-none">
+          {c.header.countLabel(rows.length)}
+          {attention > 0 ? c.header.attentionSuffix(attention) : ""}
         </span>
       </div>
       {/* GEEN INLEIDING EN GEEN WAAROM-BLOK MEER, op zijn verzoek (22 augustus).
@@ -526,106 +587,194 @@ export default function Punten({
           uitleg over het scherm maar een eigenschap van dat programma, en zonder
           die zin zou een lege plek als een ontbrekend cijfer lezen. */}
 
-      {rows.length === 0 ? (
-        <div className="empty-guide">
-          <p>Nog geen punten- of cashback-saldi.</p>
-          <ul>
-            <li>Zoek het saldo op in de app of de mail van het programma zelf.</li>
-            <li>Voeg het hieronder toe met de datum waarop je het zag.</li>
-            <li>LaVega vraagt je daarna elk kwartaal om het te bevestigen — dat interval kun je per programma aanpassen.</li>
+      {rows.length === 0 && pendingStated.length === 0 ? (
+        <div
+          className="border border-dashed border-line rounded bg-surface-2 p-4"
+          data-testid="empty-guide"
+        >
+          <p className="m-0 mb-3">{c.empty.lead}</p>
+          <ul className="m-0 pl-[1.1rem] text-muted text-[0.88rem]">
+            {c.empty.steps.map((step) => (
+              <li className="mb-1" key={step}>
+                {step}
+              </li>
+            ))}
           </ul>
         </div>
       ) : (
-        <div className="punt-list">
+        <div className="grid grid-cols-[repeat(auto-fit,minmax(280px,1fr))] gap-4 mt-4">
+          {pendingStated.map((name) => (
+            <article
+              className="flex flex-col border border-line rounded bg-surface-2 p-4"
+              data-testid="punt-stated"
+              key={`stated-${norm(name)}`}
+            >
+              <div className="font-semibold text-ink [overflow-wrap:anywhere]">{name}</div>
+              <label
+                className="mt-2 text-[0.82rem] text-muted"
+                htmlFor={`punt-stated-${slug(norm(name))}`}
+              >
+                {c.card.statedBalanceHint}
+              </label>
+              <div className="flex flex-wrap gap-2 mt-2">
+                <SaldoInput
+                  id={`punt-stated-${slug(norm(name))}`}
+                  className="flex-[1_1_120px] min-w-0"
+                  inputMode="decimal"
+                  placeholder={
+                    programUnit(name) === "eur"
+                      ? c.card.askPlaceholderEur
+                      : c.card.askPlaceholderPoints
+                  }
+                  value={statedText[norm(name)] ?? ""}
+                  disabled={busy}
+                  onChange={(e) => {
+                    setStatedText({ ...statedText, [norm(name)]: e.target.value });
+                    setStatedError({ ...statedError, [norm(name)]: "" });
+                  }}
+                />
+                <Button
+                  variant="primary"
+                  disabled={busy}
+                  aria-label={`${c.card.askSave} ${name}`}
+                  onClick={() => saveStated(name)}
+                >
+                  {c.card.askSave}
+                </Button>
+              </div>
+              {statedError[norm(name)] ? (
+                <StatusLine
+                  tone="problem"
+                  className="mt-2 mb-0 text-[0.82rem]"
+                  data-testid="punt-error"
+                >
+                  {statedError[norm(name)]}
+                </StatusLine>
+              ) : null}
+            </article>
+          ))}
           {rows.map(({ balance: b, status, unit }) => {
             const category = programCategory(b.program);
             const facts = programFacts(b.program);
             const asking = ask && ask.id === b.id ? ask : null;
             return (
-              <article className={`punt-card punt-${status.state}`} key={b.id}>
-                <header className="punt-head">
-                  <div className="punt-id">
-                    <div className="punt-program">{b.program}</div>
-                    <div className="punt-category">{category ?? "eigen programma"}</div>
+              <article
+                className={`flex flex-col border-t border-r border-b border-t-line border-r-line border-b-line rounded bg-surface-2 p-4 border-l-[3px] ${puntCardBorderClass(status.state)}`}
+                data-testid="punt-card"
+                data-state={status.state}
+                key={b.id}
+              >
+                <header className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="font-semibold text-ink [overflow-wrap:anywhere]">
+                      {b.program}
+                    </div>
+                    <div className="text-[0.78rem] text-muted">
+                      {category ?? c.card.ownProgramCategory}
+                    </div>
                   </div>
-                  <span className={`badge punt-badge-${status.state}`}>{STATE_LABEL[status.state]}</span>
+                  <Badge {...puntBadgeProps(status.state)}>{c.card.stateLabel[status.state]}</Badge>
                 </header>
 
-                <div className="punt-figure">
-                  <span className="punt-value">
-                    {unit === "eur" ? formatEuro(b.points) : b.points.toLocaleString("nl-NL")}
+                <div className="flex items-baseline gap-2 mt-3">
+                  <span
+                    className="font-body text-[2rem] font-semibold text-ink tabular-nums [overflow-wrap:anywhere]"
+                    data-testid="punt-value"
+                  >
+                    {unit === "eur"
+                      ? formatEuroIn(locale, b.points)
+                      : b.points.toLocaleString(localeTag(locale))}
                   </span>
-                  <span className="punt-unit">{unit === "eur" ? "cashback" : "punten"}</span>
+                  <span className="text-[0.85rem] text-muted" data-testid="punt-unit">
+                    {unit === "eur" ? c.card.unitCashback : c.card.unitPoints}
+                  </span>
                 </div>
-                <p className="punt-asof">
-                  Stand van {dateNL(b.updatedAt)} — {ageSentence(status)}
+                <p className="mt-1 mb-0 text-[0.82rem] text-muted">
+                  {c.card.asOfTemplate(dateIn(locale, b.updatedAt), ageSentence(status, locale))}
                 </p>
-                <p className="punt-worth">{worthLine(b.program, unit)}</p>
+                <p className="mt-2 mb-0 text-[0.82rem] text-muted" data-testid="punt-worth">
+                  {worthLine(b.program, unit, locale)}
+                </p>
                 {facts ? <ProgramFactsBlock facts={facts} /> : null}
 
                 {asking ? (
-                  <div className="punt-ask">
-                    <label htmlFor={`punt-ask-${slug(b.id)}`}>{status.question}</label>
-                    <div className="punt-ask-row">
-                      <input
+                  <div
+                    className="mt-3 p-3 border border-line rounded-sm bg-surface"
+                    data-testid="punt-ask"
+                  >
+                    <label
+                      className="block text-[0.85rem] text-ink mb-2"
+                      htmlFor={`punt-ask-${slug(b.id)}`}
+                    >
+                      {moneyCopy[locale].betaalschema.trackingQuestion(status)}
+                    </label>
+                    <div className="flex flex-wrap gap-2">
+                      <SaldoInput
                         id={`punt-ask-${slug(b.id)}`}
-                        className="saldo-input"
+                        className="flex-[1_1_120px] min-w-0"
                         inputMode="decimal"
-                        placeholder={unit === "eur" ? "bijv. 42" : "bijv. 245000"}
+                        placeholder={
+                          unit === "eur" ? c.card.askPlaceholderEur : c.card.askPlaceholderPoints
+                        }
                         value={asking.text}
                         disabled={busy}
                         onChange={(e) => setAsk({ id: b.id, text: e.target.value, error: "" })}
                       />
-                      <button type="button" className="btn btn-primary" disabled={busy} onClick={() => submitAsk(b.id)}>
-                        Opslaan
-                      </button>
-                      <button type="button" className="btn" disabled={busy} onClick={() => setAsk(null)}>
-                        Annuleer
-                      </button>
+                      <Button variant="primary" disabled={busy} onClick={() => submitAsk(b.id)}>
+                        {c.card.askSave}
+                      </Button>
+                      <Button disabled={busy} onClick={() => setAsk(null)}>
+                        {c.card.askCancel}
+                      </Button>
                     </div>
-                    {asking.error ? <p className="punt-error">{asking.error}</p> : null}
+                    {asking.error ? (
+                      <StatusLine
+                        tone="problem"
+                        className="mt-2 mb-0 text-[0.82rem]"
+                        data-testid="punt-error"
+                      >
+                        {asking.error}
+                      </StatusLine>
+                    ) : null}
                   </div>
                 ) : null}
 
-                <footer className="punt-actions">
+                <footer className="flex flex-wrap items-center gap-3 mt-auto pt-3">
                   {!asking && (
-                    <button
-                      type="button"
-                      className="card-link"
+                    <CardLink
                       disabled={busy}
                       onClick={() => setAsk({ id: b.id, text: "", error: "" })}
                     >
-                      Saldo bijwerken
-                    </button>
+                      {c.card.updateBalance}
+                    </CardLink>
                   )}
                   {(status.state === "due" || status.state === "overdue") && (
-                    <button
-                      type="button"
-                      className="card-link"
+                    <CardLink
                       disabled={busy}
                       onClick={() => onSave(snoozeTracker(balances, b.id, addDaysISO(asOf, 30)))}
                     >
-                      Niet nu
-                    </button>
+                      {c.card.notNow}
+                    </CardLink>
                   )}
-                  <label className="punt-interval">
-                    <span className="eyebrow">Vraag me</span>
+                  <label className="inline-flex items-center gap-1">
+                    <span className="eyebrow">{c.card.remindMeLabel}</span>
                     <select
-                      aria-label={`Herinnering ${b.program}`}
+                      className="text-[0.8rem] py-[2px] px-[6px]"
+                      aria-label={c.card.reminderAriaLabel(b.program)}
                       value={String(b.intervalDays ?? 90)}
                       disabled={busy}
                       onChange={(e) => changeInterval(b.id, Number(e.target.value))}
                     >
-                      {INTERVALS.map((i) => (
-                        <option key={i.days} value={String(i.days)}>
-                          {i.label}
+                      {INTERVAL_DAYS.map((days) => (
+                        <option key={days} value={String(days)}>
+                          {intervalLabels[days]}
                         </option>
                       ))}
                     </select>
                   </label>
-                  <button type="button" className="card-link card-link-danger" disabled={busy} onClick={() => remove(b.id)}>
-                    Verwijder
-                  </button>
+                  <CardLink variant="danger" disabled={busy} onClick={() => remove(b.id)}>
+                    {c.card.remove}
+                  </CardLink>
                 </footer>
               </article>
             );
@@ -634,46 +783,79 @@ export default function Punten({
       )}
 
       {removed ? (
-        <p className="field-note punt-undo" role="status">
-          <strong>{removed.program}</strong> is verwijderd —{" "}
+        <p
+          className="mt-3 mb-0 py-3 px-4 border-t border-r border-b border-t-line border-r-line border-b-line border-l-[3px] border-l-accent rounded-sm bg-surface-2 text-muted text-[0.85rem]"
+          data-testid="punt-undo"
+          role="status"
+        >
+          <strong className="text-ink">{removed.program}</strong>
+          {c.removedBanner.removedSuffix}
           {programUnit(removed.program) === "eur"
-            ? `${formatEuro(removed.points)} cashback`
-            : `${removed.points.toLocaleString("nl-NL")} punten`}{" "}
-          van {dateNL(removed.updatedAt)}. Dat getal stond alleen hier.{" "}
-          <button type="button" className="card-link" disabled={busy} onClick={undoRemove}>
-            Zet terug
-          </button>
+            ? `${formatEuroIn(locale, removed.points)} ${c.removedBanner.cashbackUnit}`
+            : `${removed.points.toLocaleString(localeTag(locale))} ${c.removedBanner.pointsUnit}`}{" "}
+          {c.removedBanner.dateOnlySuffix(dateIn(locale, removed.updatedAt))}{" "}
+          <CardLink disabled={busy} onClick={undoRemove}>
+            {c.removedBanner.undo}
+          </CardLink>
         </p>
       ) : null}
 
-      <div className="view-head">
-        <h3>Saldo toevoegen</h3>
-        <span className="eyebrow">of een bestaand programma overschrijven</span>
+      <div
+        className="flex items-baseline justify-between gap-4 flex-wrap pb-2 mt-6 mb-4 border-b border-line first:mt-0"
+        data-testid="view-head"
+      >
+        <h3 className="m-0 font-body text-[1.2rem] font-semibold tracking-[-0.01em] text-ink">
+          {c.addForm.heading}
+        </h3>
+        <span className="eyebrow flex-none">{c.addForm.overwriteHint}</span>
       </div>
-      <div className="stack-form punt-form">
-        <div className="stack-form-row">
-          <label>
-            Programma
-            <input list="reward-programs" value={program} disabled={busy} aria-label="Programma"
-              placeholder="bijv. Marriott Bonvoy"
-              onChange={(e) => setProgram(e.target.value)} />
+      <div className="flex flex-col gap-3 max-w-[720px]" data-testid="punt-form">
+        <div className="flex gap-3 [@media(max-width:640px)]:flex-col">
+          <label className="flex flex-col gap-1 text-[0.82rem] text-muted flex-[1_1_0px] min-w-0">
+            {c.addForm.programLabel}
+            <input
+              className="w-full box-border"
+              list="reward-programs"
+              value={program}
+              disabled={busy}
+              aria-label={c.addForm.programLabel}
+              placeholder={c.addForm.programPlaceholder}
+              onChange={(e) => setProgram(e.target.value)}
+            />
             {/* PICK_PROGRAMS en niet ALL_PROGRAMS: elk programma één keer. Zie
                 daar waarom core's losse "ING" hier niet meer bij staat. */}
             <datalist id="reward-programs">
-              {PICK_PROGRAMS.map((p) => <option key={p.name} value={p.name} />)}
+              {PICK_PROGRAMS.map((p) => (
+                <option key={p.name} value={p.name} />
+              ))}
             </datalist>
           </label>
-          <label>
-            {addUnit === "eur" ? "Cashback in hele euro's" : "Punten"}
-            <input className="saldo-input" inputMode="decimal" value={points}
-              disabled={busy} aria-label={addUnit === "eur" ? "Cashback in hele euro's" : "Punten"}
-              placeholder={addUnit === "eur" ? "bijv. 42" : "bijv. 245000"}
-              onChange={(e) => setPoints(e.target.value)} />
+          <label className="flex flex-col gap-1 text-[0.82rem] text-muted flex-[1_1_0px] min-w-0">
+            {addUnit === "eur" ? c.addForm.cashbackLabel : c.addForm.pointsLabel}
+            <SaldoInput
+              className="w-full box-border"
+              inputMode="decimal"
+              value={points}
+              disabled={busy}
+              aria-label={addUnit === "eur" ? c.addForm.cashbackLabel : c.addForm.pointsLabel}
+              placeholder={
+                addUnit === "eur"
+                  ? c.addForm.amountPlaceholderEur
+                  : c.addForm.amountPlaceholderPoints
+              }
+              onChange={(e) => setPoints(e.target.value)}
+            />
           </label>
-          <label>
-            Gezien op
-            <input type="date" value={updatedAt} disabled={busy} aria-label="Bijgewerkt op"
-              onChange={(e) => setUpdatedAt(e.target.value)} />
+          <label className="flex flex-col gap-1 text-[0.82rem] text-muted flex-[1_1_0px] min-w-0">
+            {c.addForm.seenOnLabel}
+            <input
+              className="w-full box-border"
+              type="date"
+              value={updatedAt}
+              disabled={busy}
+              aria-label={c.addForm.updatedAtAriaLabel}
+              onChange={(e) => setUpdatedAt(e.target.value)}
+            />
           </label>
         </div>
         {addFacts ? <ProgramFactsBlock facts={addFacts} /> : null}
@@ -683,29 +865,39 @@ export default function Punten({
             eigen id, náást ING Punten. Deze wijzer kan hier wél werken: de optie
             staat één veld hoger in dezelfde lijst. */}
         {norm(program) === "ing" ? (
-          <p className="field-note">
-            Spaar je ING Punten? Kies dan <strong>ING Punten</strong> in het veld hierboven — daar staan de
-            verdienregels van ING bij. Wat “ING” zelf bijhoudt, weet LaVega niet.
+          <p
+            className="mt-3 mb-0 py-3 px-4 border-t border-r border-b border-t-line border-r-line border-b-line border-l-[3px] border-l-accent rounded-sm bg-surface-2 text-muted text-[0.85rem]"
+            data-testid="punt-ing-hint"
+          >
+            {c.addForm.ingHintBefore}
+            <strong className="text-ink">{c.addForm.ingHintBold}</strong>
+            {c.addForm.ingHintAfter}
           </p>
         ) : null}
         {existing ? (
-          <p className="field-note punt-overwrite">
-            <strong>{existing.program}</strong> staat al in de lijst:{" "}
+          <p
+            className="mt-3 mb-0 py-3 px-4 border-t border-r border-b border-t-line border-r-line border-b-line border-l-[3px] border-l-accent rounded-sm bg-surface-2 text-muted text-[0.85rem]"
+            data-testid="punt-overwrite"
+          >
+            <strong className="text-ink">{existing.program}</strong>
+            {c.addForm.existingOverwriteSuffix}
             {programUnit(existing.program) === "eur"
-              ? `${formatEuro(existing.points)} cashback`
-              : `${existing.points.toLocaleString("nl-NL")} punten`}{" "}
-            van {dateNL(existing.updatedAt)}. Overschrijven zet jouw nieuwe getal daarvoor in de plaats —
-            dat oude saldo is er dan niet meer. Je herinnering blijft wel staan. Wil je een ander
-            programma toevoegen, verander dan eerst het veld hierboven.
+              ? `${formatEuroIn(locale, existing.points)} ${c.card.unitCashback}`
+              : `${existing.points.toLocaleString(localeTag(locale))} ${c.card.unitPoints}`}{" "}
+            {c.addForm.existingOverwriteDateSuffix(dateIn(locale, existing.updatedAt))}
           </p>
         ) : null}
-        <div className="stack-form-actions">
-          <button type="button" className="btn btn-primary" disabled={busy} onClick={add}>
-            {existing ? "Overschrijven" : "Opslaan"}
-          </button>
+        <div className="flex flex-wrap gap-2 mt-2" data-testid="stack-form-actions">
+          <Button variant="primary" disabled={busy} onClick={add}>
+            {existing ? c.addForm.submitOverwrite : c.addForm.submitSave}
+          </Button>
         </div>
-        {addError ? <p className="punt-error">{addError}</p> : null}
+        {addError ? (
+          <StatusLine tone="problem" className="mt-2 text-[0.82rem]" data-testid="punt-error">
+            {addError}
+          </StatusLine>
+        ) : null}
       </div>
-    </section>
+    </Card>
   );
 }

@@ -21,3 +21,11 @@ export function businessDaysAfter(from: string, to: string): number {
   if (to <= from) return 0;
   return businessDateRange(from, to).filter((date) => date > from).length;
 }
+
+/** Bars older than this many business days stop backing a value. */
+export const MAX_MISSED_BUSINESS_DAYS = 5;
+
+/** A bar still backs a value on `asOf` when at most five business days old. */
+export function isPriceFresh(barDate: string, asOfDate: string): boolean {
+  return businessDaysAfter(barDate, asOfDate) <= MAX_MISSED_BUSINESS_DAYS;
+}

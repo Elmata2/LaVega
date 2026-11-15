@@ -5,15 +5,28 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, expect, test } from "vitest";
 import type { Alert } from "@lavega/core";
 import AandachtBlock from "./AandachtBlock";
-import { alerts } from "./fixtures";
+
+/* Alert bodies for these render tests are constructed locally (the shared
+ * `fixtures.ts` used to export a `title`/`detail` pair here, but `Alert` now
+ * carries a structured `body` — see packages/core/src/alerts.ts's
+ * `AlertBody`). Kept local because this file is the only consumer. */
+const testAlerts: Alert[] = [
+  {
+    id: "al1",
+    severity: "critical",
+    body: { kind: "shortfall", date: "2026-09-14", balanceCents: -80_000, bufferCents: 250_000 },
+  },
+  { id: "al2", severity: "info", body: { kind: "no-balance", count: 1 } },
+];
 
 test("AandachtBlock renders every alert from props, grouped under its severity", () => {
   const html = renderToStaticMarkup(
-    <AandachtBlock alerts={alerts} bufferCents={250_000} onBufferChange={() => {}} />,
+    <AandachtBlock alerts={testAlerts} bufferCents={250_000} onBufferChange={() => {}} />,
   );
   expect(html).toContain("Aandacht");
-  expect(html).toContain("Tekort verwacht in week 6");
-  expect(html).toContain("Verwacht saldo € 1.200 onder je buffer.");
+  expect(html).toContain("Verwacht tekort");
+  expect(html).toContain("2026-09-14");
+  expect(html).toContain("2.500,00"); // buffer shown
   expect(html).toContain("1 rekening zonder saldo");
   // The buffer arrives in cents and is shown in euro.
   expect(html).toContain('value="2500"');
@@ -27,13 +40,34 @@ test("AandachtBlock renders every alert from props, grouped under its severity",
   expect(html.indexOf("Kritiek")).toBeLessThan(html.indexOf("Ter info"));
 });
 
+/* Regression for the alert-centre showing Dutch prose on the English home
+ * screen: `computeAlerts` (core) used to bake the sentence into `title`/
+ * `detail` with a hardcoded `toLocaleString("nl-NL")`, so an English reader
+ * on Overzicht saw Dutch regardless of locale. Core now returns structured
+ * `AlertBody` facts and this block renders the sentence from
+ * `copy/money.ts`'s `aandacht.alert`, per locale. */
+test("the alert centre renders English when the locale cookie is en, never Dutch", () => {
+  document.cookie = "lavega_locale=en; Path=/";
+  const html = renderToStaticMarkup(
+    <AandachtBlock alerts={testAlerts} bufferCents={250_000} onBufferChange={() => {}} />,
+  );
+  expect(html).toContain("Expected shortfall");
+  expect(html).toContain("account without a balance");
+  expect(html).toContain("Critical");
+  expect(html).not.toContain("Verwacht tekort");
+  expect(html).not.toContain("rekening zonder saldo");
+  expect(html).not.toContain("Kritiek");
+});
+
 /* --- The empty state. The old copy asserted a fact about the data ("je
  * verwachte saldo blijft boven je buffer en er zijn geen gemiste betalingen"),
  * which `computeAlerts` produces just as readily when there is no data at all:
  * no accounts, no forecast, no streams, nothing that could be missed. --- */
 
 test("AandachtBlock never reports an empty list as a clean bill of health", () => {
-  const html = renderToStaticMarkup(<AandachtBlock alerts={[]} bufferCents={500_00} onBufferChange={() => {}} />);
+  const html = renderToStaticMarkup(
+    <AandachtBlock alerts={[]} bufferCents={500_00} onBufferChange={() => {}} />,
+  );
   expect(html).not.toContain("alert-row");
 
   // No claim about the balance or about payments arriving.
@@ -50,11 +84,15 @@ test("AandachtBlock never reports an empty list as a clean bill of health", () =
 test("a buffer of zero says what that silently does to the shortfall alert", () => {
   // The forecast flags a week whose closing falls BELOW the buffer, so a buffer
   // of 0 quietly turns "waarschuw me op tijd" into "waarschuw me bij rood".
-  const zero = renderToStaticMarkup(<AandachtBlock alerts={[]} bufferCents={0} onBufferChange={() => {}} />);
+  const zero = renderToStaticMarkup(
+    <AandachtBlock alerts={[]} bufferCents={0} onBufferChange={() => {}} />,
+  );
   expect(zero).toContain("Je buffer staat op € 0");
   expect(zero).toContain("onder nul zakt");
 
-  const set = renderToStaticMarkup(<AandachtBlock alerts={[]} bufferCents={250_000} onBufferChange={() => {}} />);
+  const set = renderToStaticMarkup(
+    <AandachtBlock alerts={[]} bufferCents={250_000} onBufferChange={() => {}} />,
+  );
   expect(set).not.toContain("Je buffer staat op € 0");
 });
 
@@ -86,41 +124,101 @@ const info = (n: number): Alert[] =>
   Array.from({ length: n }, (_, i) => ({
     id: `t${i}`,
     severity: "info" as const,
-    title: `Punten ${i} — saldo bijwerken`,
-    detail: `Laatst bijgewerkt op 2026-05-0${i + 1}.`,
+    body: {
+      kind: "tracking-stale" as const,
+      label: `Punten ${i}`,
+      updatedAt: `2026-05-0${i + 1}`,
+      ageDays: 100,
+      unit: "points",
+    },
   }));
 
 test("the info tier folds away behind a count when something real outranks it", () => {
   const critical: Alert = {
     id: "shortfall",
     severity: "critical",
-    title: "Verwacht tekort",
-    detail: "Rond 2026-09-14 zakt je saldo naar € 800,00 — onder je buffer van € 2.500,00.",
+    body: { kind: "shortfall", date: "2026-09-14", balanceCents: -80_000, bufferCents: 250_000 },
   };
-  const c = render(<AandachtBlock alerts={[critical, ...info(4)]} bufferCents={250_000} onBufferChange={() => {}} />);
+  const c = render(
+    <AandachtBlock
+      alerts={[critical, ...info(4)]}
+      bufferCents={250_000}
+      onBufferChange={() => {}}
+    />,
+  );
 
   // The critical alert is never folded.
   expect(c.textContent).toContain("Verwacht tekort");
   expect(c.textContent).not.toContain("Punten 0");
-  expect(c.querySelectorAll(".alert-row")).toHaveLength(1);
+  expect(c.querySelectorAll('[data-testid="alert-row"]')).toHaveLength(1);
 
-  const toggle = [...c.querySelectorAll("button")].find((b) => (b.textContent ?? "").includes("Toon 4 ter info"))!;
+  const toggle = [...c.querySelectorAll("button")].find((b) =>
+    (b.textContent ?? "").includes("Toon 4 ter info"),
+  )!;
   expect(toggle).toBeTruthy();
   act(() => toggle.dispatchEvent(new MouseEvent("click", { bubbles: true })));
 
   expect(c.textContent).toContain("Punten 0");
-  expect(c.querySelectorAll(".alert-row")).toHaveLength(5);
+  expect(c.querySelectorAll('[data-testid="alert-row"]')).toHaveLength(5);
 });
 
 test("info alerts stay open when they are the only thing there — folding them would hide the block", () => {
-  const c = render(<AandachtBlock alerts={info(3)} bufferCents={250_000} onBufferChange={() => {}} />);
-  expect(c.querySelectorAll(".alert-row")).toHaveLength(3);
+  const c = render(
+    <AandachtBlock alerts={info(3)} bufferCents={250_000} onBufferChange={() => {}} />,
+  );
+  expect(c.querySelectorAll('[data-testid="alert-row"]')).toHaveLength(3);
   expect(c.textContent).not.toContain("Toon 3 ter info");
 });
 
 test("one or two info alerts are never folded — the toggle would cost the space it saves", () => {
-  const critical: Alert = { id: "s", severity: "critical", title: "Verwacht tekort", detail: "…" };
-  const c = render(<AandachtBlock alerts={[critical, ...info(2)]} bufferCents={250_000} onBufferChange={() => {}} />);
-  expect(c.querySelectorAll(".alert-row")).toHaveLength(3);
-  expect(c.querySelector(".alert-tier button")).toBeNull(); // no fold toggle
+  const critical: Alert = {
+    id: "s",
+    severity: "critical",
+    body: { kind: "shortfall", date: "2026-09-14", balanceCents: -80_000, bufferCents: 250_000 },
+  };
+  const c = render(
+    <AandachtBlock
+      alerts={[critical, ...info(2)]}
+      bufferCents={250_000}
+      onBufferChange={() => {}}
+    />,
+  );
+  expect(c.querySelectorAll('[data-testid="alert-row"]')).toHaveLength(3);
+  expect(c.querySelector('[data-testid="alert-tier"] button')).toBeNull(); // no fold toggle
+});
+
+/* Severity is carried by SHAPE: the tier chips used to be the coloured emoji
+ * circles, which stay coloured (and near-identical) in the black-and-white
+ * theme. Now: critical = solid border + cross, warning = dashed border +
+ * triangle, info = plain word + "i" circle. */
+test("each severity tier renders its own icon shape and border style", () => {
+  const all: Alert[] = [
+    ...testAlerts,
+    { id: "al3", severity: "warning", body: { kind: "no-balance", count: 2 } },
+  ];
+  const html = renderToStaticMarkup(
+    <AandachtBlock alerts={all} bufferCents={250_000} onBufferChange={() => {}} />,
+  );
+  const tier = (word: string) => {
+    const heading = html.match(/<h3[\s\S]*?<\/h3>/g)?.find((h) => h.includes(word));
+    expect(heading).toBeDefined();
+    return heading ?? "";
+  };
+  expect(html).not.toMatch(/🔴|🟠|🟡/u);
+  const critical = tier("Kritiek");
+  expect(critical).toContain('data-status-icon="problem"');
+  expect(critical).toContain("border-solid");
+  const warning = tier("Let op");
+  expect(warning).toContain('data-status-icon="warning"');
+  expect(warning).toContain("border-dashed");
+  const info = tier("Ter info");
+  expect(info).toContain('data-status-icon="info"');
+  expect(info).not.toContain("border-dashed");
+});
+
+test("the nothing-found line carries a check icon", () => {
+  const html = renderToStaticMarkup(
+    <AandachtBlock alerts={[]} bufferCents={250_000} onBufferChange={() => {}} />,
+  );
+  expect(html).toContain('data-status-icon="success"');
 });

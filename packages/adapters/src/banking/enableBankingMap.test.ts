@@ -1,5 +1,11 @@
 import { expect, test } from "vitest";
-import { mapEbTransaction, mapEbAccount, pickEbBalance, pickEbBalanceDate, ebAccountKey } from "./enableBankingMap.js";
+import {
+  mapEbTransaction,
+  mapEbAccount,
+  pickEbBalance,
+  pickEbBalanceDate,
+  ebAccountKey,
+} from "./enableBankingMap.js";
 
 /* Synthetic Enable Banking JSON — shapes mirror the clean-room reference
  * server.mjs's ebMapTx/ebAccountKey and the /api/eb/sync balance-pick logic.
@@ -60,6 +66,38 @@ test("mapEbTransaction: missing remittance_information falls back to bank_transa
   expect(result.counterparty).toBe("NL02XXXX0002");
 });
 
+test("mapEbTransaction: no creditor/debtor at all (a card-rail purchase) falls back to remittance_information for counterparty, same as description already does", () => {
+  // Card transactions frequently carry no structured creditor/debtor at all —
+  // Enable Banking (and PSD2 generally) only guarantees remittance_information
+  // for these, with the merchant name living there instead. Before this fix,
+  // `description` already fell back to remittance_information but
+  // `counterparty` did not, so this exact shape produced counterparty: "" —
+  // which merchantKey("") then drops from subscription/merchant detection
+  // entirely, however many times the same merchant repeats.
+  const tx = {
+    transaction_amount: { amount: "11.89", currency: "EUR" },
+    credit_debit_indicator: "DBIT",
+    remittance_information: ["SIMYO"],
+    booking_date: "2026-01-05",
+  };
+  const result = mapEbTransaction(tx, "ACC1");
+  expect(result.counterparty).toBe("SIMYO");
+  expect(result.description).toBe("SIMYO");
+});
+
+test("mapEbTransaction: creditor.name still wins over remittance_information when both are present", () => {
+  const tx = {
+    transaction_amount: { amount: "11.89", currency: "EUR" },
+    credit_debit_indicator: "DBIT",
+    remittance_information: ["Telefoonabonnement"],
+    creditor: { name: "Simyo B.V." },
+    booking_date: "2026-01-05",
+  };
+  const result = mapEbTransaction(tx, "ACC1");
+  expect(result.counterparty).toBe("Simyo B.V.");
+  expect(result.description).toBe("Telefoonabonnement");
+});
+
 test("mapEbTransaction: multi-currency — transaction_amount.currency wins over fallbackCurrency", () => {
   const tx = {
     transaction_amount: { amount: 10, currency: "USD" },
@@ -93,7 +131,11 @@ test("mapEbTransaction: no currency and no fallback defaults to EUR", () => {
 test("pickEbBalance: prefers CLBD over the first entry", () => {
   const balances = [
     { balance_type: "XPCD", balance_amount: { amount: 999, currency: "EUR" } },
-    { balance_type: "CLBD", balance_amount: { amount: 100, currency: "EUR" }, credit_debit_indicator: "CRDT" },
+    {
+      balance_type: "CLBD",
+      balance_amount: { amount: 100, currency: "EUR" },
+      credit_debit_indicator: "CRDT",
+    },
   ];
   expect(pickEbBalance(balances)).toBe(100);
 });
@@ -108,7 +150,11 @@ test("pickEbBalance: falls back to the first entry when no CLBD/closingBooked pr
 
 test("pickEbBalance: DBIT balance is negated", () => {
   const balances = [
-    { balance_type: "closingBooked", balance_amount: { amount: 42 }, credit_debit_indicator: "DBIT" },
+    {
+      balance_type: "closingBooked",
+      balance_amount: { amount: 42 },
+      credit_debit_indicator: "DBIT",
+    },
   ];
   expect(pickEbBalance(balances)).toBe(-42);
 });
@@ -120,14 +166,22 @@ test("pickEbBalance: empty or missing balances -> null", () => {
 
 test("ebAccountKey: prefers IBAN, then other.identification, then uid, then 'onbekend'", () => {
   expect(ebAccountKey({ account_id: { iban: "NL01ABCD0001" }, uid: "uid-1" })).toBe("NL01ABCD0001");
-  expect(ebAccountKey({ account_id: { other: { identification: "OTHR-1" } }, uid: "uid-1" })).toBe("OTHR-1");
+  expect(ebAccountKey({ account_id: { other: { identification: "OTHR-1" } }, uid: "uid-1" })).toBe(
+    "OTHR-1",
+  );
   expect(ebAccountKey({ uid: "uid-1" })).toBe("uid-1");
   expect(ebAccountKey({})).toBe("onbekend");
 });
 
 test("mapEbAccount: key/iban from account_id.iban, bank strips trailing country suffix, entity starts empty, balance passed through", () => {
   const account = mapEbAccount(
-    { uid: "uid-123", account_id: { iban: "NL01ABCD0001" }, name: "Zakelijke rekening", currency: "EUR", aspsp: "ING (NL)" },
+    {
+      uid: "uid-123",
+      account_id: { iban: "NL01ABCD0001" },
+      name: "Zakelijke rekening",
+      currency: "EUR",
+      aspsp: "ING (NL)",
+    },
     1234.56,
   );
 
@@ -168,7 +222,12 @@ test("pickEbBalanceDate: several balance types with DIFFERENT dates -> the date 
   const balances = [
     { balance_type: "XPCD", balance_amount: { amount: 999 }, reference_date: "2026-08-20" },
     { balance_type: "CLAV", balance_amount: { amount: 850 }, reference_date: "2026-08-11" },
-    { balance_type: "CLBD", balance_amount: { amount: 800 }, reference_date: "2026-08-10", credit_debit_indicator: "CRDT" },
+    {
+      balance_type: "CLBD",
+      balance_amount: { amount: 800 },
+      reference_date: "2026-08-10",
+      credit_debit_indicator: "CRDT",
+    },
   ];
   expect(pickEbBalance(balances)).toBe(800);
   expect(pickEbBalanceDate(balances)).toBe("2026-08-10");
@@ -185,7 +244,9 @@ test("pickEbBalanceDate: no CLBD -> first row's amount AND first row's date, nev
 
 test("pickEbBalanceDate: a balance WITHOUT reference_date stays undefined — not today", () => {
   const today = new Date().toISOString().slice(0, 10);
-  const balances = [{ balance_type: "CLBD", balance_amount: { amount: 100 }, credit_debit_indicator: "CRDT" }];
+  const balances = [
+    { balance_type: "CLBD", balance_amount: { amount: 100 }, credit_debit_indicator: "CRDT" },
+  ];
 
   const date = pickEbBalanceDate(balances);
   expect(date).toBeUndefined();
@@ -199,14 +260,22 @@ test("pickEbBalanceDate: last_change_date_time alone is NOT a balance date", () 
   // een boeking van net na middernacht een dag te vroeg dateren en die tx
   // dubbel laten tellen in currentBalance.
   const balances = [
-    { balance_type: "CLBD", balance_amount: { amount: 100 }, last_change_date_time: "2026-08-05T23:30:00Z" },
+    {
+      balance_type: "CLBD",
+      balance_amount: { amount: 100 },
+      last_change_date_time: "2026-08-05T23:30:00Z",
+    },
   ];
   expect(pickEbBalanceDate(balances)).toBeUndefined();
 });
 
 test("pickEbBalanceDate: a reference_date that is not YYYY-MM-DD is dropped", () => {
-  expect(pickEbBalanceDate([{ balance_type: "CLBD", reference_date: "24-08-2019" }])).toBeUndefined();
-  expect(pickEbBalanceDate([{ balance_type: "CLBD", reference_date: "2026-08-10T00:00:00Z" }])).toBeUndefined();
+  expect(
+    pickEbBalanceDate([{ balance_type: "CLBD", reference_date: "24-08-2019" }]),
+  ).toBeUndefined();
+  expect(
+    pickEbBalanceDate([{ balance_type: "CLBD", reference_date: "2026-08-10T00:00:00Z" }]),
+  ).toBeUndefined();
   expect(pickEbBalanceDate([{ balance_type: "CLBD", reference_date: "" }])).toBeUndefined();
 });
 
@@ -217,10 +286,21 @@ test("pickEbBalanceDate: empty or missing balances -> undefined", () => {
 
 test("mapEbAccount: the bank's reference_date lands on the account as balanceDate", () => {
   const balances = [
-    { balance_type: "CLBD", balance_amount: { amount: 1234.56 }, reference_date: "2026-07-31", credit_debit_indicator: "CRDT" },
+    {
+      balance_type: "CLBD",
+      balance_amount: { amount: 1234.56 },
+      reference_date: "2026-07-31",
+      credit_debit_indicator: "CRDT",
+    },
   ];
   const account = mapEbAccount(
-    { uid: "uid-123", account_id: { iban: "NL01ABCD0001" }, name: "Zakelijke rekening", currency: "EUR", aspsp: "ING (NL)" },
+    {
+      uid: "uid-123",
+      account_id: { iban: "NL01ABCD0001" },
+      name: "Zakelijke rekening",
+      currency: "EUR",
+      aspsp: "ING (NL)",
+    },
     pickEbBalance(balances),
     pickEbBalanceDate(balances),
   );
@@ -231,9 +311,16 @@ test("mapEbAccount: the bank's reference_date lands on the account as balanceDat
 
 test("mapEbAccount: no date from the bank -> no balanceDate at all, and certainly not today", () => {
   const today = new Date().toISOString().slice(0, 10);
-  const balances = [{ balance_type: "CLBD", balance_amount: { amount: 1234.56 }, credit_debit_indicator: "CRDT" }];
+  const balances = [
+    { balance_type: "CLBD", balance_amount: { amount: 1234.56 }, credit_debit_indicator: "CRDT" },
+  ];
   const account = mapEbAccount(
-    { uid: "uid-123", account_id: { iban: "NL01ABCD0001" }, name: "Zakelijke rekening", currency: "EUR" },
+    {
+      uid: "uid-123",
+      account_id: { iban: "NL01ABCD0001" },
+      name: "Zakelijke rekening",
+      currency: "EUR",
+    },
     pickEbBalance(balances),
     pickEbBalanceDate(balances),
   );
@@ -245,7 +332,11 @@ test("mapEbAccount: no date from the bank -> no balanceDate at all, and certainl
 });
 
 test("mapEbAccount: a date without a balance is not written — there is nothing to date", () => {
-  const account = mapEbAccount({ uid: "uid-999", name: "Spaarrekening", currency: "EUR" }, null, "2026-07-31");
+  const account = mapEbAccount(
+    { uid: "uid-999", name: "Spaarrekening", currency: "EUR" },
+    null,
+    "2026-07-31",
+  );
 
   expect(account.balance).toBeNull();
   expect("balanceDate" in account).toBe(false);

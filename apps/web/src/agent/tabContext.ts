@@ -5,8 +5,31 @@
  * transactions or other line-level data; only pre-computed aggregates leave
  * the browser for a tab's system prompt. */
 
-import type { Account, FxRate, Invoice, RewardsBalance, Rule, ScheduledFlow, Tx, VatSettings } from "@lavega/core";
-import { categoryTotals, computeAlerts, computeVatSetAside, detectSubscriptions, forecastCashflow, nextBtwDeadline, ownAccounts, resolveAccountRate } from "@lavega/core";
+import type {
+  Account,
+  ConversionMode,
+  FxRate,
+  Invoice,
+  ProfileSummary,
+  RewardsBalance,
+  Rule,
+  ScheduledFlow,
+  Tx,
+  VatSettings,
+} from "@lavega/core";
+import {
+  categoryTotals,
+  computeAlerts,
+  detectSubscriptions,
+  forecastCashflow,
+  isRuleV2,
+  ownAccounts,
+  resolveAccountRate,
+  ruleCategoryValue,
+  ruleTextValue,
+  sanitizeProfileSummary,
+  scrubPersonalValuesDeep,
+} from "@lavega/core";
 
 /** Minimal per-account fields any tab's context builder might read. */
 export type TabAccount = {
@@ -43,29 +66,34 @@ export type TabState = {
   scheduledFlows?: ScheduledFlow[];
   summary?: unknown;
   asOf?: string;
+  /** ECB rate history + the owner's Profiel setting — same two values Overzicht
+   *  and Forecast get, so the chat's forecast never disagrees with the screen
+   *  over a foreign-currency balance. Absent (dormant chat, or a caller that
+   *  predates this) falls back to "separate" over an empty history, exactly
+   *  what an all-EUR scope already computed before conversion existed. */
+  fxHistory?: Record<string, Record<string, number>>;
+  mode?: ConversionMode;
+  /** Enum-only profile answers (`profileSummaryOf`); sent on every tab. */
+  profileSummary?: ProfileSummary;
 };
 
 /** Cap for any array leaving the browser as context — keeps a tab's slice
  *  small and well under the server's MAX_CONTEXT_CHARS budget. */
 const MAX_ITEMS = 100;
 
-/** App uses English view ids for two tabs; the server allowlist (and Claude's
+/** App uses English view ids for two tabs; the server allowlist (and Mistral's
  *  per-tab prompt) key them in Dutch. Normalize here so the `tab` we return —
  *  and thus the `tab` the widget forwards to the server — matches the
  *  allowlist EXACTLY. All other views already share their name with the tab. */
 const VIEW_TO_TAB: Record<string, string> = { accounts: "rekeningen", rules: "regels" };
 
-/** Fallback VAT config for an entity with no saved settings — mirrors the
- *  Belasting view's own default so the chat estimate matches what's shown. */
-function defaultVatSettings(entity: string): VatSettings {
-  return { entity, frequency: "quarterly", defaultRatePct: 21, mixedRates: false };
-}
-
 /** Per-entity balance aggregate: sums known account balances per entity;
  *  null when any account in that entity has no saldo yet (mirrors
  *  Overzicht's own "unknown balance" rule — never invent a number). */
 function entityBalances(accounts: TabAccount[]): { entity: string; balance: number | null }[] {
-  const entities = Array.from(new Set(accounts.map((a) => a.entity).filter((e): e is string => !!e)));
+  const entities = Array.from(
+    new Set(accounts.map((a) => a.entity).filter((e): e is string => !!e)),
+  );
   return entities.map((entity) => {
     const entityAccounts = accounts.filter((a) => a.entity === entity);
     const balance = entityAccounts.some((a) => a.balance == null)
@@ -75,12 +103,31 @@ function entityBalances(accounts: TabAccount[]): { entity: string; balance: numb
   });
 }
 
-/** Unique entities present in the scoped accounts, first-appearance order. */
-function entitiesOf(accounts: TabAccount[]): string[] {
-  return Array.from(new Set(accounts.map((a) => a.entity).filter((e): e is string => !!e)));
+/** The tab's slice, value-scrubbed before it leaves the device.
+ *
+ *  Picking safe FIELDS is not the same as sending safe VALUES, and three of
+ *  these builders proved it. `drivers[].label` (forecast) and
+ *  `subscriptions[].name` (optimalisatie) are both documented as "raw
+ *  counterparty of the first occurrence", and a raw counterparty out of an ABN
+ *  CSV or a /NAME/-less MT940 is the head of the statement line — which begins
+ *  with the other party's IBAN. A rule's `match` is whatever the owner typed,
+ *  and an IBAN is a sensible thing to match on. So the strings go out through
+ *  the same scrub a message typed in the chat box gets. */
+export function buildTabContext(
+  view: string,
+  state: TabState,
+): { tab: string; context: Record<string, unknown> } {
+  const { tab, context } = buildTabSlice(view, state);
+  const withProfile = state.profileSummary
+    ? { ...context, profile: sanitizeProfileSummary(state.profileSummary) }
+    : context;
+  return { tab, context: scrubPersonalValuesDeep(withProfile) };
 }
 
-export function buildTabContext(view: string, state: TabState): { tab: string; context: Record<string, unknown> } {
+function buildTabSlice(
+  view: string,
+  state: TabState,
+): { tab: string; context: Record<string, unknown> } {
   const tab = VIEW_TO_TAB[view] ?? view;
   // Common, already-scoped inputs the compute tabs share (App pre-filters
   // accounts/txs/flows by the active top-bar entity scope).
@@ -102,6 +149,8 @@ export function buildTabContext(view: string, state: TabState): { tab: string; c
         asOf,
         bufferCents,
         scheduledFlows,
+        fxHistory: state.fxHistory ?? {},
+        mode: state.mode ?? "separate",
       }).consolidated;
       const alertCount = computeAlerts({
         accounts: accounts as Account[],
@@ -113,8 +162,13 @@ export function buildTabContext(view: string, state: TabState): { tab: string; c
       // Top category totals (name + in/out), ranked by absolute volume like
       // Overzicht's "Per categorie" table, capped to keep the slice small.
       const own = ownAccounts(accounts as Account[]);
-      const categories = Object.entries(categoryTotals(txs as Tx[], (state.rules ?? []) as Rule[], own))
-        .sort((a, b) => Math.abs(b[1].in) + Math.abs(b[1].out) - (Math.abs(a[1].in) + Math.abs(a[1].out)))
+      const categories = Object.entries(
+        categoryTotals(txs as Tx[], (state.rules ?? []) as Rule[], own),
+      )
+        .sort(
+          (a, b) =>
+            Math.abs(b[1].in) + Math.abs(b[1].out) - (Math.abs(a[1].in) + Math.abs(a[1].out)),
+        )
         .slice(0, 10)
         .map(([name, b]) => ({ name, in: b.in, out: b.out }));
       const context: Record<string, unknown> = {
@@ -141,8 +195,15 @@ export function buildTabContext(view: string, state: TabState): { tab: string; c
 
     case "regels": {
       const rules = (state.rules ?? []) as Rule[];
+      /* A Rule is a legacy row OR the v2 AST, so the chat context reads the
+       * meaning through the core accessors instead of the union's fields: a v2
+       * rule has no `match`/`category` of its own. The shape sent to the agent
+       * stays `{match, category}` so the prompt contract does not drift. */
       const context = {
-        rules: rules.slice(0, MAX_ITEMS).map((r) => ({ match: r.match, category: r.category })),
+        rules: rules.slice(0, MAX_ITEMS).map((r) => ({
+          match: ruleTextValue(r) ?? (isRuleV2(r) ? r.name : undefined) ?? "",
+          category: ruleCategoryValue(r) ?? "",
+        })),
       };
       return { tab, context };
     }
@@ -156,6 +217,8 @@ export function buildTabContext(view: string, state: TabState): { tab: string; c
         horizonDays: 91,
         bufferCents: state.bufferCents ?? 0,
         scheduledFlows: state.scheduledFlows ?? [],
+        fxHistory: state.fxHistory ?? {},
+        mode: state.mode ?? "separate",
       });
       const f = fc.consolidated;
       const lastPoint = f.points.length > 0 ? f.points[f.points.length - 1] : null;
@@ -189,7 +252,14 @@ export function buildTabContext(view: string, state: TabState): { tab: string; c
         // web-searches current rates).
         rates: (accounts as Account[]).slice(0, MAX_ITEMS).map((a) => {
           const { ratePct, source } = resolveAccountRate(a, txs as Tx[], asOf, []);
-          return { bank: a.bank, type: a.type, entity: a.entity, balance: a.balance ?? null, ratePct, source };
+          return {
+            bank: a.bank,
+            type: a.type,
+            entity: a.entity,
+            balance: a.balance ?? null,
+            ratePct,
+            source,
+          };
         }),
       };
       // Live public benchmark: only if App already has it; else omitted so the
@@ -198,80 +268,19 @@ export function buildTabContext(view: string, state: TabState): { tab: string; c
       return { tab, context };
     }
 
-    case "valuta": {
-      const holdings = Array.from(
-        new Set((accounts as TabAccount[]).map((a) => a.currency).filter((c): c is string => !!c && c !== "EUR")),
-      );
-      const context: Record<string, unknown> = { holdings };
-      // ECB rate is live-fetched in the Valuta view, not in App scope — include
-      // only if present; otherwise omit and let the agent web-search it.
-      if (state.fxRate !== undefined) context.rate = state.fxRate;
-      return { tab, context };
-    }
-
-    case "belasting": {
-      const vatSettings = (state.vatSettings ?? []) as VatSettings[];
-      const savedByEntity = new Map(vatSettings.map((s) => [s.entity, s]));
-      const keyToEntity = new Map((accounts as Account[]).map((a) => [a.key, a.entity]));
-      // Entities to report on: those with accounts, plus any that only have
-      // saved VAT settings.
-      const entities = Array.from(new Set([...entitiesOf(accounts), ...vatSettings.map((s) => s.entity)]));
-
-      const vat = entities.map((entity) => {
-        const settings = savedByEntity.get(entity) ?? defaultVatSettings(entity);
-        const entityTxs = (txs as Tx[]).filter((t) => keyToEntity.get(t.accountKey) === entity);
-        const setAside = computeVatSetAside(entityTxs, settings, asOf);
-        return {
-          entity,
-          amountCents: setAside ? setAside.amountCents : 0,
-          dueDate: setAside ? setAside.dueDate : null,
-          label: setAside ? setAside.label : null,
-        };
-      });
-
-      const deadlines = entities.map((entity) => {
-        const settings = savedByEntity.get(entity) ?? defaultVatSettings(entity);
-        const { periodLabel, deadline } = nextBtwDeadline(settings.frequency, asOf);
-        return { entity, frequency: settings.frequency, periodLabel, deadline };
-      });
-
-      const context = {
-        vat,
-        deadlines,
-        settings: vatSettings.map((s) => ({
-          entity: s.entity,
-          frequency: s.frequency,
-          defaultRatePct: s.defaultRatePct,
-          mixedRates: s.mixedRates,
-          manualCents: s.manualCents,
-        })),
-      };
-      return { tab, context };
-    }
-
-    case "facturen": {
-      const invoices = (state.invoices ?? []) as Invoice[];
-      const context = {
-        invoices: invoices.slice(0, MAX_ITEMS).map((i) => ({
-          counterparty: i.counterparty,
-          direction: i.direction,
-          amount: i.amount,
-          issueDate: i.issueDate,
-          dueDate: i.dueDate,
-          status: i.status,
-        })),
-      };
-      return { tab, context };
-    }
-
     case "punten": {
       const rewards = (state.rewards ?? []) as RewardsBalance[];
       const context = {
+        // `note` is deliberately absent. It is the one free-text field the
+        // owner keeps on a balance, which is exactly where a membership
+        // number, a login or a card number ends up, and nothing the chat does
+        // on this tab — what are the points worth, how do I transfer them —
+        // needs it. Answering that needs the programme, the balance and how
+        // old it is, and those are what this sends.
         balances: rewards.slice(0, MAX_ITEMS).map((b) => ({
           program: b.program,
           points: b.points,
           updatedAt: b.updatedAt,
-          note: b.note,
         })),
       };
       return { tab, context };

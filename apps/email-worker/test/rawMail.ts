@@ -165,7 +165,8 @@ export const RAW_IMAGE_ONLY = [
   "",
 ].join("\r\n");
 
-/** E — een afzender die SPF en DKIM niet haalt. Wordt gemarkeerd, niet geweerd. */
+/** E — een nagemaakte ING-mail met afzendergestuurde auth-headers. De fake
+ *  omzeilt Cloudflare's SMTP-controle, dus dit bewijst geen echte aflevering. */
 export const RAW_SPOOFED = [
   "Authentication-Results: mx.cloudflare.net; dkim=fail header.d=ing.nl; spf=softfail smtp.mailfrom=ing.nl; dmarc=fail header.from=ing.nl",
   "From: ING Bank <facturen@ing.nl>",
@@ -178,5 +179,56 @@ export const RAW_SPOOFED = [
   "",
   "U heeft een openstaande factuur van EUR 4.200,00. Betaal binnen 24 uur op",
   "rekening NL00 XXXX 0000 0000 00 om kosten te voorkomen.",
+  "",
+].join("\r\n");
+
+/** F — dezelfde factuur, maar DOORGESTUURD vanuit Gmail. De header claimt een
+ *  SPF-fail en DKIM-pass; de Worker vertrouwt die tekst niet. Het hoofdgebruik
+ *  van het doorstuuradres moet zonder lokale header-poort blijven werken. */
+export const RAW_FORWARDED_INVOICE = RAW_PDF_INVOICE.replace(
+  "Authentication-Results: mx.cloudflare.net; dkim=pass header.d=vandijk-installatie.nl;\r\n" +
+    " spf=pass smtp.mailfrom=vandijk-installatie.nl; dmarc=pass header.from=vandijk-installatie.nl",
+  "Authentication-Results: mx.cloudflare.net; dkim=pass header.d=vandijk-installatie.nl;\r\n" +
+    " spf=fail smtp.mailfrom=gmail.com; dmarc=pass header.from=vandijk-installatie.nl",
+);
+
+/** G — twee tegenstrijdige `Authentication-Results`-regels. De afzender kan
+ *  beide schrijven, inclusief `mx.cloudflare.net`; de Worker mag geen van
+ *  beide als Cloudflare's gemeten uitslag behandelen (bevinding H2). */
+export const RAW_FORGED_AUTH_RESULTS = [
+  "Authentication-Results: mx.cloudflare.net; dkim=pass header.d=ing.nl; spf=pass smtp.mailfrom=ing.nl; dmarc=pass header.from=ing.nl",
+  "Authentication-Results: mx.cloudflare.net; dkim=fail header.d=elders.example; spf=fail smtp.mailfrom=elders.example; dmarc=fail header.from=ing.nl",
+  "From: ING Bank <facturen@ing.nl>",
+  "To: alexander-7f3a@invoices.lavega.dev",
+  "Subject: Openstaande factuur - direct betalen",
+  "Date: Sun, 16 Aug 2026 03:11:00 +0200",
+  "Message-ID: <nep-2@elders.example>",
+  "MIME-Version: 1.0",
+  'Content-Type: text/plain; charset="utf-8"',
+  "",
+  "U heeft een openstaande factuur van EUR 4.200,00. Betaal binnen 24 uur op",
+  "rekening NL00 XXXX 0000 0000 00 om kosten te voorkomen.",
+  "",
+].join("\r\n");
+
+/** SYNTHETIC. Gmail's forwarding-confirmation mail as RFC 5322, written from
+ *  memory of the documented format. NOT a capture; the shape is UNVERIFIED. The
+ *  classifier itself is driven by core's __fixtures__/gmail-forwarding-
+ *  confirmation*.json; this one only proves the Worker passes the From header and
+ *  the text through. */
+export const RAW_GMAIL_CONFIRMATION = [
+  "From: Gmail Team <forwarding-noreply@google.com>",
+  "To: alexander-7f3a@invoices.lavega.dev",
+  "Subject: (#123456789) Gmail Forwarding Confirmation - Receive Mail from someone@gmail.com",
+  "Date: Wed, 21 Oct 2026 13:58:02 +0000",
+  "Message-ID: <synthetic-confirmation-raw@mail.gmail.com>",
+  "MIME-Version: 1.0",
+  'Content-Type: text/plain; charset="UTF-8"',
+  "",
+  "someone@gmail.com has requested to automatically forward mail to your email address alexander-7f3a@invoices.lavega.dev.",
+  "",
+  "Confirmation code: 123456789",
+  "",
+  "https://mail-settings.google.com/mail/vf-%5BSYNTHETIC%5D",
   "",
 ].join("\r\n");

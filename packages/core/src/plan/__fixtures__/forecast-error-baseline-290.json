@@ -1,0 +1,35 @@
+{
+  "asOf": "2026-09-01",
+  "scope": "geconsolideerd",
+  "openingCents": 1500000,
+  "checkpoints": [
+    {
+      "label": "30d",
+      "horizonDays": 30,
+      "date": "2026-09-29",
+      "projectedCents": 1816092,
+      "actualCents": 1806847,
+      "signedErrorCents": 9245,
+      "absoluteErrorCents": 9245
+    },
+    {
+      "label": "60d",
+      "horizonDays": 60,
+      "date": "2026-10-27",
+      "projectedCents": 2006429,
+      "actualCents": 1985144,
+      "signedErrorCents": 21285,
+      "absoluteErrorCents": 21285
+    },
+    {
+      "label": "90d",
+      "horizonDays": 90,
+      "date": "2026-11-24",
+      "projectedCents": 1834176,
+      "actualCents": 1801440,
+      "signedErrorCents": 32736,
+      "absoluteErrorCents": 32736
+    }
+  ],
+  "totalAbsoluteErrorCents": 63266
+}

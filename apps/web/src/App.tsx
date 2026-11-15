@@ -1,36 +1,195 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { Account, Rule, Tx, ScheduledFlow, VatSettings, Invoice, RewardsBalance, LearnedFact, EntityProfile, EntityScope } from "@lavega/core";
-import { ingest, reassignEntity, withCurrentBalances, isCardAccount, mergeImportedAccounts, withLinkedAt, ownAccounts, parseOwnName, assignTxIds, scheduledFlowsForScope, scheduledInvoiceFlows, reconcileInvoices, applyCategorizations, findDuplicateAccounts, mergeAccounts, upsertFacts, renameFactSubject, productOf, makeFact, planTravel, countryCurrency, accountsInScope, entitySummaries, setEntityScope as classifyEntity, DEFAULT_ENTITY_SCOPE, TRAVEL_AGENT, NL_SAVINGS_RATES, RATES_AS_OF } from "@lavega/core";
+import type {
+  Account,
+  Rule,
+  Tx,
+  ScheduledFlow,
+  VatSettings,
+  Invoice,
+  RewardsBalance,
+  LearnedFact,
+  EntityProfile,
+  EntityScope,
+  AdvisorProfileStore,
+  ProfileRead,
+  TransferPair,
+  Bill,
+  BillDecisions,
+  BillOccurrence,
+  Valuation,
+  VaultDocument,
+  ImportSession,
+} from "@lavega/core";
+import { capacityFor, computeRoom, emptyProfile, planProfileOf, resolveRoom } from "@lavega/core";
+import { fxNeedSignature, syncFxHistory } from "./fxHistory.js";
+import {
+  ingest,
+  reassignEntity,
+  accountIsLiability,
+  checkDocumentUpload,
+  detectStatementMetadata,
+  findDocumentBySha,
+  matchStatementAccount,
+  removeDocument,
+  upsertDocument,
+  applyGenericImport,
+  revertImport,
+  dropAccountValuations,
+  mergeValuations,
+  normalizeValuation,
+  valuationId,
+  withCurrentBalances,
+  isCardAccount,
+  mergeImportedAccounts,
+  withLinkedAt,
+  ownAccounts,
+  parseOwnName,
+  assignTxIds,
+  scheduledFlowsForScope,
+  scheduledInvoiceFlows,
+  generateBillOccurrences,
+  regenerateBillOccurrences,
+  scheduleChanged,
+  runBillMatcher,
+  EMPTY_BILL_DECISIONS,
+  reconcileInvoices,
+  applyCategorizations,
+  findDuplicateAccounts,
+  mergeAccounts,
+  upsertFacts,
+  renameFactSubject,
+  productOf,
+  makeFact,
+  planTravel,
+  countryCurrency,
+  accountsInScope,
+  entitySummaries,
+  setEntityScope as classifyEntity,
+  TRAVEL_AGENT,
+  NL_SAVINGS_RATES,
+  RATES_AS_OF,
+  applyTransferDecisions,
+  autoConfirmTransfers,
+  confirmTransfer,
+  reconcileTransfers,
+  rejectTransfer,
+  suggestTransfers,
+  upgradeRules,
+} from "@lavega/core";
 import type { CategoryDecision } from "@lavega/core";
-import { createFileImport, createEncryptedStorage, mapEbAccount, pickEbBalance, pickEbBalanceDate, mapEbTransaction, ebAccountKey, createRatesProvider, type RatesResult } from "@lavega/adapters";
-import { CATALOGUE_RATES } from "./catalogue-rates";
+import {
+  createFileImport,
+  createEncryptedStorage,
+  mapEbAccount,
+  type EbAccount,
+  type EbBalance,
+  type EbTransaction,
+  pickEbBalance,
+  pickEbBalanceDate,
+  mapEbTransaction,
+  ebAccountKey,
+  createRatesProvider,
+  type RatesResult,
+} from "@lavega/adapters";
+import { CATALOGUE_ENTRIES, CATALOGUE_RATES } from "./catalogue-rates";
 import { API_BASE } from "./api.js";
-import { pathForView, viewFromPathname, type View } from "./appRoutes";
+import { CONTENT_CONTAINER_CLASS } from "./module-grid.js";
+import { Shell } from "./components/Shell.js";
+import { AccountSidebar } from "./components/AccountSidebar.js";
+import { SHOW_INVOICE_FORWARDING, initialScope, isArchivedView } from "./archive";
+import { pathForView, takePendingEbParams, viewFromPathname, type View } from "./appRoutes";
 import { gateState } from "./vault-gate.js";
 import type { GateState } from "./vault-gate.js";
-import { hasLegacyData } from "./migrate.js";
-import { getBufferCents, setBufferCents, getHomeCountry, setHomeCountry, getHomeRegion, setHomeRegion, getOwnerName, setOwnerName, ownerDisplayName, getEnabledModules, setEnabledModules, type OwnerName } from "./settings.js";
+import { hasLegacyData, migrateToVault } from "./migrate.js";
+import { loadVaultKey, vaultOwnerName, VaultKeyUnavailable, type VaultOwner } from "./vaultKey.js";
+import { signOut } from "./authClient.js";
+import useIdleLock from "./useIdleLock";
+import {
+  getBufferCents,
+  setBufferCents,
+  getHomeCountry,
+  storedHomeCountry,
+  getDefaultEntity,
+  setHomeCountry,
+  getHomeRegion,
+  setHomeRegion,
+  getOwnerName,
+  setOwnerName,
+  ownerDisplayName,
+  getEnabledModules,
+  setEnabledModules,
+  getFxConversionMode,
+  setFxConversionMode,
+  getShareNetWorthEnabled,
+  setShareNetWorthEnabled,
+  getShareNetWorthPendingDelete,
+  setShareNetWorthPendingDelete,
+  SHARE_NET_WORTH_KEY,
+  SHARE_NET_WORTH_PENDING_DELETE_KEY,
+  clearLegacyN8nLocalStorage,
+  type OwnerName,
+  type ConversionMode,
+} from "./settings.js";
+import {
+  computeShareableTotalCents,
+  deleteNetWorthTotal,
+  putNetWorthTotal,
+  todayIso,
+} from "./netWorthShare.js";
 import { txIdsForAccount, txDiff } from "./accountActions.js";
-import { txsForAccounts, flowsForScope, entityOptionsFor, screenOnSwitch, SCOPE_LABELS, type ParkedScreens, type ScopeScreen } from "./scope.js";
+import {
+  txsForAccounts,
+  flowsForScope,
+  entityOptionsFor,
+  screenOnSwitch,
+  type ParkedScreens,
+  type ScopeScreen,
+} from "./scope.js";
 import { mergeScheduledFlows } from "./scheduled-flows.js";
 import { travelFacts } from "./api.js";
 import VaultGate from "./components/VaultGate";
-import NavBar from "./components/NavBar";
-import TopBar from "./components/TopBar";
-import { enabledModules as resolveModules, navModules, type ModuleId } from "./components/moduleRegistry";
+import { markOnboardingSeen, onboardingSeen, showOnboarding } from "./onboarding.js";
+import {
+  autoRefreshDue,
+  everConnectedBank,
+  lastEbRefreshAt,
+  markBankConnected,
+  markEbRefreshAttempted,
+} from "./ebAutoRefresh.js";
+import { TopBarActions } from "./components/TopBar";
+import CardLink from "./components/ui/CardLink.js";
+import Button from "./components/ui/Button.js";
+import StatusLine from "./components/ui/StatusLine.js";
+import {
+  enabledModules as resolveModules,
+  navModules,
+  type ModuleId,
+} from "./components/moduleRegistry";
+import IntakeWizard from "./views/IntakeWizard";
+import AboutYou from "./views/AboutYou";
+import PlanRoute from "./plan/PlanRoute";
+import { intakeCopy } from "./copy/intake.js";
 import Overzicht from "./views/Overzicht";
 import Transacties from "./views/Transacties";
+import Regels from "./views/Regels";
 import Rekeningen from "./views/Rekeningen";
 import Forecast from "./views/Forecast";
 import Optimalisatie from "./views/Optimalisatie";
 import Valuta from "./views/Valuta";
 import Belasting from "./views/Belasting";
+import Bills from "./views/Bills";
+import type { DocumentNotice } from "./components/documents/DocumentsCard.js";
+import type { GenericImportRequest } from "./components/import/GenericImportCard.js";
 import Facturen from "./views/Facturen";
 import Punten from "./views/Punten";
 import Koppelingen from "./views/Koppelingen";
 import Backup from "./views/Backup";
 import Profiel from "./views/Profiel";
 import type { N8nNotice, PendingInvoice } from "./n8n.js";
+import { useAppLocale } from "./appLocale.js";
+import { shellCopy } from "./copy/shell.js";
+import { importSessionCopy } from "./copy/importSession.js";
+import { importNotices, type ShellNotice } from "./shellNotice.js";
 
 export type { View } from "./appRoutes";
 
@@ -42,11 +201,12 @@ const storage = createEncryptedStorage();
 
 // Public savings-rate benchmark (same source Optimalisatie uses).
 const RATES_URL: string | undefined =
-  import.meta.env.VITE_RATES_URL ?? (import.meta.env.DEV ? "http://localhost:8787/api/rates" : undefined);
+  import.meta.env.VITE_RATES_URL ??
+  (import.meta.env.DEV ? "http://localhost:8787/api/rates" : undefined);
 
 /* "rules" has NO nav entry: Regels is a setting, so it renders inline in
  * Profiel and nothing calls setView("rules"). Its branch below is gone. The
- * union still lists it only because components/TopBar.tsx types its page-title
+ * union still lists it only because copy/shell.ts types its page-title
  * table as Record<View, string> and still has a "Regels" entry — dropping the
  * member there is one line in a file this change does not own, and that title
  * map is a label lookup, not a way to reach the view. Path `/app/rules` still
@@ -57,35 +217,118 @@ const RATES_URL: string | undefined =
  * post-migration screen sends you to Back-up ("Maak nu een back-up",
  * VaultGate.tsx:284 → onBackup → setView("backup")). Both also render inline in
  * Profiel; these two are the deep links into them, so their branches stay. */
-export default function App() {
+
+// The vault stores pending n8n rows as opaque `unknown[]` (packages/adapters
+// cannot import apps/web's PendingInvoice/N8nNotice types), so a load off
+// disk is untrusted the same way n8n.ts's own queue parsing treats network
+// JSON as untrusted — narrow before trusting it rather than casting blindly.
+function isPendingInvoiceLike(v: unknown): v is PendingInvoice {
+  return (
+    !!v &&
+    typeof v === "object" &&
+    typeof (v as { messageId?: unknown }).messageId === "string" &&
+    (v as { messageId: string }).messageId.length > 0
+  );
+}
+function isN8nNoticeLike(v: unknown): v is N8nNotice {
+  return (
+    !!v &&
+    typeof v === "object" &&
+    typeof (v as { messageId?: unknown }).messageId === "string" &&
+    (v as { messageId: string }).messageId.length > 0 &&
+    typeof (v as { kind?: unknown }).kind === "string"
+  );
+}
+
+/** The stated card ids from the read profile; none while it is not readable. */
+function statedOf(
+  read: ProfileRead | "loading" | "error",
+  key: "statedCards" | "statedDebitCards",
+): readonly string[] | undefined {
+  if (read === "loading" || read === "error" || read.kind !== "ok") return undefined;
+  return read.store.current[key]?.value;
+}
+
+/** Replace-or-append one transfer decision by its content id. Confirming and
+ *  rejecting write the SAME row (a pair is in exactly one state), so a plain
+ *  append could leave a confirmed and a rejected copy of one pair behind — and
+ *  the matcher would then read the rejection memory AND the confirmed pair. */
+function upsertTransferPair(pairs: TransferPair[], pair: TransferPair): TransferPair[] {
+  return [...pairs.filter((p) => p.id !== pair.id), pair];
+}
+
+export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner }) {
   const [gate, setGate] = useState<GateState>("loading");
+  const [openAttempt, setOpenAttempt] = useState(0);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [txs, setTxs] = useState<Tx[]>([]);
-  // Which entity an import files its accounts under. Persoonlijk, because that
-  // is what most statements are and because core's hard default for an
-  // unclassified entity is personal — so the imported accounts land in the half
-  // the app opens on instead of in a "BV1" nobody asked for. He can retype it
-  // before importing, and change it per account in Rekeningen afterwards.
-  const [entity, setEntity] = useState("Persoonlijk");
   const [busy, setBusy] = useState(false);
-  const [problems, setProblems] = useState<string[]>([]);
+  const [locale] = useAppLocale();
+  const shell = shellCopy[locale];
+  /* Which entity an import files its accounts under. The personal half, because
+   * that is what most statements are and because core's hard default for an
+   * unclassified entity is personal — so imported accounts land in the half the
+   * app opens on instead of in a "BV1" nobody asked for. He can retype it
+   * before importing, and change it per account in Rekeningen afterwards.
+   *
+   * The WORD follows the reader's language, but only the first time: see
+   * `getDefaultEntity` for why an entity name that tracks the current locale
+   * would split one entity into two the moment someone switches. */
+  const [entity, setEntity] = useState(() => getDefaultEntity(shellCopy[locale].scope.personal));
+  const [problems, setProblems] = useState<ShellNotice[]>([]);
   const [rules, setRules] = useState<Rule[]>([]);
+  // Stored transfer decisions only (confirmed pairs + rejection memory); a
+  // suggestion is derived from the ledger on read, never kept here.
+  const [transfers, setTransfers] = useState<TransferPair[]>([]);
+  // Set when an account merge/delete dropped transfer pairs whose legs no
+  // longer both exist. Rekeningen shows the count under its duplicate banner —
+  // silently orphaning a pair is the failure this exists to prevent.
+  const [transferLinksDropped, setTransferLinksDropped] = useState<number | null>(null);
   const [scheduledFlows, setScheduledFlows] = useState<ScheduledFlow[]>([]);
+  // Bills + their materialized occurrences (#286). Occurrences are derived from
+  // the series and stored, because matching/second-half work keys on their
+  // identity; materialization runs lazily on unlock and writes ONE vault save.
+  const [bills, setBills] = useState<Bill[]>([]);
+  const [billOccurrences, setBillOccurrences] = useState<BillOccurrence[]>([]);
+  // Stored payment decisions only (allocations, marks, rejection memory, price
+  // history). Suggestions are derived from the ledger on read, exactly like
+  // transfer suggestions; only what the owner or the exact tier decided is kept.
+  const [billDecisions, setBillDecisions] = useState<BillDecisions>(EMPTY_BILL_DECISIONS);
+  // Dated absolute valuations (WS3.1, issue #291). Account-keyed absolute
+  // amounts; derived from them, never stored separately, is the daily series.
+  const [valuations, setValuations] = useState<Valuation[]>([]);
+  // Statement METADATA only (WS3.4/#293). The sealed bytes live in their own
+  // IndexedDB store, so an upload never rewrites the vault ciphertext.
+  const [documents, setDocuments] = useState<VaultDocument[]>([]);
+  const [documentNotice, setDocumentNotice] = useState<DocumentNotice | null>(null);
+  /** How many documents the last erase removed, for the card's one line. */
+  const [documentErased, setDocumentErased] = useState<number | null>(null);
+  // Generic import sessions (WS3.6, issue #294): which rows one import created,
+  // so a revert removes exactly those.
+  const [importSessions, setImportSessions] = useState<ImportSession[]>([]);
+  const [importNotice, setImportNotice] = useState<string | null>(null);
   const [vatSettings, setVatSettings] = useState<VatSettings[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [rewards, setRewards] = useState<RewardsBalance[]>([]);
+  // The adviser profile, from the vault. "loading" until read; "error" if the
+  // read itself threw (the intake then stays closed rather than starting empty
+  // over something it could not read).
+  const [profileRead, setProfileRead] = useState<ProfileRead | "loading" | "error">("loading");
   // Invoice rows fetched from his own n8n and not yet decided on. Held HERE,
   // not in the Facturen view: that webhook empties its queue as it responds, so
   // these rows are the only copy in existence and must not die when the view
-  // unmounts on a navigation. Deliberately not persisted — the vault is the
-  // only place invoice amounts are allowed to rest, and until he confirms a
-  // row it isn't an invoice yet. Vergrendel therefore clears them too, which
-  // the view says out loud.
+  // unmounts on a navigation. They DO live in the vault now — Facturen.tsx
+  // durably writes them on every fetch/confirm/reject/dismiss, the same vault
+  // methods getAutoBookedInvoices uses — so this state is just the in-memory
+  // mirror loaded on unlock (see the "Load persisted data" effect below).
+  // Vergrendel clears the mirror, not the vault copy: `setPendingInvoices([])`
+  // in handleLock only drops what's rendered, and the next unlock reloads it.
   const [pendingInvoices, setPendingInvoices] = useState<PendingInvoice[]>([]);
   // Meldingen uit n8n: mail die WEL over een factuur ging maar er geen is (staat
   // klaar bij de leverancier, aanmaning, onleesbaar). Ze horen hier om dezelfde
-  // reden als de rijen hierboven: de webhook leegt zichzelf, dus dit is de enige
-  // kopie. Ze bevatten geen bedrag en kunnen dus nooit een boeking worden.
+  // reden als de rijen hierboven, en overleven een herlaad op dezelfde manier:
+  // de vault-kopie blijft staan, alleen deze in-memory spiegel wordt geleegd bij
+  // Vergrendel. Ze bevatten geen bedrag en kunnen dus nooit een boeking worden.
   const [pendingNotices, setPendingNotices] = useState<N8nNotice[]>([]);
   // What the agents have learned (and what he corrected). Lives in the vault.
   const [facts, setFacts] = useState<LearnedFact[]>([]);
@@ -97,11 +340,21 @@ export default function App() {
   // Public savings benchmark for the travel block's "where to keep it" step.
   // Same provider Optimalisatie uses (localStorage-cached), so no double fetch
   // cost; falls back to the bundled snapshot when the rates server is down.
-  const [rates, setRates] = useState<RatesResult>({ rates: [...NL_SAVINGS_RATES], asOf: RATES_AS_OF, source: "bundled" });
+  const [rates, setRates] = useState<RatesResult>({
+    rates: [...NL_SAVINGS_RATES],
+    asOf: RATES_AS_OF,
+    source: "bundled",
+  });
   // The country that drives the tax rules and the market whose card terms the
   // travel agent looks up. A local preference, edited in the profile — held in
   // state so changing it re-renders everything that reads it.
   const [homeCountry, setHomeCountryState] = useState<string>(() => getHomeCountry());
+  // Whether that value came from a real choice or is the silent NL fallback —
+  // TravelBlock needs this to say so, since onboarding's country question is
+  // skippable and `homeCountry` above cannot distinguish "NL" from "never said".
+  const [homeCountryChosen, setHomeCountryChosen] = useState<boolean>(
+    () => storedHomeCountry() !== "",
+  );
   // The level beneath it: "Texas" and "New York" are not the same tax question,
   // and a country code cannot carry that. "" = he has not said, which nothing
   // may read as a region. Typed by hand, always — LaVega never infers location.
@@ -109,6 +362,7 @@ export default function App() {
   function handleHomeCountryChange(code: string) {
     setHomeCountry(code);
     setHomeCountryState(getHomeCountry()); // read back: setHomeCountry rejects a non-ISO code
+    setHomeCountryChosen(storedHomeCountry() !== "");
     // A region belongs to a country. Keeping "Texas" while the country becomes
     // Duitsland would leave a value on screen that means nothing anywhere.
     setHomeRegion("");
@@ -118,6 +372,92 @@ export default function App() {
     setHomeRegion(region);
     setHomeRegionState(getHomeRegion()); // read back: the store trims and caps
   }
+  // Whether a non-EUR balance/transaction counts toward the euro totals
+  // (converted at the day's ECB rate) or stays out of them, as before FX
+  // support existed. A local preference, same pattern as homeCountry — held in
+  // App so every consuming view re-renders when it flips.
+  const [fxConversionMode, setFxConversionModeState] = useState<ConversionMode>(() =>
+    getFxConversionMode(),
+  );
+  function handleFxConversionModeChange(mode: ConversionMode) {
+    setFxConversionMode(mode);
+    setFxConversionModeState(mode);
+  }
+  /* Opt-in share of Totale positie into LaVega Investing's net worth. Off is
+   * the default. Two flags, not one, because turning it off must not leave
+   * data behind: `shareNetWorthEnabledStored` is the underlying preference
+   * and stays "on" until the DELETE it triggers actually succeeds;
+   * `shareNetWorthPendingDelete` is set the instant the owner switches off
+   * and is the sole trigger for the retry effect below, which is also what
+   * runs the very first attempt — so "toggle off" and "retry on next
+   * unlock/app start" are the same code path, never two.
+   *
+   * The EFFECTIVE state everything else reads is `shareNetWorthEnabled`
+   * (derived): pending delete always means "not sharing", even while the
+   * stored preference technically remains on as the retry's memory. */
+  const [shareNetWorthEnabledStored, setShareNetWorthEnabledStoredState] = useState<boolean>(() =>
+    getShareNetWorthEnabled(),
+  );
+  const [shareNetWorthPendingDelete, setShareNetWorthPendingDeleteState] = useState<boolean>(() =>
+    getShareNetWorthPendingDelete(),
+  );
+  const shareNetWorthEnabled = shareNetWorthEnabledStored && !shareNetWorthPendingDelete;
+  function handleShareNetWorthEnabledChange(on: boolean) {
+    if (on) {
+      setShareNetWorthEnabled(true);
+      setShareNetWorthEnabledStoredState(true);
+      setShareNetWorthPendingDelete(false);
+      setShareNetWorthPendingDeleteState(false);
+      return;
+    }
+    setShareNetWorthPendingDelete(true);
+    setShareNetWorthPendingDeleteState(true);
+  }
+  // The one place a DELETE for this feature is ever sent. Runs once when
+  // pendingDelete first becomes true (the owner just switched off) and again
+  // on every later unlock while it is still true (a previous attempt
+  // failed) — until it succeeds, at which point the stored preference is
+  // finally allowed to flip off too.
+  useEffect(() => {
+    if (gate !== "ready" || !shareNetWorthPendingDelete) return;
+    let cancelled = false;
+    void deleteNetWorthTotal().then((outcome) => {
+      if (cancelled || outcome !== "deleted") return;
+      setShareNetWorthEnabled(false);
+      setShareNetWorthEnabledStoredState(false);
+      setShareNetWorthPendingDelete(false);
+      setShareNetWorthPendingDeleteState(false);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [gate, shareNetWorthPendingDelete]);
+  // Cross-tab sync. Another tab can switch sharing off — and have its DELETE
+  // succeed — while THIS tab's React state still holds the old value; without
+  // this, this tab's own next sync/import/FX-mode change would read a stale
+  // "enabled" and PUT again, resurrecting the total the other tab just
+  // removed. `storage` fires in every OTHER tab/window when localStorage
+  // changes (never the tab that wrote it), so a matching key here re-reads
+  // both flags and syncs this tab's state to match. This is a UI/effect-level
+  // safety net, not the only guard: putNetWorthTotal itself re-reads both
+  // flags from storage immediately before sending, inside its queued task
+  // (netWorthShare.ts), so a PUT already queued when the other tab's DELETE
+  // lands is stopped there even before this effect gets a chance to run.
+  useEffect(() => {
+    function onStorage(event: StorageEvent) {
+      if (event.key !== SHARE_NET_WORTH_KEY && event.key !== SHARE_NET_WORTH_PENDING_DELETE_KEY)
+        return;
+      setShareNetWorthEnabledStoredState(getShareNetWorthEnabled());
+      setShareNetWorthPendingDeleteState(getShareNetWorthPendingDelete());
+    }
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, []);
+  // ECB daily rates, keyed by currency then by date — the vault's own copy,
+  // refreshed in the background (see the "Load persisted data" effect below).
+  // Empty until the vault loads it; `toEur` returns null on a lookup miss, so
+  // an empty history just means every conversion is unresolved yet, not wrong.
+  const [fxHistory, setFxHistoryState] = useState<Record<string, Record<string, number>>>({});
   // The owner's own name, shown at the top of his profile. A local preference —
   // it stays in this browser, out of the vault, and out of every model prompt.
   const [ownerName, setOwnerNameState] = useState<OwnerName>(() => getOwnerName());
@@ -125,7 +465,7 @@ export default function App() {
     setOwnerNameState(next); // keep the field exactly as typed, spaces and all
     setOwnerName(next);
   }
-  // Whether the server has an ANTHROPIC_API_KEY (drives the AI features'
+  // Whether the server has a MISTRAL_API_KEY (drives the AI features'
   // "not configured" state). Fetched once; defaults false on any error.
   const [llmConfigured, setLlmConfigured] = useState(false);
   // A question raised elsewhere in the UI (e.g. the per-category "vs.
@@ -143,13 +483,6 @@ export default function App() {
   /** The lookups ran their course without finishing. Said out loud rather than
    *  leaving a spinner turning forever, which is its own kind of lie. */
   const [termsGaveUp, setTermsGaveUp] = useState(false);
-  const [askText, setAskText] = useState<string | null>(null);
-  const [askNonce, setAskNonce] = useState(0);
-  function askAssistant(text: string) {
-    setAskText(text);
-    setAskNonce((n) => n + 1);
-  }
-
   // The owner's own module selection: which modules sit in the top nav. A local
   // preference (settings.ts); the registry resolves an unset/stale stored list
   // and guarantees Overzicht is in it.
@@ -167,8 +500,11 @@ export default function App() {
     setAddWidget((n) => n + 1);
   }
 
-  const [view, setViewState] = useState<View>(() => viewFromPathname(window.location.pathname) ?? "overview");
-  const setView = useCallback((next: View) => {
+  const [view, setViewState] = useState<View>(
+    () => viewFromPathname(window.location.pathname) ?? "overview",
+  );
+  const setView = useCallback((requested: View) => {
+    const next = isArchivedView(requested) ? "overview" : requested;
     setViewState(next);
     const nextPath = pathForView(next);
     if (window.location.pathname !== nextPath) {
@@ -186,10 +522,40 @@ export default function App() {
     window.addEventListener("popstate", onPop);
     return () => window.removeEventListener("popstate", onPop);
   }, []);
+  // Once per app load: a browser that set an n8n webhook URL/token before the
+  // 2026-09-08 vault migration, and never reopened Koppelingen since, still
+  // has that token sitting in plaintext localStorage — the exact XSS exposure
+  // that migration closed. Koppelingen no longer reads or writes those keys
+  // at all (the whole vault-backed webhook feature is gone), so there is
+  // nothing left to migrate; this only finishes deleting them. Safe to run on
+  // every load — once the keys are gone, it is a no-op.
+  useEffect(() => {
+    clearLegacyN8nLocalStorage();
+  }, []);
   // The shell's own filter: whose money is on screen. Starts on the classification
   // core defaults to, so a vault that has never been classified opens showing
   // everything it has rather than an empty page.
-  const [scope, setScope] = useState<EntityScope>(DEFAULT_ENTITY_SCOPE);
+  const [scope, setScope] = useState<EntityScope>(() => initialScope());
+  /* Of dit een VERSE kluis is, gezet op het moment dat de instelstap nog te
+   * beslissen valt. Niet afgeleid uit "heeft hij al rekeningen": iemand kan een
+   * lege kluis hebben en toch een bestaande gebruiker zijn, en die mag deze stap
+   * niet opnieuw krijgen. */
+  const [freshVault, setFreshVault] = useState(false);
+  /** Which wizard run the intake view opens: 2 only from the Overview invite. */
+  const [intakeRound, setIntakeRound] = useState<1 | 2>(1);
+  const [onboarded, setOnboarded] = useState(onboardingSeen);
+  /* Een verse kluis opent de intake-wizard op de eerste vraag, niet
+   * de oude instelstap. `showOnboarding` blijft de poort: alleen een verse kluis
+   * die dit apparaat nog niet zag, dus een bestaande gebruiker krijgt hier niets
+   * en ziet de uitnodiging op Overzicht. De vlag gaat meteen om; de intake
+   * onthoudt zelf waar hij was en hervat via die uitnodiging. */
+  useEffect(() => {
+    if (gate !== "ready" || !showOnboarding(freshVault, onboarded)) return;
+    markOnboardingSeen();
+    setOnboarded(true);
+    setScope(initialScope());
+    setView("intake");
+  }, [gate, freshVault, onboarded, setView]);
   // The per-COMPANY scope inside that half ("" = every company in this scope).
   // The chrome no longer sets it (per-company splitting is not a priority), but
   // the plumbing is intact and every view still receives it — Transacties and
@@ -198,6 +564,12 @@ export default function App() {
   // Built once at mount (empty deps — never re-reads the clock), so the
   // forecast stays deterministic for the lifetime of the session.
   const asOf = useMemo(() => new Date().toISOString().slice(0, 10), []);
+  /* The read model: a confirmed pair makes both legs "Eigen overboeking" for
+   * every spend aggregation downstream, because MOVED_CATEGORIES already
+   * excludes that one category. Derived on read and NEVER persisted — a
+   * rejected pair has to restore exactly what each row said before (a manual
+   * category, a rule's result), which a stored rewrite could not do. */
+  const ledgerTxs = useMemo(() => applyTransferDecisions(txs, transfers), [txs, transfers]);
   const [fEntity, setFEntity] = useState("");
   const [fAccount, setFAccount] = useState("");
   const [fSearch, setFSearch] = useState("");
@@ -232,8 +604,6 @@ export default function App() {
     setScope(next);
   }
 
-  const [ruleMatch, setRuleMatch] = useState("");
-  const [ruleCategory, setRuleCategory] = useState("");
   // Alert buffer (cents): warn when the forecast dips below this, so shortfalls
   // surface early instead of only at €0. Persisted as a local preference.
   const [bufferCents, setBufferCentsState] = useState<number>(() => getBufferCents());
@@ -262,14 +632,40 @@ export default function App() {
     };
   }, []);
 
-  // Decide which gate screen to show: unlock an existing vault, migrate
-  // existing plaintext data into a fresh vault, or set up a brand-new one.
+  // Open the vault with the owner's key (docs/adr/0009-account-held-vault-key.md).
+  // Nothing to ask in the normal case; the gate only shows for a one-time
+  // password-vault adoption or a key the server could not hand over.
+  const vaultName = vaultOwnerName(owner);
   useEffect(() => {
+    let current = true;
+    setGate("loading");
     (async () => {
-      const [status, legacy] = await Promise.all([storage.status(), hasLegacyData()]);
-      setGate(gateState(status, legacy));
+      try {
+        const result = await storage.open(await loadVaultKey(owner), vaultName);
+        // A vault created just now may inherit data from before the vault existed.
+        if (result === "created" && (await hasLegacyData())) await migrateToVault(storage);
+        if (!current) return;
+        if (result === "created") setFreshVault(true);
+        setGate(gateState(result));
+      } catch (error) {
+        if (!current) return;
+        if (error instanceof VaultKeyUnavailable && error.reason === "signed-out") {
+          window.location.assign("/");
+          return;
+        }
+        setGate({
+          error:
+            error instanceof VaultKeyUnavailable && error.reason === "unreadable"
+              ? "unreadable"
+              : "unreachable",
+        });
+      }
     })();
-  }, []);
+    return () => {
+      current = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [vaultName, openAttempt]);
 
   // Load persisted data once the vault is unlocked, so a reload (or a fresh
   // unlock after Vergrendel) shows prior imports. Gated on `gate` — never runs
@@ -277,28 +673,163 @@ export default function App() {
   useEffect(() => {
     if (gate !== "ready") return;
     (async () => {
-      const [loadedAccounts, loadedTxs, loadedRules, loadedFlows, loadedVat, loadedInvoices, loadedRewards, loadedFacts, loadedProfiles] = await Promise.all([
+      const [
+        loadedAccounts,
+        loadedTxs,
+        loadedRules,
+        loadedTransfers,
+        loadedFlows,
+        loadedVat,
+        loadedInvoices,
+        loadedRewards,
+        loadedFacts,
+        loadedProfiles,
+        loadedFxHistory,
+        loadedPendingInvoices,
+        loadedPendingNotices,
+        loadedBills,
+        loadedOccurrences,
+        loadedDecisions,
+        loadedValuations,
+        loadedDocuments,
+        loadedImportSessions,
+      ] = await Promise.all([
         storage.getAccounts(),
         storage.getTxs(),
         storage.getRules(),
+        storage.getTransfers(),
         storage.getScheduledFlows(),
         storage.getVatSettings(),
         storage.getInvoices(),
         storage.getRewards(),
         storage.getFacts(),
         storage.getEntityProfiles(),
+        storage.getFxHistory(),
+        storage.getPendingInvoices(),
+        storage.getPendingNotices(),
+        storage.getBills(),
+        storage.getBillOccurrences(),
+        storage.getBillDecisions(),
+        storage.getValuations(),
+        storage.getDocuments(),
+        storage.getImportSessions(),
       ]);
       setAccounts(loadedAccounts);
       setTxs(loadedTxs);
-      setRules(loadedRules);
+      // Rows are parsed and upgraded once, at the vault boundary. A row that
+      // cannot be used is counted in one warning, never dropped silently — and
+      // never allowed to block the rest of the vault from loading.
+      const storedRules = upgradeRules(loadedRules);
+      if (storedRules.problems.length > 0) {
+        console.warn(
+          `[regels] ${storedRules.problems.length} stored rule row(s) could not be read.`,
+        );
+      }
+      setRules(storedRules.rules);
+      setTransfers(loadedTransfers);
       setScheduledFlows(loadedFlows);
+      // Lazy materialization + matching, one vault write: the first unlock
+      // after a bill was added (or a schedule edited) fills the 90-day horizon;
+      // the exact matcher tier then writes the allocations it is sure of. A
+      // second unlock adds nothing and writes nothing.
+      const generated = generateBillOccurrences(loadedBills, loadedOccurrences, asOf);
+      const matched = runBillMatcher({
+        bills: loadedBills,
+        occurrences: generated.occurrences,
+        decisions: loadedDecisions,
+        txs: loadedTxs,
+        accounts: loadedAccounts,
+        asOf,
+      });
+      setBills(matched.bills);
+      setBillOccurrences(matched.occurrences);
+      setBillDecisions(matched.decisions);
+      setValuations(loadedValuations);
+      setDocuments(loadedDocuments);
+      setImportSessions(loadedImportSessions);
+      if (generated.added > 0 || matched.changed) {
+        await storage.putBillPlan(matched.bills, matched.occurrences, matched.decisions);
+      }
       setVatSettings(loadedVat);
       setInvoices(loadedInvoices);
       setRewards(loadedRewards);
       setFacts(loadedFacts);
       setEntityProfiles(loadedProfiles);
+      setFxHistoryState(loadedFxHistory);
+      setPendingInvoices(loadedPendingInvoices.filter(isPendingInvoiceLike));
+      setPendingNotices(loadedPendingNotices.filter(isN8nNoticeLike));
+      try {
+        setProfileRead(await storage.getProfile());
+      } catch {
+        setProfileRead("error");
+      }
+      // Fire, don't block: refresh the ECB history against what's ALREADY on
+      // screen. A slow or failed fetch must never delay showing the vault's
+      // own data — it just leaves fxHistory as it was until this lands. The
+      // trailing `.catch` also covers a lock mid-flight: `getFxHistory()`
+      // throws once `lock()` has cleared the vault's in-memory data, and that
+      // is not an error worth surfacing for a background refresh nobody asked
+      // to see finish.
+      void syncFxHistory(storage, loadedAccounts, loadedTxs)
+        .then(() => storage.getFxHistory())
+        .then(setFxHistoryState)
+        .catch(() => {});
     })();
-  }, [gate]);
+    // `asOf` is mount-stable (useMemo above), so it cannot retrigger the load;
+    // it is listed because the lazy bill materialization needs the same day the
+    // rest of the screen renders.
+  }, [gate, asOf]);
+
+  /* Which foreign currencies the ledger holds, and how far back each one
+   * reaches. Connecting a bank mid-session adds pockets AFTER the unlock
+   * effect above has already fetched rates, which left those balances
+   * reading "nog geen koers" until the next unlock. A later import of older
+   * rows moves a currency's earliest date back, which needs a backfill for
+   * the same reason, so the date is part of the signature too. */
+  const fxNeed = useMemo(() => fxNeedSignature(accounts, txs), [accounts, txs]);
+  /* His own IBANs, for deciding which side of an invoice is him. Every account
+   * he holds, not just the ones in scope: an invoice paid into his personal
+   * account is still his invoice, and scoping this would silently reintroduce
+   * the bug invoiceParty.ts exists to fix. */
+  const ownIbans = useMemo(
+    () => accounts.map((a) => a.iban).filter((i): i is string => typeof i === "string" && !!i),
+    [accounts],
+  );
+
+  useEffect(() => {
+    if (gate !== "ready" || fxNeed === "") return;
+    void syncFxHistory(storage, accounts, txs)
+      .then(() => storage.getFxHistory())
+      .then(setFxHistoryState)
+      .catch(() => {});
+    // `accounts`/`txs` are read, not depended on: fxNeed is the signature that
+    // says a fetch is actually warranted, and re-running on every edit to an
+    // unrelated row would hammer the ECB route for nothing.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gate, fxNeed]);
+
+  /* THE PERSONAL-TO-INVESTING NET WORTH SHARE, opt-in (docs/investing/
+   * DASHBOARD.md). `accounts`/`txs`/`fxHistory` all change on every sync and
+   * import, and `gate` becomes "ready" on unlock — so depending on them here
+   * is what gives "after each sync/import, and on unlock" without a second
+   * copy of this call at every import/sync/unlock site. A null total (no
+   * balance known at all) sends nothing; a PARTIAL total (at least one
+   * balance known) still sends, exactly like Overzicht's own figure.
+   *
+   * `shareNetWorthEnabled` already folds in pendingDelete (see above), so no
+   * PUT is ever sent while a delete is outstanding. `todayIso()` is read here
+   * rather than from the mount-time `asOf`, so a tab left open past midnight
+   * shares under the day this effect actually runs. */
+  useEffect(() => {
+    if (gate !== "ready" || !shareNetWorthEnabled) return;
+    const today = todayIso();
+    const totalCents = computeShareableTotalCents(accounts, txs, today, {
+      fxHistory,
+      mode: fxConversionMode,
+    });
+    if (totalCents === null) return;
+    void putNetWorthTotal(today, totalCents).catch(() => {});
+  }, [gate, shareNetWorthEnabled, accounts, txs, fxHistory, fxConversionMode]);
 
   // Public savings-rate benchmark for the travel block's "where to keep it"
   // step. Public data, not user data; failing is harmless (bundled snapshot).
@@ -314,72 +845,192 @@ export default function App() {
   }, []);
 
   // After returning from an Enable Banking authorisation, the browser lands on
-  // the SPA with ?eb=<session> (or ?eb_error=). Once the vault is unlocked, pull
-  // the accounts+transactions, map them (same shape as a file import) and store
-  // them. Reads fresh from storage to avoid stale state right after unlock.
+  // the SPA with ?eb=<session> (or ?eb_error=). normalizeAppLocation (Root.tsx,
+  /* WAT ER MET EEN BANKANTWOORD GEBEURT — één keer opgeschreven.
+   *
+   * De koppeling en het verversen lezen dezelfde rekeningen op dezelfde manier
+   * in. Toen dit inline in het koppel-effect stond, was de enige manier om
+   * verversen toe te voegen een tweede kopie hiervan, en de interessante bug
+   * zou daarna het verschil tussen die twee zijn geweest. Geeft terug wat er
+   * binnenkwam, zodat de aanroeper de melding kan opbouwen. */
+  async function ingestEbItems(
+    aspsp: string,
+    items: Array<{ account: EbAccount; balances: EbBalance[]; transactions: EbTransaction[] }>,
+  ): Promise<{ accounts: number; txs: number }> {
+    /* DE ECHTE KLOK, en nadrukkelijk niet `asOf`.
+     *
+     * `asOf` wordt één keer bij het monteren gezet en daarna nooit meer, zodat
+     * de prognose binnen een sessie niet onder je handen verschuift. Precies
+     * goed daarvoor, en fout hier: dit blok bestaat om een tabblad dat dagen
+     * openstaat vier keer per dag te verversen, en dan zou "opgehaald op" de
+     * dag noemen waarop het tabblad openging in plaats van de dag waarop we
+     * het vroegen. Dat is dezelfde fout die dit veld moest wegnemen, één as
+     * verderop. */
+    const fetchedOn = new Date().toISOString().slice(0, 10);
+    const newAccounts: Account[] = [];
+    const rawTxs: Array<Omit<Tx, "id">> = [];
+    for (const item of items) {
+      /* De DATUM erbij, en niet alleen het bedrag. Rekeningen zegt per
+       * rekening "stand van <dag>", en zonder deze derde parameter stond daar
+       * "datum onbekend" terwijl Enable Banking hem gewoon meestuurt — wij
+       * gooiden weg wat de bank vertelde en zeiden daarna dat we het niet
+       * wisten. Ontbreekt hij bij de bank, dan blijft hij leeg: de dag van
+       * ophalen invullen zou een saldo van drie weken oud als dat van vandaag
+       * laten lezen. */
+      const acc = mapEbAccount(
+        { ...item.account, aspsp },
+        pickEbBalance(item.balances),
+        pickEbBalanceDate(item.balances) ?? undefined,
+      );
+      acc.entity = entity;
+      /* WIJ HEBBEN HET NU GEVRAAGD, en dat is het enige moment dat we hier
+       * kunnen bewijzen. Zonder dit zou een ververste rekening zonder
+       * bank-saldodatum nog steeds "gekoppeld op <toen>" tonen naast een bedrag
+       * van vanochtend. */
+      acc.balanceFetchedAt = fetchedOn;
+      newAccounts.push(acc);
+      const key = ebAccountKey(item.account);
+      for (const t of item.transactions ?? []) rawTxs.push(mapEbTransaction(t, key, acc.currency));
+    }
+    const [curAccounts, curTxs] = await Promise.all([storage.getAccounts(), storage.getTxs()]);
+    /* HET KOPPELMOMENT, hier en nergens anders. Dit is letterlijk het moment
+     * waarop de rekening binnenkomt, dus dit is de enige plek waar het
+     * eerlijk te stempelen valt. `curAccounts` is de stand van vóór deze
+     * koppeling: alleen wat daar niet in stond is nieuw. Een rekening die er
+     * al was houdt haar eigen koppelmoment (of blijft zonder, als dat er nooit
+     * was) — zie `withLinkedAt`. */
+    const mergedAccounts = withLinkedAt(
+      curAccounts,
+      mergeImportedAccounts(curAccounts, newAccounts),
+      asOf,
+    );
+    const mergedTxs = ingest(curTxs, assignTxIds(rawTxs));
+    /* WAT ER NIEUW IS, niet wat de bank stuurde. Bij een koppeling is dat
+     * hetzelfde getal, maar bij een verversing stuurt de bank elke keer een vol
+     * jaar terug: melden dat er 812 transacties zijn binnengekomen terwijl er
+     * drie nieuw waren, is een onwaarheid op de plek die net om vertrouwen
+     * vraagt. `ingest` dedupliceert op een inhoud-afgeleide id, dus het
+     * verschil in lengte IS het aantal nieuwe rijen. */
+    const addedTxs = mergedTxs.length - curTxs.length;
+    const addedAccounts = mergedAccounts.length - curAccounts.length;
+    await storage.putAccounts(mergedAccounts);
+    await storage.putTxs(mergedTxs);
+    const [fa, ft] = await Promise.all([storage.getAccounts(), storage.getTxs()]);
+    setAccounts(fa);
+    setTxs(ft);
+    // Reconcile invoices against the freshly linked bank txs (same as file import).
+    const curInvoices = await storage.getInvoices();
+    const reconciled = reconcileInvoices(curInvoices, ft);
+    if (JSON.stringify(reconciled) !== JSON.stringify(curInvoices)) await saveInvoices(reconciled);
+    return { accounts: addedAccounts, txs: addedTxs };
+  }
+
+  /* VERVERSEN — het antwoord op "mijn saldo is van de dag dat ik koppelde".
+   *
+   * Binnen de toestemmingstermijn is dit gewoon dezelfde lezing nog een keer,
+   * dus het loopt door `ingestEbItems` en niet langs een tweede pad. De server
+   * houdt de sessies vast; de browser hoeft geen sessie-id te bewaren en vraagt
+   * alleen "ververs wat van mij is".
+   *
+   * Een verlopen toestemming wordt GENOEMD. Stil overslaan zou de gebruiker
+   * laten kijken naar een saldo dat niet meer bijwerkt zonder te zeggen welke
+   * bank opnieuw gekoppeld moet worden. */
+  /** @param silent - true for the timer's own pass: report only what changed,
+   *  a lapsed consent, or a failure. A banner on every open that says nothing
+   *  happened trains the eye to skip the banner that one day does. */
+  async function handleRefreshBank(silent = false) {
+    setBusy(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/eb/refresh`, { method: "POST" });
+      const data = (await res.json()) as {
+        error?: string;
+        refreshed?: Array<{ aspsp: string; items: [] }>;
+        expired?: string[];
+        failed?: Array<{ aspsp: string; error: string }>;
+      };
+      if (!res.ok || data.error) {
+        setProblems([{ kind: "bank-link-failed", detail: String(data.error ?? res.status) }]);
+        return;
+      }
+      const notices: ShellNotice[] = [];
+      let accounts = 0;
+      let txs = 0;
+      for (const conn of data.refreshed ?? []) {
+        const got = await ingestEbItems(conn.aspsp, conn.items);
+        accounts += got.accounts;
+        txs += got.txs;
+      }
+      /* STIL BETEKENT STIL. De timer draait vier keer per dag en vindt meestal
+         niets nieuws; een balk die dan "0 rekeningen, 0 transacties" meldt,
+         leert het oog de balk over te slaan op de dag dat er wél iets staat.
+         Een verversing die de gebruiker zelf aanzette meldt zich altijd — hij
+         drukte op een knop en verdient een antwoord. */
+      const changed = accounts > 0 || txs > 0;
+      if ((data.refreshed ?? []).length > 0 && (changed || !silent))
+        notices.push({
+          kind: "bank-linked",
+          accounts,
+          aspsp: (data.refreshed ?? []).map((r) => r.aspsp).join(", "),
+          txs,
+        });
+      for (const name of data.expired ?? [])
+        notices.push({ kind: "bank-consent-expired", aspsp: name });
+      for (const f of data.failed ?? [])
+        notices.push({ kind: "bank-link-failed", detail: `${f.aspsp}: ${f.error}` });
+      if (notices.length === 0 && !silent) notices.push({ kind: "bank-nothing-to-refresh" });
+      // Niets te melden en niemand die erom vroeg: de balk blijft staan zoals
+      // hij stond, in plaats van leeggemaakt te worden en daarmee een eerdere
+      // melding op te ruimen die de gebruiker nog niet gelezen had.
+      if (silent && notices.length === 0) return;
+      setProblems(notices);
+    } catch (e) {
+      setProblems([
+        { kind: "bank-link-failed", detail: e instanceof Error ? e.message : String(e) },
+      ]);
+    } finally {
+      /* DE POGING WORDT GESTEMPELD, niet de uitkomst — zie
+         `markEbRefreshAttempted`. Alleen bij succes stempelen maakt van elke
+         mislukking een lus: het effect draait opnieuw zodra `busy` omslaat, en
+         vindt de verversing dan meteen weer nodig. */
+      markEbRefreshAttempted(Date.now());
+      setBusy(false);
+    }
+  }
+
+  // via appRoutes.ts) already stripped that off the URL on load, so the id
+  // never sits in browser history — it's picked up here, once, from the
+  // in-memory handoff. Once the vault is unlocked, pull the accounts+
+  // transactions, map them (same shape as a file import) and store them.
+  // Reads fresh from storage to avoid stale state right after unlock.
   useEffect(() => {
     if (gate !== "ready") return;
-    const params = new URLSearchParams(window.location.search);
-    const ebError = params.get("eb_error");
-    const ebSession = params.get("eb");
-    if (!ebError && !ebSession) return;
-    window.history.replaceState({}, "", window.location.pathname); // don't re-run on refresh
+    const pending = takePendingEbParams();
+    if (!pending) return;
+    const { session: ebSession, error: ebError } = pending;
     setView("overview");
     if (ebError) {
-      setProblems([`Bankkoppeling mislukt: ${ebError}`]);
+      setProblems([{ kind: "bank-link-failed", detail: String(ebError) }]);
       return;
     }
     (async () => {
       setBusy(true);
       try {
-        const res = await fetch(`${API_BASE}/api/eb/accounts?session_id=${encodeURIComponent(ebSession as string)}`);
+        const res = await fetch(
+          `${API_BASE}/api/eb/accounts?session_id=${encodeURIComponent(ebSession as string)}`,
+        );
         const data = await res.json();
         if (!res.ok || data.error) {
-          setProblems([`Bankkoppeling mislukt: ${data.error ?? res.status}`]);
+          setProblems([{ kind: "bank-link-failed", detail: String(data.error ?? res.status) }]);
           return;
         }
-        const aspsp: string = data.aspsp ?? "";
-        const newAccounts: Account[] = [];
-        const rawTxs: Array<Omit<Tx, "id">> = [];
-        for (const item of data.items ?? []) {
-          /* De DATUM erbij, en niet alleen het bedrag. Rekeningen zegt per
-           * rekening "stand van <dag>", en zonder deze derde parameter stond daar
-           * "datum onbekend" terwijl Enable Banking hem gewoon meestuurt — wij
-           * gooiden weg wat de bank vertelde en zeiden daarna dat we het niet
-           * wisten. Ontbreekt hij bij de bank, dan blijft hij leeg: de dag van
-           * ophalen invullen zou een saldo van drie weken oud als dat van vandaag
-           * laten lezen. */
-          const acc = mapEbAccount(
-            { ...item.account, aspsp },
-            pickEbBalance(item.balances),
-            pickEbBalanceDate(item.balances) ?? undefined,
-          );
-          acc.entity = entity;
-          newAccounts.push(acc);
-          const key = ebAccountKey(item.account);
-          for (const t of item.transactions ?? []) rawTxs.push(mapEbTransaction(t, key, acc.currency));
-        }
-        const [curAccounts, curTxs] = await Promise.all([storage.getAccounts(), storage.getTxs()]);
-        /* HET KOPPELMOMENT, hier en nergens anders. Dit is letterlijk het moment
-         * waarop de rekening binnenkomt, dus dit is de enige plek waar het
-         * eerlijk te stempelen valt. `curAccounts` is de stand van vóór deze
-         * koppeling: alleen wat daar niet in stond is nieuw. Een rekening die er
-         * al was houdt haar eigen koppelmoment (of blijft zonder, als dat er nooit
-         * was) — zie `withLinkedAt`. */
-        const mergedAccounts = withLinkedAt(curAccounts, mergeImportedAccounts(curAccounts, newAccounts), asOf);
-        const mergedTxs = ingest(curTxs, assignTxIds(rawTxs));
-        await storage.putAccounts(mergedAccounts);
-        await storage.putTxs(mergedTxs);
-        const [fa, ft] = await Promise.all([storage.getAccounts(), storage.getTxs()]);
-        setAccounts(fa);
-        setTxs(ft);
-        // Reconcile invoices against the freshly linked bank txs (same as file import).
-        const curInvoices = await storage.getInvoices();
-        const reconciled = reconcileInvoices(curInvoices, ft);
-        if (JSON.stringify(reconciled) !== JSON.stringify(curInvoices)) await saveInvoices(reconciled);
-        setProblems([`Bank gekoppeld: ${newAccounts.length} rekening(en)${aspsp ? ` via ${aspsp}` : ""}, ${rawTxs.length} transacties.`]);
+        const { accounts: n, txs: m } = await ingestEbItems(data.aspsp ?? "", data.items ?? []);
+        markBankConnected();
+        markEbRefreshAttempted(Date.now());
+        setProblems([{ kind: "bank-linked", accounts: n, aspsp: data.aspsp ?? "", txs: m }]);
       } catch (e) {
-        setProblems([`Bankkoppeling mislukt: ${e instanceof Error ? e.message : String(e)}`]);
+        setProblems([
+          { kind: "bank-link-failed", detail: e instanceof Error ? e.message : String(e) },
+        ]);
       } finally {
         setBusy(false);
       }
@@ -387,14 +1038,62 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gate]);
 
-  // Sidebar "Vergrendel": drop the derived key + in-memory data (nothing
-  // sensitive stays rendered) and show the unlock screen again.
+  /* VIER KEER PER DAG, zolang de app open is. Zijn verzoek.
+   *
+   * Eén controle bij het ontgrendelen en daarna elk uur, want een tabblad dat
+   * een week openstaat moet ook meedoen — het interval is de ONDERGRENS van hoe
+   * vaak we kijken, `EB_AUTO_REFRESH_MS` de ondergrens van hoe vaak we de bank
+   * bellen. Waarom dit geen cron is, staat in `ebAutoRefresh.ts`: de server kan
+   * de kluis niet lezen en er dus ook niets in schrijven.
+   *
+   * Niet tijdens `busy`: een verversing die tussen `putAccounts` en `putTxs`
+   * van een import valt, schrijft over een half geschreven kluis heen. */
+  useEffect(() => {
+    if (gate !== "ready") return;
+    const tick = () => {
+      if (
+        autoRefreshDue({
+          connected: everConnectedBank(),
+          lastAt: lastEbRefreshAt(),
+          now: Date.now(),
+          busy,
+        })
+      )
+        void handleRefreshBank(true);
+    };
+    tick();
+    const timer = setInterval(tick, 60 * 60 * 1000);
+    return () => clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gate, busy]);
+
+  // M7 (2026-08-28 security review): the vault never locked itself. 15
+  // minutes without pointer/key/touch/scroll activity, or a tab hidden that
+  // long, runs the exact same lock path as the sidebar button below.
+  // Not while an import or sync is writing: a lock between putAccounts and
+  // putTxs would leave the vault half-written. The timer re-arms when busy ends.
+  useIdleLock(gate === "ready" && !busy, handleLock);
+
+  // Sidebar "Vergrendel": drop the key + in-memory data (nothing sensitive
+  // stays rendered), then end the session. The key comes back with the next
+  // sign-in, so locking IS signing out. Without accounts there is no session
+  // to end; the page reopens the vault with this browser's key.
   function handleLock() {
     storage.lock();
     setAccounts([]);
     setTxs([]);
     setRules([]);
+    setTransfers([]);
+    setTransferLinksDropped(null);
     setScheduledFlows([]);
+    setBills([]);
+    setBillOccurrences([]);
+    setBillDecisions(EMPTY_BILL_DECISIONS);
+    setValuations([]);
+    setDocuments([]);
+    setDocumentNotice(null);
+    setImportSessions([]);
+    setImportNotice(null);
     setVatSettings([]);
     setInvoices([]);
     setRewards([]);
@@ -402,7 +1101,10 @@ export default function App() {
     setEntityProfiles([]);
     setPendingInvoices([]);
     setPendingNotices([]);
-    setGate("unlock");
+    setProfileRead("loading");
+    setGate("loading");
+    if (owner.kind === "account") void signOut().finally(() => window.location.assign("/"));
+    else setOpenAttempt((n) => n + 1);
   }
 
   // Rules are UI-owned as a whole list (replace-all persistence), so every
@@ -410,6 +1112,41 @@ export default function App() {
   async function saveRules(next: Rule[]) {
     setRules(next);
     await storage.putRules(next);
+  }
+
+  /* Transfer decisions are UI-owned as a whole list too (replace-all), and the
+   * core mutators keep one row per pair id — so this is the only write path.
+   * Projected rows are NEVER written: `applyTransferDecisions` is derived on
+   * read, or rejecting a pair could not restore what a row said before. */
+  async function saveTransfers(next: TransferPair[]) {
+    setTransfers(next);
+    await storage.putTransfers(next);
+  }
+
+  /* Promote the unambiguous exact two-leg proofs into stored pairs, so the
+   * owner is only ever asked about a pair the ledger does not already prove.
+   * Idempotent (the core contract): a second run over its own output adds
+   * nothing, which is what lets this depend on `transfers` without looping.
+   * The write is replace-all like saveRules — `pairs` is the full list. */
+  useEffect(() => {
+    if (gate !== "ready") return;
+    const auto = autoConfirmTransfers({ txs, accounts, pairs: transfers, fxHistory, asOf });
+    if (auto.added.length === 0) return;
+    // Background write: a lock mid-flight closes the vault, and the next unlock
+    // re-runs this same deterministic promotion, so there is nothing to report.
+    void saveTransfers(auto.pairs).catch(() => {});
+    // saveTransfers is read, not depended on: its identity changes per render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gate, txs, accounts, transfers, fxHistory, asOf]);
+
+  /** Confirm or reject one derived suggestion. Both write the same pair row
+   *  (one pair, one state) and persist the whole decision list. Rejection is
+   *  memory, not deletion: the matcher must never propose those two legs again. */
+  function handleConfirmTransfer(pair: TransferPair) {
+    void saveTransfers(upsertTransferPair(transfers, confirmTransfer(pair, asOf)));
+  }
+  function handleRejectTransfer(pair: TransferPair) {
+    void saveTransfers(upsertTransferPair(transfers, rejectTransfer(pair, asOf)));
   }
 
   // Per-BV VAT settings are UI-owned as a whole list (replace-all persistence),
@@ -431,6 +1168,23 @@ export default function App() {
   async function saveRewards(next: RewardsBalance[]) {
     setRewards(next);
     await storage.putRewards(next);
+  }
+
+  async function retryProfileRead() {
+    setProfileRead("loading");
+    try {
+      setProfileRead(await storage.getProfile());
+    } catch {
+      setProfileRead("error");
+    }
+  }
+
+  // The adviser profile is one store (current + versions), written whole. The
+  // intake builds the next store with commitProfile; this only keeps state and
+  // vault in step. A failed write rejects so the intake can say so.
+  async function saveProfile(next: AdvisorProfileStore) {
+    await storage.putProfile(next);
+    setProfileRead({ kind: "ok", store: next });
   }
 
   // Persist the full tx list after an in-memory edit. `putTxs` is upsert-by-id
@@ -456,24 +1210,63 @@ export default function App() {
   // After storage.restore() swaps in a different vault's data (Task 5), reload
   // everything from it — restore() itself only touches storage, never React state.
   async function handleRestored() {
-    const [freshAccounts, freshTxs, freshRules, freshFlows, freshVat, freshInvoices, freshRewards, freshProfiles] = await Promise.all([
+    const [
+      freshAccounts,
+      freshTxs,
+      freshRules,
+      freshTransfers,
+      freshFlows,
+      freshVat,
+      freshInvoices,
+      freshRewards,
+      freshProfiles,
+      freshBills,
+      freshOccurrences,
+      freshDocuments,
+      freshValuations,
+      freshImportSessions,
+    ] = await Promise.all([
       storage.getAccounts(),
       storage.getTxs(),
       storage.getRules(),
+      storage.getTransfers(),
       storage.getScheduledFlows(),
       storage.getVatSettings(),
       storage.getInvoices(),
       storage.getRewards(),
       storage.getEntityProfiles(),
+      storage.getBills(),
+      storage.getBillOccurrences(),
+      storage.getDocuments(),
+      storage.getValuations(),
+      storage.getImportSessions(),
     ]);
+    // A restored vault carries its statement metadata AND its valuations; the
+    // document BYTES came back in the document store, so the card can show
+    // them immediately instead of after a reload.
+    setDocuments(freshDocuments);
+    setValuations(freshValuations);
+    setImportSessions(freshImportSessions);
     setAccounts(freshAccounts);
     setTxs(freshTxs);
-    setRules(freshRules);
+    const storedRules = upgradeRules(freshRules);
+    if (storedRules.problems.length > 0) {
+      console.warn(`[regels] ${storedRules.problems.length} stored rule row(s) could not be read.`);
+    }
+    setRules(storedRules.rules);
+    setTransfers(freshTransfers);
     setScheduledFlows(freshFlows);
+    setBills(freshBills);
+    setBillOccurrences(freshOccurrences);
     setVatSettings(freshVat);
     setInvoices(freshInvoices);
     setRewards(freshRewards);
     setEntityProfiles(freshProfiles);
+    try {
+      setProfileRead(await storage.getProfile());
+    } catch {
+      setProfileRead("error");
+    }
   }
 
   // Classify one entity as privé or zakelijk. Replace-all persistence, same
@@ -495,7 +1288,10 @@ export default function App() {
   // "Persoonlijk of zakelijk" list edits. Built from ALL accounts, never the
   // scoped subset: an entity must stay editable after you move it to the half
   // you are not currently looking at.
-  const entitySummaryRows = useMemo(() => entitySummaries(accounts, entityProfiles), [accounts, entityProfiles]);
+  const entitySummaryRows = useMemo(
+    () => entitySummaries(accounts, entityProfiles),
+    [accounts, entityProfiles],
+  );
 
   // The companies inside the active half — what the per-company controls that
   // survive (Transacties' filter, Belasting's per-BV modules) are built from.
@@ -518,11 +1314,110 @@ export default function App() {
     return parsed ? [parsed] : [];
   }, [ownerName]);
 
+  // The same identifiers plus the name he typed, for the room and the intake:
+  // a transfer under his own name is his own money, not income.
+  const ownWithNames = useMemo(
+    () => ({ ...own, names: ownNamesForMatching }),
+    [own, ownNamesForMatching],
+  );
+  // Profiel's "Jouw plan" card opens the plan once the intake has produced something to plan with.
+  const planUnlocked =
+    profileRead !== "loading" &&
+    profileRead !== "error" &&
+    profileRead.kind === "ok" &&
+    planProfileOf(profileRead.store).intakeBlocksDone >= 1;
+
+  // Show just this account's transactions: clear the other filters so the list
+  // isn't silently narrowed by a stale one. Rekeningen and the account sidebar
+  // share this one handler.
+  const openAccountTransactions = useCallback(
+    (key: string) => {
+      setFAccount(key);
+      setFEntity("");
+      setFSearch("");
+      setFCategory("");
+      setFFrom("");
+      setFTo("");
+      setView("transactions");
+    },
+    [setView],
+  );
+  // Capacity for "what LaVega knows about you": the same room and the same
+  // profile inputs the intake uses, worked out here and never stored.
+  // The home screen's room card: computed once per data change, and only while
+  // the overview is showing.
+  const homeRoom = useMemo(() => {
+    if (view !== "overview" || profileRead === "loading" || profileRead === "error") return null;
+    const profile = profileRead.kind === "ok" ? profileRead.store.current : emptyProfile();
+    const computed = computeRoom({
+      txs: ledgerTxs,
+      accounts,
+      profiles: entityProfiles,
+      rules,
+      own: ownWithNames,
+      asOf,
+      mode: fxConversionMode,
+      fxHistory,
+    });
+    return resolveRoom(computed, profile);
+  }, [
+    view,
+    profileRead,
+    ledgerTxs,
+    accounts,
+    entityProfiles,
+    rules,
+    ownWithNames,
+    asOf,
+    fxConversionMode,
+    fxHistory,
+  ]);
+
+  const aboutYouCapacity = useMemo(() => {
+    const profile =
+      profileRead !== "loading" && profileRead !== "error" && profileRead.kind === "ok"
+        ? profileRead.store.current
+        : emptyProfile();
+    if (view !== "about-you")
+      return capacityFor(profile, { kind: "none", reason: "no-data" }, asOf);
+    const computed = computeRoom({
+      txs: ledgerTxs,
+      accounts,
+      profiles: entityProfiles,
+      rules,
+      own: ownWithNames,
+      asOf,
+      mode: fxConversionMode,
+      fxHistory,
+    });
+    return capacityFor(profile, resolveRoom(computed, profile).room, asOf);
+  }, [
+    view,
+    profileRead,
+    ledgerTxs,
+    accounts,
+    entityProfiles,
+    rules,
+    ownWithNames,
+    asOf,
+    fxConversionMode,
+    fxHistory,
+  ]);
+
   // Accounts that look like the SAME real account imported twice. Computed on
   // the full list (a duplicate pair can straddle two entities if one side was
   // filed under the wrong BV); Rekeningen narrows the banner to the scope.
   const duplicateGroups = useMemo(() => findDuplicateAccounts(accounts), [accounts]);
 
+  /* Pairs the matcher derives on read. The input is the UNSCOPED ledger on
+   * purpose: a transfer between a personal and a business account is one pair,
+   * and scoping the matcher would give each half only one leg of it. Derived,
+   * never stored — a new import can invalidate a pending suggestion, so
+   * persisting one would leave a stale claim in the vault. */
+  const transferSuggestions = useMemo(
+    () => suggestTransfers({ txs, accounts, pairs: transfers, fxHistory, asOf }),
+    [txs, accounts, transfers, fxHistory, asOf],
+  );
   // Self-heal the Transacties entity filter and the top-bar entity scope: if
   // the selected entity no longer exists (e.g. its last account was
   // reassigned away in Rekeningen), reset to "Alle" so neither control keeps
@@ -548,14 +1443,39 @@ export default function App() {
     [scopeAccounts, entityScope],
   );
   // A transaction follows its account's classification — it is never classified
-  // on its own, so the two can't disagree.
-  const scopedTxs = useMemo(() => txsForAccounts(scopedAccounts, txs), [txs, scopedAccounts]);
+  // on its own, so the two can't disagree. Built from the transfer-projected
+  // ledger: a confirmed pair must stop counting as spending everywhere that
+  // reads these rows (Overzicht, Top-uitgaven, Statistiek, Transacties itself),
+  // and deriving it once here is what keeps every one of them in step.
+  const scopedTxs = useMemo(
+    () => txsForAccounts(scopedAccounts, ledgerTxs),
+    [ledgerTxs, scopedAccounts],
+  );
+
+  /* Only suggestions whose BOTH legs are in the current half reach the view.
+   * Naming an account from the other half would cross the line the scope switch
+   * draws; an unambiguous exact cross-half pair is auto-confirmed anyway, so
+   * what stays hidden is only the ambiguous cross-half case — a gap, not a
+   * leak. */
+  const scopedTransferSuggestions = useMemo(() => {
+    const visible = new Set(scopedTxs.map((t) => t.id));
+    return transferSuggestions.filter(
+      (s) => visible.has(s.pair.outflowTxId) && visible.has(s.pair.inflowTxId),
+    );
+  }, [transferSuggestions, scopedTxs]);
 
   // A stored balance is only "as of" its balanceDate (no date => already
   // current); roll every account forward to `asOf` with its later txs so
   // Overzicht/Forecast always display/sum the current position. Rekeningen
   // still gets the RAW scopedAccounts below — it edits stored values, not
   // this derived view.
+  // Valuations follow the same entity scope as the accounts they belong to: a
+  // valuation for an account outside the scope is not shown (and not offered).
+  const scopedValuations = useMemo(() => {
+    const keys = new Set(scopedAccounts.map((a) => a.key));
+    return valuations.filter((v) => keys.has(v.accountKey));
+  }, [valuations, scopedAccounts]);
+
   const currentScopedAccounts = useMemo(
     () => withCurrentBalances(scopedAccounts, scopedTxs, asOf),
     [scopedAccounts, scopedTxs, asOf],
@@ -580,7 +1500,8 @@ export default function App() {
   // money. A flow carries its own entity (it can exist before that entity has
   // an account), so it is classified directly rather than through `accounts`.
   const scopedScheduledFlows = useMemo(
-    () => scheduledFlowsForScope(flowsForScope(allScheduledFlows, scope, entityProfiles), entityScope),
+    () =>
+      scheduledFlowsForScope(flowsForScope(allScheduledFlows, scope, entityProfiles), entityScope),
     [allScheduledFlows, scope, entityProfiles, entityScope],
   );
 
@@ -597,18 +1518,42 @@ export default function App() {
     await storage.putScheduledFlows(merged);
   }
 
+  // Bills: the view hands back the whole series list. A schedule edit rebuilds
+  // only that series' future rows (paid and closed rows are history and are
+  // never touched); adding a series or resuming one materializes what it is
+  // missing. The pair is saved in ONE vault write.
+  async function saveBillPlan(
+    nextBills: Bill[],
+    nextOccurrences: BillOccurrence[],
+    nextDecisions: BillDecisions = billDecisions,
+  ) {
+    let occurrences = nextOccurrences;
+    for (const next of nextBills) {
+      const previous = bills.find((b) => b.id === next.id);
+      if (previous != null && scheduleChanged(previous, next)) {
+        occurrences = regenerateBillOccurrences(nextBills, occurrences, next.id, asOf).occurrences;
+      }
+    }
+    occurrences = generateBillOccurrences(nextBills, occurrences, asOf).occurrences;
+    setBills(nextBills);
+    setBillOccurrences(occurrences);
+    setBillDecisions(nextDecisions);
+    // ONE save: a decision and the occurrence rows it closed cannot land apart.
+    await storage.putBillPlan(nextBills, occurrences, nextDecisions);
+  }
+
   // NOTE: the per-tab chat context (agent/tabContext.ts) is not built here any
   // more — the floating chat widget it fed is not rendered while its future is
   // being decided. Nothing about the redaction boundary changed; the builder
   // and the widget are both still in the tree, just unmounted.
 
   // The single data path: FileImport -> ingest -> persist -> reload -> consolidate.
-  async function handleImport(file: File) {
+  async function importFile(file: File): Promise<{ ok: true; count: number } | { ok: false }> {
     setBusy(true);
     try {
       const text = await file.text();
       const result = await createFileImport().load({ filename: file.name, text, entity });
-      setProblems(result.problems);
+      setProblems(importNotices(result.problems));
 
       const mergedTxs = ingest(txs, result.txs);
       // Re-importing a statement for an account you already have must not wipe
@@ -618,7 +1563,11 @@ export default function App() {
       // is de stand van vlak daarvoor — dus precies wat `withLinkedAt` nodig heeft
       // om "nieuw" van "stond er al" te onderscheiden. Een her-import van hetzelfde
       // afschrift verschuift het moment niet: dat is de tweede tak daar.
-      const mergedAccounts = withLinkedAt(accounts, mergeImportedAccounts(accounts, result.accounts), asOf);
+      const mergedAccounts = withLinkedAt(
+        accounts,
+        mergeImportedAccounts(accounts, result.accounts),
+        asOf,
+      );
       await storage.putAccounts(mergedAccounts);
       await storage.putTxs(mergedTxs);
 
@@ -634,12 +1583,38 @@ export default function App() {
       // thus drops out of the forecast, no double-count). Persist only on change.
       const curInvoices = await storage.getInvoices();
       const reconciled = reconcileInvoices(curInvoices, freshTxs);
-      if (JSON.stringify(reconciled) !== JSON.stringify(curInvoices)) await saveInvoices(reconciled);
+      if (JSON.stringify(reconciled) !== JSON.stringify(curInvoices))
+        await saveInvoices(reconciled);
+      // A new statement can contain the payment a bill was waiting for: run the
+      // matcher over the fresh ledger and persist its decisions together with
+      // the rows they close (one save; nothing changes when nothing matched).
+      const matched = runBillMatcher({
+        bills,
+        occurrences: billOccurrences,
+        decisions: billDecisions,
+        txs: freshTxs,
+        accounts: freshAccounts,
+        asOf,
+      });
+      if (matched.changed)
+        await saveBillPlan(matched.bills, matched.occurrences, matched.decisions);
+      // Nothing read = a file we could not use (the wizard shows
+      // its own message; the page banner is not on screen there).
+      return result.txs.length === 0
+        ? { ok: false }
+        : { ok: true, count: mergedTxs.length - txs.length };
     } catch (err) {
-      setProblems([`Importeren mislukt: ${err instanceof Error ? err.message : String(err)}`]);
+      setProblems([
+        { kind: "import-failed", detail: err instanceof Error ? err.message : String(err) },
+      ]);
+      return { ok: false };
     } finally {
       setBusy(false);
     }
+  }
+
+  async function handleImport(file: File) {
+    await importFile(file);
   }
 
   // Reassign an account's entity: update in memory on every keystroke (so the
@@ -682,7 +1657,8 @@ export default function App() {
     if ("bank" in patch || "type" in patch || "name" in patch) {
       const current = accounts.find((a) => a.key === key);
       const product = current ? productOf(current) : "";
-      if (product && !productBeforeEdit.current.has(key)) productBeforeEdit.current.set(key, product);
+      if (product && !productBeforeEdit.current.has(key))
+        productBeforeEdit.current.set(key, product);
     }
     setAccounts(accounts.map((a) => (a.key === key ? { ...a, ...patch } : a)));
   }
@@ -716,6 +1692,276 @@ export default function App() {
     if (changed) await storage.putAccounts([changed]);
   }
 
+  // WS3.1: one half of the opening anchor. A liability owner types the amount
+  // OWED as a positive; it is stored as a negative like a credit-card balance.
+  async function handleOpeningCommit(
+    key: string,
+    field: "openingBalanceCents" | "openingDate",
+    value: string,
+  ) {
+    const account = accounts.find((a) => a.key === key);
+    if (account == null) return;
+    const patch: Partial<Account> = {};
+    if (field === "openingBalanceCents") {
+      const trimmed = value.trim().replace(",", ".");
+      const raw = trimmed === "" ? null : Number(trimmed);
+      if (raw !== null && !Number.isFinite(raw)) return;
+      patch.openingBalanceCents =
+        raw === null
+          ? undefined
+          : Math.round((accountIsLiability(account) ? -Math.abs(raw) : raw) * 100);
+    } else {
+      patch.openingDate = value.trim() === "" ? undefined : value;
+    }
+    const next = accounts.map((a) => (a.key === key ? { ...a, ...patch } : a));
+    setAccounts(next);
+    const changed = next.find((a) => a.key === key);
+    if (changed) await storage.putAccounts([changed]);
+  }
+
+  // WS3.1: add or replace the absolute valuation on one date. Identity is
+  // account + date, so typing the same day twice updates instead of doubling.
+  async function handleValuationCommit(accountKey: string, date: string, amountCents: number) {
+    const account = accounts.find((a) => a.key === accountKey);
+    if (account == null) return;
+    const id = valuationId(accountKey, date);
+    const entry = normalizeValuation({
+      id,
+      accountKey,
+      date,
+      amountCents,
+      currency: account.currency || "EUR",
+      kind: "reconciliation",
+      source: "manual",
+      createdAt: asOf,
+    });
+    const next = [...valuations.filter((v) => v.id !== id), entry].sort((a, b) =>
+      a.date.localeCompare(b.date),
+    );
+    setValuations(next);
+    await storage.putValuations(next);
+  }
+
+  async function handleValuationRemove(id: string) {
+    const next = valuations.filter((v) => v.id !== id);
+    setValuations(next);
+    await storage.putValuations(next);
+  }
+
+  /** SHA-256 of the bytes: the document's identity, so the same file uploaded
+   *  twice is ONE document. */
+  async function sha256Hex(bytes: Uint8Array): Promise<string> {
+    const digest = await globalThis.crypto.subtle.digest("SHA-256", bytes as BufferSource);
+    return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
+  }
+
+  async function saveDocuments(next: VaultDocument[]) {
+    setDocuments(next);
+    await storage.putDocuments(next);
+  }
+
+  // WS3.4/WS3.5: gate → hash → dedupe → seal the bytes into the document store
+  // → detect the metadata → suggest an account. The bytes go FIRST, so metadata
+  // never points at something the vault does not hold.
+  async function handleDocumentUpload(file: File) {
+    setBusy(true);
+    setDocumentNotice(null);
+    try {
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      const check = checkDocumentUpload({
+        filename: file.name,
+        mime: file.type,
+        byteSize: bytes.byteLength,
+      });
+      if (!check.ok) {
+        setDocumentNotice({ kind: "refused", filename: file.name, problem: check.problem });
+        return;
+      }
+      const sha256 = await sha256Hex(bytes);
+      if (findDocumentBySha(documents, sha256) != null) {
+        setDocumentNotice({ kind: "duplicate", filename: file.name });
+        return;
+      }
+      await storage.putDocumentBytes(sha256, bytes);
+      // A CSV is text we can read, so the detector's content tier works there
+      // exactly as Sure's does for an extracted PDF page.
+      const text =
+        check.extension === ".csv" || file.type.startsWith("text/")
+          ? new TextDecoder().decode(bytes.slice(0, 256 * 1024))
+          : null;
+      const detected = detectStatementMetadata({ filename: file.name, mime: file.type, text });
+      const match = matchStatementAccount(
+        {
+          institutionHint: detected.institutionHint,
+          accountNameHint: detected.accountNameHint,
+          accountLast4: detected.accountLast4,
+          currency: detected.currency,
+        },
+        accounts,
+      );
+      const doc: VaultDocument = {
+        id: sha256,
+        sha256,
+        filename: file.name,
+        mime: file.type || "application/octet-stream",
+        byteSize: bytes.byteLength,
+        kind: "statement",
+        source: "manual-upload",
+        uploadedAt: asOf,
+        periodFrom: detected.periodFrom,
+        periodTo: detected.periodTo,
+        currency: detected.currency ?? "EUR",
+        accountKey: null,
+        suggestedAccountKey: match.status === "matched" ? match.accountKey : null,
+        matchConfidence: match.status === "matched" ? match.confidence : null,
+        accountLast4: detected.accountLast4,
+        institutionHint: detected.institutionHint,
+        accountNameHint: detected.accountNameHint,
+        openingBalanceCents: null,
+        closingBalanceCents: null,
+        reviewStatus: "unmatched",
+        metadataSources: detected.metadataSources,
+      };
+      await saveDocuments(upsertDocument(documents, doc));
+      setDocumentNotice({ kind: "stored", filename: file.name });
+    } catch (err) {
+      setProblems([
+        { kind: "import-failed", detail: err instanceof Error ? err.message : String(err) },
+      ]);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleDocumentLink(id: string, accountKey: string) {
+    await saveDocuments(
+      documents.map((doc) =>
+        doc.id === id
+          ? {
+              ...doc,
+              accountKey,
+              reviewStatus: "linked" as const,
+              suggestedAccountKey: null,
+              matchConfidence: 1,
+            }
+          : doc,
+      ),
+    );
+  }
+
+  async function handleDocumentReject(id: string) {
+    await saveDocuments(
+      documents.map((doc) =>
+        doc.id === id ? { ...doc, accountKey: null, reviewStatus: "rejected" as const } : doc,
+      ),
+    );
+  }
+
+  // Removing a document removes BOTH halves: the sealed bytes and the metadata.
+  async function handleDocumentRemove(id: string) {
+    const doc = documents.find((d) => d.id === id);
+    if (doc == null) return;
+    await storage.deleteDocumentBytes(doc.sha256);
+    await saveDocuments(removeDocument(documents, id));
+    setDocumentNotice(null);
+  }
+
+  async function handleDocumentEraseAll() {
+    const erased = await storage.eraseDocuments();
+    setDocuments([]);
+    setDocumentNotice(null);
+    setDocumentErased(erased);
+  }
+
+  // WS3.6: confirm the dry run, write exactly its new rows, and remember the
+  // session so a revert is exact. The source file is retained in the #293
+  // document store under its SHA-256.
+  async function handleGenericImport(request: GenericImportRequest) {
+    setBusy(true);
+    setImportNotice(null);
+    try {
+      const sha256 = await sha256Hex(request.bytes);
+      const sessionId = `import-${sha256.slice(0, 12)}-${importSessions.length + 1}`;
+      const result = applyGenericImport({
+        existingTxs: txs,
+        plan: request.plan,
+        id: sessionId,
+        filename: request.filename,
+        asOf,
+        documentId: sha256,
+      });
+      const added = new Set(result.importedIds);
+      const newRows = result.txs.filter((tx) => added.has(tx.id));
+      if (newRows.length > 0) await storage.putTxs(newRows);
+      setTxs(result.txs);
+      const nextSessions = [...importSessions, result.session];
+      setImportSessions(nextSessions);
+      await storage.putImportSessions(nextSessions);
+
+      const dates = request.plan.parsed.map((row) => row.date).sort();
+      const mime =
+        request.format === "generic-xlsx"
+          ? "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+          : "text/csv";
+      const document: VaultDocument = {
+        id: sha256,
+        sha256,
+        filename: request.filename,
+        mime,
+        byteSize: request.bytes.byteLength,
+        kind: "statement",
+        source: "import",
+        uploadedAt: asOf,
+        periodFrom: dates[0] ?? null,
+        periodTo: dates[dates.length - 1] ?? null,
+        currency: "EUR",
+        accountKey: request.plan.accountKey,
+        suggestedAccountKey: null,
+        matchConfidence: 1,
+        accountLast4: null,
+        institutionHint: null,
+        accountNameHint: null,
+        openingBalanceCents: null,
+        closingBalanceCents: null,
+        reviewStatus: "linked",
+        metadataSources: ["import"],
+        txIds: result.importedIds,
+        importId: sessionId,
+      };
+      await storage.putDocumentBytes(sha256, request.bytes);
+      const nextDocuments = upsertDocument(documents, document);
+      setDocuments(nextDocuments);
+      await storage.putDocuments(nextDocuments);
+      setImportNotice(importSessionCopy[locale].imported(result.importedIds.length));
+    } catch (err) {
+      setProblems([
+        { kind: "import-failed", detail: err instanceof Error ? err.message : String(err) },
+      ]);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // Revert ONE import: exactly the rows its session recorded. The retained
+  // source document stays (it is the evidence) but is no longer linked.
+  async function handleRevertImport(sessionId: string) {
+    const reverted = revertImport({ txs, sessions: importSessions, sessionId });
+    if (reverted.session == null) return;
+    if (reverted.removedIds.length > 0) await storage.deleteTxs(reverted.removedIds);
+    setTxs(reverted.txs);
+    const nextSessions = importSessions.filter((session) => session.id !== sessionId);
+    setImportSessions(nextSessions);
+    await storage.putImportSessions(nextSessions);
+    if (reverted.documentId != null) {
+      const nextDocuments = documents.map((doc) =>
+        doc.id === reverted.documentId ? { ...doc, importId: undefined, txIds: [] } : doc,
+      );
+      setDocuments(nextDocuments);
+      await storage.putDocuments(nextDocuments);
+    }
+    setImportNotice(importSessionCopy[locale].reverted(reverted.removedIds.length));
+  }
+
   // Manually set/override an account's annual interest rate (%) for the
   // Optimisatie tab. Accepts a Dutch comma or dot (and a stray "%"); blank
   // clears the override back to auto (detected/assumed). Same persist pattern.
@@ -742,6 +1988,23 @@ export default function App() {
       await storage.deleteAccount(key);
       setTxs(txs.filter((t) => t.accountKey !== key));
       setAccounts(accounts.filter((a) => a.key !== key));
+      // Every tx of that account is gone. A pair pointing at one would link to
+      // a row nothing can render, so it is explicitly dropped — and the count
+      // is reported on Rekeningen, never swallowed.
+      const reconciled = reconcileTransfers(
+        transfers,
+        new Map<string, string | null>(ids.map((id) => [id, null])),
+      );
+      if (JSON.stringify(reconciled.pairs) !== JSON.stringify(transfers))
+        await saveTransfers(reconciled.pairs);
+      setTransferLinksDropped(reconciled.dropped.length > 0 ? reconciled.dropped.length : null);
+      // A valuation for a deleted account would be an orphan: drop it in the
+      // same pass, and only write when something actually went.
+      const droppedValuations = dropAccountValuations(valuations, key);
+      if (droppedValuations.dropped > 0) {
+        setValuations(droppedValuations.valuations);
+        await storage.putValuations(droppedValuations.valuations);
+      }
     } finally {
       setBusy(false);
     }
@@ -764,6 +2027,21 @@ export default function App() {
       await storage.deleteAccount(duplicateKey);
       setTxs(merged.txs);
       setAccounts(merged.accounts);
+      // The merge re-keys tx ids and collapses overlapping rows. Reconcile the
+      // stored pairs against that remap: a surviving pair follows its legs, a
+      // pair whose leg was absorbed is dropped and the count is reported.
+      const reconciled = reconcileTransfers(transfers, merged.txIdRemap);
+      if (JSON.stringify(reconciled.pairs) !== JSON.stringify(transfers))
+        await saveTransfers(reconciled.pairs);
+      setTransferLinksDropped(reconciled.dropped.length > 0 ? reconciled.dropped.length : null);
+      // Re-key the duplicate's valuations to the survivor; a same-day clash
+      // keeps the survivor's row and drops the duplicate's, so no orphan or
+      // double absolute amount survives the merge.
+      const mergedValuations = mergeValuations(valuations, survivorKey, duplicateKey);
+      if (mergedValuations.remapped > 0 || mergedValuations.dropped > 0) {
+        setValuations(mergedValuations.valuations);
+        await storage.putValuations(mergedValuations.valuations);
+      }
     } finally {
       setBusy(false);
     }
@@ -827,16 +2105,27 @@ export default function App() {
       const today = new Date().toISOString().slice(0, 10);
       const learned: LearnedFact[] = [];
       for (const t of reply.terms) {
-        const asOfFigure = t.checkedAt && /^\d{4}-\d{2}-\d{2}$/.test(t.checkedAt) ? t.checkedAt : today;
+        const asOfFigure =
+          t.checkedAt && /^\d{4}-\d{2}-\d{2}$/.test(t.checkedAt) ? t.checkedAt : today;
         const put = (key: string, value: number | undefined) => {
           if (value === undefined) return;
-          learned.push(makeFact({ agent: TRAVEL_AGENT, subject: t.provider, key, value: String(value), source: "agent", updatedAt: asOfFigure, note: t.note }));
+          learned.push(
+            makeFact({
+              agent: TRAVEL_AGENT,
+              subject: t.provider,
+              key,
+              value: String(value),
+              source: "agent",
+              updatedAt: asOfFigure,
+              note: t.note,
+            }),
+          );
         };
         put("fxFeePct", t.fxFeePct);
         put("convertFeePct", t.convertFeePct);
         put("cashbackPct", t.cashbackPct);
         put("pointsPerEuro", t.pointsPerEuro);
-        put("transferFreeViaIdeal", t.transferFreeViaIdeal);
+        put("topUpFree", t.topUpFree);
       }
       if (learned.length > 0) await saveFacts(learned);
       setPendingTerms(reply.pending);
@@ -859,10 +2148,18 @@ export default function App() {
       const providers = plan.spend.map((o) => o.provider).filter(Boolean);
       if (providers.length === 0) return;
       const today = new Date().toISOString().slice(0, 10);
-      // Send what he corrected so the model is told not to contradict it.
+      // Send what he corrected so the model is told not to contradict it. A
+      // correction made before the topUpFree rename is still keyed
+      // transferFreeViaIdeal in his vault — translated here, at the wire, so it
+      // still reaches the model under a name the server's registry accepts;
+      // his stored fact itself is never rewritten.
       const knownFacts = facts
         .filter((f) => f.source === "user" && f.agent === TRAVEL_AGENT)
-        .map((f) => ({ subject: f.subject, key: f.key, value: f.value }));
+        .map((f) => ({
+          subject: f.subject,
+          key: f.key === "transferFreeViaIdeal" ? "topUpFree" : f.key,
+          value: f.value,
+        }));
 
       // One fast call: the server answers from its shared cache of PUBLIC card
       // tariffs and starts background lookups for whatever it doesn't have yet.
@@ -884,16 +2181,27 @@ export default function App() {
         // koersopslag was found this morning — the same lie the precedence
         // ladder was just fixed to stop believing. No stated date means an agent
         // lookup, which is as of now.
-        const asOfFigure = t.checkedAt && /^\d{4}-\d{2}-\d{2}$/.test(t.checkedAt) ? t.checkedAt : today;
+        const asOfFigure =
+          t.checkedAt && /^\d{4}-\d{2}-\d{2}$/.test(t.checkedAt) ? t.checkedAt : today;
         const put = (key: string, value: number | undefined) => {
           if (value === undefined) return; // unverified stays unknown, never 0
-          learned.push(makeFact({ agent: TRAVEL_AGENT, subject: t.provider, key, value: String(value), source: "agent", updatedAt: asOfFigure, note: t.note }));
+          learned.push(
+            makeFact({
+              agent: TRAVEL_AGENT,
+              subject: t.provider,
+              key,
+              value: String(value),
+              source: "agent",
+              updatedAt: asOfFigure,
+              note: t.note,
+            }),
+          );
         };
         put("fxFeePct", t.fxFeePct);
         put("convertFeePct", t.convertFeePct);
         put("cashbackPct", t.cashbackPct);
         put("pointsPerEuro", t.pointsPerEuro);
-        put("transferFreeViaIdeal", t.transferFreeViaIdeal);
+        put("topUpFree", t.topUpFree);
       }
       if (learned.length > 0) await saveFacts(learned);
 
@@ -916,7 +2224,9 @@ export default function App() {
       // to the thing being looked up.
       if (pending.length > 0) void pollTravelTerms(destination, providers, knownFacts);
     } catch (err) {
-      setProblems([`Voorwaarden opzoeken mislukt: ${err instanceof Error ? err.message : String(err)}`]);
+      setProblems([
+        { kind: "terms-lookup-failed", detail: err instanceof Error ? err.message : String(err) },
+      ]);
     } finally {
       setBusy(false);
     }
@@ -929,256 +2239,477 @@ export default function App() {
       <VaultGate
         gate={gate}
         storage={storage}
-        onReady={() => setGate("ready")}
-        onBackup={() => {
+        onReady={(fresh) => {
+          if (fresh) setFreshVault(true);
           setGate("ready");
-          setView("backup");
         }}
+        onRetry={() => setOpenAttempt((n) => n + 1)}
+        onSignOut={() => void signOut().finally(() => window.location.assign("/"))}
       />
     );
   }
 
+  if (view === "intake") {
+    return (
+      <>
+        {profileRead === "loading" ? (
+          <p role="status">{intakeCopy[locale].loading}</p>
+        ) : profileRead === "error" ? (
+          <div role="alert">
+            <StatusLine tone="problem">
+              {intakeCopy[locale].loadError}
+            </StatusLine>
+            <Button onClick={() => void retryProfileRead()}>{intakeCopy[locale].retry}</Button>
+          </div>
+        ) : (
+          <IntakeWizard
+            store={profileRead.kind === "ok" ? profileRead.store : null}
+            corrupt={profileRead.kind === "corrupt"}
+            asOf={asOf}
+            onSave={saveProfile}
+            rewards={rewards}
+            onSaveRewards={saveRewards}
+            onImport={importFile}
+            round={intakeRound}
+            onFinish={() => {
+              setIntakeRound(1);
+              setView("plan");
+            }}
+            onExit={() => {
+              setIntakeRound(1);
+              setView("overview");
+            }}
+          />
+        )}
+      </>
+    );
+  }
+
   return (
-    <div className="shell">
-      <NavBar view={view} modules={navModules(modules)} onNavigate={setView} onOpenProfile={() => setView("profiel")} />
+    <Shell
+      title={shell.topBar.viewTitles[view]}
+      nav={{
+        view,
+        modules: navModules(modules),
+        onNavigate: setView,
+        onOpenProfile: () => setView("profiel"),
+      }}
+      sidebar={(onNavigate) => (
+        <AccountSidebar
+          onNavigate={onNavigate}
+          accounts={scopedAccounts}
+          activeAccountKey={view === "transactions" ? fAccount : ""}
+          onSelectAccount={openAccountTransactions}
+          // Import lives in Profiel; Rekeningen's empty state points there too.
+          onAddAccount={() => setView("profiel")}
+        />
+      )}
+      actions={
+        <TopBarActions
+          scope={scope}
+          onScopeChange={handleScopeChange}
+          onAddWidget={handleAddWidget}
+          showAddWidget={view === "overview"}
+        />
+      }
+    >
+      <div className={CONTENT_CONTAINER_CLASS}>
+        {/* Import moved into the profile, so import/bank-link messages would
+          otherwise only be visible on that page. They are the outcome of
+          something the user just did (a file import, a bank return), so
+          they follow him: the profile's own Import block shows them there,
+          this banner shows them anywhere else. */}
+        {problems.length > 0 && view !== "profiel" && (
+          <StatusLine tone="warning" role="alert" className="shell-problems">
+            {problems.map((n) => shell.notice(n)).join(" ")}
+          </StatusLine>
+        )}
 
-      <div className="shell-body">
-        <TopBar view={view} scope={scope} onScopeChange={handleScopeChange} onAddWidget={handleAddWidget} />
+        {/* An entity with no classification counts as Persoonlijk, so on a
+          vault where nothing has been classified yet, Zakelijk is empty.
+          Empty is a legitimate answer, but an empty app reads as a broken
+          one — say which it is, and where to fix it. */}
+        {scopedAccounts.length === 0 && accounts.length > 0 && view !== "profiel" && (
+          <p className="text-muted shell-problems">
+            {shell.emptyScope.before}
+            <strong>{shell.scope[scope]}</strong>
+            {shell.emptyScope.after}
+            <CardLink onClick={() => setView("accounts")}>
+              {shell.emptyScope.linkLabel}
+            </CardLink>
+            .
+          </p>
+        )}
 
-        <main className="content">
-          {/* Import moved into the profile, so import/bank-link messages would
-              otherwise only be visible on that page. They are the outcome of
-              something the user just did (a file import, a bank return), so
-              they follow him: the profile's own Import block shows them there,
-              this banner shows them anywhere else. */}
-          {problems.length > 0 && view !== "profiel" && (
-            <p role="alert" className="text-warn shell-problems">
-              {problems.join(", ")}
-            </p>
-          )}
+        {view === "overview" && (
+          <Overzicht
+            storage={storage}
+            accounts={currentScopedAccounts}
+            txs={scopedTxs}
+            rules={rules}
+            own={own}
+            asOf={asOf}
+            bufferCents={bufferCents}
+            scheduledFlows={scopedScheduledFlows}
+            bills={bills}
+            billOccurrences={billOccurrences}
+            billDecisions={billDecisions}
+            /* LETTERLIJK DEZELFDE UITDRUKKING als bij <Belasting> hieronder,
+             en dat is de bedoeling: de btw-kaart op het overzicht en het
+             scherm Belasting moeten over dezelfde ondernemingen gaan. Wie
+             hier iets anders neerzet, laat de twee schermen op dezelfde dag
+             een ander bedrag noemen. */
+            entities={entityScope ? [entityScope] : entityOptions}
+            vatSettings={vatSettings}
+            invoices={invoices}
+            country={homeCountry}
+            fxHistory={fxHistory}
+            mode={fxConversionMode}
+            onBufferChange={handleBufferChange}
+            onNavigate={setView}
+            {...(homeRoom && profileRead !== "loading" && profileRead !== "error"
+              ? {
+                  intake: {
+                    store: profileRead.kind === "ok" ? profileRead.store : null,
+                    room: homeRoom.room,
+                    ...(homeRoom.statedInputs ? { statedInputs: homeRoom.statedInputs } : {}),
+                    onSave: saveProfile,
+                    onOpenRound2: () => {
+                      setIntakeRound(2);
+                      setView("intake");
+                    },
+                  },
+                }
+              : {})}
+            travel={{
+              accounts: scopedAccounts,
+              txs: scopedTxs,
+              rates: rates.rates,
+              facts,
+              asOf,
+              homeCountry,
+              homeCountryChosen,
+              onNavigate: setView,
+              busy,
+              aiAvailable: llmConfigured,
+              onRefreshTerms: handleRefreshTravelTerms,
+              pendingTerms,
+              termsAsked,
+              termsGaveUp,
+              onRecheckAi: () => void recheckLlm(),
+              onCorrectFact: (fact) => void saveFacts([fact]),
+            }}
+            onSelectCategory={(c) => {
+              // Match exactly what the Per-categorie totals showed: only the
+              // category filter (plus any active top-bar entity scope); clear
+              // the per-view filters so the list isn't silently over-narrowed.
+              setFCategory(c);
+              setFEntity("");
+              setFAccount("");
+              setFSearch("");
+              setFFrom("");
+              setFTo("");
+              setView("transactions");
+            }}
+          />
+        )}
 
-          {/* An entity with no classification counts as Persoonlijk, so on a
-              vault where nothing has been classified yet, Zakelijk is empty.
-              Empty is a legitimate answer, but an empty app reads as a broken
-              one — say which it is, and where to fix it. */}
-          {scopedAccounts.length === 0 && accounts.length > 0 && view !== "profiel" && (
-            <p className="text-muted shell-problems">
-              Geen rekeningen staan als <strong>{SCOPE_LABELS[scope]}</strong> ingesteld — daarom is dit
-              scherm leeg. Zet dat per rekening bij{" "}
-              <button type="button" className="card-link" onClick={() => setView("accounts")}>
-                Rekeningen
-              </button>
-              .
-            </p>
-          )}
+        {view === "transactions" && (
+          <Transacties
+            accounts={scopedAccounts}
+            scopedTxs={scopedTxs}
+            rules={rules}
+            own={own}
+            transfers={transfers}
+            suggestions={scopedTransferSuggestions}
+            onConfirmTransfer={handleConfirmTransfer}
+            onRejectTransfer={handleRejectTransfer}
+            fxHistory={fxHistory}
+            mode={fxConversionMode}
+            entityOptions={entityOptions}
+            entityScope={entityScope}
+            fEntity={fEntity}
+            onFEntityChange={setFEntity}
+            fAccount={fAccount}
+            onFAccountChange={setFAccount}
+            fSearch={fSearch}
+            onFSearchChange={setFSearch}
+            fFrom={fFrom}
+            onFFromChange={setFFrom}
+            fTo={fTo}
+            onFToChange={setFTo}
+            fCategory={fCategory}
+            onFCategoryChange={setFCategory}
+            configured={llmConfigured}
+            onApplyCategories={handleApplyCategories}
+          />
+        )}
 
-          {view === "overview" && (
-            <Overzicht
-              accounts={currentScopedAccounts}
-              txs={scopedTxs}
-              rules={rules}
-              own={own}
+        {/* DE REGELS STAAN BIJ DE TRANSACTIES, niet in de instellingenkaart.
+          Zijn verzoek, en de reden staat in het scherm zelf: een regel is
+          een antwoord op een transactie die verkeerd is ingedeeld, dus hij
+          hoort op de plek waar je dat ziet gebeuren. In Profiel stond hij
+          twee klikken verderop, losgekoppeld van het ding waar hij over
+          gaat. */}
+        {view === "transactions" && (
+          <Regels
+            rules={rules}
+            txs={txs}
+            accounts={accounts}
+            own={own}
+            busy={busy}
+            onSaveRules={saveRules}
+          />
+        )}
+
+        {view === "accounts" && (
+          <Rekeningen
+            accounts={scopedAccounts}
+            txs={scopedTxs}
+            busy={busy}
+            transferLinksDropped={transferLinksDropped ?? undefined}
+            onEntityChange={handleEntityChange}
+            onAccountCommit={handleAccountCommit}
+            onAccountFieldChange={handleAccountFieldChange}
+            onSaldoCommit={handleSaldoCommit}
+            onTypeCommit={handleTypeCommit}
+            onDeleteAccount={handleDeleteAccount}
+            duplicateGroups={duplicateGroups}
+            onMergeDuplicates={handleMergeDuplicates}
+            statedCredit={statedOf(profileRead, "statedCards")}
+            statedDebit={statedOf(profileRead, "statedDebitCards")}
+            onRefreshBank={() => void handleRefreshBank()}
+            valuations={scopedValuations}
+            asOf={asOf}
+            onOpeningCommit={handleOpeningCommit}
+            onValuationCommit={handleValuationCommit}
+            onValuationRemove={handleValuationRemove}
+            onSelectAccount={openAccountTransactions}
+          />
+        )}
+
+        {view === "forecast" && (
+          <Forecast
+            txs={scopedTxs}
+            accounts={currentScopedAccounts}
+            entityScope={entityScope}
+            asOf={asOf}
+            bufferCents={bufferCents}
+            scheduledFlows={scopedScheduledFlows}
+            fxHistory={fxHistory}
+            mode={fxConversionMode}
+            bills={bills}
+            billOccurrences={billOccurrences}
+            billDecisions={billDecisions}
+          />
+        )}
+
+        {view === "optimalisatie" && (
+          <Optimalisatie
+            txs={scopedTxs}
+            entityScope={scope}
+            accounts={currentScopedAccounts}
+            rules={rules}
+            own={own}
+            asOf={asOf}
+            busy={busy}
+            facts={facts}
+            onRateCommit={handleRateCommit}
+          />
+        )}
+
+        {/* Scoped like every other view: standing in Zakelijk and being offered a
+          conversion out of a personal account is a leak across the very line
+          the switch exists to draw. */}
+        {view === "bills" && !isArchivedView("bills") && (
+          <Bills
+            bills={bills}
+            occurrences={billOccurrences}
+            accounts={scopedAccounts}
+            txs={scopedTxs}
+            decisions={billDecisions}
+            asOf={asOf}
+            busy={busy}
+            onSavePlan={saveBillPlan}
+          />
+        )}
+
+        {view === "valuta" && !isArchivedView("valuta") && <Valuta accounts={scopedAccounts} />}
+
+        {view === "belasting" && !isArchivedView("belasting") && (
+          <Belasting
+            entities={entityScope ? [entityScope] : entityOptions}
+            txs={scopedTxs}
+            accounts={scopedAccounts}
+            asOf={asOf}
+            vatSettings={vatSettings}
+            scheduledFlows={scopedScheduledFlows}
+            invoices={invoices}
+            /* DE VOLLEDIGE LIJSTEN, met opzet en precies hier. De btw-module
+             blijft op `scopedTxs`/`scopedAccounts` rekenen; de grensmodule
+             kan dat per definitie niet, want die meet wat er TUSSEN de twee
+             helften bewoog en zou vanuit één helft de tegenboeking nooit
+             zien. Dit is de ene plek in de app waar de
+             persoonlijk/zakelijk-schakelaar bewust niet doorwerkt, en de
+             reden staat uitgeschreven bij `crossScopeTransfers` in core en
+             bij `allAccounts` in Belasting.tsx. */
+            allAccounts={accounts}
+            allTxs={txs}
+            entityProfiles={entityProfiles}
+            ownNames={ownNamesForMatching}
+            busy={busy}
+            onSaveVatSettings={saveVatSettings}
+            onSaveScheduledFlows={saveScheduledFlows}
+          />
+        )}
+
+        {view === "facturen" && !isArchivedView("facturen") && (
+          <Facturen
+            storage={storage}
+            entities={entityOptions}
+            ownIbans={ownIbans}
+            invoices={invoices}
+            txs={txs}
+            asOf={asOf}
+            busy={busy}
+            defaultEntity={entity}
+            onSaveInvoices={saveInvoices}
+            pending={pendingInvoices}
+            onPendingChange={setPendingInvoices}
+            notices={pendingNotices}
+            onNoticesChange={setPendingNotices}
+            onNavigate={setView}
+          />
+        )}
+
+        {view === "punten" && (
+          <Punten
+            balances={rewards}
+            asOf={asOf}
+            busy={busy}
+            onSave={saveRewards}
+            statedPrograms={
+              profileRead !== "loading" && profileRead !== "error" && profileRead.kind === "ok"
+                ? profileRead.store.current.statedPrograms?.value
+                : undefined
+            }
+          />
+        )}
+
+        {view === "koppelingen" && SHOW_INVOICE_FORWARDING && (
+          <Koppelingen onNavigate={setView} />
+        )}
+
+        {view === "backup" && (
+          <Backup
+            storage={storage}
+            asOf={asOf}
+            documentCount={documents.length}
+            onRestored={handleRestored}
+          />
+        )}
+
+        {view === "plan" && (
+          <PlanRoute
+            profileRead={profileRead}
+            onRetry={() => void retryProfileRead()}
+            store={
+              profileRead === "loading" || profileRead === "error" || profileRead.kind !== "ok"
+                ? null
+                : profileRead.store
+            }
+            storage={storage}
+            accounts={accounts}
+            txs={ledgerTxs}
+            entityProfiles={entityProfiles}
+            rules={rules}
+            own={ownWithNames}
+            rewards={rewards}
+            facts={facts}
+            catalogue={CATALOGUE_ENTRIES}
+            rates={rates.rates}
+            mode={fxConversionMode}
+            fxHistory={fxHistory}
+            vatSettings={vatSettings}
+            valuations={valuations}
+            asOf={asOf}
+            onSaveProfile={saveProfile}
+            onSaveRewards={saveRewards}
+            onNavigate={setView}
+          />
+        )}
+
+        {view === "about-you" &&
+          (profileRead === "loading" ? (
+            <p role="status">{intakeCopy[locale].loading}</p>
+          ) : profileRead === "error" ? (
+            <div role="alert">
+              <StatusLine tone="problem">
+                {intakeCopy[locale].loadError}
+              </StatusLine>
+              <Button onClick={() => void retryProfileRead()}>
+                {intakeCopy[locale].retry}
+              </Button>
+            </div>
+          ) : (
+            <AboutYou
+              store={profileRead.kind === "ok" ? profileRead.store : null}
+              corrupt={profileRead.kind === "corrupt"}
+              capacity={aboutYouCapacity}
               asOf={asOf}
-              bufferCents={bufferCents}
-              scheduledFlows={scopedScheduledFlows}
-              /* LETTERLIJK DEZELFDE UITDRUKKING als bij <Belasting> hieronder,
-                 en dat is de bedoeling: de btw-kaart op het overzicht en het
-                 scherm Belasting moeten over dezelfde ondernemingen gaan. Wie
-                 hier iets anders neerzet, laat de twee schermen op dezelfde dag
-                 een ander bedrag noemen. */
-              entities={entityScope ? [entityScope] : entityOptions}
-              vatSettings={vatSettings}
-              invoices={invoices}
-              country={homeCountry}
-              onBufferChange={handleBufferChange}
+              onSave={saveProfile}
               onNavigate={setView}
-              travel={{
-                accounts: scopedAccounts,
-                txs: scopedTxs,
-                rates: rates.rates,
-                facts,
-                asOf,
-                homeCountry,
-                busy,
-                aiAvailable: llmConfigured,
-                onRefreshTerms: handleRefreshTravelTerms,
-                pendingTerms,
-                termsAsked,
-                termsGaveUp,
-                onRecheckAi: () => void recheckLlm(),
-                onCorrectFact: (fact) => void saveFacts([fact]),
-              }}
-              onSelectCategory={(c) => {
-                // Match exactly what the Per-categorie totals showed: only the
-                // category filter (plus any active top-bar entity scope); clear
-                // the per-view filters so the list isn't silently over-narrowed.
-                setFCategory(c);
-                setFEntity("");
-                setFAccount("");
-                setFSearch("");
-                setFFrom("");
-                setFTo("");
-                setView("transactions");
-              }}
             />
-          )}
+          ))}
 
-          {view === "transactions" && (
-            <Transacties
-              accounts={scopedAccounts}
-              scopedTxs={scopedTxs}
-              rules={rules}
-              own={own}
-              entityOptions={entityOptions}
-              entityScope={entityScope}
-              fEntity={fEntity}
-              onFEntityChange={setFEntity}
-              fAccount={fAccount}
-              onFAccountChange={setFAccount}
-              fSearch={fSearch}
-              onFSearchChange={setFSearch}
-              fFrom={fFrom}
-              onFFromChange={setFFrom}
-              fTo={fTo}
-              onFToChange={setFTo}
-              fCategory={fCategory}
-              onFCategoryChange={setFCategory}
-              configured={llmConfigured}
-              onApplyCategories={handleApplyCategories}
-            />
-          )}
-
-          {view === "accounts" && (
-            <Rekeningen
-              accounts={scopedAccounts}
-              txs={scopedTxs}
-              busy={busy}
-              onEntityChange={handleEntityChange}
-              onAccountCommit={handleAccountCommit}
-              onAccountFieldChange={handleAccountFieldChange}
-              onSaldoCommit={handleSaldoCommit}
-              onTypeCommit={handleTypeCommit}
-              onDeleteAccount={handleDeleteAccount}
-              duplicateGroups={duplicateGroups}
-              onMergeDuplicates={handleMergeDuplicates}
-              onSelectAccount={(key) => {
-                // Show just this account's transactions — clear the other
-                // filters so the list isn't silently narrowed by a stale one.
-                setFAccount(key);
-                setFEntity("");
-                setFSearch("");
-                setFCategory("");
-                setFFrom("");
-                setFTo("");
-                setView("transactions");
-              }}
-            />
-          )}
-
-          {view === "forecast" && (
-            <Forecast txs={scopedTxs} accounts={currentScopedAccounts} entityScope={entityScope} asOf={asOf} bufferCents={bufferCents} scheduledFlows={scopedScheduledFlows} />
-          )}
-
-          {view === "optimalisatie" && (
-            <Optimalisatie
-              txs={scopedTxs}
-              accounts={currentScopedAccounts}
-              rules={rules}
-              own={own}
-              asOf={asOf}
-              busy={busy}
-              facts={facts}
-              onRateCommit={handleRateCommit}
-            />
-          )}
-
-          {/* Scoped like every other view: standing in Zakelijk and being offered a
-              conversion out of a personal account is a leak across the very line
-              the switch exists to draw. */}
-          {view === "valuta" && <Valuta accounts={scopedAccounts} />}
-
-          {view === "belasting" && (
-            <Belasting
-              entities={entityScope ? [entityScope] : entityOptions}
-              txs={scopedTxs}
-              accounts={scopedAccounts}
-              asOf={asOf}
-              vatSettings={vatSettings}
-              scheduledFlows={scopedScheduledFlows}
-              invoices={invoices}
-              /* DE VOLLEDIGE LIJSTEN, met opzet en precies hier. De btw-module
-                 blijft op `scopedTxs`/`scopedAccounts` rekenen; de grensmodule
-                 kan dat per definitie niet, want die meet wat er TUSSEN de twee
-                 helften bewoog en zou vanuit één helft de tegenboeking nooit
-                 zien. Dit is de ene plek in de app waar de
-                 persoonlijk/zakelijk-schakelaar bewust niet doorwerkt, en de
-                 reden staat uitgeschreven bij `crossScopeTransfers` in core en
-                 bij `allAccounts` in Belasting.tsx. */
-              allAccounts={accounts}
-              allTxs={txs}
-              entityProfiles={entityProfiles}
-              ownNames={ownNamesForMatching}
-              busy={busy}
-              onSaveVatSettings={saveVatSettings}
-              onSaveScheduledFlows={saveScheduledFlows}
-            />
-          )}
-
-          {view === "facturen" && (
-            <Facturen
-              entities={entityOptions}
-              invoices={invoices}
-              txs={txs}
-              asOf={asOf}
-              busy={busy}
-              defaultEntity={entity}
-              onSaveInvoices={saveInvoices}
-              pending={pendingInvoices}
-              onPendingChange={setPendingInvoices}
-              notices={pendingNotices}
-              onNoticesChange={setPendingNotices}
-              onNavigate={setView}
-            />
-          )}
-
-          {view === "punten" && <Punten balances={rewards} asOf={asOf} busy={busy} onSave={saveRewards} />}
-
-          {view === "koppelingen" && <Koppelingen />}
-
-          {view === "backup" && <Backup storage={storage} asOf={asOf} onRestored={handleRestored} />}
-
-          {view === "profiel" && (
-            <Profiel
-              enabledModules={modules}
-              onModulesChange={handleModulesChange}
-              focusModules={addWidget}
-              entities={entitySummaryRows}
-              onClassifyEntity={handleClassifyEntity}
-              homeCountry={homeCountry}
-              onHomeCountryChange={handleHomeCountryChange}
-              homeRegion={homeRegion}
-              onHomeRegionChange={handleHomeRegionChange}
-              ownerName={ownerName}
-              onOwnerNameChange={handleOwnerNameChange}
-              onLock={handleLock}
-              entity={entity}
-              onEntityChange={setEntity}
-              busy={busy}
-              problems={problems}
-              onImport={handleImport}
-              rules={rules}
-              ruleMatch={ruleMatch}
-              onRuleMatchChange={setRuleMatch}
-              ruleCategory={ruleCategory}
-              onRuleCategoryChange={setRuleCategory}
-              onSaveRules={saveRules}
-              storage={storage}
-              asOf={asOf}
-              onRestored={handleRestored}
-            />
-          )}
-        </main>
+        {view === "profiel" && (
+          <Profiel
+            onNavigate={setView}
+            planUnlocked={planUnlocked}
+            enabledModules={modules}
+            onModulesChange={handleModulesChange}
+            focusModules={addWidget}
+            entities={entitySummaryRows}
+            onClassifyEntity={handleClassifyEntity}
+            homeCountry={homeCountry}
+            onHomeCountryChange={handleHomeCountryChange}
+            homeRegion={homeRegion}
+            onHomeRegionChange={handleHomeRegionChange}
+            fxConversionMode={fxConversionMode}
+            onFxConversionModeChange={handleFxConversionModeChange}
+            shareNetWorthEnabled={shareNetWorthEnabled}
+            onShareNetWorthEnabledChange={handleShareNetWorthEnabledChange}
+            shareNetWorthPendingDelete={shareNetWorthPendingDelete}
+            ownerName={ownerName}
+            onOwnerNameChange={handleOwnerNameChange}
+            onLock={handleLock}
+            entity={entity}
+            onEntityChange={setEntity}
+            busy={busy}
+            problems={problems}
+            onImport={handleImport}
+            onRefreshBank={() => void handleRefreshBank()}
+            storage={storage}
+            asOf={asOf}
+            onRestored={handleRestored}
+            documents={documents}
+            documentNotice={documentNotice}
+            documentErased={documentErased}
+            accounts={accounts}
+            txs={txs}
+            valuations={valuations}
+            onDocumentUpload={(file) => void handleDocumentUpload(file)}
+            onDocumentLink={(id, key) => void handleDocumentLink(id, key)}
+            onDocumentReject={(id) => void handleDocumentReject(id)}
+            onDocumentRemove={(id) => void handleDocumentRemove(id)}
+            onDocumentEraseAll={() => void handleDocumentEraseAll()}
+            importSessions={importSessions}
+            importNotice={importNotice}
+            onGenericImport={(request) => void handleGenericImport(request)}
+            onGenericRevert={(id) => void handleRevertImport(id)}
+          />
+        )}
       </div>
-    </div>
+    </Shell>
   );
 }

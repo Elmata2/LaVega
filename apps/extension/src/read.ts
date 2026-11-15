@@ -279,9 +279,7 @@ export function collectEvidence(doc?: Document | null, host?: string | null): Ev
      * eigenschap die een eenheidsprijs een eenheidsprijs maakt, en het @type
      * was er alleen een indicatie van. Een DeliveryChargeSpecification blijft
      * buiten de deur omdat die niet in deze lijst staat. */
-    const kaal =
-      ts.length === 0 ||
-      ts.every((t) => /(^|\/|:)(Compound|Unit)?PriceSpecification$/i.test(t));
+    const kaal = ts.every((t) => /(^|\/|:)(Compound|Unit)?PriceSpecification$/i.test(t));
     const eenheid =
       inner["referenceQuantity"] !== undefined ||
       inner["unitCode"] !== undefined ||
@@ -650,7 +648,7 @@ const REASON_TEXT: Record<ReadReason, string> = {
     "Deze pagina zet het bedrag nergens machineleesbaar neer. Er is dus niets te lezen — vul het bedrag zelf in.",
   "geen-artikelprijs":
     "Er staat wel een bedrag in de opmaak van deze pagina, maar het is niet de prijs van dit artikel: het is een bedrag van een andere soort, zoals een prijs per kilo of de verzendkosten. Wat het artikel zelf kost, staat er niet machineleesbaar bij. Vul het bedrag zelf in.",
-  "prijsbereik":
+  prijsbereik:
     "Deze pagina noemt geen prijs maar een bereik — een laagste en een hoogste bedrag, bijvoorbeeld van meerdere aanbieders of van een actieprijs naast de gewone prijs. Welke van de twee jij betaalt, staat er niet bij. Vul het bedrag zelf in.",
   "prijs-vanaf":
     "Deze pagina noemt maar één kant van een prijsbereik — een vanaf-prijs of een tot-prijs. De andere kant staat er niet, en onbekend is niet hetzelfde als de kant die er wel staat. Vul het bedrag zelf in.",
@@ -661,11 +659,11 @@ const REASON_TEXT: Record<ReadReason, string> = {
   "meerdere-prijzen":
     "De pagina noemt meer dan één bedrag, en welke bij jouw bestelling hoort staat er niet bij. Vul het bedrag zelf in.",
   "bedrag-onduidelijk":
-    "Het bedrag op de pagina is niet eenduidig te lezen: er staat één punt of komma met precies drie cijfers erachter, en dat kan \"1.234\" \u2014 € 1,23 volgens schema.org, € 1.234 volgens de Nederlandse gewoonte \u2014 duizend keer laten schelen. Vul het bedrag zelf in.",
+    'Het bedrag op de pagina is niet eenduidig te lezen: er staat één punt of komma met precies drie cijfers erachter, en dat kan "1.234" \u2014 € 1,23 volgens schema.org, € 1.234 volgens de Nederlandse gewoonte \u2014 duizend keer laten schelen. Vul het bedrag zelf in.',
   "bedrag-afgekapt":
     "Het bedrag op de pagina eindigt op een punt of komma zonder cijfers erachter. Er is dus iets afgekapt, en wat er weg is weten we niet. Vul het bedrag zelf in.",
   "bedrag-niet-leesbaar":
-    "In het prijsveld van deze pagina staat niet alleen een getal — er staat bijvoorbeeld \"vanaf\" of \"circa\" bij. Wat je hier werkelijk afrekent staat er dus niet. Vul het bedrag zelf in.",
+    'In het prijsveld van deze pagina staat niet alleen een getal — er staat bijvoorbeeld "vanaf" of "circa" bij. Wat je hier werkelijk afrekent staat er dus niet. Vul het bedrag zelf in.',
   "bedrag-negatief":
     "Het bedrag in de opmaak van deze pagina is negatief. Dat is een korting of een terugboeking en geen aankoopbedrag. Vul het bedrag zelf in.",
 };
@@ -688,16 +686,20 @@ export function reasonText(reason: ReadReason): string {
  *  lopen zonder dat tsc erover valt: `Record<ReadReason, string>` dwingt af dat
  *  elke reden in allebei staat. */
 const HANDMATIG_TEXT: Record<ReadReason, string> = {
-  "geen-prijsmarkup": "Er staat geen getal in dit veld. Typ het bedrag in euro's, bijvoorbeeld 49,99.",
+  "geen-prijsmarkup":
+    "Er staat geen getal in dit veld. Typ het bedrag in euro's, bijvoorbeeld 49,99.",
   "geen-artikelprijs": "Typ het bedrag dat je afrekent, in euro's — bijvoorbeeld 49,99.",
-  "prijsbereik": "Typ één bedrag en geen bereik: het bedrag dat je hier werkelijk afrekent.",
+  prijsbereik: "Typ één bedrag en geen bereik: het bedrag dat je hier werkelijk afrekent.",
   "prijs-vanaf": "Typ het bedrag dat je werkelijk afrekent, niet de vanaf-prijs.",
-  "prijs-zonder-valuta": "Typ alleen het bedrag in euro's; de munt van de winkel kies je in het vak eronder.",
-  "munt-spreekt-tegen": "Typ alleen het bedrag in euro's; de munt van de winkel kies je in het vak eronder.",
+  "prijs-zonder-valuta":
+    "Typ alleen het bedrag in euro's; de munt van de winkel kies je in het vak eronder.",
+  "munt-spreekt-tegen":
+    "Typ alleen het bedrag in euro's; de munt van de winkel kies je in het vak eronder.",
   "meerdere-prijzen": "Typ één bedrag: het totaal dat je hier afrekent.",
   "bedrag-onduidelijk":
-    "Eén punt of komma met drie cijfers erachter kan twee dingen betekenen: \"1.234\" is € 1,23 volgens schema.org en € 1.234 volgens de Nederlandse gewoonte. Dat scheelt duizend keer, dus we kiezen niet. Schrijf het voluit met centen — 1234,00 of 1.234,00 — dan is er niets te raden.",
-  "bedrag-afgekapt": "Er staat een punt of komma zonder cijfers erachter. Schrijf de centen erbij, bijvoorbeeld 39,00.",
+    'Eén punt of komma met drie cijfers erachter kan twee dingen betekenen: "1.234" is € 1,23 volgens schema.org en € 1.234 volgens de Nederlandse gewoonte. Dat scheelt duizend keer, dus we kiezen niet. Schrijf het voluit met centen — 1234,00 of 1.234,00 — dan is er niets te raden.',
+  "bedrag-afgekapt":
+    "Er staat een punt of komma zonder cijfers erachter. Schrijf de centen erbij, bijvoorbeeld 39,00.",
   "bedrag-niet-leesbaar":
     "Er staat iets anders dan een getal in het veld. Alleen cijfers, met een komma voor de centen — bijvoorbeeld 49,99.",
   "bedrag-negatief":

@@ -1,5 +1,11 @@
 import { expect, test } from "vitest";
-import { gmailUrl, noticeForUnreadable, parseModelJson, toQueueEntry } from "./claudeToLaVega.js";
+import {
+  gmailUrl,
+  noticeForSetup,
+  noticeForUnreadable,
+  parseModelJson,
+  toQueueEntry,
+} from "./claudeToLaVega.js";
 
 const MSG = {
   source: "gmail",
@@ -125,7 +131,9 @@ test("een onleesbare mail wordt een melding met de reden uit de normalisatie", (
     reason: "Geen leesbare tekst en geen PDF-bijlage in dit bericht.",
   });
   expect(notice.kind).toBe("unreadable");
-  expect(notice.reason).toBe("Geen leesbare tekst en geen PDF-bijlage in dit bericht. Open hem zelf.");
+  expect(notice.reason).toBe(
+    "Geen leesbare tekst en geen PDF-bijlage in dit bericht. Open hem zelf.",
+  );
   expect(notice.mailUrl).toBe(gmailUrl(MSG.messageId));
 });
 
@@ -161,7 +169,11 @@ test("een doorgestuurde factuur draagt adres én afzender mee tot in de rij", ()
 
 test("een afzender die SPF/DKIM niet haalt levert een gemarkeerde regel op, geen weggegooide", () => {
   const entry = toQueueEntry(
-    { ...INBOUND_MSG, senderCheck: "failed", senderChecks: { spf: "fail", dkim: "fail", dmarc: "fail" } },
+    {
+      ...INBOUND_MSG,
+      senderCheck: "failed",
+      senderChecks: { spf: "fail", dkim: "fail", dmarc: "fail" },
+    },
     INVOICE_ANSWER,
   );
   expect(entry.invoice?.senderCheck).toBe("failed");
@@ -175,7 +187,11 @@ test("een onbekende senderCheck wordt 'unknown', nooit 'passed'", () => {
 });
 
 test("een doorgestuurde mail krijgt GEEN Gmail-link: die zou nergens op uitkomen", () => {
-  const entry = toQueueEntry(INBOUND_MSG, { isInvoice: false, kind: "notification", note: "Log in bij de leverancier." });
+  const entry = toQueueEntry(INBOUND_MSG, {
+    isInvoice: false,
+    kind: "notification",
+    note: "Log in bij de leverancier.",
+  });
   expect(entry.notice?.mailUrl).toBe("");
   expect(entry.notice?.deliveredTo).toBe("alexander-7f3a@invoices.lavega.dev");
 
@@ -201,4 +217,40 @@ test("een melding blijft ook mét herkomst zonder bedragveld", () => {
   const notice = toQueueEntry(INBOUND_MSG, { isInvoice: false, kind: "reminder" }).notice ?? {};
   expect("amount" in notice).toBe(false);
   expect("amountCents" in notice).toBe(false);
+});
+
+test("noticeForSetup carries the kind and the code and nothing from the mail", () => {
+  const n = noticeForSetup({
+    source: "inbound-mail",
+    messageId: "<abc@mail.gmail.com>",
+    date: "Wed, 21 Oct 2026 13:58:02 +0000",
+    setup: { kind: "forwarding-confirmation", code: "123456789" },
+    deliveredTo: "alexander-7f3a@invoices.lavega.dev",
+    queueKey: "alexander-7f3a",
+    senderCheck: "unknown",
+    senderChecks: { spf: "unknown", dkim: "unknown", dmarc: "unknown" },
+  });
+  expect(n).toMatchObject({
+    kind: "forwarding-confirmation",
+    code: "123456789",
+    subject: "",
+    from: "",
+    reason: "",
+    mailUrl: "",
+    queueKey: "alexander-7f3a",
+  });
+  expect("amountCents" in n).toBe(false);
+});
+
+test("an empty Message-ID still yields a stable id, or addToQueue would drop the notice", () => {
+  const base = {
+    source: "inbound-mail",
+    messageId: "",
+    date: "",
+    setup: { kind: "setup-test" as const, code: "k3x9" },
+    deliveredTo: "a@invoices.lavega.dev",
+    queueKey: "a",
+  };
+  expect(noticeForSetup(base).messageId).toBe("setup-setup-test-k3x9");
+  expect(noticeForSetup(base).messageId).toBe(noticeForSetup(base).messageId);
 });

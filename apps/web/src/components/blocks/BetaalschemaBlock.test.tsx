@@ -1,15 +1,11 @@
+// @vitest-environment jsdom
 import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, URL as NodeURL } from "node:url";
 import { renderToStaticMarkup } from "react-dom/server";
 import { expect, test } from "vitest";
-import type { Tx } from "@lavega/core";
-import { formatEuro } from "../../format.js";
-import {
-  BetaalschemaBlock,
-  agendaRows,
-  cadenceLabel,
-  nextOccurrence,
-} from "./BetaalschemaBlock";
+import type { PaycheckPreview, Tx } from "@lavega/core";
+import { formatEuro, formatSignedEuroIn } from "../../format.js";
+import { BetaalschemaBlock, agendaRows, cadenceLabel, nextOccurrence } from "./BetaalschemaBlock";
 import { ASOF, scheduledFlows } from "./fixtures";
 
 /** A monthly subscription core's detector will recognise: same counterparty,
@@ -26,25 +22,41 @@ const recurring: Tx[] = ["2026-05-18", "2026-06-17", "2026-07-17"].map((date, i)
   manual: false,
 }));
 
-test("BetaalschemaBlock lists the planned flows by due date, overdue flagged", () => {
+test("BetaalschemaBlock lists the upcoming planned flows by due date, past dates left off", () => {
   const html = renderToStaticMarkup(
     <BetaalschemaBlock scheduledFlows={scheduledFlows} txs={[]} asOf={ASOF} />,
   );
   expect(html).toContain("Betaalagenda");
-  // Sorted ascending by date: 31 jul (overdue) before 28 aug before 31 okt.
-  expect(html.indexOf("BTW Q2 2026")).toBeLessThan(html.indexOf("Factuur Klant BV"));
+  // BTW Q2 2026 was due 31 jul, before asOf: not "next", so not on the agenda.
+  expect(html).not.toContain("BTW Q2 2026");
+  expect(html).not.toContain("te laat");
+  expect(html).not.toContain("verstreken");
+  // Sorted ascending by date: 28 aug before 31 okt.
   expect(html.indexOf("Factuur Klant BV")).toBeLessThan(html.indexOf("BTW Q3 2026"));
-  expect(html).toContain(">31<");
-  expect(html).toContain(">jul<");
-  expect(html).toContain("pay-date-overdue");
-  expect(html).toContain("te laat");
-  expect(html).toContain("1 datum al verstreken.");
+  expect(html).toContain(">28<");
+  expect(html).toContain(">aug<");
   // sign drives the amount's direction: -1 out, +1 in.
-  expect(html).toContain(formatEuro(-4_125));
-  expect(html).toContain(formatEuro(1_200));
+  expect(html).toContain(formatSignedEuroIn("nl", 1_200));
   // A paid flow is not part of the agenda any more.
   expect(html).not.toContain("Al betaald");
-  expect(html).toContain("Alle regels zijn ingeplande bedragen.");
+  // No caption under the rows any more (removed on request, 21 Oct 2026).
+  expect(html).not.toContain("ingeplande bedragen");
+});
+
+test("agendaRows: past planned flows never crowd out the upcoming ones", () => {
+  const stale = Array.from({ length: 8 }, (_, i) => ({
+    ...scheduledFlows[0],
+    id: `old${i}`,
+    label: `Oud ${i}`,
+    dueDate: `2026-07-0${i + 1}`,
+  }));
+  const rows = agendaRows([...stale, ...scheduledFlows], [], ASOF);
+  expect(rows.map((r) => r.label)).toEqual(["Factuur Klant BV", "BTW Q3 2026"]);
+});
+
+test("agendaRows keeps a planned flow due today", () => {
+  const rows = agendaRows(scheduledFlows, [], "2026-07-31");
+  expect(rows.map((r) => r.label)).toContain("BTW Q2 2026");
 });
 
 test("BetaalschemaBlock adds detected recurring payments and marks them as predictions", () => {
@@ -54,8 +66,7 @@ test("BetaalschemaBlock adds detected recurring payments and marks them as predi
   expect(html).toContain("Spotify");
   expect(html).toContain("voorspeld");
   expect(html).toContain("maandelijks · 3× gezien");
-  expect(html).toContain("1 regel voorspeld uit je eigen geschiedenis, niet bevestigd.");
-  expect(html).toContain(formatEuro(-14.99));
+  expect(html).toContain(formatSignedEuroIn("nl", -14.99));
 });
 
 test("BetaalschemaBlock renders an empty state when nothing is scheduled or detected", () => {
@@ -73,6 +84,61 @@ test("nextOccurrence rolls a stream forward past today, never back", () => {
   expect(nextOccurrence("2026-01-05", 30, ASOF) >= ASOF).toBe(true);
 });
 
+const paycheck = (overrides: Partial<PaycheckPreview> = {}): PaycheckPreview => ({
+  asOf: ASOF,
+  hasIncome: true,
+  paydayOn: "2026-08-25",
+  cashCents: 70_000,
+  dueBeforePaydayCents: 100_000,
+  reservedCents: 150_000,
+  paidRecentlyCents: 0,
+  shortfallCents: 30_000,
+  shortfallUnknown: false,
+  coversUntil: "2026-09-24",
+  ...overrides,
+});
+
+test("the block reads the declared-income paycheck preview above the agenda", () => {
+  const html = renderToStaticMarkup(
+    <BetaalschemaBlock
+      scheduledFlows={scheduledFlows}
+      txs={[]}
+      asOf={ASOF}
+      paycheck={paycheck()}
+    />,
+  );
+  expect(html).toContain('data-testid="betaalschema-paycheck"');
+  expect(html).toContain("te betalen");
+  expect(html).toContain("gereserveerd");
+  expect(html).toContain("tekort");
+  expect(html).toContain(formatEuro(1_000));
+});
+
+test("an unknown cash figure says unknown in the preview, never zero", () => {
+  const html = renderToStaticMarkup(
+    <BetaalschemaBlock
+      scheduledFlows={scheduledFlows}
+      txs={[]}
+      asOf={ASOF}
+      paycheck={paycheck({ cashCents: null, shortfallCents: null, shortfallUnknown: true })}
+    />,
+  );
+  expect(html).toContain("saldo onbekend");
+  expect(html).not.toContain(formatEuro(0));
+});
+
+test("without a declared income the preview says so instead of inventing a payday", () => {
+  const html = renderToStaticMarkup(
+    <BetaalschemaBlock
+      scheduledFlows={scheduledFlows}
+      txs={[]}
+      asOf={ASOF}
+      paycheck={paycheck({ hasIncome: false, paydayOn: null, shortfallCents: null })}
+    />,
+  );
+  expect(html).toContain("Nog geen inkomensreeks");
+});
+
 test("cadenceLabel names the cadences core snaps to", () => {
   expect(cadenceLabel(7)).toBe("wekelijks");
   expect(cadenceLabel(14)).toBe("elke 2 weken");
@@ -85,7 +151,7 @@ test("agendaRows keeps a prediction distinguishable from a committed date", () =
   const rows = agendaRows(scheduledFlows, recurring, ASOF);
   const spotify = rows.find((r) => r.label === "Spotify");
   expect(spotify?.predicted).toBe(true);
-  expect(rows.find((r) => r.label === "BTW Q2 2026")?.predicted).toBe(false);
+  expect(rows.find((r) => r.label === "BTW Q3 2026")?.predicted).toBe(false);
   // Sorted by date, oldest first.
   expect([...rows].map((r) => r.date)).toEqual([...rows].map((r) => r.date).sort());
 });
@@ -104,8 +170,15 @@ const simyo: Tx[] = [
   ["2026-07-04", "SIMYO B.V.", "SEPA Incasso algemeen doorlopend"],
   ["2026-08-04", "Simyo B.V.", "SEPA Incasso algemeen doorlopend"],
 ].map(([date, counterparty, description], i) => ({
-  id: `sim${i}`, accountKey: "A1", date, amount: -11.89, currency: "EUR",
-  counterparty, description, category: "", manual: false,
+  id: `sim${i}`,
+  accountKey: "A1",
+  date,
+  amount: -11.89,
+  currency: "EUR",
+  counterparty,
+  description,
+  category: "",
+  manual: false,
 }));
 
 const duo: Tx[] = [
@@ -114,29 +187,42 @@ const duo: Tx[] = [
   ["2026-07-24", "DUO"],
   ["2026-08-24", "DUO Groningen"],
 ].map(([date, counterparty], i) => ({
-  id: `duo${i}`, accountKey: "A1", date, amount: 512.1, currency: "EUR",
-  counterparty, description: "Studiefinanciering", category: "", manual: false,
+  id: `duo${i}`,
+  accountKey: "A1",
+  date,
+  amount: 512.1,
+  currency: "EUR",
+  counterparty,
+  description: "Studiefinanciering",
+  category: "",
+  manual: false,
 }));
 
 test("de agenda ziet Simyo, ook met een schuivende tenaamstelling en een gemiste maand", () => {
-  const html = renderToStaticMarkup(<BetaalschemaBlock scheduledFlows={[]} txs={simyo} asOf={ASOF} />);
+  const html = renderToStaticMarkup(
+    <BetaalschemaBlock scheduledFlows={[]} txs={simyo} asOf={ASOF} />,
+  );
   expect(html).toContain("SIMYO B.V.");
   expect(html).toContain("maandelijks · 5× gezien");
-  expect(html).toContain(formatEuro(-11.89));
+  expect(html).toContain(formatSignedEuroIn("nl", -11.89));
   expect(html).toContain("voorspeld");
 });
 
 test("een inkomende maandstroom (DUO) staat net zo goed in de agenda", () => {
-  const html = renderToStaticMarkup(<BetaalschemaBlock scheduledFlows={[]} txs={duo} asOf={ASOF} />);
+  const html = renderToStaticMarkup(
+    <BetaalschemaBlock scheduledFlows={[]} txs={duo} asOf={ASOF} />,
+  );
   expect(html).toContain("DUO");
-  expect(html).toContain(formatEuro(512.1));
+  expect(html).toContain(formatSignedEuroIn("nl", 512.1));
   expect(html).toContain("text-pos");
 });
 
 test("een gestopte stroom wordt niet meer vooruit geschoven", () => {
   // Laatste afschrijving maart, asOf half augustus: dit betaalt niemand meer.
   const gestopt: Tx[] = simyo.slice(0, 3);
-  const html = renderToStaticMarkup(<BetaalschemaBlock scheduledFlows={[]} txs={gestopt} asOf={ASOF} />);
+  const html = renderToStaticMarkup(
+    <BetaalschemaBlock scheduledFlows={[]} txs={gestopt} asOf={ASOF} />,
+  );
   expect(html).toContain("Niets ingepland");
 });
 
@@ -173,7 +259,9 @@ const huur: Tx[] = ["2026-05-04", "2026-06-04", "2026-07-04", "2026-08-04"].map(
 }));
 
 test("de volledige naam staat er echt — er wordt niets in code afgekapt", () => {
-  const html = renderToStaticMarkup(<BetaalschemaBlock scheduledFlows={[]} txs={huur} asOf={ASOF} />);
+  const html = renderToStaticMarkup(
+    <BetaalschemaBlock scheduledFlows={[]} txs={huur} asOf={ASOF} />,
+  );
   // De hele naam, letterlijk. Geen initialen, geen eerste woord, geen ellips.
   expect(html).toContain(langeNaam);
   expect(html).not.toContain("…");
@@ -186,7 +274,9 @@ test("de volledige naam staat er echt — er wordt niets in code afgekapt", () =
 });
 
 test("de rij is een knop, zodat de naam ook met een tik of het toetsenbord opengaat", () => {
-  const html = renderToStaticMarkup(<BetaalschemaBlock scheduledFlows={[]} txs={huur} asOf={ASOF} />);
+  const html = renderToStaticMarkup(
+    <BetaalschemaBlock scheduledFlows={[]} txs={huur} asOf={ASOF} />,
+  );
   expect(html).toContain('<button type="button" class="pay-row"');
   expect(html).toContain('data-open="off"');
   expect(html).toContain('aria-expanded="false"');
@@ -198,9 +288,11 @@ test("de voorspeld-pil valt niet met de naam mee weg", () => {
    * voorspelde regel eruit als een bevestigde afspraak — een bewering die de
    * afwezigheid van de pil niet kan dragen. De pil staat nu naast de afkappende
    * span, niet erin. */
-  const html = renderToStaticMarkup(<BetaalschemaBlock scheduledFlows={[]} txs={huur} asOf={ASOF} />);
+  const html = renderToStaticMarkup(
+    <BetaalschemaBlock scheduledFlows={[]} txs={huur} asOf={ASOF} />,
+  );
   const naam = html.indexOf('class="pay-name"');
-  const pil = html.indexOf('class="pay-tag"');
+  const pil = html.indexOf('data-testid="pay-tag"');
   expect(naam).toBeGreaterThan(-1);
   expect(pil).toBeGreaterThan(naam);
   // De pil staat NA het sluiten van de naam-span, dus buiten het afkappende vak.
@@ -212,7 +304,10 @@ test("blocks.css maakt de naam op alle drie de manieren leesbaar", () => {
    * hier eerst en dat klopt alleen zolang vitest vanuit apps/web draait; vanaf
    * de repo-wortel las dezelfde regel een bestand dat er niet is en viel de test
    * om met ENOENT — een fout die niets zegt over de opmaak die hij toetst. */
-  const css = readFileSync(fileURLToPath(new URL("../../styles/blocks.css", import.meta.url)), "utf8");
+  const css = readFileSync(
+    fileURLToPath(new NodeURL("../../styles/blocks.css", import.meta.url)),
+    "utf8",
+  );
   const flat = css.replace(/\s+/g, " ");
   // Muis, toetsenbord, tik — dezelfde drie als bij de taartlegenda (review 3
   // punt 8), want dat is waar hij toen al om vroeg.

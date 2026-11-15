@@ -1,6 +1,7 @@
+// @vitest-environment jsdom
 import { renderToStaticMarkup } from "react-dom/server";
 import { expect, test } from "vitest";
-import { formatEuro } from "../../format.js";
+import { formatSignedEuroIn } from "../../format.js";
 import RecenteTransactiesBlock, { matchesSearch } from "./RecenteTransactiesBlock";
 import { accounts, own, rules, txs } from "./fixtures";
 
@@ -34,12 +35,14 @@ test("RecenteTransactiesBlock renders the reference's row: name, date, chip, amo
   // become a chip.
   expect(html).toContain("11 aug");
   expect(html).toContain(" · Holding BV · ING");
-  expect(html).toContain(formatEuro(-1_100));
+  expect(html).toContain(formatSignedEuroIn("nl", -1_100));
+  // A real minus, never the ASCII hyphen, on a coloured amount.
+  expect(html).toMatch(/tx-amount text-neg">\u2212€\s1\.100,00/);
   expect(html).toContain(">Inkoop<");
   expect(html).toContain(">Energie<");
-  expect(html).toContain("tx-chip");
+  expect(html).toContain('data-testid="tx-chip"');
   // Search and the jump into Transacties.
-  expect(html).toContain("tx-search");
+  expect(html).toContain('data-testid="tx-search"');
   expect(html).toContain("Bekijk alles");
 });
 
@@ -56,7 +59,7 @@ test("RecenteTransactiesBlock never prints a booking time it does not have", () 
 test("RecenteTransactiesBlock renders an empty state with no transactions", () => {
   const html = render([]);
   expect(html).toContain("Nog geen transacties.");
-  expect(html).not.toContain("tx-chip");
+  expect(html).not.toContain('data-testid="tx-chip"');
 });
 
 test("a transaction with no counterparty still shows something readable", () => {

@@ -1,0 +1,91 @@
+{
+  "note": "Shared by packages/core/src/plan/cards.test.ts and apps/extension/src/rankAgreement.test.ts. cashbackPct is in percentage points (1 = 1%). expectedNetCents is the plan's net over horizonMonths. agree=false: the extension counts no fee for a card already held (basis opbrengst), the plan counts the annual fee. feeBilledPer 'maand' means feeCentsPerYear is twelve monthly charges. extensionNetCents is what rankCheckout returns where agree=false. notCardablePerMonthCents (optional) is rent, tax and other spending that cannot go on a card: the plan leaves it out of amountCents; the extension ignores it.",
+  "cases": [
+    {
+      "name": "held, free card, 1% on 6000",
+      "amountCents": 600000,
+      "cashbackPct": 1,
+      "feeCentsPerYear": 0,
+      "held": true,
+      "horizonMonths": 12,
+      "expectedNetCents": 6000,
+      "agree": true
+    },
+    {
+      "name": "not held, 1% on 6000, fee 50 a year",
+      "amountCents": 600000,
+      "cashbackPct": 1,
+      "feeCentsPerYear": 5000,
+      "held": false,
+      "horizonMonths": 12,
+      "expectedNetCents": 1000,
+      "agree": true
+    },
+    {
+      "name": "held, 1% on 6000, fee 50 a year",
+      "amountCents": 600000,
+      "cashbackPct": 1,
+      "feeCentsPerYear": 5000,
+      "held": true,
+      "horizonMonths": 12,
+      "expectedNetCents": 1000,
+      "agree": false,
+      "reason": "A held card's fee is outside the extension's one-purchase result (basis opbrengst); the plan's annual view counts it.",
+      "extensionNetCents": 6000
+    },
+    {
+      "name": "rounding, 0.333% on 12345, no fee",
+      "amountCents": 12345,
+      "cashbackPct": 0.333,
+      "feeCentsPerYear": 0,
+      "expectedNetCents": 41,
+      "held": false,
+      "horizonMonths": 12,
+      "agree": true
+    },
+    {
+      "name": "negative net, 1% on 100000, fee 50 a year",
+      "amountCents": 100000,
+      "cashbackPct": 1,
+      "feeCentsPerYear": 5000,
+      "expectedNetCents": -4000,
+      "held": false,
+      "horizonMonths": 12,
+      "agree": true
+    },
+    {
+      "name": "monthly fee, 1% on 600000, 5 a month",
+      "amountCents": 600000,
+      "cashbackPct": 1,
+      "feeCentsPerYear": 6000,
+      "feeBilledPer": "maand",
+      "expectedNetCents": 0,
+      "held": false,
+      "horizonMonths": 12,
+      "agree": true
+    },
+    {
+      "name": "short horizon, 6 months, yearly fee 36",
+      "amountCents": 300000,
+      "cashbackPct": 1,
+      "feeCentsPerYear": 3600,
+      "held": false,
+      "horizonMonths": 6,
+      "expectedNetCents": 1200,
+      "agree": false,
+      "reason": "plan pro-rates the fee to the covered months; extension widens to whole years",
+      "extensionNetCents": -600
+    },
+    {
+      "name": "rent and tax on a current account are not card spend: only the 6000 of card-payable spend earns cashback",
+      "amountCents": 600000,
+      "cashbackPct": 1,
+      "feeCentsPerYear": 0,
+      "held": true,
+      "horizonMonths": 12,
+      "notCardablePerMonthCents": 180000,
+      "expectedNetCents": 6000,
+      "agree": true
+    }
+  ]
+}

@@ -1,45 +1,15 @@
 import { expect, test } from "vitest";
-import { localPartOf, parseAuthResults, UNKNOWN_CHECKS } from "../src/authResults.js";
+import { domainOf, localPartOf, UNKNOWN_CHECKS } from "../src/authResults.js";
 
-test("de vorm die Cloudflare zet, over meerdere regels uitgevouwen", () => {
-  expect(
-    parseAuthResults(
-      "mx.cloudflare.net; dkim=pass header.d=hostingnoord.nl; spf=pass smtp.mailfrom=hostingnoord.nl; dmarc=pass header.from=hostingnoord.nl",
-    ),
-  ).toEqual({ spf: "pass", dkim: "pass", dmarc: "pass" });
+test("no Worker-visible auth result is treated as verified", () => {
+  expect(UNKNOWN_CHECKS).toEqual({ spf: "unknown", dkim: "unknown", dmarc: "unknown" });
 });
 
-test("een mechanisme dat er niet in staat is 'unknown', niet 'pass' en niet 'none'", () => {
-  expect(parseAuthResults("mx.cloudflare.net; spf=pass smtp.mailfrom=x.nl")).toEqual({
-    spf: "pass",
-    dkim: "unknown",
-    dmarc: "unknown",
-  });
-});
-
-test("geen header betekent drie keer unknown", () => {
-  expect(parseAuthResults(null)).toEqual(UNKNOWN_CHECKS);
-  expect(parseAuthResults(undefined)).toEqual(UNKNOWN_CHECKS);
-  expect(parseAuthResults("   ")).toEqual(UNKNOWN_CHECKS);
-});
-
-test("softfail, temperror en permerror worden letterlijk doorgegeven", () => {
-  expect(parseAuthResults("mx; spf=softfail; dkim=temperror; dmarc=permerror")).toEqual({
-    spf: "softfail",
-    dkim: "temperror",
-    dmarc: "permerror",
-  });
-});
-
-test("een uitslag die niet in RFC 7601 staat wordt unknown", () => {
-  expect(parseAuthResults("mx; spf=prima; dkim=pass; dmarc=none").spf).toBe("unknown");
-});
-
-test("een domeinnaam die op een mechanisme lijkt wordt niet voor een uitslag aangezien", () => {
-  // `header.d=dkim-only.nl` mag niet als `dkim=only` gelezen worden.
-  expect(parseAuthResults("mx; spf=pass header.d=dkim-only.nl smtp.mailfrom=dmarc-test.nl").dkim).toBe(
-    "unknown",
-  );
+test("domainOf haalt het domein uit een adresheader", () => {
+  expect(domainOf("Hosting Noord <facturen@hostingnoord.nl>")).toBe("hostingnoord.nl");
+  expect(domainOf("facturen@ing.nl")).toBe("ing.nl");
+  expect(domainOf("Facturen@ING.NL.")).toBe("ing.nl");
+  expect(domainOf("zonder adres")).toBe("");
 });
 
 test("localPartOf: het lokale deel, in kleine letters", () => {

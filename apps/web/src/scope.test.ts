@@ -1,8 +1,15 @@
-import { readFileSync } from "node:fs";
+import { shellCopy } from "./copy/shell.js";
 import { expect, test } from "vitest";
 import type { Account, EntityProfile, ScheduledFlow, Tx } from "@lavega/core";
 import { accountsInScope } from "@lavega/core";
-import { SCOPE_LABELS, SCOPE_ORDER, entityOptionsFor, flowsForScope, screenOnSwitch, txsForAccounts, unfilteredScreen } from "./scope.js";
+import {
+  SCOPE_ORDER,
+  entityOptionsFor,
+  flowsForScope,
+  screenOnSwitch,
+  txsForAccounts,
+  unfilteredScreen,
+} from "./scope.js";
 
 /* The Persoonlijk | Zakelijk switch: what the shell actually filters when it is
  * flipped. The classification itself is core's (entities.ts) — these prove the
@@ -40,8 +47,13 @@ const accounts = [account("prive", "Privé"), account("bv1", "BV1"), account("bv
 // Only BV1 is classified; BV2 and Privé fall to core's personal default.
 const profiles: EntityProfile[] = [{ entity: "BV1", scope: "business" }];
 
-test("the switch reads Persoonlijk | Zakelijk, in that order", () => {
-  expect(SCOPE_ORDER.map((s) => SCOPE_LABELS[s])).toEqual(["Persoonlijk", "Zakelijk"]);
+/* De labels stonden hier als `SCOPE_LABELS` in scope.ts — één vaste
+ * Nederlandse Record, ongeacht de taal van de lezer. Ze komen nu uit
+ * `shellCopy`, dus de volgorde wordt hier bewaakt en de woorden daar. */
+test("the switch reads personal then business, in that order, in both languages", () => {
+  expect(SCOPE_ORDER).toEqual(["personal", "business"]);
+  expect(SCOPE_ORDER.map((s) => shellCopy.nl.scope[s])).toEqual(["Persoonlijk", "Zakelijk"]);
+  expect(SCOPE_ORDER.map((s) => shellCopy.en.scope[s])).toEqual(["Personal", "Business"]);
 });
 
 test("switching to zakelijk shows the classified entity's accounts and nothing else", () => {
@@ -49,7 +61,10 @@ test("switching to zakelijk shows the classified entity's accounts and nothing e
 });
 
 test("switching to persoonlijk shows everything not classified as a company", () => {
-  expect(accountsInScope(accounts, "personal", profiles).map((a) => a.key)).toEqual(["prive", "bv2"]);
+  expect(accountsInScope(accounts, "personal", profiles).map((a) => a.key)).toEqual([
+    "prive",
+    "bv2",
+  ]);
 });
 
 test("a transaction follows its account's half — never its own", () => {
@@ -69,36 +84,39 @@ test("a company's VAT reservation never surfaces while you look at your private 
 test("the entity scope the views still receive is built from the half in view", () => {
   // Belasting's per-BV modules and Transacties' company filter read this list.
   expect(entityOptionsFor(accountsInScope(accounts, "business", profiles))).toEqual(["BV1"]);
-  expect(entityOptionsFor(accountsInScope(accounts, "personal", profiles))).toEqual(["Privé", "BV2"]);
+  expect(entityOptionsFor(accountsInScope(accounts, "personal", profiles))).toEqual([
+    "Privé",
+    "BV2",
+  ]);
 });
 
 test("an unclassified vault opens on the half that holds everything it has", () => {
   // No profiles at all: core's default is personal, so nothing is hidden on a
   // first run and nothing is silently promoted to zakelijk.
-  expect(accountsInScope(accounts, "personal", []).map((a) => a.key)).toEqual(["prive", "bv1", "bv2"]);
+  expect(accountsInScope(accounts, "personal", []).map((a) => a.key)).toEqual([
+    "prive",
+    "bv1",
+    "bv2",
+  ]);
   expect(accountsInScope(accounts, "business", [])).toEqual([]);
-});
-
-test("the shell scopes on the classification, not on a second axis of its own", () => {
-  const src = readFileSync(new URL("./scope.ts", import.meta.url), "utf8");
-  expect(src).toContain('from "@lavega/core"');
-  expect(src).toContain("entityScope(f.entity, profiles)");
-  const app = readFileSync(new URL("./App.tsx", import.meta.url), "utf8");
-  expect(app).toContain("accountsInScope(accounts, scope, entityProfiles)");
-  // The classification is persisted in the vault, not invented per session.
-  expect(app).toContain("storage.putEntityProfiles(profiles)");
-  expect(app).toContain("storage.getEntityProfiles()");
 });
 
 /* --- The screen each half is left on -------------------------------------- */
 
-const screen = (view: Parameters<typeof unfilteredScreen>[0], over: Partial<ReturnType<typeof unfilteredScreen>> = {}) => ({
+const screen = (
+  view: Parameters<typeof unfilteredScreen>[0],
+  over: Partial<ReturnType<typeof unfilteredScreen>> = {},
+) => ({
   ...unfilteredScreen(view),
   ...over,
 });
 
 test("a half you have never opened starts on the module you are on, with no filters", () => {
-  const current = screen("transactions", { fAccount: "prive", fCategory: "Boodschappen", fSearch: "ah" });
+  const current = screen("transactions", {
+    fAccount: "prive",
+    fCategory: "Boodschappen",
+    fSearch: "ah",
+  });
   expect(screenOnSwitch({}, "business", current)).toEqual(unfilteredScreen("transactions"));
 });
 
@@ -119,10 +137,4 @@ test("an emptied filter is a state that was left, not an unopened half", () => {
   // "he cleared them" and "he has never been here" are different answers.
   const parked = { business: unfilteredScreen("belasting") };
   expect(screenOnSwitch(parked, "business", screen("overview")).view).toBe("belasting");
-});
-
-test("the import files new accounts under Persoonlijk, not under a BV nobody asked for", () => {
-  const app = readFileSync(new URL("./App.tsx", import.meta.url), "utf8");
-  expect(app).toContain('useState("Persoonlijk")');
-  expect(app).not.toContain('useState("BV1")');
 });

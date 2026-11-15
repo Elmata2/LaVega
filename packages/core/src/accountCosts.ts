@@ -210,7 +210,8 @@ export function readAccountFee(entry: AccountFeeEntryLike): AccountFeeValue | nu
     route: "agent",
     sourceUrl: typeof r.sourceUrl === "string" ? r.sourceUrl : "",
     checkedAt: typeof r.checkedAt === "string" ? r.checkedAt : "",
-    conditions: typeof r.conditions === "string" && r.conditions.trim() !== "" ? r.conditions : null,
+    conditions:
+      typeof r.conditions === "string" && r.conditions.trim() !== "" ? r.conditions : null,
     conditionsKnown: r.conditionsKnown === true,
   };
   if (!isCovered(probe)) return null;
@@ -231,7 +232,8 @@ export function readAccountFee(entry: AccountFeeEntryLike): AccountFeeValue | nu
  *  te openen betaalpakketten" en noemt in de voorwaarden "alleen voor bestaande
  *  klanten". Dat blijft een echte prijs voor wie het pakket heeft, en het is
  *  nooit een tip voor wie het niet heeft. */
-const CLOSED_TO_NEW = /niet meer te openen|niet meer aan te vragen|niet meer verkrijgbaar|gesloten voor nieuwe klanten|alleen voor bestaande klanten/i;
+const CLOSED_TO_NEW =
+  /niet meer te openen|niet meer aan te vragen|niet meer verkrijgbaar|gesloten voor nieuwe klanten|alleen voor bestaande klanten/i;
 
 /** HET BEDRAG IS DE PRIJS VAN IETS ANDERS.
  *
@@ -409,7 +411,12 @@ export function productFeesById(entries: readonly AccountFeeEntryLike[]): Map<st
     // juridische uitgever ("N26 Bank AG; Mastercard Debit" → "N26"), zodat de
     // kaartrij en de pakketrij op hun bank vergeleken kunnen worden en niet op
     // hun uitgeverstekst.
-    if (e.issuer && plan.issuer && !bankNameMatches(issuerToBank(e.issuer), issuerToBank(plan.issuer))) continue;
+    if (
+      e.issuer &&
+      plan.issuer &&
+      !bankNameMatches(issuerToBank(e.issuer), issuerToBank(plan.issuer))
+    )
+      continue;
     out.set(e.id, plan);
   }
   return out;
@@ -575,7 +582,10 @@ export type AccountCostReport = {
  *  komma erin. De rentemodule hanteert om dezelfde reden MARGIN_PCT. */
 export const MIN_SAVING_PER_YEAR_CENTS = 1200;
 
-function cheapest(pool: readonly ProductFee[], currentPerYearCents: number): CostAlternative | null {
+function cheapest(
+  pool: readonly ProductFee[],
+  currentPerYearCents: number,
+): CostAlternative | null {
   // `accountFees` levert al goedkoopst-eerst, dus de eerste die genoeg scheelt is
   // ook de goedkoopste die genoeg scheelt.
   for (const fee of pool) {
@@ -615,14 +625,25 @@ export function accountCosts(
     const candidates = providerFees.filter((f) => f.group === group);
 
     const cost = resolveCost(account, bank, providerFees, candidates);
-    const row: AccountCostRow = { account, cost, candidates, cheaperAtProvider: null, cheaperElsewhere: null };
+    const row: AccountCostRow = {
+      account,
+      cost,
+      candidates,
+      cheaperAtProvider: null,
+      cheaperElsewhere: null,
+    };
 
     if (cost.kind === "known") {
       // Nooit het product aanraden dat hij al heeft, en nooit een product dat
       // niet meer te openen is.
-      const held = new Set(cost.matchedBy === "product-name" ? [cost.fee.productId] : cost.agreeing.map((f) => f.productId));
+      const held = new Set(
+        cost.matchedBy === "product-name"
+          ? [cost.fee.productId]
+          : cost.agreeing.map((f) => f.productId),
+      );
       const pool = fees.filter(
-        (f) => f.group === group && f.openToNewCustomers && f.pricedOnItsOwn && !held.has(f.productId),
+        (f) =>
+          f.group === group && f.openToNewCustomers && f.pricedOnItsOwn && !held.has(f.productId),
       );
       const here = pool.filter((f) => namesSameProvider(f, bank));
       const elsewhere = pool.filter((f) => !namesSameProvider(f, bank));
@@ -632,7 +653,9 @@ export function accountCosts(
       // Een tweede regel die net zoveel oplevert als de eerste leest bovendien
       // als twee adviezen waar er maar één is.
       row.cheaperElsewhere =
-        away !== null && row.cheaperAtProvider !== null && away.savingPerYearCents <= row.cheaperAtProvider.savingPerYearCents
+        away !== null &&
+        row.cheaperAtProvider !== null &&
+        away.savingPerYearCents <= row.cheaperAtProvider.savingPerYearCents
           ? null
           : away;
     }
@@ -694,7 +717,9 @@ function resolveCost(
 function agreementOf(pool: readonly ProductFee[]): ProductFee[] | null {
   if (pool.length < 2) return null;
   const first = pool[0].amount;
-  const same = pool.every((f) => f.amount.cents === first.cents && f.amount.period === first.period);
+  const same = pool.every(
+    (f) => f.amount.cents === first.cents && f.amount.period === first.period,
+  );
   return same ? [...pool] : null;
 }
 

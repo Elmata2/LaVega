@@ -144,14 +144,22 @@ function reach(wf: Workflow, start: string): Set<string> {
 }
 
 /** De leegmaak-node, gevonden op wat hij DOET en niet op zijn naam: een rename
- *  in de n8n-UI mag de wacht hieronder niet omzeilen. */
+ *  in de n8n-UI mag de wacht hieronder niet omzeilen.
+ *
+ *  Sinds de partitionering (packages/core/src/n8n/queue.js) staat de
+ *  leegmaak-logica zelf niet meer letterlijk in déze node — hij ROEPT
+ *  `drainQueue()` AAN. Beide gegenereerde nodes bevatten de VOLLEDIGE inhoud
+ *  van queue.js (dus ook de functie-DEFINITIE `function drainQueue(...) {`),
+ *  dus de locator moet een AANROEP vinden en geen definitie: het patroon sluit
+ *  `function ` ervoor uit. */
 function drainNode(wf: Workflow): Node {
-  const found = wf.nodes.filter((n) => jsCodeOf(n).includes("store.queue = []"));
+  const CALLS_DRAIN_QUEUE = /(?<!function )\bdrainQueue\(/;
+  const found = wf.nodes.filter((n) => CALLS_DRAIN_QUEUE.test(jsCodeOf(n)));
   // Vindt de locator niets, dan slaagt de bereikbaarheidstest hieronder
   // gratis — dus eerst bewijzen dat hij precies één node vond.
   expect(
     found.map((n) => n.name),
-    "geen (of meer dan één) node die `store.queue = []` doet — de locator van de leegmaak-node klopt niet meer",
+    "geen (of meer dan één) node die `drainQueue(...)` aanroept — de locator van de leegmaak-node klopt niet meer",
   ).toHaveLength(1);
   return found[0];
 }
@@ -166,13 +174,21 @@ const edge = (node: string): Edge => ({ node, type: "main", index: 0 });
  *  dat niemand aanneemt, en elke doorgestuurde mail bounct of verdwijnt. */
 function checkMailIntake(wf: Workflow): void {
   const posts = ofType(wf, WEBHOOK).filter((n) => methodOf(n) === "POST");
-  expect(posts.map((n) => n.name), "er is niet precies één POST-webhook voor doorgestuurde mail").toEqual([MAIL_HOOK]);
+  expect(
+    posts.map((n) => n.name),
+    "er is niet precies één POST-webhook voor doorgestuurde mail",
+  ).toEqual([MAIL_HOOK]);
   expect(posts[0].parameters?.path).toBe(MAIL_PATH);
-  expect(edgesFrom(wf, MAIL_HOOK), `"${MAIL_HOOK}" gaat niet naar "${MAIL_NORM}"`).toEqual([MAIL_NORM]);
+  expect(edgesFrom(wf, MAIL_HOOK), `"${MAIL_HOOK}" gaat niet naar "${MAIL_NORM}"`).toEqual([
+    MAIL_NORM,
+  ]);
   // En hij mondt uit in dezelfde If-node als Gmail: één verwerkingspad, niet twee.
   const branch = ofType(wf, IF);
   expect(branch.map((n) => n.name)).toEqual([IF_NODE]);
-  expect(edgesFrom(wf, MAIL_NORM), "de intake loopt langs de If-node heen en heeft dus zijn eigen, ongeteste pad").toEqual([IF_NODE]);
+  expect(
+    edgesFrom(wf, MAIL_NORM),
+    "de intake loopt langs de If-node heen en heeft dus zijn eigen, ongeteste pad",
+  ).toEqual([IF_NODE]);
   expect(edgesFrom(wf, GMAIL_NORM), "de Gmail-tak loopt langs de If-node heen").toEqual([IF_NODE]);
 }
 
@@ -206,8 +222,13 @@ function checkDrainOffMailPath(wf: Workflow): void {
  *  Valt dit om: n8n weigert de workflow te activeren en beide adressen geven
  *  404 — exact de storing waar deze diagnose mee begon. */
 function checkNoDuplicateWebhookPath(wf: Workflow): void {
-  const claims = ofType(wf, WEBHOOK).map((n) => `${methodOf(n)} ${String(n.parameters?.path ?? "")}`);
-  expect(new Set(claims).size, `twee webhook-nodes claimen hetzelfde adres: ${claims.join(", ")}`).toBe(claims.length);
+  const claims = ofType(wf, WEBHOOK).map(
+    (n) => `${methodOf(n)} ${String(n.parameters?.path ?? "")}`,
+  );
+  expect(
+    new Set(claims).size,
+    `twee webhook-nodes claimen hetzelfde adres: ${claims.join(", ")}`,
+  ).toBe(claims.length);
 }
 
 /** BEVINDING 3 — de Gmail-tak gooide zijn resultaat weg (diagnose :113-126). De
@@ -216,9 +237,10 @@ function checkNoDuplicateWebhookPath(wf: Workflow): void {
  *  de factuur, de rij blijft leeg, en er staat geen fout in de run — de duurste
  *  vorm van stil verlies die deze workflow heeft. */
 function checkGmailBranchLands(wf: Workflow): void {
-  expect(edgesFrom(wf, TO_LAVEGA), `"${TO_LAVEGA}" komt niet uit op "${ENQUEUE}" — Claude leest de factuur en de rij blijft leeg`).toEqual([
-    ENQUEUE,
-  ]);
+  expect(
+    edgesFrom(wf, TO_LAVEGA),
+    `"${TO_LAVEGA}" komt niet uit op "${ENQUEUE}" — Claude leest de factuur en de rij blijft leeg`,
+  ).toEqual([ENQUEUE]);
 }
 
 /** BEVINDING 3, de vorm van de bug in het algemeen. Geen enkele node mag een
@@ -231,17 +253,26 @@ function checkNoDeadOutput(wf: Workflow): void {
   for (const [from, out] of Object.entries(wf.connections)) {
     expect(names, `connections noemt "${from}", maar die node bestaat niet`).toContain(from);
     (out.main ?? []).forEach((group, i) => {
-      expect(group.length, `"${from}" uitgang ${i} is verklaard maar leeg — dat is de vorm van bevinding 3`).toBeGreaterThan(0);
+      expect(
+        group.length,
+        `"${from}" uitgang ${i} is verklaard maar leeg — dat is de vorm van bevinding 3`,
+      ).toBeGreaterThan(0);
       for (const e of group) {
         // Een typefout in een naam maakt een onzichtbare dode tak: de traversal
         // leest hem als "niet bereikbaar", wat toevallig het antwoord is dat de
         // leegmaak-test graag hoort. Dus hier hard afgekeurd.
-        expect(names, `"${from}" wijst naar "${e.node}", en die node bestaat niet`).toContain(e.node);
+        expect(names, `"${from}" wijst naar "${e.node}", en die node bestaat niet`).toContain(
+          e.node,
+        );
       }
     });
   }
-  const targets = new Set(Object.values(wf.connections).flatMap((o) => (o.main ?? []).flat().map((e) => e.node)));
-  const orphans = wf.nodes.filter((n) => !TRIGGERS.includes(n.type) && !targets.has(n.name)).map((n) => n.name);
+  const targets = new Set(
+    Object.values(wf.connections).flatMap((o) => (o.main ?? []).flat().map((e) => e.node)),
+  );
+  const orphans = wf.nodes
+    .filter((n) => !TRIGGERS.includes(n.type) && !targets.has(n.name))
+    .map((n) => n.name);
   expect(orphans, "deze nodes hebben geen ingang en kunnen dus nooit lopen").toEqual([]);
 }
 
@@ -253,7 +284,10 @@ function checkNoDeadOutput(wf: Workflow): void {
  *  Valt dit om: "Ophalen uit n8n" in Facturen haalt niets meer op. */
 function checkQueueWebhookIsGet(wf: Workflow): void {
   const gets = ofType(wf, WEBHOOK).filter((n) => methodOf(n) === "GET");
-  expect(gets.map((n) => n.name), "er is niet precies één GET-webhook; LaVega haalt met GET op").toEqual([QUEUE_HOOK]);
+  expect(
+    gets.map((n) => n.name),
+    "er is niet precies één GET-webhook; LaVega haalt met GET op",
+  ).toEqual([QUEUE_HOOK]);
   expect(gets[0].parameters?.path).toBe(QUEUE_PATH);
   const found = findQueueWebhookNode(wf);
   expect(found, "findQueueWebhookNode vindt de ophaal-webhook niet meer").not.toBeNull();
@@ -277,7 +311,10 @@ function checkResponsePairing(wf: Workflow): void {
 
   const queue = byName(wf, QUEUE_HOOK);
   expect(queue.parameters?.responseMode).toBe("responseNode");
-  expect([...reach(wf, QUEUE_HOOK)], `"${responder}" hangt niet achter de ophaal-webhook`).toContain(responder);
+  expect(
+    [...reach(wf, QUEUE_HOOK)],
+    `"${responder}" hangt niet achter de ophaal-webhook`,
+  ).toContain(responder);
 
   const mail = byName(wf, MAIL_HOOK);
   expect(mail.parameters?.responseMode).toBe("lastNode");
@@ -293,7 +330,9 @@ function checkResponsePairing(wf: Workflow): void {
  *  POST-kant zet iedereen die hem raadt regels in zijn wachtrij. */
 function checkHeaderAuthOnAllWebhooks(wf: Workflow): void {
   for (const hook of ofType(wf, WEBHOOK)) {
-    expect(hook.parameters?.authentication, `webhook "${hook.name}" vraagt geen token`).toBe("headerAuth");
+    expect(hook.parameters?.authentication, `webhook "${hook.name}" vraagt geen token`).toBe(
+      "headerAuth",
+    );
   }
 }
 
@@ -304,9 +343,39 @@ function checkHeaderAuthOnAllWebhooks(wf: Workflow): void {
  *  beschermd wordt (diagnose :320-321). */
 function checkAllowedOriginsOnlyOnQueue(wf: Workflow): void {
   const origins = (node: Node) => String(node.parameters?.options?.allowedOrigins ?? "").trim();
-  expect(origins(byName(wf, QUEUE_HOOK)).length, "allowedOrigins is leeg — de browser krijgt dan een CORS-fout bij Ophalen uit n8n").toBeGreaterThan(0);
-  expect(origins(byName(wf, QUEUE_HOOK))).toContain("https://lavega.dev");
-  expect(origins(byName(wf, MAIL_HOOK)), "de intake heeft allowedOrigins gekregen; de worker is geen browser en stuurt geen Origin").toBe("");
+  expect(
+    origins(byName(wf, QUEUE_HOOK)).length,
+    "allowedOrigins is leeg — de browser krijgt dan een CORS-fout bij Ophalen uit n8n",
+  ).toBeGreaterThan(0);
+  /* DE ORIGIN WAAR DE APP ÉCHT OP DRAAIT, niet de kale domeinnaam.
+   *
+   * Deze test eiste alleen "https://lavega.dev", en dat slaagt ook als dát de
+   * enige origin in de lijst is. Maar lavega.dev antwoordt met een 308 naar
+   * https://www.lavega.dev, dus de browser draait de app NOOIT op de kale naam:
+   * de preflight komt van www, staat die er niet bij, dan faalt Ophalen uit n8n
+   * met "Geen antwoord van n8n" — en de OPTIONS-request laat in n8n geen enkel
+   * spoor na, dus het lijkt alsof er niets is aangekomen.
+   *
+   * Precies dat gebeurde op 19 sep met lavega-invoices.json, het bestand waar
+   * DOORSTUURADRES.md naar verwijst: het had alleen de kale naam. */
+  /* EERST, niet ergens in de lijst. Gemeten tegen de echte n8n op 19 sep:
+   *
+   *   Origin: https://www.lavega.dev  -> allow-origin: https://lavega.dev
+   *   Origin: https://lavega.dev      -> allow-origin: https://lavega.dev
+   *   Origin: https://example.invalid -> allow-origin: https://lavega.dev
+   *
+   * n8n vergelijkt de Origin van het verzoek dus NIET met de lijst; hij geeft
+   * één vaste waarde terug, en dat is de eerste. Een komma-lijst is hier geen
+   * allowlist. Zolang de browser op www draait en de eerste waarde de kale naam
+   * is, faalt de preflight — wat de lijst verderop ook bevat. */
+  expect(
+    origins(byName(wf, QUEUE_HOOK)).split(",")[0].trim(),
+    "n8n geeft alleen de EERSTE origin terug; de app draait op www (lavega.dev 308't daarheen)",
+  ).toBe("https://www.lavega.dev");
+  expect(
+    origins(byName(wf, MAIL_HOOK)),
+    "de intake heeft allowedOrigins gekregen; de worker is geen browser en stuurt geen Origin",
+  ).toBe("");
 }
 
 /** BEVINDING 7 — de false-tak van `Iets te lezen?` liep dood (diagnose :205-219).
@@ -323,7 +392,10 @@ function checkBothIfBranches(wf: Workflow): void {
   expect(outputs[0][0].node).toBe(CLAUDE_REQ);
   expect(outputs[1][0].node).toBe(NOTICE);
   // En de melding moet zelf ook aankomen, anders is de tak er wel en het briefje niet.
-  expect(edgesFrom(wf, NOTICE), "de melding komt niet in de wachtrij: de tak bestaat, het briefje niet").toEqual([ENQUEUE]);
+  expect(
+    edgesFrom(wf, NOTICE),
+    "de melding komt niet in de wachtrij: de tak bestaat, het briefje niet",
+  ).toEqual([ENQUEUE]);
 }
 
 /** BEVINDING 8 — de twee remmen op ontdubbelen (diagnose :223-267). De eerste
@@ -333,9 +405,10 @@ function checkBothIfBranches(wf: Workflow): void {
  *  Valt dit om: of hij betaalt elk uur opnieuw voor dezelfde mail (rem 1 weg),
  *  of dezelfde factuur staat twee keer in zijn rij (rem 2 weg). */
 function checkDedupBrakes(wf: Workflow): void {
-  expect(jsCodeOf(byName(wf, GMAIL_NORM)), "rem 1 weg: de uurlijkse tak stuurt gezien mail opnieuw naar Claude").toContain(
-    "seen.has(",
-  );
+  expect(
+    jsCodeOf(byName(wf, GMAIL_NORM)),
+    "rem 1 weg: de uurlijkse tak stuurt gezien mail opnieuw naar Claude",
+  ).toContain("seen.has(");
   expect(
     jsCodeOf(byName(wf, MAIL_NORM)),
     "de intake-node filtert nu op seenIds — een opnieuw doorgestuurde mail wordt dan stil genegeerd",
@@ -346,9 +419,11 @@ function checkDedupBrakes(wf: Workflow): void {
   }
 }
 
-/** De leegmaak-node heeft GEEN bronbestand in packages/core/src/n8n en valt dus
- *  buiten de drift-test daar. Dit is zijn enige contract met de consument: de
- *  drie sleutels die apps/web/src/n8n.ts:166 parseQueue verwacht.
+/** De leegmaak-node heeft SINDS de partitionering wél een bronbestand
+ *  (packages/core/src/n8n/queue.js, via codeNodes.js) en valt dus ook onder de
+ *  drift-test daar (codeNodes.test.ts). Deze wacht blijft toch bestaan als
+ *  onafhankelijke controle op zijn contract met de consument: de drie sleutels
+ *  die apps/web/src/n8n.ts:166 parseQueue verwacht.
  *  Valt dit om: de app krijgt 200 terug en ziet geen enkele factuur. */
 function checkDrainContract(wf: Workflow): void {
   const code = jsCodeOf(drainNode(wf));
@@ -359,11 +434,14 @@ function checkDrainContract(wf: Workflow): void {
   const returned = code.slice(code.lastIndexOf("return "));
   expect(returned).toContain("json:");
   for (const key of ["invoices", "notices", "servedAt"]) {
-    expect(returned, `de leegmaak-node geeft "${key}" niet meer terug — parseQueue ziet dan geen enkele factuur`).toContain(
-      key,
-    );
+    expect(
+      returned,
+      `de leegmaak-node geeft "${key}" niet meer terug — parseQueue ziet dan geen enkele factuur`,
+    ).toContain(key);
   }
-  expect(parseQueue({ invoices: [], notices: [], servedAt: "2026-08-24T00:00:00.000Z" })).not.toBeNull();
+  expect(
+    parseQueue({ invoices: [], notices: [], servedAt: "2026-08-24T00:00:00.000Z" }),
+  ).not.toBeNull();
 }
 
 /** Geen geheimen in het bestand. Het gaat als los JSON over de mail en staat in
@@ -371,7 +449,9 @@ function checkDrainContract(wf: Workflow): void {
  *  daarmee gelekt. De Anthropic-sleutel mag er alleen als $env-expressie staan
  *  en het factuurtoken hoort een n8n-credential te zijn (diagnose :320-336). */
 function checkNoSecrets(raw: string, wf: Workflow): void {
-  expect(raw, "er staat een Anthropic-sleutel in het bestand").not.toMatch(/sk-ant-[A-Za-z0-9_-]{10,}/);
+  expect(raw, "er staat een Anthropic-sleutel in het bestand").not.toMatch(
+    /sk-ant-[A-Za-z0-9_-]{10,}/,
+  );
   expect(raw, "er staat een API-sleutel in het bestand").not.toMatch(/\bsk-[A-Za-z0-9]{20,}\b/);
   // Een credentials-blok bevat de id van een credential uit ZIJN n8n; in een
   // geëxporteerd bestand hoort dat niet te staan, hij hangt ze in stap 3 zelf in.
@@ -388,12 +468,14 @@ function checkNoSecrets(raw: string, wf: Workflow): void {
     else if (v && typeof v === "object") Object.values(v).forEach(walk);
   };
   walk(wf);
-  const suspicious = values.flatMap((v) => [...v.matchAll(/[A-Za-z0-9+/]{40,}={0,2}/g)].map((m) => m[0]));
+  const suspicious = values.flatMap((v) =>
+    [...v.matchAll(/[A-Za-z0-9+/]{40,}={0,2}/g)].map((m) => m[0]),
+  );
   expect(suspicious, "sleutelvormige tekst in het bestand").toEqual([]);
 
-  const apiKeyHeader = (byName(wf, "Lees de factuur").parameters?.headerParameters?.parameters ?? []).find(
-    (p: { name?: string }) => p.name === "x-api-key",
-  );
+  const apiKeyHeader = (
+    byName(wf, "Lees de factuur").parameters?.headerParameters?.parameters ?? []
+  ).find((p: { name?: string }) => p.name === "x-api-key");
   expect(apiKeyHeader?.value).toBe("={{ $env.FT_ANTHROPIC_KEY || $env.ANTHROPIC_API_KEY }}");
 }
 
@@ -521,7 +603,9 @@ test("de twee exports verschillen in precies vier bekende dingen en nergens ande
     //     gecorrigeerde export.
     const strip = (n: Node) => {
       const { notes: _n, notesInFlow: _f, parameters, ...rest } = n;
-      return { ...rest, parameters: { ...parameters } } as Node & { parameters: Record<string, any> };
+      return { ...rest, parameters: { ...parameters } } as Node & {
+        parameters: Record<string, any>;
+      };
     };
     const left = strip(node);
     const right = strip(twin);
@@ -529,7 +613,9 @@ test("de twee exports verschillen in precies vier bekende dingen en nergens ande
     // (2) de Gmail-zoekopdracht: de gecorrigeerde export voegt `OR receipt` toe,
     //     zodat een betaalbewijs ook opgehaald wordt.
     if (left.parameters.filters?.q && right.parameters.filters?.q) {
-      expect(String(left.parameters.filters.q).replace(" OR receipt", "")).toBe(String(right.parameters.filters.q));
+      expect(String(left.parameters.filters.q).replace(" OR receipt", "")).toBe(
+        String(right.parameters.filters.q),
+      );
       known.add(node.name + ".filters.q");
       left.parameters.filters = right.parameters.filters;
     }
@@ -553,9 +639,10 @@ test("de twee exports verschillen in precies vier bekende dingen en nergens ande
       delete left.parameters.authentication;
     }
 
-    expect(JSON.stringify(right), `"${node.name}" loopt uit elkaar buiten de vier bekende verschillen om`).toBe(
-      JSON.stringify(left),
-    );
+    expect(
+      JSON.stringify(right),
+      `"${node.name}" loopt uit elkaar buiten de vier bekende verschillen om`,
+    ).toBe(JSON.stringify(left));
   }
 
   expect([...known].sort()).toEqual(
@@ -700,7 +787,12 @@ describe("een teruggekeerde bevinding wordt afgekeurd (mutatie in het geheugen)"
 
   test("een node zonder ingang wordt gezien", () => {
     const mutant = clone(good);
-    mutant.nodes.push({ id: "b1000000-0000-4000-8000-0000000000ff", name: "Losse node", type: CODE, parameters: {} });
+    mutant.nodes.push({
+      id: "b1000000-0000-4000-8000-0000000000ff",
+      name: "Losse node",
+      type: CODE,
+      parameters: {},
+    });
     expect(() => checkNoDeadOutput(mutant)).toThrow();
   });
 
@@ -720,7 +812,12 @@ describe("een teruggekeerde bevinding wordt afgekeurd (mutatie in het geheugen)"
   test("de leegmaak-node kan niet stil van vorm veranderen", () => {
     const mutant = clone(good);
     const node = drainNode(mutant);
-    node.parameters!.jsCode = jsCodeOf(node).replace("invoices, notices, servedAt", "rows, notices, servedAt");
+    // Elke "invoices" hernoemen, ook binnen drainQueue's eigen return: die
+    // functie-body staat VOOR het eigen return-statement van de node in de
+    // gegenereerde tekst, dus `.replace()` op alleen de eerste match zou de
+    // laatste `return` (waar checkDrainContract naar kijkt) ongemoeid laten en
+    // deze wacht voor niets laten slagen.
+    node.parameters!.jsCode = jsCodeOf(node).replaceAll("invoices", "rows");
     expect(() => checkDrainContract(mutant)).toThrow();
   });
 });

@@ -2,12 +2,29 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
+
+/* These suites pin the behaviour that stays in the code while the business side
+ * is archived (scope switch, entity classifier, invoice forwarding, the
+ * registry entries). They run with the switch OFF; archive.test.ts and
+ * archive-ui.test.tsx cover the switch ON. */
+vi.mock("./archive", () => ({
+  ARCHIVE_BUSINESS: false,
+  ARCHIVED_VIEWS: [],
+  ARCHIVED_WIDGETS: [],
+  SHOW_SCOPE_SWITCH: true,
+  SHOW_INVOICE_FORWARDING: true,
+  SHOW_ENTITY_CLASSIFIER: true,
+  isArchivedView: () => false,
+  isArchivedWidget: () => false,
+  initialScope: () =>
+    localStorage.getItem("lavega.defaultScope") === "business" ? "business" : "personal",
+}));
 import type { Account, EntityProfile, Tx } from "@lavega/core";
 
 /* DE NAVIGATIE IS EEN <a href> GEWORDEN, geen <button> meer (commit edea871,
  * path-based personal views). Dat is een verbetering - er zijn nu echte URL's,
  * dus middenklik, "link kopiëren" en de terugknop werken - maar de selector hier
- * stond nog op button.nav-item en die vond niets meer. De test zei toen "geen
+ * stond nog op een button-selector en die vond niets meer. De test zei toen "geen
  * knop Rekeningen", wat klonk als een verdwenen knop terwijl hij er gewoon staat
  * als link.
  */
@@ -44,15 +61,20 @@ vi.mock("./migrate.js", () => ({
   migrateToVault: async () => {},
 }));
 
+// The vault key comes from the server (or this browser's IndexedDB); neither
+// exists here, and the fake storage ignores the key anyway.
+vi.mock("./vaultKey.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./vaultKey.js")>();
+  return { ...actual, loadVaultKey: async () => ({}) as CryptoKey };
+});
+
 vi.mock("@lavega/adapters", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@lavega/adapters")>();
   return {
     ...actual,
     createEncryptedStorage: () => ({
-      status: async () => "unlocked",
-      unlock: async () => true,
+      open: async () => "opened",
       lock: () => {},
-      setup: async () => {},
       export: () => null,
       restore: async () => false,
       getAccounts: async () => vault.accounts,
@@ -61,6 +83,8 @@ vi.mock("@lavega/adapters", async (importOriginal) => {
       putTxs: async () => {},
       getRules: async () => [],
       putRules: async () => {},
+      getTransfers: async () => [],
+      putTransfers: async () => {},
       deleteAccount: async () => {},
       deleteTxs: async () => {},
       getScheduledFlows: async () => [],
@@ -75,6 +99,38 @@ vi.mock("@lavega/adapters", async (importOriginal) => {
       putFacts: async () => {},
       getEntityProfiles: async () => vault.profiles,
       putEntityProfiles: async () => {},
+      getFxHistory: async () => ({}),
+      putFxHistory: async () => {},
+      // App's unlock-time load effect now also reads these two (n8n pending
+      // rows persistence); this test isn't about the n8n queue, so empty/no-op
+      // is enough to keep it from throwing.
+      getPendingInvoices: async () => [],
+      putPendingInvoices: async () => {},
+      getPendingNotices: async () => [],
+      getBills: async () => [],
+      getBillOccurrences: async () => [],
+      getBillDecisions: async () => ({
+        matches: [],
+        marks: [],
+        rejections: [],
+        priceChanges: [],
+      }),
+      putBillPlan: async () => {},
+      getValuations: async () => [],
+      putValuations: async () => {},
+      getDocuments: async () => [],
+      putDocuments: async () => {},
+      getImportSessions: async () => [],
+      putImportSessions: async () => {},
+      putDocumentBytes: async () => {},
+      getDocumentBytes: async () => null,
+      hasDocumentBytes: async () => false,
+      deleteDocumentBytes: async () => {},
+      listDocumentBytes: async () => [],
+      deleteAllDocumentBytes: async () => {},
+      exportBundle: async () => null,
+      eraseDocuments: async () => 0,
+      putPendingNotices: async () => {},
     }),
     createRatesProvider: () => ({
       getRates: async () => ({ rates: [], asOf: "2026-01-01", source: "bundled" as const }),
@@ -93,8 +149,24 @@ function account(key: string, entity: string, balance: number): Account {
   return { key, iban: `NL00TEST${key}`, name: key, bank: "TEST", entity, currency: "EUR", balance };
 }
 
-function tx(id: string, accountKey: string, date: string, amount: number, counterparty: string): Tx {
-  return { id, accountKey, date, amount, currency: "EUR", counterparty, description: counterparty, category: "", manual: false };
+function tx(
+  id: string,
+  accountKey: string,
+  date: string,
+  amount: number,
+  counterparty: string,
+): Tx {
+  return {
+    id,
+    accountKey,
+    date,
+    amount,
+    currency: "EUR",
+    counterparty,
+    description: counterparty,
+    category: "",
+    manual: false,
+  };
 }
 
 const PERSONAL_TXS = [
@@ -113,7 +185,10 @@ beforeEach(() => {
   vault.accounts = [account("prive", "Privé", 1200), account("bv", "BV1 Holding", 8000)];
   vault.txs = [...PERSONAL_TXS, ...BUSINESS_TXS];
   vault.profiles = [{ entity: "BV1 Holding", scope: "business" }];
-  vi.stubGlobal("fetch", vi.fn(async () => ({ ok: false, json: async () => ({}) })));
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => ({ ok: false, json: async () => ({}) })),
+  );
   container = document.createElement("div");
   document.body.appendChild(container);
 });
@@ -137,14 +212,18 @@ async function mount() {
 }
 
 function button(selector: string, text: string): HTMLElement {
-  const found = [...container!.querySelectorAll<HTMLElement>(selector)].find((b) => b.textContent === text);
+  const found = [...container!.querySelectorAll<HTMLElement>(selector)].find(
+    (b) => b.textContent === text,
+  );
   if (!found) throw new Error(`geen knop "${text}" (${selector})`);
   return found;
 }
 
 /** Same, but on a button whose label is a sentence rather than one word. */
 function buttonLike(selector: string, text: string): HTMLButtonElement {
-  const found = [...container!.querySelectorAll<HTMLButtonElement>(selector)].find((b) => (b.textContent ?? "").includes(text));
+  const found = [...container!.querySelectorAll<HTMLButtonElement>(selector)].find((b) =>
+    (b.textContent ?? "").includes(text),
+  );
   if (!found) throw new Error(`geen knop met "${text}" (${selector})`);
   return found;
 }
@@ -163,8 +242,8 @@ async function click(el: HTMLElement) {
   });
 }
 
-const title = () => container!.querySelector(".topbar-title")?.textContent ?? "";
-const screen = () => container!.querySelector("main.content")!.textContent ?? "";
+const title = () => container!.querySelector(".shell2-title")?.textContent ?? "";
+const screen = () => container!.querySelector("main#main")!.textContent ?? "";
 
 test("Persoonlijk → Zakelijk → Persoonlijk puts the same screen back", async () => {
   await mount();
@@ -194,7 +273,7 @@ test("you come back to the module you left the half on, not the one the other ha
   const overzicht = screen();
 
   await click(scopeButton("Zakelijk"));
-  await click(button("button.card-link", "Rekeningen")); // the empty half's only offer
+  await click(button('[data-testid="card-link"]', "Rekeningen")); // the empty half's only offer
   expect(title()).toBe("Rekeningen");
 
   await click(scopeButton("Persoonlijk"));
@@ -205,11 +284,11 @@ test("you come back to the module you left the half on, not the one the other ha
 test("each half keeps its own module, so switching back and forth is a round trip", async () => {
   await mount();
 
-  await click(button("a.nav-item", "Rekeningen")); // Persoonlijk left on Rekeningen
+  await click(button("a.shell2-rail-item", "Rekeningen")); // Persoonlijk left on Rekeningen
   const personal = screen();
 
   await click(scopeButton("Zakelijk"));
-  await click(button("a.nav-item", "Forecast")); // Zakelijk left on Forecast
+  await click(button("a.shell2-rail-item", "Optimalisatie")); // Zakelijk left on Optimalisatie
   const business = screen();
 
   await click(scopeButton("Persoonlijk"));
@@ -217,7 +296,7 @@ test("each half keeps its own module, so switching back and forth is a round tri
   expect(screen()).toBe(personal);
 
   await click(scopeButton("Zakelijk"));
-  expect(title()).toBe("Forecast");
+  expect(title()).toBe("Optimalisatie");
   expect(screen()).toBe(business);
 });
 
@@ -226,10 +305,10 @@ test("a filter naming an account of one half never narrows the other half", asyn
 
   // Rekeningen → click the personal account's transaction count → Transacties,
   // filtered to that account.
-  await click(button("a.nav-item", "Rekeningen"));
+  await click(button("a.shell2-rail-item", "Rekeningen"));
   // Rekeningen groups per bank (B4): open the bank, then its account's count.
-  await click(buttonLike("button.bank-group-head", "TEST"));
-  await click(buttonLike("button.card-link", "4 transacties bekijken"));
+  await click(buttonLike("button[data-testid=bank-group-head]", "TEST"));
+  await click(buttonLike('[data-testid="card-link"]', "4 transacties bekijken"));
   expect(title()).toBe("Transacties");
   expect(screen()).toContain("Albert Heijn");
 
@@ -244,4 +323,17 @@ test("a filter naming an account of one half never narrows the other half", asyn
   expect(title()).toBe("Transacties");
   expect(screen()).toContain("Albert Heijn");
   expect(screen()).not.toContain("Kantoorhuur");
+});
+
+test("an optional view that is not in the nav still opens by direct URL", async () => {
+  window.history.pushState({}, "", "/app/forecast");
+  try {
+    await mount();
+    expect(title()).toBe("Forecast");
+    expect([...container!.querySelectorAll("a.shell2-rail-item")].map((a) => a.textContent)).not.toContain(
+      "Forecast",
+    );
+  } finally {
+    window.history.pushState({}, "", "/");
+  }
 });

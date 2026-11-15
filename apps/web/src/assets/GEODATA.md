@@ -24,12 +24,12 @@ tekent.
 
 Wat er in de bundel opnieuw is afgewogen, nu de kaart een bol is:
 
-| Drempel | Was (doekeenheden) | Is (graden) | Waarom |
-| --- | --- | --- | --- |
-| Afronden | 0,1 eenheid = 0,036° | 1 decimaal = 0,1° (±11 km) | Op een bol van 640 px is 0,1° een halve pixel, en naar de rand van de schijf knijpt de projectie horizontaal dicht — nooit open. Wat sub-pixel is in het midden is dat overal. |
-| Vereenvoudigen | 0,4 eenheid = 0,144° | 0,15° | Praktisch dezelfde drempel, zodat de bol niet grover is dan de kaart die hij vervangt. |
-| Los vlak weglaten | 0,25 eenheid² | 0,0324°² | Exact dezelfde drempel omgerekend, zodat de verhuizing hier niets verandert. |
-| Langste recht stuk | (bestond niet) | 5° | Nieuw, en puur een bol-probleem. Zie hieronder. |
+| Drempel            | Was (doekeenheden)   | Is (graden)                | Waarom                                                                                                                                                                         |
+| ------------------ | -------------------- | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Afronden           | 0,1 eenheid = 0,036° | 1 decimaal = 0,1° (±11 km) | Op een bol van 640 px is 0,1° een halve pixel, en naar de rand van de schijf knijpt de projectie horizontaal dicht — nooit open. Wat sub-pixel is in het midden is dat overal. |
+| Vereenvoudigen     | 0,4 eenheid = 0,144° | 0,15°                      | Praktisch dezelfde drempel, zodat de bol niet grover is dan de kaart die hij vervangt.                                                                                         |
+| Los vlak weglaten  | 0,25 eenheid²        | 0,0324°²                   | Exact dezelfde drempel omgerekend, zodat de verhuizing hier niets verandert.                                                                                                   |
+| Langste recht stuk | (bestond niet)       | 5°                         | Nieuw, en puur een bol-probleem. Zie hieronder.                                                                                                                                |
 
 ### Lange rechte stukken (nieuw)
 
@@ -47,7 +47,7 @@ wél een grootcirkel, maar de koorde snijdt de boog met een pijlhoogte van
 
 Daarom worden stukken langer dan 5° opgedeeld (28 punten bijgezet). Dat gebeurt
 **lineair in lengte/breedte** en niet over de grootcirkel, want zo zijn die
-grenzen ook gedefinieerd: de 49e breedtegraad *volgt* de breedtegraad.
+grenzen ook gedefinieerd: de 49e breedtegraad _volgt_ de breedtegraad.
 Grootcirkel-interpolatie zou die grens 0,86° verkeerd neerzetten in plaats van
 goed.
 
@@ -93,25 +93,25 @@ weten waar het ligt, niet hoe groot het is.
 
 ## Bronnen
 
-| Wat | Bron | Licentie | Gelezen op |
-| --- | --- | --- | --- |
-| Landgrenzen | https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_50m_admin_0_countries.geojson | publiek domein (Natural Earth — geen bronvermelding vereist, wel gegeven) | 2026-08-21 |
+| Wat                                       | Bron                                                                                                                | Licentie                                                                  | Gelezen op |
+| ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- | ---------- |
+| Landgrenzen                               | https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_50m_admin_0_countries.geojson      | publiek domein (Natural Earth — geen bronvermelding vereist, wel gegeven) | 2026-08-21 |
 | Labelpunten voor landen zonder eigen vlak | https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_50m_admin_0_tiny_countries.geojson | publiek domein (Natural Earth — geen bronvermelding vereist, wel gegeven) | 2026-08-21 |
-| Valuta per land | https://raw.githubusercontent.com/unicode-org/cldr-json/main/cldr-json/cldr-core/supplemental/currencyData.json | Unicode-ICU licentie (CLDR) | 2026-08-21 |
-| Welke valuta wij kunnen prijzen | https://api.frankfurter.dev/v1/currencies | ECB-referentiekoersen via Frankfurter (open, geen sleutel) | 2026-08-21 |
+| Valuta per land                           | https://raw.githubusercontent.com/unicode-org/cldr-json/main/cldr-json/cldr-core/supplemental/currencyData.json     | Unicode-ICU licentie (CLDR)                                               | 2026-08-21 |
+| Welke valuta wij kunnen prijzen           | https://api.frankfurter.dev/v1/currencies                                                                           | ECB-referentiekoersen via Frankfurter (open, geen sleutel)                | 2026-08-21 |
 
 ### Wat er is geprobeerd
 
-| Uitkomst | URL | Wat er gebeurde |
-| --- | --- | --- |
-| gelukt | https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_50m_admin_0_countries.geojson | 242 vlakken, 237 landen met een ISO-code |
-| niet geprobeerd | https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_110m_admin_0_countries.geojson | niet nodig — de bron erboven werkte |
-| niet geprobeerd | https://unpkg.com/world-atlas@2/countries-110m.json | niet nodig — de bron erboven werkte |
-| mislukt | https://restcountries.com/v3.1/all?fields=cca2,currencies,name | onleesbaar: de dienst antwoordt met een fout: This API version has been deprecated. Please visit https://restcountries.com/docs/countries/legacy-api-deprecation to migrate to our new version (v5). — begint met: { "success": false, "data": null, "errors": [ { "message": "This API version has been deprecated. Please visit https://restcount |
-| gelukt | https://raw.githubusercontent.com/unicode-org/cldr-json/main/cldr-json/cldr-core/supplemental/currencyData.json | 255 landen met een geldige valuta op 2026-08-21, 3 waar de bron zegt dat er geen wettig betaalmiddel is |
-| niet geprobeerd | https://raw.githubusercontent.com/mledoze/countries/master/countries.json | niet nodig — de bron erboven werkte |
-| gelukt | https://api.frankfurter.dev/v1/currencies | 30 valuta's (ECB, via Frankfurter) |
-| gelukt | https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_50m_admin_0_tiny_countries.geojson | 74 labelpunten (alleen gebruikt voor landen zonder eigen vlak) |
+| Uitkomst        | URL                                                                                                                 | Wat er gebeurde                                                                                                                                                                                                                                                                                                                                     |
+| --------------- | ------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| gelukt          | https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_50m_admin_0_countries.geojson      | 242 vlakken, 237 landen met een ISO-code                                                                                                                                                                                                                                                                                                            |
+| niet geprobeerd | https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_110m_admin_0_countries.geojson     | niet nodig — de bron erboven werkte                                                                                                                                                                                                                                                                                                                 |
+| niet geprobeerd | https://unpkg.com/world-atlas@2/countries-110m.json                                                                 | niet nodig — de bron erboven werkte                                                                                                                                                                                                                                                                                                                 |
+| mislukt         | https://restcountries.com/v3.1/all?fields=cca2,currencies,name                                                      | onleesbaar: de dienst antwoordt met een fout: This API version has been deprecated. Please visit https://restcountries.com/docs/countries/legacy-api-deprecation to migrate to our new version (v5). — begint met: { "success": false, "data": null, "errors": [ { "message": "This API version has been deprecated. Please visit https://restcount |
+| gelukt          | https://raw.githubusercontent.com/unicode-org/cldr-json/main/cldr-json/cldr-core/supplemental/currencyData.json     | 255 landen met een geldige valuta op 2026-08-21, 3 waar de bron zegt dat er geen wettig betaalmiddel is                                                                                                                                                                                                                                             |
+| niet geprobeerd | https://raw.githubusercontent.com/mledoze/countries/master/countries.json                                           | niet nodig — de bron erboven werkte                                                                                                                                                                                                                                                                                                                 |
+| gelukt          | https://api.frankfurter.dev/v1/currencies                                                                           | 30 valuta's (ECB, via Frankfurter)                                                                                                                                                                                                                                                                                                                  |
+| gelukt          | https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_50m_admin_0_tiny_countries.geojson | 74 labelpunten (alleen gebruikt voor landen zonder eigen vlak)                                                                                                                                                                                                                                                                                      |
 
 ## Wat er is weggelaten, en waarom
 
@@ -140,6 +140,7 @@ weten waar het ligt, niet hoe groot het is.
   dicht ook de rand die bij de datumgrens langs de meridiaan loopt. Topologisch
   vereenvoudigen (gedeelde grenzen één keer) zou het bij de bron oplossen en is de
   volgende stap als het ooit stoort.
+
 - **Gebieden zonder ISO-code.** De geometriebron kent ze wel, maar zonder code is
   er geen valuta aan te koppelen: Somaliland, Northern Cyprus, Siachen Glacier.
 - **Landen zonder eigen vlak in de bron** (13): Caribisch Nederland (BQ), Bouveteiland (BV), Cocoseilanden (CC), Christmaseiland (CX), Frans-Guyana (GF), Gibraltar (GI), Guadeloupe (GP), Martinique (MQ), Réunion (RE), Spitsbergen en Jan Mayen (SJ), Tokelau (TK), Kleine afgelegen eilanden van de Verenigde Staten (UM), Mayotte (YT). Ze staan wél in
@@ -160,6 +161,7 @@ weten waar het ligt, niet hoe groot het is.
   en kan de bol er via de zoekbalk toch naartoe draaien. De rest heeft `pin: null`
   — dat betekent "wij weten het niet" en **niet** [0, 0], want dat is een plek in
   de Golf van Guinee.
+
 - **Fijner afgerond waar het moest** (53 landen). Op één decimaal valt een land van
   een halve graad in één rastercel en houdt het nul punten over — of het houdt
   drie punten over die niet meer op het land lijken. Een land moet daarom ook
@@ -197,10 +199,10 @@ ophouden en niet dat daar water is.
 Een leeg `currencies`-lijstje kan twee dingen betekenen, en de tabel houdt ze uit
 elkaar met de vlag `noTender`.
 
-| Wat de bron zegt | In de tabel | Landen |
-| --- | --- | --- |
+| Wat de bron zegt                                | In de tabel                               | Landen          |
+| ----------------------------------------------- | ----------------------------------------- | --------------- |
 | er is hier geen wettig betaalmiddel (CLDR: XXX) | `currencies: []` **met** `noTender: true` | Antarctica (AQ) |
-| niets — de bron noemt voor dit land geen valuta | `currencies: []` zonder die vlag | geen |
+| niets — de bron noemt voor dit land geen valuta | `currencies: []` zonder die vlag          | geen            |
 
 Het verschil is de reden dat er in `conversionFor()` een **zesde** soort antwoord
 staat. "Er is niets om te wisselen omdat er geen munt is" mag niet op één hoop met

@@ -14,19 +14,34 @@ export type RatesResult = { rates: RateBenchmark[]; asOf: string; source: RatesS
 export function parseRatesPayload(data: unknown): RatesPayload {
   if (!data || typeof data !== "object") throw new Error("rates: geen object");
   const d = data as Record<string, unknown>;
-  if (typeof d.asOf !== "string" || !Array.isArray(d.rates)) throw new Error("rates: asOf/rates ontbreekt");
+  if (typeof d.asOf !== "string" || !Array.isArray(d.rates))
+    throw new Error("rates: asOf/rates ontbreekt");
   const rates: RateBenchmark[] = d.rates.map((raw, i) => {
     const r = raw as Record<string, unknown>;
     if (
-      !r || typeof r.bank !== "string" || typeof r.product !== "string" ||
-      typeof r.ratePct !== "number" || !Number.isFinite(r.ratePct) || typeof r.freeWithdrawal !== "boolean"
+      !r ||
+      typeof r.bank !== "string" ||
+      typeof r.product !== "string" ||
+      typeof r.ratePct !== "number" ||
+      !Number.isFinite(r.ratePct) ||
+      typeof r.freeWithdrawal !== "boolean"
     ) {
       throw new Error(`rates: ongeldige regel ${i}`);
     }
     const standardRatePct =
-      typeof r.standardRatePct === "number" && Number.isFinite(r.standardRatePct) ? r.standardRatePct : undefined;
-    const promoNote = typeof r.promoNote === "string" && r.promoNote.length > 0 ? r.promoNote : undefined;
-    return { bank: r.bank, product: r.product, ratePct: r.ratePct, freeWithdrawal: r.freeWithdrawal, standardRatePct, promoNote };
+      typeof r.standardRatePct === "number" && Number.isFinite(r.standardRatePct)
+        ? r.standardRatePct
+        : undefined;
+    const promoNote =
+      typeof r.promoNote === "string" && r.promoNote.length > 0 ? r.promoNote : undefined;
+    return {
+      bank: r.bank,
+      product: r.product,
+      ratePct: r.ratePct,
+      freeWithdrawal: r.freeWithdrawal,
+      standardRatePct,
+      promoNote,
+    };
   });
   if (rates.length === 0) throw new Error("rates: lege lijst");
   return { asOf: d.asOf, rates };
@@ -95,12 +110,17 @@ export type RatesProvider = { getRates(): Promise<RatesResult> };
  *  throws. Live always wins, so a reload picks up refreshed server rates. */
 export function createRatesProvider(opts: RatesProviderOptions = {}): RatesProvider {
   const { url } = opts;
-  const fetchFn = opts.fetchFn ?? (typeof fetch !== "undefined" ? fetch.bind(globalThis) : undefined);
+  const fetchFn =
+    opts.fetchFn ?? (typeof fetch !== "undefined" ? fetch.bind(globalThis) : undefined);
   const cache = opts.cache ?? localStorageRatesCache();
   const timeoutMs = opts.timeoutMs ?? 6000;
   const cacheTtlMs = opts.cacheTtlMs ?? 12 * 60 * 60 * 1000;
   const now = opts.now ?? (() => Date.now());
-  const bundled: RatesResult = { rates: [...NL_SAVINGS_RATES], asOf: RATES_AS_OF, source: "bundled" };
+  const bundled: RatesResult = {
+    rates: [...NL_SAVINGS_RATES],
+    asOf: RATES_AS_OF,
+    source: "bundled",
+  };
   const catalogue = opts.catalogueRates ?? [];
 
   async function fetchLive(): Promise<RatesPayload | null> {
@@ -122,7 +142,13 @@ export function createRatesProvider(opts: RatesProviderOptions = {}): RatesProvi
    *  carries its own asOf on the row itself, which is the point of it. */
   function withCatalogue(r: RatesResult): RatesResult {
     if (!catalogue.length) return r;
-    return { ...r, rates: mergeRateSources({ rates: catalogue, provenance: "catalogue" }, { rates: r.rates, provenance: r.source === "bundled" ? "bundled" : "comparison" }) };
+    return {
+      ...r,
+      rates: mergeRateSources(
+        { rates: catalogue, provenance: "catalogue" },
+        { rates: r.rates, provenance: r.source === "bundled" ? "bundled" : "comparison" },
+      ),
+    };
   }
 
   return {

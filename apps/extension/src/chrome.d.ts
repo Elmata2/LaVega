@@ -82,7 +82,9 @@ declare namespace chrome {
       remove(keys: string[] | string): Promise<void>;
     };
     const onChanged: {
-      addListener(cb: (changes: Record<string, { newValue?: unknown }>, area: string) => void): void;
+      addListener(
+        cb: (changes: Record<string, { newValue?: unknown }>, area: string) => void,
+      ): void;
     };
   }
 
@@ -121,7 +123,9 @@ declare namespace chrome {
 
     function registerContentScripts(scripts: RegisteredContentScript[]): Promise<void>;
     function unregisterContentScripts(filter?: { ids?: string[] }): Promise<void>;
-    function getRegisteredContentScripts(filter?: { ids?: string[] }): Promise<RegisteredContentScript[]>;
+    function getRegisteredContentScripts(filter?: {
+      ids?: string[];
+    }): Promise<RegisteredContentScript[]>;
   }
 
   /** ÉÉN FUNCTIE, EN ZE STAAT HIER MET HAAR VOORBEHOUD ERBIJ.

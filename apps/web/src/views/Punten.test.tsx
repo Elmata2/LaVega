@@ -6,11 +6,25 @@ import { afterEach, expect, test } from "vitest";
 import type { Account, RewardsBalance, Tx } from "@lavega/core";
 import { makeRewardsBalance, withLinkedAt } from "@lavega/core";
 import Punten, {
-  ALL_PROGRAMS, PICK_PROGRAMS, programCategory, programFacts, programRoster, programUnit, rosterFigure, worthLine,
+  ALL_PROGRAMS,
+  PICK_PROGRAMS,
+  programCategory,
+  programFacts,
+  programUnit,
+  worthLine,
 } from "./Punten";
 import Rekeningen, {
-  dayNL, groupAccountsByBank, latestTxDates, linkedMoment, linkedNote, linkedShort, saldoAge, saldoAgeNote, saldoAgeShort,
+  dayNL,
+  groupAccountsByBank,
+  latestTxDates,
+  linkedMoment,
+  linkedNote,
+  linkedShort,
+  saldoAge,
+  saldoAgeNote,
+  saldoAgeShort,
 } from "./Rekeningen";
+import { moneyCopy } from "../copy/money.js";
 
 /* Drie gaten die de eigenaar noemde, en de invarianten die ze dichthouden.
  *
@@ -73,7 +87,9 @@ function type(el: HTMLInputElement, value: string) {
 }
 
 const byText = (sel: string, text: string): HTMLElement =>
-  [...container!.querySelectorAll<HTMLElement>(sel)].find((n) => (n.textContent ?? "").includes(text))!;
+  [...container!.querySelectorAll<HTMLElement>(sel)].find((n) =>
+    (n.textContent ?? "").includes(text),
+  )!;
 
 /** Elke zin met een jaartal erin. Waarvoor: bij een saldo zonder dag mág er wél
  *  een datum in de melding staan — die van de nieuwste transactie — maar dan
@@ -87,11 +103,25 @@ const datedSentences = (text: string): string[] =>
  * ═════════════════════════════════════════════════════════════════════════ */
 
 const acc = (p: Partial<Account> & { key: string }): Account => ({
-  iban: "", name: p.key, bank: "", entity: "Prive", currency: "EUR", balance: null, ...p,
+  iban: "",
+  name: p.key,
+  bank: "",
+  entity: "Prive",
+  currency: "EUR",
+  balance: null,
+  ...p,
 });
 
 const tx = (id: string, accountKey: string, date: string): Tx => ({
-  id, accountKey, date, amount: -12.5, currency: "EUR", counterparty: "X", description: "", category: "", manual: false,
+  id,
+  accountKey,
+  date,
+  amount: -12.5,
+  currency: "EUR",
+  counterparty: "X",
+  description: "",
+  category: "",
+  manual: false,
 });
 
 /* ── de pure kant ──────────────────────────────────────────────────────── */
@@ -100,12 +130,12 @@ test("een saldo zonder balanceDate is 'datum onbekend' — en dat label bevat ge
   // Precies de vorm die mapEbAccount aflevert: een bedrag, geen dag.
   const age = saldoAge(acc({ key: "NL01INGB", balance: 1200.5 }), null);
   expect(age.kind).toBe("undated");
-  const short = saldoAgeShort(age);
+  const short = saldoAgeShort(age, "nl");
   expect(short).toBe("datum onbekend");
   // De hele fout die dit dichtzet: iets dat als datum kan worden gelezen. Ook
   // geen jaartal, geen "vandaag", geen streepje op een datumplek.
   expect(short).not.toMatch(/\d/);
-  expect(saldoAgeNote(age)).not.toMatch(/\d{4}/);
+  expect(saldoAgeNote(age, "nl")).not.toMatch(/\d{4}/);
 });
 
 test("bij een onbekende dag hoort elke datum in de melding bij de transacties, niet bij het bedrag", () => {
@@ -113,7 +143,7 @@ test("bij een onbekende dag hoort elke datum in de melding bij de transacties, n
   // hebben. Maar hij mag niet als de dag van het saldo kunnen worden gelezen —
   // bij een koppeling komen saldo en transacties uit dezelfde fetch, maar dat is
   // per rekening niet te bewijzen, dus wordt het niet geclaimd.
-  const note = saldoAgeNote(saldoAge(acc({ key: "A", balance: 843.21 }), "2026-08-10"));
+  const note = saldoAgeNote(saldoAge(acc({ key: "A", balance: 843.21 }), "2026-08-10"), "nl");
   const dated = datedSentences(note);
   expect(dated).toHaveLength(1);
   expect(dated[0]).toContain("De nieuwste transactie");
@@ -121,7 +151,7 @@ test("bij een onbekende dag hoort elke datum in de melding bij de transacties, n
 });
 
 test("de melding bij een onbekende dag noemt de oorzaak: de koppeling vernieuwt zichzelf niet", () => {
-  const note = saldoAgeNote(saldoAge(acc({ key: "A", balance: 10 }), null));
+  const note = saldoAgeNote(saldoAge(acc({ key: "A", balance: 10 }), null), "nl");
   expect(note).toContain("geen dag");
   expect(note).toContain("vernieuwt zichzelf niet");
   expect(note).toContain("het moment waarop je autoriseerde");
@@ -133,9 +163,12 @@ test("geen enkele melding stelt een handeling voor die op deze pagina niet besta
   // zijn dat niet uit te voeren is — en er is ook geen verversroute om naar te
   // wijzen: de server heeft aspsps/auth/callback/accounts en niets anders.
   const notes = [
-    saldoAgeNote(saldoAge(acc({ key: "A", balance: 10 }), null)),
-    saldoAgeNote(saldoAge(acc({ key: "B", balance: 10, balanceDate: "2026-07-31" }), "2026-08-12")),
-    saldoAgeNote(saldoAge(acc({ key: "C", balance: null }), null)),
+    saldoAgeNote(saldoAge(acc({ key: "A", balance: 10 }), null), "nl"),
+    saldoAgeNote(
+      saldoAge(acc({ key: "B", balance: 10, balanceDate: "2026-07-31" }), "2026-08-12"),
+      "nl",
+    ),
+    saldoAgeNote(saldoAge(acc({ key: "C", balance: null }), null), "nl"),
   ];
   for (const note of notes) {
     expect(note).not.toMatch(/koppel (opnieuw|je bank)/i);
@@ -147,8 +180,8 @@ test("geen enkele melding stelt een handeling voor die op deze pagina niet besta
 test("een gedateerd saldo zegt van welke dag het is, en meldt latere transacties", () => {
   const age = saldoAge(acc({ key: "A", balance: 1000, balanceDate: "2026-07-31" }), "2026-08-12");
   expect(age).toEqual({ kind: "dated", date: "2026-07-31", laterTx: "2026-08-12" });
-  expect(saldoAgeShort(age)).toBe("stand van 31 juli 2026");
-  const note = saldoAgeNote(age);
+  expect(saldoAgeShort(age, "nl")).toBe("stand van 31 juli 2026");
+  const note = saldoAgeNote(age, "nl");
   expect(note).toContain("stand van 31 juli 2026, niet van vandaag");
   expect(note).toContain("nieuwste is van 12 augustus 2026");
 });
@@ -156,14 +189,14 @@ test("een gedateerd saldo zegt van welke dag het is, en meldt latere transacties
 test("een transactie op de saldodatum zelf is geen latere transactie", () => {
   const age = saldoAge(acc({ key: "A", balance: 1000, balanceDate: "2026-08-12" }), "2026-08-12");
   expect(age).toEqual({ kind: "dated", date: "2026-08-12", laterTx: null });
-  expect(saldoAgeNote(age)).not.toContain("ná die dag");
+  expect(saldoAgeNote(age, "nl")).not.toContain("ná die dag");
 });
 
 test("geen saldo is geen nul en ook geen datum", () => {
   const age = saldoAge(acc({ key: "A", balance: null }), "2026-08-12");
   expect(age).toEqual({ kind: "none", latestTx: "2026-08-12" });
-  expect(saldoAgeShort(age)).toBe("geen saldo");
-  expect(saldoAgeNote(age)).toContain("geen bedrag, en dus ook geen nul");
+  expect(saldoAgeShort(age, "nl")).toBe("geen saldo");
+  expect(saldoAgeNote(age, "nl")).toContain("geen bedrag, en dus ook geen nul");
 });
 
 test("latestTxDates neemt per rekening de nieuwste dag, in één doorloop", () => {
@@ -192,32 +225,53 @@ const noop = () => {};
 /** Twee rekeningen bij één bank: één met een gedateerd afschriftsaldo, één zoals
  *  een bankkoppeling hem oplevert (bedrag, geen dag). */
 const LINKED = acc({ key: "NL02INGB", name: "Gekoppelde rekening", bank: "ING", balance: 843.21 });
-const IMPORTED = acc({ key: "NL01INGB", name: "Afschrift", bank: "ING", balance: 1200.5, balanceDate: "2026-07-31" });
+const IMPORTED = acc({
+  key: "NL01INGB",
+  name: "Afschrift",
+  bank: "ING",
+  balance: 1200.5,
+  balanceDate: "2026-07-31",
+});
 const REK_TXS: Tx[] = [tx("t1", "NL01INGB", "2026-08-12"), tx("t2", "NL02INGB", "2026-08-10")];
 
 function rekProps(): RekProps {
   return {
-    accounts: [IMPORTED, LINKED], txs: REK_TXS, busy: false,
-    onEntityChange: noop, onAccountCommit: noop, onAccountFieldChange: noop,
-    onSaldoCommit: noop, onTypeCommit: noop, onSelectAccount: noop, onDeleteAccount: noop,
-    duplicateGroups: [], onMergeDuplicates: noop,
+    accounts: [IMPORTED, LINKED],
+    txs: REK_TXS,
+    busy: false,
+    onEntityChange: noop,
+    onAccountCommit: noop,
+    onAccountFieldChange: noop,
+    onSaldoCommit: noop,
+    onTypeCommit: noop,
+    onSelectAccount: noop,
+    onDeleteAccount: noop,
+    duplicateGroups: [],
+    onMergeDuplicates: noop,
+    valuations: [],
+    asOf: "2026-11-11",
+    onOpeningCommit: noop,
+    onValuationCommit: noop,
+    onValuationRemove: noop,
   };
 }
 
 test("het paneel van een gekoppelde rekening zegt 'datum onbekend' en vult geen dag in", () => {
   mount(<Rekeningen {...rekProps()} />);
-  click(byText(".bank-group-head", "ING"));
+  click(byText("[data-testid=bank-group-head]", "ING"));
   click(byText('[role="tab"]', "Gekoppelde rekening"));
-  const panel = container!.querySelector(".bank-panel")!;
+  const panel = container!.querySelector("[data-testid=bank-panel]")!;
   expect(panel.textContent).toContain("datum onbekend");
   // Er staat geen dag bij het bedrag. De enige datum in het blok is die van de
   // nieuwste transactie, en die zin gaat ook over de transacties.
-  const age = panel.querySelector(".bank-panel-age")!;
+  const age = panel.querySelector("[data-testid=bank-panel-age]")!;
   // Het veld van het SALDO, opgezocht aan het invoerveld dat erin staat en niet
   // aan zijn plek in de rij: er staat nu ook een veld "Gekoppeld" met een datum
   // erin, en dat is een ander gegeven. Op volgorde selecteren zou deze test op
   // een dag stilletjes het verkeerde veld gaan keuren.
-  const saldoField = [...panel.querySelectorAll<HTMLElement>(".bank-field")].find((f) => f.querySelector(".saldo-input"))!;
+  const saldoField = [...panel.querySelectorAll<HTMLElement>("[data-testid=bank-field]")].find(
+    (f) => f.querySelector('[data-testid="saldo-input"]'),
+  )!;
   expect(saldoField.querySelector(".cell-sub")!.textContent).not.toMatch(/\d/);
   const dated = datedSentences(age.textContent ?? "");
   expect(dated).toHaveLength(1);
@@ -228,10 +282,12 @@ test("het paneel van een gekoppelde rekening zegt 'datum onbekend' en vult geen 
 
 test("het advies in de melding wijst naar een veld dat op dezelfde pagina staat", () => {
   mount(<Rekeningen {...rekProps()} />);
-  click(byText(".bank-group-head", "ING"));
+  click(byText("[data-testid=bank-group-head]", "ING"));
   click(byText('[role="tab"]', "Gekoppelde rekening"));
-  const panel = container!.querySelector<HTMLElement>(".bank-panel")!;
-  expect(panel.querySelector(".bank-panel-age")!.textContent).toContain("in het veld hierboven");
+  const panel = container!.querySelector<HTMLElement>("[data-testid=bank-panel]")!;
+  expect(panel.querySelector("[data-testid=bank-panel-age]")!.textContent).toContain(
+    "in het veld hierboven",
+  );
   // En dat veld bestaat hier echt — dit is het hele punt van regel 3.
   expect(panel.querySelector('[aria-label="Saldo Gekoppelde rekening"]')).toBeTruthy();
   // Er staat geen knop op deze pagina die een koppeling verrast, dus er wordt
@@ -242,15 +298,17 @@ test("het advies in de melding wijst naar een veld dat op dezelfde pagina staat"
 
 test("een geïmporteerd saldo zegt van welke dag het is, en dat er nieuwere transacties zijn", () => {
   mount(<Rekeningen {...rekProps()} />);
-  click(byText(".bank-group-head", "ING"));
-  const panel = container!.querySelector(".bank-panel")!; // eerste tab = Afschrift
+  click(byText("[data-testid=bank-group-head]", "ING"));
+  const panel = container!.querySelector("[data-testid=bank-panel]")!; // eerste tab = Afschrift
   expect(panel.textContent).toContain("stand van 31 juli 2026");
-  expect(panel.querySelector(".bank-panel-age")!.textContent).toContain("nieuwste is van 12 augustus 2026");
+  expect(panel.querySelector("[data-testid=bank-panel-age]")!.textContent).toContain(
+    "nieuwste is van 12 augustus 2026",
+  );
 });
 
 test("de platte tabel zegt per rij hetzelfde, en vult ook daar geen dag in", () => {
   mount(<Rekeningen {...rekProps()} />);
-  click(byText(".bank-modes .pill", "Alle rekeningen"));
+  click(byText('[data-testid=bank-modes] [data-testid="pill"]', "Alle rekeningen"));
   const cells = [...container!.querySelectorAll<HTMLElement>('td[data-label="Saldo"]')];
   const texts = cells.map((c) => c.querySelector(".cell-sub")!.textContent);
   expect(texts).toContain("stand van 31 juli 2026");
@@ -261,7 +319,7 @@ test("de dichtgeklapte bankkop zegt 'dag onbekend' zodra een opgeteld saldo geen
   // Dichtgeklapt is de stand waarin hij de pagina opent: daar staat een
   // euro-totaal en niets anders, en dat leest als "nu".
   mount(<Rekeningen {...rekProps()} />);
-  const head = byText(".bank-group-head", "ING");
+  const head = byText("[data-testid=bank-group-head]", "ING");
   expect(head.textContent).toContain("dag onbekend");
   // Het totaal blijft staan — het is wél de som van wat we hebben (843,21 +
   // 1.200,50), alleen niet de som van één dag.
@@ -270,7 +328,7 @@ test("de dichtgeklapte bankkop zegt 'dag onbekend' zodra een opgeteld saldo geen
 
 test("een bank waarvan elk saldo een dag heeft krijgt die melding niet", () => {
   mount(<Rekeningen {...rekProps()} accounts={[IMPORTED]} />);
-  const head = byText(".bank-group-head", "ING");
+  const head = byText("[data-testid=bank-group-head]", "ING");
   expect(head.textContent).not.toContain("dag onbekend");
 });
 
@@ -382,15 +440,15 @@ test("de waarderegel van ING noemt de reden waarom er geen bedrag staat", () => 
 
 test("op de ING-kaart staat geen euro-waarde, wel de reden waarom niet", () => {
   mount(<Punten {...puntenProps([ingBalance(12_500)])} />);
-  const card = container!.querySelector<HTMLElement>(".punt-card")!;
-  expect(card.querySelector(".punt-value")!.textContent).toBe("12.500");
-  expect(card.querySelector(".punt-unit")!.textContent).toBe("punten");
+  const card = container!.querySelector<HTMLElement>("[data-testid=punt-card]")!;
+  expect(card.querySelector("[data-testid=punt-value]")!.textContent).toBe("12.500");
+  expect(card.querySelector("[data-testid=punt-unit]")!.textContent).toBe("punten");
 
   // Alles buiten het regelblok is LaVega's eigen tekst over dit saldo. Daar mag
   // geen euroteken staan: er is geen euro-waarde van een ING-punt.
-  const rules = card.querySelector<HTMLElement>(".punt-facts")!;
+  const rules = card.querySelector<HTMLElement>("[data-testid=punt-facts]")!;
   const own = card.cloneNode(true) as HTMLElement;
-  own.querySelector(".punt-facts")!.remove();
+  own.querySelector("[data-testid=punt-facts]")!.remove();
   expect(own.textContent).not.toContain("€");
 
   // En binnen het regelblok is elk euroteken een DREMPEL van ING, nooit een
@@ -411,7 +469,7 @@ test("de kaart toont de negen verdienregels en de pakketopslag", () => {
   const items = [...container!.querySelectorAll(".punt-facts-earn li")].map((li) => li.textContent);
   expect(items).toHaveLength(9);
   expect(items[0]).toContain("250 punten per maand");
-  const rules = container!.querySelector(".punt-facts")!;
+  const rules = container!.querySelector("[data-testid=punt-facts]")!;
   expect(rules.textContent).toContain("ING Extra: 20% meer punten");
   expect(rules.textContent).toContain("kunnen wijzigen");
   expect(rules.textContent).toContain("opgehaald op 21 augustus 2026");
@@ -427,29 +485,46 @@ test("het regelblok haalt niets op: geen link, geen afbeelding, geen remote adre
 
 test("de regels staan er al vóórdat hij opslaat, zodra het formulier op ING Punten staat", () => {
   mount(<Punten {...puntenProps([])} />);
-  expect(container!.querySelector(".punt-facts")).toBeNull();
-  const field = container!.querySelector<HTMLInputElement>('.punt-form [aria-label="Programma"]')!;
+  expect(container!.querySelector("[data-testid=punt-facts]")).toBeNull();
+  const field = container!.querySelector<HTMLInputElement>(
+    '[data-testid=punt-form] [aria-label="Programma"]',
+  )!;
   type(field, ING);
-  const rules = container!.querySelector(".punt-facts")!;
+  const rules = container!.querySelector("[data-testid=punt-facts]")!;
   expect(rules.textContent).toContain("drempel, geen tarief");
   expect(container!.querySelector('[aria-label="Punten"]')).toBeTruthy(); // punten, geen euro's
 });
 
 test("wie 'ING' kiest wordt naar ING Punten gewezen — een optie die in dezelfde lijst staat", () => {
   mount(<Punten {...puntenProps([])} />);
-  const field = container!.querySelector<HTMLInputElement>('.punt-form [aria-label="Programma"]')!;
+  const field = container!.querySelector<HTMLInputElement>(
+    '[data-testid=punt-form] [aria-label="Programma"]',
+  )!;
   type(field, "ING");
-  const note = byText(".punt-form .field-note", "Spaar je ING Punten?");
+  const note = byText(
+    "[data-testid=punt-form] [data-testid=punt-ing-hint]",
+    "Spaar je ING Punten?",
+  );
   expect(note).toBeTruthy();
-  const options = [...container!.querySelectorAll("#reward-programs option")].map((o) => o.getAttribute("value"));
+  const options = [...container!.querySelectorAll("#reward-programs option")].map((o) =>
+    o.getAttribute("value"),
+  );
   expect(options).toContain(ING);
 });
 
 test("een ander programma blijft precies zoals het was", () => {
-  mount(<Punten {...puntenProps([makeRewardsBalance({ program: "Marriott Bonvoy", points: 60_000, updatedAt: "2026-08-01" })])} />);
-  const card = container!.querySelector<HTMLElement>(".punt-card")!;
-  expect(card.querySelector(".punt-facts")).toBeNull();
-  expect(card.querySelector(".punt-worth")!.textContent).toContain("niet vast te stellen");
+  mount(
+    <Punten
+      {...puntenProps([
+        makeRewardsBalance({ program: "Marriott Bonvoy", points: 60_000, updatedAt: "2026-08-01" }),
+      ])}
+    />,
+  );
+  const card = container!.querySelector<HTMLElement>("[data-testid=punt-card]")!;
+  expect(card.querySelector("[data-testid=punt-facts]")).toBeNull();
+  expect(card.querySelector("[data-testid=punt-worth]")!.textContent).toContain(
+    "niet vast te stellen",
+  );
   expect(card.textContent).not.toContain("€");
 });
 
@@ -468,8 +543,6 @@ test("een ander programma blijft precies zoals het was", () => {
  * dichtgezet: het programma viel weg zonder saldo (nu staat het in de lijst
  * hieronder) én er stonden twee ING's naast elkaar (nu nog één te kiezen).
  * ═════════════════════════════════════════════════════════════════════════ */
-
-const AMEX = "American Express Membership Rewards";
 
 test("elk programma staat één keer in de keuzelijst — de dubbele ING is weg", () => {
   const pickable = PICK_PROGRAMS.map((p) => p.name).filter((n) => /^ING/i.test(n));
@@ -490,20 +563,13 @@ test("elk programma staat één keer in de keuzelijst — de dubbele ING is weg"
  * onderliggende oorzaak bestaan: de kieslijst in "Saldo toevoegen" is een
  * <input list> + <datalist>, onzichtbaar tot je begint te typen. Met het blok
  * is ook deze wacht weg — komt die klacht terug, dan is er nu geen test die
- * hem vóór hem vangt. */
-
-test("de lijst zet de programma's met een saldo bovenaan en verzint er geen bij", () => {
-  const rows = programRoster([makeRewardsBalance({ program: "Spaarzegels van de bakker", points: 12, updatedAt: "2026-08-01" })]);
-  // Zijn eigen programma staat erbij (anders zou "alle programma's" zijn eigen
-  // invoer weglaten) en het staat vooraan, want daar is een saldo van.
-  expect(rows[0].name).toBe("Spaarzegels van de bakker");
-  expect(rows[0].category).toBe("eigen programma");
-  expect(rows.filter((r) => r.balance !== null)).toHaveLength(1);
-  expect(rows.slice(1).every((r) => r.balance === null)).toBe(true);
-  // Een programma zonder saldo heeft er GEEN — geen nul die daarvoor doorgaat.
-  expect(rows.find((r) => r.name === AMEX)!.balance).toBeNull();
-  expect(rosterFigure(rows.find((r) => r.name === AMEX)!)).toBe("nog geen saldo");
-});
+ * hem vóór hem vangt.
+ *
+ * De achtste test — voor `programRoster`/`rosterFigure`, de functies achter
+ * dat verwijderde blok — bleef achter zonder aanroeper buiten zichzelf (Engelse
+ * localisatiepas, sep 2026). Dode Nederlandse code is een valkuil: hij compileert,
+ * hij test groen, en niemand merkt dat het scherm hem nooit rendert. Verwijderd
+ * samen met `programRoster`, `rosterFigure` en `RosterRow` in Punten.tsx. */
 
 test("er staat geen uitleg meer over waarom punten geen euro-waarde hebben", () => {
   /* HIJ HEEFT DIT BLOK LATEN VERWIJDEREN (22 augustus), samen met de inleidende
@@ -558,10 +624,10 @@ test("een her-import verschuift een bestaand koppelmoment niet en wist het niet"
 
 test("het koppelmoment en de saldodatum zijn twee verschillende gegevens", () => {
   const a = acc({ key: "A", balance: 1000, balanceDate: "2026-07-31", linkedAt: "2026-08-21" });
-  expect(saldoAgeShort(saldoAge(a, null))).toBe("stand van 31 juli 2026");
-  expect(linkedShort(linkedMoment(a))).toBe("gekoppeld op 21 augustus 2026");
+  expect(saldoAgeShort(saldoAge(a, null), "nl")).toBe("stand van 31 juli 2026");
+  expect(linkedShort(linkedMoment(a), "nl")).toBe("gekoppeld op 21 augustus 2026");
   // De zin over de koppeling doet geen enkele uitspraak over het bedrag.
-  const note = linkedNote(linkedMoment(a));
+  const note = linkedNote(linkedMoment(a), "nl");
   expect(note).toContain("hoe oud de koppeling is");
   expect(note).toContain("niet hoe oud het bedrag is");
 });
@@ -569,9 +635,9 @@ test("het koppelmoment en de saldodatum zijn twee verschillende gegevens", () =>
 test("geen koppelmoment leest als onbekend — geen cijfer, geen vandaag", () => {
   const m = linkedMoment(acc({ key: "A", balance: 10 }));
   expect(m).toEqual({ kind: "unknown" });
-  expect(linkedShort(m)).toBe("koppelmoment onbekend");
-  expect(linkedShort(m)).not.toMatch(/\d/);
-  const note = linkedNote(m);
+  expect(linkedShort(m, "nl")).toBe("koppelmoment onbekend");
+  expect(linkedShort(m, "nl")).not.toMatch(/\d/);
+  const note = linkedNote(m, "nl");
   expect(note).toContain("niet vastgelegd");
   expect(note).not.toMatch(/\d{4}/);
 });
@@ -580,28 +646,124 @@ test("de melding bij een onbekend koppelmoment stelt geen handeling voor die het
   // Opnieuw importeren MAAKT geen koppelmoment voor een rekening die er al is —
   // withLinkedAt vult niet met terugwerkende kracht. Dat als advies geven zou
   // dus een advies zijn dat in deze toestand niet werkt.
-  const note = linkedNote({ kind: "unknown" });
+  const note = linkedNote({ kind: "unknown" }, "nl");
   expect(note).not.toMatch(/opnieuw import|importeer opnieuw|koppel opnieuw|opnieuw koppelen/i);
   expect(note).not.toMatch(/ververs/i);
 });
 
 test("het paneel toont beide data, uit elkaar gehouden", () => {
-  const gekoppeld = acc({ key: "NL03INGB", name: "Nieuwe rekening", bank: "ING", balance: 500, linkedAt: "2026-08-21" });
+  const gekoppeld = acc({
+    key: "NL03INGB",
+    name: "Nieuwe rekening",
+    bank: "ING",
+    balance: 500,
+    linkedAt: "2026-08-21",
+  });
   mount(<Rekeningen {...rekProps()} accounts={[IMPORTED, gekoppeld]} />);
-  click(byText(".bank-group-head", "ING"));
+  click(byText("[data-testid=bank-group-head]", "ING"));
   click(byText('[role="tab"]', "Nieuwe rekening"));
-  const panel = container!.querySelector<HTMLElement>(".bank-panel")!;
-  expect(panel.querySelector(".bank-panel-linked")!.textContent).toContain("gekoppeld op 21 augustus 2026");
+  const panel = container!.querySelector<HTMLElement>("[data-testid=bank-panel]")!;
+  expect(panel.querySelector("[data-testid=bank-panel-linked]")!.textContent).toContain(
+    "gekoppeld op 21 augustus 2026",
+  );
   // Twee aparte alinea's, niet één zin met twee datums erin.
-  expect(panel.querySelector(".bank-panel-age")!.textContent).not.toContain("gekoppeld op");
-  expect(panel.querySelector(".bank-panel-linked")!.textContent).not.toContain("stand van");
+  expect(panel.querySelector("[data-testid=bank-panel-age]")!.textContent).not.toContain(
+    "gekoppeld op",
+  );
+  expect(panel.querySelector("[data-testid=bank-panel-linked]")!.textContent).not.toContain(
+    "stand van",
+  );
 });
 
 test("een rekening van vóór dit veld zegt het eerlijk in het paneel", () => {
   mount(<Rekeningen {...rekProps()} />);
-  click(byText(".bank-group-head", "ING"));
-  const panel = container!.querySelector<HTMLElement>(".bank-panel")!;
-  const linked = panel.querySelector(".bank-panel-linked")!;
+  click(byText("[data-testid=bank-group-head]", "ING"));
+  const panel = container!.querySelector<HTMLElement>("[data-testid=bank-panel]")!;
+  const linked = panel.querySelector("[data-testid=bank-panel-linked]")!;
   expect(linked.textContent).toContain("koppelmoment onbekend");
   expect(linked.textContent).not.toMatch(/\d{4}/);
+});
+
+/* "EEN GETAL ZONDER DATUM LEEST ALS EEN GETAL VAN NU." Zijn woorden, en de helft
+ * van die klacht die nog openstond. Sinds `/api/eb/refresh` bestaat is het
+ * KOPPELMOMENT niet langer het beste wat we over een bedrag weten: een rekening
+ * van vorige maand kan een saldo van vanochtend dragen, en "gekoppeld op
+ * 8 september" ernaast leest dan als een uitspraak over dát bedrag. */
+test("a balance we fetched today says so, even when the bank sent no date", () => {
+  const account = acc({ key: "EB1", balance: 2_400, linkedAt: "2026-08-08" });
+  account.balanceFetchedAt = "2026-09-22";
+  const age = saldoAge(account, null);
+  if (age.kind !== "undated") throw new Error("onbereikbaar");
+  expect(age.fetchedAt).toBe("2026-09-22");
+
+  for (const locale of ["nl", "en"] as const) {
+    const short = saldoAgeShort(age, locale);
+    expect(short, locale).toMatch(/22/); // de dag waarop we het vroegen
+    expect(short, locale).not.toMatch(/8 augustus|8 August/); // niet het koppelmoment
+  }
+  // En de uitleg zegt expliciet WELKE dag dit is, want de twee zijn niet gelijk.
+  expect(saldoAgeNote(age, "en")).toContain("not the day the amount held");
+});
+
+/* Zonder ophaalmoment verandert er niets: dan is het koppelmoment nog steeds
+ * het beste wat er is, en blijft de oude zin staan. */
+test("without a fetch moment the linked-on wording is unchanged", () => {
+  const age = saldoAge(acc({ key: "EB2", balance: 900, linkedAt: "2026-08-08" }), null);
+  if (age.kind !== "undated") throw new Error("onbereikbaar");
+  expect(age.fetchedAt).toBeNull();
+  expect(saldoAgeShort(age, "nl")).toBe(moneyCopy.nl.rekeningen.datumOnbekend);
+});
+
+/* ── Punten prefill uit de opgegeven programma's ───────────────────────── */
+
+test("stated Flying Blue shows an empty row", () => {
+  mount(<Punten {...puntenProps([])} statedPrograms={["Flying Blue"]} />);
+  const cards = container!.querySelectorAll("[data-testid=punt-stated]");
+  expect(cards).toHaveLength(1);
+  expect(cards[0].textContent).toContain("Flying Blue");
+  expect(cards[0].textContent).toContain("Vul je saldo in");
+  expect(cards[0].querySelector<HTMLInputElement>("input")!.value).toBe("");
+  // Nothing invented: no balance card, no zero.
+  expect(container!.querySelectorAll("[data-testid=punt-card]")).toHaveLength(0);
+});
+
+test("stated programme with a balance is not duplicated", () => {
+  const fb = makeRewardsBalance({ program: "Flying Blue", points: 5000, updatedAt: "2026-08-01" });
+  mount(<Punten {...puntenProps([fb])} statedPrograms={["flying  blue"]} />);
+  expect(container!.querySelectorAll("[data-testid=punt-stated]")).toHaveLength(0);
+  expect(container!.querySelectorAll("[data-testid=punt-card]")).toHaveLength(1);
+});
+
+test("entering a balance saves through the normal path", () => {
+  const saved: RewardsBalance[][] = [];
+  mount(
+    <Punten
+      {...puntenProps([])}
+      onSave={(next) => saved.push(next)}
+      statedPrograms={["Flying Blue"]}
+    />,
+  );
+  const card = container!.querySelector<HTMLElement>("[data-testid=punt-stated]")!;
+  type(card.querySelector<HTMLInputElement>("input")!, "12500");
+  click(card.querySelector<HTMLButtonElement>("button")!);
+  expect(saved).toHaveLength(1);
+  expect(saved[0]).toHaveLength(1);
+  expect(saved[0][0]).toMatchObject({ program: "Flying Blue", points: 12500, updatedAt: ASOF });
+});
+
+test("saving an empty stated row shows the error and does not save", () => {
+  const saved: RewardsBalance[][] = [];
+  mount(
+    <Punten
+      {...puntenProps([])}
+      onSave={(next) => saved.push(next)}
+      statedPrograms={["Flying Blue"]}
+    />,
+  );
+  const card = container!.querySelector<HTMLElement>("[data-testid=punt-stated]")!;
+  const btn = card.querySelector<HTMLButtonElement>("button")!;
+  expect(btn.getAttribute("aria-label")).toContain("Flying Blue");
+  click(btn);
+  expect(saved).toHaveLength(0);
+  expect(card.querySelector("[data-testid=punt-error]")!.textContent).toBeTruthy();
 });

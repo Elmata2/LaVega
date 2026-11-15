@@ -4,7 +4,13 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, test } from "vitest";
 import type { RewardsBalance } from "@lavega/core";
 import { makeRewardsBalance } from "@lavega/core";
-import Punten, { programUnit, programCategory, puntenRows, addDaysISO, dateNL } from "./views/Punten";
+import Punten, {
+  programUnit,
+  programCategory,
+  puntenRows,
+  addDaysISO,
+  dateNL,
+} from "./views/Punten";
 
 /* B5 — the Punten tracker.
  *
@@ -17,7 +23,11 @@ import Punten, { programUnit, programCategory, puntenRows, addDaysISO, dateNL } 
 
 const ASOF = "2026-08-17";
 
-const mr = (points: number, updatedAt: string, extra: Partial<RewardsBalance> = {}): RewardsBalance => ({
+const mr = (
+  points: number,
+  updatedAt: string,
+  extra: Partial<RewardsBalance> = {},
+): RewardsBalance => ({
   ...makeRewardsBalance({ program: "American Express Membership Rewards", points, updatedAt }),
   ...extra,
 });
@@ -97,15 +107,19 @@ function render(balances: RewardsBalance[], busy = false) {
   document.body.appendChild(container);
   root = createRoot(container);
   act(() =>
-    root!.render(<Punten balances={balances} asOf={ASOF} busy={busy} onSave={(next) => saved.push(next)} />),
+    root!.render(
+      <Punten balances={balances} asOf={ASOF} busy={busy} onSave={(next) => saved.push(next)} />,
+    ),
   );
   return container;
 }
 
 const byText = (sel: string, text: string): HTMLElement =>
-  [...container!.querySelectorAll<HTMLElement>(sel)].find((n) => (n.textContent ?? "").includes(text))!;
+  [...container!.querySelectorAll<HTMLElement>(sel)].find((n) =>
+    (n.textContent ?? "").includes(text),
+  )!;
 
-const cardFor = (program: string): HTMLElement => byText(".punt-card", program);
+const cardFor = (program: string): HTMLElement => byText('[data-testid="punt-card"]', program);
 
 function click(el: HTMLElement) {
   act(() => {
@@ -114,7 +128,8 @@ function click(el: HTMLElement) {
 }
 
 function type(el: HTMLInputElement | HTMLSelectElement, value: string) {
-  const proto = el instanceof HTMLSelectElement ? HTMLSelectElement.prototype : HTMLInputElement.prototype;
+  const proto =
+    el instanceof HTMLSelectElement ? HTMLSelectElement.prototype : HTMLInputElement.prototype;
   act(() => {
     Object.getOwnPropertyDescriptor(proto, "value")!.set!.call(el, value);
     el.dispatchEvent(new Event("input", { bubbles: true }));
@@ -125,8 +140,8 @@ function type(el: HTMLInputElement | HTMLSelectElement, value: string) {
 test("a points balance shows the number, the date it came from, and no euro value", () => {
   render([mr(245_000, "2026-05-12")]);
   const card = cardFor("American Express");
-  expect(card.querySelector(".punt-value")!.textContent).toBe("245.000");
-  expect(card.querySelector(".punt-unit")!.textContent).toBe("punten");
+  expect(card.querySelector('[data-testid="punt-value"]')!.textContent).toBe("245.000");
+  expect(card.querySelector('[data-testid="punt-unit"]')!.textContent).toBe("punten");
   expect(card.textContent).toContain("Stand van 12 mei 2026");
   expect(card.textContent).toContain("Waarde: niet vast te stellen");
   expect(card.textContent).not.toContain("€");
@@ -135,8 +150,8 @@ test("a points balance shows the number, the date it came from, and no euro valu
 test("cashback in euro's is the one value shown — the balance itself, no rate", () => {
   render([bunq(42, ASOF)]);
   const card = cardFor("bunq");
-  expect(card.querySelector(".punt-value")!.textContent).toContain("42,00");
-  expect(card.querySelector(".punt-unit")!.textContent).toBe("cashback");
+  expect(card.querySelector('[data-testid="punt-value"]')!.textContent).toContain("42,00");
+  expect(card.querySelector('[data-testid="punt-unit"]')!.textContent).toBe("cashback");
   expect(card.textContent).toContain("geen omrekening");
 });
 
@@ -160,7 +175,7 @@ test("nothing on the screen adds two programmes together", () => {
 test("an old balance is flagged, dated, and given the question to answer", () => {
   render([mr(245_000, "2026-01-01")]);
   const card = cardFor("American Express");
-  expect(card.className).toContain("punt-overdue");
+  expect(card.dataset.state).toBe("overdue");
   expect(card.textContent).toContain("verouderd");
   expect(card.textContent).toContain("228 dagen geleden ingevoerd");
   expect(card.textContent).toContain("over de afgesproken termijn");
@@ -176,9 +191,9 @@ test("a fresh balance says when it will be asked about, and is not nagged at", (
 
 test("answering with just the number stores it and re-dates it to today", () => {
   render([mr(200_000, "2026-01-01")]);
-  click(byText(".punt-card .card-link", "Saldo bijwerken"));
-  type(container!.querySelector<HTMLInputElement>(".punt-ask input")!, "245k");
-  click(byText(".punt-ask .btn-primary", "Opslaan"));
+  click(byText('[data-testid="punt-card"] [data-testid="card-link"]', "Saldo bijwerken"));
+  type(container!.querySelector<HTMLInputElement>('[data-testid="punt-ask"] input')!, "245k");
+  click(byText('[data-testid="punt-ask"] [data-testid="btn-primary"]', "Opslaan"));
   expect(saved).toHaveLength(1);
   expect(saved[0][0].points).toBe(245_000);
   expect(saved[0][0].updatedAt).toBe(ASOF);
@@ -186,65 +201,98 @@ test("answering with just the number stores it and re-dates it to today", () => 
 
 test("a reply that is a sentence is refused out loud — nothing is guessed into the vault", () => {
   render([mr(200_000, "2026-01-01")]);
-  click(byText(".punt-card .card-link", "Saldo bijwerken"));
-  type(container!.querySelector<HTMLInputElement>(".punt-ask input")!, "ergens tussen 240000 en 250000");
-  click(byText(".punt-ask .btn-primary", "Opslaan"));
+  click(byText('[data-testid="punt-card"] [data-testid="card-link"]', "Saldo bijwerken"));
+  type(
+    container!.querySelector<HTMLInputElement>('[data-testid="punt-ask"] input')!,
+    "ergens tussen 240000 en 250000",
+  );
+  click(byText('[data-testid="punt-ask"] [data-testid="btn-primary"]', "Opslaan"));
   expect(saved).toHaveLength(0);
-  expect(container!.querySelector(".punt-error")!.textContent).toContain("stuur alleen het saldo");
+  expect(container!.querySelector('[data-testid="punt-error"]')!.textContent).toContain(
+    "stuur alleen het saldo",
+  );
 });
 
 test("'Niet nu' snoozes exactly one month and asks nothing in between", () => {
   render([mr(200_000, "2026-01-01")]);
-  click(byText(".punt-card .card-link", "Niet nu"));
+  click(byText('[data-testid="punt-card"] [data-testid="card-link"]', "Niet nu"));
   expect(saved[0][0].snoozedUntil).toBe("2026-09-16");
 });
 
 test("the reminder interval is set per programme", () => {
   render([fb(60_000, "2026-08-01")]);
-  type(container!.querySelector<HTMLSelectElement>('[aria-label="Herinnering Flying Blue (KLM/Air France)"]')!, "30");
+  type(
+    container!.querySelector<HTMLSelectElement>(
+      '[aria-label="Herinnering Flying Blue (KLM/Air France)"]',
+    )!,
+    "30",
+  );
   expect(saved[0][0].intervalDays).toBe(30);
 });
 
 test("a balance can be removed", () => {
   render([fb(60_000, ASOF), mr(1, ASOF)]);
-  click(byText(".punt-card .card-link-danger", "Verwijder"));
+  click(byText('[data-testid="punt-card"] [data-variant="danger"]', "Verwijder"));
   expect(saved[0]).toHaveLength(1);
 });
 
 test("the add form takes '245k' and refuses text, saying why", () => {
   render([]);
-  type(container!.querySelector<HTMLInputElement>('.punt-form [aria-label="Punten"]')!, "geen idee");
-  click(byText(".stack-form-actions .btn-primary", "Opslaan"));
+  type(
+    container!.querySelector<HTMLInputElement>('[data-testid="punt-form"] [aria-label="Punten"]')!,
+    "geen idee",
+  );
+  click(byText('[data-testid="stack-form-actions"] [data-testid="btn-primary"]', "Opslaan"));
   expect(saved).toHaveLength(0);
-  expect(container!.querySelector(".punt-error")!.textContent).toContain("geen getal");
+  expect(container!.querySelector('[data-testid="punt-error"]')!.textContent).toContain(
+    "geen getal",
+  );
 
-  type(container!.querySelector<HTMLInputElement>('.punt-form [aria-label="Punten"]')!, "245k");
-  click(byText(".stack-form-actions .btn-primary", "Opslaan"));
+  type(
+    container!.querySelector<HTMLInputElement>('[data-testid="punt-form"] [aria-label="Punten"]')!,
+    "245k",
+  );
+  click(byText('[data-testid="stack-form-actions"] [data-testid="btn-primary"]', "Opslaan"));
   expect(saved[0][0].points).toBe(245_000);
 });
 
 test("the add form names the unit of the chosen programme", () => {
   render([]);
-  expect(container!.querySelector('.punt-form [aria-label="Punten"]')).toBeTruthy();
-  type(container!.querySelector<HTMLInputElement>('.punt-form [aria-label="Programma"]')!, "bunq");
-  expect(container!.querySelector('.punt-form [aria-label="Cashback in hele euro\'s"]')).toBeTruthy();
+  expect(container!.querySelector('[data-testid="punt-form"] [aria-label="Punten"]')).toBeTruthy();
+  type(
+    container!.querySelector<HTMLInputElement>(
+      '[data-testid="punt-form"] [aria-label="Programma"]',
+    )!,
+    "bunq",
+  );
+  expect(
+    container!.querySelector('[data-testid="punt-form"] [aria-label="Cashback in hele euro\'s"]'),
+  ).toBeTruthy();
 });
 
 test("with nothing tracked the screen explains what to do, and claims nothing", () => {
   render([]);
-  expect(container!.querySelector(".empty-guide")!.textContent).toContain("Nog geen punten- of cashback-saldi");
-  expect(container!.querySelectorAll(".punt-card")).toHaveLength(0);
+  expect(container!.querySelector('[data-testid="empty-guide"]')!.textContent).toContain(
+    "Nog geen punten- of cashback-saldi",
+  );
+  expect(container!.querySelectorAll('[data-testid="punt-card"]')).toHaveLength(0);
   /* "0 SALDI" EN NIET "0 PROGRAMMA'S", en dat is een correctie en geen
    * naamswijziging. Sinds hij vroeg om ALLE programma's te tonen — ook ING, ook
    * die waar hij niets heeft staan — is de lijst eronder nooit meer leeg. "0
    * programma's" zou dus onwaar zijn boven een scherm dat er een stuk of tien
    * opsomt. Wat er nul is, is het aantal saldi dat hij heeft ingevuld. */
-  expect(container!.querySelector(".view-head .eyebrow")!.textContent).toBe("0 saldi");
+  expect(container!.querySelector('[data-testid="view-head"] .eyebrow')!.textContent).toBe(
+    "0 saldi",
+  );
 });
 
 test("busy disables every control that would write", () => {
   render([mr(1, "2026-01-01")], true);
-  const live = [...container!.querySelectorAll<HTMLButtonElement | HTMLInputElement | HTMLSelectElement>("button, input, select")];
+  const live = [
+    ...container!.querySelectorAll<HTMLButtonElement | HTMLInputElement | HTMLSelectElement>(
+      "button, input, select",
+    ),
+  ];
   expect(live.length).toBeGreaterThan(0);
   expect(live.every((el) => el.disabled)).toBe(true);
 });

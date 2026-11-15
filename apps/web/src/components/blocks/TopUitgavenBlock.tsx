@@ -1,8 +1,11 @@
 import { useMemo } from "react";
 import type { CategoryComparison, OwnAccounts, Rule, Tx } from "@lavega/core";
 import { categoryComparison } from "@lavega/core";
-import { formatEuro, monthLabelNL } from "../../format.js";
+import { formatEuroIn, formatSignedPercentIn, monthLabel } from "../../format.js";
 import Module from "../Module.js";
+import CardLink from "../ui/CardLink.js";
+import { useAppLocale } from "../../appLocale.js";
+import { moneyCopy, categoryLabel } from "../../copy/money.js";
 
 /* Top uitgaven — where the latest month's money went, biggest category first:
  * its share of the month's spend, the amount, and — only when the two months
@@ -35,13 +38,15 @@ const ROWS = 6;
  *  down = spending less (green); a brand-new category shows "nieuw". Only ever
  *  rendered when core says the two months are comparable. */
 function CategoryDelta({ changePct }: { changePct: number | null }) {
-  if (changePct === null) return <span className="cat-delta flat">nieuw</span>;
+  const [locale] = useAppLocale();
+  if (changePct === null)
+    return <span className="cat-delta flat">{moneyCopy[locale].topUitgaven.nieuwDelta}</span>;
   const rounded = Math.round(changePct);
   if (rounded === 0) return <span className="cat-delta flat">0%</span>;
   const up = rounded > 0;
   return (
     <span className={`cat-delta ${up ? "up" : "down"}`}>
-      {up ? "▲" : "▼"} {Math.abs(rounded)}%
+      {up ? "▲" : "▼"} {formatSignedPercentIn(locale, rounded)}
     </span>
   );
 }
@@ -55,18 +60,20 @@ type TopUitgavenViewProps = {
  *  be handed straight in — including the verdict "these two months cannot be
  *  compared", which is the case the block exists to get right. */
 export function TopUitgavenView({ comparison, onSelectCategory }: TopUitgavenViewProps) {
+  const [locale] = useAppLocale();
+  const c = moneyCopy[locale].topUitgaven;
   const { coverage, current } = comparison;
   const rows = comparison.rows.slice(0, ROWS);
-  const month = monthLabelNL(comparison.month);
-  const prev = monthLabelNL(comparison.prevMonth);
+  const month = monthLabel(locale, comparison.month);
+  const prev = monthLabel(locale, comparison.prevMonth);
   const excluded = coverage.excludedAccountKeys.length;
   const excludedOut = coverage.excludedOut.current + coverage.excludedOut.previous;
 
   // Nothing imported at all — not a comparison problem, an empty vault.
   if (comparison.month === "") {
     return (
-      <Module title="Top uitgaven" height="tall">
-        <p className="block-empty">Nog geen uitgaven deze maand.</p>
+      <Module title={c.title} height="tall">
+        <p className="block-empty">{c.nogGeenUitgavenDezeMaand}</p>
       </Module>
     );
   }
@@ -76,49 +83,36 @@ export function TopUitgavenView({ comparison, onSelectCategory }: TopUitgavenVie
     // there is no like-for-like figure to print, and an approximate one would
     // be read as an exact one.
     return (
-      <Module title="Top uitgaven" height="tall" footer={<>{month} t.o.v. {prev}</>}>
-        <p className="cat-nocompare">
-          {month} en {prev} zijn niet vergelijkbaar: geen enkele rekening heeft gegevens in beide maanden.
-          {excludedOut > 0 && <> Er staat wel {formatEuro(excludedOut)} aan uitgaven in deze twee maanden.</>}
+      <Module title={c.title} height="tall" footer={<>{c.maandTOvPrev(month, prev)}</>}>
+        <p className="mt-0 mx-0 mb-3 py-2 px-3 border border-dashed border-line rounded bg-surface-2 text-muted text-[0.8rem]">
+          {c.nietVergelijkbaar(month, prev)}
+          {excludedOut > 0 && <>{c.erStaatWelUitgaven(formatEuroIn(locale, excludedOut))}</>}
         </p>
-        <p className="block-empty">
-          Importeer beide maanden van dezelfde rekeningen, dan verschijnt de vergelijking hier.
-        </p>
+        <p className="block-empty">{c.importeerBeideMaanden}</p>
       </Module>
     );
   }
 
   return (
     <Module
-      title="Top uitgaven"
+      title={c.title}
       height="tall"
-      footer={
-        rows.length > 0 ? (
-          <>
-            {month} · aandeel &amp; Δ t.o.v. {prev}
-          </>
-        ) : undefined
-      }
+      footer={rows.length > 0 ? <>{c.aandeelEnDeltaTOv(month, prev)}</> : undefined}
     >
       {rows.length === 0 ? (
-        <p className="block-empty">Nog geen uitgaven deze maand.</p>
+        <p className="block-empty">{c.nogGeenUitgavenDezeMaand}</p>
       ) : (
         <>
           {(current.partial || excluded > 0) && (
             // The comparison holds, but not without qualification — and the
             // qualification is stated next to it, not left for him to guess.
-            <p className="cat-nocompare">
+            <p className="mt-0 mx-0 mb-3 py-2 px-3 border border-dashed border-line rounded bg-surface-2 text-muted text-[0.8rem]">
               {current.partial && (
-                <>
-                  {month} telt tot nu toe {current.daysObserved} van {current.daysInMonth} dagen.
-                </>
+                <>{c.telDagenTotNuToe(month, current.daysObserved, current.daysInMonth)}</>
               )}
               {current.partial && excluded > 0 && " "}
               {excluded > 0 && (
-                <>
-                  {excluded} rekening{excluded === 1 ? "" : "en"} blijft buiten de vergelijking — die heeft geen
-                  gegevens in beide maanden ({formatEuro(excludedOut)} aan uitgaven).
-                </>
+                <>{c.rekeningenBuitenVergelijking(excluded, formatEuroIn(locale, excludedOut))}</>
               )}
             </p>
           )}
@@ -126,22 +120,23 @@ export function TopUitgavenView({ comparison, onSelectCategory }: TopUitgavenVie
             {rows.map((r) => (
               <div className="cat-row" key={r.category}>
                 <div className="cat-row-top">
-                  <button
-                    type="button"
-                    className="card-link"
+                  <CardLink
                     onClick={() => onSelectCategory(r.category)}
-                    title={`Bekijk transacties in ${r.category}`}
+                    title={c.bekijkTransactiesIn(categoryLabel(locale, r.category))}
                   >
-                    {r.category}
-                  </button>
+                    {categoryLabel(locale, r.category)}
+                  </CardLink>
                   <span className="cat-fig">
                     <span className="cat-share">{r.sharePct.toFixed(0)}%</span>
-                    <span className="cat-amt">{formatEuro(r.out)}</span>
+                    <span className="cat-amt">{formatEuroIn(locale, r.out)}</span>
                     <CategoryDelta changePct={r.changePct} />
                   </span>
                 </div>
                 <div className="cat-bar">
-                  <div className="cat-bar-fill" style={{ width: `${Math.min(100, r.sharePct)}%` }} />
+                  <div
+                    className="cat-bar-fill"
+                    style={{ width: `${Math.min(100, r.sharePct)}%` }}
+                  />
                 </div>
               </div>
             ))}
@@ -159,7 +154,12 @@ type TopUitgavenBlockProps = {
   onSelectCategory: (category: string) => void;
 };
 
-export default function TopUitgavenBlock({ txs, rules, own, onSelectCategory }: TopUitgavenBlockProps) {
+export default function TopUitgavenBlock({
+  txs,
+  rules,
+  own,
+  onSelectCategory,
+}: TopUitgavenBlockProps) {
   const comparison = useMemo(() => categoryComparison(txs, rules, own), [txs, rules, own]);
   return <TopUitgavenView comparison={comparison} onSelectCategory={onSelectCategory} />;
 }

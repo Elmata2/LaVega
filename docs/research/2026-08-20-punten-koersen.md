@@ -37,17 +37,17 @@ de FAQ als JSON-LD.
 Uit de payload van `ing.nl/particulier/ing-punten/zo-spaar-je-ing-punten` (het document noemt geen
 eigen datum; opgehaald 21-08-2026):
 
-| Waar krijg je Punten voor | Punten |
-|---|---|
-| Elke maand minimaal € 700 bijschrijven op je Betaalrekening | 250 per maand |
-| 10 transacties met je Betaalrekening | 100 per maand |
-| Meer dan € 100 uitgeven met je ING Creditcard Extra of Max | 250 per maand |
+| Waar krijg je Punten voor                                      | Punten        |
+| -------------------------------------------------------------- | ------------- |
+| Elke maand minimaal € 700 bijschrijven op je Betaalrekening    | 250 per maand |
+| 10 transacties met je Betaalrekening                           | 100 per maand |
+| Meer dan € 100 uitgeven met je ING Creditcard Extra of Max     | 250 per maand |
 | Meer dan € 100 uitgeven met je ING (studenten) Creditcard More | 100 per maand |
-| Openen eerste Betaalrekening | 2.500 |
-| Creditcard toevoegen aan je wallet | 100 |
-| Eerste Oranje Spaarrekening openen | 500 |
-| Rond af & Spaar actief gebruiken | 100 per maand |
-| Hypotheek hebben | 250 per maand |
+| Openen eerste Betaalrekening                                   | 2.500         |
+| Creditcard toevoegen aan je wallet                             | 100           |
+| Eerste Oranje Spaarrekening openen                             | 500           |
+| Rond af & Spaar actief gebruiken                               | 100 per maand |
+| Hypotheek hebben                                               | 250 per maand |
 
 Bovenop de tabel geldt een pakketvermenigvuldiger, letterlijk:
 
@@ -189,16 +189,16 @@ door elkaar.
 
 ## Wat niet gelukt is
 
-| Wat | Route | Waarom het stukliep |
-|---|---|---|
-| Euro-waarde van een ING-punt in de ING Winkel | shop, jina, Wayback | `www.ing.nl/punten/*` verbreekt de HTTP/2-stream (ook op `--http1.1`); `r.jina.ai` haalt de pagina wel op maar meldt "This page contains shadow DOM that are currently hidden" en levert alleen de titel, ook met `x-with-shadow-dom`; de Wayback CDX heeft van `ing.nl/punten*` uitsluitend JS-bundles, geen productpagina's. De Winkel zit achter Mijn ING. |
-| ING Platinumcard | payload-json | ING's spaartabel noemt de kaart niet. Geen bewijs is hier geen nul en ook geen koers. |
-| Inwisselwaarde Flying Blue Miles | jina | `flyingblue.com/nl/miles/spend` geeft 404 en valt terug op een Franstalige foutpagina. Niet verder gezocht. |
-| Wise betaalpas | curl, jina | `wise.com/nl/card/` levert via curl 6 kB JS-shell en via `r.jina.ai` een tracking-pixel in plaats van de pagina. Het helpartikel dat naar een rewards-programma verwees, leidt door naar een pagina over regelgeving per land. Geen uitspraak van Wise verkregen, in geen van beide richtingen. |
-| 212 Card | curl, jina | `trading212.com/nl/card` stuurt door naar de algemene beleggingspagina in het Engels; geen kaart-voordelenopsomming te pakken gekregen. |
-| Crypto.com, Nexo, Krak Card, Bybit Card, paysafecard | — | Niet geprobeerd deze ronde. Deze producten belonen in tokens/cashback, niet in punten, maar dat is een verwachting en geen vondst; ze blijven leeg. |
-| ABN AMRO en Rabobank spaarprogramma's | WebSearch | Eén zoekopdracht op rabobank.nl leverde alleen spaarrekeningpagina's op, daarna was het WebSearch-budget van de sessie op (200/200). De catalogus houdt beide al op 0.0 via hun eigen productpagina's; daar is deze ronde niets aan toegevoegd of afgedaan. |
-| ICS zakelijke kaarten via de AV-PDF's | provider-pdf | Bewust niet gebruikt. Een voorwaardendocument dat punten niet noemt bewijst niet dat punten niet bestaan — dat is precies hoe de acht valse nullen ontstonden. |
+| Wat                                                  | Route               | Waarom het stukliep                                                                                                                                                                                                                                                                                                                                           |
+| ---------------------------------------------------- | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Euro-waarde van een ING-punt in de ING Winkel        | shop, jina, Wayback | `www.ing.nl/punten/*` verbreekt de HTTP/2-stream (ook op `--http1.1`); `r.jina.ai` haalt de pagina wel op maar meldt "This page contains shadow DOM that are currently hidden" en levert alleen de titel, ook met `x-with-shadow-dom`; de Wayback CDX heeft van `ing.nl/punten*` uitsluitend JS-bundles, geen productpagina's. De Winkel zit achter Mijn ING. |
+| ING Platinumcard                                     | payload-json        | ING's spaartabel noemt de kaart niet. Geen bewijs is hier geen nul en ook geen koers.                                                                                                                                                                                                                                                                         |
+| Inwisselwaarde Flying Blue Miles                     | jina                | `flyingblue.com/nl/miles/spend` geeft 404 en valt terug op een Franstalige foutpagina. Niet verder gezocht.                                                                                                                                                                                                                                                   |
+| Wise betaalpas                                       | curl, jina          | `wise.com/nl/card/` levert via curl 6 kB JS-shell en via `r.jina.ai` een tracking-pixel in plaats van de pagina. Het helpartikel dat naar een rewards-programma verwees, leidt door naar een pagina over regelgeving per land. Geen uitspraak van Wise verkregen, in geen van beide richtingen.                                                               |
+| 212 Card                                             | curl, jina          | `trading212.com/nl/card` stuurt door naar de algemene beleggingspagina in het Engels; geen kaart-voordelenopsomming te pakken gekregen.                                                                                                                                                                                                                       |
+| Crypto.com, Nexo, Krak Card, Bybit Card, paysafecard | —                   | Niet geprobeerd deze ronde. Deze producten belonen in tokens/cashback, niet in punten, maar dat is een verwachting en geen vondst; ze blijven leeg.                                                                                                                                                                                                           |
+| ABN AMRO en Rabobank spaarprogramma's                | WebSearch           | Eén zoekopdracht op rabobank.nl leverde alleen spaarrekeningpagina's op, daarna was het WebSearch-budget van de sessie op (200/200). De catalogus houdt beide al op 0.0 via hun eigen productpagina's; daar is deze ronde niets aan toegevoegd of afgedaan.                                                                                                   |
+| ICS zakelijke kaarten via de AV-PDF's                | provider-pdf        | Bewust niet gebruikt. Een voorwaardendocument dat punten niet noemt bewijst niet dat punten niet bestaan — dat is precies hoe de acht valse nullen ontstonden.                                                                                                                                                                                                |
 
 ## Controle
 

@@ -1,7 +1,7 @@
 # Tax optimisation — a proposal to react to (review-2 item 15)
 
-**His words:** *"taxes — yeah, I'm thinking I do something here with tax optimization. Get back to me
-with this."* That is an open brief, so this is a proposal and not a build. Nothing in it is
+**His words:** _"taxes — yeah, I'm thinking I do something here with tax optimization. Get back to me
+with this."_ That is an open brief, so this is a proposal and not a build. Nothing in it is
 implemented; no production file was touched.
 
 **Read the recommendation first, then the boundary section.** The boundary is not boilerplate — it is
@@ -12,17 +12,17 @@ the part that decides whether this feature is buildable at all, because three of
 
 ## 1. What is already on his screen — measured, not assumed
 
-| Already built | Where | State |
-|---|---|---|
-| Country rule packs (NL/DE), data-only, dated | `packages/core/src/taxpacks/` | working, `rulesAsOf 2026-08-04` |
-| BTW set-aside as a `ScheduledFlow`, netted out of the available balance and visible in the forecast | `tax.ts` `computeVatSetAside` | working |
-| Deadline arithmetic per country (NL: last day of the month after the period) | `tax.ts` `nextVatPeriod` | working |
-| DE profit-tax prepayments + Nachzahlung | `tax.ts` `computeProfitTaxPrepayments` | working, NL has none by design |
-| One module per tax, per entity, with rate/frequency/manual/mixed | `apps/web/src/views/Belasting.tsx` | working |
-| "Wat LaVega hier niet berekent" (the caveats list) | `Belasting.tsx` + `pack.caveats` | working — and the mechanism the whole boundary section builds on |
-| Privé/zakelijk classification per **entity**, inherited by accounts, default personal | `entities.ts` | working |
-| Invoices with `direction` + `vatAmount`, auto-reconciled to transactions | `invoices.ts`, `Facturen.tsx` | working |
-| Import of his own bookkeeping sheet → real turnover/cost/BTW figures | `taxSheet.ts` | **built, tested, wired to nothing** |
+| Already built                                                                                       | Where                                  | State                                                            |
+| --------------------------------------------------------------------------------------------------- | -------------------------------------- | ---------------------------------------------------------------- |
+| Country rule packs (NL/DE), data-only, dated                                                        | `packages/core/src/taxpacks/`          | working, `rulesAsOf 2026-08-04`                                  |
+| BTW set-aside as a `ScheduledFlow`, netted out of the available balance and visible in the forecast | `tax.ts` `computeVatSetAside`          | working                                                          |
+| Deadline arithmetic per country (NL: last day of the month after the period)                        | `tax.ts` `nextVatPeriod`               | working                                                          |
+| DE profit-tax prepayments + Nachzahlung                                                             | `tax.ts` `computeProfitTaxPrepayments` | working, NL has none by design                                   |
+| One module per tax, per entity, with rate/frequency/manual/mixed                                    | `apps/web/src/views/Belasting.tsx`     | working                                                          |
+| "Wat LaVega hier niet berekent" (the caveats list)                                                  | `Belasting.tsx` + `pack.caveats`       | working — and the mechanism the whole boundary section builds on |
+| Privé/zakelijk classification per **entity**, inherited by accounts, default personal               | `entities.ts`                          | working                                                          |
+| Invoices with `direction` + `vatAmount`, auto-reconciled to transactions                            | `invoices.ts`, `Facturen.tsx`          | working                                                          |
+| Import of his own bookkeeping sheet → real turnover/cost/BTW figures                                | `taxSheet.ts`                          | **built, tested, wired to nothing**                              |
 
 Three things are worth stating up front, because they change what each direction below costs.
 
@@ -34,7 +34,7 @@ bookkeeping, even though the code to use it exists. That is a wiring job in `app
 another lane; recorded here because every direction below is cheaper once it is done.
 
 **(b) `Invoice.vatAmount` is stored and used by nothing.** `Facturen.tsx` says so in a comment:
-*"the Invoice keeps vatAmount for the (later) tax agent."* Also worth knowing: the manual invoice form
+_"the Invoice keeps vatAmount for the (later) tax agent."_ Also worth knowing: the manual invoice form
 has no BTW field, so `vatAmount` arrives only via CSV, UBL and the AI read. Any invoice-based BTW
 figure therefore starts with partial coverage and has to say so.
 
@@ -54,18 +54,18 @@ for twice.
 
 None of these belong in an engine or a view as a literal. They belong in `taxpacks/nl.ts` as pack
 data with `rulesAsOf` — the mechanism that already exists — with one addition: a `source` URL per
-field, because *"regels per 2026-08-04"* is a date without a document.
+field, because _"regels per 2026-08-04"_ is a date without a document.
 
-| Figure (2026) | Value | Source, and the date the source itself states |
-|---|---|---|
-| BTW-tarieven | 21 / 9 / 0 % | `taxpacks/nl.ts`, `rulesAsOf` 2026-08-04 |
-| BTW-aangifte **en** betaling, per kwartaal | uiterlijk de laatste dag van de maand ná het kwartaal | belastingdienst.nl, *Btw-aangifte doen en betalen* (read 2026-08-20) |
-| Welk stelsel geldt | factuurstelsel bij levering aan ondernemers/rechtspersonen; kasstelsel bij levering aan consumenten | belastingdienst.nl, *Factuurstelsel* / *Voor wie geldt het kasstelsel?* (read 2026-08-20) |
-| Vennootschapsbelasting | 19,0 % t/m € 200.000 · 25,8 % daarboven | belastingdienst.nl, *Tarieven voor de vennootschapsbelasting* (read 2026-08-20) |
-| Box 2 (aanmerkelijk belang) | 24,5 % tot € 68.843 · 31 % vanaf € 68.843 (2025: € 67.804) | belastingdienst.nl, *Box 2: uitleg en tarieven* (read 2026-08-20) |
-| Box 1, jonger dan AOW-leeftijd | 35,75 % t/m € 38.883 · 37,56 % t/m € 78.426 · 49,50 % daarboven | belastingdienst.nl, *Box 1: uitleg en tarieven* (read 2026-08-20) |
-| Minimumbedrag gebruikelijk loon | € 58.000 | Belastingdienst, *Tarieven, bedragen en percentages loonheffingen vanaf 1 januari 2026* (bijlage bij de Nieuwsbrief Loonheffingen 2026, **16 december 2025**), regel "Minimumbedrag gebruikelijk loon voor aandeelhouders met aanmerkelijk belang € 58.000,00" |
-| Belastingrente vanaf 1-1-2026 | 5 % — voor de vennootschapsbelasting **en** voor de overige middelen | belastingdienst.nl, *Overzicht percentages belastingrente* (read 2026-08-20) |
+| Figure (2026)                              | Value                                                                                               | Source, and the date the source itself states                                                                                                                                                                                                                  |
+| ------------------------------------------ | --------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| BTW-tarieven                               | 21 / 9 / 0 %                                                                                        | `taxpacks/nl.ts`, `rulesAsOf` 2026-08-04                                                                                                                                                                                                                       |
+| BTW-aangifte **en** betaling, per kwartaal | uiterlijk de laatste dag van de maand ná het kwartaal                                               | belastingdienst.nl, _Btw-aangifte doen en betalen_ (read 2026-08-20)                                                                                                                                                                                           |
+| Welk stelsel geldt                         | factuurstelsel bij levering aan ondernemers/rechtspersonen; kasstelsel bij levering aan consumenten | belastingdienst.nl, _Factuurstelsel_ / _Voor wie geldt het kasstelsel?_ (read 2026-08-20)                                                                                                                                                                      |
+| Vennootschapsbelasting                     | 19,0 % t/m € 200.000 · 25,8 % daarboven                                                             | belastingdienst.nl, _Tarieven voor de vennootschapsbelasting_ (read 2026-08-20)                                                                                                                                                                                |
+| Box 2 (aanmerkelijk belang)                | 24,5 % tot € 68.843 · 31 % vanaf € 68.843 (2025: € 67.804)                                          | belastingdienst.nl, _Box 2: uitleg en tarieven_ (read 2026-08-20)                                                                                                                                                                                              |
+| Box 1, jonger dan AOW-leeftijd             | 35,75 % t/m € 38.883 · 37,56 % t/m € 78.426 · 49,50 % daarboven                                     | belastingdienst.nl, _Box 1: uitleg en tarieven_ (read 2026-08-20)                                                                                                                                                                                              |
+| Minimumbedrag gebruikelijk loon            | € 58.000                                                                                            | Belastingdienst, _Tarieven, bedragen en percentages loonheffingen vanaf 1 januari 2026_ (bijlage bij de Nieuwsbrief Loonheffingen 2026, **16 december 2025**), regel "Minimumbedrag gebruikelijk loon voor aandeelhouders met aanmerkelijk belang € 58.000,00" |
+| Belastingrente vanaf 1-1-2026              | 5 % — voor de vennootschapsbelasting **en** voor de overige middelen                                | belastingdienst.nl, _Overzicht percentages belastingrente_ (read 2026-08-20)                                                                                                                                                                                   |
 
 Everything else a DGA's tax position depends on — his box-1 income elsewhere, his partner's box-2
 room, the DGA-pension, the aanmerkelijk-belang verkrijgingsprijs, whether there is a loan from the BV
@@ -76,8 +76,8 @@ quarters of what "tax optimisation" usually means.
 
 ## 3. Direction A — de BTW-positie vooruit in plaats van achteraf
 
-**What it is.** One BTW figure per entity that is honest about *which* period it describes, *what it
-was built from*, and *which way the money goes* — plus the running position of the quarter he is
+**What it is.** One BTW figure per entity that is honest about _which_ period it describes, _what it
+was built from_, and _which way the money goes_ — plus the running position of the quarter he is
 inside right now, so "de BTW van dit kwartaal is al uitgegeven" can fire in week 4 instead of on
 31 October.
 
@@ -85,24 +85,25 @@ inside right now, so "de BTW van dit kwartaal is al uitgegeven" can fire in week
 
 ```ts
 type VatPosition = {
-  period: TaxPeriod;                       // from nextVatPeriod, unchanged
-  stage: "loopt" | "afgesloten";           // is the window over? decides the label AND the status
+  period: TaxPeriod; // from nextVatPeriod, unchanged
+  stage: "loopt" | "afgesloten"; // is the window over? decides the label AND the status
   basis: "manual" | "sheet" | "invoices" | "proxy";
-  chargedCents: number | null;             // null = this basis does not know, never 0
+  chargedCents: number | null; // null = this basis does not know, never 0
   paidCents: number | null;
   netCents: number | null;
   direction: "betalen" | "terugvragen" | "onbekend";
-  coverage: { withVat: number; total: number };   // invoices in the window carrying a BTW amount
+  coverage: { withVat: number; total: number }; // invoices in the window carrying a BTW amount
 };
 ```
 
 The basis ladder **extends** the one already in `computeVatSetAside` — manual > sheet > **invoices** >
-proxy — and the bases are never blended. That is not fussiness: a reconciled invoice *is* a bank
+proxy — and the bases are never blended. That is not fussiness: a reconciled invoice _is_ a bank
 movement, so adding invoice VAT to proxy VAT double-counts the same euros. `computeVatSetAside`
 becomes a thin wrapper over `vatPosition` so the forecast, the netting and the DE path keep working
 unchanged.
 
 **What it delivers**
+
 - The mid-quarter figure gets labelled as what it is (`stage: "loopt"` → `status: "expected"`) and a
   second line: "dit kwartaal loopt nog — dit is de stand tot vandaag, niet de aangifte."
 - A refund quarter stops being invisible: the Belasting screen shows "terug te vragen € X". It does
@@ -120,10 +121,11 @@ BTW field on the manual invoice form (that is why coverage is 0 for manual rows 
 rule. Medium, and the smallest of the three.
 
 **Where it goes wrong**
+
 - **Stelsel unknown.** The invoice basis is simply wrong for a kasstelsel entity. Fix: one field on
   `TaxSettings` (`vatBasis`), asked once, stored `source: "user"`. Until answered, the invoice basis
   is not used at all — falls back to the proxy rather than guessing.
-- **A legitimate zero.** Btw-verlegd, ICP and 0 %-export invoices carry `vatAmount` 0 *correctly*.
+- **A legitimate zero.** Btw-verlegd, ICP and 0 %-export invoices carry `vatAmount` 0 _correctly_.
   That is today's lesson in a new place: an explicit zero is a known zero and must be recorded as
   one, or the coverage meter will call a complete quarter incomplete.
 - **What LaVega will never see in a BTW return**: privégebruik-correcties, the auto-correctie in Q4,
@@ -169,7 +171,7 @@ a measurement, a published figure and a caveat:
 
 That last sentence is what keeps it a measurement instead of a warning.
 
-**Signal 2 — de box-2-kalender.** Dividend is a *dated* event and the bracket resets on 1 January, so
+**Signal 2 — de box-2-kalender.** Dividend is a _dated_ event and the bracket resets on 1 January, so
 a date is a fact LaVega may state: 24,5 % tot € 68.843 per persoon per kalenderjaar, 31 % daarboven,
 plus how much dividend LaVega has actually **seen** this year. It must say in the same breath that it
 cannot see his partner, his other box-2 income, or his verkrijgingsprijs. This signal is the closest
@@ -183,6 +185,7 @@ boundary), not a deductibility rule, and it is the thing that actually costs a D
 already exists), one new fact key. Medium-to-large.
 
 **Where it goes wrong**
+
 - **An unclassified vault yields nothing.** `entities.ts` defaults every entity to personal, so with no
   profiles set there are no crossings. The module must say "je hebt nog geen entiteit als zakelijk
   gemarkeerd" — not € 0. This is exactly the "je saldi staan al op de beste plek" mistake in a new
@@ -252,20 +255,20 @@ arithmetic. The same three plus a verb is advice.
 
 Three tests every sentence has to pass before it goes on the screen.
 
-1. **Herkomst.** Every figure names the document it came from and the date *that document* states —
+1. **Herkomst.** Every figure names the document it came from and the date _that document_ states —
    never the day we looked. Same rule as the catalogue, applied to tax rules.
 2. **Meten of zwijgen.** The sentence describes something that moved, or a date that exists. No
-   conditional euros. *"Je zou € X besparen als je…"* is the sentence an adviser is paid to sign for,
+   conditional euros. _"Je zou € X besparen als je…"_ is the sentence an adviser is paid to sign for,
    and it is banned even when the arithmetic is right — because the arithmetic depends on facts that
    are not in the vault.
 3. **Wie beslist.** Every signal ends in a question, a date, or a handover — never in an instruction.
-   *"€ 8.100 van BV1 naar Privé, en LaVega weet niet wat het was — wat was dit?"* is allowed.
-   *"Keer dit als dividend uit"* is not.
+   _"€ 8.100 van BV1 naar Privé, en LaVega weet niet wat het was — wat was dit?"_ is allowed.
+   _"Keer dit als dividend uit"_ is not.
 
-**Vocabulary.** Allowed: *gemeten*, *volgens*, *uiterlijk*, *stand tot vandaag*, *LaVega ziet niet…*.
-Not allowed anywhere in this feature: *advies*, *wij raden aan*, *je moet*, *optimaal*, *bespaar*,
-*fiscaal voordeel*. (Note the contrast with Optimalisatie, where a comparison of two rates he actually
-holds *is* a measurement — that is a different claim about different data.)
+**Vocabulary.** Allowed: _gemeten_, _volgens_, _uiterlijk_, _stand tot vandaag_, _LaVega ziet niet…_.
+Not allowed anywhere in this feature: _advies_, _wij raden aan_, _je moet_, _optimaal_, _bespaar_,
+_fiscaal voordeel_. (Note the contrast with Optimalisatie, where a comparison of two rates he actually
+holds _is_ a measurement — that is a different claim about different data.)
 
 **Four things that make this structural instead of a promise:**
 
@@ -305,7 +308,6 @@ holds *is* a measurement — that is a different claim about different data.)
 nothing in `apps/web`, and `Belasting.tsx` calls `computeTaxReservations` without `figures`. His own
 bookkeeping cannot currently reach the BTW figure, whatever we build on top.
 
-
 ---
 
 ## Zijn antwoorden op sectie 8 (20 augustus, avond)
@@ -314,8 +316,8 @@ bookkeeping cannot currently reach the BTW figure, whatever we build on top.
 een btw-bedrag noemt. Het handmatige btw-veld op het factuurformulier bestaat inmiddels, dus die
 dekking is haalbaar zonder AI-concept.
 
-**2. Geen loonadministratie, en dit verandert Richting B wezenlijk.** Zijn woorden: *"het is niet voor
-DGA's met loon, het is gewoon inkomen al belast met btw."* Er is dus geen loonstrook, geen maandelijkse
+**2. Geen loonadministratie, en dit verandert Richting B wezenlijk.** Zijn woorden: _"het is niet voor
+DGA's met loon, het is gewoon inkomen al belast met btw."_ Er is dus geen loonstrook, geen maandelijkse
 loonheffing en geen gebruikelijkloon-afweging om te signaleren. Het salaris-versus-dividend-signaal uit
 Richting B is voor hem niet van toepassing en moet NIET gebouwd worden op de aanname dat het er is.
 

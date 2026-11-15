@@ -84,7 +84,9 @@ export function korteUitgever(issuer: string): string | null {
  *  Afgeleid uit de bundel zelf en niet uit een gegenereerde constante, zodat het
  *  meeverandert zodra de catalogus verandert — dat is precies de fout die hier
  *  zat: de constante was blijven staan terwijl de inhoud bijgewerkt was. */
-export function catalogPeriode(cards: readonly CheckoutCard[]): { eerste: string; laatste: string } | null {
+export function catalogPeriode(
+  cards: readonly CheckoutCard[],
+): { eerste: string; laatste: string } | null {
   const datums: string[] = [];
   for (const c of cards) {
     for (const veld of [c.fxFeePct, c.cashbackPct, c.pointsPerEuro, c.fee]) {
@@ -444,7 +446,8 @@ export function grossLine(row: Row): string {
      * hem geld, ongeacht waarin de beloning wordt uitgekeerd. Het BEDRAG staat
      * er niet bij, want dat zou naast een opbrengst komen te staan die geen
      * euro's is, en dan lijkt het alsof de twee tegen elkaar wegvallen. */
-    if (row.fxPct > 0) return `${kern} De koersopslag van ${pct(row.fxPct)} kost je hier wél euro's.`;
+    if (row.fxPct > 0)
+      return `${kern} De koersopslag van ${pct(row.fxPct)} kost je hier wél euro's.`;
     return kern;
   }
 
@@ -466,13 +469,23 @@ export function grossLine(row: Row): string {
 
   if (row.euroCents === null) {
     if (row.grossPct === 0) return "Kost je niets extra.";
-    if (row.grossPct > 0) return hooguit ? `Levert hooguit ${pct(row.grossPct)} op.` : `Levert ${pct(row.grossPct)} op.`;
+    if (row.grossPct > 0)
+      return hooguit
+        ? `Levert hooguit ${pct(row.grossPct)} op.`
+        : `Levert ${pct(row.grossPct)} op.`;
     return `Kost ${pct(-row.grossPct)} aan koersopslag.`;
   }
   if (row.euroCents === 0) return "Kost je niets extra.";
   if (row.euroCents > 0) {
-    const kern = hooguit ? `Levert hooguit ${euro(row.euroCents)} op.` : `Levert ${euro(row.euroCents)} op.`;
-    if (hooguit && claim.capCents !== null && row.grossCents !== null && row.euroCents < row.grossCents) {
+    const kern = hooguit
+      ? `Levert hooguit ${euro(row.euroCents)} op.`
+      : `Levert ${euro(row.euroCents)} op.`;
+    if (
+      hooguit &&
+      claim.capCents !== null &&
+      row.grossCents !== null &&
+      row.euroCents < row.grossCents
+    ) {
       return (
         `${kern} Gerekend met het plafond van ${euro(claim.capCents)} per ${claim.capBasis}, ` +
         `niet met het hele aankoopbedrag.`
@@ -518,7 +531,12 @@ export function netLine(row: Row): string {
     `minstens ${euro(row.charge.cents)}${termijnen}.`;
 
   if (row.resultCents === null) {
-    return metVoorwaarden(row, grossLine(row), opening, "Vul het bedrag in om te zien wat er netto overblijft.");
+    return metVoorwaarden(
+      row,
+      grossLine(row),
+      opening,
+      "Vul het bedrag in om te zien wat er netto overblijft.",
+    );
   }
   /* Is de opbrengst een bovengrens, dan is de netto-uitkomst dat ook. Boven nul
    * schrijven we dat als "hooguit"; onder nul draait het om — dan is het verlies
@@ -616,9 +634,15 @@ export function rowLine(row: Row): string {
  *  enige waarop hij de betrouwbaarheid kan afmeten, dus die staat er altijd. */
 export function sourceLine(row: Row): string {
   const bits: string[] = [];
-  if (row.card.cashbackPct) bits.push(`cashback ${pct(row.cashbackPct)}, gecontroleerd ${dateNL(row.card.cashbackPct.checkedAt)}`);
+  if (row.card.cashbackPct)
+    bits.push(
+      `cashback ${pct(row.cashbackPct)}, gecontroleerd ${dateNL(row.card.cashbackPct.checkedAt)}`,
+    );
   if (row.fxNote) bits.push(`koersopslag ${pct(0)} — ${row.fxNote}`);
-  else if (row.card.fxFeePct) bits.push(`koersopslag ${pct(row.fxPct)}, gecontroleerd ${dateNL(row.card.fxFeePct.checkedAt)}`);
+  else if (row.card.fxFeePct)
+    bits.push(
+      `koersopslag ${pct(row.fxPct)}, gecontroleerd ${dateNL(row.card.fxFeePct.checkedAt)}`,
+    );
   return bits.join(" · ");
 }
 
@@ -700,7 +724,9 @@ export function headline(r: Ranking): string {
   const hooguit = best.claim.soort === "hooguit";
 
   if (noAmount) {
-    const meeste = gemengd ? "het meeste op van je kaarten die in euro's uitkeren" : "hier het meeste op";
+    const meeste = gemengd
+      ? "het meeste op van je kaarten die in euro's uitkeren"
+      : "hier het meeste op";
     return best.grossPct > 0
       ? `Van jouw kaarten levert ${name} ${meeste}: ${hooguit ? "hooguit " : ""}${pct(best.grossPct)}. Vul het bedrag in voor de euro's.`
       : best.grossPct === 0
@@ -814,7 +840,9 @@ export function aanbodRegel(a: Aanbieding, asOf: string, bron: Bron): string {
         `LaVega rekent er daarom niet mee.`,
     );
   } else {
-    delen.push("Er stond geen einddatum bij. Dat is niet hetzelfde als onbeperkt geldig; we weten het niet.");
+    delen.push(
+      "Er stond geen einddatum bij. Dat is niet hetzelfde als onbeperkt geldig; we weten het niet.",
+    );
   }
 
   delen.push(gebruikRegel(bron));
@@ -839,9 +867,13 @@ export function aanbodAntwoord(aanbiedingen: readonly Aanbieding[], bron: Bron):
   );
   const merk = merken.size === 1 ? [...merken][0] : null;
   if (bron.prijsSoort === "punten") {
-    return merk ? `${merk}-korting via je ${bron.merk}-punten` : `Korting via je ${bron.merk}-punten`;
+    return merk
+      ? `${merk}-korting via je ${bron.merk}-punten`
+      : `Korting via je ${bron.merk}-punten`;
   }
-  return merk ? `${merk}-aanbieding op je ${bron.merk}-kaart` : `Aanbieding op je ${bron.merk}-kaart`;
+  return merk
+    ? `${merk}-aanbieding op je ${bron.merk}-kaart`
+    : `Aanbieding op je ${bron.merk}-kaart`;
 }
 
 /** De doorklik: waar hij dit ophaalt.
@@ -854,7 +886,8 @@ export function aanbodAntwoord(aanbiedingen: readonly Aanbieding[], bron: Bron):
 export function aanbodLink(bron: Bron): PaneelAanbodLink {
   const href = bron.match.replace(/\*$/, "");
   return {
-    tekst: bron.prijsSoort === "punten" ? `Ophalen in ${bron.paginaNaam}` : `Toevoegen bij ${bron.merk}`,
+    tekst:
+      bron.prijsSoort === "punten" ? `Ophalen in ${bron.paginaNaam}` : `Toevoegen bij ${bron.merk}`,
     href,
   };
 }
@@ -961,7 +994,8 @@ export function aanbodToestandRegel(u: AanbodUitkomst, bron: Bron): string {
        * bedrag: dat cijfer zou relevantie voor DEZE winkel suggereren, en dat is
        * precies het deel dat onbevestigd is. */
       const titels = u.matches.map((a) => `"${a.winkel}"`).join(", ");
-      const meer = u.totaal > u.matches.length ? ` en ${u.totaal - u.matches.length} andere titel(s)` : "";
+      const meer =
+        u.totaal > u.matches.length ? ` en ${u.totaal - u.matches.length} andere titel(s)` : "";
       return (
         `In je ING Punten (gelezen op ${dateNL(u.op)}) staat ${titels}${meer} — dat kan bij deze winkel ` +
         `passen. LaVega weet niet of dit hier te verzilveren is; check dat zelf in mijn.ing.nl.`
@@ -974,7 +1008,8 @@ export function aanbodToestandRegel(u: AanbodUitkomst, bron: Bron): string {
        * geen bedrag, geen punten — alleen dat de titel bij WAT JE HIER BEKIJKT
        * kan passen. */
       const titels = u.matches.map((a) => `"${a.winkel}"`).join(", ");
-      const meer = u.totaal > u.matches.length ? ` en ${u.totaal - u.matches.length} andere titel(s)` : "";
+      const meer =
+        u.totaal > u.matches.length ? ` en ${u.totaal - u.matches.length} andere titel(s)` : "";
       return (
         `In je ING Punten (gelezen op ${dateNL(u.op)}) staat ${titels}${meer} — dat kan bij wat je hier ` +
         `bekijkt passen. LaVega weet niet of dit hier te verzilveren is; check dat zelf in mijn.ing.nl.`

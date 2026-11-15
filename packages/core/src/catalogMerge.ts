@@ -54,7 +54,7 @@ export function mergeCatalogEntries(
 
   const winners = rows.map((row) => {
     const before = byId.get(row.id);
-    const fields: Partial<Record<CatalogField, CatalogValue>> = { ...(before?.fields ?? {}) };
+    const fields: Partial<Record<CatalogField, CatalogValue>> = { ...before?.fields };
     for (const name of Object.keys(row.fields) as CatalogField[]) {
       const found = row.fields[name];
       if (isCovered(fields[name]) && !isCovered(found)) {

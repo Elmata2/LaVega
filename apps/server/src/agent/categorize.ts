@@ -1,21 +1,35 @@
-import Anthropic from "@anthropic-ai/sdk";
-import { AGENTS, CATEGORY_OPTIONS, type LearnedFact } from "@lavega/core";
+import { AGENTS, CATEGORY_OPTIONS, scrubPersonalValues, type LearnedFact } from "@lavega/core";
 import { loadAgentPrompt } from "./prompts.js";
 import { factsBlock } from "./facts.js";
+import { createMistralProvider } from "./mistral.js";
+import { createAiObservationContext } from "./aiObservability.js";
+import { MISTRAL_SMALL } from "./models.js";
+import { ValidationError } from "./validationError.js";
 
 export type CategorizeItem = { id: string; text: string; sign: "in" | "out" };
 
 const MAX_ITEMS = 200;
+/* When a call fails after the tokens were counted we cannot read the usage, so
+ * the cap is charged the most a full batch could have cost. Over-attributing is
+ * the safe direction: the alternative is spend the ledger never sees. */
+const MAX_BILLED_INPUT_TOKENS = 40_000;
 const MAX_TEXT = 200;
 
 /** THE redaction boundary for bulk categorization: only {id, text, sign} per
- *  item can ever reach Claude — never amounts, balances, account keys, or dates.
- *  Builds a fresh array from allowlisted fields; throws on empty/oversize. */
+ *  item can ever reach Mistral — never amounts, balances, account keys, or dates.
+ *  Builds a fresh array from allowlisted fields; throws on empty/oversize.
+ *
+ *  M5: an allowlist on field names says nothing about what sits inside `text`
+ *  — the browser's own scrub could be stale, bypassed, or simply wrong. So
+ *  `text` is run through `scrubPersonalValues` again here, server-side, before
+ *  it is trusted. Defence in depth, not a replacement for the browser pass. */
 export function sanitizeCategorizeInput(raw: unknown): { items: CategorizeItem[] } {
-  if (!raw || typeof raw !== "object") throw new Error("ongeldige invoer");
+  if (!raw || typeof raw !== "object")
+    throw new ValidationError("categorize-invalid-input", "ongeldige invoer");
   const rawItems = (raw as Record<string, unknown>).items;
-  if (!Array.isArray(rawItems)) throw new Error("geen items");
-  if (rawItems.length > MAX_ITEMS) throw new Error("te veel items");
+  if (!Array.isArray(rawItems)) throw new ValidationError("categorize-no-items", "geen items");
+  if (rawItems.length > MAX_ITEMS)
+    throw new ValidationError("categorize-too-many-items", "te veel items");
   const items: CategorizeItem[] = [];
   for (const r of rawItems) {
     if (!r || typeof r !== "object") continue;
@@ -23,41 +37,20 @@ export function sanitizeCategorizeInput(raw: unknown): { items: CategorizeItem[]
     const id = o.id;
     const text = o.text;
     if (typeof id !== "string" || typeof text !== "string") continue;
-    if (text.length > MAX_TEXT) throw new Error("tekst te lang");
-    items.push({ id, text, sign: o.sign === "in" ? "in" : "out" });
+    if (text.length > MAX_TEXT)
+      throw new ValidationError("categorize-text-too-long", "tekst te lang");
+    items.push({ id, text: scrubPersonalValues(text), sign: o.sign === "in" ? "in" : "out" });
   }
-  if (items.length === 0) throw new Error("geen geldige items");
+  if (items.length === 0)
+    throw new ValidationError("categorize-no-valid-items", "geen geldige items");
   return { items };
 }
 
-const CATEGORIZE_TOOL = {
-  name: "categorize_transactions",
-  description: "Wijs elke transactie een categorie toe uit de toegestane lijst.",
-  input_schema: {
-    type: "object",
-    properties: {
-      results: {
-        type: "array",
-        items: {
-          type: "object",
-          properties: {
-            id: { type: "string" },
-            category: { type: "string", enum: [...CATEGORY_OPTIONS] },
-          },
-          required: ["id", "category"],
-        },
-      },
-    },
-    required: ["results"],
-  },
-} as const;
-
 const VALID = new Set(CATEGORY_OPTIONS);
 
-/** Bulk-categorize transactions via Haiku (forced tool). Returns [{id, category}]
- *  for the ids the model classified, filtered to the allowed taxonomy. The only
- *  place `@anthropic-ai/sdk` is imported for categorization; it only ever sees
- *  the sanitized {id, text, sign} items.
+/** Bulk-categorize transactions via the Mistral provider (JSON mode). Returns
+ *  [{id, category}] for the ids the model classified, filtered to the allowed
+ *  taxonomy. It only ever sees the sanitized {id, text, sign} items.
  *
  *  Its behaviour lives in `prompts/categorize.md` (composed with `_base.md`),
  *  not in this file — plus what it has learned about how the owner re-files its
@@ -66,22 +59,51 @@ export async function categorizeTransactions(
   input: { items: CategorizeItem[] },
   apiKey: string,
   facts: readonly LearnedFact[] = [],
+  onUsage?: (usage: {
+    inputTokens: number;
+    outputTokens: number;
+    cacheWriteTokens?: number;
+    cacheReadTokens?: number;
+  }) => void | Promise<void>,
+  userId?: string,
 ): Promise<{ id: string; category: string }[]> {
-  const client = new Anthropic({ apiKey });
+  const provider = createMistralProvider(apiKey, MISTRAL_SMALL, createAiObservationContext(userId));
   const list = input.items.map((it) => `${it.id}\t[${it.sign}] ${it.text}`).join("\n");
-  const res = await client.messages.create({
-    model: "claude-haiku-4-5",
-    // Headroom for a full MAX_ITEMS (200) batch: ~200 × {id,category} objects
-    // land well under this, so the forced-tool JSON won't truncate mid-array.
-    max_tokens: 8192,
-    system: loadAgentPrompt("categorize") + factsBlock(facts, AGENTS.categorize),
-    tools: [CATEGORIZE_TOOL as unknown as Anthropic.Tool],
-    tool_choice: { type: "tool", name: "categorize_transactions" },
-    messages: [{ role: "user", content: `Transacties:\n${list}` }],
+  /* A billed 200 with an unexpected body, or a timeout after the tokens were
+   * counted, still costs. Recorded at the boundary cap rather than silently. */
+  let res: Awaited<ReturnType<typeof provider.complete>>;
+  try {
+    res = await provider.complete({
+      system: loadAgentPrompt("categorize") + factsBlock(facts, AGENTS.categorize),
+      user: `Transacties:\n${list}`,
+      json: true,
+      // Headroom for a full MAX_ITEMS (200) batch: ~200 × {id,category} objects
+      // land well under this, so the JSON won't truncate mid-array.
+      maxTokens: 8192,
+    });
+  } catch (e) {
+    await onUsage?.({ inputTokens: MAX_BILLED_INPUT_TOKENS, outputTokens: 8192 });
+    throw e;
+  }
+  // Called regardless of what happens to res.text below — tokens were spent
+  // either way, whether or not the JSON that follows parses.
+  await onUsage?.({
+    inputTokens: res.usage.input,
+    outputTokens: res.usage.output,
+    ...(res.usage.cacheWriteTokens === undefined
+      ? {}
+      : { cacheWriteTokens: res.usage.cacheWriteTokens }),
+    ...(res.usage.cacheReadTokens === undefined
+      ? {}
+      : { cacheReadTokens: res.usage.cacheReadTokens }),
   });
-  const block = res.content.find((b) => b.type === "tool_use");
-  if (!block || block.type !== "tool_use") return [];
-  const results = (block.input as { results?: unknown }).results;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(res.text);
+  } catch {
+    return [];
+  }
+  const results = (parsed as { results?: unknown } | null)?.results;
   if (!Array.isArray(results)) return [];
   const out: { id: string; category: string }[] = [];
   for (const r of results) {

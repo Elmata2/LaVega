@@ -2,10 +2,29 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
+
+/* These suites pin the behaviour that stays in the code while the business side
+ * is archived (scope switch, entity classifier, invoice forwarding, the
+ * registry entries). They run with the switch OFF; archive.test.ts and
+ * archive-ui.test.tsx cover the switch ON. */
+vi.mock("../archive", () => ({
+  ARCHIVE_BUSINESS: false,
+  ARCHIVED_VIEWS: [],
+  ARCHIVED_WIDGETS: [],
+  SHOW_SCOPE_SWITCH: true,
+  SHOW_INVOICE_FORWARDING: true,
+  SHOW_ENTITY_CLASSIFIER: true,
+  isArchivedView: () => false,
+  isArchivedWidget: () => false,
+  initialScope: () =>
+    localStorage.getItem("lavega.defaultScope") === "business" ? "business" : "personal",
+}));
 import type { Account, LearnedFact } from "@lavega/core";
 import { entitySummaries, factId, TRAVEL_AGENT } from "@lavega/core";
 import type { VaultStorage } from "@lavega/adapters";
 import Profiel from "./Profiel";
+import { forgetMemoryTheme } from "../hooks/useTheme";
+import { intakeCopy } from "../copy/intake.js";
 import { WIDGETS, enabledModules } from "../components/moduleRegistry";
 import { COUNTRY_CODES } from "../countries";
 import { getHomeCountry } from "../settings";
@@ -21,14 +40,22 @@ let root: Root | null = null;
 let container: HTMLElement | null = null;
 
 beforeEach(() => {
+  forgetMemoryTheme();
   localStorage.clear();
+  document.cookie = "lavega_locale=nl";
 });
 
 afterEach(() => {
   if (root) act(() => root!.unmount());
   container?.remove();
+  // Some tests render twice and orphan the first container; its radios would
+  // share a name with the next test's and uncheck them.
+  document.body.replaceChildren();
   root = null;
   container = null;
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
+  document.cookie = "lavega_locale=; Max-Age=0; Path=/";
 });
 
 /** Wat de kluis in deze tests doet. Back-up raakt hem pas bij een klik, maar de
@@ -71,6 +98,11 @@ async function render(overrides: Partial<Parameters<typeof Profiel>[0]> = {}) {
     onHomeCountryChange: () => {},
     homeRegion: "",
     onHomeRegionChange: () => {},
+    fxConversionMode: "convert",
+    onFxConversionModeChange: () => {},
+    shareNetWorthEnabled: false,
+    onShareNetWorthEnabledChange: () => {},
+    shareNetWorthPendingDelete: false,
     ownerName: { first: "", last: "" },
     onOwnerNameChange: () => {},
     onLock: () => {},
@@ -79,15 +111,11 @@ async function render(overrides: Partial<Parameters<typeof Profiel>[0]> = {}) {
     busy: false,
     problems: [],
     onImport: () => {},
-    rules: [{ id: "r1", match: "albert heijn", category: "Boodschappen" }],
-    ruleMatch: "",
-    onRuleMatchChange: () => {},
-    ruleCategory: "",
-    onRuleCategoryChange: () => {},
-    onSaveRules: () => {},
+    onRefreshBank: () => {},
     storage,
     asOf: "2026-08-16",
     onRestored: () => {},
+    planUnlocked: false,
     ...overrides,
   };
   container = document.createElement("div");
@@ -116,30 +144,172 @@ function section(label: string): HTMLElement {
   return el as HTMLElement;
 }
 
-test("Regels, Koppelingen, Back-up and Import all render inside the profile", async () => {
+/* ══════ ACCOUNT — inloggen tegen de geconfigureerde LaVega-server ══════════
+ *
+ * Sign-up blijft verborgen (dat regelt de server). Wat hier wordt bewaakt: de
+ * drie standen van AuthState renderen elk het juiste — geen formulier zonder
+ * server, wél een formulier zonder sessie, en de identiteit plus een uitweg
+ * zodra er een sessie is — en dat een mislukte inlogpoging de Nederlandse
+ * boodschap toont, nooit de rauwe servertekst. */
+
+function submit(form: HTMLFormElement) {
+  form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+}
+
+test("Account: zonder serveraccount staat er alleen de ene zin, geen formulier", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => new Response(null, { status: 503 })),
+  );
   await render();
-  expect(section("Regels").textContent).toContain("albert heijn");
-  // Koppelingen has no aria-label wrapper of its own; its fields identify it.
-  expect(container!.querySelector('[aria-label="n8n webhook-URL"]')).not.toBeNull();
+  const account = section("Account");
+  expect(account.textContent).toContain("geen serveraccount ingesteld");
+  expect(account.querySelector("form")).toBeNull();
+  expect(account.querySelector("input")).toBeNull();
+});
+
+test("Account: zonder sessie staat het inlogformulier klaar", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => new Response(JSON.stringify({ user: null }))),
+  );
+  await render();
+  const account = section("Account");
+  expect(account.querySelector('input[type="email"]')).not.toBeNull();
+  expect(account.querySelector('input[type="password"]')).not.toBeNull();
+  expect([...account.querySelectorAll("button")].some((b) => b.textContent === "Inloggen")).toBe(
+    true,
+  );
+});
+
+test("Account: een mislukte inlogpoging toont de Nederlandse boodschap, niet de servertekst", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (url: string) => {
+      if (String(url).includes("/sign-in/email")) {
+        return new Response(JSON.stringify({ message: "invalid credentials" }), { status: 401 });
+      }
+      return new Response(JSON.stringify({ user: null }));
+    }),
+  );
+  await render();
+  const account = section("Account");
+  act(() =>
+    setNativeValue(
+      account.querySelector('input[type="email"]') as HTMLInputElement,
+      "owner@example.com",
+    ),
+  );
+  act(() =>
+    setNativeValue(account.querySelector('input[type="password"]') as HTMLInputElement, "verkeerd"),
+  );
+  await act(async () => submit(account.querySelector("form") as HTMLFormElement));
+  expect(account.querySelector('[role="alert"]')?.textContent).toBe(
+    "Onjuist e-mailadres of wachtwoord.",
+  );
+});
+
+test("Account: een geslaagde inlog toont het e-mailadres en een Uitloggen-knop", async () => {
+  let loggedIn = false;
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (url: string, init?: RequestInit) => {
+      const path = String(url);
+      if (path.includes("/sign-in/email") && init?.method === "POST") {
+        loggedIn = true;
+        return new Response(JSON.stringify({ user: { id: "u1", email: "owner@example.com" } }));
+      }
+      return new Response(
+        JSON.stringify(
+          loggedIn ? { user: { id: "u1", email: "owner@example.com" } } : { user: null },
+        ),
+      );
+    }),
+  );
+  await render();
+  const account = section("Account");
+  act(() =>
+    setNativeValue(
+      account.querySelector('input[type="email"]') as HTMLInputElement,
+      "owner@example.com",
+    ),
+  );
+  act(() =>
+    setNativeValue(
+      account.querySelector('input[type="password"]') as HTMLInputElement,
+      "geheim123",
+    ),
+  );
+  await act(async () => submit(account.querySelector("form") as HTMLFormElement));
+  expect(section("Account").textContent).toContain("owner@example.com");
+  expect(
+    [...section("Account").querySelectorAll("button")].some((b) => b.textContent === "Uitloggen"),
+  ).toBe(true);
+});
+
+test("Account: Uitloggen roept de sign-out endpoint aan en komt terug bij het formulier", async () => {
+  let loggedIn = true;
+  const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+    const path = String(url);
+    if (path.includes("/sign-out") && init?.method === "POST") {
+      loggedIn = false;
+      return new Response(null);
+    }
+    return new Response(
+      JSON.stringify(
+        loggedIn ? { user: { id: "u1", email: "owner@example.com" } } : { user: null },
+      ),
+    );
+  });
+  vi.stubGlobal("fetch", fetchMock);
+  await render();
+  const uitloggen = [...section("Account").querySelectorAll("button")].find(
+    (b) => b.textContent === "Uitloggen",
+  ) as HTMLButtonElement;
+  await act(async () => uitloggen.dispatchEvent(new MouseEvent("click", { bubbles: true })));
+  expect(
+    fetchMock.mock.calls.some(
+      ([u, i]) =>
+        String(u).includes("/sign-out") && (i as RequestInit | undefined)?.method === "POST",
+    ),
+  ).toBe(true);
+  expect(section("Account").querySelector('input[type="email"]')).not.toBeNull();
+});
+
+test("Koppelingen, Back-up and Import render inside the profile", async () => {
+  await render();
+  expect(container!.querySelector('[aria-label="Koppelingen"]')).not.toBeNull();
   expect(section("Importeren").querySelector('input[type="file"]')).not.toBeNull();
   expect(container!.textContent).toContain("Back-up");
+});
+
+/* REGELS STAAT HIER NIET MEER. Zijn verzoek bij de UI-ronde van 21 september:
+ * regels horen bij de transactiestap en niet in de instellingenkaart — een
+ * regel is een antwoord op een transactie die verkeerd is ingedeeld, dus hij
+ * hoort waar je dat ziet gebeuren. App.tsx rendert hem nu naast Transacties. */
+test("the rules are no longer buried in the settings card", async () => {
+  await render();
+  expect(container!.querySelector('[aria-label="Regels"]')).toBeNull();
+  expect(container!.textContent).not.toContain("albert heijn");
 });
 
 test("the module picker is on the profile, with Overzicht locked on", async () => {
   await render();
   const picker = section("Modules");
   expect(picker.querySelectorAll(".mp-item").length).toBeGreaterThan(1);
-  const home = picker.querySelector('[aria-label="Overzicht in de navigatie"]') as HTMLButtonElement;
+  const home = picker.querySelector(
+    '[aria-label="Overzicht in de navigatie"]',
+  ) as HTMLButtonElement;
   expect(home.disabled).toBe(true);
 });
 
-test("the country that drives the tax rules is set here, and says what it covers", async () => {
+test("the country that sets the card-terms market is set here, and says what it covers", async () => {
   const onHomeCountryChange = vi.fn();
   await render({ onHomeCountryChange });
   const select = section("Land en regio").querySelector("select") as HTMLSelectElement;
   expect(select.value).toBe("NL");
   expect(getHomeCountry()).toBe("NL"); // the same preference App reads
-  expect(section("Land en regio").textContent).toContain("alleen voor Nederland");
+  expect(section("Land en regio").textContent).toContain("voorwaarden van je kaarten");
 
   act(() => {
     select.value = "BE";
@@ -180,7 +350,9 @@ test("a region sits under the country, and is only a LIST where we have one", as
 test("the region is typed by hand, and the app never infers where he is", async () => {
   const onHomeRegionChange = vi.fn();
   await render({ homeCountry: "US", onHomeRegionChange });
-  const input = section("Land en regio").querySelector('input[list="home-regions"]') as HTMLInputElement;
+  const input = section("Land en regio").querySelector(
+    'input[list="home-regions"]',
+  ) as HTMLInputElement;
   act(() => setNativeValue(input, "Texas"));
   expect(onHomeRegionChange).toHaveBeenCalledWith("Texas");
   expect(section("Land en regio").textContent).toContain("LaVega leidt nooit af waar je bent");
@@ -189,37 +361,30 @@ test("the region is typed by hand, and the app never infers where he is", async 
 test("the profile opens with his own name, and says the name stays here", async () => {
   await render({ ownerName: { first: "Alexander", last: "Steunenberg" } });
   const head = section("Profiel");
-  expect(head.querySelector(".profile-head-name")?.textContent).toBe("Alexander Steunenberg");
-  expect(head.querySelector(".profile-head-avatar")?.textContent).toBe("AS"); // drawn, never fetched
+  expect(head.querySelector('[data-testid="profile-head-name"]')?.textContent).toBe(
+    "Alexander Steunenberg",
+  );
+  expect(head.querySelector('[data-testid="profile-head-avatar"]')?.textContent).toBe("AS"); // drawn, never fetched
   expect(head.textContent).toContain("nooit meegestuurd naar een model");
 });
 
 test("no name is 'no name', not a blank greeting", async () => {
   await render();
   const head = section("Profiel");
-  expect(head.querySelector(".profile-head-name")?.textContent).toBe("Nog geen naam ingevuld");
-  expect(head.querySelector(".profile-head-avatar")?.textContent).toBe("");
+  expect(head.querySelector('[data-testid="profile-head-name"]')?.textContent).toBe(
+    "Nog geen naam ingevuld",
+  );
+  expect(head.querySelector('[data-testid="profile-head-avatar"]')?.textContent).toBe("");
 });
 
 test("typing a name reports both halves back, unmangled", async () => {
   const onOwnerNameChange = vi.fn();
   await render({ ownerName: { first: "Alexander", last: "" }, onOwnerNameChange });
-  const last = section("Profiel").querySelector('input[aria-label="Achternaam"]') as HTMLInputElement;
+  const last = section("Profiel").querySelector(
+    'input[aria-label="Achternaam"]',
+  ) as HTMLInputElement;
   act(() => setNativeValue(last, "Steunenberg"));
   expect(onOwnerNameChange).toHaveBeenCalledWith({ first: "Alexander", last: "Steunenberg" });
-});
-
-test("Koppelingen explains itself behind an eye, and the fields stay in the open", async () => {
-  await render();
-  // The value you came to set is visible without opening anything…
-  expect(container!.querySelector('[aria-label="n8n webhook-URL"]')).not.toBeNull();
-  expect(container!.textContent).not.toContain("Production URL — niet de Test URL");
-
-  const eye = container!.querySelector('[aria-label="Uitleg bij de webhook-URL"]') as HTMLButtonElement;
-  expect(eye).not.toBeNull();
-  expect(eye.getAttribute("aria-expanded")).toBe("false");
-  act(() => eye.dispatchEvent(new MouseEvent("click", { bubbles: true })));
-  expect(container!.textContent).toContain("Production URL");
 });
 
 test("the half each entity belongs to is set here, and says what is not classified", async () => {
@@ -243,18 +408,31 @@ test("the half each entity belongs to is set here, and says what is not classifi
 
 test("an entity already classified shows its half as the pressed option", async () => {
   await render({
-    entities: entitySummaries([{ key: "bv1", entity: "BV1" } as Account], [{ entity: "BV1", scope: "business" }]),
+    entities: entitySummaries(
+      [{ key: "bv1", entity: "BV1" } as Account],
+      [{ entity: "BV1", scope: "business" }],
+    ),
   });
   const list = section("Persoonlijk of zakelijk");
-  expect((list.querySelector('[aria-label="BV1 zakelijk"]') as HTMLButtonElement).getAttribute("aria-pressed")).toBe("true");
-  expect((list.querySelector('[aria-label="BV1 persoonlijk"]') as HTMLButtonElement).getAttribute("aria-pressed")).toBe("false");
+  expect(
+    (list.querySelector('[aria-label="BV1 zakelijk"]') as HTMLButtonElement).getAttribute(
+      "aria-pressed",
+    ),
+  ).toBe("true");
+  expect(
+    (list.querySelector('[aria-label="BV1 persoonlijk"]') as HTMLButtonElement).getAttribute(
+      "aria-pressed",
+    ),
+  ).toBe("false");
   expect(list.textContent).not.toContain("niet ingedeeld");
 });
 
-test("Vergrendelen moved here from the app bar and still locks", async () => {
+test("Uitloggen (formerly Vergrendelen) lives here and still locks", async () => {
   const onLock = vi.fn();
   await render({ onLock });
-  const button = [...section("Vergrendelen").querySelectorAll("button")].find((b) => (b.textContent ?? "").includes("Vergrendel"));
+  const button = [...section("Uitloggen").querySelectorAll("button")].find((b) =>
+    (b.textContent ?? "").includes("Uitloggen"),
+  );
   expect(button).toBeTruthy();
   act(() => {
     button!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
@@ -282,7 +460,9 @@ test("the overview widgets are switched here, and they start off", async () => {
   expect(widgets.textContent).toContain("Positie");
 
   for (const label of ["Aandacht", "Positie"]) {
-    const toggle = widgets.querySelector(`[aria-label="${label} op je overzicht"]`) as HTMLButtonElement;
+    const toggle = widgets.querySelector(
+      `[aria-label="${label} op je overzicht"]`,
+    ) as HTMLButtonElement;
     expect(toggle, `no switch for ${label}`).not.toBeNull();
     expect(toggle.getAttribute("aria-checked")).toBe("false");
     expect(toggle.disabled).toBe(false); // neither is locked on, unlike Overzicht in the nav
@@ -297,7 +477,9 @@ test("Facturen en BTW zijn hier allebei te schakelen, met hun eigen beginstand",
    * kunt uitzetten, is geen widget maar een besluit. */
   await render();
   const widgets = section("Widgets");
-  const facturen = widgets.querySelector('[aria-label="Facturen op je overzicht"]') as HTMLButtonElement;
+  const facturen = widgets.querySelector(
+    '[aria-label="Facturen op je overzicht"]',
+  ) as HTMLButtonElement;
   const btw = widgets.querySelector('[aria-label="BTW op je overzicht"]') as HTMLButtonElement;
 
   expect(facturen, "geen schakelaar voor Facturen").not.toBeNull();
@@ -315,12 +497,16 @@ test("Facturen en BTW zijn hier allebei te schakelen, met hun eigen beginstand",
 
   act(() => facturen.dispatchEvent(new MouseEvent("click", { bubbles: true })));
   expect(facturen.getAttribute("aria-checked")).toBe("true");
-  expect(JSON.parse(localStorage.getItem("lavega.overviewWidgets") ?? "null").on).toContain("facturen-open");
+  expect(JSON.parse(localStorage.getItem("lavega.overviewWidgets") ?? "null").on).toContain(
+    "facturen-open",
+  );
 });
 
 test("switching a widget on is remembered, and does not touch the nav preference", async () => {
   await render();
-  const toggle = section("Widgets").querySelector('[aria-label="Aandacht op je overzicht"]') as HTMLButtonElement;
+  const toggle = section("Widgets").querySelector(
+    '[aria-label="Aandacht op je overzicht"]',
+  ) as HTMLButtonElement;
   act(() => toggle.dispatchEvent(new MouseEvent("click", { bubbles: true })));
   expect(toggle.getAttribute("aria-checked")).toBe("true");
   /* DE VORM IS {on, seen} GEWORDEN, en dat is opzet. Een kale lijst kon niet
@@ -360,14 +546,6 @@ test("een oude, kale widget-lijst blijft betekenen wat hij toen betekende", asyn
   if (agenda) expect(agenda.getAttribute("aria-checked")).not.toBe("false");
 });
 
-test("the manual rules keep their explanation of how a match is decided", async () => {
-  await render();
-  const regels = section("Regels");
-  expect(regels.textContent).toContain("Je eigen regels hieronder gaan vóór die automatische categorieën");
-  expect(regels.textContent).toContain("eerste");
-  expect(regels.querySelector("input")).not.toBeNull(); // and you can still add one
-});
-
 /* ══════ CASHBACK CORRIGEREN — de feedbackmodule ═════════════════════════════
  *
  * App review 4, punt 22. Hij vroeg om de aanname "een gewone kaart heeft geen
@@ -382,7 +560,16 @@ test("the manual rules keep their explanation of how a match is decided", async 
  */
 
 const ING: Account[] = [
-  { key: "B1", iban: "NL01INGB", name: "Betaalrekening", bank: "ING", entity: "Prive", currency: "EUR", balance: 1000, type: "Betaalrekening" } as Account,
+  {
+    key: "B1",
+    iban: "NL01INGB",
+    name: "Betaalrekening",
+    bank: "ING",
+    entity: "Prive",
+    currency: "EUR",
+    balance: 1000,
+    type: "Betaalrekening",
+  } as Account,
 ];
 
 /** Zoek de regel van één product op zijn testid. Faalt hard als hij er niet
@@ -402,7 +589,9 @@ function cashbackInput(product: string): HTMLInputElement {
  *  want "Opslaan" en "Wis mijn correctie" wisselen van plek zodra er een
  *  correctie staat. */
 function cashbackButton(product: string, label: string): HTMLButtonElement {
-  const btn = [...cashbackRow(product).querySelectorAll("button")].find((b) => b.textContent === label);
+  const btn = [...cashbackRow(product).querySelectorAll("button")].find(
+    (b) => b.textContent === label,
+  );
   if (!btn) throw new Error(`geen knop "${label}" bij ${product}`);
   return btn as HTMLButtonElement;
 }
@@ -424,7 +613,9 @@ test("wat hij invult wordt een gebruikersfeit in zijn eigen kluis", async () => 
   await render({ storage: s });
   act(() => setNativeValue(cashbackInput("ING betaalpas"), "1,5"));
   await act(async () => {
-    cashbackButton("ING betaalpas", "Opslaan").dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    cashbackButton("ING betaalpas", "Opslaan").dispatchEvent(
+      new MouseEvent("click", { bubbles: true }),
+    );
   });
 
   // Eén feit, in de bestaande namespace, met bron "user" — geen tweede tabel
@@ -453,10 +644,14 @@ test("een correctie is terug te draaien, en dan komt de aanname terug", async ()
   await render({ storage: s });
   act(() => setNativeValue(cashbackInput("ING betaalpas"), "1,5"));
   await act(async () => {
-    cashbackButton("ING betaalpas", "Opslaan").dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    cashbackButton("ING betaalpas", "Opslaan").dispatchEvent(
+      new MouseEvent("click", { bubbles: true }),
+    );
   });
   await act(async () => {
-    cashbackButton("ING betaalpas", "Wis mijn correctie").dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    cashbackButton("ING betaalpas", "Wis mijn correctie").dispatchEvent(
+      new MouseEvent("click", { bubbles: true }),
+    );
   });
   expect(stored.facts).toHaveLength(0);
   expect(cashbackRow("ING betaalpas").textContent).toContain("aangenomen: geen cashback");
@@ -467,7 +662,9 @@ test("een onmogelijk percentage wordt geweigerd MET de reden, niet stil ingeslik
   await render({ storage: s });
   act(() => setNativeValue(cashbackInput("ING betaalpas"), "honderdduizend euro"));
   await act(async () => {
-    cashbackButton("ING betaalpas", "Opslaan").dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    cashbackButton("ING betaalpas", "Opslaan").dispatchEvent(
+      new MouseEvent("click", { bubbles: true }),
+    );
   });
   // De reden komt uit `checkFact` — dezelfde grens die elke agent moet passeren,
   // niet een tweede validatie die er net iets anders over denkt.
@@ -480,7 +677,9 @@ test("een onmogelijk percentage wordt geweigerd MET de reden, niet stil ingeslik
 test("de aanname is uit te zetten, en dan staat er weer onbekend", async () => {
   const { storage: s } = fakeStorage(ING);
   await render({ storage: s });
-  const toggle = container!.querySelector('[aria-label="Neem aan dat een gewone kaart geen cashback geeft"]') as HTMLInputElement;
+  const toggle = container!.querySelector(
+    '[aria-label="Neem aan dat een gewone kaart geen cashback geeft"]',
+  ) as HTMLInputElement;
   expect(toggle.checked).toBe(true); // hij vroeg erom, dus hij staat aan
 
   // Een echte klik, niet `checked = false` + een los change-event: React leest
@@ -493,12 +692,71 @@ test("de aanname is uit te zetten, en dan staat er weer onbekend", async () => {
   expect(localStorage.getItem("lavega.cashbackAssumption")).toBe("0");
 });
 
+test("vreemde valuta omrekenen staat standaard aan en meldt de wijziging aan de ouder", async () => {
+  const onFxConversionModeChange = vi.fn();
+  await render({ fxConversionMode: "convert", onFxConversionModeChange });
+  const toggle = container!.querySelector(
+    '[aria-label="Vreemde valuta omrekenen naar euro"]',
+  ) as HTMLInputElement;
+  expect(toggle.checked).toBe(true); // omrekenen is het gestelde standaardgedrag
+
+  // App owns the state (see App.tsx); Profiel only reports the click.
+  act(() => toggle.dispatchEvent(new MouseEvent("click", { bubbles: true })));
+  expect(onFxConversionModeChange).toHaveBeenCalledWith("separate");
+});
+
+test("de omreken-checkbox volgt de fxConversionMode prop", async () => {
+  await render({ fxConversionMode: "separate" });
+  const toggle = container!.querySelector(
+    '[aria-label="Vreemde valuta omrekenen naar euro"]',
+  ) as HTMLInputElement;
+  expect(toggle.checked).toBe(false);
+});
+
+test("de net-worth-share schakelaar staat standaard uit en meldt de verandering naar boven", async () => {
+  const onChange = vi.fn();
+  await render({ shareNetWorthEnabled: false, onShareNetWorthEnabledChange: onChange });
+  const toggle = container!.querySelector(
+    '[aria-label="Deel mijn Totale positie met LaVega Investing"]',
+  ) as HTMLInputElement;
+  expect(toggle.checked).toBe(false);
+  act(() => toggle.click());
+  expect(onChange).toHaveBeenCalledWith(true);
+});
+
+test("de net-worth-share schakelaar volgt de prop als hij al aan staat", async () => {
+  await render({ shareNetWorthEnabled: true });
+  const toggle = container!.querySelector(
+    '[aria-label="Deel mijn Totale positie met LaVega Investing"]',
+  ) as HTMLInputElement;
+  expect(toggle.checked).toBe(true);
+});
+
+test("een mislukte verwijdering na het uitzetten toont de terugval-melding", async () => {
+  await render({ shareNetWorthEnabled: false, shareNetWorthPendingDelete: true });
+  expect(container!.textContent).toContain("Kon je gedeelde bedragen niet verwijderen");
+});
+
+test("geen terugval-melding zolang er niets mislukt is", async () => {
+  await render({ shareNetWorthEnabled: false, shareNetWorthPendingDelete: false });
+  expect(container!.textContent).not.toContain("Kon je gedeelde bedragen niet verwijderen");
+});
+
 test("een Amex blijft onbekend, ook met de aanname aan, en zegt waarom", async () => {
   // De afbakening in het klein: bij een kaart die op zijn beloning wordt verkocht
   // is nul niet voorzichtig maar onjuist. En de melding noemt de oorzaak, want
   // "onbekend" zonder reden stuurt hem naar de verkeerde knop.
   const amex: Account[] = [
-    { key: "C1", iban: "", name: "Green Card", bank: "American Express", entity: "Prive", currency: "EUR", balance: -100, type: "Creditcard" } as Account,
+    {
+      key: "C1",
+      iban: "",
+      name: "Green Card",
+      bank: "American Express",
+      entity: "Prive",
+      currency: "EUR",
+      balance: -100,
+      type: "Creditcard",
+    } as Account,
   ];
   const { storage: s } = fakeStorage(amex);
   await render({ storage: s });
@@ -511,10 +769,7 @@ test("een Amex blijft onbekend, ook met de aanname aan, en zegt waarom", async (
 test("twee rekeningen van hetzelfde product zijn één vraag, niet twee", async () => {
   // Feiten zijn gekeyd op de productnaam. Twee regels zouden suggereren dat je ze
   // los kunt zetten, en de tweede zou de eerste stil overschrijven.
-  const twee: Account[] = [
-    ING[0],
-    { ...ING[0], key: "B2", name: "Tweede rekening" } as Account,
-  ];
+  const twee: Account[] = [ING[0], { ...ING[0], key: "B2", name: "Tweede rekening" } as Account];
   const { storage: s } = fakeStorage(twee);
   await render({ storage: s });
   expect(container!.querySelectorAll('[data-testid^="cashback-fix-"]').length).toBe(1);
@@ -546,14 +801,168 @@ test("een 0 die HIJ invult is een bekende nul, geen aanname — en overleeft de 
   await render({ storage: s });
   act(() => setNativeValue(cashbackInput("ING betaalpas"), "0"));
   await act(async () => {
-    cashbackButton("ING betaalpas", "Opslaan").dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    cashbackButton("ING betaalpas", "Opslaan").dispatchEvent(
+      new MouseEvent("click", { bubbles: true }),
+    );
   });
   expect(stored.facts[0]).toMatchObject({ value: "0", source: "user" });
   expect(cashbackRow("ING betaalpas").textContent).toContain("door jou ingesteld");
 
-  const toggle = container!.querySelector('[aria-label="Neem aan dat een gewone kaart geen cashback geeft"]') as HTMLInputElement;
+  const toggle = container!.querySelector(
+    '[aria-label="Neem aan dat een gewone kaart geen cashback geeft"]',
+  ) as HTMLInputElement;
   act(() => toggle.dispatchEvent(new MouseEvent("click", { bubbles: true })));
   const row = cashbackRow("ING betaalpas").textContent ?? "";
   expect(row).toContain("door jou ingesteld");
   expect(row).not.toContain("uitgezet");
+});
+
+test("the page renders in English when the locale cookie says en", async () => {
+  document.cookie = "lavega_locale=en";
+  await render();
+  expect(container!.textContent).toContain("Correct cashback");
+  expect(container!.textContent).toContain("Personal or business");
+  expect(container!.textContent).toContain("Sign out");
+  expect(container!.textContent).not.toContain("Cashback corrigeren");
+  expect(container!.textContent).not.toContain("Persoonlijk of zakelijk");
+  expect(container!.textContent).not.toContain("Uitloggen");
+});
+
+test("the language switch flips the page's copy live, without a remount", async () => {
+  await render();
+  const switcher = section("Taal / Language");
+  expect(section("Uitloggen")).toBeTruthy();
+
+  const englishButton = [...switcher.querySelectorAll("button")].find(
+    (b) => b.textContent === "English",
+  ) as HTMLButtonElement;
+  expect(englishButton).toBeTruthy();
+  await act(async () => {
+    englishButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+  });
+
+  expect(section("Sign out")).toBeTruthy();
+  expect(container!.querySelector('[aria-label="Uitloggen"]')).toBeNull();
+});
+
+test("a link card opens what LaVega knows about you", async () => {
+  const onNavigate = vi.fn();
+  await render({ onNavigate });
+  const card = section("Wat LaVega over je weet");
+  const open = [...card.querySelectorAll("button")].find(
+    (b) => b.textContent === "Bekijk wat LaVega weet",
+  )!;
+  act(() => open.click());
+  expect(onNavigate).toHaveBeenCalledWith("about-you");
+});
+
+/* ══════ WEERGAVE — thema-keuze (Midnight / Zwart-wit) ═════════════════════ */
+
+/** Een radio aanklikken. Onder jsdom staat de `checked`-eigenschap van een
+ *  gecontroleerde radio pas goed na een tweede flush; de state en het attribuut
+ *  op <html> zijn al meteen goed. */
+async function pick(radio: HTMLInputElement) {
+  act(() => radio.click());
+  await act(async () => {});
+}
+
+test("Weergave: twee gelabelde radio's in een radiogroup, boven de modulekaart", async () => {
+  await render();
+  const card = section("Weergave");
+  const group = card.querySelector('[role="radiogroup"]');
+  expect(group).not.toBeNull();
+  expect(group!.getAttribute("aria-label")).toBe("Thema");
+  const radios = [...card.querySelectorAll<HTMLInputElement>('input[type="radio"]')];
+  expect(radios.map((r) => r.value)).toEqual(["midnight", "mono"]);
+  expect(card.textContent).toContain("Midnight");
+  expect(card.textContent).toContain("Zwart-wit");
+  for (const r of radios) expect(r.labels?.length).toBe(1);
+  const modules = section("Modules");
+  expect(card.compareDocumentPosition(modules) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+});
+
+test("Weergave: Engels gebruikt 'Black and white'", async () => {
+  document.cookie = "lavega_locale=en";
+  await render();
+  expect(container!.textContent).toContain("Black and white");
+});
+
+test("Weergave: de gekozen radio volgt het opgeslagen thema bij het laden", async () => {
+  localStorage.setItem("lavega.theme", "mono");
+  await render();
+  const radios = [...section("Weergave").querySelectorAll<HTMLInputElement>("input[type=radio]")];
+  expect(radios.find((r) => r.checked)?.value).toBe("mono");
+});
+
+test("Weergave: kiezen bewaart en past direct toe", async () => {
+  delete document.documentElement.dataset.theme;
+  await render();
+  const mono = section("Weergave").querySelector<HTMLInputElement>('input[value="mono"]')!;
+  await pick(mono);
+  expect(localStorage.getItem("lavega.theme")).toBe("mono");
+  expect(document.documentElement.dataset.theme).toBe("mono");
+  expect(mono.checked).toBe(true);
+  const mid = section("Weergave").querySelector<HTMLInputElement>('input[value="midnight"]')!;
+  await pick(mid);
+  expect(document.documentElement.hasAttribute("data-theme")).toBe(false);
+  expect(localStorage.getItem("lavega.theme")).toBe("midnight");
+});
+
+test("Weergave: geblokkeerde opslag wisselt toch, zonder foutmelding", async () => {
+  vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+    throw new Error("blocked");
+  });
+  await render();
+  const card = section("Weergave");
+  const before = card.textContent;
+  await pick(card.querySelector<HTMLInputElement>('input[value="mono"]')!);
+  expect(document.documentElement.dataset.theme).toBe("mono");
+  expect(card.querySelector<HTMLInputElement>('input[value="mono"]')!.checked).toBe(true);
+  expect(card.textContent).toBe(before);
+  expect(card.querySelector('[role="alert"]')).toBeNull();
+  vi.restoreAllMocks();
+  delete document.documentElement.dataset.theme;
+});
+
+test("Weergave: een storage-event van een ander tabblad werkt de keuze bij", async () => {
+  delete document.documentElement.dataset.theme;
+  await render();
+  localStorage.setItem("lavega.theme", "mono");
+  act(() => {
+    window.dispatchEvent(new StorageEvent("storage", { key: "lavega.theme", newValue: "mono" }));
+  });
+  expect(document.documentElement.dataset.theme).toBe("mono");
+  expect(section("Weergave").querySelector<HTMLInputElement>('input[value="mono"]')!.checked).toBe(
+    true,
+  );
+  delete document.documentElement.dataset.theme;
+});
+
+
+/* ══════ JOUW PLAN — the only way in now that the nav no longer lists it ═══════ */
+
+test("Jouw plan card is the first card; unlocked it opens the plan view", async () => {
+  const onNavigate = vi.fn();
+  await render({ planUnlocked: true, onNavigate });
+  const first = container!.querySelector("section")!;
+  expect(first.getAttribute("aria-label")).toBe("Jouw plan");
+  expect(first.textContent).toContain("Jouw plan");
+  const open = [...first.querySelectorAll("button, a")].find(
+    (b) => b.textContent === "Open je plan",
+  ) as HTMLElement;
+  expect(open).toBeTruthy();
+  act(() => open.click());
+  expect(onNavigate).toHaveBeenCalledWith("plan");
+});
+
+test("Jouw plan card, locked: the intake prompt and a Begin button that opens the intake", async () => {
+  const onNavigate = vi.fn();
+  await render({ planUnlocked: false, onNavigate });
+  const first = container!.querySelector("section")!;
+  expect(first.getAttribute("aria-label")).toBe("Jouw plan");
+  expect(first.textContent).toContain(intakeCopy.nl.home.invite.intro);
+  expect(first.textContent).not.toContain("Open je plan");
+  const begin = [...first.querySelectorAll("button")].find((b) => b.textContent === "Begin")!;
+  act(() => begin.click());
+  expect(onNavigate).toHaveBeenCalledWith("intake");
 });

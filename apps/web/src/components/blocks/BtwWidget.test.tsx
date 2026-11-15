@@ -1,7 +1,8 @@
+// @vitest-environment jsdom
 import { renderToStaticMarkup } from "react-dom/server";
 import { expect, test } from "vitest";
 import type { Account, Invoice, Tx, VatSettings } from "@lavega/core";
-import { formatEuro } from "../../format.js";
+import { formatEuro, formatSignedEuroIn } from "../../format.js";
 import { BtwBlock, btwRows } from "./BtwWidget";
 
 /* De btw-kaart op het overzicht, in de volgorde van eerlijkheid die hij zelf
@@ -15,23 +16,66 @@ import { BtwBlock, btwRows } from "./BtwWidget";
 const ASOF = "2026-08-16";
 
 const accounts: Account[] = [
-  { key: "A1", iban: "NL01INGB0001", name: "Zakelijk", bank: "ING", entity: "Holding BV", currency: "EUR", balance: 10_000 },
-  { key: "A2", iban: "NL02RABO0001", name: "Zakelijk", bank: "Rabobank", entity: "Café BV", currency: "EUR", balance: 4_000 },
+  {
+    key: "A1",
+    iban: "NL01INGB0001",
+    name: "Zakelijk",
+    bank: "ING",
+    entity: "Holding BV",
+    currency: "EUR",
+    balance: 10_000,
+  },
+  {
+    key: "A2",
+    iban: "NL02RABO0001",
+    name: "Zakelijk",
+    bank: "Rabobank",
+    entity: "Café BV",
+    currency: "EUR",
+    balance: 4_000,
+  },
 ];
 
 /** Eén omzettransactie per onderneming, zodat de marge-benadering ALTIJD een
  *  getal zou kunnen opleveren. Dat is precies wat de eerste test moet kunnen
  *  bewijzen: het getal bestaat, en de kaart toont het toch niet. */
 const txs: Tx[] = [
-  { id: "t1", accountKey: "A1", date: "2026-07-05", amount: 12_100, currency: "EUR", counterparty: "Klant BV", description: "Omzet", category: "", manual: false },
-  { id: "t2", accountKey: "A2", date: "2026-07-06", amount: 6_050, currency: "EUR", counterparty: "Gast", description: "Omzet", category: "", manual: false },
+  {
+    id: "t1",
+    accountKey: "A1",
+    date: "2026-07-05",
+    amount: 12_100,
+    currency: "EUR",
+    counterparty: "Klant BV",
+    description: "Omzet",
+    category: "",
+    manual: false,
+  },
+  {
+    id: "t2",
+    accountKey: "A2",
+    date: "2026-07-06",
+    amount: 6_050,
+    currency: "EUR",
+    counterparty: "Gast",
+    description: "Omzet",
+    category: "",
+    manual: false,
+  },
 ];
 
 /** Wat de marge-benadering van Holding BV zou opleveren: 12.100 × 21 / 121. */
 const PROXY_HOLDING = 2_100;
 
 function settings(entity: string, extra: Partial<VatSettings> = {}): VatSettings {
-  return { entity, frequency: "quarterly", defaultRatePct: 21, mixedRates: false, country: "NL", ...extra };
+  return {
+    entity,
+    frequency: "quarterly",
+    defaultRatePct: 21,
+    mixedRates: false,
+    country: "NL",
+    ...extra,
+  };
 }
 
 function invoice(i: Partial<Invoice> & { id: string }): Invoice {
@@ -49,11 +93,7 @@ function invoice(i: Partial<Invoice> & { id: string }): Invoice {
   };
 }
 
-function render(opts: {
-  entities: string[];
-  vatSettings: VatSettings[];
-  invoices?: Invoice[];
-}) {
+function render(opts: { entities: string[]; vatSettings: VatSettings[]; invoices?: Invoice[] }) {
   return renderToStaticMarkup(
     <BtwBlock
       entities={opts.entities}
@@ -112,7 +152,7 @@ test("onvolledige dekking zegt hoeveel facturen geen btw-bedrag noemen", () => {
   // De facturen zijn dan niet de basis; wat er staat is de marge-benadering, en
   // de kaart noemt die bron in plaats van hem te verzwijgen.
   expect(html).toContain("een marge-benadering uit je banktransacties");
-  expect(html).toContain(formatEuro(PROXY_HOLDING));
+  expect(html).toContain(formatSignedEuroIn("nl", -PROXY_HOLDING));
 });
 
 test("een gewone positie: bedrag, periode, richting en de eerstvolgende deadline", () => {
@@ -125,7 +165,8 @@ test("een gewone positie: bedrag, periode, richting en de eerstvolgende deadline
     ],
   });
 
-  expect(html).toContain(formatEuro(1_680)); // 2.100 af te dragen − 420 voorbelasting
+  expect(html).toContain(formatSignedEuroIn("nl", -1_680));
+  expect(html).toMatch(/text-neg">\u2212€\s1\.680,00/); // 2.100 af te dragen − 420 voorbelasting
   expect(html).toContain("te betalen");
   expect(html).toContain("Q3 2026");
   expect(html).toContain("uiterlijk 2026-10-31");
@@ -143,7 +184,8 @@ test("meer voorbelasting dan afdracht is terug te vragen, niet een absentie", ()
       invoice({ id: "i2", direction: "out", amount: 5_000, vatAmount: 900 }),
     ],
   });
-  expect(html).toContain(formatEuro(700));
+  expect(html).toContain(formatSignedEuroIn("nl", 700));
+  expect(html).toMatch(/text-pos">\+€\s700,00/);
   expect(html).toContain("terug te vragen");
 });
 

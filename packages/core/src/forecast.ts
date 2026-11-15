@@ -1,4 +1,7 @@
 import type { Account, ScheduledFlow, Tx } from "./model.js";
+import { isEurCurrency } from "./model.js";
+import type { ConversionMode } from "./fx.js";
+import { toEur } from "./fx.js";
 import { norm } from "./hash.js";
 import { scheduledFlowsForScope } from "./scheduledFlows.js";
 import { categorize, ownAccounts } from "./views.js";
@@ -9,17 +12,21 @@ import { categorize, ownAccounts } from "./views.js";
  * a locale/TZ hazard). */
 
 export type RecurringStream = {
-  key: string;             // norm(counterparty) + "|" + (sign > 0 ? "in" : "out")
-  counterparty: string;    // raw counterparty of the first occurrence in the group
-  sign: 1 | -1;             // 1 = inflow, -1 = outflow
-  cadenceDays: number;      // snapped: 7 | 14 | 30 | 91 | 365
-  amountCents: number;      // representative magnitude = round(median(|amount| in cents)), POSITIVE integer
+  key: string; // norm(counterparty) + "|" + (sign > 0 ? "in" : "out")
+  counterparty: string; // raw counterparty of the first occurrence in the group
+  sign: 1 | -1; // 1 = inflow, -1 = outflow
+  cadenceDays: number; // snapped: 7 | 14 | 30 | 91 | 365
+  amountCents: number; // representative magnitude = round(median(|amount| in cents)), POSITIVE integer
   occurrences: number;
-  lastDate: string;         // ISO date of the most recent occurrence
-  intervalCv: number;       // std/mean of day-gaps (0 when < 2 gaps)
+  lastDate: string; // ISO date of the most recent occurrence
+  intervalCv: number; // std/mean of day-gaps (0 when < 2 gaps)
 };
 
-export type DetectOptions = { minOccurrences?: number; maxIntervalCv?: number; amountTolerance?: number };
+export type DetectOptions = {
+  minOccurrences?: number;
+  maxIntervalCv?: number;
+  amountTolerance?: number;
+};
 
 /** Minimum days of transaction history before the incidental (non-recurring)
  *  daily baseline is extrapolated into the forecast. Below this, one lumpy
@@ -201,7 +208,8 @@ export function detectRecurringStreams(txs: Tx[], opts: DetectOptions = {}): Rec
     const sorted = [...group].sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
 
     const gaps: number[] = [];
-    for (let i = 1; i < sorted.length; i++) gaps.push(daysBetween(sorted[i - 1].date, sorted[i].date));
+    for (let i = 1; i < sorted.length; i++)
+      gaps.push(daysBetween(sorted[i - 1].date, sorted[i].date));
 
     const cadenceDays = snapCadence(median(gaps));
     if (cadenceDays === null) continue;
@@ -276,7 +284,12 @@ export function streamOccurrences(s: RecurringStream, asOf: string, horizonEnd: 
     const overdueDays = daysBetween(missed, asOf);
     const grace = Math.max(3, Math.round(s.cadenceDays * 0.2));
     const catchUp = addDays(asOf, 1);
-    if (overdueDays > grace && overdueDays <= s.cadenceDays && catchUp <= horizonEnd && dates[0] !== catchUp) {
+    if (
+      overdueDays > grace &&
+      overdueDays <= s.cadenceDays &&
+      catchUp <= horizonEnd &&
+      dates[0] !== catchUp
+    ) {
       dates.unshift(catchUp);
     }
   }
@@ -301,7 +314,52 @@ export type ForecastPoint = {
   upperCents: number | null;
 };
 export type Shortfall = { date: string; balanceCents: number };
-export type Driver = { label: string; sign: 1 | -1; perWeekCents: number };
+
+/** WS2.10 (#290): how well a bills series' recurrence has been OBSERVED.
+ *  - "high": at least three occurrences of the series already closed before
+ *    `asOf` — the cadence has been seen repeating.
+ *  - "medium": one or two closed occurrences.
+ *  - "low": none yet; the series is declared but has never been paid, so the
+ *    projection rests on the declaration alone.
+ *  It is a rule over the ledger, not a tuned weight. */
+export type ForecastCommitmentConfidence = "low" | "medium" | "high";
+
+/** One real committed payment coming out of the bills workstream: an open
+ *  occurrence with its own date and amount (WS2.10, #290). The bills adapter
+ *  (`bills/forecast.ts`) produces these; the forecast projects them instead of
+ *  extrapolating the matching detected stream, and never both. */
+export type ForecastCommitment = {
+  /** The occurrence id (`billId|originalDueOn`), so a caller can trace it. */
+  id: string;
+  /** Entity the commitment belongs to; "" when the series has no resolvable
+   *  account entity, in which case it counts only in the consolidated scope. */
+  entity?: string;
+  label: string;
+  sign: 1 | -1;
+  /** Integer cents, positive magnitude (ADR 0011). */
+  amountCents: number;
+  /** ISO date of the occurrence — the real committed date, not an extrapolation. */
+  dueDate: string;
+  confidence: ForecastCommitmentConfidence;
+};
+
+/** A detected stream the bills workstream explains: its real occurrence dates
+ *  and amounts are projected through `commitments`, so the stream's own
+ *  extrapolated dates are suppressed or the same money lands twice. */
+export type ClaimedStream = { key: string; entity?: string };
+
+export type Driver = {
+  label: string;
+  sign: 1 | -1;
+  perWeekCents: number;
+  /** WS2.10: the committed dates behind a bills driver, ascending. Absent on a
+   *  detected-stream driver, whose dates are extrapolated, not committed. */
+  dates?: string[];
+  /** WS2.10: the committed confidence for a bills driver. Absent on a stream. */
+  commitmentConfidence?: ForecastCommitmentConfidence;
+  /** WS2.10: where the driver came from. Absent on older forecasts. */
+  source?: "stream" | "commitment";
+};
 
 /** Where the band's width comes from. "streams" = the measured spread of the
  *  recurring amounts themselves; "incidental" = the week-to-week spread of
@@ -324,11 +382,11 @@ export type ForecastBasis = {
   /** Days spanned by this scope's transaction history (0 for none or one tx). */
   historyDays: number;
   firstTxDate: string; // "" when the scope has no transactions
-  lastTxDate: string;  // ""; also the answer to "how stale is this?"
+  lastTxDate: string; // ""; also the answer to "how stale is this?"
   /** Whole calendar weeks fully inside the observed window. */
   fullWeeks: number;
-  accountsTotal: number;        // accounts in this scope
-  accountsWithHistory: number;  // ...of which contributed at least one transaction
+  accountsTotal: number; // accounts in this scope
+  accountsWithHistory: number; // ...of which contributed at least one transaction
   /** The SHORTEST history among the accounts that contributed any — "three
    *  weeks of one account" is literally this number. null when none did. */
   shortestAccountDays: number | null;
@@ -348,6 +406,11 @@ export type ForecastBasis = {
   overdueFlowCount: number;
   /** Scheduled flows that ARE in the line (due inside the horizon). */
   projectedFlowCount: number;
+  /** WS2.10: bills occurrences projected in the line, and detected streams
+   *  suppressed because bills now carry their real dates. Optional on older
+   *  fixtures, which predate the bills integration. */
+  commitmentsProjected?: number;
+  claimedStreams?: number;
   confidence: ForecastConfidence;
 };
 
@@ -365,16 +428,37 @@ export type EntityForecast = {
    *  when `shortfall` is null; a real shortfall says it louder already.
    *  Optional so forecasts written by hand in tests/fixtures stay valid. */
   atRisk?: Shortfall | null;
+  /** The bills occurrences projected into this scope (WS2.10, #290), with
+   *  their real dates and commitment confidence. Optional so forecasts written
+   *  by hand in tests/fixtures stay valid. */
+  commitments?: ForecastCommitment[];
   /** Optional for the same reason. `forecastCashflow` always produces it. */
   basis?: ForecastBasis;
 };
-export type ForecastOptions = { asOf: string; horizonDays?: number; bufferCents?: number; scheduledFlows?: ScheduledFlow[] };
+export type ForecastOptions = {
+  asOf: string;
+  horizonDays?: number;
+  bufferCents?: number;
+  scheduledFlows?: ScheduledFlow[];
+  /** Required, no default: whether a foreign-currency balance folds into the
+   *  opening position (converted at the ECB rate) or is excluded from it is a
+   *  choice the caller must make explicitly, exactly like `consolidate()`. */
+  fxHistory: Record<string, Record<string, number>>;
+  mode: ConversionMode;
+  /** WS2.10 (#290): real committed payments from the bills workstream. When
+   *  present they are projected on their own dates and amounts; absent keeps
+   *  the pre-integration streams-only model exactly. */
+  commitments?: ForecastCommitment[];
+  /** Detected streams the bills occurrences explain. Their extrapolated dates
+   *  are suppressed so the same money is not projected twice. */
+  claimedStreams?: ClaimedStream[];
+};
 
 /** Per-week "recurring flow" contribution of a stream, used for the driver
  *  ranking. Note this is an AVERAGE rate, not a schedule — the projection
  *  itself uses the real calendar dates from `streamOccurrences`. */
 function perWeekCents(s: RecurringStream): number {
-  return Math.round(s.sign * s.amountCents * 7 / s.cadenceDays);
+  return Math.round((s.sign * s.amountCents * 7) / s.cadenceDays);
 }
 
 /** Build one scope's forecast (an entity, or the "geconsolideerd" total)
@@ -388,16 +472,55 @@ function buildForecast(
   horizonDays: number,
   bufferCents: number,
   scheduledFlows: ScheduledFlow[] = [],
+  conversion: { fxHistory: Record<string, Record<string, number>>; mode: ConversionMode },
+  commitments: ForecastCommitment[] = [],
+  claimedStreams: ReadonlySet<string> = new Set<string>(),
 ): EntityForecast {
   const horizonEnd = addDays(asOf, horizonDays);
 
   // No accounts (e.g. the "onbekend" scope of orphan txs) => opening is UNKNOWN,
   // not a confident €0 — otherwise it could surface a spurious shortfall.
-  const openingCents = scopeAccounts.length === 0 || scopeAccounts.some((a) => a.balance === null)
-    ? null
-    : Math.round(scopeAccounts.reduce((s, a) => s + (a.balance as number), 0) * 100);
+  //
+  // A balance LaVega cannot price into euro right now (separate mode, or
+  // convert mode with no ECB rate yet) does not poison an otherwise-known
+  // opening balance — it is excluded, exactly like consolidate()'s entity
+  // balance — unless excluding it leaves nothing left to sum. A genuinely
+  // MISSING balance (null, any currency) still poisons the whole scope,
+  // unchanged from before.
+  const eurBalanceOf = (a: Account): number | null => {
+    if (a.balance === null) return null;
+    if (isEurCurrency(a.currency)) return a.balance;
+    return conversion.mode === "convert"
+      ? toEur(a.balance, a.currency, asOf, conversion.fxHistory)
+      : null;
+  };
+  const missingBalance = scopeAccounts.some((a) => a.balance === null);
+  const pricedAccounts = scopeAccounts.filter((a) => eurBalanceOf(a) !== null);
+  const openingCents =
+    scopeAccounts.length === 0 || missingBalance || pricedAccounts.length === 0
+      ? null
+      : Math.round(pricedAccounts.reduce((s, a) => s + (eurBalanceOf(a) as number), 0) * 100);
 
-  const streams = detectRecurringStreams(scopeTxs);
+  // Everything below this point (recurring-stream detection, incidental spend,
+  // the week-by-week roll-forward) reads Tx.amount directly, exactly like the
+  // opening balance did before it was fixed — so it needs the same conversion,
+  // done once, here, rather than re-derived at every downstream site. A tx this
+  // function cannot price into euro right now (separate mode, or convert mode
+  // with no rate for its own date) is dropped, matching how every other
+  // aggregation site in this feature treats an unconvertible row.
+  const eurTxs: Tx[] = [];
+  for (const t of scopeTxs) {
+    if (isEurCurrency(t.currency)) {
+      eurTxs.push(t);
+      continue;
+    }
+    if (conversion.mode !== "convert") continue;
+    const eur = toEur(t.amount, t.currency, t.date, conversion.fxHistory);
+    if (eur === null) continue;
+    eurTxs.push({ ...t, amount: eur });
+  }
+
+  const streams = detectRecurringStreams(eurTxs);
   const liveStreams = streams.filter((s) => !streamHasEnded(s, asOf));
   const endedStreams = streams.filter((s) => streamHasEnded(s, asOf));
   const streamKeys = new Set(streams.map((s) => s.key));
@@ -408,7 +531,7 @@ function buildForecast(
   // one computed from a mean over mixed signs, so it did not even describe the
   // thing it was 15% of.
   const amountsByKey = new Map<string, number[]>();
-  for (const t of scopeTxs) {
+  for (const t of eurTxs) {
     const k = streamKeyOf(t);
     if (!streamKeys.has(k)) continue;
     const arr = amountsByKey.get(k);
@@ -426,7 +549,7 @@ function buildForecast(
   // full list): consolidated nets a BV1->BV2 move to zero and should ignore both
   // legs, while for BV1 alone that same move is a real outflow and must count.
   const own = ownAccounts(scopeAccounts);
-  const incidental = scopeTxs.filter(
+  const incidental = eurTxs.filter(
     (t) => !streamKeys.has(streamKeyOf(t)) && categorize(t, [], own) !== TRANSFER_CATEGORY,
   );
 
@@ -442,7 +565,8 @@ function buildForecast(
       if (t.date > s.last) s.last = t.date;
     }
   }
-  const firstTxDate = dated.length > 0 ? dated.reduce((a, b) => (a.date < b.date ? a : b)).date : "";
+  const firstTxDate =
+    dated.length > 0 ? dated.reduce((a, b) => (a.date < b.date ? a : b)).date : "";
   const lastTxDate = dated.length > 0 ? dated.reduce((a, b) => (a.date > b.date ? a : b)).date : "";
   const historyDays = dated.length > 0 ? daysBetween(firstTxDate, lastTxDate) : 0;
   const accountDays = [...spanByAccount.values()].map((s) => daysBetween(s.first, s.last));
@@ -456,7 +580,9 @@ function buildForecast(
   // recurring streams only (honest "not enough history for a spend baseline").
   const incidentalIncluded = historyDays >= MIN_HISTORY_DAYS;
   const incidentalSumCents = incidental.reduce((s, t) => s + Math.round(t.amount * 100), 0);
-  const incidentalPerDayCents = incidentalIncluded ? Math.round(incidentalSumCents / Math.max(1, historyDays)) : 0;
+  const incidentalPerDayCents = incidentalIncluded
+    ? Math.round(incidentalSumCents / Math.max(1, historyDays))
+    : 0;
 
   // Week-to-week spread of the incidental flow, over EVERY whole week in the
   // observed window — quiet weeks included as real zeros. The old version built
@@ -472,7 +598,7 @@ function buildForecast(
   let incidentalWeeklyStd = 0;
   const bandHasIncidental = fullWeeks >= MIN_BAND_WEEKS;
   if (bandHasIncidental) {
-    const netByWeek = new Array<number>(fullWeeks).fill(0);
+    const netByWeek = Array.from({ length: fullWeeks }, () => 0);
     for (const t of incidental) {
       const w = Math.floor(dayIndex(t.date) / 7) - firstFullWeek;
       if (w >= 0 && w < fullWeeks) netByWeek[w] += Math.round(t.amount * 100);
@@ -481,14 +607,23 @@ function buildForecast(
   }
   const bandHasStreams = liveStreams.length > 0;
   const bandBasis: BandBasis =
-    bandHasStreams && bandHasIncidental ? "both" : bandHasStreams ? "streams" : bandHasIncidental ? "incidental" : "none";
+    bandHasStreams && bandHasIncidental
+      ? "both"
+      : bandHasStreams
+        ? "streams"
+        : bandHasIncidental
+          ? "incidental"
+          : "none";
 
   // The projected calendar: what lands on which day, and how uncertain each
   // landing is. Streams carry their own measured amount spread; a scheduled flow
   // is a known amount on a known date and contributes none.
   const deltaByDate = new Map<string, number>();
   const varianceByDate = new Map<string, number>();
-  for (const s of liveStreams) {
+  // A stream a bills series explains is NOT projected from its extrapolated
+  // dates: the series' real occurrences carry that money (WS2.10).
+  const projectedStreams = liveStreams.filter((s) => !claimedStreams.has(s.key));
+  for (const s of projectedStreams) {
     const sd = amountStdByKey.get(s.key) ?? 0;
     for (const d of streamOccurrences(s, asOf, horizonEnd)) {
       deltaByDate.set(d, (deltaByDate.get(d) ?? 0) + s.sign * s.amountCents);
@@ -513,6 +648,21 @@ function buildForecast(
     projectedFlowCount += 1;
   }
 
+  // Real committed bills occurrences (WS2.10): a known amount on a known date,
+  // like a scheduled flow, so it adds no measured variance. Only occurrences
+  // inside (asOf, horizonEnd] count; a due-today occurrence is already in the
+  // opening position.
+  const projectedCommitments: ForecastCommitment[] = [];
+  for (const commitment of commitments) {
+    if (commitment.dueDate <= asOf || commitment.dueDate > horizonEnd) continue;
+    if (commitment.amountCents <= 0) continue;
+    deltaByDate.set(
+      commitment.dueDate,
+      (deltaByDate.get(commitment.dueDate) ?? 0) + commitment.sign * commitment.amountCents,
+    );
+    projectedCommitments.push(commitment);
+  }
+
   // Day-by-day roll-forward, capturing a weekly closing point every 7th day.
   // The band's half-width at week k is sqrt(measured variance accumulated so
   // far): the recurring amounts' own variance for every occurrence already
@@ -523,6 +673,9 @@ function buildForecast(
   const points: ForecastPoint[] = [];
   let bal = openingCents ?? 0;
   let streamVariance = 0;
+  /** The band's half-width at the LAST week — how uncertain the end of the
+   *  horizon is, which is what `gradeConfidence` weighs. */
+  let finalSpread: number | null = null;
   for (let d = 1; d <= horizonDays; d++) {
     const day = addDays(asOf, d);
     bal += incidentalPerDayCents;
@@ -532,6 +685,7 @@ function buildForecast(
       const week = d / 7;
       const variance = streamVariance + incidentalWeeklyStd * incidentalWeeklyStd * week;
       const spread = bandBasis === "none" ? null : Math.round(Math.sqrt(variance));
+      finalSpread = spread;
       points.push({
         date: day,
         projectedClosingCents: openingCents === null ? null : bal,
@@ -549,7 +703,8 @@ function buildForecast(
   if (openingCents !== null) {
     for (const p of points) {
       const closing = p.projectedClosingCents as number;
-      if (shortfall === null && closing < bufferCents) shortfall = { date: p.date, balanceCents: closing };
+      if (shortfall === null && closing < bufferCents)
+        shortfall = { date: p.date, balanceCents: closing };
       if (atRisk === null && p.lowerCents !== null && p.lowerCents < bufferCents) {
         atRisk = { date: p.date, balanceCents: p.lowerCents };
       }
@@ -557,8 +712,43 @@ function buildForecast(
     if (shortfall !== null) atRisk = null; // the louder statement wins
   }
 
-  const drivers: Driver[] = liveStreams
-    .map((s) => ({ label: s.counterparty, sign: s.sign, perWeekCents: perWeekCents(s) }))
+  // Detected-stream drivers, minus the streams bills now carry.
+  const streamDrivers: Driver[] = projectedStreams.map((s) => ({
+    label: s.counterparty,
+    sign: s.sign,
+    perWeekCents: perWeekCents(s),
+    source: "stream" as const,
+  }));
+  // Bills drivers: one per series, carrying the committed dates and the
+  // confidence the ledger earned. Rate is the series' committed money over the
+  // horizon, so the ranking is comparable with a stream's per-week rate.
+  const commitmentDrivers = new Map<string, Driver & { totalCents: number }>();
+  for (const commitment of projectedCommitments) {
+    const key = `${commitment.sign}|${commitment.label}`;
+    const current = commitmentDrivers.get(key);
+    const dates = current?.dates ? [...current.dates, commitment.dueDate] : [commitment.dueDate];
+    const confidence = moreConservativeConfidence(
+      current?.commitmentConfidence ?? "high",
+      commitment.confidence,
+    );
+    commitmentDrivers.set(key, {
+      label: commitment.label,
+      sign: commitment.sign,
+      perWeekCents: 0,
+      dates,
+      commitmentConfidence: confidence,
+      source: "commitment",
+      totalCents: (current?.totalCents ?? 0) + Math.abs(commitment.amountCents),
+    });
+  }
+  const commitmentDriverList: Driver[] = [...commitmentDrivers.values()]
+    .map(({ totalCents, ...driver }) => ({
+      ...driver,
+      dates: [...(driver.dates ?? [])].sort(),
+      perWeekCents: Math.round((totalCents * 7) / horizonDays),
+    }))
+    .sort((a, b) => Math.abs(b.perWeekCents) - Math.abs(a.perWeekCents));
+  const drivers: Driver[] = [...commitmentDriverList, ...streamDrivers]
     .sort((a, b) => Math.abs(b.perWeekCents) - Math.abs(a.perWeekCents))
     .slice(0, 8);
 
@@ -578,16 +768,45 @@ function buildForecast(
     overdueFlowsCents,
     overdueFlowCount,
     projectedFlowCount,
+    commitmentsProjected: projectedCommitments.length,
+    claimedStreams: claimedStreams.size,
     confidence: gradeConfidence({
-      hasEvidence: liveStreams.length > 0 || incidentalIncluded || projectedFlowCount > 0,
+      hasEvidence:
+        liveStreams.length > 0 ||
+        incidentalIncluded ||
+        projectedFlowCount > 0 ||
+        projectedCommitments.length > 0,
       historyDays,
       accountsTotal: scopeAccounts.length,
       accountsWithHistory: spanByAccount.size,
       shortestAccountDays,
+      bandRatio: bandRatio(openingCents, bal, finalSpread),
     }),
   };
 
-  return { scope, asOf, horizonDays, openingCents, points, shortfall, atRisk, streams, drivers, basis };
+  return {
+    scope,
+    asOf,
+    horizonDays,
+    openingCents,
+    points,
+    shortfall,
+    atRisk,
+    streams,
+    drivers,
+    commitments: projectedCommitments,
+    basis,
+  };
+}
+
+/** The weaker of two commitment confidences: a driver is only as trustworthy
+ *  as its least-observed occurrence. */
+function moreConservativeConfidence(
+  a: ForecastCommitmentConfidence,
+  b: ForecastCommitmentConfidence,
+): ForecastCommitmentConfidence {
+  const rank: Record<ForecastCommitmentConfidence, number> = { low: 0, medium: 1, high: 2 };
+  return rank[a] <= rank[b] ? a : b;
 }
 
 /** The confidence ladder, as a rule anyone can check against the basis:
@@ -603,18 +822,62 @@ function buildForecast(
  *  - "medium" enough history to project, less than {@link SOLID_HISTORY_DAYS}.
  *  - "high"   at least SOLID_HISTORY_DAYS, on accounts that all reach back.
  */
+/** How wide the band is against the money at stake, 0..1 — or null when there
+ *  is no band to judge.
+ *
+ *  Denominator is the LARGEST of the opening, the projected closing and the
+ *  spread itself, for two reasons. It cannot vanish, so someone whose balance
+ *  hovers near zero does not divide by it. And including the spread caps the
+ *  ratio at 1, so "the band dwarfs the money" and "the band is merely huge"
+ *  both land in the same worst bucket instead of producing a number that grows
+ *  without meaning. */
+function bandRatio(
+  openingCents: number | null,
+  closingCents: number,
+  spreadCents: number | null,
+): number | null {
+  if (openingCents === null || spreadCents === null || spreadCents <= 0) return null;
+  const scale = Math.max(Math.abs(openingCents), Math.abs(closingCents), spreadCents);
+  return scale === 0 ? null : spreadCents / scale;
+}
+
+/** A band this wide relative to the position means the line is a shape, not a
+ *  figure — no amount of history makes it a number you can act on. */
+const BAND_RATIO_LOW = 0.5;
+/** Wide enough that the exact figure should not be leaned on, while the
+ *  direction still carries. */
+const BAND_RATIO_MEDIUM = 0.2;
+
 function gradeConfidence(o: {
   hasEvidence: boolean;
   historyDays: number;
   accountsTotal: number;
   accountsWithHistory: number;
   shortestAccountDays: number | null;
+  /** The measured spread against the position. See `bandRatio`. */
+  bandRatio: number | null;
 }): ForecastConfidence {
   if (!o.hasEvidence) return "none";
   if (o.historyDays < MIN_HISTORY_DAYS) return "low";
   if (o.accountsWithHistory < o.accountsTotal) return "low";
   if (o.accountsWithHistory > 1 && (o.shortestAccountDays ?? 0) < MIN_HISTORY_DAYS) return "low";
+
+  /* COVERAGE IS NOT RELIABILITY, and grading only the first was the bug.
+   *
+   * Everything above asks how much we have SEEN — days of history, accounts
+   * contributing. Nothing asked how PREDICTABLE what we saw is, so twelve
+   * months of complete history over wildly irregular income scored "high"
+   * beside a band of ±59% of the projected figure. The band was already
+   * honest; the word next to it was not.
+   *
+   * So dispersion CAPS the grade, and never raises it: a narrow band cannot
+   * buy confidence that thin history has not earned. Coarse on purpose, like
+   * the rest of this function — a percentage here would imply a precision
+   * this model has no basis for. */
+  const ratio = o.bandRatio;
+  if (ratio !== null && ratio >= BAND_RATIO_LOW) return "low";
   if (o.historyDays < SOLID_HISTORY_DAYS) return "medium";
+  if (ratio !== null && ratio >= BAND_RATIO_MEDIUM) return "medium";
   return "high";
 }
 
@@ -630,6 +893,7 @@ export function forecastCashflow(
   const horizonDays = opts.horizonDays ?? 91;
   const bufferCents = opts.bufferCents ?? 0;
   const allFlows = opts.scheduledFlows ?? [];
+  const conversion = { fxHistory: opts.fxHistory, mode: opts.mode };
 
   const entityOf = new Map(accounts.map((a) => [a.key, a.entity]));
 
@@ -664,6 +928,15 @@ export function forecastCashflow(
     }
   }
 
+  const allCommitments = opts.commitments ?? [];
+  const allClaimed = opts.claimedStreams ?? [];
+  const claimedFor = (entity: string | null): Set<string> =>
+    new Set(
+      allClaimed
+        .filter((claimed) => entity === null || (claimed.entity ?? "") === entity)
+        .map((claimed) => claimed.key),
+    );
+
   const byEntity: Record<string, EntityForecast> = {};
   for (const e of entities) {
     byEntity[e] = buildForecast(
@@ -674,10 +947,24 @@ export function forecastCashflow(
       horizonDays,
       bufferCents,
       scheduledFlowsForScope(allFlows, e),
+      conversion,
+      allCommitments.filter((commitment) => (commitment.entity ?? "") === e),
+      claimedFor(e),
     );
   }
 
-  const consolidated = buildForecast(txs, accounts, "geconsolideerd", asOf, horizonDays, bufferCents, allFlows);
+  const consolidated = buildForecast(
+    txs,
+    accounts,
+    "geconsolideerd",
+    asOf,
+    horizonDays,
+    bufferCents,
+    allFlows,
+    conversion,
+    allCommitments,
+    claimedFor(null),
+  );
 
   return { byEntity, consolidated };
 }

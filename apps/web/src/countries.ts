@@ -24,56 +24,307 @@
  *
  * Pure: no I/O, no clock, no storage. */
 
+import type { Locale } from "./locale.js";
+import { localeTag } from "./format.js";
+
 /** ISO 3166-1 alpha-2, all 249 officially assigned codes, in code order. */
 export const COUNTRY_CODES: readonly string[] = [
-  "AD", "AE", "AF", "AG", "AI", "AL", "AM", "AO", "AQ", "AR", "AS", "AT", "AU", "AW", "AX", "AZ",
-  "BA", "BB", "BD", "BE", "BF", "BG", "BH", "BI", "BJ", "BL", "BM", "BN", "BO", "BQ", "BR", "BS",
-  "BT", "BV", "BW", "BY", "BZ", "CA", "CC", "CD", "CF", "CG", "CH", "CI", "CK", "CL", "CM", "CN",
-  "CO", "CR", "CU", "CV", "CW", "CX", "CY", "CZ", "DE", "DJ", "DK", "DM", "DO", "DZ", "EC", "EE",
-  "EG", "EH", "ER", "ES", "ET", "FI", "FJ", "FK", "FM", "FO", "FR", "GA", "GB", "GD", "GE", "GF",
-  "GG", "GH", "GI", "GL", "GM", "GN", "GP", "GQ", "GR", "GS", "GT", "GU", "GW", "GY", "HK", "HM",
-  "HN", "HR", "HT", "HU", "ID", "IE", "IL", "IM", "IN", "IO", "IQ", "IR", "IS", "IT", "JE", "JM",
-  "JO", "JP", "KE", "KG", "KH", "KI", "KM", "KN", "KP", "KR", "KW", "KY", "KZ", "LA", "LB", "LC",
-  "LI", "LK", "LR", "LS", "LT", "LU", "LV", "LY", "MA", "MC", "MD", "ME", "MF", "MG", "MH", "MK",
-  "ML", "MM", "MN", "MO", "MP", "MQ", "MR", "MS", "MT", "MU", "MV", "MW", "MX", "MY", "MZ", "NA",
-  "NC", "NE", "NF", "NG", "NI", "NL", "NO", "NP", "NR", "NU", "NZ", "OM", "PA", "PE", "PF", "PG",
-  "PH", "PK", "PL", "PM", "PN", "PR", "PS", "PT", "PW", "PY", "QA", "RE", "RO", "RS", "RU", "RW",
-  "SA", "SB", "SC", "SD", "SE", "SG", "SH", "SI", "SJ", "SK", "SL", "SM", "SN", "SO", "SR", "SS",
-  "ST", "SV", "SX", "SY", "SZ", "TC", "TD", "TF", "TG", "TH", "TJ", "TK", "TL", "TM", "TN", "TO",
-  "TR", "TT", "TV", "TW", "TZ", "UA", "UG", "UM", "US", "UY", "UZ", "VA", "VC", "VE", "VG", "VI",
-  "VN", "VU", "WF", "WS", "YE", "YT", "ZA", "ZM", "ZW",
+  "AD",
+  "AE",
+  "AF",
+  "AG",
+  "AI",
+  "AL",
+  "AM",
+  "AO",
+  "AQ",
+  "AR",
+  "AS",
+  "AT",
+  "AU",
+  "AW",
+  "AX",
+  "AZ",
+  "BA",
+  "BB",
+  "BD",
+  "BE",
+  "BF",
+  "BG",
+  "BH",
+  "BI",
+  "BJ",
+  "BL",
+  "BM",
+  "BN",
+  "BO",
+  "BQ",
+  "BR",
+  "BS",
+  "BT",
+  "BV",
+  "BW",
+  "BY",
+  "BZ",
+  "CA",
+  "CC",
+  "CD",
+  "CF",
+  "CG",
+  "CH",
+  "CI",
+  "CK",
+  "CL",
+  "CM",
+  "CN",
+  "CO",
+  "CR",
+  "CU",
+  "CV",
+  "CW",
+  "CX",
+  "CY",
+  "CZ",
+  "DE",
+  "DJ",
+  "DK",
+  "DM",
+  "DO",
+  "DZ",
+  "EC",
+  "EE",
+  "EG",
+  "EH",
+  "ER",
+  "ES",
+  "ET",
+  "FI",
+  "FJ",
+  "FK",
+  "FM",
+  "FO",
+  "FR",
+  "GA",
+  "GB",
+  "GD",
+  "GE",
+  "GF",
+  "GG",
+  "GH",
+  "GI",
+  "GL",
+  "GM",
+  "GN",
+  "GP",
+  "GQ",
+  "GR",
+  "GS",
+  "GT",
+  "GU",
+  "GW",
+  "GY",
+  "HK",
+  "HM",
+  "HN",
+  "HR",
+  "HT",
+  "HU",
+  "ID",
+  "IE",
+  "IL",
+  "IM",
+  "IN",
+  "IO",
+  "IQ",
+  "IR",
+  "IS",
+  "IT",
+  "JE",
+  "JM",
+  "JO",
+  "JP",
+  "KE",
+  "KG",
+  "KH",
+  "KI",
+  "KM",
+  "KN",
+  "KP",
+  "KR",
+  "KW",
+  "KY",
+  "KZ",
+  "LA",
+  "LB",
+  "LC",
+  "LI",
+  "LK",
+  "LR",
+  "LS",
+  "LT",
+  "LU",
+  "LV",
+  "LY",
+  "MA",
+  "MC",
+  "MD",
+  "ME",
+  "MF",
+  "MG",
+  "MH",
+  "MK",
+  "ML",
+  "MM",
+  "MN",
+  "MO",
+  "MP",
+  "MQ",
+  "MR",
+  "MS",
+  "MT",
+  "MU",
+  "MV",
+  "MW",
+  "MX",
+  "MY",
+  "MZ",
+  "NA",
+  "NC",
+  "NE",
+  "NF",
+  "NG",
+  "NI",
+  "NL",
+  "NO",
+  "NP",
+  "NR",
+  "NU",
+  "NZ",
+  "OM",
+  "PA",
+  "PE",
+  "PF",
+  "PG",
+  "PH",
+  "PK",
+  "PL",
+  "PM",
+  "PN",
+  "PR",
+  "PS",
+  "PT",
+  "PW",
+  "PY",
+  "QA",
+  "RE",
+  "RO",
+  "RS",
+  "RU",
+  "RW",
+  "SA",
+  "SB",
+  "SC",
+  "SD",
+  "SE",
+  "SG",
+  "SH",
+  "SI",
+  "SJ",
+  "SK",
+  "SL",
+  "SM",
+  "SN",
+  "SO",
+  "SR",
+  "SS",
+  "ST",
+  "SV",
+  "SX",
+  "SY",
+  "SZ",
+  "TC",
+  "TD",
+  "TF",
+  "TG",
+  "TH",
+  "TJ",
+  "TK",
+  "TL",
+  "TM",
+  "TN",
+  "TO",
+  "TR",
+  "TT",
+  "TV",
+  "TW",
+  "TZ",
+  "UA",
+  "UG",
+  "UM",
+  "US",
+  "UY",
+  "UZ",
+  "VA",
+  "VC",
+  "VE",
+  "VG",
+  "VI",
+  "VN",
+  "VU",
+  "WF",
+  "WS",
+  "YE",
+  "YT",
+  "ZA",
+  "ZM",
+  "ZW",
 ];
 
 export type Country = { code: string; name: string };
 
 /** Built once. `Intl.DisplayNames` exists in every browser LaVega targets; the
  *  guard is for an environment that lacks it, where the CODE is the name. */
-const displayNames: { of(code: string): string | undefined } | null = (() => {
+function buildDisplayNames(locale: Locale): { of(code: string): string | undefined } | null {
   try {
-    return new Intl.DisplayNames(["nl"], { type: "region" });
+    return new Intl.DisplayNames([localeTag(locale)], { type: "region" });
   } catch {
     return null;
   }
-})();
+}
 
-/** The Dutch name of a country code, or the code itself when the platform has
- *  none — never a blank row, and never a made-up name. */
-export function countryName(code: string): string {
-  const c = String(code ?? "").trim().toUpperCase();
+const displayNamesByLocale: Record<Locale, { of(code: string): string | undefined } | null> = {
+  nl: buildDisplayNames("nl"),
+  en: buildDisplayNames("en"),
+};
+
+export function countryNameIn(locale: Locale, code: string): string {
+  const c = String(code ?? "")
+    .trim()
+    .toUpperCase();
   if (!/^[A-Z]{2}$/.test(c)) return "";
   try {
-    return displayNames?.of(c) ?? c;
+    return displayNamesByLocale[locale]?.of(c) ?? c;
   } catch {
     return c;
   }
 }
 
+/** The Dutch name of a country code, or the code itself when the platform has
+ *  none — never a blank row, and never a made-up name. */
+export function countryName(code: string): string {
+  return countryNameIn("nl", code);
+}
+
+export function countryListIn(locale: Locale): Country[] {
+  return COUNTRY_CODES.map((code) => ({ code, name: countryNameIn(locale, code) })).sort((a, b) =>
+    a.name.localeCompare(b.name, localeTag(locale)),
+  );
+}
+
 /** Every country, Dutch name, sorted the way a Dutch reader expects (so "Ålan"
  *  and "Oostenrijk" land where he would look for them). */
 export function countryList(): Country[] {
-  return COUNTRY_CODES.map((code) => ({ code, name: countryName(code) })).sort((a, b) =>
-    a.name.localeCompare(b.name, "nl"),
-  );
+  return countryListIn("nl");
 }
 
 /* --- The level beneath the country ---------------------------------------
@@ -85,36 +336,112 @@ export function countryList(): Country[] {
  * "Nieuw-York". */
 
 const US_STATES: readonly string[] = [
-  "Alabama", "Alaska", "Arizona", "Arkansas", "California", "Colorado", "Connecticut", "Delaware",
-  "District of Columbia", "Florida", "Georgia", "Hawaii", "Idaho", "Illinois", "Indiana", "Iowa",
-  "Kansas", "Kentucky", "Louisiana", "Maine", "Maryland", "Massachusetts", "Michigan", "Minnesota",
-  "Mississippi", "Missouri", "Montana", "Nebraska", "Nevada", "New Hampshire", "New Jersey",
-  "New Mexico", "New York", "North Carolina", "North Dakota", "Ohio", "Oklahoma", "Oregon",
-  "Pennsylvania", "Rhode Island", "South Carolina", "South Dakota", "Tennessee", "Texas", "Utah",
-  "Vermont", "Virginia", "Washington", "West Virginia", "Wisconsin", "Wyoming",
+  "Alabama",
+  "Alaska",
+  "Arizona",
+  "Arkansas",
+  "California",
+  "Colorado",
+  "Connecticut",
+  "Delaware",
+  "District of Columbia",
+  "Florida",
+  "Georgia",
+  "Hawaii",
+  "Idaho",
+  "Illinois",
+  "Indiana",
+  "Iowa",
+  "Kansas",
+  "Kentucky",
+  "Louisiana",
+  "Maine",
+  "Maryland",
+  "Massachusetts",
+  "Michigan",
+  "Minnesota",
+  "Mississippi",
+  "Missouri",
+  "Montana",
+  "Nebraska",
+  "Nevada",
+  "New Hampshire",
+  "New Jersey",
+  "New Mexico",
+  "New York",
+  "North Carolina",
+  "North Dakota",
+  "Ohio",
+  "Oklahoma",
+  "Oregon",
+  "Pennsylvania",
+  "Rhode Island",
+  "South Carolina",
+  "South Dakota",
+  "Tennessee",
+  "Texas",
+  "Utah",
+  "Vermont",
+  "Virginia",
+  "Washington",
+  "West Virginia",
+  "Wisconsin",
+  "Wyoming",
 ];
 
 const CA_PROVINCES: readonly string[] = [
-  "Alberta", "British Columbia", "Manitoba", "New Brunswick", "Newfoundland and Labrador",
-  "Northwest Territories", "Nova Scotia", "Nunavut", "Ontario", "Prince Edward Island", "Quebec",
-  "Saskatchewan", "Yukon",
+  "Alberta",
+  "British Columbia",
+  "Manitoba",
+  "New Brunswick",
+  "Newfoundland and Labrador",
+  "Northwest Territories",
+  "Nova Scotia",
+  "Nunavut",
+  "Ontario",
+  "Prince Edward Island",
+  "Quebec",
+  "Saskatchewan",
+  "Yukon",
 ];
 
 /** Countries whose region level LaVega can offer as a list, with what that
  *  level is CALLED there — a Canadian picks a province, not a state. */
-const KNOWN_REGIONS: Readonly<Record<string, { label: string; options: readonly string[] }>> = {
-  US: { label: "Staat", options: US_STATES },
-  CA: { label: "Provincie of territorium", options: CA_PROVINCES },
+const KNOWN_REGIONS: Readonly<
+  Record<string, { label: Record<Locale, string>; options: readonly string[] }>
+> = {
+  US: { label: { nl: "Staat", en: "State" }, options: US_STATES },
+  CA: {
+    label: { nl: "Provincie of territorium", en: "Province or territory" },
+    options: CA_PROVINCES,
+  },
 };
 
 /** The region options for a country, or [] when we have no verified list — in
  *  which case the field stays free text rather than offering a guess. */
 export function regionsFor(code: string): readonly string[] {
-  return KNOWN_REGIONS[String(code ?? "").trim().toUpperCase()]?.options ?? [];
+  return (
+    KNOWN_REGIONS[
+      String(code ?? "")
+        .trim()
+        .toUpperCase()
+    ]?.options ?? []
+  );
+}
+
+export function regionLabelIn(locale: Locale, code: string): string {
+  const known =
+    KNOWN_REGIONS[
+      String(code ?? "")
+        .trim()
+        .toUpperCase()
+    ];
+  if (known) return known.label[locale];
+  return locale === "nl" ? "Regio of staat" : "Region or state";
 }
 
 /** What the region level is called in this country. The generic fallback is
  *  used wherever we have no list, because "regio" is true everywhere. */
 export function regionLabel(code: string): string {
-  return KNOWN_REGIONS[String(code ?? "").trim().toUpperCase()]?.label ?? "Regio of staat";
+  return regionLabelIn("nl", code);
 }

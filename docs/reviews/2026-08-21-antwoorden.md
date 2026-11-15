@@ -18,16 +18,16 @@ tenaamstelling) en ze door `detectSubscriptions` gehaald, met daarnaast een kopi
 drempelketen die vertelt wáár hij stopt. Script:
 `scratchpad/simyo.ts`; de functie staat in `packages/core/src/subscriptions.ts:322`.
 
-| Reeks | Uitkomst | Waar hij stopt | Het gemeten getal |
-|---|---|---|---|
-| A. schoon, 4× € 11,89, vier schrijfwijzen | **gevonden** | — | intervallen 29/30/32, cv **0,050**; grens 0,4 |
-| B. maar twee afschrijvingen | niets | `band.minOcc` | maandritme vraagt **3** afschrijvingen, er zijn er 2 |
-| C. juni mist (mislukte incasso) | niets | `maxIntervalCv` | intervallen **31, 61, 30** → gemiddelde 40,67, sd 17,62, **cv 0,433** — net boven **0,4** |
-| D. dezelfde betaling twee keer in de kluis | niets | `CADENCE_BANDS` | intervallen **0, 29, 0, 30, 0, 32, 0** → mediaan **0**; de maandband is 26–36 dagen |
-| E. bedrag herhaalt zich nooit | niets | eis "een bedrag herhaalt zich" | 1189 / 1244 / 1135 / 1302 — geen bedrag komt twee keer voor |
-| F. eenmalige extra 5 dagen na de incasso | niets | `maxIntervalCv` | intervallen 29/30/32/**5** → **cv 0,530** |
-| G. tegenpartij leeg | niets | groepering | `merchantKey("")` = `""`, en die rijen worden vóór alles weggegooid |
-| H. abonnement + toestelkrediet, zelfde winkel | niets | `CADENCE_BANDS` | intervallen 14/15/16/14/16/16/15 → mediaan **15** |
+| Reeks                                         | Uitkomst     | Waar hij stopt                 | Het gemeten getal                                                                         |
+| --------------------------------------------- | ------------ | ------------------------------ | ----------------------------------------------------------------------------------------- |
+| A. schoon, 4× € 11,89, vier schrijfwijzen     | **gevonden** | —                              | intervallen 29/30/32, cv **0,050**; grens 0,4                                             |
+| B. maar twee afschrijvingen                   | niets        | `band.minOcc`                  | maandritme vraagt **3** afschrijvingen, er zijn er 2                                      |
+| C. juni mist (mislukte incasso)               | niets        | `maxIntervalCv`                | intervallen **31, 61, 30** → gemiddelde 40,67, sd 17,62, **cv 0,433** — net boven **0,4** |
+| D. dezelfde betaling twee keer in de kluis    | niets        | `CADENCE_BANDS`                | intervallen **0, 29, 0, 30, 0, 32, 0** → mediaan **0**; de maandband is 26–36 dagen       |
+| E. bedrag herhaalt zich nooit                 | niets        | eis "een bedrag herhaalt zich" | 1189 / 1244 / 1135 / 1302 — geen bedrag komt twee keer voor                               |
+| F. eenmalige extra 5 dagen na de incasso      | niets        | `maxIntervalCv`                | intervallen 29/30/32/**5** → **cv 0,530**                                                 |
+| G. tegenpartij leeg                           | niets        | groepering                     | `merchantKey("")` = `""`, en die rijen worden vóór alles weggegooid                       |
+| H. abonnement + toestelkrediet, zelfde winkel | niets        | `CADENCE_BANDS`                | intervallen 14/15/16/14/16/16/15 → mediaan **15**                                         |
 
 Reeks A bewijst dat de grondslag klopt: naamvarianten zijn opgelost, `merchantKey` doet zijn
 werk, de 32 tests in `packages/core/src/subscriptions.test.ts` zijn groen (32/32, gedraaid). Dat
@@ -147,6 +147,7 @@ De knop staat in `apps/web/src/views/Transacties.tsx:275`, in het onbekend-panee
    want daar gaat het om. Eerlijk erbij: het machtigingskenmerk `014-M162245502` overleeft het,
    omdat er een letter en een streepje in zitten. Dat is geen IBAN, geen bedrag en geen datum, dus
    de belofte in de toestemmingstekst klopt — maar het is wel een kenmerk dat naar jou verwijst.
+
 3. **Wat er daadwerkelijk over de lijn gaat, is drie velden per rij**, opgebouwd door
    `aiCategorizeItems` (`categorize.ts:135`):
 
@@ -159,6 +160,7 @@ De knop staat in `apps/web/src/views/Transacties.tsx:275`, in het onbekend-panee
    `apps/server/src/agent/categorize.ts:14`) — dat is een tweede hek, zodat een fout in de browser
    niet automatisch een lek is. Maximaal 200 rijen per keer; rijen waar na het schrobben geen
    letter meer over is, gaan niet mee en tellen dus ook geen plek op.
+
 4. **Het antwoord is een voorstel, geen wijziging.** Het model (Claude Haiku, via onze eigen
    server, niet vanuit je browser) mag alleen categorieën teruggeven die al in LaVega's eigen
    lijst staan; alles daarbuiten wordt weggegooid. Je krijgt een reviewscherm met een rij per
@@ -214,13 +216,13 @@ NOK NZD PHP PLN RON SEK SGD THB TRY USD ZAR
 
 Over de landen op de bol gelegd (`apps/web/src/worldMap.ts`, functie `conversionFor`):
 
-| Wat de bol met een land kan | Aantal landen |
-|---|---|
-| koers bekend | 58 |
-| euroland, niets te wisselen | 32 |
-| **geen koers** | **139** |
-| twee munten, dus eerst een keuze | 7 |
-| geen wettig betaalmiddel (Antarctica) | 1 |
+| Wat de bol met een land kan           | Aantal landen |
+| ------------------------------------- | ------------- |
+| koers bekend                          | 58            |
+| euroland, niets te wisselen           | 32            |
+| **geen koers**                        | **139**       |
+| twee munten, dus eerst een keuze      | 7             |
+| geen wettig betaalmiddel (Antarctica) | 1             |
 
 Dat zijn **116 verschillende valuta zonder koers**. Bekende bestemmingen die eronder vallen:
 Verenigde Arabische Emiraten (AED), Marokko (MAD), Egypte (EGP), Tunesië (TND), Saoedi-Arabië
@@ -237,12 +239,12 @@ dirham betaalt en kan er tegelijk geen bedrag bij zetten.
 
 Ik heb er vier geprobeerd met plain `curl`, zonder sleutel en zonder iets te omzeilen:
 
-| Bron | Antwoord | Dekking van de 116 ontbrekende | Afwijking t.o.v. de ECB |
-|---|---|---|---|
-| `api.exchangerate.host` | HTTP 200, `missing_access_key` | — | — |
-| `api.frankfurter.app` | HTTP 301 (verplaatst naar `.dev`) | — | de huidige bron |
-| `open.er-api.com` | HTTP 200, 166 valuta | **115 van 116** (alleen KPW niet) | mediaan 0,169%, hoogste 0,66% (KRW) |
-| `cdn.jsdelivr.net/npm/@fawazahmed0/currency-api` | HTTP 200, 340 sleutels | **116 van 116** | mediaan 0,101%, hoogste 0,54% (ZAR) |
+| Bron                                             | Antwoord                          | Dekking van de 116 ontbrekende    | Afwijking t.o.v. de ECB             |
+| ------------------------------------------------ | --------------------------------- | --------------------------------- | ----------------------------------- |
+| `api.exchangerate.host`                          | HTTP 200, `missing_access_key`    | —                                 | —                                   |
+| `api.frankfurter.app`                            | HTTP 301 (verplaatst naar `.dev`) | —                                 | de huidige bron                     |
+| `open.er-api.com`                                | HTTP 200, 166 valuta              | **115 van 116** (alleen KPW niet) | mediaan 0,169%, hoogste 0,66% (KRW) |
+| `cdn.jsdelivr.net/npm/@fawazahmed0/currency-api` | HTTP 200, 340 sleutels            | **116 van 116**                   | mediaan 0,101%, hoogste 0,54% (ZAR) |
 
 **De beste van de twee mag niet.** In de voorwaarden van ExchangeRate-API staat letterlijk:
 
@@ -278,8 +280,8 @@ ING Punten geldig vanaf 1 oktober 2025.
 
 ### Waarom er geen getal kan staan
 
-ING's tabel zegt: *"Meer dan € 100 uitgeven met je ING Creditcard Extra of Max → 250 punten per
-maand."* Dat is een drempel, geen tarief. Bij € 100 zijn het 250 punten, bij € 4.000 ook. Wie door
+ING's tabel zegt: _"Meer dan € 100 uitgeven met je ING Creditcard Extra of Max → 250 punten per
+maand."_ Dat is een drempel, geen tarief. Bij € 100 zijn het 250 punten, bij € 4.000 ook. Wie door
 de drempel deelt krijgt 2,5 punt per euro — een koers die niet bestaat en die bij normaal gebruik
 tot een factor 40 te hoog uitvalt. Dat is dezelfde soort fout als de acht valse nullen, alleen de
 andere kant op: daar werd onbekend als nul gelezen, hier zou een drempel als tarief gelezen worden.
@@ -295,8 +297,8 @@ Drie verschillende soorten uitspraken, en ze mogen niet op één hoop:
 - **De verdienregels: bekend en hard.** Ze staan er nu, letterlijk in ING's eigen woorden, in
   `apps/web/src/views/Punten.tsx` (`ING_PUNTEN`) en als toelichting in
   `packages/core/src/rewards.ts:67`. `pointsPerEuro` blijft leeg — geen nul.
-- **Inwisselen voor geld: een uitgesproken nul.** Uit de voorwaarden: *"ING Punten hebben geen
-  geldwaarde. Je kan je ING Punten niet inwisselen voor geld en niet overdragen aan anderen."* Dat
+- **Inwisselen voor geld: een uitgesproken nul.** Uit de voorwaarden: _"ING Punten hebben geen
+  geldwaarde. Je kan je ING Punten niet inwisselen voor geld en niet overdragen aan anderen."_ Dat
   is een bekende nul, met bron en datum, en die mag er dus als nul staan.
 - **Wat een punt in de ING Winkel aan korting oplevert: onbekend.** Die winkel zit achter Mijn
   ING; `www.ing.nl/punten/*` verbreekt de HTTP/2-stream, `r.jina.ai` levert alleen de titel omdat
@@ -315,8 +317,8 @@ dat verschil vast; 47 van 47 tests groen, gedraaid.
 Twee wegen, allebei zonder verzinnen:
 
 1. **Rekenen met JOUW gedrag in plaats van met een koers.** LaVega ziet je instroom, je aantal
-   transacties en je creditcardbesteding per maand. Daarmee is te zeggen: *"vorige maand haalde je
-   drie van de vier drempels: 600 punten, met ING Extra 720."* Dat is geen koers, dat is een
+   transacties en je creditcardbesteding per maand. Daarmee is te zeggen: _"vorige maand haalde je
+   drie van de vier drempels: 600 punten, met ING Extra 720."_ Dat is geen koers, dat is een
    optelling van regels die ING zelf publiceert, en hij is per maand na te rekenen. Dit is de enige
    route die vandaag al kan.
 2. **De inwisselkant meten in plaats van opzoeken.** Zodra je in de ING Winkel één artikel ziet met
@@ -333,14 +335,14 @@ kan.
 
 ## Wat is er gedraaid
 
-| Wat | Uitkomst |
-|---|---|
-| `packages/core` → `vitest run src/subscriptions.test.ts` | 32 van 32 groen |
-| `apps/web` → `vitest run src/views/Punten.test.tsx` | 47 van 47 groen |
-| 8 Simyo-reeksen door `detectSubscriptions` + drempelketen | zie de tabel bij vraag 1 |
-| 2 kandidaat-reparaties gemeten (ontdubbelen, per bedrag groeperen) | beide herstellen hun reeks |
-| redactie + payload op een echte incassoregel | zie vraag 2 |
-| 237 landen tegen de live ECB-lijst gelegd | 139 zonder koers |
-| 4 koersbronnen met plain `curl` | 2 leveren data, 1 daarvan verbiedt herdistributie |
+| Wat                                                                | Uitkomst                                          |
+| ------------------------------------------------------------------ | ------------------------------------------------- |
+| `packages/core` → `vitest run src/subscriptions.test.ts`           | 32 van 32 groen                                   |
+| `apps/web` → `vitest run src/views/Punten.test.tsx`                | 47 van 47 groen                                   |
+| 8 Simyo-reeksen door `detectSubscriptions` + drempelketen          | zie de tabel bij vraag 1                          |
+| 2 kandidaat-reparaties gemeten (ontdubbelen, per bedrag groeperen) | beide herstellen hun reeks                        |
+| redactie + payload op een echte incassoregel                       | zie vraag 2                                       |
+| 237 landen tegen de live ECB-lijst gelegd                          | 139 zonder koers                                  |
+| 4 koersbronnen met plain `curl`                                    | 2 leveren data, 1 daarvan verbiedt herdistributie |
 
 Niets gecommit, niets gepusht.

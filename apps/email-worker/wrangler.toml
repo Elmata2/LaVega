@@ -10,6 +10,8 @@
 # De volledige stappen — Email Routing aanzetten, de catch-all-regel, de
 # n8n-credential — staan in docs/n8n/DOORSTUURADRES.md.
 
+# Workers Builds (root /apps/email-worker, branch master) deploys this Worker.
+# Name stays lavega-email-in so Email Routing on lavega.dev keeps matching.
 name = "lavega-email-in"
 main = "src/index.ts"
 compatibility_date = "2026-08-01"
@@ -19,8 +21,23 @@ compatibility_date = "2026-08-01"
 # gewone functie in src/parseMail.ts, juist om hier geen Buffer nodig te hebben.
 compatibility_flags = []
 
+# De misbruikgrens per wachtrij (src/queueLimit.ts leest deze binding).
+# Geen namespace om aan te maken: Workers Rate Limiting telt per binding en per
+# Cloudflare-locatie. `namespace_id` moet binnen dit account uniek zijn; 1001 is
+# hier gekozen en botst alleen als een andere Worker hem al gebruikt.
+# De getallen moeten gelijk zijn aan INBOUND_LIMIT en INBOUND_PERIOD_SECONDS;
+# een test leest dit bestand en vergelijkt ze. Period is 10 of 60.
+[[ratelimits]]
+name = "INBOUND_RATE_LIMIT"
+namespace_id = "1001"
+simple = { limit = 20, period = 60 }
+
 [observability]
 enabled = true
+
+# Non-production Workers Builds runs `npx wrangler preview`.
+# Wrangler requires this block. Empty: no preview-only bindings.
+[previews]
 
 # N8N_WEBHOOK_URL en N8N_SHARED_SECRET staan hier NIET. Het zijn secrets:
 #     pnpm dlx wrangler@4 secret put N8N_WEBHOOK_URL

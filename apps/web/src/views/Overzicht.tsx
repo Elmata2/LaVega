@@ -1,8 +1,35 @@
 import { useMemo } from "react";
-import type { Account, Invoice, OwnAccounts, Rule, Tx, ScheduledFlow, VatSettings } from "@lavega/core";
-import { forecastCashflow, computeAlerts } from "@lavega/core";
+import type {
+  Account,
+  AdvisorProfileStore,
+  Bill,
+  BillDecisions,
+  BillOccurrence,
+  Invoice,
+  OwnAccounts,
+  RoomResult,
+  Rule,
+  Tx,
+  ScheduledFlow,
+  VatSettings,
+} from "@lavega/core";
+import {
+  billForecastProjection,
+  cashOnHandCents,
+  forecastCashflow,
+  computeAlerts,
+  paycheckOverview,
+} from "@lavega/core";
 import type { View } from "../App";
+import type { VaultStorage } from "@lavega/adapters";
+import { AssistantPanel } from "../assistant/AssistantPanel.js";
+import type { ConversionMode } from "../settings.js";
+import { useAppLocale } from "../appLocale.js";
+import { shellCopy } from "../copy/shell.js";
 import ModuleGrid from "../components/ModuleGrid";
+import { IntakeInviteWidget } from "../components/blocks/IntakeInviteCard";
+import { ConnectChecklistWidget } from "../components/blocks/ConnectChecklist";
+import { RoomCardWidget } from "../components/blocks/RoomCard";
 import { AandachtWidget } from "../components/blocks/AandachtBlock";
 import SaldoBlock from "../components/blocks/SaldoBlock";
 import StatistiekBlock from "../components/blocks/StatistiekBlock";
@@ -59,6 +86,11 @@ type OverzichtProps = {
   asOf: string;
   bufferCents: number;
   scheduledFlows: ScheduledFlow[];
+  /** The bills lane (#286/#287/#288), threaded so the Betaalagenda can show the
+   *  paycheck preview. Absent on an older caller; the agenda then stays as-is. */
+  bills?: Bill[];
+  billOccurrences?: BillOccurrence[];
+  billDecisions?: BillDecisions;
   /** De ondernemingen die dit scherm toont — DEZELFDE lijst die Belasting
    *  krijgt, zodat de btw-kaart hier en het scherm daar over dezelfde
    *  ondernemingen gaan. */
@@ -67,14 +99,37 @@ type OverzichtProps = {
   invoices: Invoice[];
   /** Het land uit het profiel; bepaalt welke belastingregels gelden. */
   country: string;
+  /** ECB daily rates, and whether non-EUR balances/transactions convert into
+   *  the totals or stay out of them — threaded to every block that touches an
+   *  amount in a foreign currency. */
+  fxHistory: Record<string, Record<string, number>>;
+  mode: ConversionMode;
   onBufferChange: (cents: number) => void;
   onNavigate: (view: View) => void;
   onSelectCategory: (category: string) => void;
   /** Push a pre-filled question into the LaVega assistant (used by the
    *  per-category "vs. gemiddelde" benchmark button). */
+  /** The assistant panel needs the unlocked vault (WS5.8, issue #301). Absent
+   *  in a test or a caller without storage, and then the panel is not shown. */
+  storage?: VaultStorage;
   /** Everything the travel module needs, passed straight through. */
   travel: TravelBlockProps;
+  /** The adviser profile and the room worked out from it; absent while the
+   *  profile is still being read, in which case neither intake card shows. */
+  intake?: {
+    store: AdvisorProfileStore | null;
+    room: RoomResult;
+    statedInputs?: {
+      income: { lowCents: number; highCents: number };
+      spend: { lowCents: number; highCents: number };
+    };
+    onSave: (next: AdvisorProfileStore) => Promise<void>;
+    /** Opens the wizard in round 2 (the coaching questions). */
+    onOpenRound2?: () => void;
+  };
 };
+
+const NO_STATED: readonly string[] = [];
 
 export default function Overzicht({
   accounts,
@@ -84,18 +139,51 @@ export default function Overzicht({
   asOf,
   bufferCents,
   scheduledFlows,
+  bills,
+  billOccurrences,
+  billDecisions,
   entities,
   vatSettings,
   invoices,
   country,
+  fxHistory,
+  mode,
   onBufferChange,
   onNavigate,
   onSelectCategory,
+  storage,
   travel,
+  intake,
 }: OverzichtProps) {
+  const [locale] = useAppLocale();
+  const c = shellCopy[locale];
+  // WS2.10 (#290): bills occurrences are forecast drivers on this card too, so
+  // the Overzicht position and the Forecast screen cannot disagree. An absent
+  // bills lane yields the empty projection and the pre-#290 call.
+  const forecastProjection = useMemo(
+    () =>
+      billForecastProjection({
+        bills: bills ?? [],
+        occurrences: billOccurrences ?? [],
+        decisions: billDecisions,
+        txs,
+        accounts,
+        asOf,
+      }),
+    [bills, billOccurrences, billDecisions, txs, accounts, asOf],
+  );
   const forecast = useMemo(
-    () => forecastCashflow(txs, accounts, { asOf, bufferCents, scheduledFlows }).consolidated,
-    [txs, accounts, asOf, bufferCents, scheduledFlows],
+    () =>
+      forecastCashflow(txs, accounts, {
+        asOf,
+        bufferCents,
+        scheduledFlows,
+        fxHistory,
+        mode,
+        commitments: forecastProjection.commitments,
+        claimedStreams: forecastProjection.claimedStreams,
+      }).consolidated,
+    [txs, accounts, asOf, bufferCents, scheduledFlows, fxHistory, mode, forecastProjection],
   );
 
   // The alert centre: shortfall (vs. buffer) + overdue recurring payments +
@@ -105,6 +193,19 @@ export default function Overzicht({
     () => computeAlerts({ accounts, forecast, asOf, bufferCents, scheduledFlows }),
     [accounts, forecast, asOf, bufferCents, scheduledFlows],
   );
+
+  // The declared-income paycheck preview for the Betaalagenda (#288). Accounts
+  // here are already rolled forward to `asOf`, so no tx walk is needed.
+  const paycheck = useMemo(() => {
+    if (bills == null || billOccurrences == null) return undefined;
+    return paycheckOverview({
+      bills,
+      occurrences: billOccurrences,
+      decisions: billDecisions,
+      asOf,
+      cashCents: cashOnHandCents(accounts),
+    }).preview;
+  }, [bills, billOccurrences, billDecisions, asOf, accounts]);
 
   const positieOn = useWidgetEnabled("positie");
 
@@ -119,59 +220,119 @@ export default function Overzicht({
   const btwOn = useWidgetEnabled("btw-stand");
 
   return (
-    <ModuleGrid label="Overzicht">
-      <AandachtWidget alerts={alerts} bufferCents={bufferCents} onBufferChange={onBufferChange} />
+    <>
+      {storage && (
+        <div className="mb-5">
+          <AssistantPanel storage={storage} asOf={asOf} />
+        </div>
+      )}
+      <ModuleGrid label={c.overzicht.gridLabel}>
+        <AandachtWidget alerts={alerts} bufferCents={bufferCents} onBufferChange={onBufferChange} />
 
-      {/* Saldo is span-2 with Positie beside it and span-3 without: an absent
+        {intake && (
+          <>
+            <IntakeInviteWidget
+              store={intake.store}
+              asOf={asOf}
+              onSave={intake.onSave}
+              onOpenIntake={() => onNavigate("intake")}
+              {...(intake.onOpenRound2 ? { onOpenRound2: intake.onOpenRound2 } : {})}
+              hasTransactions={txs.length > 0}
+            />
+            <RoomCardWidget
+              store={intake.store}
+              result={intake.room}
+              accounts={accounts}
+              {...(intake.statedInputs ? { statedInputs: intake.statedInputs } : {})}
+              onOpenIntake={() => onNavigate("intake")}
+              onImport={() => onNavigate("profiel")}
+              onOpenPlan={() => onNavigate("plan")}
+            />
+            <ConnectChecklistWidget
+              store={intake.store}
+              accounts={accounts}
+              onOpenAccounts={() => onNavigate("accounts")}
+            />
+          </>
+        )}
+
+        {/* Saldo is span-2 with Positie beside it and span-3 without: an absent
           widget should leave a wider card, not a gap. Only this view knows what
           else is on the page, which is why the span is decided here rather than
           inside either block. */}
-      <SaldoBlock
-        span={positieOn ? 2 : 3}
-        accounts={accounts}
-        txs={txs}
-        scheduledFlows={scheduledFlows}
-        asOf={asOf}
-        onNavigate={onNavigate}
-      />
-      <PositieWidget accounts={accounts} onNavigate={onNavigate} />
+        <SaldoBlock
+          span={positieOn ? 2 : 3}
+          accounts={accounts}
+          txs={txs}
+          scheduledFlows={scheduledFlows}
+          asOf={asOf}
+          onNavigate={onNavigate}
+          fxHistory={fxHistory}
+          mode={mode}
+        />
+        <PositieWidget
+          accounts={accounts}
+          onNavigate={onNavigate}
+          asOf={asOf}
+          fxHistory={fxHistory}
+          mode={mode}
+        />
 
-      <StatistiekBlock txs={txs} rules={rules} own={own} onSelectCategory={onSelectCategory} />
+        <StatistiekBlock
+          txs={txs}
+          rules={rules}
+          own={own}
+          onSelectCategory={onSelectCategory}
+          fxHistory={fxHistory}
+          mode={mode}
+        />
 
-      <RecenteTransactiesBlock
-        txs={txs}
-        accounts={accounts}
-        rules={rules}
-        own={own}
-        onNavigate={onNavigate}
-        onSelectCategory={onSelectCategory}
-      />
-      <BetaalschemaBlock scheduledFlows={scheduledFlows} txs={txs} asOf={asOf} />
+        <RecenteTransactiesBlock
+          txs={txs}
+          accounts={accounts}
+          rules={rules}
+          own={own}
+          onNavigate={onNavigate}
+          onSelectCategory={onSelectCategory}
+        />
+        <BetaalschemaBlock
+          scheduledFlows={scheduledFlows}
+          txs={txs}
+          asOf={asOf}
+          {...(paycheck ? { paycheck } : {})}
+        />
 
-      <BtwWidget
-        span={facturenOn ? 2 : 3}
-        entities={entities}
-        txs={txs}
-        accounts={accounts}
-        asOf={asOf}
-        vatSettings={vatSettings}
-        invoices={invoices}
-        country={country}
-        onNavigate={onNavigate}
-      />
-      <FacturenWidget span={btwOn ? 1 : 3} invoices={invoices} entities={entities} asOf={asOf} onNavigate={onNavigate} />
+        <BtwWidget
+          span={facturenOn ? 2 : 3}
+          entities={entities}
+          txs={txs}
+          accounts={accounts}
+          asOf={asOf}
+          vatSettings={vatSettings}
+          invoices={invoices}
+          country={country}
+          onNavigate={onNavigate}
+        />
+        <FacturenWidget
+          span={btwOn ? 1 : 3}
+          invoices={invoices}
+          entities={entities}
+          asOf={asOf}
+          onNavigate={onNavigate}
+        />
 
-      <CashflowBlock forecast={forecast} bufferCents={bufferCents} onNavigate={onNavigate} />
-      <TopUitgavenBlock
-        txs={txs}
-        rules={rules}
-        own={own}
-        onSelectCategory={onSelectCategory}
-      />
+        <CashflowBlock forecast={forecast} bufferCents={bufferCents} onNavigate={onNavigate} />
+        <TopUitgavenBlock txs={txs} rules={rules} own={own} onSelectCategory={onSelectCategory} />
 
-      <KaartenBlock accounts={accounts} onNavigate={onNavigate} />
+        <KaartenBlock
+          accounts={accounts}
+          onNavigate={onNavigate}
+          statedCredit={intake?.store?.current.statedCards?.value ?? NO_STATED}
+          statedDebit={intake?.store?.current.statedDebitCards?.value ?? NO_STATED}
+        />
 
-      <TravelBlock {...travel} />
-    </ModuleGrid>
+        <TravelBlock {...travel} />
+      </ModuleGrid>
+    </>
   );
 }

@@ -14,10 +14,10 @@ in its provider list at all.
 So the feature he is describing needs **no comparison source at all**. It is hold-only, and
 hold-only is the cheap half. Two different questions had been collapsed into one:
 
-| Question | Data | Verdict |
-|---|---|---|
-| What do my OWN accounts earn and return? | already in the vault and the facts | **build this** |
-| What would a card I don't own return? | only affiliate sites quoting "up to" | parked, see below |
+| Question                                 | Data                                 | Verdict           |
+| ---------------------------------------- | ------------------------------------ | ----------------- |
+| What do my OWN accounts earn and return? | already in the vault and the facts   | **build this**    |
+| What would a card I don't own return?    | only affiliate sites quoting "up to" | parked, see below |
 
 ## One precision the number needs
 
@@ -59,7 +59,7 @@ Rules carried over unchanged, because they are why the rest of the app can be tr
 
 - **Unknown is never zero.** A card with no cashback fact is `null`, not 0%, and cannot win or lose
   a comparison. `resolveAccountRate` already distinguishes `manual / detected / benchmark / assumed /
-  unknown` and that distinction survives into the output.
+unknown` and that distinction survives into the output.
 - **A user correction always wins.** Both inputs are LearnedFacts or user-set values.
 - **Integer cents, no `Date.now()`**, `asOf` passed in.
 - **Coverage honesty.** `spendPerYearCents` is annualised from an observed window; when the window is
@@ -127,14 +127,14 @@ his decision and is recorded here so the collision is deliberate when it happens
 
 Asked to find a Dutch cashback comparison source before building the switch half. Measured 2026-08-18:
 
-| Source | Result |
-|---|---|
-| ICS — issuer of most NL credit cards | 200, **zero** cashback percentages on its own card pages |
-| geld.nl creditcards, Independer | 404 |
-| Consumentenbond | 200, 1 MB, **zero** cashback figures in the HTML |
-| creditcard-vergelijk.nl | 200, ten brands, zero percentages — prose only |
-| smartcreditcard.eu | 200, 37 hits — affiliate, phrased "Cashback **up to** 2%" |
-| creditcardnetherlands.nl | 200, 12 hits — affiliate |
+| Source                               | Result                                                    |
+| ------------------------------------ | --------------------------------------------------------- |
+| ICS — issuer of most NL credit cards | 200, **zero** cashback percentages on its own card pages  |
+| geld.nl creditcards, Independer      | 404                                                       |
+| Consumentenbond                      | 200, 1 MB, **zero** cashback figures in the HTML          |
+| creditcard-vergelijk.nl              | 200, ten brands, zero percentages — prose only            |
+| smartcreditcard.eu                   | 200, 37 hits — affiliate, phrased "Cashback **up to** 2%" |
+| creditcardnetherlands.nl             | 200, 12 hits — affiliate                                  |
 
 **No neutral source exists.** The only pages carrying numbers are affiliate sites that earn on
 signups, quoting "up to" rather than a rate — the wrong input for an app whose selling point is not

@@ -4,7 +4,7 @@
 where to **keep** money, where to **convert** it, which card to **spend** with — combining
 the interest, conversion and points agents that today don't talk to each other.
 
-Decisions taken with Alexander (2026-08-13): built as the first *real* agent (so item 2's
+Decisions taken with Alexander (2026-08-13): built as the first _real_ agent (so item 2's
 architecture starts here); **hybrid** facts (deterministic math on own data + agent web
 search for product terms, cached); card terms **auto-derived and correctable**; triggered
 by a **travel field on the homepage**.
@@ -12,25 +12,25 @@ by a **travel field on the homepage**.
 ## The privacy consequence that shapes everything
 
 Because the ranking math is deterministic and local, **the model never needs to see his
-money**. It answers *product* questions only ("what does a Trading 212 card charge on a
+money**. It answers _product_ questions only ("what does a Trading 212 card charge on a
 USD transaction?"). LaVega combines that with balances locally.
 
 That makes this the tightest redaction boundary in the app so far — tighter than chat:
 
-| Sent to Claude | Never sent |
-|---|---|
-| home country, destination, target currency | balances, amounts, account keys, IBANs |
-| provider names he banks with (`["ING","Revolut",…]`) | transactions, dates, entity names |
-| facts already known (so it can't contradict them) | anything identifying |
+| Sent to Claude                                       | Never sent                             |
+| ---------------------------------------------------- | -------------------------------------- |
+| home country, destination, target currency           | balances, amounts, account keys, IBANs |
+| provider names he banks with (`["ING","Revolut",…]`) | transactions, dates, entity names      |
+| facts already known (so it can't contradict them)    | anything identifying                   |
 
 ## Item 2 slice: `LearnedFact` — the thing that makes it sticky
 
 ```ts
 type LearnedFact = {
-  id: string;        // hash(agent|subject|key) — stable, so a re-run upserts
-  agent: string;     // "travel"
-  subject: string;   // "Trading 212"
-  key: string;       // "fxFeePct" | "cashbackPct" | "pointsPerEuro"
+  id: string; // hash(agent|subject|key) — stable, so a re-run upserts
+  agent: string; // "travel"
+  subject: string; // "Trading 212"
+  key: string; // "fxFeePct" | "cashbackPct" | "pointsPerEuro"
   value: string;
   source: "agent" | "user";
   updatedAt: string;
@@ -74,7 +74,7 @@ every later render until he presses "ververs".
 ## Web — a modular block on Overzicht
 
 `components/TravelBlock.tsx`: "Ik reis naar [land] van [datum] tot [datum]" → three
-sections (**Bewaren / Wisselen / Betalen**), each a one-line recommendation plus a *waarom*.
+sections (**Bewaren / Wisselen / Betalen**), each a one-line recommendation plus a _waarom_.
 Every used fact is correctable inline (writes `source: "user"`).
 
 Built as a **self-contained block** taking only props — the first modular block, which is
@@ -87,5 +87,6 @@ since there is no signup in a local-first app.
 
 Core: fact upsert (user beats agent, agent never clobbers user), `planTravel` ranking
 (cheapest net wins, unknown terms rank last), `countryCurrency`. Adapters: facts round-trip
-+ parity. Server: sanitize rejects balances/keys/oversize; agent output filtered.
-Web: block renders each section from a plan; correction writes a user fact.
+
+- parity. Server: sanitize rejects balances/keys/oversize; agent output filtered.
+  Web: block renders each section from a plan; correction writes a user fact.

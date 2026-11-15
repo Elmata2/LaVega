@@ -1,20 +1,93 @@
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import type { CipherBlob, VaultStorage } from "@lavega/adapters";
-import { backupFilename, serializeBackup, parseBackup } from "../backup.js";
-import { fetchServerBackup, uploadServerBackup } from "../vaultSync.js";
+import { backupFilename, buildPortableExport, serializeBackup, parseBackup } from "../backup.js";
+import { eraseServerData, fetchServerBackup, uploadServerBackup } from "../vaultSync.js";
+import { adminCopy } from "../copy/admin.js";
+import { useAppLocale } from "../appLocale.js";
+import type { Locale } from "../locale.js";
+import posthog from "../posthog.js";
+import Button from "../components/ui/Button.js";
+import Card from "../components/ui/Card.js";
+import { Field, CheckboxField } from "../components/ui/Field.js";
+import StatusLine from "../components/ui/StatusLine.js";
 
 type BackupProps = {
   storage: VaultStorage;
   asOf: string;
+  /** How many documents the vault holds; used to refuse a server backup that
+   *  cannot carry them, instead of silently dropping the files. */
+  documentCount?: number;
   // Called after a successful restore so App reloads accounts/txs/rules from
   // the (now swapped) vault state — restore() itself never touches React state.
   onRestored: () => void;
 };
 
-const RESTORE_ERROR = "Onjuist wachtwoord of ongeldig back-upbestand.";
+/**
+ * Draagbare export (WS6.1, #302): a readable, versioned ZIP of the open vault,
+ * read back through the core reader before the screen reports success. The
+ * encrypted `.lavega` download above stays what it is: a restore artifact, not
+ * a portable one.
+ */
+function PortableExport({ storage, asOf }: { storage: VaultStorage; asOf: string }) {
+  const [locale] = useAppLocale();
+  const c = adminCopy[locale].backup.portable;
+  const [state, setState] = useState<"idle" | "building" | "verified" | "failed">("idle");
+  const [message, setMessage] = useState("");
 
-const dutchDate = (iso: string) => new Date(iso).toLocaleString("nl-NL");
+  async function handleExport() {
+    setState("building");
+    setMessage("");
+    try {
+      const built = await buildPortableExport(storage, asOf);
+      const url = URL.createObjectURL(
+        new Blob([built.bytes.slice().buffer as ArrayBuffer], { type: "application/zip" }),
+      );
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = built.filename;
+      link.click();
+      URL.revokeObjectURL(url);
+      if (built.readback.ok) {
+        const rows = Object.values(built.manifest.recordCounts).reduce(
+          (sum, count) => sum + count,
+          0,
+        );
+        setState("verified");
+        setMessage(c.verified(rows, built.manifest.sections.length));
+      } else {
+        setState("failed");
+        setMessage(c.verificationFailed(built.readback.problems.length));
+      }
+    } catch {
+      setState("failed");
+      setMessage(c.error);
+    }
+  }
+
+  return (
+    <>
+      <h3>{c.title}</h3>
+      <p>{c.description}</p>
+      <Button
+        variant="primary"
+        data-testid="portable-export"
+        disabled={state === "building"}
+        onClick={handleExport}
+      >
+        {state === "building" ? c.building : c.button}
+      </Button>
+      {message !== "" && (
+        <p role={state === "failed" ? "alert" : undefined} data-testid="portable-export-result">
+          {message}
+        </p>
+      )}
+    </>
+  );
+}
+
+const formatDateTime = (locale: Locale, iso: string) =>
+  new Date(iso).toLocaleString(locale === "nl" ? "nl-NL" : "en-GB");
 
 /**
  * Back-up naar de server. De kluis wordt hier versleuteld en gaat er versleuteld
@@ -22,7 +95,15 @@ const dutchDate = (iso: string) => new Date(iso).toLocaleString("nl-NL");
  * mag bestaan naast de download, en het is ook de reden dat een verloren
  * wachtwoord deze back-up net zo onbruikbaar maakt als die op schijf.
  */
-function ServerBackup({ storage }: { storage: VaultStorage }) {
+function ServerBackup({
+  storage,
+  documentCount = 0,
+}: {
+  storage: VaultStorage;
+  documentCount?: number;
+}) {
+  const [locale] = useAppLocale();
+  const c = adminCopy[locale].backup;
   const [state, setState] = useState<"checking" | "signed-out" | "ready">("checking");
   const [updatedAt, setUpdatedAt] = useState<string | null>(null);
   const [serverBlob, setServerBlob] = useState<CipherBlob | null>(null);
@@ -30,25 +111,39 @@ function ServerBackup({ storage }: { storage: VaultStorage }) {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [confirmErase, setConfirmErase] = useState(false);
+  const [erasing, setErasing] = useState(false);
+  const [eraseMessage, setEraseMessage] = useState("");
+  const [eraseError, setEraseError] = useState("");
+
+  function applyStatus(result: Awaited<ReturnType<typeof fetchServerBackup>>) {
+    if (result === "signed-out") return setState("signed-out");
+    setState("ready");
+    setUpdatedAt(result.updatedAt);
+    setServerBlob(result.blob);
+  }
 
   useEffect(() => {
     let current = true;
     void fetchServerBackup()
       .then((result) => {
-        if (!current) return;
-        if (result === "signed-out") return setState("signed-out");
-        setState("ready");
-        setUpdatedAt(result.updatedAt);
-        setServerBlob(result.blob);
+        if (current) applyStatus(result);
       })
-      .catch(() => { if (current) setState("signed-out"); });
-    return () => { current = false; };
+      .catch(() => {
+        if (current) setState("signed-out");
+      });
+    return () => {
+      current = false;
+    };
   }, []);
 
   async function upload(overwrite: boolean) {
     const blob = storage.export();
-    if (!blob) return setError("Ontgrendel de kluis voordat je een back-up maakt.");
-    setBusy(true); setError(""); setMessage(""); setConflict(null);
+    if (!blob) return setError(c.server.errors.locked);
+    setBusy(true);
+    setError("");
+    setMessage("");
+    setConflict(null);
     try {
       const result = await uploadServerBackup(blob, updatedAt, overwrite);
       if (result.status === "signed-out") return setState("signed-out");
@@ -60,54 +155,143 @@ function ServerBackup({ storage }: { storage: VaultStorage }) {
       }
       setUpdatedAt(result.updatedAt);
       setServerBlob(blob);
-      setMessage("Back-up opgeslagen.");
+      setMessage(c.server.success);
+      posthog.capture("server_backup_uploaded", { overwritten: overwrite });
     } catch {
-      setError("Back-up opslaan mislukt.");
+      setError(c.server.errors.saveFailed);
     } finally {
       setBusy(false);
     }
   }
 
-  if (state === "checking") return null;
-  if (state === "signed-out") {
-    return <>
-      <h3>Back-up op de server</h3>
-      <p>Log in om je versleutelde kluis ook op de server te bewaren. Handig voor een tweede apparaat.</p>
-    </>;
+  async function eraseData() {
+    setErasing(true);
+    setEraseError("");
+    setEraseMessage("");
+    try {
+      const report = await eraseServerData(locale);
+      const touched = report.filter((entry) => entry.rows > 0);
+      const rows = touched.reduce((sum, entry) => sum + entry.rows, 0);
+      setEraseMessage(c.server.erase.success(rows, touched.length));
+      posthog.capture("server_data_erased", {
+        collections_erased: touched.length,
+        rows_erased: rows,
+      });
+      await fetchServerBackup()
+        .then(applyStatus)
+        .catch(() => setState("signed-out"));
+    } catch (err) {
+      setEraseError(err instanceof Error ? err.message : c.server.erase.errorGeneric);
+    } finally {
+      setErasing(false);
+      setConfirmErase(false);
+    }
   }
 
-  return <>
-    <h3>Back-up op de server</h3>
-    <p>
-      {updatedAt ? `Laatste back-up: ${dutchDate(updatedAt)}.` : "Nog geen back-up op de server."}
-      {" "}De server bewaart alleen versleutelde bytes en kan je gegevens niet lezen.
-    </p>
-    <button type="button" className="btn btn-primary" disabled={busy} onClick={() => void upload(false)}>
-      {busy ? "Bezig…" : "Nu back-uppen"}
-    </button>
-    {conflict && <>
-      <p role="alert" className="text-warn">
-        Een ander apparaat heeft op {dutchDate(conflict)} een nieuwere back-up opgeslagen. Overschrijven verwijdert die.
+  if (state === "checking") return null;
+  if (state === "signed-out") {
+    return (
+      <>
+        <h3>{c.server.title}</h3>
+        <p>{c.server.signedOut}</p>
+      </>
+    );
+  }
+
+  return (
+    <>
+      <h3>{c.server.title}</h3>
+      <p>
+        {updatedAt ? c.server.lastBackup(formatDateTime(locale, updatedAt)) : c.server.noBackupYet}{" "}
+        {c.server.encryptionNote}
       </p>
-      <button type="button" className="btn" disabled={busy} onClick={() => void upload(true)}>Toch overschrijven</button>
-    </>}
-    {message && <p>{message}</p>}
-    {error && <p role="alert" className="text-warn">{error}</p>}
-    {serverBlob && <p>
-      Herstellen van de server? Download &apos;m eerst en gebruik het formulier hieronder.{" "}
-      <button type="button" className="btn" onClick={() => {
-        const url = URL.createObjectURL(new Blob([serializeBackup(serverBlob)], { type: "application/json" }));
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = backupFilename((updatedAt ?? "").slice(0, 10));
-        a.click();
-        URL.revokeObjectURL(url);
-      }}>Haal back-up van server</button>
-    </p>}
-  </>;
+      {documentCount > 0 && (
+        <p role="status" data-testid="server-backup-documents-blocked">
+          {c.server.documentsBlocked(documentCount)}
+        </p>
+      )}
+      <Button
+        variant="primary"
+        disabled={busy || erasing || documentCount > 0}
+        onClick={() => void upload(false)}
+      >
+        {busy ? c.common.busy : c.server.backupNowButton}
+      </Button>
+      {conflict && (
+        <>
+          <StatusLine tone="problem" role="alert">
+            {c.server.conflict.message(formatDateTime(locale, conflict))}
+          </StatusLine>
+          <Button disabled={busy || erasing} onClick={() => void upload(true)}>
+            {c.server.conflict.overwriteButton}
+          </Button>
+        </>
+      )}
+      {message && <p>{message}</p>}
+      {error && (
+        <StatusLine tone="problem" role="alert">
+          {error}
+        </StatusLine>
+      )}
+      {serverBlob && (
+        <p>
+          {c.server.restoreFromServer.prompt}{" "}
+          <Button
+            onClick={() => {
+              const url = URL.createObjectURL(
+                new Blob([serializeBackup(serverBlob)], { type: "application/json" }),
+              );
+              const a = document.createElement("a");
+              a.href = url;
+              a.download = backupFilename((updatedAt ?? "").slice(0, 10));
+              a.click();
+              URL.revokeObjectURL(url);
+            }}
+          >
+            {c.server.restoreFromServer.button}
+          </Button>
+        </p>
+      )}
+      {!confirmErase && (
+        <p>
+          <Button
+            disabled={busy || erasing}
+            onClick={() => {
+              setConfirmErase(true);
+              setEraseMessage("");
+              setEraseError("");
+            }}
+          >
+            {c.server.erase.button}
+          </Button>
+        </p>
+      )}
+      {confirmErase && (
+        <>
+          <StatusLine tone="warning" role="alert">
+            {c.server.erase.warning}
+          </StatusLine>
+          <Button disabled={busy || erasing} onClick={() => void eraseData()}>
+            {erasing ? c.common.busy : c.server.erase.confirmButton}
+          </Button>{" "}
+          <Button disabled={busy || erasing} onClick={() => setConfirmErase(false)}>
+            {c.server.erase.cancelButton}
+          </Button>
+        </>
+      )}
+      {eraseMessage && <p>{eraseMessage}</p>}
+      {eraseError && (
+        <StatusLine tone="problem" role="alert">
+          {eraseError}
+        </StatusLine>
+      )}
+    </>
+  );
 }
 
-export default function Backup({ storage, asOf, onRestored }: BackupProps) {
+export default function Backup({ storage, asOf, documentCount = 0, onRestored }: BackupProps) {
+  const [locale] = useAppLocale();
+  const c = adminCopy[locale].backup;
   const [file, setFile] = useState<File | null>(null);
   const [pass, setPass] = useState("");
   const [confirmed, setConfirmed] = useState(false);
@@ -115,29 +299,34 @@ export default function Backup({ storage, asOf, onRestored }: BackupProps) {
   const [error, setError] = useState("");
   const [restored, setRestored] = useState(false);
 
-  function handleDownload() {
-    const blob = storage.export();
+  async function handleDownload() {
+    // The FULL bundle (v3): the vault AND the sealed document bytes. A download
+    // that dropped documents would be worse than no download at all.
+    const blob = await storage.exportBundle();
     if (!blob) return; // locked/empty — nothing to download
-    const url = URL.createObjectURL(new Blob([serializeBackup(blob)], { type: "application/json" }));
+    const url = URL.createObjectURL(
+      new Blob([serializeBackup(blob)], { type: "application/json" }),
+    );
     const a = document.createElement("a");
     a.href = url;
     a.download = backupFilename(asOf);
     a.click();
     URL.revokeObjectURL(url);
+    posthog.capture("backup_downloaded", { documents: documentCount });
   }
 
   async function handleRestore(e: FormEvent) {
     e.preventDefault();
-    if (!file || pass.length === 0 || !confirmed) return;
+    if (!file || !confirmed) return;
     setBusy(true);
     setError("");
     setRestored(false);
     try {
       const text = await file.text();
       const blob = parseBackup(text); // throws on malformed/misshaped file
-      const ok = await storage.restore(blob, pass);
+      const ok = await storage.restore(blob, pass || undefined);
       if (!ok) {
-        setError(RESTORE_ERROR);
+        setError(c.restore.error);
         return;
       }
       setRestored(true);
@@ -145,33 +334,33 @@ export default function Backup({ storage, asOf, onRestored }: BackupProps) {
       setFile(null);
       setConfirmed(false);
       onRestored();
+      posthog.capture("backup_restored");
     } catch {
-      setError(RESTORE_ERROR);
+      setError(c.restore.error);
     } finally {
       setBusy(false);
     }
   }
 
   return (
-    <section className="card" aria-label="Back-up">
-      <h2>Back-up</h2>
+    <Card as="section" aria-label={c.ariaLabel}>
+      <h2>{c.title}</h2>
 
-      <h3>Download</h3>
-      <p>
-        Download een versleutelde back-up. Bewaar &apos;m veilig; je hebt je wachtwoord nodig om &apos;m te
-        herstellen.
-      </p>
-      <button type="button" className="btn btn-primary" onClick={handleDownload}>
-        Download back-up
-      </button>
+      <h3>{c.download.title}</h3>
+      <p>{c.download.description}</p>
+      <Button variant="primary" onClick={handleDownload}>
+        {c.download.button}
+      </Button>
 
-      <ServerBackup storage={storage} />
+      <PortableExport storage={storage} asOf={asOf} />
 
-      <h3>Herstel uit back-up</h3>
-      <p className="text-warn">Dit vervangt je huidige data in deze kluis.</p>
+      <ServerBackup storage={storage} documentCount={documentCount} />
+
+      <h3>{c.restore.title}</h3>
+      <StatusLine tone="warning">{c.restore.warning}</StatusLine>
       <form onSubmit={handleRestore}>
-        <div className="vault-field">
-          <label htmlFor="backup-restore-file">Back-upbestand</label>
+        <Field>
+          <label htmlFor="backup-restore-file">{c.restore.fileLabel}</label>
           <input
             id="backup-restore-file"
             type="file"
@@ -179,9 +368,9 @@ export default function Backup({ storage, asOf, onRestored }: BackupProps) {
             disabled={busy}
             onChange={(e) => setFile(e.target.files?.[0] ?? null)}
           />
-        </div>
-        <div className="vault-field">
-          <label htmlFor="backup-restore-pass">Wachtwoord</label>
+        </Field>
+        <Field>
+          <label htmlFor="backup-restore-pass">{c.restore.passwordLabel}</label>
           <input
             id="backup-restore-pass"
             type="password"
@@ -189,30 +378,26 @@ export default function Backup({ storage, asOf, onRestored }: BackupProps) {
             onChange={(e) => setPass(e.target.value)}
             disabled={busy}
           />
-        </div>
-        <label className="vault-checkbox-field">
+        </Field>
+        <CheckboxField>
           <input
             type="checkbox"
             checked={confirmed}
             onChange={(e) => setConfirmed(e.target.checked)}
             disabled={busy}
           />
-          Ik snap dat dit mijn huidige data in deze kluis vervangt
-        </label>
+          {c.restore.confirmLabel}
+        </CheckboxField>
         {error && (
-          <p role="alert" className="text-warn">
+          <StatusLine tone="problem" role="alert">
             {error}
-          </p>
+          </StatusLine>
         )}
-        {restored && <p>Herstel geslaagd.</p>}
-        <button
-          type="submit"
-          className="btn btn-primary"
-          disabled={busy || !file || pass.length === 0 || !confirmed}
-        >
-          Herstellen
-        </button>
+        {restored && <p>{c.restore.success}</p>}
+        <Button type="submit" variant="primary" disabled={busy || !file || !confirmed}>
+          {c.restore.submitButton}
+        </Button>
       </form>
-    </section>
+    </Card>
   );
 }

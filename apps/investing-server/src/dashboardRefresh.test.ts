@@ -1,0 +1,359 @@
+import { afterEach, expect, test, vi } from "vitest";
+import { createInMemorySharedPriceStore } from "@lavega/adapters";
+import type { BrokerSyncResume } from "@lavega/adapters";
+import type { InvestingDashboardData } from "@lavega/core";
+import type { RuntimeBrokerDataSnapshot } from "./runtimeBrokerData.js";
+import type { RuntimeCredentialStore } from "./credentialStore.js";
+import { createRuntimeApp } from "./index.js";
+
+const persistence = vi.hoisted(() => ({
+  snapshots: new Map<string, RuntimeBrokerDataSnapshot>(),
+  reads: vi.fn(),
+  credentials: vi.fn(async () => null),
+  loadFailure: null as Error | null,
+  priceGet: vi.fn(async (_request: { symbol: string }) => ({ bars: [], problems: [] })),
+  connected: false,
+  resume: null as BrokerSyncResume | null,
+  /* Stored dashboards, standing in for investing.dashboard_snapshots. Null is
+   * a database without the table, so the other tests keep building. */
+  dashboards: null as Map<string, { version: number; dashboard: unknown }> | null,
+  sourceVersion: 0,
+}));
+
+vi.mock("@lavega/database", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@lavega/database")>()),
+  createDashboardSnapshotRepository: (_db: unknown, tenantId: string) => ({
+    async get(key: string) {
+      if (!persistence.dashboards) throw new Error("no dashboard table");
+      const stored = persistence.dashboards.get(`${tenantId}\u0000${key}`);
+      const version = persistence.sourceVersion;
+      return { version, dashboard: stored?.version === version ? stored.dashboard : null };
+    },
+    async put(key: string, version: number, dashboard: unknown) {
+      persistence.dashboards?.set(`${tenantId}\u0000${key}`, { version, dashboard });
+    },
+  }),
+}));
+
+vi.mock("./credentialStore.js", () => ({
+  runtimeDatabase: () => ({}),
+  credentialsArePerTenant: () => true,
+  createRuntimeCredentialStore: (tenantId: string): RuntimeCredentialStore => ({
+    status: async () => "unlocked",
+    setup: async () => undefined,
+    unlock: async () => true,
+    lock: () => undefined,
+    getCredentials: ((candidateTenantId: string, broker: string) =>
+      persistence.connected && broker === "trading212"
+        ? Promise.resolve({ broker, tenantId: candidateTenantId, token: "test", secret: "test" })
+        : persistence.credentials()) as RuntimeCredentialStore["getCredentials"],
+    putCredentials: async () => undefined,
+    getBrokerData: async () => {
+      persistence.reads(tenantId);
+      if (persistence.loadFailure) throw persistence.loadFailure;
+      return structuredClone(persistence.snapshots.get(tenantId) ?? {});
+    },
+    putBrokerData: async (snapshot) => {
+      persistence.snapshots.set(tenantId, structuredClone(snapshot));
+    },
+    putBrokerSnapshot: async (broker, snapshot) => {
+      persistence.snapshots.set(tenantId, {
+        ...persistence.snapshots.get(tenantId),
+        [broker]: structuredClone(snapshot),
+      });
+    },
+  }),
+}));
+
+/* The Neon operation store reads the stored broker data when it claims and
+ * writes it when it commits, so the fake keeps those on the same map the
+ * credential store uses. */
+vi.mock("./neonStores.js", async (importOriginal) => {
+  const original = await importOriginal<typeof import("./neonStores.js")>();
+  const { createMemoryBrokerSyncStateStore } = await import("@lavega/adapters");
+  const { createInMemoryPriceSyncProgressStore } = await import("./priceOrchestrator.js");
+  return {
+    ...original,
+    createNeonPriceSyncProgressStore: () => createInMemoryPriceSyncProgressStore(),
+    createNeonBrokerSyncStateStore: (_database: unknown, tenantId: string) => {
+      const leases = createMemoryBrokerSyncStateStore();
+      const state = (broker: string) => ({
+        lastSyncedAt: null,
+        resume: broker === "trading212" ? persistence.resume : null,
+      });
+      return {
+        ...leases,
+        get: async (broker: string) => state(broker),
+        claim: async (broker: string, input: Parameters<typeof leases.claim>[1]) => {
+          const claim = await leases.claim(broker as "trading212", input);
+          persistence.reads(tenantId);
+          return {
+            ...claim,
+            state: state(broker),
+            data: persistence.snapshots.get(tenantId)?.[broker as "trading212"] ?? null,
+          };
+        },
+        commit: async (broker: string, input: Parameters<typeof leases.commit>[1]) => {
+          const committed = await leases.commit(broker as "trading212", input);
+          if (committed && input.data)
+            persistence.snapshots.set(tenantId, {
+              ...persistence.snapshots.get(tenantId),
+              [broker]: structuredClone(input.data),
+            });
+          return committed;
+        },
+      };
+    },
+  };
+});
+
+vi.mock("@lavega/adapters", async (importOriginal) => {
+  const original = await importOriginal<typeof import("@lavega/adapters")>();
+  return {
+    ...original,
+    createFrankfurterFxProvider: () => ({
+      getLatestRate: async () => ({ problems: [] }),
+      getHistoricalRates: async () => ({ rates: [], problems: [] }),
+    }),
+    createYahooPriceProvider: () => ({
+      sourceKey: "yahoo",
+      priority: 10,
+      get: persistence.priceGet,
+    }),
+  };
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+  persistence.snapshots.clear();
+  persistence.reads.mockClear();
+  persistence.credentials.mockReset().mockResolvedValue(null);
+  persistence.connected = false;
+  persistence.resume = null;
+  persistence.dashboards = null;
+  persistence.sourceVersion = 0;
+  persistence.loadFailure = null;
+  persistence.priceGet.mockClear();
+});
+
+const acceptedConsent = {
+  get: async (tenantId: string) => ({
+    tenantId,
+    accepted: true,
+    decidedAt: "2026-09-01T00:00:00Z",
+    disclosureVersion: "yahoo-finance-v1",
+  }),
+  set: async () => undefined,
+};
+
+function snapshot(quantity: number): RuntimeBrokerDataSnapshot {
+  return {
+    trading212: {
+      positions: [
+        {
+          symbol: "AAPL",
+          quantity,
+          averagePrice: 100,
+          marketPrice: 100,
+          marketValue: quantity * 100,
+          currency: "EUR",
+          entity: "personal",
+          asOf: "2026-09-06",
+        },
+      ],
+      trades: [],
+      dividends: [],
+    },
+  };
+}
+
+test("price discovery refreshes committed symbols without a dashboard read", async () => {
+  let now = Date.now();
+  vi.spyOn(Date, "now").mockImplementation(() => now);
+  persistence.snapshots.set("tenant", snapshot(1));
+  const priceStore = createInMemorySharedPriceStore();
+  const first = await createRuntimeApp({
+    priceStore,
+    resolveTenantId: () => "tenant",
+    marketDataConsentStore: acceptedConsent,
+  });
+  const second = await createRuntimeApp({
+    priceStore,
+    resolveTenantId: () => "tenant",
+    marketDataConsentStore: acceptedConsent,
+  });
+  await first.request("/api/investing/dashboard");
+  await second.request("/api/investing/dashboard");
+  const updated = snapshot(1);
+  updated.trading212!.positions.push({ ...updated.trading212!.positions[0]!, symbol: "ASML" });
+  persistence.snapshots.set("tenant", updated);
+  now += 15_000;
+  const response = await first.request("/api/prices/sync", { method: "POST" });
+  expect(response.status).toBe(200);
+  expect(await response.json()).toMatchObject({ total: 2 });
+  expect(persistence.priceGet.mock.calls.map(([request]) => request.symbol)).toContain("ASML");
+  expect(persistence.reads).toHaveBeenCalledTimes(3);
+});
+
+test("price discovery reports a failed hosted refresh instead of completing from old symbols", async () => {
+  let now = Date.now();
+  vi.spyOn(Date, "now").mockImplementation(() => now);
+  persistence.snapshots.set("tenant", snapshot(1));
+  const app = await createRuntimeApp({
+    priceStore: createInMemorySharedPriceStore(),
+    resolveTenantId: () => "tenant",
+    marketDataConsentStore: acceptedConsent,
+  });
+  await app.request("/api/investing/dashboard");
+  now += 15_000;
+  persistence.loadFailure = new Error("snapshot database unavailable");
+  const response = await app.request("/api/prices/sync", { method: "POST" });
+  expect(await response.json()).toMatchObject({
+    status: "problem",
+    problems: ["snapshot database unavailable"],
+  });
+  expect(persistence.priceGet).not.toHaveBeenCalled();
+});
+
+test("warm dashboard instances reload shared broker and price data after fifteen seconds", async () => {
+  let now = Date.now();
+  vi.spyOn(Date, "now").mockImplementation(() => now);
+  persistence.snapshots.set("tenant", snapshot(1));
+  const priceStore = createInMemorySharedPriceStore();
+  const priceReads = vi.spyOn(priceStore, "getRange");
+  const first = await createRuntimeApp({ priceStore, resolveTenantId: () => "tenant" });
+  const second = await createRuntimeApp({ priceStore, resolveTenantId: () => "tenant" });
+  const read = async (app: typeof first) => {
+    const response = await app.request("/api/investing/dashboard");
+    expect(response.status).toBe(200);
+    return response.json() as Promise<InvestingDashboardData>;
+  };
+  expect((await read(first)).positions[0]?.quantity).toBe(1);
+  expect((await read(second)).positions[0]?.quantity).toBe(1);
+  const initialPriceReads = priceReads.mock.calls.length;
+  persistence.snapshots.set("tenant", snapshot(2));
+  now += 14_999;
+  expect((await read(first)).positions[0]?.quantity).toBe(1);
+  expect(priceReads).toHaveBeenCalledTimes(initialPriceReads);
+  expect(persistence.reads).toHaveBeenCalledTimes(2);
+  now += 1;
+  expect((await read(first)).positions[0]?.quantity).toBe(2);
+  expect((await read(second)).positions[0]?.quantity).toBe(2);
+  expect(persistence.reads).toHaveBeenCalledTimes(4);
+  expect(priceReads.mock.calls.length).toBeGreaterThan(initialPriceReads);
+});
+
+test("requests that never show positions do not read the broker snapshots", async () => {
+  persistence.snapshots.set("tenant", snapshot(1));
+  const app = await createRuntimeApp({
+    priceStore: createInMemorySharedPriceStore(),
+    resolveTenantId: () => "tenant",
+  });
+
+  expect((await app.request("/api/brokers/sync/status")).status).toBe(200);
+  expect((await app.request("/api/brokers/credentials/status")).status).toBe(200);
+  expect(persistence.reads).not.toHaveBeenCalled();
+
+  const dashboard = await app.request("/api/investing/dashboard");
+  expect(((await dashboard.json()) as InvestingDashboardData).positions[0]?.quantity).toBe(1);
+  expect(persistence.reads).toHaveBeenCalledTimes(1);
+});
+
+test("dashboard refresh does not replace broker data during a local sync", async () => {
+  let now = Date.now();
+  vi.spyOn(Date, "now").mockImplementation(() => now);
+  persistence.snapshots.set("tenant", snapshot(1));
+  const app = await createRuntimeApp({
+    priceStore: createInMemorySharedPriceStore(),
+    resolveTenantId: () => "tenant",
+  });
+  await app.request("/api/investing/dashboard");
+  let release!: (value: null) => void;
+  let started!: () => void;
+  const waiting = new Promise<void>((resolve) => {
+    started = resolve;
+  });
+  persistence.credentials.mockImplementationOnce(() => {
+    started();
+    return new Promise<null>((resolve) => {
+      release = resolve;
+    });
+  });
+  const sync = app.request("/api/brokers/sync", { method: "POST" });
+  await waiting;
+  try {
+    now += 15_000;
+    persistence.snapshots.set("tenant", snapshot(2));
+    const response = await app.request("/api/investing/dashboard");
+    const data = (await response.json()) as InvestingDashboardData;
+    expect(data.positions[0]?.quantity).toBe(1);
+    // The dashboard, plus the claim the running sync took: the refresh read none.
+    expect(persistence.reads).toHaveBeenCalledTimes(2);
+  } finally {
+    release(null);
+    await sync;
+  }
+  const response = await app.request("/api/investing/dashboard");
+  const data = (await response.json()) as InvestingDashboardData;
+  expect(data.positions[0]?.quantity).toBe(2);
+});
+
+test("a resumed sync merges the latest persisted history instead of its warm snapshot", async () => {
+  const initial = snapshot(1);
+  persistence.snapshots.set("tenant", initial);
+  const app = await createRuntimeApp({
+    priceStore: createInMemorySharedPriceStore(),
+    resolveTenantId: () => "tenant",
+  });
+  await app.request("/api/investing/dashboard");
+  const updated = snapshot(2);
+  updated.trading212!.trades = [
+    {
+      id: "trading212:1",
+      brokerTradeId: "1",
+      entity: "personal",
+      symbol: "AAPL",
+      date: "2026-09-05",
+      side: "buy",
+      quantity: 2,
+      price: 100,
+      amount: 200,
+      currency: "EUR",
+      commission: 0,
+    },
+  ];
+  persistence.snapshots.set("tenant", updated);
+  persistence.connected = true;
+  persistence.resume = {
+    ordersComplete: true,
+    transactionsComplete: true,
+    dividendsNextPagePath: "https://live.trading212.com/dividends-next",
+  };
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (input: string | URL | Request) => {
+      const path = new URL(
+        typeof input === "string" ? input : input instanceof URL ? input.href : input.url,
+      ).pathname;
+      const body = path.endsWith("/positions")
+        ? []
+        : path.endsWith("/summary")
+          ? { currency: "EUR", cash: { availableToTrade: 100, inPies: 0, reservedForOrders: 0 } }
+          : { items: [] };
+      return new Response(JSON.stringify(body), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }),
+  );
+  const response = await app.request("/api/brokers/sync", { method: "POST" });
+  expect(response.status).toBe(200);
+  // Same trades, same ids; loading a snapshot only adds the broker its own key
+  // already named.
+  expect(persistence.snapshots.get("tenant")?.trading212?.trades).toEqual(
+    updated.trading212!.trades.map((trade) => ({ ...trade, broker: "trading212" })),
+  );
+  // The dashboard, plus one claim per scheduled broker.
+  expect(persistence.reads).toHaveBeenCalledTimes(3);
+});

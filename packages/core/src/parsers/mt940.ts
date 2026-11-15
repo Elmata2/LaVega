@@ -17,7 +17,9 @@ export function parseMt940(text: string): { accounts: Account[]; txs: Array<Omit
   // for accounts whose :25: is an old-style account number, not an IBAN. Scoped
   // to the header so a counterparty BIC inside a :86: line can't mislabel it.
   const i20 = text.indexOf(":20:");
-  const headerBic = (i20 > 0 ? text.slice(0, i20) : "").match(/\b[A-Z]{6}[A-Z0-9]{2}(?:[A-Z0-9]{3})?\b/)?.[0] ?? null;
+  const headerBic =
+    (i20 > 0 ? text.slice(0, i20) : "").match(/\b[A-Z]{6}[A-Z0-9]{2}(?:[A-Z0-9]{3})?\b/)?.[0] ??
+    null;
   const blocks = text.split(/(?=:20:)/).filter((b) => /:61:/.test(b) || /:25:/.test(b));
   for (const b of blocks) {
     const lines = b.split(/\r?\n/);
@@ -41,8 +43,13 @@ export function parseMt940(text: string): { accounts: Account[]; txs: Array<Omit
     }
     if (!acc) continue;
     accounts[acc] = accounts[acc] || {
-      key: acc, iban: findIban(acc) ?? "", name: acc,
-      bank: bankFromIban(acc) ?? bankFromBic(headerBic) ?? "", entity: "", currency: cur, balance: close,
+      key: acc,
+      iban: findIban(acc) ?? "",
+      name: acc,
+      bank: bankFromIban(acc) ?? bankFromBic(headerBic) ?? "",
+      entity: "",
+      currency: cur,
+      balance: close,
     };
     if (close != null) accounts[acc].balance = close;
     // balanceDate anchors this block's closing balance to the statement's last
@@ -73,8 +80,14 @@ export function parseMt940(text: string): { accounts: Account[]; txs: Array<Omit
         cp = (parts[0] || "").slice(0, 60);
       }
       txs.push({
-        accountKey: acc, date, amount: sign * Math.abs(val), currency: cur,
-        counterparty: cp, description: desc || ref, category: "", manual: false,
+        accountKey: acc,
+        date,
+        amount: sign * Math.abs(val),
+        currency: cur,
+        counterparty: cp,
+        description: desc || ref,
+        category: "",
+        manual: false,
       });
     }
     if (maxTxDate != null) accounts[acc].balanceDate = maxTxDate;

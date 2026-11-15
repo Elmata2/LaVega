@@ -1,9 +1,11 @@
-import { LOCAL_TENANT_ID, type CredentialStore } from "@lavega/core";
-import type { BrokerAccessAdapter } from "./BrokerAccessAdapter.js";
+import { LOCAL_TENANT_ID, type CredentialStore, type ScheduledBroker } from "@lavega/core";
+import { allSections, type BrokerAccessAdapter } from "./BrokerAccessAdapter.js";
 import { createIbkrFlexAdapter } from "./ibkr/flexAdapter.js";
 import { createTrading212Adapter, type Trading212DiagnosticEvent } from "./trading212/index.js";
-
-export type ScheduledBrokerName = "ibkr" | "trading212";
+import {
+  createMemoryPartnerBudgetClient,
+  type PartnerBudgetClient,
+} from "../partnerBudget/PartnerBudget.js";
 
 export type CredentialsAwareBrokerAdaptersOptions = {
   credentials: CredentialStore;
@@ -11,6 +13,9 @@ export type CredentialsAwareBrokerAdaptersOptions = {
   /** Config override for tests; defaults to reading process.env. */
   environment?: (name: string) => string | undefined;
   onTrading212Diagnostic?: (event: Trading212DiagnosticEvent) => void;
+  /** Where partner request slots come from. Defaults to one budget shared by
+   *  both brokers and every sync of this set of adapters, not one per sync. */
+  partnerBudget?: PartnerBudgetClient;
 };
 
 function defaultEnvironment(name: string): string | undefined {
@@ -18,32 +23,35 @@ function defaultEnvironment(name: string): string | undefined {
   return value || undefined;
 }
 
-/** Host time left for one Trading 212 invocation. Unset locally so a Docker
- *  sync can wait out every provider window. On Vercel the function dies if
- *  that wait runs past maxDuration, so we stop early and resume. */
-export function trading212DeadlineMs(environment: (name: string) => string | undefined, now = Date.now()): number | undefined {
-  const budget = Number(environment("INVESTING_SYNC_BUDGET_MS"));
-  if (Number.isFinite(budget) && budget > 0) return now + budget;
-  if (environment("VERCEL")) return now + 45_000;
-  return undefined;
-}
-
 /** One BrokerAccessAdapter per scheduled broker, with credential lookup and
  *  env config resolved inside each adapter's own module instead of server
  *  wiring. The "not configured" fallbacks mirror the wording the server used
  *  to fabricate; syncScheduledBrokers normally refuses to call sync without
  *  credentials, so these are the wording of record for direct callers. */
-export function createCredentialsAwareBrokerAdapters(options: CredentialsAwareBrokerAdaptersOptions): { broker: ScheduledBrokerName; adapter: BrokerAccessAdapter }[] {
+export function createCredentialsAwareBrokerAdapters(
+  options: CredentialsAwareBrokerAdaptersOptions,
+): { broker: ScheduledBroker; adapter: BrokerAccessAdapter }[] {
   const tenantId = options.tenantId ?? LOCAL_TENANT_ID;
   const environment = options.environment ?? defaultEnvironment;
+  const partnerBudget = options.partnerBudget ?? createMemoryPartnerBudgetClient();
   return [
     {
       broker: "ibkr",
       adapter: {
         async sync(input) {
           const stored = await options.credentials.getCredentials(tenantId, "ibkr");
-          if (!stored) return { positions: [], trades: [], source: "ibkr-flex", problems: ["IBKR: credentials are not configured"] };
-          return createIbkrFlexAdapter({ token: stored.token, queryId: stored.queryId, endpoint: environment("IBKR_FLEX_ENDPOINT") }).sync(input);
+          if (!stored)
+            return {
+              sections: allSections("unavailable"),
+              source: "ibkr-flex",
+              problems: ["IBKR: credentials are not configured"],
+            };
+          return createIbkrFlexAdapter({
+            token: stored.token,
+            queryId: stored.queryId,
+            endpoint: environment("IBKR_FLEX_ENDPOINT"),
+            partnerBudget,
+          }).sync(input);
         },
       },
     },
@@ -52,13 +60,18 @@ export function createCredentialsAwareBrokerAdapters(options: CredentialsAwareBr
       adapter: {
         async sync(input) {
           const stored = await options.credentials.getCredentials(tenantId, "trading212");
-          if (!stored) return { positions: [], trades: [], source: "trading-212", problems: ["Trading 212: credentials are not configured"] };
+          if (!stored)
+            return {
+              sections: allSections("unavailable"),
+              source: "trading-212",
+              problems: ["Trading 212: credentials are not configured"],
+            };
           return createTrading212Adapter({
             token: stored.token,
             secret: stored.secret,
             baseUrl: environment("TRADING212_BASE_URL") ?? "https://live.trading212.com",
-            deadlineMs: trading212DeadlineMs(environment),
             resume: input.resume,
+            partnerBudget,
             diagnostics: (details) => {
               console.log(JSON.stringify({ event: "investing.trading212.http", ...details }));
               options.onTrading212Diagnostic?.(details);

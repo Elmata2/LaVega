@@ -1,7 +1,25 @@
 import { expect, test } from "vitest";
-import type { CashBalance, CashFlow, PriceBar, Trade } from "./model.js";
-import { computePortfolioValueSeries, filterPortfolioValueRange, type PortfolioValuePoint } from "./portfolio.js";
+import type {
+  CashBalance,
+  CashFlow,
+  CashHistoryCoverage,
+  Position,
+  PriceBar,
+  Trade,
+} from "./model.js";
+import {
+  computePortfolioValueSeries,
+  filterPortfolioValueRange,
+  type PortfolioValuePoint,
+} from "./portfolio.js";
 import { FX_RATES, POSITIONS, PRICE_BARS, TRADES } from "./__fixtures__/portfolio.js";
+
+const complete = (
+  broker: string,
+  from: string,
+  tradeCash: "trade-settlement" | "cash-flows",
+  to = "2026-01-06",
+): CashHistoryCoverage => ({ entity: "personal", broker, status: "complete", from, to, tradeCash });
 
 const point = (date: string, value: number, unpriced: string[] = []): PortfolioValuePoint => ({
   date,
@@ -13,22 +31,190 @@ const point = (date: string, value: number, unpriced: string[] = []): PortfolioV
   cashUnknown: [],
 });
 
-test("reconstructs holdings from signed trades instead of current positions", () => {
-  const result = computePortfolioValueSeries(POSITIONS, TRADES, PRICE_BARS, "EUR", FX_RATES, { today: "2026-02-02" });
+test("values holdings by walking trades out from the broker position", () => {
+  const result = computePortfolioValueSeries(POSITIONS, TRADES, PRICE_BARS, "EUR", FX_RATES, {
+    today: "2026-02-02",
+  });
 
   expect(result.find(({ date }) => date === "2026-01-02")).toEqual(point("2026-01-02", 2200));
-  expect(result.find(({ date }) => date === "2026-01-05")).toEqual(point("2026-01-05", 1952.3809523809523));
-  expect(result.at(-1)).toEqual(point("2026-02-02", 2090.909090909091));
+  expect(result.find(({ date }) => date === "2026-01-05")).toEqual({
+    ...point("2026-01-05", 1952.3809523809523),
+    holdingsReturn: (8 * 100 + 7 * 210) / 1.05 / 2200 - 1,
+  });
+  expect(result.at(-1)).toEqual({
+    ...point("2026-02-02", 2090.909090909091),
+    holdingsReturn: null,
+  });
+});
+
+test("values the broker position when the trade history is short", () => {
+  const trades = TRADES.filter((trade) => trade.id !== "a");
+
+  const result = computePortfolioValueSeries(POSITIONS, trades, PRICE_BARS, "EUR", FX_RATES, {
+    today: "2026-02-02",
+  });
+
+  expect(result.at(-1)?.positionsValue).toBeCloseTo((10 * 120 + 5 * 220) / 1.1, 9);
+});
+
+test("marks a pie holding as unknown before its first broker snapshot", () => {
+  const positions: Position[] = [
+    {
+      entity: "personal",
+      symbol: "OTHER",
+      quantity: 1,
+      averagePrice: 100,
+      marketPrice: 100,
+      marketValue: 100,
+      currency: "EUR",
+      asOf: "2026-02-02",
+    },
+    {
+      entity: "personal",
+      symbol: "PIE",
+      quantity: 4,
+      averagePrice: 50,
+      marketPrice: 60,
+      marketValue: 240,
+      currency: "EUR",
+      asOf: "2026-02-02",
+    },
+  ];
+  const trades: Trade[] = [
+    {
+      id: "other",
+      entity: "personal",
+      date: "2026-01-02",
+      symbol: "OTHER",
+      side: "buy",
+      quantity: 1,
+      price: 100,
+      amount: 100,
+      currency: "EUR",
+      commission: 0,
+    },
+  ];
+  const bars: PriceBar[] = ["OTHER", "PIE"].flatMap((symbol) => [
+    { symbol, date: "2026-01-02", close: symbol === "PIE" ? 50 : 100, currency: "EUR" },
+    { symbol, date: "2026-02-02", close: symbol === "PIE" ? 60 : 100, currency: "EUR" },
+  ]);
+
+  const result = computePortfolioValueSeries(positions, trades, bars, "EUR", FX_RATES, {
+    today: "2026-02-02",
+  });
+
+  expect(result[0]?.positionsValue).toBe(300);
+  expect(result[0]?.holdingsUnknown).toEqual(["PIE"]);
+  expect(result.at(-1)?.positionsValue).toBe(340);
+  expect(result.at(-1)?.holdingsUnknown).toBeUndefined();
+});
+
+test("does not invent pre-snapshot history for an all-pie portfolio", () => {
+  const positions: Position[] = [
+    {
+      entity: "personal",
+      symbol: "PIE",
+      quantity: 4,
+      averagePrice: 50,
+      marketPrice: 60,
+      marketValue: 240,
+      currency: "EUR",
+      asOf: "2026-02-02",
+    },
+  ];
+  const bars: PriceBar[] = [
+    { symbol: "PIE", date: "2026-01-02", close: 50, currency: "EUR" },
+    { symbol: "PIE", date: "2026-02-02", close: 60, currency: "EUR" },
+  ];
+
+  const result = computePortfolioValueSeries(positions, [], bars, "EUR", FX_RATES, {
+    today: "2026-02-02",
+  });
+
+  expect(result).toHaveLength(1);
+  expect(result[0]).toMatchObject({ date: "2026-02-02", positionsValue: 240, value: 240 });
+  expect(result[0]?.holdingsUnknown).toBeUndefined();
+});
+
+test("starts at first account trade instead of earliest market quote", () => {
+  const positions: Position[] = [
+    {
+      entity: "personal",
+      symbol: "AAPL",
+      quantity: 1,
+      averagePrice: 100,
+      marketPrice: 110,
+      marketValue: 110,
+      currency: "EUR",
+      asOf: "2024-10-02",
+    },
+  ];
+  const trades: Trade[] = [
+    {
+      id: "buy",
+      entity: "personal",
+      date: "2024-10-01",
+      symbol: "AAPL",
+      side: "buy",
+      quantity: 1,
+      price: 100,
+      amount: 100,
+      currency: "EUR",
+      commission: 0,
+    },
+  ];
+  const bars: PriceBar[] = [
+    { symbol: "AAPL", date: "2000-01-03", close: 10, currency: "EUR" },
+    { symbol: "AAPL", date: "2024-10-01", close: 100, currency: "EUR" },
+    { symbol: "AAPL", date: "2024-10-02", close: 110, currency: "EUR" },
+  ];
+
+  const result = computePortfolioValueSeries(positions, trades, bars, "EUR", FX_RATES, {
+    today: "2024-10-02",
+  });
+
+  expect(result.map(({ date }) => date)).toEqual(["2024-10-01", "2024-10-02"]);
+  expect(result[0]?.positionsValue).toBe(100);
 });
 
 test("includes closed positions only while trade history says they were held", () => {
   const trades: Trade[] = [
-    { id: "buy", tenantId: "local", entity: "personal", date: "2026-01-02", symbol: "CLOSED", side: "buy", quantity: 2, price: 10, amount: 20, currency: "EUR", commission: 0 },
-    { id: "sell", tenantId: "local", entity: "personal", date: "2026-01-06", symbol: "CLOSED", side: "sell", quantity: 2, price: 12, amount: 24, currency: "EUR", commission: 0 },
+    {
+      id: "buy",
+      entity: "personal",
+      date: "2026-01-02",
+      symbol: "CLOSED",
+      side: "buy",
+      quantity: 2,
+      price: 10,
+      amount: 20,
+      currency: "EUR",
+      commission: 0,
+    },
+    {
+      id: "sell",
+      entity: "personal",
+      date: "2026-01-06",
+      symbol: "CLOSED",
+      side: "sell",
+      quantity: 2,
+      price: 12,
+      amount: 24,
+      currency: "EUR",
+      commission: 0,
+    },
   ];
-  const bars: PriceBar[] = ["2026-01-02", "2026-01-05", "2026-01-06"].map((date) => ({ tenantId: "local", symbol: "CLOSED", date, close: 10, currency: "EUR" }));
+  const bars: PriceBar[] = ["2026-01-02", "2026-01-05", "2026-01-06"].map((date) => ({
+    tenantId: "local",
+    symbol: "CLOSED",
+    date,
+    close: 10,
+    currency: "EUR",
+  }));
 
-  const result = computePortfolioValueSeries([], trades, bars, "EUR", FX_RATES, { today: "2026-01-06" });
+  const result = computePortfolioValueSeries([], trades, bars, "EUR", FX_RATES, {
+    today: "2026-01-06",
+  });
   expect(result.map(({ date, positionsValue }) => ({ date, positionsValue }))).toEqual([
     { date: "2026-01-02", positionsValue: 20 },
     { date: "2026-01-05", positionsValue: 20 },
@@ -39,35 +225,991 @@ test("includes closed positions only while trade history says they were held", (
 test("forward-fills five business days then marks held symbol unpriced", () => {
   const trades = TRADES.filter((trade) => trade.symbol === "AAPL");
   const bars = PRICE_BARS.filter((bar) => bar.symbol === "AAPL" && bar.date === "2026-01-05");
-  const result = computePortfolioValueSeries([], trades, bars, "EUR", FX_RATES, { today: "2026-01-13" });
+  const result = computePortfolioValueSeries([], trades, bars, "EUR", FX_RATES, {
+    today: "2026-01-13",
+  });
 
   expect(result.find(({ date }) => date === "2026-01-12")?.forwardFilled).toEqual(["AAPL"]);
-  expect(result.find(({ date }) => date === "2026-01-13")).toMatchObject({ positionsValue: null, value: null, unpriced: ["AAPL"], forwardFilled: [] });
+  expect(result.find(({ date }) => date === "2026-01-13")).toMatchObject({
+    positionsValue: null,
+    value: null,
+    unpriced: ["AAPL"],
+    forwardFilled: [],
+  });
+});
+
+test("bounds a stale holding by its last known value instead of leaving it unaccounted for", () => {
+  const trades = TRADES.filter((trade) => trade.symbol === "AAPL");
+  const bars = PRICE_BARS.filter((bar) => bar.symbol === "AAPL" && bar.date === "2026-01-05");
+  const result = computePortfolioValueSeries([], trades, bars, "EUR", FX_RATES, {
+    today: "2026-01-13",
+  });
+
+  const stale = result.find(({ date }) => date === "2026-01-13");
+  expect(stale?.unpriced).toEqual(["AAPL"]);
+  expect(stale?.unaccountedValue).toBeCloseTo(1000 / 1.05, 9);
+});
+
+test("leaves the date unbounded when a held symbol has never been priced", () => {
+  const trades: Trade[] = [
+    {
+      id: "buy",
+      entity: "personal",
+      date: "2026-01-02",
+      symbol: "GHOST",
+      side: "buy",
+      quantity: 1,
+      price: 10,
+      amount: 10,
+      currency: "EUR",
+      commission: 0,
+    },
+  ];
+  const result = computePortfolioValueSeries([], trades, [], "EUR", FX_RATES, {
+    today: "2026-01-02",
+  });
+
+  expect(result[0]).toMatchObject({ unpriced: ["GHOST"], unaccountedValue: null });
+});
+
+test("counts a forward-filled holding's value toward the unaccounted total", () => {
+  const trades = TRADES.filter((trade) => trade.symbol === "AAPL");
+  const bars: PriceBar[] = [
+    { symbol: "AAPL", date: "2026-01-05", close: 100, currency: "USD" },
+    { symbol: "AAPL", date: "2026-01-07", close: 101, currency: "USD" },
+  ];
+  const result = computePortfolioValueSeries([], trades, bars, "EUR", FX_RATES, {
+    today: "2026-01-08",
+  });
+
+  const point = result.find(({ date }) => date === "2026-01-08");
+  expect(point?.forwardFilled).toEqual(["AAPL"]);
+  expect(point?.value).toBeCloseTo(1010 / 1.05, 9);
+  expect(point?.unaccountedValue).toBeCloseTo(1010 / 1.05, 9);
+});
+
+test("a day the market was closed carries the last close as a real value", () => {
+  const trades = TRADES.filter((trade) => trade.symbol === "AAPL");
+  const bars: PriceBar[] = [
+    { symbol: "AAPL", date: "2026-01-05", close: 100, currency: "USD" },
+    { symbol: "AAPL", date: "2026-01-07", close: 101, currency: "USD" },
+  ];
+  const result = computePortfolioValueSeries([], trades, bars, "EUR", FX_RATES, {
+    today: "2026-01-08",
+  });
+
+  expect(result.find(({ date }) => date === "2026-01-06")).toMatchObject({
+    forwardFilled: [],
+    unpriced: [],
+  });
+  expect(result.find(({ date }) => date === "2026-01-08")?.forwardFilled).toEqual(["AAPL"]);
+});
+
+test("with no FX rate at all, foreign holdings go unpriced but EUR cash still values", () => {
+  const trades = TRADES.filter((trade) => trade.symbol === "AAPL");
+  const bars = PRICE_BARS.filter((bar) => bar.symbol === "AAPL");
+  const cashBalances: CashBalance[] = [
+    { entity: "personal", broker: "ibkr", currency: "EUR", amount: 150, asOf: "2026-01-02" },
+  ];
+  const result = computePortfolioValueSeries([], trades, bars, "EUR", undefined, {
+    cashBalances,
+    today: "2026-01-02",
+  });
+
+  expect(result.find(({ date }) => date === "2026-01-02")).toMatchObject({
+    positionsValue: null,
+    cashValue: 150,
+    value: 150,
+    unpriced: ["AAPL"],
+  });
 });
 
 test("walks cash anchors with deduplicated flows and dividends", () => {
-  const cashBalances: CashBalance[] = [{ tenantId: "local", entity: "personal", broker: "ibkr", currency: "EUR", amount: 150, asOf: "2026-01-06" }];
-  const cashFlows: CashFlow[] = [
-    { id: "deposit-1", brokerFlowId: "same", tenantId: "local", entity: "personal", broker: "ibkr", date: "2026-01-02", currency: "EUR", amount: 100, kind: "deposit" },
-    { id: "deposit-copy", brokerFlowId: "same", tenantId: "local", entity: "personal", broker: "ibkr", date: "2026-01-02", currency: "EUR", amount: 100, kind: "deposit" },
+  const cashBalances: CashBalance[] = [
+    { entity: "personal", broker: "ibkr", currency: "EUR", amount: 150, asOf: "2026-01-06" },
   ];
-  const dividends = [{ id: "dividend", tenantId: "local", entity: "personal", broker: "ibkr", date: "2026-01-05", symbol: "AAPL", amount: 50, currency: "EUR" }];
-  const result = computePortfolioValueSeries([], TRADES, PRICE_BARS, "EUR", FX_RATES, { cashBalances, cashFlows, dividends, today: "2026-01-06" });
+  const cashFlows: CashFlow[] = [
+    {
+      id: "deposit-1",
+      brokerFlowId: "same",
+      entity: "personal",
+      broker: "ibkr",
+      date: "2026-01-02",
+      currency: "EUR",
+      amount: 100,
+      kind: "deposit",
+    },
+    {
+      id: "deposit-copy",
+      brokerFlowId: "same",
+      entity: "personal",
+      broker: "ibkr",
+      date: "2026-01-02",
+      currency: "EUR",
+      amount: 100,
+      kind: "deposit",
+    },
+  ];
+  const dividends = [
+    {
+      id: "dividend",
+      tenantId: "local",
+      entity: "personal",
+      broker: "ibkr",
+      date: "2026-01-05",
+      symbol: "AAPL",
+      amount: 50,
+      currency: "EUR",
+    },
+  ];
+  const result = computePortfolioValueSeries([], TRADES, PRICE_BARS, "EUR", FX_RATES, {
+    cashBalances,
+    cashFlows,
+    dividends,
+    cashCoverage: [complete("ibkr", "2026-01-02", "cash-flows")],
+    today: "2026-01-06",
+  });
 
   expect(result.find(({ date }) => date === "2026-01-02")?.cashValue).toBe(100);
   expect(result.find(({ date }) => date === "2026-01-05")?.cashValue).toBe(150);
   expect(result.find(({ date }) => date === "2026-01-06")?.cashValue).toBe(150);
 });
 
+test("a cash flow with an unknown amount marks the leg unknown instead of crashing or guessing", () => {
+  const cashBalances: CashBalance[] = [
+    { entity: "personal", broker: "ibkr", currency: "EUR", amount: 9.54, asOf: "2026-01-01" },
+  ];
+  const cashFlows: CashFlow[] = [
+    {
+      id: "transfer",
+      entity: "personal",
+      broker: "ibkr",
+      date: "2026-01-02",
+      currency: "EUR",
+      amount: null,
+      kind: "other",
+    },
+  ];
+  const result = computePortfolioValueSeries([], [], [], "EUR", FX_RATES, {
+    cashBalances,
+    cashFlows,
+    today: "2026-01-05",
+  });
+
+  expect(result.find(({ date }) => date === "2026-01-01")).toMatchObject({
+    cashValue: 9.54,
+    cashUnknown: [],
+  });
+  expect(result.find(({ date }) => date === "2026-01-05")).toMatchObject({
+    cashValue: null,
+    cashUnknown: ["ibkr:EUR"],
+  });
+});
+
+test("a trade moves cash between the deposit and the broker balance", () => {
+  const trades: Trade[] = [
+    {
+      id: "buy",
+      entity: "personal",
+      broker: "ibkr",
+      date: "2026-01-05",
+      symbol: "AAPL",
+      side: "buy",
+      quantity: 10,
+      price: 100,
+      amount: 1000,
+      currency: "EUR",
+      commission: 1,
+    },
+  ];
+  const bars: PriceBar[] = [
+    { symbol: "AAPL", date: "2026-01-02", close: 100, currency: "EUR" },
+    { symbol: "AAPL", date: "2026-01-06", close: 100, currency: "EUR" },
+  ];
+  const cashBalances: CashBalance[] = [
+    { entity: "personal", broker: "ibkr", currency: "EUR", amount: 0, asOf: "2026-01-06" },
+  ];
+  const cashFlows: CashFlow[] = [
+    {
+      id: "deposit",
+      entity: "personal",
+      broker: "ibkr",
+      date: "2026-01-02",
+      currency: "EUR",
+      amount: 1001,
+      kind: "deposit",
+    },
+  ];
+  const result = computePortfolioValueSeries([], trades, bars, "EUR", FX_RATES, {
+    cashBalances,
+    cashFlows,
+    cashCoverage: [complete("ibkr", "2026-01-02", "trade-settlement")],
+    today: "2026-01-06",
+  });
+
+  expect(result.find(({ date }) => date === "2026-01-02")).toMatchObject({
+    cashValue: 1001,
+    value: 1001,
+  });
+  expect(result.find(({ date }) => date === "2026-01-06")).toMatchObject({
+    cashValue: 0,
+    value: 1000,
+  });
+});
+
+test("a single-wallet broker settles foreign trades and flows into its wallet", () => {
+  const trades: Trade[] = [
+    {
+      id: "buy",
+      entity: "personal",
+      broker: "trading212",
+      date: "2026-01-05",
+      symbol: "AAPL",
+      side: "buy",
+      quantity: 1,
+      price: 110,
+      amount: 110,
+      currency: "USD",
+      commission: 0,
+      settlement: { currency: "EUR", amount: -100.15 },
+    },
+  ];
+  const cashBalances: CashBalance[] = [
+    { entity: "personal", broker: "trading212", currency: "EUR", amount: 0, asOf: "2026-01-06" },
+  ];
+  const cashFlows: CashFlow[] = [
+    {
+      id: "deposit",
+      entity: "personal",
+      broker: "trading212",
+      date: "2026-01-02",
+      currency: "EUR",
+      amount: 99.15,
+      kind: "deposit",
+    },
+    {
+      id: "interest",
+      entity: "personal",
+      broker: "trading212",
+      date: "2026-01-06",
+      currency: "USD",
+      amount: 1.05,
+      kind: "interest",
+    },
+  ];
+  const result = computePortfolioValueSeries([], trades, PRICE_BARS, "EUR", FX_RATES, {
+    cashBalances,
+    cashFlows,
+    cashCoverage: [complete("trading212", "2026-01-02", "trade-settlement")],
+    today: "2026-01-06",
+  });
+
+  const opening = result.find(({ date }) => date === "2026-01-02");
+  expect(opening?.cashUnknown).toEqual([]);
+  expect(opening?.cashValue).toBeCloseTo(99.15, 9);
+});
+
+test("statements that the reported movements cannot reconcile are left unknown", () => {
+  /* 500 on the 2nd and 800 on the 6th with nothing between them saying where
+   * 300 came from. Walking forward from the first says 500, walking back from
+   * the second says 800, and the history is what is wrong. An estimate here
+   * would be picking one statement and ignoring the other. */
+  const declared: CashHistoryCoverage = {
+    entity: "personal",
+    broker: "trading212",
+    tradeCash: "trade-settlement",
+    status: "unknown",
+    reason: "window unproven",
+  };
+
+  expect(
+    cashSeries({
+      cashBalances: [eurCash(500, "2026-01-02"), eurCash(800, "2026-01-06")],
+      cashCoverage: [declared],
+      today: "2026-01-06",
+    }),
+  ).toEqual([
+    { date: "2026-01-02", cashValue: 500, cashUnknown: [], cashEstimated: [] },
+    { date: "2026-01-05", cashValue: null, cashUnknown: ["trading212:EUR"], cashEstimated: [] },
+    { date: "2026-01-06", cashValue: 800, cashUnknown: [], cashEstimated: [] },
+  ]);
+
+  /* Same two statements, now with the deposit that explains the difference.
+   * The gap reconciles, so the day between them can be stated. */
+  expect(
+    cashSeries({
+      cashBalances: [eurCash(500, "2026-01-02"), eurCash(800, "2026-01-06")],
+      cashFlows: [
+        {
+          id: "top-up",
+          entity: "personal",
+          broker: "trading212",
+          date: "2026-01-06",
+          currency: "EUR",
+          amount: 300,
+          kind: "deposit",
+        },
+      ],
+      cashCoverage: [declared],
+      today: "2026-01-06",
+    }),
+  ).toEqual([
+    { date: "2026-01-02", cashValue: 500, cashUnknown: [], cashEstimated: [] },
+    { date: "2026-01-05", cashValue: 500, cashUnknown: [], cashEstimated: ["trading212:EUR"] },
+    { date: "2026-01-06", cashValue: 800, cashUnknown: [], cashEstimated: [] },
+  ]);
+});
+
+test("a trade with no broker balance behind it names the wallet it cannot value", () => {
+  /* A sync that read orders but lost the account summary leaves trades with no
+   * statement to walk from. The leg exists because the trade settled somewhere,
+   * and having no anchor it can only be reported as unknown rather than
+   * quietly left out of the cash figure. */
+  const trades: Trade[] = [
+    {
+      id: "buy",
+      entity: "personal",
+      broker: "trading212",
+      date: "2026-01-05",
+      symbol: "X",
+      side: "buy",
+      quantity: 1,
+      price: 200,
+      amount: 200,
+      currency: "EUR",
+      commission: 0,
+    },
+  ];
+
+  const series = computePortfolioValueSeries([], trades, [], "EUR", FX_RATES, {
+    cashBalances: [],
+    cashCoverage: [
+      {
+        entity: "personal",
+        broker: "trading212",
+        tradeCash: "trade-settlement",
+        status: "unknown",
+        reason: "window unproven",
+      },
+    ],
+    today: "2026-01-06",
+  });
+
+  expect(series.at(-1)?.cashValue).toBeNull();
+  expect(series.at(-1)?.cashUnknown).toEqual(["trading212:EUR"]);
+  expect(series.at(-1)?.cashEstimated).toBeUndefined();
+});
+
+test("an unproven broker folds a foreign trade into the one wallet it anchors", () => {
+  /* Trading 212 anchors a single wallet, so a trade settling in another
+   * currency is money that left that wallet at the day's rate. The fold used
+   * to be reachable only through a proven window; now that trade cash is
+   * declared without one, this is the path an unproven account takes. */
+  const trades: Trade[] = [
+    {
+      id: "buy-usd",
+      entity: "personal",
+      broker: "trading212",
+      date: "2026-01-05",
+      symbol: "X",
+      side: "buy",
+      quantity: 1,
+      price: 100,
+      amount: 100,
+      currency: "USD",
+      commission: 0,
+      settlement: { currency: "USD", amount: -100 },
+    },
+  ];
+
+  const series = computePortfolioValueSeries([], trades, [], "EUR", FX_RATES, {
+    cashBalances: [eurCash(1000, "2026-01-02")],
+    cashCoverage: [
+      {
+        entity: "personal",
+        broker: "trading212",
+        tradeCash: "trade-settlement",
+        status: "unknown",
+        reason: "window unproven",
+      },
+    ],
+    today: "2026-01-06",
+  });
+
+  const after = series.find((entry) => entry.date === "2026-01-06");
+  // One wallet, so no second leg is reported and nothing is left unknown.
+  expect(after?.cashUnknown).toEqual([]);
+  expect(after?.cashEstimated).toEqual(["trading212:EUR"]);
+  // 100 USD left the wallet, converted at the rate for the trade's own date.
+  expect(after?.cashValue).toBeLessThan(1000);
+  expect(after?.cashValue).toBeGreaterThan(800);
+});
+
+test("a coverage row stored before tradeCash existed is settled by the movements", () => {
+  /* This shipped. Rows written before the field existed read exactly like a
+   * broker that named no trade-cash stream, so every trade was dropped and the
+   * walk summed deposits without the purchases they funded. It put the wallet
+   * 16,627 EUR overdrawn on the day the account opened and turned a real
+   * return of about 5 percent into 74.83 percent. */
+  const stale = {
+    entity: "personal",
+    broker: "trading212",
+    status: "unknown",
+    reason: "written before tradeCash existed",
+  } as unknown as CashHistoryCoverage;
+
+  const trades: Trade[] = [
+    {
+      id: "buy",
+      entity: "personal",
+      broker: "trading212",
+      date: "2026-01-05",
+      symbol: "X",
+      side: "buy",
+      quantity: 1,
+      price: 900,
+      amount: 900,
+      currency: "EUR",
+      commission: 0,
+      settlement: { currency: "EUR", amount: -900 },
+    },
+  ];
+  const deposit: CashFlow = {
+    id: "deposit",
+    entity: "personal",
+    broker: "trading212",
+    date: "2026-01-02",
+    currency: "EUR",
+    amount: 1000,
+    kind: "deposit",
+  };
+
+  const series = computePortfolioValueSeries([], trades, [], "EUR", FX_RATES, {
+    cashBalances: [eurCash(100, "2026-01-06")],
+    cashFlows: [deposit],
+    cashCoverage: [stale],
+    today: "2026-01-06",
+  });
+
+  /* Counting the purchase, 1000 of deposits less 900 spent comes back to an
+   * empty wallet. Not counting it reads -900 on the day the account opened.
+   * One closes and one does not, so the movements settle what the stored row
+   * could not say, and the opening day is the deposit rather than a debt. */
+  expect(series.every((point) => (point.cashValue ?? 0) >= 0)).toBe(true);
+  expect(series[0]?.cashValue).toBe(1000);
+  expect(series[0]?.cashUnknown).toEqual([]);
+  expect(series[0]?.cashEstimated).toEqual(["trading212:EUR"]);
+});
+
+test("a history whose movements do not close on an empty wallet is refused", () => {
+  /* The same arithmetic with the stream named but the purchases never
+   * reported: the funding is in the history and the spending is not, so the
+   * total does not come back to nothing on the day before the first deposit. */
+  const declared: CashHistoryCoverage = {
+    entity: "personal",
+    broker: "trading212",
+    tradeCash: "cash-flows",
+    status: "unknown",
+    reason: "window unproven",
+  };
+
+  const series = computePortfolioValueSeries([], [], [], "EUR", FX_RATES, {
+    cashBalances: [eurCash(100, "2026-01-06")],
+    cashFlows: [
+      {
+        id: "deposit",
+        entity: "personal",
+        broker: "trading212",
+        date: "2026-01-02",
+        currency: "EUR",
+        amount: 1000,
+        kind: "deposit",
+      },
+    ],
+    cashCoverage: [declared],
+    today: "2026-01-06",
+  });
+
+  /* The walk back to the deposit is refused. Nothing was reported after it,
+   * so the balance itself is the estimate, and the shortfall says how much of
+   * the history it may be missing. */
+  expect(series[0]).toMatchObject({
+    cashValue: 100,
+    cashUnknown: [],
+    cashEstimated: ["trading212:EUR"],
+    cashShortfall: { "trading212:EUR": -900 },
+  });
+
+  /* Add the withdrawal that accounts for the difference and the history
+   * closes, so the same dates can be stated. */
+  const closed = computePortfolioValueSeries([], [], [], "EUR", FX_RATES, {
+    cashBalances: [eurCash(100, "2026-01-06")],
+    cashFlows: [
+      {
+        id: "deposit",
+        entity: "personal",
+        broker: "trading212",
+        date: "2026-01-02",
+        currency: "EUR",
+        amount: 1000,
+        kind: "deposit",
+      },
+      {
+        id: "withdrawal",
+        entity: "personal",
+        broker: "trading212",
+        date: "2026-01-05",
+        currency: "EUR",
+        amount: -900,
+        kind: "withdrawal",
+      },
+    ],
+    cashCoverage: [declared],
+    today: "2026-01-06",
+  });
+
+  expect(closed[0]?.cashValue).toBe(1000);
+  expect(closed[0]?.cashEstimated).toEqual(["trading212:EUR"]);
+});
+
+test("rounding across many movements is tolerated, a missing one is not", () => {
+  const declared: CashHistoryCoverage = {
+    entity: "personal",
+    broker: "trading212",
+    tradeCash: "cash-flows",
+    status: "unknown",
+    reason: "window unproven",
+  };
+  const flows = (count: number): CashFlow[] =>
+    Array.from({ length: count }, (_, index) => ({
+      id: `flow-${index}`,
+      entity: "personal",
+      broker: "trading212",
+      date: "2026-01-02",
+      currency: "EUR",
+      amount: 10,
+      kind: "deposit" as const,
+    }));
+
+  /* 200 movements of 10 is 2000, and the balance is a euro under it. That is
+   * half a cent per movement, which is what rounding comes to. */
+  const drifted = computePortfolioValueSeries([], [], [], "EUR", FX_RATES, {
+    cashBalances: [eurCash(1999, "2026-01-06")],
+    cashFlows: flows(200),
+    cashCoverage: [declared],
+    today: "2026-01-06",
+  });
+  expect(drifted[0]?.cashEstimated).toEqual(["trading212:EUR"]);
+  expect(drifted[0]?.cashShortfall).toBeUndefined();
+
+  /* The same 200 movements with a 500 withdrawal never reported. Far past what
+   * rounding could account for, however many rows there are. */
+  const missing = computePortfolioValueSeries([], [], [], "EUR", FX_RATES, {
+    cashBalances: [eurCash(1500, "2026-01-06")],
+    cashFlows: flows(200),
+    cashCoverage: [declared],
+    today: "2026-01-06",
+  });
+  expect(missing[0]?.cashValue).toBe(1500);
+  expect(missing[0]?.cashShortfall).toEqual({ "trading212:EUR": -500 });
+});
+
+test("names how far a history is from closing, and on which side", () => {
+  const declared: CashHistoryCoverage = {
+    entity: "personal",
+    broker: "trading212",
+    tradeCash: "cash-flows",
+    status: "unknown",
+    reason: "window unproven",
+  };
+  const deposit = (amount: number): CashFlow => ({
+    id: `flow-${amount}`,
+    entity: "personal",
+    broker: "trading212",
+    date: "2026-01-02",
+    currency: "EUR",
+    amount,
+    kind: amount > 0 ? "deposit" : "withdrawal",
+  });
+
+  /* 1000 went in and 100 is left, with nothing recorded taking 900 out. The
+   * funding is in the history and the spending is not. */
+  const spendingMissing = computePortfolioValueSeries([], [], [], "EUR", FX_RATES, {
+    cashBalances: [eurCash(100, "2026-01-06")],
+    cashFlows: [deposit(1000)],
+    cashCoverage: [declared],
+    today: "2026-01-06",
+  });
+  expect(spendingMissing[0]?.cashShortfall).toEqual({ "trading212:EUR": -900 });
+
+  /* 100 went out and 1000 is left, with nothing recorded putting it there. */
+  const fundingMissing = computePortfolioValueSeries([], [], [], "EUR", FX_RATES, {
+    cashBalances: [eurCash(1000, "2026-01-06")],
+    cashFlows: [deposit(-100)],
+    cashCoverage: [declared],
+    today: "2026-01-06",
+  });
+  expect(fundingMissing[0]?.cashShortfall).toEqual({ "trading212:EUR": 1100 });
+
+  /* A history that closes carries no shortfall at all. */
+  const closed = computePortfolioValueSeries([], [], [], "EUR", FX_RATES, {
+    cashBalances: [eurCash(1000, "2026-01-06")],
+    cashFlows: [deposit(1000)],
+    cashCoverage: [declared],
+    today: "2026-01-06",
+  });
+  expect(closed[0]?.cashShortfall).toBeUndefined();
+  expect(closed[0]?.cashEstimated).toEqual(["trading212:EUR"]);
+});
+
 test("keeps unreachable and unconvertible cash legs unknown", () => {
   const cashBalances: CashBalance[] = [
-    { tenantId: "local", entity: "personal", broker: "ibkr", currency: "EUR", amount: 100, asOf: "2026-01-06" },
-    { tenantId: "local", entity: "personal", broker: "trading212", currency: "GBP", amount: 50, asOf: "2026-01-02" },
+    { entity: "personal", broker: "ibkr", currency: "EUR", amount: 100, asOf: "2026-01-06" },
+    { entity: "personal", broker: "trading212", currency: "GBP", amount: 50, asOf: "2026-01-02" },
   ];
-  const cashFlows: CashFlow[] = [{ id: "late", tenantId: "local", entity: "personal", broker: "ibkr", date: "2026-01-05", currency: "EUR", amount: 100, kind: "deposit" }];
-  const result = computePortfolioValueSeries([], TRADES, PRICE_BARS, "EUR", FX_RATES, { cashBalances, cashFlows, today: "2026-01-02" });
+  const cashFlows: CashFlow[] = [
+    {
+      id: "late",
+      entity: "personal",
+      broker: "ibkr",
+      date: "2026-01-05",
+      currency: "EUR",
+      amount: 100,
+      kind: "deposit",
+    },
+  ];
+  const result = computePortfolioValueSeries([], TRADES, PRICE_BARS, "EUR", FX_RATES, {
+    cashBalances,
+    cashFlows,
+    today: "2026-01-02",
+  });
 
   expect(result[0]).toMatchObject({ cashValue: null, cashUnknown: ["ibkr:EUR", "trading212:GBP"] });
+});
+
+function thousandEuroAccount(broker: string) {
+  const deposit: CashFlow = {
+    id: "deposit",
+    entity: "personal",
+    broker,
+    date: "2026-01-02",
+    currency: "EUR",
+    amount: 1000,
+    kind: "deposit",
+  };
+  const purchase: Trade = {
+    id: "buy",
+    entity: "personal",
+    broker,
+    date: "2026-01-05",
+    symbol: "X",
+    side: "buy",
+    quantity: 1,
+    price: 200,
+    amount: 200,
+    currency: "EUR",
+    commission: 0,
+    settlement: { currency: "EUR", amount: -200 },
+  };
+  const purchaseCash: CashFlow = {
+    id: "purchase-cash",
+    entity: "personal",
+    broker,
+    date: "2026-01-05",
+    currency: "EUR",
+    amount: -200,
+    kind: "other",
+  };
+  const holding: Position = {
+    entity: "personal",
+    broker,
+    symbol: "X",
+    quantity: 1,
+    averagePrice: 200,
+    marketPrice: 200,
+    marketValue: 200,
+    currency: "EUR",
+    asOf: "2026-01-06",
+  };
+  const bars: PriceBar[] = ["2026-01-02", "2026-01-05", "2026-01-06"].map((date) => ({
+    symbol: "X",
+    date,
+    close: 200,
+    currency: "EUR",
+  }));
+  const closingCash: CashBalance = {
+    entity: "personal",
+    broker,
+    currency: "EUR",
+    amount: 800,
+    asOf: "2026-01-06",
+  };
+  const series = (cashFlows: CashFlow[], cashCoverage: CashHistoryCoverage[]) =>
+    computePortfolioValueSeries([holding], [purchase], bars, "EUR", FX_RATES, {
+      cashBalances: [closingCash],
+      cashFlows,
+      cashCoverage,
+      today: "2026-01-06",
+    }).map(({ date, value, cashUnknown, cashEstimated }) => ({
+      date,
+      value,
+      cashUnknown,
+      cashEstimated: cashEstimated ?? [],
+    }));
+  return { deposit, purchaseCash, series };
+}
+
+test("settles a purchase once from the trade when the broker proves its settlement", () => {
+  const account = thousandEuroAccount("trading212");
+
+  expect(
+    account.series([account.deposit], [complete("trading212", "2026-01-02", "trade-settlement")]),
+  ).toEqual([
+    { date: "2026-01-02", value: 1000, cashUnknown: [], cashEstimated: [] },
+    { date: "2026-01-05", value: 1000, cashUnknown: [], cashEstimated: [] },
+    { date: "2026-01-06", value: 1000, cashUnknown: [], cashEstimated: [] },
+  ]);
+});
+
+test("settles a purchase once from the ledger row when the broker books trade cash", () => {
+  const account = thousandEuroAccount("ibkr");
+
+  expect(
+    account.series(
+      [account.deposit, account.purchaseCash],
+      [complete("ibkr", "2026-01-02", "cash-flows")],
+    ),
+  ).toEqual([
+    { date: "2026-01-02", value: 1000, cashUnknown: [], cashEstimated: [] },
+    { date: "2026-01-05", value: 1000, cashUnknown: [], cashEstimated: [] },
+    { date: "2026-01-06", value: 1000, cashUnknown: [], cashEstimated: [] },
+  ]);
+});
+
+test("with no coverage the movements settle which stream carries trade cash", () => {
+  /* Nothing says whether this broker books trade cash in its ledger or on the
+   * trade, so both readings are totalled. Counting the purchase closes the
+   * wallet; leaving it out leaves 200 unaccounted for. The account held 1000
+   * throughout, and saying 0 and 200 for the first two days understated a
+   * funded account by the whole of its cash. */
+  const account = thousandEuroAccount("trading212");
+
+  expect(account.series([account.deposit], [])).toEqual([
+    { date: "2026-01-02", value: 1000, cashUnknown: [], cashEstimated: ["trading212:EUR"] },
+    { date: "2026-01-05", value: 1000, cashUnknown: [], cashEstimated: ["trading212:EUR"] },
+    { date: "2026-01-06", value: 1000, cashUnknown: [], cashEstimated: [] },
+  ]);
+});
+
+test("an unproven window still values cash from the movements the broker reported", () => {
+  /* The window is unproven, but the broker named its trade-cash stream, so
+   * every movement in hand is accounted for and the walk back from the closing
+   * statement lands on the deposit. The account held 1000 throughout: 1000 in
+   * cash, then 800 in cash beside a 200 holding. Reporting 0 and 200 for the
+   * first two days, as refusing the walk did, understated a funded account by
+   * the whole of its cash. */
+  const account = thousandEuroAccount("trading212");
+
+  expect(
+    account.series(
+      [account.deposit],
+      [
+        {
+          entity: "personal",
+          broker: "trading212",
+          tradeCash: "trade-settlement",
+          status: "unknown",
+          reason: "trade settlement unverified",
+        },
+      ],
+    ),
+  ).toEqual([
+    { date: "2026-01-02", value: 1000, cashUnknown: [], cashEstimated: ["trading212:EUR"] },
+    { date: "2026-01-05", value: 1000, cashUnknown: [], cashEstimated: ["trading212:EUR"] },
+    { date: "2026-01-06", value: 1000, cashUnknown: [], cashEstimated: [] },
+  ]);
+});
+
+test("cash before a proven window is estimated from the movements around it", () => {
+  const account = thousandEuroAccount("ibkr");
+
+  expect(
+    account.series(
+      [account.deposit, account.purchaseCash],
+      [complete("ibkr", "2026-01-05", "cash-flows")],
+    ),
+  ).toEqual([
+    { date: "2026-01-02", value: 1000, cashUnknown: [], cashEstimated: ["ibkr:EUR"] },
+    { date: "2026-01-05", value: 1000, cashUnknown: [], cashEstimated: [] },
+    { date: "2026-01-06", value: 1000, cashUnknown: [], cashEstimated: [] },
+  ]);
+});
+
+function eurCash(amount: number, asOf: string): CashBalance {
+  return { entity: "personal", broker: "trading212", currency: "EUR", amount, asOf };
+}
+
+const cashSeries = (options: Parameters<typeof computePortfolioValueSeries>[5]) =>
+  computePortfolioValueSeries([], [], [], "EUR", FX_RATES, options).map(
+    ({ date, cashValue, cashUnknown, cashEstimated }) => ({
+      date,
+      cashValue,
+      cashUnknown,
+      cashEstimated: cashEstimated ?? [],
+    }),
+  );
+
+test("the latest broker balance carries to dates after it when history is unknown", () => {
+  expect(
+    cashSeries({
+      cashBalances: [eurCash(500, "2026-01-02"), eurCash(800, "2026-01-06")],
+      today: "2026-01-08",
+    }),
+  ).toEqual([
+    { date: "2026-01-02", cashValue: 500, cashUnknown: [], cashEstimated: [] },
+    { date: "2026-01-05", cashValue: null, cashUnknown: ["trading212:EUR"], cashEstimated: [] },
+    { date: "2026-01-06", cashValue: 800, cashUnknown: [], cashEstimated: [] },
+    { date: "2026-01-07", cashValue: 800, cashUnknown: [], cashEstimated: [] },
+    { date: "2026-01-08", cashValue: 800, cashUnknown: [], cashEstimated: [] },
+  ]);
+});
+
+test("a weekend broker balance carries to the next business day", () => {
+  expect(
+    cashSeries({
+      cashBalances: [eurCash(700, "2026-01-08"), eurCash(800, "2026-01-10")],
+      today: "2026-01-13",
+    }),
+  ).toEqual([
+    { date: "2026-01-08", cashValue: 700, cashUnknown: [], cashEstimated: [] },
+    { date: "2026-01-09", cashValue: null, cashUnknown: ["trading212:EUR"], cashEstimated: [] },
+    { date: "2026-01-12", cashValue: 800, cashUnknown: [], cashEstimated: [] },
+    { date: "2026-01-13", cashValue: 800, cashUnknown: [], cashEstimated: [] },
+  ]);
+});
+
+const ibkrFlow = (id: string, date: string, amount: number): CashFlow => ({
+  id,
+  entity: "personal",
+  broker: "ibkr",
+  date,
+  currency: "EUR",
+  amount,
+  kind: amount > 0 ? "deposit" : "other",
+});
+
+test("a flow after a proven window's end is walked onto the last proven balance", () => {
+  expect(
+    cashSeries({
+      cashBalances: [{ ...eurCash(800, "2026-01-05"), broker: "ibkr" }],
+      cashFlows: [
+        ibkrFlow("deposit", "2026-01-02", 1000),
+        ibkrFlow("purchase-cash", "2026-01-05", -200),
+        ibkrFlow("after-statement", "2026-01-07", -50),
+      ],
+      cashCoverage: [complete("ibkr", "2026-01-02", "cash-flows", "2026-01-05")],
+      today: "2026-01-07",
+    }),
+  ).toEqual([
+    { date: "2026-01-02", cashValue: 1000, cashUnknown: [], cashEstimated: [] },
+    { date: "2026-01-05", cashValue: 800, cashUnknown: [], cashEstimated: [] },
+    { date: "2026-01-06", cashValue: 800, cashUnknown: [], cashEstimated: [] },
+    { date: "2026-01-07", cashValue: 750, cashUnknown: [], cashEstimated: ["ibkr:EUR"] },
+  ]);
+});
+
+test.each([
+  [
+    "a purchase",
+    {
+      trades: [
+        {
+          id: "buy",
+          entity: "personal",
+          broker: "trading212",
+          date: "2026-01-05",
+          symbol: "X",
+          side: "buy",
+          quantity: 1,
+          price: 200,
+          amount: 200,
+          currency: "EUR",
+          commission: 0,
+        },
+      ],
+      cashFlows: [],
+    },
+  ],
+  [
+    "a withdrawal",
+    {
+      trades: [],
+      cashFlows: [
+        {
+          id: "withdrawal",
+          entity: "personal",
+          broker: "trading212",
+          date: "2026-01-05",
+          currency: "EUR",
+          amount: -200,
+          kind: "withdrawal",
+        },
+      ],
+    },
+  ],
+] satisfies [string, { trades: Trade[]; cashFlows: CashFlow[] }][])(
+  "the latest balance is walked across %s after it when history is unknown",
+  (_, { trades, cashFlows }) => {
+    const bars: PriceBar[] = ["2026-01-02", "2026-01-05", "2026-01-06"].map((date) => ({
+      symbol: "X",
+      date,
+      close: 200,
+      currency: "EUR",
+    }));
+    const series = computePortfolioValueSeries([], trades, bars, "EUR", FX_RATES, {
+      cashBalances: [eurCash(1000, "2026-01-02")],
+      cashFlows,
+      cashCoverage: [
+        {
+          entity: "personal",
+          broker: "trading212",
+          tradeCash: "trade-settlement",
+          status: "unknown",
+          reason: "unverified",
+        },
+      ],
+      today: "2026-01-06",
+    });
+
+    expect(
+      series.map(({ date, cashValue, cashUnknown, cashEstimated }) => ({
+        date,
+        cashValue,
+        cashUnknown,
+        cashEstimated: cashEstimated ?? [],
+      })),
+    ).toEqual([
+      { date: "2026-01-02", cashValue: 1000, cashUnknown: [], cashEstimated: [] },
+      { date: "2026-01-05", cashValue: 800, cashUnknown: [], cashEstimated: ["trading212:EUR"] },
+      { date: "2026-01-06", cashValue: 800, cashUnknown: [], cashEstimated: ["trading212:EUR"] },
+    ]);
+  },
+);
+
+test("the balance walked to a window's end carries past an earlier statement", () => {
+  expect(
+    cashSeries({
+      cashBalances: [{ ...eurCash(1000, "2026-01-02"), broker: "ibkr" }],
+      cashFlows: [ibkrFlow("purchase-cash", "2026-01-05", -200)],
+      cashCoverage: [complete("ibkr", "2026-01-02", "cash-flows", "2026-01-05")],
+      today: "2026-01-07",
+    }),
+  ).toEqual([
+    { date: "2026-01-02", cashValue: 1000, cashUnknown: [], cashEstimated: [] },
+    { date: "2026-01-05", cashValue: 800, cashUnknown: [], cashEstimated: [] },
+    { date: "2026-01-06", cashValue: 800, cashUnknown: [], cashEstimated: [] },
+    { date: "2026-01-07", cashValue: 800, cashUnknown: [], cashEstimated: [] },
+  ]);
 });
 
 test.each([
@@ -78,5 +1220,252 @@ test.each([
   ["All", "0000-01-01"],
 ] as const)("filters %s from latest data date", (range, start) => {
   const points = [point("2025-01-01", 1), point("2026-01-01", 2), point("2026-02-02", 3)];
-  expect(filterPortfolioValueRange(points, range).map(({ date }) => date)).toEqual(points.filter(({ date }) => date >= start).map(({ date }) => date));
+  expect(filterPortfolioValueRange(points, range).map(({ date }) => date)).toEqual(
+    points.filter(({ date }) => date >= start).map(({ date }) => date),
+  );
+});
+
+test.each([
+  ["2026-03-31", "1M", "2026-02-28"],
+  ["2026-01-31", "1M", "2025-12-31"],
+  ["2026-05-31", "6M", "2025-11-30"],
+  ["2024-03-31", "1Y", "2023-03-31"],
+  ["2024-02-29", "1Y", "2023-02-28"],
+] as const)("clamps %s minus %s to %s", (latest, range, expectedStart) => {
+  const points = [point("2000-01-01", 1), point(latest, 2)];
+  expect(filterPortfolioValueRange(points, range).map(({ date }) => date)).toEqual([latest]);
+  // The start date is observable through the filter boundary: a point placed
+  // on the expected start must be kept, and one day earlier dropped.
+  const boundary = [
+    point("1999-01-01", 1),
+    point(expectedStart, 2),
+    point(latest, 3),
+  ];
+  expect(filterPortfolioValueRange(boundary, range).map(({ date }) => date)).toEqual([
+    expectedStart,
+    latest,
+  ]);
+});
+
+/* Live account, 2026-10-04: a Sunday sync dated the only Trading 212 balance
+ * after the last market day, with interest and a card payment booked in
+ * between, and a history ~7,900 EUR short of closing. Every point of the
+ * chart, the latest included, read as cash unknown. */
+test("a balance is walked back through recent movements until the wallet would be overdrawn", () => {
+  const declared: CashHistoryCoverage = {
+    entity: "personal",
+    broker: "trading212",
+    tradeCash: "trade-settlement",
+    status: "unknown",
+    reason: "window unproven",
+  };
+  const flow = (id: string, date: string, amount: number) => ({
+    id,
+    entity: "personal",
+    broker: "trading212",
+    date,
+    currency: "EUR",
+    amount,
+    kind: amount > 0 ? ("deposit" as const) : ("withdrawal" as const),
+  });
+
+  const series = computePortfolioValueSeries([], [], [], "EUR", FX_RATES, {
+    cashBalances: [eurCash(150, "2026-01-07")],
+    cashFlows: [
+      flow("fee", "2026-01-02", -5),
+      flow("deposit", "2026-01-05", 500),
+      flow("card", "2026-01-06", -20),
+    ],
+    cashCoverage: [declared],
+    today: "2026-01-07",
+  });
+  const on = (date: string) => series.find((point) => point.date === date);
+
+  expect(on("2026-01-06")).toMatchObject({
+    cashValue: 150,
+    cashUnknown: [],
+    cashEstimated: ["trading212:EUR"],
+  });
+  expect(on("2026-01-05")).toMatchObject({ cashValue: 170, cashEstimated: ["trading212:EUR"] });
+  /* Before the deposit the wallet would hold -330: a movement is missing. */
+  expect(on("2026-01-02")).toMatchObject({ cashValue: null, cashUnknown: ["trading212:EUR"] });
+});
+
+const proven = (
+  from: string,
+  to: string,
+  quantityProven = true,
+  provenFrom = from,
+): CashHistoryCoverage => ({
+  entity: "personal",
+  broker: "ibkr",
+  status: "complete" as const,
+  from,
+  to,
+  tradeCash: "cash-flows" as const,
+  ...(quantityProven ? { quantityProvenFrom: provenFrom } : {}),
+});
+
+const vusa = (quantity = 93, asOf = "2026-10-02"): Position => ({
+  entity: "personal",
+  broker: "ibkr",
+  symbol: "VUSA",
+  quantity,
+  averagePrice: 100,
+  marketPrice: 100,
+  marketValue: quantity * 100,
+  currency: "EUR",
+  asOf,
+});
+
+const vusaTrade = (side: "buy" | "sell", quantity: number, date: string): Trade => ({
+  id: `${side}-${date}`,
+  entity: "personal",
+  broker: "ibkr",
+  date,
+  symbol: "VUSA",
+  side,
+  quantity,
+  price: 100,
+  amount: quantity * 100,
+  currency: "EUR",
+  commission: 0,
+});
+
+const vusaBars = (): PriceBar[] =>
+  businessDays("2025-09-29", "2026-10-05").map((date) => ({
+    symbol: "VUSA",
+    date,
+    close: 100,
+    currency: "EUR",
+  }));
+
+function businessDays(from: string, to: string): string[] {
+  const days: string[] = [];
+  for (
+    let cursor = new Date(`${from}T00:00:00Z`);
+    cursor.toISOString().slice(0, 10) <= to;
+    cursor.setUTCDate(cursor.getUTCDate() + 1)
+  ) {
+    if (cursor.getUTCDay() !== 0 && cursor.getUTCDay() !== 6)
+      days.push(cursor.toISOString().slice(0, 10));
+  }
+  return days;
+}
+
+const series = (
+  trades: Trade[],
+  cashCoverage: CashHistoryCoverage[],
+  bars: PriceBar[] = vusaBars(),
+) =>
+  computePortfolioValueSeries([vusa()], trades, bars, "EUR", FX_RATES, {
+    today: "2026-10-05",
+    cashCoverage,
+    cashFlows: [
+      {
+        id: "early-deposit",
+        entity: "personal",
+        broker: "ibkr",
+        date: "2025-09-29",
+        currency: "EUR",
+        amount: 1,
+        kind: "deposit",
+      },
+    ],
+  });
+
+test("a holding is known across the broker's proven trade window with no trades in it", () => {
+  const result = series([], [proven("2025-10-02", "2026-10-02")]);
+
+  for (const point of result.filter(({ date }) => date >= "2025-10-02" && date <= "2026-10-02")) {
+    expect(point.holdingsUnknown, point.date).toBeUndefined();
+    expect(point.positionsValue, point.date).toBe(9300);
+    expect(point.unaccountedValue, point.date).toBeUndefined();
+  }
+  const before = result.filter(({ date }) => date < "2025-10-02");
+  expect(before.length).toBeGreaterThan(0);
+  for (const point of before) expect(point.holdingsUnknown, point.date).toEqual(["VUSA"]);
+});
+
+test("walks a buy inside the proven window back from the anchor", () => {
+  const result = series([vusaTrade("buy", 10, "2026-03-02")], [proven("2025-10-02", "2026-10-02")]);
+
+  for (const point of result.filter(({ date }) => date >= "2025-10-02" && date <= "2026-10-02")) {
+    expect(point.holdingsUnknown, point.date).toBeUndefined();
+    expect(point.positionsValue, point.date).toBe(point.date < "2026-03-02" ? 8300 : 9300);
+  }
+});
+
+test("leaves the holding unknown before its anchor when no trade window is proven", () => {
+  for (const coverage of [[], [proven("2025-10-02", "2026-10-02", false)]]) {
+    const result = series([], coverage);
+    for (const point of result.filter(({ date }) => date < "2026-10-02"))
+      expect(point.holdingsUnknown, point.date).toEqual(["VUSA"]);
+    expect(result.find(({ date }) => date === "2026-10-02")?.holdingsUnknown).toBeUndefined();
+  }
+});
+
+test("keeps a date unknown when the derived quantity would be negative", () => {
+  const result = series(
+    [vusaTrade("buy", 100, "2026-03-02")],
+    [proven("2025-10-02", "2026-10-02")],
+  );
+
+  expect(result.find(({ date }) => date === "2026-02-27")?.holdingsUnknown).toEqual(["VUSA"]);
+  expect(result.find(({ date }) => date === "2026-03-02")?.holdingsUnknown).toBeUndefined();
+});
+
+test("a proven window that ends before the anchor does not vouch for the gap", () => {
+  const result = series([], [proven("2025-10-02", "2026-09-01")]);
+
+  expect(result.find(({ date }) => date === "2026-01-05")?.holdingsUnknown).toEqual(["VUSA"]);
+});
+
+test("a sell inside the proven window: before it the holding was anchor plus sold", () => {
+  const result = series(
+    [vusaTrade("sell", 10, "2026-03-02")],
+    [proven("2025-10-02", "2026-10-02")],
+  );
+
+  for (const point of result.filter(({ date }) => date >= "2025-10-02" && date <= "2026-10-02")) {
+    expect(point.holdingsUnknown, point.date).toBeUndefined();
+    expect(point.positionsValue, point.date).toBe(point.date < "2026-03-02" ? 10300 : 9300);
+  }
+});
+
+test("a trade on the first proven day shows its post-trade quantity that day", () => {
+  const result = series([vusaTrade("buy", 10, "2025-10-02")], [proven("2025-10-02", "2026-10-02")]);
+
+  /* Events dated d count on d; the day before the window stays unknown. */
+  expect(result.find(({ date }) => date === "2025-10-02")).toMatchObject({ positionsValue: 9300 });
+  expect(result.find(({ date }) => date === "2025-10-02")?.holdingsUnknown).toBeUndefined();
+  expect(result.find(({ date }) => date === "2025-10-01")?.holdingsUnknown).toEqual(["VUSA"]);
+});
+
+test("the proof starts at quantityProvenFrom, not at the cash coverage start", () => {
+  const coverage = proven("2024-01-01", "2026-10-02", true, "2025-10-02");
+  const result = series([], [coverage]);
+
+  expect(result.find(({ date }) => date === "2025-10-01")?.holdingsUnknown).toEqual(["VUSA"]);
+  expect(result.find(({ date }) => date === "2025-10-02")?.holdingsUnknown).toBeUndefined();
+});
+
+test("a second anchor from a backfill: the nearest anchor still walks within the proof", () => {
+  const result = computePortfolioValueSeries(
+    [vusa(93, "2026-10-02"), vusa(80, "2026-03-02")],
+    [vusaTrade("buy", 13, "2026-06-01")],
+    vusaBars(),
+    "EUR",
+    FX_RATES,
+    {
+      today: "2026-10-05",
+      cashCoverage: [proven("2025-10-02", "2026-10-02")],
+      cashFlows: [],
+    },
+  );
+
+  for (const point of result.filter(({ date }) => date >= "2025-10-02" && date <= "2026-10-02")) {
+    expect(point.holdingsUnknown, point.date).toBeUndefined();
+    expect(point.positionsValue, point.date).toBe(point.date < "2026-06-01" ? 8000 : 9300);
+  }
 });

@@ -1,35 +1,151 @@
-/* LaVega design-system tokens. Warm editorial palette (EB Garamond headings +
- * Inter body — self-hosted via @fontsource in main.tsx). The app now sits as a
- * single floating, rounded "frame" on a soft gutter, with generously rounded
- * white cards, soft diffuse shadows and a solid dark active nav pill — the look
- * borrowed from the reference dashboard, our fonts + warm accents kept.
- * Everything references these variables, so the whole theme lives here. */
-:root {
-  /* Color — light, warm, editorial */
-  --gutter: #d8d3c9; /* soft warm-grey frame the app floats on */
-  --bg: #f7f5f0; /* app surface inside the frame */
-  --surface: #ffffff; /* raised cards */
-  --surface-2: #f1eee7; /* nested rows / inputs */
-  --ink: #1a1a17; /* near-black text + active nav pill */
-  --ink-soft: #33322d; /* pill gradient bottom */
-  --on-ink: #f7f5f0; /* text/icons on the dark pill */
-  --muted: #6b6961; /* warm grey */
-  --line: #e6e2d9; /* hairline border */
-  --accent: #1f4e6b; /* aegean deep blue */
-  --accent-soft: rgba(31, 78, 107, 0.1);
-  --pos: #4e7a3a; /* money in — natural green */
-  --neg: #b0442e; /* money out / debt — terracotta */
-  --warn: #b0781e; /* attention — amber */
-  /* Data-viz accents (charts, category dots) */
-  --chart-blue: #3b6ea5;
-  --chart-purple: #7b6cc4;
-  --chart-teal: #2f8f83;
+/* TAILWIND, WITHOUT ITS RESET, ON PURPOSE.
+ *
+ * This app is 6,300 lines of hand-written CSS that predates Tailwind. Importing
+ * `tailwindcss` whole would bring Preflight, which rewrites margins, box-sizing
+ * and the default look of headings, lists and form controls — silently
+ * restyling every screen while every test kept passing, because none of them
+ * assert on appearance.
+ *
+ * So only the theme and the utilities are imported. Existing CSS is untouched,
+ * Tailwind classes work alongside it, and a component can be converted one at a
+ * time rather than the whole app at once. Preflight can be adopted later, as a
+ * deliberate step with its own visual check, once little enough hand-written
+ * CSS is left for it to matter.
+ *
+ * The @theme block below maps Tailwind's namespaces onto the variables this
+ * file already defines, so `bg-surface` and `var(--surface)` are the same
+ * colour by construction. A converted component cannot drift from an
+ * unconverted one. */
+@layer theme, base, components, utilities;
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities);
 
-  /* Radius — larger, softer than before */
-  --r-lg: 26px; /* the floating app frame */
-  --r-card: 22px; /* module cards on the homescreen grid */
-  --r: 18px; /* cards */
-  --r-sm: 12px; /* inputs, chips, small controls */
+/* LaVega design-system tokens. "Midnight" palette matching the marketing site:
+ * near-black ground, two raised panel tones, hairline borders, cantaloupe for the
+ * primary action and blue for links and active states. Geist for everything in
+ * the app (self-hosted, see the @font-face block below). The app is a full-viewport
+ * frame on --bg (no gutter, no radius). Everything references these
+ * variables, so the whole theme lives here. */
+
+/* One family in the app (2026-11-13): Geist, a variable face (100-900) with
+ * real `tnum`, for body, UI, figures and page titles. Instrument Serif is
+ * declared below ONLY for the landing page (`--serif` in landing.css, scope
+ * `.lp`); nothing in the app references it.
+ * Neither latin subset has arrows or checks (`→ ← ✓`), so every stack ends in
+ * a system face and the browser falls back per glyph. The `* Fallback` faces
+ * scale a local font to the webfont's metrics so the swap does not reflow.
+ * Relative url(), so Vite fingerprints and bundles the files. Font files and
+ * OFL licenses: src/assets/fonts/. */
+@font-face {
+  font-family: "Instrument Serif";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("../assets/fonts/instrument-serif-latin-400-normal.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Instrument Serif";
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+  src: url("../assets/fonts/instrument-serif-latin-400-italic.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Geist";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("../assets/fonts/geist-latin-wght-normal.woff2") format("woff2-variations");
+}
+@font-face {
+  font-family: "Geist";
+  font-style: italic;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("../assets/fonts/geist-latin-wght-italic.woff2") format("woff2-variations");
+}
+@font-face {
+  font-family: "Instrument Serif Fallback";
+  src: local("Times New Roman"), local("TimesNewRomanPSMT");
+  size-adjust: 92%;
+  ascent-override: 107%;
+  descent-override: 34%;
+  line-gap-override: 0%;
+}
+@font-face {
+  font-family: "Geist Fallback";
+  src: local("Arial"), local("ArialMT");
+  size-adjust: 104%;
+  ascent-override: 97%;
+  descent-override: 28%;
+  line-gap-override: 0%;
+}
+
+:root {
+  color-scheme: dark;
+  /* Color: midnight */
+  /* Theme-picker swatches (Profiel > Weergave). Constant in every theme on
+   * purpose: each swatch shows its own theme's real ground and ink, whichever
+   * theme is active. Same four values in the mono block (contrast script). */
+  --swatch-midnight-bg: #02070a;
+  --swatch-midnight-cta: #fc734d;
+  --swatch-mono-bg: #ffffff;
+  --swatch-mono-ink: #000000;
+  --swatch-ring: #8a8a8a; /* mid-grey: visible on a white and on a black pill */
+  --bg: #02070a; /* app surface inside the frame */
+  --surface: #0d171d; /* raised panels */
+  --surface-2: #16222a; /* nested rows / inputs */
+  --ink: #ffffff; /* primary text + active nav pill */
+  --ink-soft: #e3e9ec; /* hover state of the pill */
+  --on-ink: #02070a; /* text/icons on the white pill */
+  --muted: #a9b4bb; /* secondary text */
+  --line: rgba(255, 255, 255, 0.12); /* hairline border */
+  --accent: #0297de; /* blue: links, active states, focus */
+  --accent-soft: rgba(2, 151, 222, 0.16);
+  --cta: #fc734d; /* cantaloupe: the primary button */
+  --on-cta: #02070a;
+  /* Semantic colours, lifted for the dark ground. Each is >= 4.5:1 on --bg,
+   * --surface and --surface-2 (measured in scripts/check-midnight-contrast.mjs). */
+  --pos: #5fd38d; /* money in */
+  --neg: #ff8f8f; /* money out / debt */
+  --warn: #f2b84b; /* attention */
+  /* The 12% tints behind the delta pills. Derived rather than written out so
+   * they follow --pos/--neg.
+   *
+   * color-mix in srgb, not Tailwind's `bg-pos/12`. That modifier SILENTLY emits
+   * full opacity here, because @theme inline points --color-pos at another
+   * variable and Tailwind cannot resolve it at build time to mix against. A
+   * solid green pill, no error, no failing test. */
+  --pos-tint: color-mix(in srgb, var(--pos) 16%, transparent);
+  --neg-tint: color-mix(in srgb, var(--neg) 16%, transparent);
+  /* Data-viz accents (charts, category dots) */
+  --chart-blue: #4db4f0;
+  --chart-purple: #a99bff;
+  --chart-teal: #4fd1c0;
+  /* Fallback faces for bank cards with no brand colour. Flat, dark enough for
+   * the fixed light card text (--card-text) at >= 4.5:1. */
+  --card-face-1: #0a4a6b;
+  --card-face-2: #0f5c55;
+  --card-face-3: #4b3f8f;
+  --card-face-4: #8a3a22;
+  --card-text: #f7f5f0;
+  /* Spending pie slices. No green or red: those mean money in and out
+   * everywhere else, so a green slice would read as income. */
+  --slice-1: #6f8cff;
+  --slice-2: #a58bff;
+  --slice-3: #ff9a5c;
+  --slice-4: #3cc3d9;
+  --slice-5: #ffc247;
+  --slice-6: #ff7fb0;
+  --slice-7: #6fd08a;
+  --slice-8: #9aa7b2;
+  --slice-rest: #c3ccd3;
+  --scrim: rgba(2, 7, 10, 0.72); /* behind dialogs */
+
+  /* Radius: large and soft, like the site's panels */
+  --r-card: 28px; /* module cards on the homescreen grid */
+  --r: 20px; /* cards */
+  --r-sm: 14px; /* inputs, chips, small controls */
   --pill: 999px;
 
   /* Spacing (4px base) */
@@ -40,17 +156,24 @@
   --sp-5: 24px;
   --sp-6: 32px;
 
-  /* Type — EB Garamond for classical headings, Inter for everything else */
-  --font-display: "EB Garamond", Georgia, "Times New Roman", serif;
-  --font-body: "Inter", system-ui, -apple-system, "Segoe UI", Arial, sans-serif;
-  --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+  /* Type: one family in the app. --font-body and --font-mono are Geist, which
+   * has real `tnum`, so numeric cells with `font-variant-numeric: tabular-nums`
+   * align by digit width. The landing's serif is `--serif` under `.lp`. */
+  --font-body: "Geist", "Geist Fallback", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "Geist", "Geist Fallback", system-ui, -apple-system, "Segoe UI", sans-serif;
 
-  /* Elevation */
-  --shadow-sm: 0 1px 2px rgba(26, 26, 23, 0.04), 0 18px 40px -28px rgba(26, 26, 23, 0.16);
-  --shadow-float: 0 32px 64px -28px rgba(26, 26, 23, 0.3), 0 6px 16px -10px rgba(26, 26, 23, 0.12);
+  /* Elevation: panels are separated by tone and hairline, not shadow. Only
+   * floating layers (dialogs, menus) get a shadow, and it is dark-on-dark. */
+  --shadow-sm: 0 0 0 0 transparent; /* a real value, not `none`: Tailwind lists it among ring shadows */
+  --shadow-float: 0 24px 80px rgba(0, 0, 0, 0.55);
 
-  /* Layout */
-  --frame-gap: 14px; /* gutter around the floating app */
+  /* Wizard card-details block: hairline between cards and the card legend ink.
+   * Fixed values (the wizard sits on a light panel in every theme). */
+  --wz-cardrow-line: #e4e7ec;
+  --wz-cardrow-ink: #14161a;
+
+  /* Motion */
+  --ease-emphasized: cubic-bezier(0.23, 1, 0.32, 1); /* fast out, gentle settle */
 
   /* Module grid — the homescreen layout language. A block declares a span
    * (1/2/3 columns) and a height (short/tall); the grid places it. Adding a
@@ -59,4 +182,151 @@
   --module-h-short: 200px;
   --module-h-tall: 360px;
   --module-pad: var(--sp-5);
+}
+
+/* Light: the same brand on a white ground. Only colour changes; radius, type,
+ * spacing and motion are shared. Blue and the semantic colours are darkened so
+ * they stay >= 4.5:1 as text on the light panels (scripts/check-midnight-contrast.mjs
+ * checks both themes). Bank card faces keep their fixed colours. */
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg: #ffffff;
+  --surface: #f3f6f8;
+  --surface-2: #e8edf0;
+  --ink: #02070a;
+  --ink-soft: #1c2830;
+  --on-ink: #ffffff;
+  --muted: #4f5d66;
+  --line: rgba(2, 7, 10, 0.1);
+  --accent: #016da3;
+  --accent-soft: rgba(2, 151, 222, 0.12);
+  --cta: #fc734d;
+  --on-cta: #02070a;
+  --pos: #17703f;
+  --neg: #b42f25;
+  --warn: #7d5200;
+  --chart-blue: #016da3;
+  --chart-purple: #5a45c4;
+  --chart-teal: #0a6f64;
+  --slice-1: #3d5ce0;
+  --slice-2: #7a5cd6;
+  --slice-3: #d4622a;
+  --slice-4: #128a9e;
+  --slice-5: #b07d00;
+  --slice-6: #c94f86;
+  --slice-7: #3f8f58;
+  --slice-8: #6b7983;
+  --slice-rest: #9aa5ad;
+  --scrim: rgba(2, 7, 10, 0.4);
+  --shadow-float: 0 24px 80px rgba(2, 7, 10, 0.16);
+}
+
+/* Monochrome: white ground, black ink, no hue. Selected in Profiel (step 4) and
+ * applied before first paint by public/theme-init.js. Every #rrggbb colour token
+ * of :root is set here (scripts/check-midnight-contrast.mjs fails otherwise), so
+ * nothing leaks from midnight. Colour no longer carries meaning: positive and
+ * negative read by sign and glyph, warnings by dashed border and icon. Radius,
+ * type, spacing and motion are shared. Placed after the light block on purpose:
+ * Globe.test.tsx splits this file at the light selector. */
+:root[data-theme="mono"] {
+  color-scheme: light;
+  --bg: #ffffff;
+  --surface: #f5f5f5;
+  --surface-2: #ebebeb;
+  --ink: #000000;
+  --ink-soft: #262626;
+  --on-ink: #ffffff;
+  --muted: #595959;
+  --line: rgba(0, 0, 0, 0.12);
+  --accent: #000000;
+  --accent-soft: rgba(0, 0, 0, 0.06);
+  --cta: #000000;
+  --on-cta: #ffffff;
+  --pos: #000000;
+  --neg: #404040;
+  --warn: #262626;
+  --chart-blue: #000000;
+  --chart-purple: #4d4d4d;
+  --chart-teal: #737373;
+  --card-face-1: #1f1f1f;
+  --card-face-2: #2b2b2b;
+  --card-face-3: #383838;
+  --card-face-4: #454545;
+  --card-text: #ffffff;
+  --slice-1: #1a1a1a;
+  --slice-2: #2d2d2d;
+  --slice-3: #404040;
+  --slice-4: #545454;
+  --slice-5: #686868;
+  --slice-6: #7c7c7c;
+  --slice-7: #909090;
+  --slice-8: #a0a0a0;
+  --slice-rest: #b0b0b0;
+  --scrim: rgba(0, 0, 0, 0.4);
+  --shadow-float: 0 24px 80px rgba(0, 0, 0, 0.14);
+  /* The wizard panel is light in every theme; same greys, no blue cast. */
+  --wz-cardrow-line: #e5e5e5;
+  --wz-cardrow-ink: #141414;
+  /* Theme-picker swatches (Profiel > Weergave). Constant in every theme on
+   * purpose: each swatch shows its own theme's real ground and ink, whichever
+   * theme is active. Same four values as in :root. */
+  --swatch-midnight-bg: #02070a;
+  --swatch-midnight-cta: #fc734d;
+  --swatch-mono-bg: #ffffff;
+  --swatch-mono-ink: #000000;
+  --swatch-ring: #8a8a8a; /* mid-grey: visible on a white and on a black pill */
+}
+
+/* Tailwind's namespace, pointed at the variables above. Adding a token means
+ * adding it in :root and naming it here — never a second hard-coded value. */
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-ink: var(--ink);
+  --color-ink-soft: var(--ink-soft);
+  --color-on-ink: var(--on-ink);
+  --color-muted: var(--muted);
+  --color-line: var(--line);
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+  --color-cta: var(--cta);
+  --color-on-cta: var(--on-cta);
+  --color-pos: var(--pos);
+  --color-neg: var(--neg);
+  --color-warn: var(--warn);
+  --color-pos-tint: var(--pos-tint);
+  --color-neg-tint: var(--neg-tint);
+  --color-chart-blue: var(--chart-blue);
+  --color-chart-purple: var(--chart-purple);
+  --color-chart-teal: var(--chart-teal);
+
+  --radius-card: var(--r-card);
+  /* `--radius`, not `--radius-DEFAULT`. Tailwind v4 keys the bare `rounded`
+   * utility off `--radius`; a `-DEFAULT` suffix is simply an unused token, so
+   * `rounded` silently fell back to Tailwind's own 0.25rem instead of this
+   * app's 18px. Wrong corner on every element using it, green suite. */
+  --radius: var(--r);
+  --radius-sm: var(--r-sm);
+  --radius-pill: var(--pill);
+
+  /* NO --spacing-* HERE, DELIBERATELY.
+   *
+   * Mapping Tailwind's numeric scale onto --sp-1..6 was the obvious move and it
+   * was wrong. Steps 1 to 4 happen to agree (4/8/12/16px), but --sp-5 is 24px
+   * where Tailwind's 5 is 20px, and --sp-6 is 32px where Tailwind's 6 is 24px.
+   * That made `p-6` mean 32px in this repo and 24px everywhere else, including
+   * apps/investing-web — the codebase this migration exists to align with. A
+   * reader coming from Tailwind would have been wrong about every spacing
+   * value above 4, silently.
+   *
+   * So the numeric scale stays standard (n x 4px): 24px is `6`, 32px is `8`.
+   * The app's own tokens remain available where they carry meaning the scale
+   * does not, as var(--sp-5) or an explicit p-[24px]. */
+
+  --font-body: var(--font-body);
+  --font-mono: var(--font-mono);
+
+  --shadow-sm: var(--shadow-sm);
+  --shadow-float: var(--shadow-float);
 }

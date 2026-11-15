@@ -1,17 +1,27 @@
-/* Pulling invoices out of the owner's OWN n8n (docs/n8n/FACTUREN.md).
+/* Pulling invoices out of n8n (docs/n8n/FACTUREN.md).
  *
- * The path is: his mailbox -> his n8n -> this browser. The LaVega server is not
- * in it, so nothing here talks to API_BASE; the browser calls his webhook
- * directly with the token he stored under Koppelingen.
+ * The path is: his mailbox -> n8n -> LaVega's server -> this browser. This
+ * USED to skip the server entirely — the browser held the n8n webhook URL and
+ * the shared token in the vault, and called n8n directly. That could only
+ * ever serve one person: the credential and the `queueKey` it read were both
+ * something the BROWSER chose, so a second user would either need the
+ * owner's own secret or would have no way to prove which rows were theirs.
+ * See docs/adr/0006-invoice-queue-server-proxy.md for why that changed —
+ * the server now holds the credential and derives `queueKey` from the
+ * caller's own session, and this module just calls `/api/n8n/queue`.
  *
- * The one fact everything below is shaped around: the webhook EMPTIES its queue
- * as it responds. One GET, one copy. So this module never throws data away —
- * a row that fails validation is REPORTED (dropped count), not silently
- * skipped, and the caller keeps the rows until the owner has decided on each.
+ * The one fact everything below is still shaped around: the webhook EMPTIES
+ * its queue as it responds. One GET, one copy. So this module never throws
+ * data away — a row that fails validation is REPORTED (dropped count), not
+ * silently skipped, and the caller keeps the rows until the owner has decided
+ * on each.
  */
 
-import type { Invoice } from "@lavega/core";
+import type { Invoice, N8nAutoBooked } from "@lavega/core";
 import { makeInvoice } from "@lavega/core";
+import type { VaultStorage } from "@lavega/adapters";
+import { Option, Schema } from "effect";
+import { API_BASE } from "./api.js";
 
 /** Where a row came in, and whether the sending domain survived the mail
  *  authentication checks Cloudflare ran on it.
@@ -73,7 +83,9 @@ export type N8nNotice = {
   from?: string;
   receivedAt?: string;
   kind: "notification" | "reminder" | "no-amount" | "unreadable";
-  reason: string;
+  /** Waarom deze mail geen boekbare factuur was. `undefined` als n8n zelf
+   *  geen reden meestuurde — de zin daarvoor staat in `copy/admin`, niet hier. */
+  reason?: string;
   /** Empty when the workflow had no messageId to build one from. Never guessed. */
   mailUrl: string;
 };
@@ -81,8 +93,16 @@ export type N8nNotice = {
 /** What a GET on the webhook ended in. Every failure is its own kind — none of
  *  them may be presented as a success. */
 export type FetchOutcome =
-  | { kind: "ok"; rows: N8nInvoiceRow[]; notices: N8nNotice[]; dropped: number }
+  | {
+      kind: "ok";
+      rows: N8nInvoiceRow[];
+      notices: N8nNotice[];
+      setup: N8nSetupSignal[];
+      setupDropped: number;
+      dropped: number;
+    }
   | { kind: "not-configured" }
+  | { kind: "no-address" }
   | { kind: "unauthorized"; status: number }
   | { kind: "http-error"; status: number }
   | { kind: "network" }
@@ -107,6 +127,57 @@ function cents(v: unknown): number | null {
  */
 const NOTICE_KINDS: N8nNotice["kind"][] = ["notification", "reminder", "no-amount", "unreadable"];
 
+/** The two notices that are not mail to act on but signals for the forwarding
+ *  guide. Same wire array as notices, a separate type on this side: they must
+ *  never be persisted to the vault or listed under "Zelf ophalen". Only kind,
+ *  code and receivedAt are taken from the wire entry. */
+export type N8nSetupSignal = {
+  kind: "forwarding-confirmation" | "setup-test";
+  code: string;
+  receivedAt?: string;
+};
+
+const SetupSignalSchema = Schema.Union([
+  Schema.Struct({
+    kind: Schema.Literal("forwarding-confirmation"),
+    code: Schema.String.check(Schema.isPattern(/^[0-9]{1,20}$/)),
+  }),
+  Schema.Struct({
+    kind: Schema.Literal("setup-test"),
+    code: Schema.String.check(Schema.isPattern(/^[a-z0-9]{4}$/)),
+  }),
+]);
+const decodeSetupSignal = Schema.decodeUnknownOption(SetupSignalSchema);
+
+const SETUP_KINDS: readonly string[] = ["forwarding-confirmation", "setup-test"];
+
+/** Setup entries of the `notices` array. An entry of a setup kind whose code is
+ *  malformed is counted in `setupDropped`, not skipped silently and not mixed
+ *  into the invoice `dropped` count (whose message says "missing an amount"). */
+function parseSetupSignals(body: unknown): { setup: N8nSetupSignal[]; setupDropped: number } {
+  const list = (body as { notices?: unknown }).notices;
+  const setup: N8nSetupSignal[] = [];
+  let setupDropped = 0;
+  if (!Array.isArray(list)) return { setup, setupDropped };
+  for (const raw of list) {
+    if (!raw || typeof raw !== "object") continue;
+    const r = raw as Record<string, unknown>;
+    if (typeof r.kind !== "string" || !SETUP_KINDS.includes(r.kind)) continue;
+    const decoded = Option.getOrNull(decodeSetupSignal(raw));
+    if (!decoded) {
+      setupDropped++;
+      continue;
+    }
+    const receivedAt = str(r.receivedAt) ?? undefined;
+    setup.push({
+      kind: decoded.kind,
+      code: decoded.code,
+      ...(receivedAt ? { receivedAt } : {}),
+    });
+  }
+  return { setup, setupDropped };
+}
+
 /** The sender verdict, read the same way `normalizeInboundMail` writes it:
  *  anything that is not literally "passed" or "failed" is `unknown`. A missing
  *  field, a typo and a hostile value all land there — never on "passed". */
@@ -119,19 +190,12 @@ function senderCheckOf(v: unknown): SenderCheck {
 function senderChecksOf(v: unknown): SenderChecks | undefined {
   if (!v || typeof v !== "object") return undefined;
   const o = v as Record<string, unknown>;
-  const spf = str(o.spf), dkim = str(o.dkim), dmarc = str(o.dmarc);
+  const spf = str(o.spf),
+    dkim = str(o.dkim),
+    dmarc = str(o.dmarc);
   if (!spf && !dkim && !dmarc) return undefined;
   return { spf: spf ?? "unknown", dkim: dkim ?? "unknown", dmarc: dmarc ?? "unknown" };
 }
-
-/** What the owner reads above each notice. Kept here, next to the type, so a
- *  new kind cannot reach the screen without a label. */
-export const NOTICE_LABELS: Record<N8nNotice["kind"], string> = {
-  notification: "Staat klaar bij de leverancier",
-  reminder: "Herinnering of aanmaning",
-  "no-amount": "Factuur zonder leesbaar bedrag",
-  unreadable: "Niets leesbaars in deze mail",
-};
 
 /**
  * The `notices` half of the same body. An older workflow that doesn't send them
@@ -156,14 +220,20 @@ function parseNotices(body: unknown): N8nNotice[] {
       from: str(r.from) ?? undefined,
       receivedAt: str(r.receivedAt) ?? undefined,
       kind,
-      reason: str(r.reason) ?? "n8n gaf geen reden mee.",
+      reason: str(r.reason) ?? undefined,
       mailUrl: str(r.mailUrl)?.startsWith("https://mail.google.com/") ? str(r.mailUrl)! : "",
     });
   }
   return notices;
 }
 
-export function parseQueue(body: unknown): { rows: N8nInvoiceRow[]; notices: N8nNotice[]; dropped: number } | null {
+export function parseQueue(body: unknown): {
+  rows: N8nInvoiceRow[];
+  notices: N8nNotice[];
+  setup: N8nSetupSignal[];
+  setupDropped: number;
+  dropped: number;
+} | null {
   if (!body || typeof body !== "object") return null;
   const list = (body as { invoices?: unknown }).invoices;
   if (!Array.isArray(list)) return null;
@@ -205,28 +275,38 @@ export function parseQueue(body: unknown): { rows: N8nInvoiceRow[]; notices: N8n
       note: str(r.note) ?? undefined,
     });
   }
-  return { rows, notices: parseNotices(body), dropped };
+  return { rows, notices: parseNotices(body), ...parseSetupSignals(body), dropped };
 }
 
 /**
- * GET the queue from his n8n. `fetchImpl` is injectable so the review flow can
- * be tested without a network.
+ * POST the queue via LaVega's own server (`/api/n8n/queue`), never n8n
+ * directly. The server holds the n8n credential and derives `queueKey` from
+ * the caller's session — there is no `key` parameter here anymore, and that
+ * is deliberate: a client that could choose its own key could read anyone's
+ * queue (see the route's own comment, apps/server/src/n8n-routes.ts).
+ *
+ * POST, not GET: the webhook EMPTIES its queue as it responds, so this request
+ * destroys what it returns. A GET is reachable from another site by a plain
+ * link or an `<img>`, and the session cookie (`sameSite:"lax"`) rides along on
+ * that top-level navigation — a cross-site page could drain and destroy the
+ * owner's invoice queue (security review 2026-10-17, M4). A POST is not a
+ * simple cross-site request, and the server refuses a cross-site one outright.
+ * There is no body: the server derives everything from the session.
+ *
+ * `fetchImpl` is injectable so the review flow can be tested without a
+ * network; production uses the browser's own `fetch`, which sends the
+ * session cookie same-origin.
  */
 export async function fetchQueue(
-  url: string,
-  token: string,
   fetchImpl: typeof fetch = globalThis.fetch,
 ): Promise<FetchOutcome> {
-  if (!url.trim() || !token.trim()) return { kind: "not-configured" };
   let res: Response;
   try {
-    res = await fetchImpl(url.trim(), {
-      method: "GET",
-      headers: { "x-lavega-token": token.trim() },
-    });
+    res = await fetchImpl(`${API_BASE}/api/n8n/queue`, { method: "POST" });
   } catch {
     return { kind: "network" };
   }
+  if (res.status === 503) return { kind: "not-configured" };
   if (res.status === 401 || res.status === 403) return { kind: "unauthorized", status: res.status };
   if (!res.ok) return { kind: "http-error", status: res.status };
   let body: unknown;
@@ -235,9 +315,95 @@ export async function fetchQueue(
   } catch {
     return { kind: "unreadable" };
   }
+  if (body && typeof body === "object" && (body as { noAddress?: unknown }).noAddress === true) {
+    return { kind: "no-address" };
+  }
   const parsed = parseQueue(body);
   if (!parsed) return { kind: "unreadable" };
-  return { kind: "ok", rows: parsed.rows, notices: parsed.notices, dropped: parsed.dropped };
+  return {
+    kind: "ok",
+    rows: parsed.rows,
+    notices: parsed.notices,
+    setup: parsed.setup,
+    setupDropped: parsed.setupDropped,
+    dropped: parsed.dropped,
+  };
+}
+
+export type ForwardAddressReadOutcome =
+  | { kind: "ok"; localPart: string | null }
+  | { kind: "unauthorized" }
+  | { kind: "network" }
+  | { kind: "http-error"; status: number };
+
+export async function fetchForwardAddress(
+  fetchImpl: typeof fetch = globalThis.fetch,
+): Promise<ForwardAddressReadOutcome> {
+  let res: Response;
+  try {
+    res = await fetchImpl(`${API_BASE}/api/n8n/forward-address`, { method: "GET" });
+  } catch {
+    return { kind: "network" };
+  }
+  if (res.status === 401 || res.status === 403) return { kind: "unauthorized" };
+  if (!res.ok) return { kind: "http-error", status: res.status };
+  let body: unknown;
+  try {
+    body = await res.json();
+  } catch {
+    return { kind: "http-error", status: res.status };
+  }
+  const localPart = (body as { localPart?: unknown }).localPart;
+  return { kind: "ok", localPart: typeof localPart === "string" ? localPart : null };
+}
+
+export type ForwardAddressWriteOutcome =
+  | { kind: "stored"; localPart: string }
+  | { kind: "invalid" }
+  | { kind: "taken" }
+  /** `ifAbsent` was set and this account already holds an address: nothing was written */
+  | { kind: "already-set"; localPart: string }
+  | { kind: "unauthorized" }
+  | { kind: "network" }
+  | { kind: "http-error"; status: number };
+
+/** `ifAbsent` is the create path: the server refuses to replace an address the
+ *  account already has and answers `already-set` with that address instead. */
+export async function recordForwardAddress(
+  localPart: string,
+  fetchImpl: typeof fetch = globalThis.fetch,
+  options: { ifAbsent?: boolean } = {},
+): Promise<ForwardAddressWriteOutcome> {
+  let res: Response;
+  try {
+    res = await fetchImpl(`${API_BASE}/api/n8n/forward-address`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(options.ifAbsent ? { localPart, ifAbsent: true } : { localPart }),
+    });
+  } catch {
+    return { kind: "network" };
+  }
+  if (res.status === 401 || res.status === 403) return { kind: "unauthorized" };
+  if (res.status === 400) return { kind: "invalid" };
+  if (res.status === 409) {
+    const conflict = await res.json().catch(() => null);
+    const existing = (conflict as { code?: unknown; localPart?: unknown } | null) ?? {};
+    if (existing.code === "n8n-address-already-set" && typeof existing.localPart === "string")
+      return { kind: "already-set", localPart: existing.localPart };
+    return { kind: "taken" };
+  }
+  if (!res.ok) return { kind: "http-error", status: res.status };
+  let body: unknown;
+  try {
+    body = await res.json();
+  } catch {
+    return { kind: "http-error", status: res.status };
+  }
+  const stored = (body as { localPart?: unknown }).localPart;
+  return typeof stored === "string"
+    ? { kind: "stored", localPart: stored }
+    : { kind: "http-error", status: res.status };
 }
 
 /** An n8n row while the owner is still reviewing it. Strings, because these are
@@ -285,22 +451,29 @@ export function toPending(row: N8nInvoiceRow, defaultEntity: string): PendingInv
   };
 }
 
+/** What a reviewed row is missing, as a fact. These used to be Dutch sentences
+ *  returned from validation, which put prose in the model layer and rendered
+ *  Dutch on the English screen. */
+export type InvoiceGap = "counterparty" | "issue-date" | "due-date" | "amount" | "currency" | "vat";
+
 /** Turn a reviewed row into a real Invoice, or say exactly what is missing.
  *  `sourceType: "llm"` because a model read this out of an e-mail — it must
  *  stay distinguishable from something he typed himself. No confidence is set:
  *  the workflow reports none, and a fabricated one would be a lie. */
-export function pendingToInvoice(p: PendingInvoice): { ok: true; invoice: Invoice } | { ok: false; error: string } {
+export function pendingToInvoice(
+  p: PendingInvoice,
+): { ok: true; invoice: Invoice } | { ok: false; gap: InvoiceGap } {
   const counterparty = p.counterparty.trim();
-  if (!counterparty) return { ok: false, error: "Vul een relatie in." };
-  if (!p.issueDate) return { ok: false, error: "Vul een factuurdatum in." };
-  if (!p.dueDate) return { ok: false, error: "Vul een vervaldatum in — n8n vond er geen." };
+  if (!counterparty) return { ok: false, gap: "counterparty" };
+  if (!p.issueDate) return { ok: false, gap: "issue-date" };
+  if (!p.dueDate) return { ok: false, gap: "due-date" };
   const amount = Number(p.amount.replace(",", "."));
-  if (!Number.isFinite(amount) || amount <= 0) return { ok: false, error: "Vul een geldig bedrag in." };
+  if (!Number.isFinite(amount) || amount <= 0) return { ok: false, gap: "amount" };
   const currency = p.currency.trim().toUpperCase();
-  if (!/^[A-Z]{3}$/.test(currency)) return { ok: false, error: "Vul de valuta in — n8n las er geen, en LaVega gokt geen euro's." };
+  if (!/^[A-Z]{3}$/.test(currency)) return { ok: false, gap: "currency" };
   const vatRaw = p.vat.trim();
   const vat = vatRaw === "" ? undefined : Number(vatRaw.replace(",", "."));
-  if (vat !== undefined && (!Number.isFinite(vat) || vat < 0)) return { ok: false, error: "Btw-bedrag klopt niet." };
+  if (vat !== undefined && (!Number.isFinite(vat) || vat < 0)) return { ok: false, gap: "vat" };
   return {
     ok: true,
     invoice: makeInvoice({
@@ -362,7 +535,25 @@ export function pendingToInvoice(p: PendingInvoice): { ok: true; invoice: Invoic
  * verdwijnt. Iets stils dat zijn boeken verandert is erger dan een klik.
  */
 
-export type AutoBookDecision = { book: true } | { book: false; reason: string };
+/** The sender checks as the workflow reported them. Language-neutral: SPF, DKIM
+ *  and DMARC are called that in every language. */
+export type SenderCheckDetail = { spf: string; dkim: string; dmarc: string };
+
+/** Why a row was held back, as a FACT rather than a sentence.
+ *
+ *  This used to be a Dutch string built right here, which meant the decision
+ *  engine owned prose and an English reader was told in Dutch why their invoice
+ *  was waiting. The engine decides; the screen says it, in the reader's
+ *  language. It also stops a copy tweak from breaking a decision test. */
+export type AutoBookHold =
+  | { kind: "sender-forwarded"; checks: SenderCheckDetail | null }
+  | { kind: "sender-failed"; checks: SenderCheckDetail | null }
+  | { kind: "sender-unchecked" }
+  | { kind: "entity-ambiguous" }
+  | { kind: "incomplete"; gap: InvoiceGap }
+  | { kind: "over-ceiling"; ceilingCents: number };
+
+export type AutoBookDecision = { book: true } | { book: false; hold: AutoBookHold };
 
 export type EntityContext = { entityChoices: string[]; defaultEntity: string };
 
@@ -386,10 +577,6 @@ export function bookingEntity(ctx: EntityContext): string {
  *  missen zonder het te zien. */
 export const AUTO_BOOK_CEILING_CENTS = 1_000_000;
 
-function formatCeiling(): string {
-  return `€ ${(AUTO_BOOK_CEILING_CENTS / 100).toLocaleString("nl-NL")}`;
-}
-
 /** Ziet dit eruit als een doorgestuurde mail in plaats van een nagemaakte afzender?
  *
  *  SPF gaat over de verzendende SERVER, DKIM over het BERICHT. Doorsturen wisselt
@@ -406,65 +593,55 @@ export function forwardedNotSpoofed(c: N8nInvoiceRow["senderChecks"]): boolean {
   return spfZakt && c.dkim === "pass";
 }
 
-export function autoBookDecision(
-  row: N8nInvoiceRow,
-  ctx: EntityContext,
-): AutoBookDecision {
+export function autoBookDecision(row: N8nInvoiceRow, ctx: EntityContext): AutoBookDecision {
   if (row.senderCheck === "failed") {
     const c = row.senderChecks;
-    const detail = c ? ` (SPF ${c.spf}, DKIM ${c.dkim}, DMARC ${c.dmarc})` : "";
+    /* DE ECHTE OORZAAK IS HET DOORSTUREN, en die hoort de lezer te krijgen.
+     *
+     * SPF zakt en DKIM slaagt is de handtekening van een DOORGESTUURDE mail:
+     * DKIM ondertekent het bericht en overleeft de reis, SPF gaat over de
+     * verzendende server en die is bij doorsturen niet meer die van de
+     * leverancier. Een NAGEMAAKTE afzender krijgt juist geen geldige DKIM voor
+     * het domein dat hij naspeelt - dat is nou net wat DKIM moeilijk maakt.
+     *
+     * De oude tekst noemde hier twee oorzaken waarvan er in dit geval GEEN
+     * ENKELE de echte was. Wie een doorstuurregel in Gmail aanzet kreeg dus bij
+     * elke factuur te lezen dat zijn leverancier verdacht was.
+     *
+     * De poort blijft in beide gevallen dicht, en dat is opzet: DKIM zegt dat
+     * het bericht onderweg niet is veranderd, niet dat de doorstuurder te
+     * vertrouwen is. Maar wachten met de juiste reden is iets anders dan
+     * wachten met een verkeerde. */
     return {
       book: false,
-      reason: forwardedNotSpoofed(c)
-        ? /* DE ECHTE OORZAAK IS HET DOORSTUREN, en dat moet er staan.
-           *
-           * SPF zakt en DKIM slaagt is de handtekening van een DOORGESTUURDE
-           * mail: DKIM ondertekent het bericht en overleeft de reis, SPF gaat
-           * over de verzendende server en die is bij doorsturen niet meer die
-           * van de leverancier. Een NAGEMAAKTE afzender krijgt juist geen
-           * geldige DKIM voor het domein dat hij naspeelt - dat is nou net wat
-           * DKIM moeilijk maakt.
-           *
-           * De oude tekst noemde hier twee oorzaken ("slordig ingesteld domein
-           * of een nagemaakte afzender") waarvan er in dit geval GEEN ENKELE de
-           * echte was. Wie een doorstuurregel in Gmail aanzet kreeg dus bij elke
-           * factuur te lezen dat zijn leverancier verdacht was.
-           *
-           * De poort blijft dicht, en dat is opzet: DKIM zegt dat het bericht
-           * onderweg niet is veranderd, niet dat de doorstuurder te vertrouwen
-           * is. Maar wachten met de juiste reden is iets anders dan wachten met
-           * een verkeerde. */
-          `De afzender kwam niet door de SPF-controle${detail}, maar DKIM klopt wél — dat patroon hoort bij een DOORGESTUURDE mail en niet bij een nagemaakte afzender. Waarschijnlijk je eigen doorstuurregel. LaVega boekt hem toch niet zelf: dat de mail onderweg niet is veranderd, zegt niets over wie hem doorstuurde. Controleer de regel en bevestig hem zelf.`
-        : `De afzender kwam niet door de SPF/DKIM-controle${detail}. Dat kan een slordig ingesteld domein zijn óf een nagemaakte afzender — daarom boekt LaVega deze niet zelf. Controleer de regel en bevestig hem zelf.`,
+      hold: {
+        kind: forwardedNotSpoofed(c) ? "sender-forwarded" : "sender-failed",
+        checks: c ?? null,
+      },
     };
   }
   if (row.senderCheck !== "passed") {
-    return {
-      book: false,
-      reason: "Bij deze mail is geen afzendercontrole gedaan — hij kwam niet via het doorstuuradres binnen. Geen controle is geen goedkeuring, dus deze wacht op jou.",
-    };
+    return { book: false, hold: { kind: "sender-unchecked" } };
   }
   if (ctx.entityChoices.length > 1) {
-    return {
-      book: false,
-      reason: "Je hebt meer dan één onderneming en de factuur zegt niet voor welke hij is. LaVega gokt geen entiteit — kies hem en bevestig.",
-    };
+    return { book: false, hold: { kind: "entity-ambiguous" } };
   }
   const check = pendingToInvoice(toPending(row, bookingEntity(ctx)));
-  if (!check.ok) return { book: false, reason: `${check.error} Zolang dat ontbreekt boekt LaVega niets automatisch.` };
+  if (!check.ok) return { book: false, hold: { kind: "incomplete", gap: check.gap } };
   /* HET PLAFOND, LAATST GECONTROLEERD EN MET OPZET. Een bedrag boven de grens
-   * wacht ook als de afzender geverifieerd is en de extractie compleet — het is de
-   * enige rem die niet over de HERKOMST gaat maar over de SCHADE. Een geverifieerde
-   * afzender kan een correcte factuur sturen met een fout bedrag, en dan is de vraag
-   * niet of hij echt is maar hoeveel je wilt kunnen missen zonder het te zien.
+   * wacht ook als de afzender geverifieerd is en de extractie compleet - het is
+   * de enige rem die niet over de HERKOMST gaat maar over de SCHADE. Een
+   * geverifieerde afzender kan een correcte factuur sturen met een fout bedrag,
+   * en dan is de vraag niet of hij echt is maar hoeveel je wilt kunnen missen
+   * zonder het te zien.
    *
    * Deze staat als LAATSTE zodat de melding de nuttigste is: bij een gespoofte
-   * afzender van € 50.000 hoort hij te lezen dat de afzender niet klopt, niet dat
-   * het bedrag hoog is. */
+   * afzender van EUR 50.000 hoort hij te lezen dat de afzender niet klopt, niet
+   * dat het bedrag hoog is. */
   if (row.amountCents > AUTO_BOOK_CEILING_CENTS) {
     return {
       book: false,
-      reason: `Boven ${formatCeiling()} boekt LaVega niets zelf, ook niet van een geverifieerde afzender. Deze wacht op jou.`,
+      hold: { kind: "over-ceiling", ceilingCents: AUTO_BOOK_CEILING_CENTS },
     };
   }
   return { book: true };
@@ -472,29 +649,31 @@ export function autoBookDecision(
 
 /* ── De lijst van wat zichzelf geboekt heeft ───────────────────────────────
  *
- * Dit hoort eigenlijk als veld op `Invoice` in packages/core/src/model.ts —
- * dan reist het mee in de kluis en in een back-up. Dat bestand is van een
- * andere lane, dus staat het hier: een aparte localStorage-sleutel naast de
- * kluis, met alleen een id, het messageId en het onderwerp. Zonder deze lijst
- * is een automatisch geboekte factuur na één herlaad niet te onderscheiden van
- * een die hij zelf bevestigde, en dan is "zichtbaar automatisch gebeurd" een
- * belofte die maar één sessie meegaat.
+ * `Invoice.autoBooked` (packages/core/src/model.ts) is the field of record and
+ * reaches the vault and a back-up through the normal invoice path. This list is
+ * only the fallback for rows booked before that field existed — see
+ * views/Facturen.tsx's `autoBookedIds`. It used to be its own localStorage key
+ * next to the vault (privacy/security review 2026-08-28, finding L6: factuur-
+ * onderwerpen in platte tekst); now it is `vault.getAutoBookedInvoices()`, the
+ * same encrypted-at-rest treatment the `autoBooked` field itself already gets.
  */
 
-const AUTO_BOOKED_KEY = "lavega.n8n.autoBooked.v1";
+const AUTO_BOOKED_LEGACY_KEY = "lavega.n8n.autoBooked.v1";
 
-export type AutoBookedInvoice = { invoiceId: string; messageId: string; subject?: string };
+export type AutoBookedInvoice = N8nAutoBooked;
 
-export function getAutoBookedInvoices(): AutoBookedInvoice[] {
+function readLegacyAutoBooked(): AutoBookedInvoice[] {
   try {
-    const raw = localStorage.getItem(AUTO_BOOKED_KEY);
+    if (typeof localStorage === "undefined") return [];
+    const raw = localStorage.getItem(AUTO_BOOKED_LEGACY_KEY);
     if (!raw) return [];
     const parsed: unknown = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
     return parsed.flatMap((e): AutoBookedInvoice[] => {
       if (!e || typeof e !== "object") return [];
       const o = e as Record<string, unknown>;
-      const invoiceId = str(o.invoiceId), messageId = str(o.messageId);
+      const invoiceId = str(o.invoiceId),
+        messageId = str(o.messageId);
       if (!invoiceId || !messageId) return [];
       return [{ invoiceId, messageId, subject: str(o.subject) ?? undefined }];
     });
@@ -503,21 +682,37 @@ export function getAutoBookedInvoices(): AutoBookedInvoice[] {
   }
 }
 
-/** Idempotent: the same invoice logged twice stays one entry, so a re-render or
- *  a repeated fetch cannot inflate the list. */
-export function rememberAutoBooked(entry: AutoBookedInvoice): void {
-  const kept = getAutoBookedInvoices().filter((a) => a.invoiceId !== entry.invoiceId);
+/** Reads the vault's list, migrating a legacy localStorage list into it (and
+ *  deleting the legacy key) the first time this runs after unlock. Safe to call
+ *  on every read — once the legacy key is gone, this is one vault read. */
+export async function getAutoBookedInvoices(vault: VaultStorage): Promise<AutoBookedInvoice[]> {
+  const current = await vault.getAutoBookedInvoices();
+  const legacy = readLegacyAutoBooked();
+  if (legacy.length === 0) return current;
+  const byId = new Map(current.map((e) => [e.invoiceId, e]));
+  for (const e of legacy) if (!byId.has(e.invoiceId)) byId.set(e.invoiceId, e);
+  const merged = [...byId.values()];
+  await vault.putAutoBookedInvoices(merged);
   try {
-    localStorage.setItem(AUTO_BOOKED_KEY, JSON.stringify([...kept, entry]));
+    localStorage.removeItem(AUTO_BOOKED_LEGACY_KEY);
   } catch {
-    /* a full or blocked localStorage must not break the booking itself */
+    /* the vault write already succeeded; a stuck legacy key is stale, not lost data */
   }
+  return merged;
 }
 
-export function forgetAutoBooked(invoiceId: string): void {
-  try {
-    localStorage.setItem(AUTO_BOOKED_KEY, JSON.stringify(getAutoBookedInvoices().filter((a) => a.invoiceId !== invoiceId)));
-  } catch {
-    /* ignored, same reason */
-  }
+/** Idempotent: the same invoice logged twice stays one entry, so a re-render or
+ *  a repeated fetch cannot inflate the list. */
+export async function rememberAutoBooked(
+  vault: VaultStorage,
+  entry: AutoBookedInvoice,
+): Promise<void> {
+  const current = await getAutoBookedInvoices(vault);
+  const kept = current.filter((a) => a.invoiceId !== entry.invoiceId);
+  await vault.putAutoBookedInvoices([...kept, entry]);
+}
+
+export async function forgetAutoBooked(vault: VaultStorage, invoiceId: string): Promise<void> {
+  const current = await getAutoBookedInvoices(vault);
+  await vault.putAutoBookedInvoices(current.filter((a) => a.invoiceId !== invoiceId));
 }

@@ -48,7 +48,7 @@ export const INVESTING_URL: string | null = resolveInvestingUrl(import.meta.env 
  *  Dockerfile runs as a gate; do not re-implement it as a second fetch here.
  *
  *  Also worth knowing before wiring this to anything: it currently has no
- *  caller. NavBar and Landing render the link unconditionally from
+ *  caller. Rail, the drawer and Landing render the link unconditionally from
  *  INVESTING_URL, so a false here hides nothing today.
  *
  *  Same origin can be verified properly, and has to be: the SPA's catch-all

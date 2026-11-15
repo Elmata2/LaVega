@@ -1,10 +1,21 @@
 import { expect, test } from "vitest";
 import { normalizeGmailMessage } from "./normalizeGmailMessage.js";
 import { buildClaudeRequest, requestSize } from "./buildClaudeRequest.js";
-import { noticeForUnreadable, parseModelJson, toQueueEntry } from "./claudeToLaVega.js";
-import { addToQueue } from "./queue.js";
+import {
+  noticeForSetup,
+  noticeForUnreadable,
+  parseModelJson,
+  toQueueEntry,
+} from "./claudeToLaVega.js";
+import { GMAIL_CONFIRMATION_PAYLOAD, EXPECTED_CODE } from "./__fixtures__/gmailConfirmation.test.fixture.js";
+import { addToQueue, OWNER_KEY } from "./queue.js";
 import { encodeBase64Url, simulateGmailNode } from "./__fixtures__/gmailNode.js";
-import { RAW_HTML_ONLY, RAW_LINK_ONLY, RAW_NO_BODY, RAW_PDF_INVOICE } from "./__fixtures__/rawMail.js";
+import {
+  RAW_HTML_ONLY,
+  RAW_LINK_ONLY,
+  RAW_NO_BODY,
+  RAW_PDF_INVOICE,
+} from "./__fixtures__/rawMail.js";
 import { normalizeInboundMail } from "./normalizeInboundMail.js";
 import { INBOUND_STORAGE_REFERENCE, INBOUND_WITH_PDF } from "./__fixtures__/inboundPayload.js";
 
@@ -107,7 +118,11 @@ test("vier mailvormen, vier uitkomsten, niets verdwijnt onderweg", () => {
   ]);
 
   const store: Record<string, unknown> = {};
-  const result = addToQueue(store, { invoices, notices, processedIds } as never, "2026-08-17T08:00:00.000Z");
+  const result = addToQueue(
+    store,
+    { invoices, notices, processedIds } as never,
+    "2026-08-17T08:00:00.000Z",
+  );
   expect(result).toEqual({
     addedInvoices: 2,
     addedNotices: 2,
@@ -117,9 +132,21 @@ test("vier mailvormen, vier uitkomsten, niets verdwijnt onderweg", () => {
   });
 
   // Het antwoord aan LaVega, zoals "Geef de rij en leeg hem" het samenstelt.
-  const body = { invoices: store.queue, notices: store.notices, servedAt: "2026-08-17T08:00:01.000Z" };
-  expect((body.invoices as { amountCents: number }[]).map((i) => i.amountCents)).toEqual([181500, 18069]);
-  expect((body.notices as { kind: string }[]).map((n) => n.kind)).toEqual(["notification", "unreadable"]);
+  // Gmail-berichten dragen geen queueKey: ze horen bij de eigenaar (OWNER_KEY).
+  const byKey = store.queueByKey as Record<string, unknown>;
+  const noticesByKey = store.noticesByKey as Record<string, unknown>;
+  const body = {
+    invoices: byKey[OWNER_KEY],
+    notices: noticesByKey[OWNER_KEY],
+    servedAt: "2026-08-17T08:00:01.000Z",
+  };
+  expect((body.invoices as { amountCents: number }[]).map((i) => i.amountCents)).toEqual([
+    181500, 18069,
+  ]);
+  expect((body.notices as { kind: string }[]).map((n) => n.kind)).toEqual([
+    "notification",
+    "unreadable",
+  ]);
   // Geen enkele melding draagt een bedrag: er is niets om per ongeluk te boeken.
   for (const notice of body.notices as Record<string, unknown>[]) {
     expect("amount" in notice).toBe(false);
@@ -155,7 +182,12 @@ test("een doorgestuurde mail loopt door precies hetzelfde pad en komt met herkom
   );
   expect(result.addedInvoices).toBe(1);
 
-  const row = (store.queue as Record<string, unknown>[])[0];
+  // Deze rij draagt een echte queueKey ("alexander-7f3a") en landt dus in zijn
+  // EIGEN vak, niet bij de eigenaar (OWNER_KEY) — dat vak bestaat hier niet
+  // eens, want er kwam geen enkel Gmail-bericht of sleutelloze mail binnen.
+  const byKey = store.queueByKey as Record<string, Record<string, unknown>[]>;
+  expect(byKey[OWNER_KEY]).toBeUndefined();
+  const row = byKey["alexander-7f3a"][0];
   expect(row).toMatchObject({
     source: "inbound-mail",
     amountCents: 96800,
@@ -180,11 +212,40 @@ test("een doorgestuurde mail zonder leesbare inhoud wordt een melding, geen stil
   expect(notice.mailUrl).toBe("");
 });
 
-test("een tweede run op dezelfde mailbox stuurt niets opnieuw naar het model", () => {
-  const store: Record<string, unknown> = { seenIds: ["m-pdf", "m-html", "m-link", "m-leeg"] };
-  const seen = new Set(store.seenIds as string[]);
-  const again = [run(RAW_PDF_INVOICE, "m-pdf"), run(RAW_HTML_ONLY, "m-html")].filter(
-    (m) => !seen.has(m.messageId),
+test("both setup kinds reach the owner's queue key and never become a Claude request", () => {
+  const confirmation = normalizeInboundMail(GMAIL_CONFIRMATION_PAYLOAD);
+  const test1 = normalizeInboundMail({
+    ...INBOUND_WITH_PDF,
+    messageId: "<t1>",
+    subject: "LaVega test k3x9 factuur",
+  });
+  const notices = [];
+  for (const m of [confirmation, test1]) {
+    // The If-node: ok:false never reaches "Bouw Claude-verzoek".
+    expect(m.ok).toBe(false);
+    expect(m.setup).not.toBeNull();
+    notices.push(noticeForSetup(m as never));
+  }
+  const store: Record<string, unknown> = {};
+  const result = addToQueue(
+    store,
+    { invoices: [], notices, processedIds: notices.map((n) => n.messageId) } as never,
+    "2026-10-21T14:00:00.000Z",
   );
-  expect(again).toEqual([]);
+  expect(result.addedNotices).toBe(2);
+  const byKey = store.noticesByKey as Record<string, { kind: string; code: string }[]>;
+  expect(byKey["alexander-7f3a"].map((n) => [n.kind, n.code])).toEqual([
+    ["forwarding-confirmation", EXPECTED_CODE],
+    ["setup-test", "k3x9"],
+  ]);
+  expect(byKey[OWNER_KEY]).toBeUndefined();
+});
+
+test("Gmail resending the same confirmation does not duplicate the notice", () => {
+  const m = normalizeInboundMail(GMAIL_CONFIRMATION_PAYLOAD);
+  const n = noticeForSetup(m as never);
+  const store: Record<string, unknown> = {};
+  addToQueue(store, { invoices: [], notices: [n], processedIds: [] } as never, "t1");
+  const again = addToQueue(store, { invoices: [], notices: [n], processedIds: [] } as never, "t2");
+  expect(again.addedNotices).toBe(0);
 });

@@ -54,7 +54,7 @@ export const POINTS_RATES_READ_AT = "2026-08-21";
 export const POINTS_RATES: readonly PointsRate[] = [
   {
     program: "Flying Blue Miles",
-    aliases: ["flying blue miles","flying blue klm air france","flying blue"],
+    aliases: ["flying blue miles", "flying blue klm air france", "flying blue"],
     eurPerPoint: null,
     soort: "niet-gepubliceerd",
     scope: "alle inwisselopties",
@@ -63,24 +63,35 @@ export const POINTS_RATES: readonly PointsRate[] = [
     gelezenOp: "2026-08-21",
     bronDatum: null,
     hercontrole: null,
-    nuance: "Wat een mijl waard is hangt bij Flying Blue af van de vlucht; er is geen vaste koers om te lezen, ook niet als de pagina het wel had gedaan.",
+    nuance:
+      "Wat een mijl waard is hangt bij Flying Blue af van de vlucht; er is geen vaste koers om te lezen, ook niet als de pagina het wel had gedaan.",
   },
   {
     program: "ING Punten",
-    aliases: ["ing punten","ing","ing bank"],
+    aliases: ["ing punten", "ing", "ing bank"],
     eurPerPoint: 0,
     soort: "uitgesproken-nul",
     scope: "inwisselen voor geld",
-    quote: "ING Punten hebben geen geldwaarde. Je kan je ING Punten niet inwisselen voor geld en niet overdragen aan anderen",
-    sourceUrl: "https://assets.ing.com/m/410cccd97ce258bd/original/Voorwaarden-ING-Punten-vanaf-1-oktober-2025.pdf",
+    quote:
+      "ING Punten hebben geen geldwaarde. Je kan je ING Punten niet inwisselen voor geld en niet overdragen aan anderen",
+    sourceUrl:
+      "https://assets.ing.com/m/410cccd97ce258bd/original/Voorwaarden-ING-Punten-vanaf-1-oktober-2025.pdf",
     gelezenOp: "2026-08-21",
     bronDatum: "1 oktober 2025",
-    hercontrole: "Op 22 augustus 2026 zelf opnieuw opgehaald met kale curl: de PDF geeft HTTP 200 (127.289 bytes) en de zin 'geen geldwaarde' staat er nog in.",
-    nuance: "Die nul gaat over inwisselen tegen GELD. Wat een punt aan korting oplevert in de ING Winkel is een ander cijfer; dat staat achter Mijn ING en is niet openbaar.",
+    hercontrole:
+      "Op 22 augustus 2026 zelf opnieuw opgehaald met kale curl: de PDF geeft HTTP 200 (127.289 bytes) en de zin 'geen geldwaarde' staat er nog in.",
+    nuance:
+      "Die nul gaat over inwisselen tegen GELD. Wat een punt aan korting oplevert in de ING Winkel is een ander cijfer; dat staat achter Mijn ING en is niet openbaar.",
   },
   {
     program: "Membership Rewards",
-    aliases: ["membership rewards","american express membership rewards","amex membership rewards","american express","amex"],
+    aliases: [
+      "membership rewards",
+      "american express membership rewards",
+      "amex membership rewards",
+      "american express",
+      "amex",
+    ],
     eurPerPoint: 0.003,
     soort: "koers",
     scope: "Betalen met Punten via de Amex App / online account",
@@ -88,20 +99,26 @@ export const POINTS_RATES: readonly PointsRate[] = [
     sourceUrl: "https://www.americanexpress.com/nl-nl/rewards/membership-rewards/",
     gelezenOp: "2026-08-21",
     bronDatum: null,
-    hercontrole: "Op 22 augustus 2026 zelf opnieuw opgehaald met kale curl en een browser-UA: HTTP 200, 604.301 bytes, en het citaat staat er woordelijk in.",
-    nuance: "Overboeken naar een luchtvaart- of hotelpartner heeft een andere waarde, en die publiceert Amex niet.",
+    hercontrole:
+      "Op 22 augustus 2026 zelf opnieuw opgehaald met kale curl en een browser-UA: HTTP 200, 604.301 bytes, en het citaat staat er woordelijk in.",
+    nuance:
+      "Overboeken naar een luchtvaart- of hotelpartner heeft een andere waarde, en die publiceert Amex niet.",
   },
   {
     program: "RevPoints",
-    aliases: ["revpoints","revolut revpoints","revolut"],
+    aliases: ["revpoints", "revolut revpoints", "revolut"],
     eurPerPoint: null,
     soort: "geen-vaste-waarde",
     scope: "alle inwisselopties",
-    quote: "RevPoints hebben geen vaste geldwaarde en hun waarde hangt af van de gekozen inwisselmethode.",
-    sourceUrl: "https://help.revolut.com/nl-NL/help/revpoints/what-is-revpoints/question-how-can-i-redeem-my-revpoints/",
+    quote:
+      "RevPoints hebben geen vaste geldwaarde en hun waarde hangt af van de gekozen inwisselmethode.",
+    sourceUrl:
+      "https://help.revolut.com/nl-NL/help/revpoints/what-is-revpoints/question-how-can-i-redeem-my-revpoints/",
     gelezenOp: "2026-08-21",
     bronDatum: null,
-    hercontrole: "Op 22 augustus 2026 niet opnieuw te lezen: zowel direct als via r.jina.ai komt er een Cloudflare-uitdaging terug (HTTP 403). Die is niet omzeild, dus dit cijfer draagt de datum van 21 augustus 2026 en niet die van vandaag.",
-    nuance: "Revolut noemt wel één euro per punt, maar dat is een plafond op wat zij in rekening brengen bij een negatief saldo (maximaal € 0,02 per punt) en geen inwisselwaarde.",
+    hercontrole:
+      "Op 22 augustus 2026 niet opnieuw te lezen: zowel direct als via r.jina.ai komt er een Cloudflare-uitdaging terug (HTTP 403). Die is niet omzeild, dus dit cijfer draagt de datum van 21 augustus 2026 en niet die van vandaag.",
+    nuance:
+      "Revolut noemt wel één euro per punt, maar dat is een plafond op wat zij in rekening brengen bij een negatief saldo (maximaal € 0,02 per punt) en geen inwisselwaarde.",
   },
 ];

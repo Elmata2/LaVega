@@ -30,39 +30,39 @@
  * @property {{ role: 'user', content: unknown[] }[]} messages
  */
 
-const INVOICE_MODEL = 'claude-sonnet-5';
+const INVOICE_MODEL = "claude-sonnet-5";
 
 const INVOICE_SYSTEM = [
-  'Je leest e-mails en bijlagen en bepaalt of er een FACTUUR in zit.',
-  'Antwoord UITSLUITEND met JSON, zonder uitleg eromheen:',
+  "Je leest e-mails en bijlagen en bepaalt of er een FACTUUR in zit.",
+  "Antwoord UITSLUITEND met JSON, zonder uitleg eromheen:",
   '{"isInvoice": true|false, "kind": "invoice"|"notification"|"reminder"|"receipt"|"other",',
   ' "invoiceNumber": string|null, "issueDate": "YYYY-MM-DD"|null,',
   ' "dueDate": "YYYY-MM-DD"|null, "amount": number|null, "vatAmount": number|null,',
   ' "currency": string|null, "counterparty": string|null, "direction": "expense"|"income"|null,',
   ' "note": string}',
-  'kind beschrijft wat de mail IS:',
+  "kind beschrijft wat de mail IS:",
   '"invoice" = de factuur zelf staat erin (in de tekst of als bijlage);',
   '"notification" = de mail meldt een factuur die er niet in staat ("uw factuur staat klaar",',
-  'inloggen bij de leverancier, een link naar een portaal) — de eigenaar moet hem zelf ophalen;',
+  "inloggen bij de leverancier, een link naar een portaal) — de eigenaar moet hem zelf ophalen;",
   '"reminder" = herinnering of aanmaning voor een factuur die hij al hoorde te hebben;',
   '"receipt" = betaalbewijs of bevestiging van een betaling die al gedaan is;',
   '"other" = geen van deze.',
   'isInvoice is alleen true bij kind "invoice". Een melding, een herinnering en een',
-  'betaalbewijs zijn GEEN factuur, ook niet als er een bedrag in staat.',
-  'amount is het TOTAAL inclusief btw, als getal, punt als decimaalteken, zonder valutateken.',
-  'currency is de valuta die OP DE FACTUUR staat, als ISO-code (EUR, USD, GBP).',
-  'Neem hem niet aan: staat er geen valuta, zet dan null. LaVega vraagt het dan zelf.',
-  'Een factuur in dollars die als euro wordt geboekt is geen opmaakfoutje maar een',
-  'verkeerd bedrag in een boekhouding, en niets waarschuwt de eigenaar daarvoor.',
-  'vatAmount is alleen het btw-bedrag.',
+  "betaalbewijs zijn GEEN factuur, ook niet als er een bedrag in staat.",
+  "amount is het TOTAAL inclusief btw, als getal, punt als decimaalteken, zonder valutateken.",
+  "currency is de valuta die OP DE FACTUUR staat, als ISO-code (EUR, USD, GBP).",
+  "Neem hem niet aan: staat er geen valuta, zet dan null. LaVega vraagt het dan zelf.",
+  "Een factuur in dollars die als euro wordt geboekt is geen opmaakfoutje maar een",
+  "verkeerd bedrag in een boekhouding, en niets waarschuwt de eigenaar daarvoor.",
+  "vatAmount is alleen het btw-bedrag.",
   'direction: "expense" als iemand GELD VAN JOU wil, "income" als jij iemand factureert.',
-  'Laat een veld null als het er niet staat. Verzin nooit een bedrag of een nummer:',
-  'een verzonnen factuur in een boekhouding is erger dan een gemiste factuur.',
-  'note is één zin in het Nederlands: wat je zag, en bij een melding of herinnering',
-  'wat de eigenaar zelf moet doen.',
+  "Laat een veld null als het er niet staat. Verzin nooit een bedrag of een nummer:",
+  "een verzonnen factuur in een boekhouding is erger dan een gemiste factuur.",
+  "note is één zin in het Nederlands: wat je zag, en bij een melding of herinnering",
+  "wat de eigenaar zelf moet doen.",
   'Staat er onder "Bijlagen" niets, ga dan niet beweren dat er geen bijlage was:',
-  'je ziet alleen wat je is meegegeven.',
-].join(' ');
+  "je ziet alleen wat je is meegegeven.",
+].join(" ");
 
 /**
  * @param {NormalizedMessage} m
@@ -74,40 +74,40 @@ function buildClaudeRequest(m) {
   const content = [];
   for (const pdf of pdfs) {
     content.push({
-      type: 'document',
-      source: { type: 'base64', media_type: 'application/pdf', data: pdf.data },
+      type: "document",
+      source: { type: "base64", media_type: "application/pdf", data: pdf.data },
     });
   }
 
   /** @type {string[]} */
   const lines = [];
-  lines.push('Onderwerp: ' + m.subject);
-  lines.push('Afzender: ' + m.from);
-  lines.push('Datum: ' + m.date);
+  lines.push("Onderwerp: " + m.subject);
+  lines.push("Afzender: " + m.from);
+  lines.push("Datum: " + m.date);
   // Alleen een regel als er ook echt iets bij zit — zie de kop van dit bestand.
   if (pdfs.length > 0) {
     lines.push(
-      'Bijlagen: ' +
+      "Bijlagen: " +
         pdfs
           .map(function (p) {
             return p.name;
           })
-          .join(', '),
+          .join(", "),
     );
   }
   if (m.truncated) {
-    lines.push('(De tekst hieronder is afgekapt; de mail was ' + m.textChars + ' tekens lang.)');
+    lines.push("(De tekst hieronder is afgekapt; de mail was " + m.textChars + " tekens lang.)");
   }
-  lines.push('');
-  lines.push(m.text || '(deze mail had geen leesbare tekst)');
+  lines.push("");
+  lines.push(m.text || "(deze mail had geen leesbare tekst)");
 
-  content.push({ type: 'text', text: lines.join('\n') });
+  content.push({ type: "text", text: lines.join("\n") });
 
   return {
     model: INVOICE_MODEL,
     max_tokens: 1024,
     system: INVOICE_SYSTEM,
-    messages: [{ role: 'user', content: content }],
+    messages: [{ role: "user", content: content }],
   };
 }
 
@@ -124,13 +124,13 @@ function requestSize(request) {
   let pdfBytes = 0;
   for (const block of request.messages[0].content) {
     const b = /** @type {Record<string, unknown>} */ (block);
-    if (b.type === 'document') {
+    if (b.type === "document") {
       documents += 1;
       const source = /** @type {Record<string, unknown>} */ (b.source);
-      const data = typeof source.data === 'string' ? source.data : '';
+      const data = typeof source.data === "string" ? source.data : "";
       pdfBytes += Math.floor((data.length * 3) / 4);
-    } else if (b.type === 'text') {
-      textChars += typeof b.text === 'string' ? b.text.length : 0;
+    } else if (b.type === "text") {
+      textChars += typeof b.text === "string" ? b.text.length : 0;
     }
   }
   return { documents: documents, textChars: textChars, pdfBytes: pdfBytes };

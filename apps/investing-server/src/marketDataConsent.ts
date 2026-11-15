@@ -12,12 +12,21 @@ export type MarketDataConsentStore = {
   set(decision: MarketDataConsentDecision): Promise<void>;
 };
 
-const emptyDecision = (tenantId: string): MarketDataConsentDecision => ({ tenantId, accepted: false, decidedAt: null, disclosureVersion: YAHOO_DISCLOSURE_VERSION });
+const emptyDecision = (tenantId: string): MarketDataConsentDecision => ({
+  tenantId,
+  accepted: false,
+  decidedAt: null,
+  disclosureVersion: YAHOO_DISCLOSURE_VERSION,
+});
 
 export function createInMemoryMarketDataConsentStore(): MarketDataConsentStore {
   const decisions = new Map<string, MarketDataConsentDecision>();
   return {
-    async get(tenantId) { return structuredClone(decisions.get(tenantId) ?? emptyDecision(tenantId)); },
-    async set(decision) { decisions.set(decision.tenantId, structuredClone(decision)); },
+    async get(tenantId) {
+      return structuredClone(decisions.get(tenantId) ?? emptyDecision(tenantId));
+    },
+    async set(decision) {
+      decisions.set(decision.tenantId, structuredClone(decision));
+    },
   };
 }

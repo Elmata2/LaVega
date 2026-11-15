@@ -1,11 +1,18 @@
 import { useMemo } from "react";
 import type { Account } from "@lavega/core";
-import { accountType } from "@lavega/core";
+import { accountType, accountTypeKind, type AccountTypeKind } from "@lavega/core";
 import type { View } from "../../App";
-import { formatEuro } from "../../format.js";
+import { formatEuroIn } from "../../format.js";
 import { BANK_LOGOS, type BankLogo } from "../../assets/bank-logos.generated.js";
 import useBrandRamps from "../../useBrandRamps.js";
 import Module from "../Module.js";
+import Button from "../ui/Button.js";
+import CardLink from "../ui/CardLink.js";
+import { useAppLocale } from "../../appLocale.js";
+import { moneyCopy, type MoneyCopy } from "../../copy/money.js";
+import { wizardCopy } from "../../copy/wizard.js";
+import { CATALOGUE_ENTRIES } from "../../catalogue-rates";
+import { statedCardPlaceholders } from "../../plan/statedPlaceholders";
 
 /* Je kaarten — the card-art strip from `Modules for homescreen 5/7.png`.
  *
@@ -54,29 +61,79 @@ import Module from "../Module.js";
  * transition: een toestand mag, een overgang is motion en die gaat apart. */
 
 /** Cards first — that is what the block is called and what he wants to see. */
-const TYPE_ORDER = ["Creditcard", "Betaalrekening", "Spaarrekening", "Beleggingsrekening", "Overig"];
+const TYPE_ORDER = [
+  "Creditcard",
+  "Betaalrekening",
+  "Spaarrekening",
+  "Beleggingsrekening",
+  "Lening",
+  "Woning",
+  "Voertuig",
+  "Overig bezit",
+  "Overige schuld",
+  "Overig",
+];
 
-/** Four faces, cycled by position. Every stop is an existing token.
- *
- *  DRIE STOPS, NIET TWEE, en alledrie beginnen ze donker. Dat is dezelfde
- *  ingreep als in `cardRamp` (brandFace.ts) en om dezelfde reden: een verloop
- *  wordt sterker door zijn bereik, en het bereik kan alleen naar de donkere kant
- *  groeien omdat de lichte kant de leesbaarheid van het saldo draagt. Twee van
- *  deze vier liepen van accent naar chart-blue en van teal naar accent — dat zijn
- *  kleuren die dicht bij elkaar liggen, dus het verloop was er nauwelijks. */
+/** Exhaustive by switch, so a new AccountTypeKind fails the build here instead
+ *  of rendering nothing. */
+function typeLabel(c: MoneyCopy["accountTypes"], kind: AccountTypeKind): string {
+  switch (kind) {
+    case "current":
+      return c.current;
+    case "savings":
+      return c.savings;
+    case "credit":
+      return c.credit;
+    case "investment":
+      return c.investment;
+    case "loan":
+      return c.loan;
+    case "property":
+      return c.property;
+    case "vehicle":
+      return c.vehicle;
+    case "otherAsset":
+      return c.otherAsset;
+    case "otherLiability":
+      return c.otherLiability;
+    case "other":
+      return c.other;
+  }
+}
+
+/** Four flat faces, cycled by position, each a --card-face-* token that holds
+ *  --card-text at 4.5:1.
+ */
 const FACES = [
-  "linear-gradient(135deg, var(--ink) 0%, var(--ink-soft) 38%, var(--accent) 100%)",
-  "linear-gradient(135deg, var(--ink) 0%, var(--accent) 45%, var(--chart-blue) 100%)",
-  "linear-gradient(135deg, var(--ink) 0%, var(--chart-teal) 45%, var(--accent) 100%)",
-  "linear-gradient(135deg, var(--ink) 0%, var(--ink-soft) 38%, var(--chart-purple) 100%)",
+  "var(--card-face-1)",
+  "var(--card-face-2)",
+  "var(--card-face-3)",
+  "var(--card-face-4)",
 ];
 
 /* Corporate-form words, dropped before matching. `account.bank` arrives as "ING"
  * from a CSV profile, as "ING Bank N.V." from an Enable Banking ASPSP name and as
  * "Coöperatieve Rabobank U.A." from another — all three mean the same issuer. */
 const CORPORATE = new Set([
-  "bank", "banken", "nv", "bv", "ua", "ag", "sa", "sas", "uab", "gmbh", "as", "ab", "plc", "ltd",
-  "limited", "group", "cooperatieve", "cooperatief", "the",
+  "bank",
+  "banken",
+  "nv",
+  "bv",
+  "ua",
+  "ag",
+  "sa",
+  "sas",
+  "uab",
+  "gmbh",
+  "as",
+  "ab",
+  "plc",
+  "ltd",
+  "limited",
+  "group",
+  "cooperatieve",
+  "cooperatief",
+  "the",
 ]);
 
 /** The keys a bank name may be known by: the whole name, and the name without
@@ -119,23 +176,67 @@ export function ibanTail(iban: string): string | null {
  *  die rechtstreeks op het element wordt gezet: een CSS-variabele op de KAART
  *  zou de stijl van elk kind laten hertekenen bij elke muisbeweging, en een
  *  kaart heeft er een stuk of acht. */
-export function sheenTransform(rect: { left: number; top: number }, clientX: number, clientY: number): string {
+export function sheenTransform(
+  rect: { left: number; top: number },
+  clientX: number,
+  clientY: number,
+): string {
   const x = Math.round(clientX - rect.left);
   const y = Math.round(clientY - rect.top);
   return `translate3d(${x}px, ${y}px, 0)`;
 }
 
+/* .bank-card itself, .bank-card-sheen and the hover/focus-within box-shadow
+ * stay hand-written CSS (blocks.css): the sheen's two feature media queries
+ * (`hover: hover`, `prefers-reduced-motion`) are outside what
+ * test-support/resolveStyle can resolve (it only parses max-width blocks), and
+ * the hover contrast math is load-bearing (see brandFace.ts).
+ *
+ * NOT exported, deliberately. It was, so the test could assert against "the
+ * classes actually rendered" — but importing this constant is not that. It is
+ * the string the component happens to use today, and the assertion keeps
+ * passing if the component stops applying it to this element. That is the
+ * vacuous assertion the whole migration exists to avoid. The test now mounts
+ * the block and reads className off the strip itself. */
+const CARD_STRIP_CLASS = "flex gap-4 overflow-x-auto pb-2 [scroll-snap-type:x_proximity]";
+
 type KaartenBlockProps = {
   accounts: Account[];
   onNavigate: (view: View) => void;
+  /** Catalogue ids (or "other") from the wizard; each shows as a card that is
+   *  not connected yet until the bank data brings the real one. */
+  statedCredit?: readonly string[];
+  statedDebit?: readonly string[];
 };
 
-export default function KaartenBlock({ accounts, onNavigate }: KaartenBlockProps) {
+const NO_IDS: readonly string[] = [];
+
+export default function KaartenBlock({
+  accounts,
+  onNavigate,
+  statedCredit = NO_IDS,
+  statedDebit = NO_IDS,
+}: KaartenBlockProps) {
+  const [locale] = useAppLocale();
+  const c = moneyCopy[locale].kaarten;
+  const typesCopy = moneyCopy[locale].accountTypes;
   const ramps = useBrandRamps();
+  const wc = wizardCopy[locale];
+  const placeholders = useMemo(
+    () =>
+      statedCardPlaceholders({
+        credit: statedCredit,
+        debit: statedDebit,
+        accounts,
+        entries: CATALOGUE_ENTRIES,
+        otherLabels: { credit: wc.otherCard, debit: wc.otherDebitCard },
+      }),
+    [statedCredit, statedDebit, accounts, wc.otherCard, wc.otherDebitCard],
+  );
   const cards = useMemo(
     () =>
       accounts
-        .map((a) => ({ account: a, type: accountType(a) }))
+        .map((a) => ({ account: a, type: accountType(a), kind: accountTypeKind(a) }))
         .sort((a, b) => {
           const ta = TYPE_ORDER.indexOf(a.type);
           const tb = TYPE_ORDER.indexOf(b.type);
@@ -146,20 +247,16 @@ export default function KaartenBlock({ accounts, onNavigate }: KaartenBlockProps
 
   return (
     <Module
-      title="Kaarten"
+      title={c.title}
       span={3}
       height="short"
-      menu={
-        <button type="button" className="card-link" onClick={() => onNavigate("accounts")}>
-          Rekeningen →
-        </button>
-      }
+      menu={<CardLink onClick={() => onNavigate("accounts")}>{c.rekeningenArrow}</CardLink>}
     >
-      {cards.length === 0 ? (
-        <p className="block-empty">Nog geen rekeningen gekoppeld — importeer een bestand of koppel een bank.</p>
+      {cards.length === 0 && placeholders.length === 0 ? (
+        <p className="block-empty">{c.geenRekeningenGekoppeld}</p>
       ) : (
-        <div className="card-strip">
-          {cards.map(({ account, type }, i) => {
+        <div className={CARD_STRIP_CLASS}>
+          {cards.map(({ account, kind }, i) => {
             const tail = ibanTail(account.iban);
             const logo = bankLogo(account.bank);
             // De eigen huisstijl waar die bestaat, anders het tokenvlak.
@@ -169,7 +266,7 @@ export default function KaartenBlock({ accounts, onNavigate }: KaartenBlockProps
                 className="bank-card"
                 key={account.key}
                 style={{ background: face }}
-                aria-label={`${account.bank || "Onbekende bank"} · ${type}`}
+                aria-label={c.cardAria(account.bank || c.onbekendeBank, typeLabel(typesCopy, kind))}
                 /* De glans volgt de cursor. De transform gaat RECHTSTREEKS op de
                  * laag en niet via React-state: bij state zou elke muisbeweging
                  * een render van de hele kaartenrij zijn. Zo raakt hij alleen
@@ -184,8 +281,8 @@ export default function KaartenBlock({ accounts, onNavigate }: KaartenBlockProps
               >
                 {/* Puur decoratief: een schermlezer heeft niets aan een lichtvlek. */}
                 <span className="bank-card-sheen" aria-hidden="true" />
-                <header className="bank-card-top">
-                  <span className="bank-card-bank">
+                <header className="flex items-baseline justify-between gap-3">
+                  <span className="font-bold text-[0.95rem] overflow-hidden text-ellipsis whitespace-nowrap">
                     {logo ? (
                       /* Decorative: the bank's name is right next to it, so a
                        * screen reader should not read the mark twice. The white
@@ -193,13 +290,14 @@ export default function KaartenBlock({ accounts, onNavigate }: KaartenBlockProps
                       <img
                         src={logo.dataUri}
                         alt=""
+                        className="bank-logo"
                         width={16}
                         height={16}
                         style={{
                           width: 16,
                           height: 16,
                           objectFit: "contain",
-                          background: "#fff",
+                          background: "var(--card-text)",
                           borderRadius: 3,
                           padding: 1,
                           marginRight: 6,
@@ -207,34 +305,97 @@ export default function KaartenBlock({ accounts, onNavigate }: KaartenBlockProps
                         }}
                       />
                     ) : null}
-                    {account.bank || "Onbekende bank"}
+                    {account.bank || c.onbekendeBank}
                   </span>
-                  <span className="bank-card-type">{type}</span>
+                  <span className="flex-none font-mono text-[0.6rem] tracking-[0.1em] uppercase opacity-75">
+                    {typeLabel(typesCopy, kind)}
+                  </span>
                 </header>
 
-                <div className="bank-card-number">
+                <div className="font-mono text-[0.95rem] tracking-[0.06em]">
                   {tail ? (
                     <>
                       <span aria-hidden="true">•••• •••• ••••</span> {tail}
                     </>
                   ) : (
-                    <span className="bank-card-unknown">geen IBAN bekend</span>
+                    <span className="opacity-70 italic">{c.geenIbanBekend}</span>
                   )}
                 </div>
 
-                <footer className="bank-card-bottom">
-                  <div className="bank-card-who">
-                    <div className="bank-card-caption">Op naam van</div>
-                    <div className="bank-card-holder" title={account.entity || undefined}>
-                      {account.entity || "geen entiteit ingesteld"}
+                <footer className="flex items-end justify-between gap-3 text-[0.85rem] tabular-nums">
+                  <div className="min-w-0">
+                    <div className="font-mono text-[0.55rem] tracking-[0.1em] uppercase opacity-70">
+                      {c.opNaamVan}
+                    </div>
+                    <div
+                      className="font-semibold line-clamp-2 [overflow-wrap:anywhere]"
+                      title={account.entity || undefined}
+                    >
+                      {account.entity || c.geenEntiteitIngesteld}
                     </div>
                   </div>
-                  <div className="bank-card-saldo">
-                    <div className="bank-card-caption">Saldo</div>
-                    <div className={account.balance === null ? "bank-card-unknown" : ""}>
-                      {account.balance === null ? "onbekend" : formatEuro(account.balance)}
+                  <div className="text-right flex-none">
+                    <div className="font-mono text-[0.55rem] tracking-[0.1em] uppercase opacity-70">
+                      {c.saldoLabel}
+                    </div>
+                    <div className={account.balance === null ? "opacity-70 italic" : ""}>
+                      {account.balance === null
+                        ? c.onbekend
+                        : formatEuroIn(locale, account.balance)}
                     </div>
                   </div>
+                </footer>
+              </article>
+            );
+          })}
+          {placeholders.map((p) => {
+            const label = p.brand === null ? undefined : (wc.bankNames[p.brand] ?? p.brand);
+            const logo = label === undefined ? null : bankLogo(label);
+            return (
+              <article
+                className="bank-card"
+                key={`${p.kind}:${p.id}`}
+                style={{
+                  background: "var(--surface-2)",
+                  border: "1px dashed var(--line)",
+                  color: "var(--ink)",
+                }}
+                aria-label={c.placeholderAria(p.name)}
+              >
+                <header className="flex items-baseline justify-between gap-3">
+                  <span className="font-bold text-[0.95rem] overflow-hidden text-ellipsis whitespace-nowrap">
+                    {logo ? (
+                      <img
+                        src={logo.dataUri}
+                        alt=""
+                        className="bank-logo"
+                        width={16}
+                        height={16}
+                        style={{
+                          width: 16,
+                          height: 16,
+                          objectFit: "contain",
+                          background: "var(--card-text)",
+                          borderRadius: 3,
+                          padding: 1,
+                          marginRight: 6,
+                          verticalAlign: "-3px",
+                        }}
+                      />
+                    ) : null}
+                    {p.name}
+                  </span>
+                </header>
+                <div className="text-[0.85rem]" style={{ color: "var(--muted)" }}>
+                  {c.nietGekoppeld}
+                </div>
+                <footer className="flex">
+                  <Button
+                    className="px-3 py-1 text-[0.85rem] font-semibold bg-transparent"
+                    onClick={() => onNavigate("accounts")}
+                  >
+                    {c.koppelen}
+                  </Button>
                 </footer>
               </article>
             );

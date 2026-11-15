@@ -18,7 +18,13 @@ test("only {subject,key,value,source} is read — the note and everything else i
     AGENTS.travel,
   );
   expect(out).toHaveLength(1);
-  expect(out[0]).toMatchObject({ agent: "travel", subject: "ING betaalpas", key: "fxFeePct", value: "1.4", source: "user" });
+  expect(out[0]).toMatchObject({
+    agent: "travel",
+    subject: "ING betaalpas",
+    key: "fxFeePct",
+    value: "1.4",
+    source: "user",
+  });
   expect(out[0].note).toBeUndefined();
   const serialized = JSON.stringify(out);
   expect(serialized).not.toContain("12450");
@@ -29,8 +35,23 @@ test("only {subject,key,value,source} is read — the note and everything else i
 test("the ROUTE decides the agent — a client cannot smuggle a fact into another namespace", () => {
   // Claiming agent "travel" on the categorize route does not make it a travel
   // fact; it is stamped `categorize`, where a brand subject is not allowed.
-  expect(sanitizeKnownFacts([{ agent: "travel", subject: "ING betaalpas", key: "fxFeePct", value: "1.4" }], AGENTS.categorize)).toEqual([]);
-  const ok = sanitizeKnownFacts([{ agent: "travel", subject: "Overboekingen", key: "corrigeerNaar", value: "Eigen overboeking" }], AGENTS.categorize);
+  expect(
+    sanitizeKnownFacts(
+      [{ agent: "travel", subject: "ING betaalpas", key: "fxFeePct", value: "1.4" }],
+      AGENTS.categorize,
+    ),
+  ).toEqual([]);
+  const ok = sanitizeKnownFacts(
+    [
+      {
+        agent: "travel",
+        subject: "Overboekingen",
+        key: "corrigeerNaar",
+        value: "Eigen overboeking",
+      },
+    ],
+    AGENTS.categorize,
+  );
   expect(ok).toHaveLength(1);
   expect(ok[0].agent).toBe("categorize");
 });
@@ -46,15 +67,29 @@ test("a fact carrying a balance, an amount, an IBAN or a counterparty never gets
   expect(sanitizeKnownFacts(poisoned, AGENTS.travel)).toEqual([]);
   // A counterparty cannot be a subject anywhere but travel, and there it is a
   // public brand — categorize/facturen/chat subjects come from closed lists.
-  expect(sanitizeKnownFacts([{ subject: "Albert Heijn", key: "corrigeerNaar", value: "Boodschappen" }], AGENTS.categorize)).toEqual([]);
-  expect(sanitizeKnownFacts([{ subject: "ACME BV", key: "voorkeur", value: "30 dagen" }], AGENTS.facturen)).toEqual([]);
+  expect(
+    sanitizeKnownFacts(
+      [{ subject: "Albert Heijn", key: "corrigeerNaar", value: "Boodschappen" }],
+      AGENTS.categorize,
+    ),
+  ).toEqual([]);
+  expect(
+    sanitizeKnownFacts(
+      [{ subject: "ACME BV", key: "voorkeur", value: "30 dagen" }],
+      AGENTS.facturen,
+    ),
+  ).toEqual([]);
 });
 
 test("malformed input yields no facts rather than an error, and the list is capped", () => {
   expect(sanitizeKnownFacts(undefined, AGENTS.chat)).toEqual([]);
   expect(sanitizeKnownFacts("nope", AGENTS.chat)).toEqual([]);
   expect(sanitizeKnownFacts([null, 3, {}, { subject: "antwoord" }], AGENTS.chat)).toEqual([]);
-  const many = Array.from({ length: 99 }, () => ({ subject: "antwoord", key: "lengte", value: "kort" }));
+  const many = Array.from({ length: 99 }, () => ({
+    subject: "antwoord",
+    key: "lengte",
+    value: "kort",
+  }));
   // 60 read, then deduped by (agent,subject,key) — the cap is what matters.
   expect(sanitizeKnownFacts(many, AGENTS.chat).length).toBeLessThanOrEqual(60);
 });

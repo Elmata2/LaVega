@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, useState } from "react";
+import { act, useEffect, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, expect, test } from "vitest";
@@ -34,8 +34,24 @@ const ASOF = "2026-08-16";
  * langer met een cijfer als eigen kenmerk, zodat een generieke naam als
  * "Betaalrekening" nooit per ongeluk op een omschrijving matcht. */
 const ACCOUNTS: Account[] = [
-  { key: "A1", iban: "NL01INGB0001234567", name: "Zakelijk", bank: "ING", entity: "BV1", currency: "EUR", balance: 10_000 },
-  { key: "P1", iban: "NL02INGB0007654321", name: "Betaalrekening", bank: "ING", entity: "Privé", currency: "EUR", balance: 5_000 },
+  {
+    key: "A1",
+    iban: "NL01INGB0001234567",
+    name: "Zakelijk",
+    bank: "ING",
+    entity: "BV1",
+    currency: "EUR",
+    balance: 10_000,
+  },
+  {
+    key: "P1",
+    iban: "NL02INGB0007654321",
+    name: "Betaalrekening",
+    bank: "ING",
+    entity: "Privé",
+    currency: "EUR",
+    balance: 5_000,
+  },
 ];
 /** Alleen BV1 is ingedeeld; "Privé" is privé via de harde standaard van
  *  entities.ts, precies zoals in een vault waarin hij één keuze maakte. */
@@ -46,17 +62,54 @@ function gtx(o: Partial<Tx> & Pick<Tx, "id" | "accountKey" | "date" | "amount">)
 }
 
 const TXS: Tx[] = [
-  gtx({ id: "x1", accountKey: "A1", date: "2026-03-14", amount: -4_300, counterparty: "Privé", description: "Naar NL02INGB0007654321" }),
-  gtx({ id: "x2", accountKey: "P1", date: "2026-03-15", amount: 4_300, counterparty: "BV1", description: "Van NL01INGB0001234567" }),
-  gtx({ id: "x3", accountKey: "A1", date: "2026-05-08", amount: -1_900, counterparty: "Privé", description: "NL02INGB0007654321 aanvulling" }),
+  gtx({
+    id: "x1",
+    accountKey: "A1",
+    date: "2026-03-14",
+    amount: -4_300,
+    counterparty: "Privé",
+    description: "Naar NL02INGB0007654321",
+  }),
+  gtx({
+    id: "x2",
+    accountKey: "P1",
+    date: "2026-03-15",
+    amount: 4_300,
+    counterparty: "BV1",
+    description: "Van NL01INGB0001234567",
+  }),
+  gtx({
+    id: "x3",
+    accountKey: "A1",
+    date: "2026-05-08",
+    amount: -1_900,
+    counterparty: "Privé",
+    description: "NL02INGB0007654321 aanvulling",
+  }),
   gtx({ id: "x4", accountKey: "P1", date: "2026-02-01", amount: -640, counterparty: "Coolblue" }),
   gtx({ id: "x5", accountKey: "A1", date: "2026-07-20", amount: -310, counterparty: "Coolblue" }),
   gtx({ id: "x6", accountKey: "GONE", date: "2026-04-01", amount: -50, counterparty: "Onbekend" }),
   // ZIJN EIGEN GELD, aan allebei de kanten en met dezelfde naam erop. Zonder de
   // uitsluitingen in core zou hij hier als zijn eigen grootste "leverancier"
   // bovenaan de bijproductlijst staan. Twee afschrijvingen, dus geen kruising.
-  gtx({ id: "x7", accountKey: "P1", date: "2026-04-10", amount: -2_000, counterparty: "A Steunenberg", category: "Eigen overboeking", manual: true }),
-  gtx({ id: "x8", accountKey: "A1", date: "2026-06-10", amount: -3_000, counterparty: "A Steunenberg", category: "Eigen overboeking", manual: true }),
+  gtx({
+    id: "x7",
+    accountKey: "P1",
+    date: "2026-04-10",
+    amount: -2_000,
+    counterparty: "A Steunenberg",
+    category: "Eigen overboeking",
+    manual: true,
+  }),
+  gtx({
+    id: "x8",
+    accountKey: "A1",
+    date: "2026-06-10",
+    amount: -3_000,
+    counterparty: "A Steunenberg",
+    category: "Eigen overboeking",
+    manual: true,
+  }),
 ];
 
 type Opts = {
@@ -194,7 +247,9 @@ test("gemeten en niets over de grens is de enige nul die deze module uitspreekt,
   // "VOND LaVega geen overboeking", niet "er STAAT er geen in je vault": het
   // tweede is een uitspraak over zijn vault en die kan deze meting niet doen.
   // Zie de test hieronder voor het bedrag dat achter dat verschil zat.
-  expect(html).toContain("vond LaVega geen overboeking die de grens tussen zakelijk en privé oversteekt");
+  expect(html).toContain(
+    "vond LaVega geen overboeking die de grens tussen zakelijk en privé oversteekt",
+  );
   expect(html).not.toContain("er geen gevonden");
   expect(html).toContain("Dit is wél gemeten");
   // De nul staat nooit alleen: eronder staat waar deze meting blind is.
@@ -215,10 +270,20 @@ test("een afboeking naar een rekening die niet in je vault staat, wordt onder de
    * NL77RABO0123456789 is, en een bedrag noemen zou suggereren dat het naar hem
    * ging. Vandaar een AANTAL onder de nul, en geen euro erbij. */
   const html = markup({
-    allTxs: [gtx({ id: "z1", accountKey: "A1", date: "2026-02-05", amount: -12_400, description: "SEPA Overboeking NL77RABO0123456789" })],
+    allTxs: [
+      gtx({
+        id: "z1",
+        accountKey: "A1",
+        date: "2026-02-05",
+        amount: -12_400,
+        description: "SEPA Overboeking NL77RABO0123456789",
+      }),
+    ],
   });
   expect(html).toContain('data-testid="grens-niets-gekruist"');
-  expect(html).toContain("Op 1 afschrijving van een zakelijke rekening staat een rekeningnummer dat in geen enkele rekening van je vault voorkomt");
+  expect(html).toContain(
+    "Op 1 afschrijving van een zakelijke rekening staat een rekeningnummer dat in geen enkele rekening van je vault voorkomt",
+  );
   expect(html).toContain("die rij telt hier niet mee");
   // Geen bedrag bij de blinde vlek: niet in euro's en niet als nul.
   expect(html).not.toContain("12.400");
@@ -252,10 +317,20 @@ afterEach(() => {
 /** Wat App.tsx is: hij houdt de instellingen vast en geeft de nieuwe lijst
  *  meteen weer naar beneden. Zonder die lus test je een scherm dat zijn eigen
  *  antwoord nooit terugziet. */
-let saved: VatSettings[] = [];
-function Host({ entities, initial, accounts }: { entities: string[]; initial: VatSettings[]; accounts: Account[] }) {
+const savedBox: { current: VatSettings[] } = { current: [] };
+function Host({
+  entities,
+  initial,
+  accounts,
+}: {
+  entities: string[];
+  initial: VatSettings[];
+  accounts: Account[];
+}) {
   const [vatSettings, setVatSettings] = useState<VatSettings[]>(initial);
-  saved = vatSettings;
+  useEffect(() => {
+    savedBox.current = vatSettings;
+  }, [vatSettings]);
   return (
     <Belasting
       entities={entities}
@@ -275,11 +350,19 @@ function Host({ entities, initial, accounts }: { entities: string[]; initial: Va
 }
 
 function render(entities: string[], opts: { initial?: VatSettings[]; accounts?: Account[] } = {}) {
-  saved = opts.initial ?? [];
+  savedBox.current = opts.initial ?? [];
   container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);
-  act(() => root!.render(<Host entities={entities} initial={opts.initial ?? []} accounts={opts.accounts ?? ACCOUNTS} />));
+  act(() =>
+    root!.render(
+      <Host
+        entities={entities}
+        initial={opts.initial ?? []}
+        accounts={opts.accounts ?? ACCOUNTS}
+      />,
+    ),
+  );
   return container;
 }
 
@@ -290,7 +373,8 @@ function click(el: HTMLElement) {
 }
 
 function type(el: HTMLInputElement | HTMLSelectElement, value: string) {
-  const proto = el instanceof HTMLSelectElement ? HTMLSelectElement.prototype : HTMLInputElement.prototype;
+  const proto =
+    el instanceof HTMLSelectElement ? HTMLSelectElement.prototype : HTMLInputElement.prototype;
   act(() => {
     Object.getOwnPropertyDescriptor(proto, "value")!.set!.call(el, value);
     el.dispatchEvent(new Event("input", { bubbles: true }));
@@ -299,9 +383,13 @@ function type(el: HTMLInputElement | HTMLSelectElement, value: string) {
 }
 
 const byText = (text: string) =>
-  [...container!.querySelectorAll<HTMLButtonElement>("button")].find((b) => (b.textContent ?? "").includes(text));
-const streamSelect = () => container!.querySelector<HTMLSelectElement>('select[aria-label^="Wat was "]');
-const answersOf = (entity: string) => saved.find((s) => s.entity === entity)?.crossScopeAnswers ?? [];
+  [...container!.querySelectorAll<HTMLButtonElement>("button")].find((b) =>
+    (b.textContent ?? "").includes(text),
+  );
+const streamSelect = () =>
+  container!.querySelector<HTMLSelectElement>('select[aria-label^="Wat was "]');
+const answersOf = (entity: string) =>
+  savedBox.current.find((s) => s.entity === entity)?.crossScopeAnswers ?? [];
 
 test("de vraag wordt per STROOM gesteld, één keer, en niet per overboeking", () => {
   render(["BV1"]);
@@ -317,17 +405,17 @@ test("er wordt niets bewaard zonder zijn bevestiging", () => {
 
   // Alleen het keuzemenu aanraken schrijft niets weg.
   type(streamSelect()!, "dividend");
-  expect(saved).toEqual([]);
+  expect(savedBox.current).toEqual([]);
 
   // En annuleren gooit het concept weg in plaats van het te bewaren.
   click(byText("Annuleer")!);
-  expect(saved).toEqual([]);
+  expect(savedBox.current).toEqual([]);
   click(byText("Beantwoord 1 stroom")!);
   expect(streamSelect()!.value).toBe("");
 
   // "Bewaar antwoorden" zonder ingevuld antwoord bewaart ook niets, en zegt dat.
   click(byText("Bewaar antwoorden")!);
-  expect(saved).toEqual([]);
+  expect(savedBox.current).toEqual([]);
   expect(container!.textContent).toContain("Niets bewaard");
 });
 
@@ -344,7 +432,7 @@ test("zijn antwoord wordt een bewaard feit op de ZAKELIJKE onderneming, en de vr
   expect(answers[0].updatedAt).toBe(ASOF);
   // Op de zakelijke kant bewaard: bij elke kruising is precies één kant
   // zakelijk, dus die keuze is eenduidig en overleeft de privékant.
-  expect(saved.map((s) => s.entity)).toEqual(["BV1"]);
+  expect(savedBox.current.map((s) => s.entity)).toEqual(["BV1"]);
 
   // Het scherm geeft zijn antwoord terug, met de dekking erbij — een antwoord
   // per stroom spreekt ook voor de latere overboekingen van die stroom.
@@ -384,7 +472,7 @@ test("een antwoord over een stroom overleeft “Bereken & bewaar” terwijl de o
   expect(answersOf("BV1")).toHaveLength(1);
   expect(answersOf("BV1")[0].kind).toBe("salaris");
   // en de onderneming in beeld heeft nu ook een rij, zonder de antwoorden op te eten
-  expect(saved.map((s) => s.entity).sort()).toEqual(["BV1", "Privé"]);
+  expect(savedBox.current.map((s) => s.entity).sort()).toEqual(["BV1", "Privé"]);
 });
 
 test("een antwoord overleeft “Bereken & bewaar” ook als er al een onbewaarde bewerking van dezelfde onderneming lag", () => {
@@ -394,7 +482,10 @@ test("een antwoord overleeft “Bereken & bewaar” ook als er al een onbewaarde
   // concept-stap in `bewaarGrensAntwoorden` overschreef die knop het antwoord
   // met een concept van vóór het antwoord.
   render(["BV1"]);
-  type(container!.querySelector<HTMLSelectElement>('select[aria-label="BTW-frequentie BV1"]')!, "monthly");
+  type(
+    container!.querySelector<HTMLSelectElement>('select[aria-label="BTW-frequentie BV1"]')!,
+    "monthly",
+  );
 
   click(byText("Beantwoord 1 stroom")!);
   type(streamSelect()!, "dividend");
@@ -402,8 +493,8 @@ test("een antwoord overleeft “Bereken & bewaar” ook als er al een onbewaarde
   expect(answersOf("BV1")).toHaveLength(1);
 
   click(byText("Bereken & bewaar")!);
-  expect(saved.find((s) => s.entity === "BV1")?.frequency).toBe("monthly"); // zijn bewerking staat er nog
-  expect(answersOf("BV1")).toHaveLength(1);                                 // en zijn antwoord ook
+  expect(savedBox.current.find((s) => s.entity === "BV1")?.frequency).toBe("monthly"); // zijn bewerking staat er nog
+  expect(answersOf("BV1")).toHaveLength(1); // en zijn antwoord ook
   expect(answersOf("BV1")[0].kind).toBe("dividend");
 });
 
@@ -422,8 +513,8 @@ test("een naam met een spatie erachter maakt geen tweede instellingenrij", () =>
   type(streamSelect()!, "dividend");
   click(byText("Bewaar antwoorden")!);
 
-  expect(saved).toHaveLength(1);
-  expect(saved[0].entity).toBe("BV1 ");
-  expect(saved[0].crossScopeAnswers).toHaveLength(1);
-  expect(saved[0].defaultRatePct).toBe(21); // zijn bestaande instelling staat er nog
+  expect(savedBox.current).toHaveLength(1);
+  expect(savedBox.current[0].entity).toBe("BV1 ");
+  expect(savedBox.current[0].crossScopeAnswers).toHaveLength(1);
+  expect(savedBox.current[0].defaultRatePct).toBe(21); // zijn bestaande instelling staat er nog
 });

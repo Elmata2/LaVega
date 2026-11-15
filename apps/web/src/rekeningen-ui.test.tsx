@@ -5,7 +5,12 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, expect, test } from "vitest";
 import type { Account, Tx } from "@lavega/core";
 import { accountSummaries } from "@lavega/core";
-import Rekeningen, { groupAccountsByBank, bankInitials, bankTone, UNKNOWN_BANK } from "./views/Rekeningen";
+import Rekeningen, {
+  groupAccountsByBank,
+  bankInitials,
+  bankTone,
+  UNKNOWN_BANK,
+} from "./views/Rekeningen";
 
 /* B4 — Rekeningen grouped by bank.
  *
@@ -21,21 +26,49 @@ import Rekeningen, { groupAccountsByBank, bankInitials, bankTone, UNKNOWN_BANK }
 
 function acc(p: Partial<Account> & { key: string }): Account {
   return {
-    iban: "", name: p.key, bank: "", entity: "Prive", currency: "EUR", balance: null,
+    iban: "",
+    name: p.key,
+    bank: "",
+    entity: "Prive",
+    currency: "EUR",
+    balance: null,
     ...p,
   } as Account;
 }
 
 const ACCOUNTS: Account[] = [
   acc({ key: "NL01INGB", iban: "NL01INGB", name: "Betaalrekening", bank: "ING", balance: 1200.5 }),
-  acc({ key: "NL02INGB", iban: "NL02INGB", name: "Oranje Spaarrekening", bank: "ING", balance: 25000 }),
-  acc({ key: "NL03ABNA", iban: "NL03ABNA", name: "Zakelijk", bank: "ABN AMRO", entity: "BV1", balance: null }),
+  acc({
+    key: "NL02INGB",
+    iban: "NL02INGB",
+    name: "Oranje Spaarrekening",
+    bank: "ING",
+    balance: 25000,
+  }),
+  acc({
+    key: "NL03ABNA",
+    iban: "NL03ABNA",
+    name: "Zakelijk",
+    bank: "ABN AMRO",
+    entity: "BV1",
+    balance: null,
+  }),
   acc({ key: "AMEX", name: "Gold Card", bank: "American Express", balance: -430.25 }),
   acc({ key: "0123456789", name: "0123456789", bank: "" }),
 ];
 
 function tx(id: string, accountKey: string): Tx {
-  return { id, accountKey, date: "2026-08-01", amount: -10, currency: "EUR", counterparty: "X", description: "", category: "", manual: false };
+  return {
+    id,
+    accountKey,
+    date: "2026-08-01",
+    amount: -10,
+    currency: "EUR",
+    counterparty: "X",
+    description: "",
+    category: "",
+    manual: false,
+  };
 }
 const TXS: Tx[] = [tx("t1", "NL01INGB"), tx("t2", "NL01INGB"), tx("t3", "AMEX")];
 
@@ -46,7 +79,10 @@ const rows = () => accountSummaries(ACCOUNTS, TXS);
 test("accounts are grouped under their bank, named banks first and 'Zonder bank' last", () => {
   const groups = groupAccountsByBank(rows());
   expect(groups.map((g) => g.label)).toEqual(["ABN AMRO", "American Express", "ING", UNKNOWN_BANK]);
-  expect(groups[2].rows.map((r) => r.account.name)).toEqual(["Betaalrekening", "Oranje Spaarrekening"]);
+  expect(groups[2].rows.map((r) => r.account.name)).toEqual([
+    "Betaalrekening",
+    "Oranje Spaarrekening",
+  ]);
   expect(groups[2].txCount).toBe(2);
 });
 
@@ -65,14 +101,37 @@ test("a bank whose every saldo is unknown gets NO total — not a zero", () => {
 
 test("a partly-known bank reports how many of its accounts the total covers", () => {
   const mixed = groupAccountsByBank(
-    accountSummaries([
-      acc({ key: "A", bank: "ING", balance: 100 }),
-      acc({ key: "B", bank: "ING", balance: null }),
-    ], []),
+    accountSummaries(
+      [acc({ key: "A", bank: "ING", balance: 100 }), acc({ key: "B", bank: "ING", balance: null })],
+      [],
+    ),
   )[0];
   expect(mixed.total).toBe(100);
   expect(mixed.knownCount).toBe(1);
   expect(mixed.unknownCount).toBe(1);
+});
+
+test("a non-EUR balance never enters the euro total; it counts as unknown", () => {
+  const g = groupAccountsByBank(
+    accountSummaries(
+      [
+        acc({ key: "A", bank: "ING", balance: 100 }),
+        acc({ key: "B", bank: "ING", balance: 500, currency: "USD" }),
+      ],
+      [],
+    ),
+  )[0];
+  expect(g.total).toBe(100);
+  expect(g.knownCount).toBe(1);
+  expect(g.unknownCount).toBe(1);
+});
+
+test("a bank whose only known balances are non-EUR has no total", () => {
+  const g = groupAccountsByBank(
+    accountSummaries([acc({ key: "B", bank: "ING", balance: 500, currency: "USD" })], []),
+  )[0];
+  expect(g.total).toBeNull();
+  expect(g.knownCount).toBe(0);
 });
 
 test("banks typed with different casing are one group", () => {
@@ -84,7 +143,10 @@ test("banks typed with different casing are one group", () => {
 });
 
 test("bankOf freezes a half-typed rename in its own group, so the row cannot jump per keystroke", () => {
-  const list = accountSummaries([acc({ key: "A", bank: "IN" }), acc({ key: "B", bank: "ING" })], []);
+  const list = accountSummaries(
+    [acc({ key: "A", bank: "IN" }), acc({ key: "B", bank: "ING" })],
+    [],
+  );
   // Live: two groups, because "IN" is not yet "ING".
   expect(groupAccountsByBank(list)).toHaveLength(2);
   // Frozen at the value the rename started from:
@@ -123,10 +185,23 @@ type Props = ComponentProps<typeof Rekeningen>;
 const noop = () => {};
 function props(): Props {
   return {
-    accounts: ACCOUNTS, txs: TXS, busy: false,
-    onEntityChange: noop, onAccountCommit: noop, onAccountFieldChange: noop,
-    onSaldoCommit: noop, onTypeCommit: noop, onSelectAccount: noop, onDeleteAccount: noop,
-    duplicateGroups: [], onMergeDuplicates: noop,
+    accounts: ACCOUNTS,
+    txs: TXS,
+    busy: false,
+    onEntityChange: noop,
+    onAccountCommit: noop,
+    onAccountFieldChange: noop,
+    onSaldoCommit: noop,
+    onTypeCommit: noop,
+    onSelectAccount: noop,
+    onDeleteAccount: noop,
+    duplicateGroups: [],
+    onMergeDuplicates: noop,
+    valuations: [],
+    asOf: "2026-11-11",
+    onOpeningCommit: noop,
+    onValuationCommit: noop,
+    onValuationRemove: noop,
   };
 }
 
@@ -149,7 +224,9 @@ function render(overrides: Partial<Props> = {}) {
 }
 
 const byText = (sel: string, text: string): HTMLElement =>
-  [...container!.querySelectorAll<HTMLElement>(sel)].find((n) => (n.textContent ?? "").includes(text))!;
+  [...container!.querySelectorAll<HTMLElement>(sel)].find((n) =>
+    (n.textContent ?? "").includes(text),
+  )!;
 
 function click(el: HTMLElement) {
   act(() => {
@@ -159,7 +236,8 @@ function click(el: HTMLElement) {
 
 /** Type into a controlled input the way React notices it. */
 function type(el: HTMLInputElement | HTMLSelectElement, value: string) {
-  const proto = el instanceof HTMLSelectElement ? HTMLSelectElement.prototype : HTMLInputElement.prototype;
+  const proto =
+    el instanceof HTMLSelectElement ? HTMLSelectElement.prototype : HTMLInputElement.prototype;
   act(() => {
     Object.getOwnPropertyDescriptor(proto, "value")!.set!.call(el, value);
     el.dispatchEvent(new Event("input", { bubbles: true }));
@@ -174,13 +252,119 @@ function blur(el: HTMLElement) {
   });
 }
 
+/* ── WS3.1: asset/liability kinds and dated valuations ─────────────────── */
+
+test("a liability kind is offered, read as the amount owed, and carries a valuation editor", () => {
+  const loan = acc({
+    key: "L",
+    name: "Hypotheek",
+    bank: "ING",
+    type: "Lening",
+    balance: -180_000,
+    balanceDate: "2026-11-01",
+  });
+  render({ accounts: [loan] });
+  click(byText("[data-testid=bank-group-head]", "ING"));
+  const select = container!.querySelector<HTMLSelectElement>('[aria-label="Type Hypotheek"]')!;
+  expect([...select.options].map((o) => o.value)).toContain("Lening");
+  expect([...select.options].map((o) => o.value)).toContain("Woning");
+  // A liability stores a negative balance but the owner reads the debt positive.
+  const saldo = container!.querySelector<HTMLInputElement>(
+    '[aria-label="Openstaand bedrag Hypotheek"]',
+  )!;
+  expect(saldo.value).toBe("180000");
+  expect(container!.querySelector('[data-testid="account-valuations"]')).not.toBeNull();
+  expect(container!.querySelector('[data-testid="valuation-status"]')!.textContent).toContain(
+    "Laatste waardering",
+  );
+});
+
+test("an account with no anchor at all says its value is unknown, not zero", () => {
+  const car = acc({ key: "C", name: "Auto", bank: "ING", type: "Voertuig" });
+  render({ accounts: [car] });
+  click(byText("[data-testid=bank-group-head]", "ING"));
+  const status = container!.querySelector('[data-testid="valuation-status"]')!.textContent ?? "";
+  expect(status).toContain("onbekend");
+  expect(status).toContain("Onbekend telt niet als nul");
+  expect(container!.querySelector('[data-testid="valuation-list"]')).toBeNull();
+});
+
+test("adding a valuation commits the account, the date and integer cents", () => {
+  const house = acc({ key: "W", name: "Woning", bank: "ING", type: "Woning" });
+  const commits: Array<[string, string, number]> = [];
+  render({
+    accounts: [house],
+    onValuationCommit: (key, date, cents) => commits.push([key, date, cents]),
+  });
+  click(byText("[data-testid=bank-group-head]", "ING"));
+  type(
+    container!.querySelector<HTMLInputElement>('[aria-label="Waarderingsdatum van Woning"]')!,
+    "2026-11-05",
+  );
+  type(
+    container!.querySelector<HTMLInputElement>('[aria-label="Waarderingsbedrag van Woning"]')!,
+    "420000",
+  );
+  click(container!.querySelector<HTMLElement>('[data-testid="valuation-add"]')!);
+  expect(commits).toEqual([["W", "2026-11-05", 42_000_000]]);
+});
+
+test("a dated valuation is listed and can be removed", () => {
+  const house = acc({ key: "W", name: "Woning", bank: "ING", type: "Woning" });
+  const removed: string[] = [];
+  render({
+    accounts: [house],
+    valuations: [
+      {
+        id: "W|2026-11-05",
+        accountKey: "W",
+        date: "2026-11-05",
+        amountCents: 42_000_000,
+        currency: "EUR",
+        kind: "reconciliation",
+        source: "manual",
+        createdAt: "2026-11-11",
+      },
+    ],
+    onValuationRemove: (id) => removed.push(id),
+  });
+  click(byText("[data-testid=bank-group-head]", "ING"));
+  const list = container!.querySelector('[data-testid="valuation-list"]')!.textContent ?? "";
+  expect(list).toContain("november 2026");
+  expect(list).toContain("420.000,00");
+  click(container!.querySelector<HTMLElement>('[aria-label^="Waardering van"]')!);
+  expect(removed).toEqual(["W|2026-11-05"]);
+});
+
+test("an opening balance commits both halves of the anchor", () => {
+  const house = acc({ key: "W", name: "Woning", bank: "ING", type: "Woning" });
+  const commits: Array<[string, string, string]> = [];
+  render({
+    accounts: [house],
+    onOpeningCommit: (key, field, value) => commits.push([key, field, value]),
+  });
+  click(byText("[data-testid=bank-group-head]", "ING"));
+  const amount = container!.querySelector<HTMLInputElement>(
+    '[aria-label="Beginsaldo van Woning"]',
+  )!;
+  type(amount, "1000");
+  blur(amount);
+  const date = container!.querySelector<HTMLInputElement>('[aria-label="Begindatum van Woning"]')!;
+  type(date, "2026-01-01");
+  blur(date);
+  expect(commits).toEqual([
+    ["W", "openingBalanceCents", "1000"],
+    ["W", "openingDate", "2026-01-01"],
+  ]);
+});
+
 test("the banks are listed collapsed, each saying what it holds", () => {
   render();
-  const heads = [...container!.querySelectorAll(".bank-group-head")];
+  const heads = [...container!.querySelectorAll("[data-testid=bank-group-head]")];
   expect(heads).toHaveLength(4);
   expect(heads.every((h) => h.getAttribute("aria-expanded") === "false")).toBe(true);
-  expect(container!.querySelectorAll(".bank-panel")).toHaveLength(0);
-  const ing = byText(".bank-group-head", "ING");
+  expect(container!.querySelectorAll("[data-testid=bank-panel]")).toHaveLength(0);
+  const ing = byText("[data-testid=bank-group-head]", "ING");
   expect(ing.textContent).toContain("2 rekeningen");
   expect(ing.textContent).toContain("Rekeningen tonen"); // the click is spelled out
   // €26.200,50 — the two ING balances, nothing invented.
@@ -189,14 +373,14 @@ test("the banks are listed collapsed, each saying what it holds", () => {
 
 test("a bank with no saldo at all says so instead of showing € 0,00", () => {
   render();
-  const abn = byText(".bank-group-head", "ABN AMRO");
+  const abn = byText("[data-testid=bank-group-head]", "ABN AMRO");
   expect(abn.textContent).toContain("saldo onbekend");
   expect(abn.textContent).not.toContain("0,00");
 });
 
 test("clicking a bank opens it and its accounts appear as sub-tabs", () => {
   render();
-  click(byText(".bank-group-head", "ING"));
+  click(byText("[data-testid=bank-group-head]", "ING"));
   const tabs = [...container!.querySelectorAll<HTMLElement>('[role="tab"]')];
   expect(tabs.map((t) => t.textContent)).toEqual([
     expect.stringContaining("Betaalrekening"),
@@ -204,24 +388,30 @@ test("clicking a bank opens it and its accounts appear as sub-tabs", () => {
   ]);
   expect(tabs[0].getAttribute("aria-selected")).toBe("true");
   // The first account's panel is the one on screen.
-  expect(container!.querySelector(".bank-panel")!.textContent).toContain("2 transacties bekijken");
+  expect(container!.querySelector("[data-testid=bank-panel]")!.textContent).toContain(
+    "2 transacties bekijken",
+  );
 });
 
 test("a second sub-tab swaps the panel to that account", () => {
   render();
-  click(byText(".bank-group-head", "ING"));
+  click(byText("[data-testid=bank-group-head]", "ING"));
   click(byText('[role="tab"]', "Oranje Spaarrekening"));
-  const panel = container!.querySelector(".bank-panel")!;
-  expect(panel.querySelector<HTMLInputElement>('[aria-label="Saldo Oranje Spaarrekening"]')!.value).toBe("25000");
+  const panel = container!.querySelector("[data-testid=bank-panel]")!;
+  expect(
+    panel.querySelector<HTMLInputElement>('[aria-label="Saldo Oranje Spaarrekening"]')!.value,
+  ).toBe("25000");
   expect(panel.textContent).toContain("Nog geen transacties geïmporteerd");
 });
 
 test("a bank with one account shows the account straight away, without a tab strip", () => {
   render();
-  click(byText(".bank-group-head", "American Express"));
+  click(byText("[data-testid=bank-group-head]", "American Express"));
   expect(container!.querySelectorAll('[role="tab"]')).toHaveLength(0);
   // A card's debt is typed and read as a positive.
-  expect(container!.querySelector<HTMLInputElement>('[aria-label="Openstaand bedrag Gold Card"]')!.value).toBe("430.25");
+  expect(
+    container!.querySelector<HTMLInputElement>('[aria-label="Openstaand bedrag Gold Card"]')!.value,
+  ).toBe("430.25");
 });
 
 test("the panel still carries every edit the table had", () => {
@@ -233,19 +423,19 @@ test("the panel still carries every edit the table had", () => {
     onSelectAccount: (key) => seen.push(`open:${key}`),
     onDeleteAccount: (key) => seen.push(`delete:${key}`),
   });
-  click(byText(".bank-group-head", "ING"));
-  const panel = container!.querySelector(".bank-panel")!;
+  click(byText("[data-testid=bank-group-head]", "ING"));
+  const panel = container!.querySelector("[data-testid=bank-panel]")!;
 
   type(panel.querySelector<HTMLSelectElement>("select")!, "Spaarrekening");
   type(panel.querySelector<HTMLInputElement>('[aria-label="Entiteit Betaalrekening"]')!, "BV2");
   // Saldo commits on blur, unchanged.
   blur(panel.querySelector<HTMLInputElement>('[aria-label="Saldo Betaalrekening"]')!);
-  click(byText(".bank-panel .card-link", "transacties bekijken"));
+  click(byText('[data-testid=bank-panel] [data-testid="card-link"]', "transacties bekijken"));
   // Delete asks first — one click never deletes.
-  click(byText(".bank-panel .card-link-danger", "Verwijder"));
+  click(byText('[data-testid=bank-panel] [data-variant="danger"]', "Verwijder"));
   expect(container!.textContent).toContain("Betaalrekening en 2 transacties verwijderen?");
   expect(seen).not.toContain("delete:NL01INGB");
-  click(byText(".bank-panel .card-link-danger", "Ja"));
+  click(byText('[data-testid=bank-panel] [data-variant="danger"]', "Ja"));
 
   expect(seen).toEqual([
     "type:NL01INGB:Spaarrekening",
@@ -278,8 +468,8 @@ test("typing a bank name does not move the row to another group mid-word", () =>
   root = createRoot(container);
   act(() => root!.render(<Shell />));
 
-  click(byText(".bank-group-head", UNKNOWN_BANK));
-  click(byText(".bank-panel .card-link", "Bank invullen"));
+  click(byText("[data-testid=bank-group-head]", UNKNOWN_BANK));
+  click(byText('[data-testid=bank-panel] [data-testid="card-link"]', "Bank invullen"));
   const bank = container.querySelector<HTMLInputElement>('[aria-label="Bank van 0123456789"]')!;
 
   for (const partial of ["I", "IN", "ING"]) {
@@ -287,37 +477,64 @@ test("typing a bank name does not move the row to another group mid-word", () =>
     // Same element, still in the same open group — never re-mounted, never moved.
     expect(container.querySelector('[aria-label="Bank van 0123456789"]')).toBe(bank);
     expect(bank.value).toBe(partial);
-    expect(byText(".bank-group-head", UNKNOWN_BANK)).toBeTruthy();
+    expect(byText("[data-testid=bank-group-head]", UNKNOWN_BANK)).toBeTruthy();
   }
-  expect(container.querySelectorAll(".bank-group")).toHaveLength(4);
+  expect(container.querySelectorAll("[data-testid=bank-group]")).toHaveLength(4);
 
   // "Klaar" ends the rename, and only then does the account join ING.
-  click(byText(".bank-panel .card-link", "Klaar"));
-  expect(container.querySelectorAll(".bank-group")).toHaveLength(3);
-  expect(byText(".bank-group-head", "ING").textContent).toContain("3 rekeningen");
+  click(byText('[data-testid=bank-panel] [data-testid="card-link"]', "Klaar"));
+  expect(container.querySelectorAll("[data-testid=bank-group]")).toHaveLength(3);
+  expect(byText("[data-testid=bank-group-head]", "ING").textContent).toContain("3 rekeningen");
 });
 
 test("'Alle rekeningen' falls back to the flat table, with every account in it", () => {
   render();
-  act(() => byText(".bank-modes .pill", "Alle rekeningen").click());
+  act(() => byText('[data-testid=bank-modes] [data-testid="pill"]', "Alle rekeningen").click());
   expect(container!.querySelectorAll("table tbody tr")).toHaveLength(5);
-  expect(container!.querySelectorAll(".bank-group")).toHaveLength(0);
+  expect(container!.querySelectorAll("[data-testid=bank-group]")).toHaveLength(0);
 });
 
 test("the duplicate banner still sits above the groups", () => {
   render({
-    duplicateGroups: [{
-      canonicalId: "dup1",
-      survivor: ACCOUNTS[0],
-      accounts: [ACCOUNTS[0], ACCOUNTS[1]],
-    }] as Props["duplicateGroups"],
+    duplicateGroups: [
+      {
+        canonicalId: "dup1",
+        survivor: ACCOUNTS[0],
+        accounts: [ACCOUNTS[0], ACCOUNTS[1]],
+      },
+    ] as Props["duplicateGroups"],
   });
-  expect(container!.querySelector(".dup-banner")!.textContent).toContain("lijken dezelfde rekening");
-  expect(container!.querySelectorAll(".bank-group").length).toBeGreaterThan(0);
+  expect(container!.querySelector(".dup-banner")!.textContent).toContain(
+    "lijken dezelfde rekening",
+  );
+  expect(container!.querySelectorAll("[data-testid=bank-group]").length).toBeGreaterThan(0);
 });
 
 test("with no accounts the view says to import first, and offers no view switch", () => {
   render({ accounts: [], txs: [] });
   expect(container!.textContent).toContain("Nog geen rekeningen");
-  expect(container!.querySelectorAll(".bank-modes")).toHaveLength(0);
+  expect(container!.querySelectorAll("[data-testid=bank-modes]")).toHaveLength(0);
+});
+
+test("a bank group's saldo carries + or a real minus, as its colour does", () => {
+  render();
+  const totals = [...container!.querySelectorAll('[data-testid="bank-group-saldo"] > span')]
+    .map((n) => n.textContent ?? "")
+    .filter((t) => /\d/.test(t));
+  expect(totals.length).toBeGreaterThan(0);
+  for (const t of totals) expect(t).toMatch(/^[+−]€\s/);
+});
+
+test("a bank group with a USD account shows a partial euro total, never the USD as euros", () => {
+  render({
+    accounts: [
+      acc({ key: "A", bank: "ING", balance: 100 }),
+      acc({ key: "B", bank: "ING", balance: 500, currency: "USD" }),
+    ],
+    txs: [],
+  });
+  const head = container!.querySelector('[data-testid="bank-group-saldo"]')!;
+  expect(head.textContent).toContain("100,00");
+  expect(head.textContent).not.toContain("600");
+  expect(head.textContent).toContain("1 van 2");
 });

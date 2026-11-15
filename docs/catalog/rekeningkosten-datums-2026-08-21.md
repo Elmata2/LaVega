@@ -37,26 +37,26 @@ niet, alleen de bevestiging dat het cijfer niet is verschoven).
 
 ## Wat erin ging: 18 rekeningkosten
 
-| catalogusrij | bedrag | checkedAt | document |
-|---|---|---|---|
-| `ics-visa-world-card` | € 42,95 /jaar | 2025-06-01 | wijziging jaarbijdrage World Card (Panda), Wayback 19-05-2026 |
-| `ics-visa-world-card-panda` | € 42,95 /jaar | 2025-06-01 | zelfde pagina — de Panda staat in de titel |
-| `ics-visa-world-card-gold` | € 57,95 /jaar | 2025-04-01 | wijziging Extra Card VWC Gold, Wayback 15-04-2026 |
-| `ics-visa-world-card-platinum` | € 175,00 /jaar | 2026-04-30 | "Wat kost een creditcard?" (live) |
-| `ics-mastercard-classic` | € 38,95 /jaar | 2026-06-01 | wijziging jaarbijdrage Mastercard Classic (live) |
-| `ics-mastercard-gold` | € 45,00 /jaar | 2025-04-01 | wijziging jaarbijdrage Mastercard Gold, Wayback 10-02-2026 |
-| `ics-mastercard-black` | € 225,00 /jaar | 2025-07-01 | nieuwe reisservices en jaarbijdrage Black (live) |
-| `anwb-visa-classic-card` | € 29,95 /jaar | 2025-11-01 | FAQ jaarbijdrage ANWB, Wayback 05-03-2026 |
-| `anwb-visa-silver-card` | € 39,95 /jaar | 2025-11-01 | zelfde pagina, eigen rij |
-| `anwb-visa-gold-card` | € 51,95 /jaar | 2025-11-01 | zelfde pagina, eigen rij |
-| `asn-creditcard` | € 37,50 /jaar | 2025-11-01 | FAQ jaarbijdrage ASN bij ICS, Wayback 21-04-2026 |
-| `american-express-blue-card` | € 0,00 /jaar | 2024-07-04 | Overzicht Kaartlidmaatschapsbijdragen (PDF) |
-| `american-express-green-card` | € 6,50 /maand | 2024-07-04 | zelfde PDF |
-| `american-express-gold-card` | € 20,00 /maand | 2024-07-04 | zelfde PDF |
-| `flying-blue-american-express-entry-card` | € 3,00 /maand | 2024-07-04 | zelfde PDF |
-| `flying-blue-american-express-silver-card` | € 6,25 /maand | 2024-07-04 | zelfde PDF |
-| `flying-blue-american-express-gold-card` | € 16,50 /maand | 2024-07-04 | zelfde PDF |
-| `flying-blue-american-express-platinum-card` | € 55,00 /maand | 2024-07-04 | zelfde PDF |
+| catalogusrij                                 | bedrag         | checkedAt  | document                                                      |
+| -------------------------------------------- | -------------- | ---------- | ------------------------------------------------------------- |
+| `ics-visa-world-card`                        | € 42,95 /jaar  | 2025-06-01 | wijziging jaarbijdrage World Card (Panda), Wayback 19-05-2026 |
+| `ics-visa-world-card-panda`                  | € 42,95 /jaar  | 2025-06-01 | zelfde pagina — de Panda staat in de titel                    |
+| `ics-visa-world-card-gold`                   | € 57,95 /jaar  | 2025-04-01 | wijziging Extra Card VWC Gold, Wayback 15-04-2026             |
+| `ics-visa-world-card-platinum`               | € 175,00 /jaar | 2026-04-30 | "Wat kost een creditcard?" (live)                             |
+| `ics-mastercard-classic`                     | € 38,95 /jaar  | 2026-06-01 | wijziging jaarbijdrage Mastercard Classic (live)              |
+| `ics-mastercard-gold`                        | € 45,00 /jaar  | 2025-04-01 | wijziging jaarbijdrage Mastercard Gold, Wayback 10-02-2026    |
+| `ics-mastercard-black`                       | € 225,00 /jaar | 2025-07-01 | nieuwe reisservices en jaarbijdrage Black (live)              |
+| `anwb-visa-classic-card`                     | € 29,95 /jaar  | 2025-11-01 | FAQ jaarbijdrage ANWB, Wayback 05-03-2026                     |
+| `anwb-visa-silver-card`                      | € 39,95 /jaar  | 2025-11-01 | zelfde pagina, eigen rij                                      |
+| `anwb-visa-gold-card`                        | € 51,95 /jaar  | 2025-11-01 | zelfde pagina, eigen rij                                      |
+| `asn-creditcard`                             | € 37,50 /jaar  | 2025-11-01 | FAQ jaarbijdrage ASN bij ICS, Wayback 21-04-2026              |
+| `american-express-blue-card`                 | € 0,00 /jaar   | 2024-07-04 | Overzicht Kaartlidmaatschapsbijdragen (PDF)                   |
+| `american-express-green-card`                | € 6,50 /maand  | 2024-07-04 | zelfde PDF                                                    |
+| `american-express-gold-card`                 | € 20,00 /maand | 2024-07-04 | zelfde PDF                                                    |
+| `flying-blue-american-express-entry-card`    | € 3,00 /maand  | 2024-07-04 | zelfde PDF                                                    |
+| `flying-blue-american-express-silver-card`   | € 6,25 /maand  | 2024-07-04 | zelfde PDF                                                    |
+| `flying-blue-american-express-gold-card`     | € 16,50 /maand | 2024-07-04 | zelfde PDF                                                    |
+| `flying-blue-american-express-platinum-card` | € 55,00 /maand | 2024-07-04 | zelfde PDF                                                    |
 
 Alle achttien bedragen zijn identiek aan wat de zoekronde van 21 augustus op de
 productpagina's vond. Er is dus niets herzien; er is alleen een document bij
@@ -138,13 +138,13 @@ per constructie nooit te bereiken.
 
 Gemeten, met de echte code, vóór en na de hernoeming:
 
-| rekening | vóór | na |
-|---|---|---|
-| N26 · "N26 Standard" | `unknown product-unknown` (8 kandidaten) | `known € 0,00/maand` via product-name |
-| N26 · "Standard" | — | `known € 0,00/maand` |
-| Revolut · "Revolut Standard" | `unknown product-unknown` (5 kandidaten) | `known € 0,00/maand` |
-| N26 · "Betaalrekening" | `unknown product-unknown` | `unknown product-unknown` (ongewijzigd) |
-| N26 · "N26 Smart" | `known € 4,90/maand` | `known € 4,90/maand` (ongewijzigd) |
+| rekening                     | vóór                                     | na                                      |
+| ---------------------------- | ---------------------------------------- | --------------------------------------- |
+| N26 · "N26 Standard"         | `unknown product-unknown` (8 kandidaten) | `known € 0,00/maand` via product-name   |
+| N26 · "Standard"             | —                                        | `known € 0,00/maand`                    |
+| Revolut · "Revolut Standard" | `unknown product-unknown` (5 kandidaten) | `known € 0,00/maand`                    |
+| N26 · "Betaalrekening"       | `unknown product-unknown`                | `unknown product-unknown` (ongewijzigd) |
+| N26 · "N26 Smart"            | `known € 4,90/maand`                     | `known € 4,90/maand` (ongewijzigd)      |
 
 De laatste twee regels zijn de controle: een N26-rekening die zijn pakket niet
 noemt komt nog steeds op onbekend uit en niet op de goedkoopste die past.

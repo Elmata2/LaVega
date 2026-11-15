@@ -29,19 +29,26 @@
 The number cashback multiplies. Getting this wrong inflates every figure downstream, which is why it gets its own task and its own gate.
 
 **Files:**
+
 - Create: `packages/core/src/returns.ts`
 - Create: `packages/core/src/returns.test.ts`
 - Modify: `packages/core/src/index.ts` (add `export * from "./returns.js";` after the `./interest.js` line)
 
 **Interfaces:**
+
 - Consumes: `Account`, `Tx`, `Rule` from `./model.js`; `categorize`, `type OwnAccounts` from `./views.js`; `accountType` from `./balance.js`
 - Produces:
+
   ```ts
   export const MIN_SPEND_DAYS = 60;
   export type SpendKind = "exact" | "upper-bound" | "unknown";
   export type SpendBase = { perYearCents: number | null; kind: SpendKind; observedDays: number };
   export function annualSpendCents(
-    account: Account, txs: Tx[], rules: Rule[], own: OwnAccounts | undefined, asOf: string,
+    account: Account,
+    txs: Tx[],
+    rules: Rule[],
+    own: OwnAccounts | undefined,
+    asOf: string,
   ): SpendBase;
   ```
 
@@ -54,13 +61,29 @@ import type { Account, Tx } from "./model.js";
 import { annualSpendCents, MIN_SPEND_DAYS } from "./returns.js";
 import { ownAccounts } from "./views.js";
 
-const acc = (over: Partial<Account>): Account =>
-  ({ key: "k", iban: "", name: "Rekening", bank: "ING", entity: "BV1",
-     currency: "EUR", balance: 1000, ...over });
+const acc = (over: Partial<Account>): Account => ({
+  key: "k",
+  iban: "",
+  name: "Rekening",
+  bank: "ING",
+  entity: "BV1",
+  currency: "EUR",
+  balance: 1000,
+  ...over,
+});
 
-const tx = (over: Partial<Tx>): Tx =>
-  ({ id: "t", accountKey: "k", date: "2026-08-01", amount: -100, currency: "EUR",
-     counterparty: "Albert Heijn", description: "", category: "", manual: false, ...over });
+const tx = (over: Partial<Tx>): Tx => ({
+  id: "t",
+  accountKey: "k",
+  date: "2026-08-01",
+  amount: -100,
+  currency: "EUR",
+  counterparty: "Albert Heijn",
+  description: "",
+  category: "",
+  manual: false,
+  ...over,
+});
 
 test("a credit card's spend base is EXACT: every outflow on it is card spend", () => {
   const card = acc({ key: "amex", bank: "American Express", type: "Creditcard" });
@@ -94,8 +117,14 @@ test("money moved to your own account is not spending", () => {
   const own = ownAccounts([pay, savings]);
   const txs = [
     tx({ id: "a", accountKey: "ing", date: "2026-03-01", amount: -300 }),
-    tx({ id: "b", accountKey: "ing", date: "2026-08-27", amount: -5000,
-         counterparty: "NL01INGB0002222222", description: "naar spaarrekening" }),
+    tx({
+      id: "b",
+      accountKey: "ing",
+      date: "2026-08-27",
+      amount: -5000,
+      counterparty: "NL01INGB0002222222",
+      description: "naar spaarrekening",
+    }),
   ];
   const base = annualSpendCents(pay, txs, [], own, "2026-08-27");
 
@@ -235,12 +264,15 @@ to be labelled as one. Under 60 days of history it is null, never a projection."
 ### Task 2: Per-account returns
 
 **Files:**
+
 - Modify: `packages/core/src/returns.ts`
 - Modify: `packages/core/src/returns.test.ts`
 
 **Interfaces:**
+
 - Consumes: `annualSpendCents`, `SpendBase` from Task 1; `resolveAccountRate`, `type RateSource`, `type RateBenchmark` from `./interest.js`; `factNumber` from `./facts.js`; `productOf`, `TRAVEL_AGENT` from `./travel.js`
 - Produces:
+
   ```ts
   export type AccountReturn = {
     account: Account;
@@ -251,8 +283,13 @@ to be labelled as one. Under 60 days of history it is null, never a projection."
     spend: SpendBase;
   };
   export function accountReturns(
-    accounts: Account[], txs: Tx[], rules: Rule[], own: OwnAccounts | undefined,
-    facts: readonly LearnedFact[], rates: readonly RateBenchmark[], asOf: string,
+    accounts: Account[],
+    txs: Tx[],
+    rules: Rule[],
+    own: OwnAccounts | undefined,
+    facts: readonly LearnedFact[],
+    rates: readonly RateBenchmark[],
+    asOf: string,
   ): AccountReturn[];
   ```
 
@@ -266,8 +303,14 @@ import { makeFact } from "./facts.js";
 import { TRAVEL_AGENT } from "./travel.js";
 
 const cashbackFact = (subject: string, value: string) =>
-  makeFact({ agent: TRAVEL_AGENT, subject, key: "cashbackPct", value,
-             source: "agent", updatedAt: "2026-08-18" });
+  makeFact({
+    agent: TRAVEL_AGENT,
+    subject,
+    key: "cashbackPct",
+    value,
+    source: "agent",
+    updatedAt: "2026-08-18",
+  });
 
 test("cashback is read from the product fact, and a card without one stays UNKNOWN", () => {
   const t212 = acc({ key: "t212", bank: "Trading 212", type: "Betaalrekening", balance: 20_000 });
@@ -283,8 +326,14 @@ test("cashback is read from the product fact, and a card without one stays UNKNO
 });
 
 test("the balance rate keeps the source it came from, and cents are integers", () => {
-  const savings = acc({ key: "spaar", bank: "Trading 212", name: "Spaar",
-                        type: "Spaarrekening", balance: 20_000, interestRate: 3.5 });
+  const savings = acc({
+    key: "spaar",
+    bank: "Trading 212",
+    name: "Spaar",
+    type: "Spaarrekening",
+    balance: 20_000,
+    interestRate: 3.5,
+  });
   const out = accountReturns([savings], [], [], undefined, [], [], "2026-08-18");
 
   expect(out[0].savingsPct).toBe(3.5);
@@ -294,7 +343,9 @@ test("the balance rate keeps the source it came from, and cents are integers", (
 
 test("an account with no saldo reports zero cents rather than guessing one", () => {
   const unknown = acc({ key: "x", balance: null });
-  expect(accountReturns([unknown], [], [], undefined, [], [], "2026-08-18")[0].balanceCents).toBe(0);
+  expect(accountReturns([unknown], [], [], undefined, [], [], "2026-08-18")[0].balanceCents).toBe(
+    0,
+  );
 });
 ```
 
@@ -378,26 +429,32 @@ said it pays nothing."
 ### Task 3: The two actions
 
 **Files:**
+
 - Modify: `packages/core/src/returns.ts`
 - Modify: `packages/core/src/returns.test.ts`
 
 **Interfaces:**
+
 - Consumes: `accountReturns`, `AccountReturn` from Task 2
 - Produces:
+
   ```ts
   export type ReturnAction = {
     kind: "move-balance" | "route-spending";
-    from: Account; to: Account;
-    fromPct: number; toPct: number;
+    from: Account;
+    to: Account;
+    fromPct: number;
+    toPct: number;
     baseCents: number;
     gainPerYearCents: number;
     /** True when the base is an upper bound, so the UI must say "tot €X". */
     approximate: boolean;
   };
   export type ReturnGap = { product: string; missing: "cashbackPct" | "savingsPct" };
-  export function optimiseReturns(
-    returns: readonly AccountReturn[],
-  ): { actions: ReturnAction[]; gaps: ReturnGap[] };
+  export function optimiseReturns(returns: readonly AccountReturn[]): {
+    actions: ReturnAction[];
+    gaps: ReturnGap[];
+  };
   ```
 
 - [ ] **Step 1: Write the failing test**
@@ -409,15 +466,30 @@ import { optimiseReturns } from "./returns.js";
 
 test("his own case: two actions on two bases, not one blended rate", () => {
   // Trading 212: 3,5% on balance and 1,5% cashback. ING: 1,5% and 0%.
-  const t212 = acc({ key: "t212", bank: "Trading 212", type: "Betaalrekening",
-                     balance: 0, interestRate: 3.5 });
-  const ing = acc({ key: "ing", bank: "ING", type: "Betaalrekening",
-                    balance: 20_000, interestRate: 1.5 });
+  const t212 = acc({
+    key: "t212",
+    bank: "Trading 212",
+    type: "Betaalrekening",
+    balance: 0,
+    interestRate: 3.5,
+  });
+  const ing = acc({
+    key: "ing",
+    bank: "ING",
+    type: "Betaalrekening",
+    balance: 20_000,
+    interestRate: 1.5,
+  });
   const facts = [cashbackFact("Trading 212 betaalpas", "1.5"), cashbackFact("ING betaalpas", "0")];
   // A year of ING spending at €2.500/month.
   const txs = Array.from({ length: 12 }, (_, i) =>
-    tx({ id: "s" + i, accountKey: "ing", amount: -2500,
-         date: `2025-${String(i + 1).padStart(2, "0")}-15` }));
+    tx({
+      id: "s" + i,
+      accountKey: "ing",
+      amount: -2500,
+      date: `2025-${String(i + 1).padStart(2, "0")}-15`,
+    }),
+  );
 
   const { actions } = optimiseReturns(
     accountReturns([t212, ing], txs, [], undefined, facts, [], "2026-01-15"),
@@ -443,7 +515,13 @@ test("his own case: two actions on two bases, not one blended rate", () => {
 
 test("an unknown side produces a GAP, never an action", () => {
   const t212 = acc({ key: "t212", bank: "Trading 212", type: "Betaalrekening", balance: 0 });
-  const ing = acc({ key: "ing", bank: "ING", type: "Betaalrekening", balance: 20_000, interestRate: 1.5 });
+  const ing = acc({
+    key: "ing",
+    bank: "ING",
+    type: "Betaalrekening",
+    balance: 20_000,
+    interestRate: 1.5,
+  });
   // No cashback fact for either, and no rate for T212.
   const { actions, gaps } = optimiseReturns(
     accountReturns([t212, ing], [], [], undefined, [], [], "2026-08-18"),
@@ -496,9 +574,10 @@ export type ReturnGap = { product: string; missing: "cashbackPct" | "savingsPct"
 /** Below this the advice is noise. Same threshold `analyzeInterest` uses. */
 const MARGIN_PCT = 0.1;
 
-export function optimiseReturns(
-  returns: readonly AccountReturn[],
-): { actions: ReturnAction[]; gaps: ReturnGap[] } {
+export function optimiseReturns(returns: readonly AccountReturn[]): {
+  actions: ReturnAction[];
+  gaps: ReturnGap[];
+} {
   const actions: ReturnAction[] = [];
   const gaps: ReturnGap[] = [];
 
@@ -580,11 +659,13 @@ one who can answer it."
 ### Task 4: The Cashback module
 
 **Files:**
+
 - Modify: `apps/web/src/views/Optimalisatie.tsx`
 - Modify: `apps/web/src/App.tsx` (pass `facts`)
 - Create: `apps/web/src/optimalisatie-cashback.test.tsx`
 
 **Interfaces:**
+
 - Consumes: `accountReturns`, `optimiseReturns`, `type ReturnAction`, `type ReturnGap` from Tasks 1–3
 - Produces: nothing other tasks depend on
 
@@ -598,14 +679,28 @@ import type { Account, Tx } from "@lavega/core";
 import { makeFact, TRAVEL_AGENT } from "@lavega/core";
 import Optimalisatie from "./views/Optimalisatie";
 
-const acc = (over: Partial<Account>): Account =>
-  ({ key: "k", iban: "", name: "Rekening", bank: "ING", entity: "BV1",
-     currency: "EUR", balance: 1000, ...over });
+const acc = (over: Partial<Account>): Account => ({
+  key: "k",
+  iban: "",
+  name: "Rekening",
+  bank: "ING",
+  entity: "BV1",
+  currency: "EUR",
+  balance: 1000,
+  ...over,
+});
 
-const spend = (key: string, month: number): Tx =>
-  ({ id: key + month, accountKey: key, date: `2025-${String(month).padStart(2, "0")}-15`,
-     amount: -2500, currency: "EUR", counterparty: "Albert Heijn", description: "",
-     category: "", manual: false });
+const spend = (key: string, month: number): Tx => ({
+  id: key + month,
+  accountKey: key,
+  date: `2025-${String(month).padStart(2, "0")}-15`,
+  amount: -2500,
+  currency: "EUR",
+  counterparty: "Albert Heijn",
+  description: "",
+  category: "",
+  manual: false,
+});
 
 const render = (props: Partial<Parameters<typeof Optimalisatie>[0]> = {}) =>
   renderToStaticMarkup(
@@ -620,10 +715,22 @@ const render = (props: Partial<Parameters<typeof Optimalisatie>[0]> = {}) =>
       asOf="2026-01-15"
       busy={false}
       facts={[
-        makeFact({ agent: TRAVEL_AGENT, subject: "Trading 212 betaalpas", key: "cashbackPct",
-                   value: "1.5", source: "agent", updatedAt: "2026-08-18" }),
-        makeFact({ agent: TRAVEL_AGENT, subject: "ING betaalpas", key: "cashbackPct",
-                   value: "0", source: "agent", updatedAt: "2026-08-18" }),
+        makeFact({
+          agent: TRAVEL_AGENT,
+          subject: "Trading 212 betaalpas",
+          key: "cashbackPct",
+          value: "1.5",
+          source: "agent",
+          updatedAt: "2026-08-18",
+        }),
+        makeFact({
+          agent: TRAVEL_AGENT,
+          subject: "ING betaalpas",
+          key: "cashbackPct",
+          value: "0",
+          source: "agent",
+          updatedAt: "2026-08-18",
+        }),
       ]}
       onRateCommit={() => {}}
       {...props}
@@ -673,42 +780,46 @@ In `apps/web/src/views/Optimalisatie.tsx`, add to `OptimalisatieProps` (around l
 Add `facts` to the destructured parameter list on the `export default function Optimalisatie(...)` line, then above the `return`:
 
 ```tsx
-  // Two rates on two bases, from the accounts he already holds. Core owns the
-  // whole derivation; this view only prints it.
-  const returns = useMemo(
-    () => accountReturns(accounts, txs, rules, own, facts, rates.rates, asOf),
-    [accounts, txs, rules, own, facts, rates, asOf],
-  );
-  const { actions, gaps } = useMemo(() => optimiseReturns(returns), [returns]);
-  const routing = actions.filter((a) => a.kind === "route-spending");
-  const cashbackGaps = gaps.filter((g) => g.missing === "cashbackPct");
+// Two rates on two bases, from the accounts he already holds. Core owns the
+// whole derivation; this view only prints it.
+const returns = useMemo(
+  () => accountReturns(accounts, txs, rules, own, facts, rates.rates, asOf),
+  [accounts, txs, rules, own, facts, rates, asOf],
+);
+const { actions, gaps } = useMemo(() => optimiseReturns(returns), [returns]);
+const routing = actions.filter((a) => a.kind === "route-spending");
+const cashbackGaps = gaps.filter((g) => g.missing === "cashbackPct");
 ```
 
 Add a third `<Module>` inside the existing `<ModuleGrid>`, after the Rente module:
 
 ```tsx
-        <Module title="Cashback" footer={<span>Percentages gelden op wat je uitgeeft, niet op je saldo.</span>}>
-          {routing.length === 0 && cashbackGaps.length === 0 && (
-            <p className="block-empty">Je betaalt al met de kaart die het meeste teruggeeft.</p>
-          )}
-          {routing.map((a) => (
-            <div className="position-row" key={a.from.key + a.to.key}>
-              <span>
-                Betaal met <strong>{a.to.bank}</strong> in plaats van {a.from.bank} — {a.toPct}% tegen {a.fromPct}%.
-              </span>
-              <span className="text-pos">
-                {a.approximate ? "tot " : ""}
-                {euro(a.gainPerYearCents)} per jaar
-              </span>
-            </div>
-          ))}
-          {cashbackGaps.length > 0 && (
-            <p className="cell-sub">
-              Cashback onbekend voor {cashbackGaps.map((g) => g.product).join(", ")}. Vul het zelf in bij het
-              reisblok — wat jij invult wordt nooit overschreven.
-            </p>
-          )}
-        </Module>
+<Module
+  title="Cashback"
+  footer={<span>Percentages gelden op wat je uitgeeft, niet op je saldo.</span>}
+>
+  {routing.length === 0 && cashbackGaps.length === 0 && (
+    <p className="block-empty">Je betaalt al met de kaart die het meeste teruggeeft.</p>
+  )}
+  {routing.map((a) => (
+    <div className="position-row" key={a.from.key + a.to.key}>
+      <span>
+        Betaal met <strong>{a.to.bank}</strong> in plaats van {a.from.bank} — {a.toPct}% tegen{" "}
+        {a.fromPct}%.
+      </span>
+      <span className="text-pos">
+        {a.approximate ? "tot " : ""}
+        {euro(a.gainPerYearCents)} per jaar
+      </span>
+    </div>
+  ))}
+  {cashbackGaps.length > 0 && (
+    <p className="cell-sub">
+      Cashback onbekend voor {cashbackGaps.map((g) => g.product).join(", ")}. Vul het zelf in bij
+      het reisblok — wat jij invult wordt nooit overschreven.
+    </p>
+  )}
+</Module>
 ```
 
 Extend the `@lavega/core` import at the top of the file with `accountReturns`, `optimiseReturns` and `type LearnedFact`.

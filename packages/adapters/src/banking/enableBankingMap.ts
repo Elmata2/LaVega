@@ -51,7 +51,9 @@ export type EbAccount = {
  * counterparty/description should keep their original casing, matching the
  * reference's dedicated `ebNorm`. */
 function ebNorm(s: unknown): string {
-  return String(s ?? "").replace(/\s+/g, " ").trim();
+  return String(s ?? "")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 /** EB transaction -> Omit<Tx,"id">. Amount sign: DBIT -> negative, else positive. */
@@ -62,10 +64,26 @@ export function mapEbTransaction(
 ): Omit<Tx, "id"> {
   const amt = Number(ebTx?.transaction_amount?.amount ?? 0);
   const dbit = String(ebTx?.credit_debit_indicator || "").toUpperCase() === "DBIT";
-  const remit = ([] as unknown[]).concat(ebTx?.remittance_information ?? []).filter(Boolean).join(" ");
+  const remit = ([] as unknown[])
+    .concat(ebTx?.remittance_information ?? [])
+    .filter(Boolean)
+    .join(" ");
+  /* A card-rail purchase routinely carries no creditor/debtor at all — PSD2
+   * only guarantees remittance_information for those, with the merchant name
+   * living there instead of in a structured field. `description` already fell
+   * back to it; `counterparty` did not, so a card purchase with no structured
+   * party landed with counterparty: "" — invisible to everything keyed on
+   * counterparty (merchantKey, the subscription detector, "Eigen
+   * overboeking"), no matter how many times the same merchant repeats.
+   * `counterparty` now also feeds ingest's dedup (`ingest.ts`'s
+   * `samePartyKey`/`merchantKey`) and the categorisation rules engine, both of
+   * which key on it directly — so `remit` earning a place in this fallback
+   * chain only works because remittance_information is, in practice, the
+   * merchant's name; a future fallback added here has to keep that same
+   * merchant-like shape or those three consumers silently stop matching. */
   const cpName = dbit
-    ? ebTx?.creditor?.name || ebTx?.creditor_account?.iban || ""
-    : ebTx?.debtor?.name || ebTx?.debtor_account?.iban || "";
+    ? ebTx?.creditor?.name || ebTx?.creditor_account?.iban || remit
+    : ebTx?.debtor?.name || ebTx?.debtor_account?.iban || remit;
   const date = String(ebTx?.booking_date || ebTx?.value_date || "").slice(0, 10);
 
   return {
@@ -103,7 +121,9 @@ export function ebAccountKey(ebAccount: EbAccount): string {
  * counting. Two lookups, one row. */
 function pickEbBalanceEntry(balances: EbBalance[] | null | undefined): EbBalance | null {
   const list = balances || [];
-  return list.find((x) => /CLBD|closingBooked/i.test(x.balance_type || x.name || "")) ?? list[0] ?? null;
+  return (
+    list.find((x) => /CLBD|closingBooked/i.test(x.balance_type || x.name || "")) ?? list[0] ?? null
+  );
 }
 
 /** Picks a balance from GET /accounts/{uid}/balances: prefers a CLBD/closingBooked
@@ -154,7 +174,11 @@ export function pickEbBalanceDate(balances: EbBalance[] | null | undefined): str
  *  nothing, and mergeImportedAccounts would drop it on the next import anyway
  *  (it only takes the imported date when the imported balance is real) — so
  *  writing it would be a field that cannot survive its own round trip. */
-export function mapEbAccount(ebAccount: EbAccount, balance: number | null, balanceDate?: string): Account {
+export function mapEbAccount(
+  ebAccount: EbAccount,
+  balance: number | null,
+  balanceDate?: string,
+): Account {
   const key = ebAccountKey(ebAccount);
   const iban = ebAccount?.account_id?.iban ?? "";
   const name = ebAccount?.name || ebAccount?.product || key;

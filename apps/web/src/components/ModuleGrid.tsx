@@ -15,7 +15,11 @@ type ModuleGridProps = {
 
 export default function ModuleGrid({ label, className, children }: ModuleGridProps) {
   return (
-    <div className={className ? `${MODULE_GRID_CLASS} ${className}` : MODULE_GRID_CLASS} role="group" aria-label={label}>
+    <div
+      className={className ? `${MODULE_GRID_CLASS} ${className}` : MODULE_GRID_CLASS}
+      role="group"
+      aria-label={label}
+    >
       {children}
     </div>
   );

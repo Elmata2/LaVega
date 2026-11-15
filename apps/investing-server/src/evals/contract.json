@@ -1,0 +1,61 @@
+{
+  "version": 1,
+  "tools": [
+    {
+      "name": "get_agent_memory",
+      "scope": "read",
+      "preview": false,
+      "descriptionHash": "06c7ff9c448a7660",
+      "schemaHash": "32062bdb9024160d"
+    },
+    {
+      "name": "get_fundamentals",
+      "scope": "read",
+      "preview": false,
+      "descriptionHash": "b31417bb4eaacf11",
+      "schemaHash": "df9dd9f58eb92336"
+    },
+    {
+      "name": "get_portfolio_value",
+      "scope": "read",
+      "preview": false,
+      "descriptionHash": "4fcec2b1f2a28e82",
+      "schemaHash": "32062bdb9024160d"
+    },
+    {
+      "name": "get_positions",
+      "scope": "read",
+      "preview": false,
+      "descriptionHash": "f69899a596b22528",
+      "schemaHash": "32062bdb9024160d"
+    },
+    {
+      "name": "get_price",
+      "scope": "read",
+      "preview": false,
+      "descriptionHash": "45a6a8d44cf17c7b",
+      "schemaHash": "b025e841da3268ae"
+    },
+    {
+      "name": "get_risk",
+      "scope": "read",
+      "preview": false,
+      "descriptionHash": "347f687128491a85",
+      "schemaHash": "40bfd88af11b221d"
+    },
+    {
+      "name": "get_sector_exposure",
+      "scope": "read",
+      "preview": false,
+      "descriptionHash": "75e34c5ce1d5619f",
+      "schemaHash": "32062bdb9024160d"
+    },
+    {
+      "name": "get_trades",
+      "scope": "read",
+      "preview": false,
+      "descriptionHash": "815f2f1e2dd4a2f9",
+      "schemaHash": "2f4794e9427e9af9"
+    }
+  ]
+}

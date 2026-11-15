@@ -1,0 +1,270 @@
+import { businessDaysAfter } from "./calendar.js";
+import type { InvestingDashboardData } from "./dashboard.js";
+import { computePortfolioMetrics, type PortfolioMetrics } from "./summary.js";
+
+export const RISK_MINIMUM_OBSERVATIONS = 60;
+/** 0.5% of the date's portfolio value. An unaccounted slice this small
+ *  perturbs a daily return by far less than a typical daily move, so it
+ *  cannot meaningfully change a volatility or drawdown estimate; anything
+ *  larger can, so the date stays disqualified. */
+export const RISK_MATERIALITY_THRESHOLD = 0.005;
+export const RISK_MAX_STALE_BUSINESS_DAYS = 7;
+export const RISK_SETTLING_BUSINESS_DAYS = 2;
+export type RiskRange = "6M" | "1Y" | "All";
+/** "account" measures the whole account value, cash included; "holdings"
+ *  measures only the invested holdings, used when cash history is unproven. */
+export type RiskBasis = "account" | "holdings";
+
+export type TrailingGap = "none" | "settling" | "incomplete" | "stale";
+
+/** How far behind the range's last date the last known date sits, in
+ *  business days (a Friday-to-Monday gap is one missed session, not three
+ *  calendar days). "none" measures through the raw last point; "stale" past
+ *  RISK_MAX_STALE_BUSINESS_DAYS disqualifies the estimate outright. */
+export function classifyTrailingGap(businessDaysBehind: number, hasGap: boolean): TrailingGap {
+  if (!hasGap) return "none";
+  if (businessDaysBehind > RISK_MAX_STALE_BUSINESS_DAYS) return "stale";
+  if (businessDaysBehind <= RISK_SETTLING_BUSINESS_DAYS) return "settling";
+  return "incomplete";
+}
+
+/** Historical account risk. Partial valuations are never market returns. */
+export function buildHistoricalRisk(
+  data: InvestingDashboardData,
+  range: RiskRange = "1Y",
+  benchmarkSymbol?: string,
+) {
+  const points = data.portfolio[range];
+  const benchmark = benchmarkSymbol
+    ? data.benchmarks.find((item) => item.symbol === benchmarkSymbol)
+    : data.benchmarks[0];
+  const isImmaterial = (point: (typeof points)[number]): boolean => {
+    const hasUnresolved =
+      point.unpriced.length > 0 ||
+      point.forwardFilled.length > 0 ||
+      (point.holdingsUnknown?.length ?? 0) > 0;
+    if (!hasUnresolved) return true;
+    const unaccounted = point.unaccountedValue;
+    if (unaccounted == null || point.value == null) return false;
+    return Math.abs(unaccounted) <= RISK_MATERIALITY_THRESHOLD * Math.abs(point.value);
+  };
+  const accountKnown = (point: (typeof points)[number]) =>
+    point.cashUnknown.length === 0 && isImmaterial(point);
+  const holdingsKnown = (point: (typeof points)[number]) =>
+    isImmaterial(point) &&
+    (Number.isFinite(point.holdingsReturn) ||
+      (point === points[0] && point.holdingsReturn === undefined));
+
+  // Cash moves no market, so when its history cannot be proven the holdings
+  // alone still show how the portfolio moved: each date's return reprices
+  // the previous date's holdings, which trades and transfers cannot distort.
+  const holdingsIndex = new Map<string, number>();
+  let index = 1;
+  for (const point of points) {
+    if (holdingsKnown(point)) index *= 1 + (point.holdingsReturn ?? 0);
+    holdingsIndex.set(point.date, index);
+  }
+  const returnCount = (usable: (point: (typeof points)[number]) => boolean, holdings: boolean) =>
+    computePortfolioMetrics({
+      valuePoints: points.map((point) => ({
+        date: point.date,
+        value: holdings ? holdingsIndex.get(point.date)! : point.value,
+        usable: usable(point),
+      })),
+      externalCashFlows: holdings ? [] : data.externalCashFlows,
+      minObservations: RISK_MINIMUM_OBSERVATIONS,
+    }).observationDays;
+  const basis: RiskBasis =
+    returnCount(accountKnown, false) < RISK_MINIMUM_OBSERVATIONS &&
+    returnCount(holdingsKnown, true) >= RISK_MINIMUM_OBSERVATIONS
+      ? "holdings"
+      : "account";
+  const known = basis === "holdings" ? holdingsKnown : accountKnown;
+  const valueOf = (point: (typeof points)[number]) =>
+    basis === "holdings" ? holdingsIndex.get(point.date)! : point.value;
+  const flows = basis === "holdings" ? [] : data.externalCashFlows;
+
+  // A trailing run of unknown dates (today's close still settling, usually)
+  // is not a return yet, so the whole account is measured through the last
+  // known date instead of demanding the series' raw last point be complete.
+  let lastKnownIndex = points.length - 1;
+  while (lastKnownIndex >= 0 && !known(points[lastKnownIndex]!)) lastKnownIndex -= 1;
+  const measured = points.slice(0, lastKnownIndex + 1);
+  const trailingDropped = lastKnownIndex >= 0 && lastKnownIndex < points.length - 1;
+  const staleDays = trailingDropped
+    ? businessDaysAfter(points[lastKnownIndex]!.date, points.at(-1)!.date)
+    : 0;
+  const trailingGap = classifyTrailingGap(staleDays, trailingDropped);
+  const isStale = trailingGap === "stale";
+
+  // Max drawdown needs a genuinely continuous, fully priced series: one
+  // unknown date makes the compounded path unobservable, so it still uses
+  // only the most recent unbroken run of complete dates ending at the last
+  // known date.
+  let start = measured.length;
+  while (start > 0 && known(measured[start - 1]!)) start -= 1;
+  const window = measured.slice(start);
+
+  // Volatility, beta and alpha are each built from independent daily
+  // intervals, so one unknown date should drop only the interval(s) that
+  // touch it, not every earlier date. Mark every point's usability and let
+  // computePortfolioMetrics exclude just the bad intervals, keeping the real
+  // history around them.
+  const unknownPoints = points.filter((point) => !known(point));
+  const missingPrices = [...new Set(unknownPoints.flatMap((point) => point.unpriced))].sort();
+  const missingCash = [...new Set(unknownPoints.flatMap((point) => point.cashUnknown))].sort();
+  const missingHoldings = [
+    ...new Set(unknownPoints.flatMap((point) => point.holdingsUnknown ?? [])),
+  ].sort();
+  const estimatedPrices = unknownPoints.some((point) => point.forwardFilled.length > 0);
+  const estimatedCash = [...new Set(points.flatMap((point) => point.cashEstimated ?? []))].sort();
+  const knownPoints = points.filter(known);
+  const coverage =
+    knownPoints.length === 0
+      ? null
+      : Math.min(
+          ...knownPoints.map((point) => {
+            if (!point.value) return 1;
+            return 1 - Math.abs(point.unaccountedValue ?? 0) / Math.abs(point.value);
+          }),
+        );
+  const negativeCashDays = knownPoints.filter(
+    (point) => point.cashValue !== null && point.cashValue < -0.01,
+  ).length;
+  const computed = computePortfolioMetrics({
+    valuePoints: measured.map((point) => ({
+      date: point.date,
+      value: valueOf(point),
+      usable: known(point),
+    })),
+    externalCashFlows: flows,
+    benchmarkPoints: benchmark?.points,
+    minObservations: RISK_MINIMUM_OBSERVATIONS,
+  });
+  const drawdown = computePortfolioMetrics({
+    valuePoints: window.map((point) => ({ date: point.date, value: valueOf(point) })),
+    externalCashFlows: flows,
+  }).maxDrawdown;
+  const available =
+    lastKnownIndex >= 0 && !isStale && computed.observationDays >= RISK_MINIMUM_OBSERVATIONS;
+  const metrics = available
+    ? { ...computed, maxDrawdown: drawdown }
+    : {
+        ...computed,
+        dailyVolatility: null,
+        annualizedVolatility: null,
+        beta: null,
+        alpha: null,
+        maxDrawdown: null,
+      };
+  const reasons: string[] = [];
+  if (basis === "holdings")
+    reasons.push(
+      "Measured on invested holdings only: cash history is incomplete, so cash is left out.",
+    );
+  if (missingCash.length) reasons.push(`Cash history missing: ${missingCash.join(", ")}.`);
+  if (negativeCashDays > 0)
+    reasons.push(
+      `Cash balance is below zero on ${negativeCashDays} dates; risk estimates may be inaccurate.`,
+    );
+  if (missingPrices.length) reasons.push(`Prices missing for ${missingPrices.length} instruments.`);
+  if (missingHoldings.length)
+    reasons.push(`Ownership history incomplete for ${missingHoldings.length} holdings.`);
+  if (estimatedPrices) reasons.push("Some dates use carried-forward prices.");
+  if (estimatedCash.length)
+    reasons.push(
+      `Cash for ${estimatedCash.join(", ")} is walked from history the broker could not prove complete.`,
+    );
+  if (coverage !== null && coverage < 1)
+    reasons.push(
+      `Estimate covers ${(coverage * 100).toFixed(2)}% of portfolio value; the rest carries uncertain ownership or pricing but is too small to change the result.`,
+    );
+  if (window.length === 0)
+    reasons.push("No recent date has a continuous, fully priced history for maximum drawdown.");
+  else if (start > 0)
+    reasons.push(
+      `Maximum drawdown is measured from ${window[0]!.date}; earlier dates lack a continuous, fully priced history.`,
+    );
+  if (computed.excludedIntervals > 0)
+    reasons.push(
+      "Return intervals that touch an incomplete date are excluded from volatility and beta.",
+    );
+  if (trailingGap === "stale")
+    reasons.push(`Risk data has been incomplete since ${points[lastKnownIndex + 1]!.date}.`);
+  else if (trailingGap === "settling")
+    reasons.push(
+      `Measured through ${points[lastKnownIndex]!.date}; later dates are still settling.`,
+    );
+  else if (trailingGap === "incomplete")
+    reasons.push(`Measured through ${points[lastKnownIndex]!.date}; later dates are incomplete.`);
+  if (computed.observationDays < RISK_MINIMUM_OBSERVATIONS)
+    reasons.push(`At least ${RISK_MINIMUM_OBSERVATIONS} valid daily returns are required.`);
+  if (!benchmark) reasons.push("Choose a benchmark to calculate beta and alpha.");
+  else if (available && metrics.beta === null)
+    reasons.push(
+      "Beta and alpha need 60 matching return intervals and a benchmark with non-zero variance.",
+    );
+  return {
+    metrics,
+    risk: {
+      status: available ? ("estimate" as const) : ("unavailable" as const),
+      basis,
+      range,
+      from: computed.startDate,
+      to: computed.endDate,
+      drawdownFrom: (window[0]?.date ?? null) as string | null,
+      minimumObservations: RISK_MINIMUM_OBSERVATIONS,
+      benchmark: benchmark
+        ? { symbol: benchmark.symbol, name: benchmark.name, currency: benchmark.currency }
+        : null,
+      benchmarks: data.benchmarks.map(({ symbol, name, currency }) => ({ symbol, name, currency })),
+      reasons,
+      missingHoldings,
+      missingPrices,
+      coverage,
+      currency: data.presentationCurrency,
+    },
+  };
+}
+
+export type HistoricalRisk = ReturnType<typeof buildHistoricalRisk>["risk"];
+
+/** The whole answer `buildHistoricalRisk` produces: the metrics plus the risk
+ *  report. The summary endpoint returns both, so both travel in the
+ *  projection rather than being recomputed on the request path. */
+export type HistoricalRiskReport = {
+  metrics: PortfolioMetrics;
+  risk: HistoricalRisk;
+};
+
+/** Risk is a projection of the dashboard read model, not a per-request
+ *  computation: one report per configured benchmark and risk range, built once
+ *  with the read model and carried in its snapshot. */
+export type InvestingRiskProjection = {
+  /** One entry per configured benchmark symbol, per risk range. The empty
+   *  string is the no-benchmark entry, used when none is configured. */
+  byBenchmark: Record<string, Partial<Record<RiskRange, HistoricalRiskReport>>>;
+  /** The benchmark a fresh dashboard shows when the owner has chosen none. */
+  defaultBenchmark: string | null;
+};
+
+/** Every range risk is estimated for. `PORTFOLIO_RANGES` also carries `1M` and
+ *  `YTD`, but those are chart ranges: risk is not computed over them. */
+const RISK_RANGES: readonly RiskRange[] = ["6M", "1Y", "All"];
+
+/** The whole projection, computed from an already-built read model over the
+ *  series it holds: one call per configured benchmark — or one no-benchmark
+ *  entry when none is set — for each `RiskRange`. */
+export function buildRiskProjection(data: InvestingDashboardData): InvestingRiskProjection {
+  const defaultBenchmark = data.benchmarks[0]?.symbol ?? null;
+  const symbols =
+    defaultBenchmark === null ? [""] : data.benchmarks.map((benchmark) => benchmark.symbol);
+  const byBenchmark: Record<string, Partial<Record<RiskRange, HistoricalRiskReport>>> = {};
+  for (const symbol of symbols) {
+    const perRange: Partial<Record<RiskRange, HistoricalRiskReport>> = {};
+    for (const range of RISK_RANGES)
+      perRange[range] = buildHistoricalRisk(data, range, symbol || undefined);
+    byBenchmark[symbol] = perRange;
+  }
+  return { byBenchmark, defaultBenchmark };
+}

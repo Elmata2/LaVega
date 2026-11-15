@@ -1,7 +1,6 @@
-import type { CategorySelection, OwnAccounts, Rule, Tx } from "@lavega/core";
-import { categorize, selectMajorCategories } from "@lavega/core";
+import type { CategorySelection, ConversionMode, OwnAccounts, Rule, Tx } from "@lavega/core";
+import { categorize, isEurCurrency, selectMajorCategories, toEur } from "@lavega/core";
 import {
-  dayLabelNL,
   daysBetween,
   mondayOf,
   monthFirstDay,
@@ -9,10 +8,10 @@ import {
   shiftDate,
   shiftMonth,
   weekdayIndex,
-  WEEKDAYS_NL,
-  WEEKDAYS_SHORT_NL,
 } from "./dates.js";
-import { monthLabelNL, monthShortNL } from "../../format.js";
+import { monthLabel, monthShort, weekdayLabel, weekdayShort } from "../../format.js";
+import type { Locale } from "../../locale.js";
+import { moneyCopy, dayLabelIn } from "../../copy/money.js";
 
 /* The two questions the Statistieken block answers, as pure derivations, over
  * an explicit WINDOW.
@@ -89,7 +88,10 @@ export type MovedCategory = {
 export const MOVED_CATEGORIES: readonly MovedCategory[] = [
   { category: "Eigen overboeking", why: "een overboeking tussen je eigen rekeningen" },
   { category: "Sparen & beleggen", why: "geld naar je eigen spaar- of beleggingsrekening" },
-  { category: "Creditcard afbetaald", why: "een afbetaling aan je eigen creditcard — die uitgaven staan al op de creditcardrekening" },
+  {
+    category: "Creditcard afbetaald",
+    why: "een afbetaling aan je eigen creditcard — die uitgaven staan al op de creditcardrekening",
+  },
   /* GELDOPNAME STAAT HIER BEWUST NIET IN, op zijn beslissing van 20 augustus.
    *
    * Strikt genomen is contant opnemen ook "dezelfde euro op een andere plek": het
@@ -105,6 +107,13 @@ export const MOVED_CATEGORIES: readonly MovedCategory[] = [
 ];
 
 const MOVED_BY_CATEGORY = new Map(MOVED_CATEGORIES.map((m) => [m.category, m.why]));
+
+/** How every function in this file turns a row's own-currency amount into
+ *  EUR: convert via the ECB history when the owner asked for it, otherwise
+ *  keep it out of every total the same way an unrecognised currency always
+ *  was. One shape, reused at every guard below, so the eight sites cannot
+ *  drift into eight slightly different definitions of "in euros". */
+type Conversion = { fxHistory: Record<string, Record<string, number>>; mode: ConversionMode };
 
 /** Whether a category is money moving rather than money spent. */
 export function isMovedCategory(category: string): boolean {
@@ -130,15 +139,22 @@ export function movedTotals(
   rules: Rule[],
   own: OwnAccounts | undefined,
   window: StatWindow,
+  conversion: Conversion,
 ): MovedTotal[] {
   const byCat = new Map<string, { outCents: number; inCents: number }>();
   for (const t of txs) {
     if (!t.date || t.date < window.start || t.date > window.end) continue;
+    const eurAmount = isEurCurrency(t.currency)
+      ? t.amount
+      : conversion.mode === "convert"
+        ? toEur(t.amount, t.currency, t.date, conversion.fxHistory)
+        : null;
+    if (eurAmount === null) continue;
     const category = categorize(t, rules, own);
     if (!isMovedCategory(category)) continue;
     const bucket = byCat.get(category) ?? { outCents: 0, inCents: 0 };
-    const cents = Math.round(Math.abs(t.amount) * 100);
-    if (t.amount < 0) bucket.outCents += cents;
+    const cents = Math.round(Math.abs(eurAmount) * 100);
+    if (eurAmount < 0) bucket.outCents += cents;
     else bucket.inCents += cents;
     byCat.set(category, bucket);
   }
@@ -208,14 +224,20 @@ export function bucketUnit(window: StatWindow): StatBucketUnit {
 const monthOf = (date: string): string => date.slice(0, 7);
 
 /** Spend transactions only, moved money removed, already categorised. */
-function spendRows(txs: Tx[], rules: Rule[], own: OwnAccounts | undefined) {
+function spendRows(txs: Tx[], rules: Rule[], own: OwnAccounts | undefined, conversion: Conversion) {
   const rows: { date: string; category: string; spend: number }[] = [];
   for (const t of txs) {
     if (t.amount >= 0) continue;
     if (!t.date) continue;
+    const eurAmount = isEurCurrency(t.currency)
+      ? t.amount
+      : conversion.mode === "convert"
+        ? toEur(t.amount, t.currency, t.date, conversion.fxHistory)
+        : null;
+    if (eurAmount === null) continue;
     const category = categorize(t, rules, own);
     if (isMovedCategory(category)) continue;
-    rows.push({ date: t.date, category, spend: -t.amount });
+    rows.push({ date: t.date, category, spend: -eurAmount });
   }
   return rows;
 }
@@ -275,12 +297,19 @@ export type CategoryWindow = {
 
 /** "aug" inside a year, "aug '25" once the window is longer than twelve months
  *  — both so the label stays short and so it stays UNIQUE. */
-export function monthAxisLabel(month: string, windowLength: number): string {
-  return windowLength > 12 ? `${monthShortNL(month)} '${month.slice(2, 4)}` : monthShortNL(month);
+export function monthAxisLabel(month: string, windowLength: number, locale: Locale): string {
+  return windowLength > 12
+    ? `${monthShort(locale, month)} '${month.slice(2, 4)}`
+    : monthShort(locale, month);
 }
 
 /** The buckets covering `covered`, clipped at both ends. */
-function buildBuckets(covered: StatWindow, unit: StatBucketUnit): Omit<StatBucket, "hasData">[] {
+function buildBuckets(
+  covered: StatWindow,
+  unit: StatBucketUnit,
+  locale: Locale,
+): Omit<StatBucket, "hasData">[] {
+  const c = moneyCopy[locale].statistiek;
   const clip = (start: string, end: string) => ({
     start: start < covered.start ? covered.start : start,
     end: end > covered.end ? covered.end : end,
@@ -291,8 +320,8 @@ function buildBuckets(covered: StatWindow, unit: StatBucketUnit): Omit<StatBucke
     for (let d = covered.start; d <= covered.end; d = shiftDate(d, 1)) {
       out.push({
         key: d,
-        label: dayLabelNL(d),
-        title: `${WEEKDAYS_NL[weekdayIndex(d)]} ${dayLabelNL(d)}`,
+        label: dayLabelIn(locale, d),
+        title: `${weekdayLabel(locale, weekdayIndex(d))} ${dayLabelIn(locale, d)}`,
         start: d,
         end: d,
         // A single day is never "part of" itself.
@@ -310,10 +339,11 @@ function buildBuckets(covered: StatWindow, unit: StatBucketUnit): Omit<StatBucke
       const partial = start !== full.start || end !== full.end;
       out.push({
         key: w,
-        label: dayLabelNL(start),
+        label: dayLabelIn(locale, start),
         title: partial
-          ? `Week van ${dayLabelNL(full.start)} — alleen ${dayLabelNL(start)} t/m ${dayLabelNL(end)}`
-          : `Week van ${dayLabelNL(full.start)}`,
+          ? c.weekVan(dayLabelIn(locale, full.start)) +
+            c.alleenTM(dayLabelIn(locale, start), dayLabelIn(locale, end))
+          : c.weekVan(dayLabelIn(locale, full.start)),
         start,
         end,
         partial,
@@ -323,17 +353,18 @@ function buildBuckets(covered: StatWindow, unit: StatBucketUnit): Omit<StatBucke
   }
 
   const months: string[] = [];
-  for (let m = monthOf(covered.start); m <= monthOf(covered.end); m = shiftMonth(m, -1)) months.push(m);
+  for (let m = monthOf(covered.start); m <= monthOf(covered.end); m = shiftMonth(m, -1))
+    months.push(m);
   return months.map((m) => {
     const full = { start: monthFirstDay(m), end: monthLastDay(m) };
     const { start, end } = clip(full.start, full.end);
     const partial = start !== full.start || end !== full.end;
     return {
       key: m,
-      label: monthAxisLabel(m, months.length),
+      label: monthAxisLabel(m, months.length, locale),
       title: partial
-        ? `${monthLabelNL(m)} — alleen ${dayLabelNL(start)} t/m ${dayLabelNL(end)}`
-        : monthLabelNL(m),
+        ? monthLabel(locale, m) + c.alleenTM(dayLabelIn(locale, start), dayLabelIn(locale, end))
+        : monthLabel(locale, m),
       start,
       end,
       partial,
@@ -343,7 +374,11 @@ function buildBuckets(covered: StatWindow, unit: StatBucketUnit): Omit<StatBucke
 
 /** Which bucket a date falls in. The buckets are contiguous and ordered, so
  *  this is arithmetic rather than a search. */
-function bucketIndexOf(date: string, buckets: Omit<StatBucket, "hasData">[], unit: StatBucketUnit): number {
+function bucketIndexOf(
+  date: string,
+  buckets: Omit<StatBucket, "hasData">[],
+  unit: StatBucketUnit,
+): number {
   if (buckets.length === 0) return -1;
   if (unit === "dag") return daysBetween(buckets[0].start, date);
   if (unit === "week") return Math.floor(daysBetween(buckets[0].key, date) / 7);
@@ -361,6 +396,8 @@ export function categoryPerWindow(
   own: OwnAccounts | undefined,
   window: StatWindow,
   maxShown: number,
+  conversion: Conversion,
+  locale: Locale,
 ): CategoryWindow {
   const unit = bucketUnit(window);
   const empty: CategoryWindow = {
@@ -374,7 +411,7 @@ export function categoryPerWindow(
     windowDays: 0,
   };
 
-  const all = spendRows(txs, rules, own);
+  const all = spendRows(txs, rules, own, conversion);
   const covered = coveredWindow(
     all.map((r) => r.date),
     window,
@@ -384,7 +421,7 @@ export function categoryPerWindow(
   const rows = all.filter((r) => r.date >= covered.start && r.date <= covered.end);
   if (rows.length === 0) return { ...empty, covered };
 
-  const skeleton = buildBuckets(covered, unit);
+  const skeleton = buildBuckets(covered, unit, locale);
   const totals = new Map<string, number>();
   const grid = skeleton.map(() => new Map<string, number>());
   const touched = skeleton.map(() => false);
@@ -418,6 +455,14 @@ export type WindowTotals = {
   outTotal: number;
   /** The part of the window the data covers — null when nothing does. */
   covered: StatWindow | null;
+  /** Rows in the window excluded from every total above: in "separate" mode
+   *  every non-EUR row, in "convert" mode only the ones `toEur` had no rate
+   *  for — a row that DID convert is in the totals as a euro amount instead
+   *  and is no longer tracked here. Nothing here is dropped silently, so the
+   *  count and the face-value sum per currency travel with the totals instead
+   *  of just vanishing from them. `byCurrency` is unsigned face value, not a
+   *  euro amount of anything. */
+  foreignCurrency: { count: number; byCurrency: Record<string, number> };
 };
 
 /** What came in and what went out inside `window`. Totals, not per-month
@@ -428,6 +473,7 @@ export function windowTotals(
   rules: Rule[],
   own: OwnAccounts | undefined,
   window: StatWindow,
+  conversion: Conversion,
 ): WindowTotals {
   const dated = txs.filter((t) => t.date);
   const covered = coveredWindow(
@@ -436,13 +482,35 @@ export function windowTotals(
   );
   let inTotal = 0;
   let outTotal = 0;
+  let foreignCount = 0;
+  const foreignByCurrency: Record<string, number> = {};
   for (const t of dated) {
     if (t.date < window.start || t.date > window.end) continue;
+    const eurAmount = isEurCurrency(t.currency)
+      ? t.amount
+      : conversion.mode === "convert"
+        ? toEur(t.amount, t.currency, t.date, conversion.fxHistory)
+        : null;
+    if (eurAmount === null) {
+      // In "separate" mode every non-EUR row lands here by policy; in
+      // "convert" mode it lands here only when toEur itself found no rate —
+      // a row that DID convert never reaches this branch, it is in the
+      // totals below as eurAmount instead.
+      foreignCount++;
+      const currency = (t.currency || "EUR").trim().toUpperCase();
+      foreignByCurrency[currency] = (foreignByCurrency[currency] ?? 0) + Math.abs(t.amount);
+      continue;
+    }
     if (isMovedCategory(categorize(t, rules, own))) continue;
-    if (t.amount >= 0) inTotal += t.amount;
-    else outTotal += -t.amount;
+    if (eurAmount >= 0) inTotal += eurAmount;
+    else outTotal += -eurAmount;
   }
-  return { inTotal, outTotal, covered };
+  return {
+    inTotal,
+    outTotal,
+    covered,
+    foreignCurrency: { count: foreignCount, byCurrency: foreignByCurrency },
+  };
 }
 
 /* ─────────────────────────────── gemiddelde inkomsten en gemiddelde uitgaven
@@ -562,7 +630,10 @@ export type PeriodAverages =
  *  Een week begint hier op maandag (`mondayOf`), net als in `buildBuckets` en in
  *  het weekdagblok — één weekbegrip per app, anders staat er straks een
  *  weekgemiddelde onder een grafiek die de week ergens anders knipt. */
-function wholeUnits(covered: StatWindow, unit: StatBucketUnit): { units: number; span: StatWindow } | null {
+function wholeUnits(
+  covered: StatWindow,
+  unit: StatBucketUnit,
+): { units: number; span: StatWindow } | null {
   if (unit === "dag") {
     // Elke dag in het venster is een hele dag; er valt niets af te knippen.
     const units = daysBetween(covered.start, covered.end) + 1;
@@ -590,7 +661,9 @@ function wholeUnits(covered: StatWindow, unit: StatBucketUnit): { units: number;
     units++;
     month = shiftMonth(month, -1);
   }
-  return units < 1 ? null : { units, span: { start: monthFirstDay(first), end: monthLastDay(last) } };
+  return units < 1
+    ? null
+    : { units, span: { start: monthFirstDay(first), end: monthLastDay(last) } };
 }
 
 /** Gemiddelde inkomsten en gemiddelde uitgaven per eenheid van `window`.
@@ -600,6 +673,7 @@ export function periodAverages(
   rules: Rule[],
   own: OwnAccounts | undefined,
   window: StatWindow,
+  conversion: Conversion,
 ): PeriodAverages {
   const askedUnit = bucketUnit(window);
   // Op ALLE gedateerde transacties geklemd en niet alleen op de uitgaven, net
@@ -609,7 +683,8 @@ export function periodAverages(
     txs.filter((t) => t.date).map((t) => t.date),
     window,
   );
-  if (covered === null) return { kind: "geen", reason: "geen-gegevens", askedUnit, covered: null, coveredDays: 0 };
+  if (covered === null)
+    return { kind: "geen", reason: "geen-gegevens", askedUnit, covered: null, coveredDays: 0 };
 
   const coveredDays = daysBetween(covered.start, covered.end) + 1;
 
@@ -620,7 +695,7 @@ export function periodAverages(
     if (whole === null || whole.units < MIN_AVERAGE_UNITS) continue;
     // Door windowTotals heen, over de HELE eenheden en niet over het venster:
     // de teller moet dezelfde dagen beslaan als de noemer telt.
-    const { inTotal, outTotal } = windowTotals(txs, rules, own, whole.span);
+    const { inTotal, outTotal } = windowTotals(txs, rules, own, whole.span, conversion);
     const spanDays = daysBetween(whole.span.start, whole.span.end) + 1;
     return {
       kind: "gemiddeld",
@@ -670,11 +745,13 @@ export function weekdaySpend(
   rules: Rule[],
   own: OwnAccounts | undefined,
   window: StatWindow,
+  conversion: Conversion,
+  locale: Locale,
 ): WeekdaySpend {
   const blank: WeekdaySpend = {
-    rows: WEEKDAYS_NL.map((label, i) => ({
-      label,
-      short: WEEKDAYS_SHORT_NL[i],
+    rows: Array.from({ length: 7 }, (_, i) => ({
+      label: weekdayLabel(locale, i),
+      short: weekdayShort(locale, i),
       total: 0,
       occurrences: 0,
       average: null,
@@ -684,7 +761,7 @@ export function weekdaySpend(
     peak: null,
   };
 
-  const all = spendRows(txs, rules, own);
+  const all = spendRows(txs, rules, own, conversion);
   const covered = coveredWindow(
     all.map((r) => r.date),
     window,
@@ -693,20 +770,20 @@ export function weekdaySpend(
 
   const spanDays = daysBetween(covered.start, covered.end) + 1;
 
-  const totals = new Array(7).fill(0);
+  const totals = Array.from({ length: 7 }, () => 0);
   for (const r of all) {
     if (r.date < covered.start || r.date > covered.end) continue;
     totals[weekdayIndex(r.date)] += r.spend;
   }
 
   // Count every calendar occurrence in the window, transaction or not.
-  const occurrences = new Array(7).fill(0);
+  const occurrences = Array.from({ length: 7 }, () => 0);
   const startWd = weekdayIndex(covered.start);
   for (let i = 0; i < spanDays; i++) occurrences[(startWd + i) % 7]++;
 
-  const out: WeekdayRow[] = WEEKDAYS_NL.map((label, i) => ({
-    label,
-    short: WEEKDAYS_SHORT_NL[i],
+  const out: WeekdayRow[] = Array.from({ length: 7 }, (_, i) => ({
+    label: weekdayLabel(locale, i),
+    short: weekdayShort(locale, i),
     total: totals[i],
     occurrences: occurrences[i],
     average: occurrences[i] === 0 ? null : totals[i] / occurrences[i],
@@ -754,6 +831,7 @@ export function categoryShare(
   rules: Rule[],
   own: OwnAccounts | undefined,
   window: StatWindow,
+  conversion: Conversion,
 ): { slices: CategorySlice[]; totalCents: number; covered: StatWindow | null } {
   const inWindow = txs.filter((t) => t.date && t.date >= window.start && t.date <= window.end);
   if (inWindow.length === 0) return { slices: [], totalCents: 0, covered: null };
@@ -761,9 +839,15 @@ export function categoryShare(
   let total = 0;
   for (const t of inWindow) {
     if (t.amount >= 0) continue;
+    const eurAmount = isEurCurrency(t.currency)
+      ? t.amount
+      : conversion.mode === "convert"
+        ? toEur(t.amount, t.currency, t.date, conversion.fxHistory)
+        : null;
+    if (eurAmount === null) continue;
     const cat = categorize(t, rules, own);
     if (isMovedCategory(cat)) continue;
-    const cents = Math.round(Math.abs(t.amount) * 100);
+    const cents = Math.round(Math.abs(eurAmount) * 100);
     byCat.set(cat, (byCat.get(cat) ?? 0) + cents);
     total += cents;
   }
@@ -798,19 +882,31 @@ export function categoryGrowth(
   rules: Rule[],
   own: OwnAccounts | undefined,
   window: StatWindow,
+  conversion: Conversion,
 ): { rows: CategoryDelta[]; before: StatWindow } {
-  const days = Math.max(1, Math.round((Date.parse(window.end) - Date.parse(window.start)) / 86_400_000) + 1);
+  const days = Math.max(
+    1,
+    Math.round((Date.parse(window.end) - Date.parse(window.start)) / 86_400_000) + 1,
+  );
   const beforeEnd = new Date(Date.parse(window.start) - 86_400_000).toISOString().slice(0, 10);
-  const beforeStart = new Date(Date.parse(beforeEnd) - (days - 1) * 86_400_000).toISOString().slice(0, 10);
+  const beforeStart = new Date(Date.parse(beforeEnd) - (days - 1) * 86_400_000)
+    .toISOString()
+    .slice(0, 10);
   const before: StatWindow = { start: beforeStart, end: beforeEnd };
 
   const spendIn = (w: StatWindow) => {
     const m = new Map<string, number>();
     for (const t of txs) {
       if (!t.date || t.date < w.start || t.date > w.end || t.amount >= 0) continue;
+      const eurAmount = isEurCurrency(t.currency)
+        ? t.amount
+        : conversion.mode === "convert"
+          ? toEur(t.amount, t.currency, t.date, conversion.fxHistory)
+          : null;
+      if (eurAmount === null) continue;
       const cat = categorize(t, rules, own);
       if (isMovedCategory(cat)) continue;
-      m.set(cat, (m.get(cat) ?? 0) + Math.round(Math.abs(t.amount) * 100));
+      m.set(cat, (m.get(cat) ?? 0) + Math.round(Math.abs(eurAmount) * 100));
     }
     return m;
   };

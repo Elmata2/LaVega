@@ -1,11 +1,20 @@
+import { replayCostBasis, selectCostBasis, type CostBasisSummary } from "./costBasis.js";
 import type { Dividend } from "./dividend.js";
 import type { Position, PriceBar, Trade } from "./model.js";
-import { convertCurrency, type FxRates } from "./portfolio.js";
-import { businessDaysAfter } from "./calendar.js";
+import { convertCurrency, MissingFxRateError, type FxRates } from "./portfolio.js";
+import { latestOwnershipAnchors } from "./ownership.js";
 import { solveXirr } from "./benchmarks.js";
+import { orderTrades } from "./quantity.js";
+import { instrumentKey } from "./securities.js";
+import { valuePosition, type QuoteQuality } from "./valuation.js";
 
-export type PositionPriceStatus = "priced" | "forward-filled" | "unpriced" | "missing-fx";
-export type PositionReturnStatus = "available" | "missing-cost" | "missing-fx" | "unpriced";
+export type PositionPriceStatus = QuoteQuality;
+export type PositionReturnStatus =
+  | "available"
+  | "broker-unrealized"
+  | "missing-cost"
+  | "missing-fx"
+  | "unpriced";
 
 export type PositionReturn = {
   status: PositionReturnStatus;
@@ -18,12 +27,18 @@ export type PositionReturn = {
   totalReturnPercentage: number | null;
   sinceFirstBuyPercentage: number | null;
   firstBuyDate: string | null;
+  /** Set only when the calculation degraded for a reason other than a missing
+   *  FX rate, so the cause is not silently discarded. Developer-facing text;
+   *  a caller renders or drops it, it is never shown verbatim as copy. */
+  problem?: string;
 };
 
 export type CurrentPosition = {
   symbol: string;
   entity: string;
   isin?: string;
+  /** ISIN-first canonical identity (WS4.5, #297), when the snapshot names one. */
+  instrumentKey?: string;
   description?: string;
   quantity: number;
   currency: string;
@@ -32,11 +47,18 @@ export type CurrentPosition = {
   portfolioWeight: number | null;
   priceStatus: PositionPriceStatus;
   returns: PositionReturn;
+  /** Why the cost basis behind those returns is known or unknown (WS4.2).
+   *  Set by `buildCurrentPositions`; optional so a row shaped before the
+   *  provenance slice still type-checks. */
+  basis?: CostBasisSummary;
 };
 
 const EPSILON = 1e-9;
 
-function emptyReturn(status: PositionReturnStatus, firstBuyDate: string | null = null): PositionReturn {
+function emptyReturn(
+  status: PositionReturnStatus,
+  firstBuyDate: string | null = null,
+): PositionReturn {
   return {
     status,
     remainingCostBasis: null,
@@ -57,6 +79,11 @@ function tradeValue(trade: Trade): number | null {
   return null;
 }
 
+type BrokerCostLeg = { amount: number; currency: string; date: string };
+export type BrokerCostCoverage =
+  | { status: "complete"; heldQuantity: number; legs: readonly BrokerCostLeg[] }
+  | { status: "incomplete"; heldQuantity: number; coveredQuantity: number };
+
 export function calculatePositionReturn(
   quantity: number,
   marketValue: number | null,
@@ -64,12 +91,24 @@ export function calculatePositionReturn(
   dividends: readonly Dividend[],
   presentationCurrency: string,
   fxRates: FxRates,
-  options: { valuationDate?: string } = {},
+  options: { valuationDate?: string; brokerCost?: BrokerCostCoverage } = {},
 ): PositionReturn {
-  const orderedTrades = [...trades].sort((left, right) => left.date.localeCompare(right.date));
+  const orderedTrades = orderTrades(trades);
   const firstBuyDate = orderedTrades.find((trade) => trade.side === "buy")?.date ?? null;
-  if (orderedTrades.length === 0 || orderedTrades.some((trade) => trade.side === "other" || trade.commission === null)) {
-    return emptyReturn("missing-cost", firstBuyDate);
+  const fallback = () =>
+    brokerCostReturn(
+      marketValue,
+      dividends,
+      presentationCurrency,
+      fxRates,
+      firstBuyDate,
+      options.brokerCost,
+    );
+  if (
+    orderedTrades.length === 0 ||
+    orderedTrades.some((trade) => trade.side === "other" || trade.commission === null)
+  ) {
+    return fallback();
   }
 
   let heldQuantity = 0;
@@ -80,17 +119,29 @@ export function calculatePositionReturn(
   try {
     for (const trade of orderedTrades) {
       const gross = tradeValue(trade);
-      if (gross === null || trade.quantity <= 0) return emptyReturn("missing-cost", firstBuyDate);
-      const grossEur = convertCurrency(gross, trade.currency, presentationCurrency, trade.date, fxRates);
-      const feeEur = convertCurrency(Math.abs(trade.commission!), trade.currency, presentationCurrency, trade.date, fxRates);
+      if (gross === null || trade.quantity <= 0) return fallback();
+      const grossEur = convertCurrency(
+        gross,
+        trade.currency,
+        presentationCurrency,
+        trade.date,
+        fxRates,
+      );
+      const feeEur = convertCurrency(
+        Math.abs(trade.commission!),
+        trade.currency,
+        presentationCurrency,
+        trade.date,
+        fxRates,
+      );
       if (trade.side === "buy") {
         heldQuantity += trade.quantity;
         remainingCostBasis += grossEur + feeEur;
         datedFlows.push({ date: trade.date, amount: -(grossEur + feeEur) });
         continue;
       }
-      if (trade.quantity > heldQuantity + EPSILON || heldQuantity <= EPSILON) return emptyReturn("missing-cost", firstBuyDate);
-      const removed = remainingCostBasis / heldQuantity * trade.quantity;
+      if (trade.quantity > heldQuantity + EPSILON || heldQuantity <= EPSILON) return fallback();
+      const removed = (remainingCostBasis / heldQuantity) * trade.quantity;
       heldQuantity -= trade.quantity;
       remainingCostBasis -= removed;
       realizedCostBasisRemoved += removed;
@@ -98,39 +149,51 @@ export function calculatePositionReturn(
       datedFlows.push({ date: trade.date, amount: grossEur - feeEur });
     }
 
-    if (Math.abs(heldQuantity - quantity) > EPSILON) return emptyReturn("missing-cost", firstBuyDate);
+    if (Math.abs(heldQuantity - quantity) > EPSILON) return fallback();
     let dividendsReceived = 0;
     for (const dividend of dividends) {
-      const converted = convertCurrency(dividend.amount, dividend.currency, presentationCurrency, dividend.date, fxRates);
+      const converted = convertCurrency(
+        dividend.amount,
+        dividend.currency,
+        presentationCurrency,
+        dividend.date,
+        fxRates,
+      );
       dividendsReceived += converted;
       datedFlows.push({ date: dividend.date, amount: converted });
     }
-    if (marketValue === null) return {
-      status: "unpriced",
-      remainingCostBasis,
-      realizedCostBasisRemoved,
-      unrealizedGain: null,
-      realizedGain,
-      dividendsReceived,
-      totalReturn: null,
-      totalReturnPercentage: null,
-      sinceFirstBuyPercentage: null,
-      firstBuyDate,
-    };
+    if (marketValue === null)
+      return {
+        status: "unpriced",
+        remainingCostBasis,
+        realizedCostBasisRemoved,
+        unrealizedGain: null,
+        realizedGain,
+        dividendsReceived,
+        totalReturn: null,
+        totalReturnPercentage: null,
+        sinceFirstBuyPercentage: null,
+        firstBuyDate,
+      };
     const unrealizedGain = marketValue - remainingCostBasis;
     const totalReturn = unrealizedGain + realizedGain + dividendsReceived;
     const denominator = remainingCostBasis + realizedCostBasisRemoved;
-    const valuationDate = options.valuationDate
-      ?? [...orderedTrades.map((trade) => trade.date), ...dividends.map((dividend) => dividend.date)].sort().at(-1)
-      ?? firstBuyDate;
-    if (marketValue > EPSILON && valuationDate) datedFlows.push({ date: valuationDate, amount: marketValue });
+    const valuationDate =
+      options.valuationDate ??
+      [...orderedTrades.map((trade) => trade.date), ...dividends.map((dividend) => dividend.date)]
+        .sort()
+        .at(-1) ??
+      firstBuyDate;
+    if (marketValue > EPSILON && valuationDate)
+      datedFlows.push({ date: valuationDate, amount: marketValue });
     const annualized = solveXirr(datedFlows);
-    const elapsedYears = firstBuyDate && valuationDate
-      ? (Date.parse(`${valuationDate}T00:00:00Z`) - Date.parse(`${firstBuyDate}T00:00:00Z`)) / 31_536_000_000
-      : 0;
-    const sinceFirstBuyPercentage = annualized !== null && elapsedYears > 0
-      ? Math.pow(1 + annualized, elapsedYears) - 1
-      : null;
+    const elapsedYears =
+      firstBuyDate && valuationDate
+        ? (Date.parse(`${valuationDate}T00:00:00Z`) - Date.parse(`${firstBuyDate}T00:00:00Z`)) /
+          31_536_000_000
+        : 0;
+    const sinceFirstBuyPercentage =
+      annualized !== null && elapsedYears > 0 ? Math.pow(1 + annualized, elapsedYears) - 1 : null;
     return {
       status: "available",
       remainingCostBasis,
@@ -143,13 +206,89 @@ export function calculatePositionReturn(
       sinceFirstBuyPercentage,
       firstBuyDate,
     };
+  } catch (error) {
+    if (error instanceof MissingFxRateError) return emptyReturn("missing-fx", firstBuyDate);
+    return { ...fallback(), problem: error instanceof Error ? error.message : String(error) };
+  }
+}
+
+export function brokerCostCoverage(positions: readonly Position[]): BrokerCostCoverage {
+  const held = positions.filter((position) => Math.abs(position.quantity) > EPSILON);
+  const heldQuantity = held.reduce((sum, position) => sum + Math.abs(position.quantity), 0);
+  const known = held.filter(
+    (
+      position,
+    ): position is Position & {
+      brokerCost: Extract<Position["brokerCost"], { status: "known" }>;
+    } => position.brokerCost?.status === "known",
+  );
+  const coveredQuantity = known.reduce((sum, position) => sum + Math.abs(position.quantity), 0);
+  if (coveredQuantity !== heldQuantity)
+    return { status: "incomplete", heldQuantity, coveredQuantity };
+  return {
+    status: "complete",
+    heldQuantity,
+    legs: known.map((position) => ({
+      amount: position.brokerCost.amount,
+      currency: position.brokerCost.currency,
+      date: position.asOf,
+    })),
+  };
+}
+
+function brokerCostReturn(
+  marketValue: number | null,
+  dividends: readonly Dividend[],
+  presentationCurrency: string,
+  fxRates: FxRates,
+  firstBuyDate: string | null,
+  brokerCost: BrokerCostCoverage | undefined,
+): PositionReturn {
+  if (
+    !brokerCost ||
+    brokerCost.status !== "complete" ||
+    Math.abs(brokerCost.heldQuantity) <= EPSILON
+  )
+    return emptyReturn("missing-cost", firstBuyDate);
+  try {
+    let remainingCostBasis = 0;
+    for (const leg of brokerCost.legs)
+      remainingCostBasis += convertCurrency(
+        leg.amount,
+        leg.currency,
+        presentationCurrency,
+        leg.date,
+        fxRates,
+      );
+    let dividendsReceived = 0;
+    for (const dividend of dividends)
+      dividendsReceived += convertCurrency(
+        dividend.amount,
+        dividend.currency,
+        presentationCurrency,
+        dividend.date,
+        fxRates,
+      );
+    const unrealizedGain = marketValue === null ? null : marketValue - remainingCostBasis;
+    return {
+      status: "broker-unrealized",
+      remainingCostBasis,
+      realizedCostBasisRemoved: null,
+      unrealizedGain,
+      realizedGain: null,
+      dividendsReceived,
+      totalReturn: null,
+      totalReturnPercentage: null,
+      sinceFirstBuyPercentage: null,
+      firstBuyDate,
+    };
   } catch {
     return emptyReturn("missing-fx", firstBuyDate);
   }
 }
 
-function key(value: Pick<Position | Trade | Dividend, "tenantId" | "entity" | "symbol">): string {
-  return `${value.tenantId}\u0000${value.entity}\u0000${value.symbol.toUpperCase()}`;
+function key(value: Pick<Position | Trade | Dividend, "entity" | "symbol">): string {
+  return `${value.entity}\u0000${value.symbol.toUpperCase()}`;
 }
 
 export function buildCurrentPositions(input: {
@@ -161,9 +300,12 @@ export function buildCurrentPositions(input: {
   fxRates: FxRates;
   today: string;
 }): CurrentPosition[] {
+  // Grouped by entity + symbol because that is the row a reader wants, but the
+  // quantity inside a group is rebuilt per ownership key first: a group can
+  // hold several brokers' snapshots, and only snapshots of the same account
+  // supersede one another by date.
   const groups = new Map<string, Position[]>();
   for (const position of input.positions) {
-    if (Math.abs(position.quantity) <= EPSILON) continue;
     const groupKey = key(position);
     groups.set(groupKey, [...(groups.get(groupKey) ?? []), position]);
   }
@@ -173,59 +315,104 @@ export function buildCurrentPositions(input: {
   // of the same tenant + symbol.
   const barsBySymbol = new Map<string, PriceBar[]>();
   for (const bar of input.priceBars) {
-    if (bar.date > input.today) continue;
-    const listKey = `${bar.tenantId}\u0000${bar.symbol.toUpperCase()}`;
+    const listKey = bar.symbol.toUpperCase();
     const list = barsBySymbol.get(listKey);
     if (list) list.push(bar);
     else barsBySymbol.set(listKey, [bar]);
   }
-  for (const list of barsBySymbol.values()) list.sort((left, right) => left.date.localeCompare(right.date));
 
-  const current = [...groups.entries()].map(([groupKey, positions]) => {
-    const sample = positions[0]!;
-    const quantity = positions.reduce((sum, position) => sum + position.quantity, 0);
-    const bars = barsBySymbol.get(`${sample.tenantId}\u0000${sample.symbol.toUpperCase()}`) ?? [];
-    const latest = bars.at(-1);
-    let marketValue: number | null = null;
-    let priceStatus: PositionPriceStatus = "unpriced";
-    if (latest && businessDaysAfter(latest.date, input.today) <= 5) {
-      try {
-        marketValue = convertCurrency(quantity * latest.close, latest.currency, input.presentationCurrency, input.today, input.fxRates);
-        priceStatus = latest.date === input.today ? "priced" : "forward-filled";
-      } catch {
-        priceStatus = "missing-fx";
-      }
-    }
+  const current = [...groups.entries()].flatMap(([groupKey, positions]) => {
+    const anchors = latestOwnershipAnchors(positions);
+    const sample = anchors[0]!;
+    const quantity = anchors.reduce((sum, position) => sum + position.quantity, 0);
+    // A holding every owner has closed out is not a row, and neither is one
+    // whose brokers' remaining quantities happen to cancel.
+    if (Math.abs(quantity) <= EPSILON) return [];
+    const valuation = valuePosition({
+      bars: barsBySymbol.get(sample.symbol.toUpperCase()) ?? [],
+      quantity,
+      valuationDate: input.today,
+      presentationCurrency: input.presentationCurrency,
+      fxRates: input.fxRates,
+    });
+    const marketValue = valuation.value;
+    const priceStatus = valuation.quality;
+    const groupTrades = input.trades.filter((trade) => key(trade) === groupKey);
+    const groupDividends = input.dividends.filter((dividend) => key(dividend) === groupKey);
+    const providerCoverage = brokerCostCoverage(anchors);
+    const basis = selectCostBasis({
+      presentationCurrency: input.presentationCurrency,
+      fxRates: input.fxRates,
+      // A manual value speaks for the whole group only when every broker row
+      // carries one; a partial override would average different claims.
+      manual:
+        anchors.length > 0 && anchors.every((anchor) => anchor.manualCostBasis)
+          ? {
+              legs: anchors.map((anchor) => ({
+                amountCents: anchor.manualCostBasis!.amountCents,
+                currency: anchor.manualCostBasis!.currency,
+                date: anchor.asOf,
+                locked: anchor.manualCostBasis!.locked,
+              })),
+            }
+          : null,
+      calculated: replayCostBasis({
+        trades: groupTrades,
+        presentationCurrency: input.presentationCurrency,
+        fxRates: input.fxRates,
+        expectedQuantity: quantity,
+      }),
+      provider:
+        providerCoverage.status === "complete"
+          ? { status: "complete", legs: providerCoverage.legs }
+          : providerCoverage.coveredQuantity > 0
+            ? { status: "incomplete" }
+            : null,
+    });
     const calculatedReturns = calculatePositionReturn(
       quantity,
       marketValue,
-      input.trades.filter((trade) => key(trade) === groupKey),
-      input.dividends.filter((dividend) => key(dividend) === groupKey),
+      groupTrades,
+      groupDividends,
       input.presentationCurrency,
       input.fxRates,
-      { valuationDate: latest?.date },
+      {
+        ...(valuation.quoteDate ? { valuationDate: valuation.quoteDate } : {}),
+        brokerCost: providerCoverage,
+      },
     );
-    const returns = priceStatus === "missing-fx" && calculatedReturns.status === "unpriced"
-      ? { ...calculatedReturns, status: "missing-fx" as const }
-      : calculatedReturns;
-    return {
+    const returns =
+      priceStatus === "missing-fx" && calculatedReturns.status === "unpriced"
+        ? { ...calculatedReturns, status: "missing-fx" as const }
+        : calculatedReturns;
+    const canonicalKey = instrumentKey({ isin: sample.isin, ticker: sample.symbol });
+    const row = {
       symbol: sample.symbol,
       entity: sample.entity,
       ...(sample.isin ? { isin: sample.isin } : {}),
+      ...(canonicalKey ? { instrumentKey: canonicalKey } : {}),
       ...(sample.description ? { description: sample.description } : {}),
       quantity,
       currency: sample.currency,
-      asOf: positions.map((position) => position.asOf).sort().at(-1)!,
+      asOf: positions
+        .map((position) => position.asOf)
+        .sort()
+        .at(-1)!,
       marketValue,
       portfolioWeight: null,
       priceStatus,
       returns,
+      basis,
     } satisfies CurrentPosition;
+    return [row];
   });
 
   const pricedTotal = current.reduce((sum, position) => sum + (position.marketValue ?? 0), 0);
   return current.map((position) => ({
     ...position,
-    portfolioWeight: position.marketValue === null || pricedTotal <= EPSILON ? null : position.marketValue / pricedTotal,
+    portfolioWeight:
+      position.marketValue === null || pricedTotal <= EPSILON
+        ? null
+        : position.marketValue / pricedTotal,
   }));
 }

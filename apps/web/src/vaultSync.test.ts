@@ -1,8 +1,16 @@
 import { afterEach, expect, test, vi } from "vitest";
-import { fetchServerBackup, uploadServerBackup } from "./vaultSync.js";
+import { eraseServerData, fetchServerBackup, uploadServerBackup } from "./vaultSync.js";
+import { SIGNED_OUT_MESSAGE } from "./api.js";
 import type { CipherBlob } from "@lavega/adapters";
 
-const blob: CipherBlob = { v: 1, kdf: "PBKDF2-SHA256", iterations: 210_000, salt: "c2FsdA==", iv: "aXY=", ct: "Y2lwaGVy" };
+const blob: CipherBlob = {
+  v: 1,
+  kdf: "PBKDF2-SHA256",
+  iterations: 210_000,
+  salt: "c2FsdA==",
+  iv: "aXY=",
+  ct: "Y2lwaGVy",
+};
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -27,7 +35,14 @@ test("a signed-out visitor is told so, not shown an error", async () => {
 });
 
 test("a blob the server hands back is validated before it reaches the key derivation", async () => {
-  stub(new Response(JSON.stringify({ blob: { ...blob, iterations: 99_000_000 }, updatedAt: "2026-08-31T00:00:00.000Z" })));
+  stub(
+    new Response(
+      JSON.stringify({
+        blob: { ...blob, iterations: 99_000_000 },
+        updatedAt: "2026-08-31T00:00:00.000Z",
+      }),
+    ),
+  );
 
   await expect(fetchServerBackup()).rejects.toThrow(/ongeldig/i);
 });
@@ -35,14 +50,26 @@ test("a blob the server hands back is validated before it reaches the key deriva
 test("an upload names the copy it replaces", async () => {
   const fetchMock = stub(new Response(JSON.stringify({ updatedAt: "2026-08-31T12:00:00.000Z" })));
 
-  expect(await uploadServerBackup(blob, "2026-08-31T00:00:00.000Z")).toEqual({ status: "stored", updatedAt: "2026-08-31T12:00:00.000Z" });
-  expect(JSON.parse(String((fetchMock.mock.calls[0] as unknown as [string, RequestInit])[1].body))).toEqual({ blob, baseUpdatedAt: "2026-08-31T00:00:00.000Z" });
+  expect(await uploadServerBackup(blob, "2026-08-31T00:00:00.000Z")).toEqual({
+    status: "stored",
+    updatedAt: "2026-08-31T12:00:00.000Z",
+  });
+  expect(
+    JSON.parse(String((fetchMock.mock.calls[0] as unknown as [string, RequestInit])[1].body)),
+  ).toEqual({ blob, baseUpdatedAt: "2026-08-31T00:00:00.000Z" });
 });
 
 test("a newer server copy comes back as a conflict with its date, not as a write", async () => {
-  stub(new Response(JSON.stringify({ problems: ["nieuwer"], updatedAt: "2026-08-31T09:00:00.000Z" }), { status: 409 }));
+  stub(
+    new Response(JSON.stringify({ problems: ["nieuwer"], updatedAt: "2026-08-31T09:00:00.000Z" }), {
+      status: 409,
+    }),
+  );
 
-  expect(await uploadServerBackup(blob, "2026-08-30T00:00:00.000Z")).toEqual({ status: "conflict", updatedAt: "2026-08-31T09:00:00.000Z" });
+  expect(await uploadServerBackup(blob, "2026-08-30T00:00:00.000Z")).toEqual({
+    status: "conflict",
+    updatedAt: "2026-08-31T09:00:00.000Z",
+  });
 });
 
 test("overwriting is a different request, never a silent retry", async () => {
@@ -50,5 +77,40 @@ test("overwriting is a different request, never a silent retry", async () => {
 
   await uploadServerBackup(blob, null, true);
 
-  expect((fetchMock.mock.calls[0] as unknown as [string])[0]).toBe("/api/vault/backup?overwrite=true");
+  expect((fetchMock.mock.calls[0] as unknown as [string])[0]).toBe(
+    "/api/vault/backup?overwrite=true",
+  );
+});
+
+test("erasure confirms with the server-required body and reports what was deleted", async () => {
+  const fetchMock = stub(
+    new Response(JSON.stringify({ erased: [{ table: "personal.vaults", rows: 1 }] })),
+  );
+
+  expect(await eraseServerData("nl")).toEqual([{ table: "personal.vaults", rows: 1 }]);
+  const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+  expect(url).toBe("/api/account/data");
+  expect(init.method).toBe("DELETE");
+  expect(init.credentials).toBe("same-origin");
+  expect(JSON.parse(String(init.body))).toEqual({ confirm: "ERASE" });
+});
+
+test("erasure while signed out reports the shared signed-out message", async () => {
+  stub(new Response(null, { status: 401 }));
+
+  await expect(eraseServerData("nl")).rejects.toThrow(SIGNED_OUT_MESSAGE);
+});
+
+test("a server-side erasure failure surfaces its own message", async () => {
+  stub(new Response(JSON.stringify({ error: "Wissen mislukt." }), { status: 500 }));
+
+  await expect(eraseServerData("nl")).rejects.toThrow("Wissen mislukt.");
+});
+
+/* DE LAATSTE AANROEPER VAN DE TAALLOZE `apiErrorMessage`. Wissen is de ene knop
+ * waar misverstaan worden het minst kan, en een Engelse lezer kreeg er
+ * "Je bent uitgelogd, log opnieuw in." Nu volgt de melding de lezer. */
+test("erasure while signed out reports it in the reader's language", async () => {
+  stub(new Response(null, { status: 401 }));
+  await expect(eraseServerData("en")).rejects.toThrow("You're signed out, log back in.");
 });

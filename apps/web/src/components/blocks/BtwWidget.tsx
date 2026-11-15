@@ -1,11 +1,15 @@
 import { useMemo } from "react";
-import type { Account, Invoice, Tx, VatBasis, VatPosition, VatSettings } from "@lavega/core";
+import type { Account, Invoice, Tx, VatPosition, VatSettings } from "@lavega/core";
 import { resolveVatSettings, txsForEntity, vatPosition } from "@lavega/core";
 import type { View } from "../../App";
 import type { ModuleSpan } from "../../module-grid.js";
-import { formatEuro } from "../../format.js";
+import { formatSignedEuroIn } from "../../format.js";
 import Module from "../Module.js";
+import CardLink from "../ui/CardLink.js";
 import { useWidgetEnabled } from "../moduleRegistry";
+import type { Locale } from "../../locale.js";
+import { useAppLocale } from "../../appLocale.js";
+import { moneyCopy } from "../../copy/money.js";
 
 /* BTW op de startpagina — "doe default wel btw".
  *
@@ -62,17 +66,6 @@ import { useWidgetEnabled } from "../moduleRegistry";
  * dus niet, en kan één tree lager op de ladder uitkomen dan Belasting op dat
  * moment toont. Allebei noemen hun bron, dus geen van beide liegt. */
 
-/** Korte bronnamen. De volledige zinnen staan in Belasting (`BASIS_LABEL`); dit
- *  zijn de korte vormen van dezelfde `VatBasis`, en omdat het een `Record` over
- *  die union is, is een nieuwe bron hier een compileerfout in plaats van een
- *  stilzwijgend gat. */
-const SHORT_BASIS: Record<VatBasis, string> = {
-  manual: "je eigen bedrag",
-  sheet: "je boekhouding",
-  invoices: "je facturen",
-  proxy: "een marge-benadering uit je banktransacties",
-};
-
 export type BtwRow = {
   entity: string;
   position: VatPosition;
@@ -105,7 +98,15 @@ export type BtwRowsInput = {
 
 /** De btw-positie van elke onderneming in beeld, meest urgent eerst. Puur:
  *  `asOf` komt binnen, er wordt niets geklokt. */
-export function btwRows({ entities, txs, accounts, asOf, vatSettings, invoices, country }: BtwRowsInput): BtwRow[] {
+export function btwRows({
+  entities,
+  txs,
+  accounts,
+  asOf,
+  vatSettings,
+  invoices,
+  country,
+}: BtwRowsInput): BtwRow[] {
   const saved = new Map(vatSettings.map((s) => [s.entity, s]));
   return entities
     .map((entity) => {
@@ -135,7 +136,8 @@ export function btwRows({ entities, txs, accounts, asOf, vatSettings, invoices, 
  *  De lange versies staan in Belasting (`noteText`); dit zijn de korte. De
  *  switch is uitputtend over `VatNote`, dus een nieuwe notitie is hier een
  *  compileerfout. */
-function shortNote(row: BtwRow): string | null {
+function shortNote(row: BtwRow, locale: Locale = "nl"): string | null {
+  const c = moneyCopy[locale].btw;
   const { position: p, entity } = row;
   const missing = p.coverage.total - p.coverage.withVat;
   /* Dezelfde reden als in Belasting.tsx: een 0 zonder te zeggen dat zijn factuur
@@ -147,37 +149,31 @@ function shortNote(row: BtwRow): string | null {
    * 0 en kon hij niet zien of die klopte. */
   if (p.note === null && buiten > 0 && p.coverage.total === 0) {
     return buiten === 1
-      ? `Geen factuur van ${entity} in dit tijdvak — de enige die LaVega kent valt erbuiten.`
-      : `Geen factuur van ${entity} in dit tijdvak; ${buiten} vallen erbuiten.`;
+      ? c.note.geenFactuurEnkele(entity)
+      : c.note.geenFactuurMeerdere(entity, buiten);
   }
 
   switch (p.note) {
     case null:
       return null;
     case "stelsel-onbekend":
-      return `Voor ${entity} is niet gekozen tussen factuurstelsel en kasstelsel. Bij het factuurstelsel valt de btw in de periode van de factuur, bij het kasstelsel in die van de betaling — dat scheelt echt geld, dus LaVega noemt hier geen bedrag. Het stelsel kies je bij Belasting.`;
+      return c.note.stelselOnbekend(entity);
     case "btw-onbekend-op-facturen":
-      return `Van ${missing} van de ${p.coverage.total} facturen in deze periode is het btw-bedrag onbekend, dus je facturen zijn hier niet de basis.`;
+      return c.note.btwOnbekendOpFacturen(missing, p.coverage.total);
     case "gemengde-tarieven":
-      return "Gemengde tarieven: LaVega rekent hier niets uit en zet ook geen nul.";
+      return c.note.gemengdeTarieven;
     case "kasstelsel":
-      return "Kasstelsel: de btw valt in de periode van de betaling, niet van de factuur, dus je facturen zijn hier niet de basis.";
+      return c.note.kasstelsel;
     case "omzetfacturen-onbekend":
-      return "In deze periode staan alleen inkoopfacturen; wat er aan btw over je omzet tegenover staat, ziet LaVega niet.";
+      return c.note.omzetfacturenOnbekend;
     case "voorbelasting-onbekend":
-      return "Geen inkoopfactuur met een btw-bedrag in deze periode, dus de voorbelasting is onbekend.";
+      return c.note.voorbelastingOnbekend;
     case "boekhouding-andere-periode":
-      return "Je geïmporteerde boekhouding dekt deze periode niet volledig, dus LaVega gebruikt hem niet half.";
+      return c.note.boekhoudingAnderePeriode;
     case "geen-banktransacties":
-      return `LaVega ziet geen transacties van ${entity} in deze periode. Dat is geen nul: er is niets om een bedrag uit te lezen.`;
+      return c.note.geenBanktransacties(entity);
   }
 }
-
-const DIRECTION_WORD: Record<VatPosition["direction"], string> = {
-  betalen: "te betalen",
-  terugvragen: "terug te vragen",
-  onbekend: "richting onbekend",
-};
 
 export type BtwBlockProps = {
   /** De ondernemingen die dit scherm toont — dezelfde lijst die Belasting krijgt. */
@@ -204,6 +200,8 @@ export function BtwBlock({
   span,
   onNavigate,
 }: BtwBlockProps) {
+  const [locale] = useAppLocale();
+  const c = moneyCopy[locale].btw;
   const rows = useMemo(
     () => btwRows({ entities, txs, accounts, asOf, vatSettings, invoices, country }),
     [entities, txs, accounts, asOf, vatSettings, invoices, country],
@@ -216,46 +214,45 @@ export function BtwBlock({
   const row = rows[0];
   const others = rows.length - 1;
   const { position: p } = row;
-  const note = shortNote(row);
+  const note = shortNote(row, locale);
 
   return (
     <Module
-      title="BTW"
+      title={c.title}
       span={span}
       height="short"
-      menu={
-        <button type="button" className="card-link" onClick={() => onNavigate("belasting")}>
-          Belasting →
-        </button>
-      }
+      menu={<CardLink onClick={() => onNavigate("belasting")}>{c.belastingArrow}</CardLink>}
       footer={
         <>
-          {row.amountShown && `Bron: ${SHORT_BASIS[p.basis]}. `}
-          {p.vatLabel} · regels per {p.rulesAsOf}.
-          {others > 0 && (
-            <>
-              {" "}
-              Nog {others} andere onderneming{others === 1 ? "" : "en"} — Belasting toont ze apart. LaVega telt ze hier
-              niet bij elkaar op: ze kunnen een ander stelsel en een andere aangifteperiode hebben, en dan hoort er bij
-              die som geen periode.
-            </>
-          )}
+          {row.amountShown && c.bronPrefix(c.shortBasis[p.basis])}
+          {p.vatLabel}
+          {c.regelsPer(p.rulesAsOf)}
+          {others > 0 && c.nogNAndereOnderneming(others)}
         </>
       }
     >
       <div className="module-figure">
-        <span className={`module-figure-value ${!row.amountShown ? "" : p.direction === "terugvragen" ? "text-pos" : "text-neg"}`}>
-          {row.amountShown ? formatEuro(Math.abs(p.netCents as number) / 100) : "geen bedrag"}
+        <span
+          className={`module-figure-value ${!row.amountShown ? "" : p.direction === "terugvragen" ? "text-pos" : "text-neg"}`}
+        >
+          {row.amountShown
+            ? formatSignedEuroIn(
+                locale,
+                (p.direction === "terugvragen" ? 1 : -1) * (Math.abs(p.netCents as number) / 100),
+              )
+            : c.geenBedrag}
         </span>
-        {row.amountShown && <span className="figure-vs">{DIRECTION_WORD[p.direction]}</span>}
+        {row.amountShown && (
+          <span className="text-muted text-[0.8rem]">{c.direction[p.direction]}</span>
+        )}
       </div>
 
       <p className="module-figure-label">
         {/* De onderneming staat er alleen bij als er meer dan één in beeld is:
             bij één zou hij op elke regel hetzelfde zeggen. */}
-        {rows.length > 1 && `${row.entity} · `}
-        {p.period.periodLabel} · uiterlijk {p.period.deadline}
-        {p.stage === "loopt" ? ` · loopt nog t/m ${p.period.periodEnd}` : ""}
+        {rows.length > 1 && c.entiteitPrefix(row.entity)}
+        {p.period.periodLabel} · {c.uiterlijk(p.period.deadline)}
+        {p.stage === "loopt" ? c.looptNogTm(p.period.periodEnd) : ""}
       </p>
 
       {note && <p className="cell-sub">{note}</p>}

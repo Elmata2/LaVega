@@ -2,9 +2,17 @@ import { expect, test } from "vitest";
 import type { Tx } from "@lavega/core";
 import { txIdsForAccount, txDiff } from "./accountActions.js";
 
-const tx = (id: string, accountKey: string, amount = -5): Tx =>
-  ({ id, accountKey, date: "2026-06-01", amount, currency: "EUR",
-     counterparty: "", description: "", category: "", manual: false });
+const tx = (id: string, accountKey: string, amount = -5): Tx => ({
+  id,
+  accountKey,
+  date: "2026-06-01",
+  amount,
+  currency: "EUR",
+  counterparty: "",
+  description: "",
+  category: "",
+  manual: false,
+});
 
 test("txIdsForAccount picks only that account's txs", () => {
   const txs = [tx("a1", "A"), tx("b1", "B"), tx("a2", "A")];

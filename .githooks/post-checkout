@@ -1,0 +1,29 @@
+#!/bin/sh
+# Provision a fresh git worktree so no manual `pnpm install` is needed.
+#
+# Fires on `git worktree add` and on every branch switch. It only acts when
+# node_modules is missing, so switching branches in an installed tree is a
+# no-op. The pnpm store is global and shared by every worktree, so this is
+# hardlink-only and needs no network when the store is warm.
+#
+# Opt out with LAVEGA_SKIP_WORKTREE_INSTALL=1.
+
+if [ -n "$LAVEGA_SKIP_WORKTREE_INSTALL" ]; then
+	exit 0
+fi
+
+if [ -d node_modules ]; then
+	exit 0
+fi
+
+if command -v pnpm >/dev/null 2>&1; then
+	pm="pnpm"
+elif command -v corepack >/dev/null 2>&1; then
+	pm="corepack pnpm"
+else
+	echo "post-checkout: pnpm not found; run 'pnpm install' in $(pwd)" >&2
+	exit 0
+fi
+
+echo "post-checkout: provisioning node_modules ($pm install --frozen-lockfile --prefer-offline) in $(pwd)"
+$pm install --frozen-lockfile --prefer-offline

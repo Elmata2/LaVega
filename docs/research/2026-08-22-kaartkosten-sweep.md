@@ -1,7 +1,7 @@
 # Kosten van kaarten — zijn ze vindbaar? Voor twee kaarten meteen, en dat is genoeg.
 
-Zijn opdracht, 22 augustus: *"de kosten, doe een vergelijkbare sweep als voor de rente die
-we al hebben gedaan."* De aanleiding was scherp: van de 77 gebundelde kaarten draagt er
+Zijn opdracht, 22 augustus: _"de kosten, doe een vergelijkbare sweep als voor de rente die
+we al hebben gedaan."_ De aanleiding was scherp: van de 77 gebundelde kaarten draagt er
 **geen enkele** zowel een cashbackcijfer als een prijs, dus de extensie kan niets netto
 rangschikken. Acht kaarten hebben een cashbackcijfer. Eén prijs bij één van die acht zet de
 hele nettotak aan.
@@ -22,13 +22,13 @@ de eigen JSON van de site.
 
 ## Wat het verschil maakte tussen zijn meting en deze
 
-Zijn eigen aantekening bij Bleap was: *"No fees (really!)"* op de landingspagina — vindbaar,
+Zijn eigen aantekening bij Bleap was: _"No fees (really!)"_ op de landingspagina — vindbaar,
 niet toelaatbaar. Klopt. Maar hetzelfde bedrijf heeft **`/legal-agreements`**, en daar staat:
 
 > **6.1 No Bleap card fees.** Cards are free. Bleap charges no issuance, monthly, usage or
 > exchange fees for Card activity.
 >
-> — Bleap Cardholder Terms (EEA) Bleap SIA, *Updated: 28 June 2026*
+> — Bleap Cardholder Terms (EEA) Bleap SIA, _Updated: 28 June 2026_
 
 Dat is dezelfde bewering, maar nu met een datum, een artikelnummer, drie benoemde
 kostensoorten in plaats van één uitroepteken, en een artikel 6.2 dat zegt wat er **wel**
@@ -43,14 +43,14 @@ waar deze sweep om draaide.
 
 ## De zes met een gedateerde prijs
 
-| kaart | bedrag | eenheid | bron | datum in het document |
-|---|---|---|---|---|
-| Bleap Card | 0 | per maand | Cardholder Terms (EEA) Bleap SIA | 28 juni 2026 |
-| Wirex One (X-tras Standard) | 0 | per maand | helpcentrum via eigen JSON | 11 januari 2024 |
-| Bybit Card | 0 | **per jaar** | helpcentrum-tarievenblad | 3 juni 2026 |
-| Crypto.com Basic (Midnight Blue) | 0 | per maand | helpcentrum via eigen JSON | 22 april 2026 |
-| Nexo Card | 0 | per maand | productpagina met eigen `pageUpdateDate` | 31 juli 2026 |
-| Crypto.com Plus / Pro / Icy-Rose / Obsidian | 0 | per maand | idem als Basic | 22 april 2026 |
+| kaart                                       | bedrag | eenheid      | bron                                     | datum in het document |
+| ------------------------------------------- | ------ | ------------ | ---------------------------------------- | --------------------- |
+| Bleap Card                                  | 0      | per maand    | Cardholder Terms (EEA) Bleap SIA         | 28 juni 2026          |
+| Wirex One (X-tras Standard)                 | 0      | per maand    | helpcentrum via eigen JSON               | 11 januari 2024       |
+| Bybit Card                                  | 0      | **per jaar** | helpcentrum-tarievenblad                 | 3 juni 2026           |
+| Crypto.com Basic (Midnight Blue)            | 0      | per maand    | helpcentrum via eigen JSON               | 22 april 2026         |
+| Nexo Card                                   | 0      | per maand    | productpagina met eigen `pageUpdateDate` | 31 juli 2026          |
+| Crypto.com Plus / Pro / Icy-Rose / Obsidian | 0      | per maand    | idem als Basic                           | 22 april 2026         |
 
 Bybit staat er in **jaren** omdat het document de rij zo noemt — `Annual Fee | None`. Er is
 niet omgerekend, ook niet bij een nul.
@@ -60,12 +60,12 @@ Twee dingen die deze zes eerlijk maken in plaats van alleen aanwezig:
 - **Wirex** is de mooiste vondst in vorm en de zwakste in houdbaarheid. Hetzelfde artikel
   geeft de prijs én de 0,5% — prijs en opbrengst uit één bron, geen koppelrisico. Maar de
   `updatedAt` in de eigen JSON van de site is **11 januari 2024**, tweeënhalf jaar oud, en
-  het losse Wirex-tarievenblad waarschuwt zelf: *"these fees are subject to change."* De
+  het losse Wirex-tarievenblad waarschuwt zelf: _"these fees are subject to change."_ De
   catalogus tekende eerder al aan dat Wirex zijn EEA-uitgifte sindsdien heeft verbouwd.
   Hercontroleren voor gebruik.
 - **Nexo** is de zwakste van de zes en staat er met de reden erop: het is een verkooppagina.
-  Hij komt binnen omdat de zin drie kostensoorten met naam noemt (*"no monthly, annual, or
-  inactivity card fees"*) in plaats van "geen kosten" te roepen, en omdat de pagina een
+  Hij komt binnen omdat de zin drie kostensoorten met naam noemt (_"no monthly, annual, or
+  inactivity card fees"_) in plaats van "geen kosten" te roepen, en omdat de pagina een
   machineleesbare wijzigingsdatum in zijn eigen payload draagt — dezelfde route als het
   Trade Republic-veld dat op 21 augustus wel is toegelaten. `nexo.com/legal` geeft 404; er
   is geen los tarievenstuk.
@@ -108,14 +108,14 @@ Dat is woord voor woord het Crypto.com-geval. De vier niveaus horen dus **niet**
 te bouwen om dat goed te doen.
 
 En de twee Private-niveaus zijn nog een graad erger dan de andere twee. Het gedateerde
-artikel *How do I join Level Up?* (18 juni 2026) zet in zijn eigen tabel:
+artikel _How do I join Level Up?_ (18 juni 2026) zet in zijn eigen tabel:
 
-| niveau | toegang |
-|---|---|
-| Private | **CRO Lockup/Stake** |
-| Pro | Subscription or CRO Lockup/Stake |
-| Plus | Subscription or CRO Lockup/Stake |
-| Basic | No subscription or CRO Lockup/Stake required |
+| niveau  | toegang                                      |
+| ------- | -------------------------------------------- |
+| Private | **CRO Lockup/Stake**                         |
+| Pro     | Subscription or CRO Lockup/Stake             |
+| Plus    | Subscription or CRO Lockup/Stake             |
+| Basic   | No subscription or CRO Lockup/Stake required |
 
 Voor Private bestaat er **geen abonnementsroute**. Er is dus geen maandprijs om te vinden —
 de toegang is een vastzetting (crypto.com/nl/cards noemt EUR 45.000 en EUR 450.000, maar
@@ -131,10 +131,10 @@ diezelfde tabel dat er helemaal geen abonnement of inleg nodig is. Die staat wel
 Bij Gnosis Pay kwam iets boven dat geen vondst is maar wel opgeschreven moet worden. Twee
 stukken van dezelfde uitgever, allebei met een datum, over dezelfde handeling:
 
-| bron | datum | wat het zegt over een kaart bestellen |
-|---|---|---|
-| *Understanding Your Card's Fees and Limits* | updated 12 aug 2026 | `Card Order \| FREE \| FREE shipping of your physical card` |
-| *How To Pay for Your Gnosis Card* | updated 28 jun 2026 | "✅ 30.23 EURe Ready — You will need **exactly 30.23 EURe** in your wallet" |
+| bron                                        | datum               | wat het zegt over een kaart bestellen                                       |
+| ------------------------------------------- | ------------------- | --------------------------------------------------------------------------- |
+| _Understanding Your Card's Fees and Limits_ | updated 12 aug 2026 | `Card Order \| FREE \| FREE shipping of your physical card`                 |
+| _How To Pay for Your Gnosis Card_           | updated 28 jun 2026 | "✅ 30.23 EURe Ready — You will need **exactly 30.23 EURe** in your wallet" |
 
 Ik kies hier geen winnaar. Het tarievenblad is het jongste, maar zijn toelichtingskolom gaat
 over **verzending** en niet over de bestelling, dus het is niet eens zeker dat ze over
@@ -144,13 +144,13 @@ hetzelfde gaan. Beide staan met datum en citaat in `eenmaligeKosten`.
 
 - **Gnosis Pay** (1% cashback) — vier gedateerde documenten gelezen (tarievenblad, Monavate
   Cardholder Terms EEA, Terms of Service, How To Pay) en de Zendesk-zoek-API afgelopen op
-  *fee, pricing, subscription, monthly, free, issuance, order* — 23 artikelen. **Geen enkel
+  _fee, pricing, subscription, monthly, free, issuance, order_ — 23 artikelen. **Geen enkel
   document noemt een maand- of jaarprijs, en geen enkel document zegt dat die nul is.** Een
   ontbrekende rij in een tarievenoverzicht is geen uitgesproken nul. Dus onbekend.
 - **Zeal** (1% cashback) — publiceert niets eigens. De enige tariefverwijzing op `zeal.app`
   gaat naar `help.gnosispay.com/en/articles/8663251-fees-and-limits`, en die geeft **404**.
   Dat is dezelfde dode URL die de Monavate Cardholder Terms **vier keer** aanhalen met de zin
-  *"You can see all fees applicable to you here."* De contractuele tariefverwijzing van de
+  _"You can see all fees applicable to you here."_ De contractuele tariefverwijzing van de
   kaartuitgever wijst naar een pagina die niet meer bestaat, sinds Gnosis Pay van Intercom
   naar Zendesk verhuisde. Dat is zelf een bevinding.
 - **Krak (Kraken)** — de EEA-tabel is compleet en de eigen payload draagt `updatedAt`
@@ -161,7 +161,7 @@ hetzelfde gaan. Beide staan met datum en citaat in `eenmaligeKosten`.
 - **Crypto.com Level Up-prijzen** — `crypto.com/document/<slug>` geeft **HTTP 403**
   (genoteerd, niet omzeild — het helpcentrum verwijst er zelf naar, dus daar zou het
   gedateerde stuk kunnen staan). `/legal`, `/eea/level-up` en `/nl/level-up` geven 404. In
-  het helpcentrum gezocht op *3.99*, *24.99*, *subscription price* en *Level Up terms*: de
+  het helpcentrum gezocht op _3.99_, _24.99_, _subscription price_ en _Level Up terms_: de
   twee gedateerde Level Up-artikelen beschrijven de plannen en de CRO-tredes in dollars en
   drukken het eurobedrag nergens af.
 - **Wayback (route 4)** — vier keer **HTTP 429 Too Many Requests**, ook met 20 seconden
@@ -191,14 +191,14 @@ een datum. Dat is een ander soort blokkade en hij is met opzet apart gehouden.
 
 ## De telling
 
-| | aantal |
-|---|---|
-| **Gevonden** — een terugkerend maand- of jaarbedrag bij een kaart uit de catalogus | **17** |
-| Daarvan **door de toelatingseis** (waarde + bron + datum + voorwaarden) | **9** |
-| — waarvan **direct te serveren** (`entries`) | 5 |
-| — waarvan **achter een niveaupoort** (`entriesMetTierpoort`, niet netto rangschikken) | 4 |
-| **Stranden op alleen de datum** | **3** |
-| **Stranden op de rijtoewijzing** (waarde én datum compleet, rij onbeslist) | **5** |
+|                                                                                       | aantal |
+| ------------------------------------------------------------------------------------- | ------ |
+| **Gevonden** — een terugkerend maand- of jaarbedrag bij een kaart uit de catalogus    | **17** |
+| Daarvan **door de toelatingseis** (waarde + bron + datum + voorwaarden)               | **9**  |
+| — waarvan **direct te serveren** (`entries`)                                          | 5      |
+| — waarvan **achter een niveaupoort** (`entriesMetTierpoort`, niet netto rangschikken) | 4      |
+| **Stranden op alleen de datum**                                                       | **3**  |
+| **Stranden op de rijtoewijzing** (waarde én datum compleet, rij onbeslist)            | **5**  |
 
 De drie die op alleen de datum stranden zijn de categorie waar een gedateerd stuk ze alsnog
 binnenhaalt: **paysafecard** (EUR 3 per maand vanaf de tweede maand, staat er letterlijk,
@@ -211,21 +211,20 @@ rangschikbaar in plaats van geblokkeerd.
 
 Op de acht kaarten met een cashbackcijfer staat de stand nu zo:
 
-| kaart | cashback | prijs | netto te rangschikken? |
-|---|---|---|---|
-| Bleap Card | 1% | EUR 0 / maand | **ja** |
-| Wirex One | 0,5% | EUR 0 / maand | **ja**, met een houdbaarheidswaarschuwing |
-| Crypto.com Plus (Ruby Steel) | 2% | kaart 0, niveau onbekend-met-datum | nee — poort |
-| Crypto.com Pro (Jade/Indigo) | 3% | kaart 0, niveau onbekend-met-datum | nee — poort |
-| Crypto.com Private (Icy/Rose) | 4% | kaart 0, toegang is een inleg | nee — poort |
-| Crypto.com Private (Obsidian) | 5% | kaart 0, toegang is een inleg | nee — poort |
-| Gnosis Pay Card | 1% | onbekend | nee |
-| Zeal Card | 1% | onbekend | nee |
+| kaart                         | cashback | prijs                              | netto te rangschikken?                    |
+| ----------------------------- | -------- | ---------------------------------- | ----------------------------------------- |
+| Bleap Card                    | 1%       | EUR 0 / maand                      | **ja**                                    |
+| Wirex One                     | 0,5%     | EUR 0 / maand                      | **ja**, met een houdbaarheidswaarschuwing |
+| Crypto.com Plus (Ruby Steel)  | 2%       | kaart 0, niveau onbekend-met-datum | nee — poort                               |
+| Crypto.com Pro (Jade/Indigo)  | 3%       | kaart 0, niveau onbekend-met-datum | nee — poort                               |
+| Crypto.com Private (Icy/Rose) | 4%       | kaart 0, toegang is een inleg      | nee — poort                               |
+| Crypto.com Private (Obsidian) | 5%       | kaart 0, toegang is een inleg      | nee — poort                               |
+| Gnosis Pay Card               | 1%       | onbekend                           | nee                                       |
+| Zeal Card                     | 1%       | onbekend                           | nee                                       |
 
 De nettotak van de extensie kan aan. Hij kan twee kaarten echt rangschikken en moet bij zes
 nog steeds "kosten onbekend" of "prijs zit in het niveau" zeggen — maar dat is nu een
-**uitspraak met een reden erachter**, en niet meer hetzelfde lege "kosten onbekend" bij alle
-77.
+**uitspraak met een reden erachter**, en niet meer hetzelfde lege "kosten onbekend" bij alle 77.
 
 ---
 

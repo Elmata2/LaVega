@@ -1,4 +1,18 @@
-export const CHAT_TABS = ["overview","rekeningen","regels","forecast","optimalisatie","valuta","belasting","facturen","punten","backup"] as const;
+import { sanitizeProfileSummary, scrubPersonalValues, scrubPersonalValuesDeep } from "@lavega/core";
+import { ValidationError } from "./validationError.js";
+
+export const CHAT_TABS = [
+  "overview",
+  "rekeningen",
+  "regels",
+  "forecast",
+  "optimalisatie",
+  "valuta",
+  "belasting",
+  "facturen",
+  "punten",
+  "backup",
+] as const;
 export type ChatTab = (typeof CHAT_TABS)[number];
 export type ChatMessage = { role: "user" | "assistant"; content: string };
 
@@ -7,7 +21,11 @@ const MAX_MSG_CHARS = 8_000;
 const MAX_MSGS = 20;
 
 /** Per-tab allowlist of top-level context keys the client may send. Nothing
- *  outside this can reach Claude — the chat redaction boundary. */
+ *  outside this can reach Mistral — the chat redaction boundary.
+ *
+ *  It is a list of KEY NAMES and says nothing about what a key contains, so it
+ *  is only half the boundary; `sanitizeChatContext` also value-scrubs whatever
+ *  survives the list. See the note on that function. */
 const ALLOW: Record<string, readonly string[]> = {
   overview: ["entities", "categories", "alertCount", "shortfall", "bufferCents"],
   rekeningen: ["accounts"],
@@ -29,17 +47,40 @@ const ALLOW: Record<string, readonly string[]> = {
   backup: [],
 };
 
+/** The structured half of the chat boundary: keep only the tab's allowlisted
+ *  top-level keys, then value-scrub everything inside them.
+ *
+ *  The scrub is here because the allowlist alone could not see a leak it was
+ *  waving through. `forecast` allows exactly one key, `summary`, and that key
+ *  carries `drivers[].label`, the raw counterparty of a bank row — which for an
+ *  ABN CSV or a /NAME/-less MT940 is the head of the statement line, IBAN
+ *  first. The browser's builder is the first line of defence, but this server
+ *  is the thing that actually talks to Mistral and it cannot tell whether a
+ *  builder was widened, so the value rule has to hold here too. */
 export function sanitizeChatContext(tab: string, raw: unknown): Record<string, unknown> {
-  const allow = ALLOW[tab] ?? [];
+  const allow = Object.hasOwn(ALLOW, tab) ? ALLOW[tab] : [];
   const out: Record<string, unknown> = {};
   if (raw && typeof raw === "object") {
     const r = raw as Record<string, unknown>;
-    for (const k of allow) if (k in r) out[k] = r[k];
+    for (const k of allow) if (k in r) out[k] = scrubPersonalValuesDeep(r[k]);
+    // `profile` is the same on every tab (even one not in ALLOW), so it is not
+    // an ALLOW entry: it is rebuilt from known enum literals only, never copied,
+    // so no free text or unknown key can ride along.
+    // Scrubbed too as defence in depth, and omitted when it says nothing.
+    if (Object.hasOwn(r, "profile") && r.profile !== null && typeof r.profile === "object") {
+      const p = sanitizeProfileSummary(r.profile);
+      const empty = Object.values(p).every((v) => v === null || (Array.isArray(v) && v.length === 0));
+      if (!empty) out.profile = scrubPersonalValuesDeep(p);
+    }
   }
-  if (JSON.stringify(out).length > MAX_CONTEXT_CHARS) throw new Error("context te groot");
+  if (JSON.stringify(out).length > MAX_CONTEXT_CHARS)
+    throw new ValidationError("chat-context-too-large", "context te groot");
   return out;
 }
 
+/** M5: the owner types this content free-hand (an IBAN pasted into the chat
+ *  box, say), so — unlike `sanitizeChatContext`'s structured, allowlisted
+ *  fields — it gets the same value-scrub the categorize boundary applies. */
 export function sanitizeMessages(raw: unknown): ChatMessage[] {
   if (!Array.isArray(raw)) return [];
   const out: ChatMessage[] = [];
@@ -50,14 +91,14 @@ export function sanitizeMessages(raw: unknown): ChatMessage[] {
       if ((role === "user" || role === "assistant") && typeof content === "string") {
         // Drop empty/whitespace-only messages: a turn that yields no text
         // leaves an empty-content assistant message in history, which
-        // Anthropic rejects.
+        // Mistral rejects.
         if (content.trim() === "") continue;
-        out.push({ role, content: content.slice(0, MAX_MSG_CHARS) });
+        out.push({ role, content: scrubPersonalValues(content).slice(0, MAX_MSG_CHARS) });
       }
     }
   }
   const capped = out.slice(-MAX_MSGS);
-  // Anthropic requires the first message to be `user`; the tail slice (or a
+  // Mistral requires the first message to be `user`; the tail slice (or a
   // history that opened mid-turn) can leave a leading `assistant`. Drop any
   // leading assistant turns so the result starts with `user` (or is empty).
   let start = 0;

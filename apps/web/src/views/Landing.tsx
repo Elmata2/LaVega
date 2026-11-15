@@ -1,60 +1,215 @@
 import { useEffect, useRef, useState } from "react";
-import type { FormEvent } from "react";
-import CardSpiral from "./CardSpiral";
-import { INVESTING_URL } from "../investing.js";
+import type { CSSProperties, MouseEvent } from "react";
+import { landingCopy } from "../landingCopy.js";
+import {
+  alternatePath,
+  applyDocumentLocale,
+  applyHreflang,
+  DEFAULT_LOCALE,
+  rememberLocale,
+  type Locale,
+} from "../locale.js";
+import { APP_BASE } from "../appRoutes.js";
+import { RESET_PASSWORD_PATH, useAuthState } from "../authClient.js";
+import { NewPasswordForm, RequestResetForm } from "../components/PasswordResetForms.js";
+import { shellCopy } from "../copy/shell.js";
+import SignInForm from "../components/SignInForm.js";
+import SignUpForm from "../components/SignUpForm.js";
+import Conversation from "./landing/Conversation.js";
+import RevealWords from "./landing/RevealWords.js";
+import ThreeBoxes from "./landing/ThreeBoxes.js";
+import { useAnimated, useReducedMotion } from "./landing/motion.js";
 
-/** Deployed Google Apps Script web-app URL (…/exec) that appends waitlist rows
- *  to the "LaVega — Wachtlijst" Google Sheet. Empty until deployed → the form
- *  shows a "binnenkort" state instead of silently dropping sign-ups. */
-const WAITLIST_ENDPOINT = "https://script.google.com/macros/s/AKfycbxouQ-TkXgdAipOfHJS9A-ChGqthOjDDxjngh8ytmiP2OOU4sbKVEB7CscuQz1QKcvT/exec";
+type AuthView = "sign-in" | "sign-up" | "forgot" | "new-password";
 
-/** Public marketing landing page. Warm-cream + espresso + tan, big EB Garamond
- *  serif (StrategiQ-inspired), broad audience (students → werkenden →
- *  ondernemers). The app isn't public yet — it's a waitlist front door: the
- *  prominent CTAs go to #wachtlijst; only the discreet header "Inloggen" enters
- *  the vault (`/app`) via `onEnter`, for owner/Railway testing. */
-export default function Landing({ onEnter }: { onEnter: () => void }) {
+const CONTACT_EMAIL = "alexander.steunenberg@gmail.com";
+const SECTION_IDS = ["does", "faq"] as const;
+const delay = (n: number) => ({ "--d": n }) as CSSProperties;
+
+/** The emailed reset link lands on /reset-password?token=… (or ?error=… when
+ *  better-auth already refused the token). Read once, then strip the token
+ *  from the address bar so it does not sit in history or a shared screenshot. */
+let resetLinkTaken: { token: string | null } | null | undefined;
+function takeResetLink(): { token: string | null } | null {
+  if (resetLinkTaken !== undefined) return resetLinkTaken;
+  if (typeof window === "undefined" || window.location.pathname !== RESET_PASSWORD_PATH)
+    return null;
+  const params = new URLSearchParams(window.location.search);
+  resetLinkTaken = { token: params.has("error") ? null : params.get("token") };
+  window.history.replaceState({}, "", "/");
+  return resetLinkTaken;
+}
+
+/** Heading with its last words in italics. */
+function Heading({ lead, em }: { lead: string; em: string }) {
+  return (
+    <>
+      {lead} <em>{em}</em>
+    </>
+  );
+}
+
+/** Public marketing landing page: midnight palette, Instrument Serif over Geist, the
+ *  gradient only in the hero and the closing call to action. Every "get early
+ *  access" button opens the auth dialog on its sign-up view; "Log in" opens it
+ *  on sign-in and enters the vault (`/app`) via `onEnter`. */
+export default function Landing({
+  onEnter,
+  locale = DEFAULT_LOCALE,
+  linkError = false,
+}: {
+  onEnter: () => void;
+  locale?: Locale;
+  /** The visitor followed an invalid or expired confirmation link. */
+  linkError?: boolean;
+}) {
+  const c = landingCopy(locale);
+  const { state: authState } = useAuthState();
+  const reduce = useReducedMotion();
+  const animated = useAnimated();
+  const [resetLink] = useState(takeResetLink);
+  const [showSignIn, setShowSignIn] = useState(linkError || resetLink !== null);
+  const [authView, setAuthView] = useState<AuthView>(resetLink ? "new-password" : "sign-in");
+  /* Carries the typed address from sign-in into "forgot password" and back,
+   * and the "password changed" line onto the sign-in form after a reset. */
+  const [resetEmail, setResetEmail] = useState("");
+  const [signInNotice, setSignInNotice] = useState<string | undefined>(undefined);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [activeSection, setActiveSection] = useState<string | null>(null);
+  const account = shellCopy[locale].profiel.account;
+  const dialogRef = useRef<HTMLDialogElement | null>(null);
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
+  /* Whichever button opened the dialog gets the focus back when it closes. */
+  const openerRef = useRef<HTMLElement | null>(null);
   const rootRef = useRef<HTMLDivElement | null>(null);
-  const agentsRef = useRef<HTMLDivElement | null>(null);
+  const burgerRef = useRef<HTMLButtonElement | null>(null);
+  const panelRef = useRef<HTMLDivElement | null>(null);
 
-  function scrollAgents(dir: 1 | -1) {
-    const track = agentsRef.current;
-    if (!track) return;
-    const card = track.querySelector<HTMLElement>(".lp-feature-card");
-    const step = card ? card.offsetWidth + 20 : track.clientWidth * 0.8;
-    track.scrollBy({ left: dir * step, behavior: "smooth" });
-  }
-
-  // Waitlist form → Google Sheet (via the Apps Script web app). Fire-and-forget
-  // no-cors POST (Apps Script can't do CORS preflight), so we optimistically
-  // confirm on a resolved fetch and only show an error on a network failure.
-  const wlReady = WAITLIST_ENDPOINT.length > 0;
-  const [wlName, setWlName] = useState("");
-  const [wlEmail, setWlEmail] = useState("");
-  const [wlStatus, setWlStatus] = useState<"idle" | "sending" | "done" | "error">("idle");
-
-  async function submitWaitlist(e: FormEvent) {
-    e.preventDefault();
-    const email = wlEmail.trim();
-    if (!wlReady || !email || wlStatus === "sending") return;
-    setWlStatus("sending");
-    try {
-      await fetch(WAITLIST_ENDPOINT, {
-        method: "POST",
-        mode: "no-cors",
-        body: new URLSearchParams({ name: wlName.trim(), email, source: "lavega.dev" }),
-      });
-      setWlStatus("done");
-      setWlName("");
-      setWlEmail("");
-    } catch {
-      setWlStatus("error");
+  /* The dialog is always mounted; only showModal()/close() move it on/off
+   * screen. That's what gives the CSS exit transition something to animate
+   * (an unmount has nothing left to fade), and it's why a failed sign-in
+   * never wipes the typed email — the form stays alive underneath.
+   *
+   * `showSignIn` is the only thing that opens or closes it. The obvious
+   * alternative, syncing state back from the dialog's `close` event, does not
+   * work: measured in Chrome on the built page, showModal() and close() both
+   * work and the `close` event never fires at all, which left the trigger
+   * needing two clicks to reopen and focus stranded inside a hidden dialog. */
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+    const shouldOpen = showSignIn && authState.kind !== "signed-in";
+    if (shouldOpen && !dialog.open) {
+      dialog.showModal();
+      dialog.querySelector<HTMLInputElement>("input")?.focus();
+    } else if (!shouldOpen && dialog.open) {
+      dialog.close();
+      (openerRef.current ?? triggerRef.current)?.focus();
     }
+  }, [showSignIn, authState.kind]);
+
+  function openSignUp() {
+    if (authState.kind === "signed-in") {
+      onEnter();
+      return;
+    }
+    setAuthView("sign-up");
+    setShowSignIn(true);
   }
+
+  function openSignIn() {
+    if (authState.kind === "signed-in") {
+      onEnter();
+      return;
+    }
+    if (showSignIn && authView === "sign-in") {
+      setShowSignIn(false);
+      return;
+    }
+    setAuthView("sign-in");
+    setShowSignIn(true);
+  }
+
+  const withOpener = (open: () => void) => (e: MouseEvent<HTMLElement>) => {
+    openerRef.current = e.currentTarget;
+    open();
+  };
+  const onCta = withOpener(openSignUp);
+  const onLogin = withOpener(openSignIn);
+
+  /* A tap that landed before this bundle did (public/lp-early.js records it).
+   * Replayed once, so a visitor on a slow connection still gets the dialog. */
+  useEffect(() => {
+    const w = window as Window & { __lpTap?: string };
+    const tap = w.__lpTap;
+    delete w.__lpTap;
+    if (tap === "sign-up") openSignUp();
+    else if (tap === "sign-in") openSignIn();
+    // oxlint-disable-next-line react-hooks/exhaustive-deps -- mount-only replay
+  }, []);
+
+  /* `<html lang>` has to follow the copy, and the two pages have to declare
+   * each other as alternates — otherwise the English page reads to a search
+   * engine as content competing with the Dutch one it exists alongside. Title
+   * and meta description are restored on unmount so entering the vault via
+   * "Log in" leaves the plain "LaVega" title behind instead of leaking the
+   * public pitch into the app frame. */
+  useEffect(() => {
+    const prev = {
+      title: document.title,
+      metaDescription:
+        document.querySelector('meta[name="description"]')?.getAttribute("content") ?? null,
+    };
+    applyDocumentLocale(locale);
+    applyHreflang(window.location.origin);
+    return () => {
+      document.title = prev.title;
+      const meta = document.querySelector('meta[name="description"]');
+      if (prev.metaDescription === null) meta?.remove();
+      else meta?.setAttribute("content", prev.metaDescription);
+    };
+  }, [locale]);
+
+  /* The open mobile menu locks page scroll, makes everything behind it inert,
+   * moves focus into the panel, and closes on Escape or when the viewport grows
+   * past the mobile breakpoint (the burger is gone there, so nothing could close
+   * it). Focus goes back to the burger on close. Declared before the
+   * window-scroll effect below: on unmount cleanups run in order, so this one
+   * restores first and that one has the last word on body.overflow. */
+  useEffect(() => {
+    if (!menuOpen) return;
+    const root = rootRef.current;
+    const panel = panelRef.current;
+    const dialog = dialogRef.current;
+    const burger = burgerRef.current;
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const behind = [...(root?.children ?? [])].filter(
+      (el) => el !== panel && !el.matches("nav, dialog") && !el.hasAttribute("inert"),
+    );
+    behind.forEach((el) => el.setAttribute("inert", ""));
+    panel?.querySelector<HTMLElement>("a, button")?.focus();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMenuOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    const wide =
+      typeof window.matchMedia === "function" ? window.matchMedia("(min-width: 761px)") : null;
+    const onWide = (e: MediaQueryListEvent) => {
+      if (e.matches) setMenuOpen(false);
+    };
+    wide?.addEventListener("change", onWide);
+    return () => {
+      document.body.style.overflow = prevOverflow;
+      behind.forEach((el) => el.removeAttribute("inert"));
+      window.removeEventListener("keydown", onKey);
+      wide?.removeEventListener("change", onWide);
+      if (!dialog?.open) burger?.focus();
+    };
+  }, [menuOpen]);
 
   // Let the whole window scroll (the app frame otherwise pins body overflow).
-  // Restored on unmount so the dashboard frame behaves again. Window-scrolling
-  // also lets GSAP ScrollTrigger track with its default scroller.
+  // Restored on unmount so the dashboard frame behaves again.
   useEffect(() => {
     const html = document.documentElement;
     const body = document.body;
@@ -71,377 +226,383 @@ export default function Landing({ onEnter }: { onEnter: () => void }) {
     };
   }, []);
 
-  // Scroll-reveal (fade/rise) via IntersectionObserver; CSS keeps content
-  // visible under prefers-reduced-motion.
+  // Scroll-reveal (fade/rise) via IntersectionObserver. The hiding class is
+  // decided at render time (see .lp-reveal in landing.css), so the prerendered
+  // HTML stays readable if the bundle never runs, and a reduced-motion visitor
+  // gets the end state rather than a faster animation. Without an observer
+  // nothing is hidden in the first place.
   useEffect(() => {
-    const els = rootRef.current?.querySelectorAll<HTMLElement>(".lp-reveal");
-    if (!els || !("IntersectionObserver" in window)) {
-      els?.forEach((el) => el.classList.add("lp-in"));
+    const els = rootRef.current?.querySelectorAll<HTMLElement>(".r");
+    if (!els) return;
+    if (!animated || typeof IntersectionObserver === "undefined") {
+      els.forEach((el) => el.classList.add("in-view"));
       return;
     }
     const io = new IntersectionObserver(
       (entries) => {
         for (const e of entries) {
           if (e.isIntersecting) {
-            e.target.classList.add("lp-in");
+            e.target.classList.add("in-view");
             io.unobserve(e.target);
           }
         }
       },
-      { threshold: 0.15 },
+      { threshold: 0.2, rootMargin: "0px 0px -6% 0px" },
     );
     els.forEach((el) => io.observe(el));
     return () => io.disconnect();
+  }, [animated]);
+
+  // Scrollspy: the nav link of the section crossing the middle of the screen.
+  useEffect(() => {
+    const root = rootRef.current;
+    if (!root || typeof IntersectionObserver === "undefined") return;
+    const io = new IntersectionObserver(
+      (entries) => {
+        for (const e of entries) if (e.isIntersecting) setActiveSection(e.target.id);
+      },
+      { rootMargin: "-45% 0px -50% 0px" },
+    );
+    SECTION_IDS.forEach((id) => {
+      const el = root.querySelector(`#${id}`);
+      if (el) io.observe(el);
+    });
+    return () => io.disconnect();
   }, []);
 
+  const otherLocale = locale === "en" ? "nl" : "en";
+  const closeMenu = () => setMenuOpen(false);
+  const switchLocale = () => rememberLocale(otherLocale);
+  const shot = c.hero.shot;
+
   return (
-    <div className="lp" ref={rootRef}>
-      {/* Nav */}
-      <header className="lp-nav">
-        <button type="button" className="lp-brand" onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}>
-          LaVega
-        </button>
-        <nav className="lp-nav-links">
-          <a href="#agents">Agents</a>
-          <a href="#privacy">Privacy</a>
-          <a href="#how">Hoe het werkt</a>
-          <a href="#wachtlijst">Wachtlijst</a>
-          {INVESTING_URL && (
-            <a
-              href={INVESTING_URL}
-              {...(INVESTING_URL.startsWith("http") ? { target: "_blank", rel: "noopener noreferrer" } : {})}
-            >
-              Investing
+    <div className={animated ? "lp lp-reveal" : "lp"} ref={rootRef}>
+      <a className="skip" href="#main">
+        {c.skip}
+      </a>
+      <nav className="lp-nav" aria-label={c.nav.label}>
+        <div className="w">
+          <a className="logo" href="#main">
+            LaVega
+          </a>
+          <div className="links">
+            <a href="#does" aria-current={activeSection === "does" ? "true" : undefined}>
+              {c.nav.how}
             </a>
-          )}
-        </nav>
-        <button type="button" className="lp-btn lp-btn-dark" onClick={onEnter}>
-          Inloggen
+            <a href="#faq" aria-current={activeSection === "faq" ? "true" : undefined}>
+              {c.nav.faq}
+            </a>
+            <a
+              className="lp-lang"
+              href={alternatePath(locale)}
+              hrefLang={otherLocale}
+              title={c.langSwitch.to}
+              aria-label={c.langSwitch.to}
+              onClick={switchLocale}
+            >
+              {c.langSwitch.label}
+            </a>
+          </div>
+          <div className="right">
+            <button
+              ref={triggerRef}
+              type="button"
+              className="login"
+              data-lp-tap="sign-in"
+              onClick={onLogin}
+            >
+              {c.nav.login}
+            </button>
+            <button type="button" className="btn small" data-lp-tap="sign-up" onClick={onCta}>
+              {c.nav.cta}
+            </button>
+            <button
+              ref={burgerRef}
+              type="button"
+              className="burger"
+              aria-expanded={menuOpen}
+              aria-controls="panel"
+              aria-label={c.nav.menu}
+              onClick={() => setMenuOpen((o) => !o)}
+            >
+              <i />
+              <i />
+            </button>
+          </div>
+        </div>
+      </nav>
+      <div className={`panel${menuOpen ? " open" : ""}`} id="panel" ref={panelRef}>
+        <a style={{ "--n": 0 } as CSSProperties} href="#does" onClick={closeMenu}>
+          {c.nav.how}
+        </a>
+        <a style={{ "--n": 1 } as CSSProperties} href="#faq" onClick={closeMenu}>
+          {c.nav.faq}
+        </a>
+        <button
+          type="button"
+          style={{ "--n": 2 } as CSSProperties}
+          onClick={(e) => {
+            closeMenu();
+            onLogin(e);
+            /* The panel is hidden once closed; the burger is what the visitor can see. */
+            openerRef.current = burgerRef.current;
+          }}
+        >
+          {c.nav.login}
         </button>
+        <a
+          style={{ "--n": 3 } as CSSProperties}
+          className="lp-lang-menu"
+          href={alternatePath(locale)}
+          hrefLang={otherLocale}
+          onClick={() => {
+            closeMenu();
+            switchLocale();
+          }}
+        >
+          {c.nav.menuLanguage}
+        </a>
+        <button
+          type="button"
+          className="btn panel-cta"
+          data-lp-tap="sign-up"
+          style={{ "--n": 4 } as CSSProperties}
+          onClick={(e) => {
+            closeMenu();
+            onCta(e);
+            openerRef.current = burgerRef.current;
+          }}
+        >
+          {c.nav.cta}
+        </button>
+      </div>
+
+      <dialog
+        ref={dialogRef}
+        className="lp-signin-dialog"
+        aria-labelledby="lp-dialog-title"
+        onClick={(e) => {
+          if (e.target === dialogRef.current) setShowSignIn(false);
+        }}
+        onCancel={(e) => {
+          e.preventDefault();
+          setShowSignIn(false);
+        }}
+      >
+        <button
+          type="button"
+          className="lp-signin-dialog-close"
+          aria-label={c.login.close}
+          onClick={() => setShowSignIn(false)}
+        >
+          ×
+        </button>
+        <h2 id="lp-dialog-title">
+          {authView === "sign-up"
+            ? c.login.signUpTitle
+            : authView === "forgot"
+              ? account.reset.requestTitle
+              : authView === "new-password"
+                ? account.reset.newTitle
+                : c.nav.login}
+        </h2>
+        {linkError && authView === "sign-in" && <p role="alert">{c.login.linkInvalid}</p>}
+        {authView === "forgot" ? (
+          <RequestResetForm
+            locale={locale}
+            initialEmail={resetEmail}
+            onBack={() => setAuthView("sign-in")}
+          />
+        ) : authView === "new-password" ? (
+          <NewPasswordForm
+            locale={locale}
+            token={resetLink?.token ?? null}
+            onDone={() => {
+              setSignInNotice(account.reset.done);
+              setAuthView("sign-in");
+            }}
+            onRequestNew={() => setAuthView("forgot")}
+          />
+        ) : authView === "sign-up" ? (
+          <SignUpForm locale={locale} intro={c.login.signUpIntro} />
+        ) : (
+          <SignInForm
+            locale={locale}
+            intro={c.login.intro}
+            notice={signInNotice}
+            initialEmail={resetEmail}
+            onForgotPassword={(email) => {
+              setResetEmail(email);
+              setSignInNotice(undefined);
+              setAuthView("forgot");
+            }}
+            onSuccess={() => {
+              setShowSignIn(false);
+              /* A full navigation, not onEnter()'s pushState. Root holds its own
+               * useAuthState, fetched once at page load, and a client-side
+               * transition leaves it reading "signed-out" — so Root's gate sent
+               * the freshly signed-in user straight back to this landing page
+               * while the URL said /app, and signing in looked like it did
+               * nothing. Loading /app for real re-reads the session, and the
+               * server gate sees the cookie that now exists. */
+              window.location.assign(APP_BASE);
+            }}
+          />
+        )}
+        {(authView === "sign-in" || authView === "sign-up") && (
+          <button
+            type="button"
+            data-testid="auth-toggle"
+            className="lp-dialog-link"
+            onClick={() => setAuthView((v) => (v === "sign-in" ? "sign-up" : "sign-in"))}
+          >
+            {authView === "sign-up" ? c.login.toSignIn : c.login.toSignUp}
+          </button>
+        )}
+      </dialog>
+
+      <header className="g g-hero hero">
+        <div className="w">
+          <p className="kicker">{c.hero.eyebrow}</p>
+          <h1>
+            {c.hero.lineOne}
+            <br />
+            {c.hero.lineTwo} <em>{c.hero.em}</em>
+          </h1>
+          <p className="sub">{c.hero.sub}</p>
+          <button type="button" className="btn" data-lp-tap="sign-up" onClick={onCta}>
+            {c.nav.cta}
+          </button>
+          <div className="shot" role="img" aria-label={shot.label}>
+            <div className="shot-nav">
+              <b>LaVega</b>
+              {shot.tabs.map((tab, i) => (
+                <span key={tab} className={i === 1 ? "on" : i > 1 ? "x" : undefined}>
+                  {tab}
+                </span>
+              ))}
+            </div>
+            <div className="shot-main">
+              <h2>{shot.title}</h2>
+              <p>{shot.asOf}</p>
+              <p className="shot-mut">{shot.source}</p>
+              <p className="shot-links">
+                <span>{shot.links[0]}</span>
+                <span>{shot.links[1]}</span>
+              </p>
+              {shot.cards.map((card) => (
+                <div className="shot-card" key={card.title}>
+                  <strong>{card.title}</strong>
+                  <span>
+                    {card.value}
+                    <i className={card.attention ? "warn" : undefined}>
+                      {card.attention ? shot.warn : shot.ok}
+                    </i>
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
       </header>
 
-      {/* Hero */}
-      <section className="lp-hero">
-        <h1 className="lp-h1 lp-reveal">
-          Al je rekeningen,<br />één helder getal.
-        </h1>
-        <p className="lp-sub lp-reveal">
-          LaVega bundelt al je rekeningen — bij elke bank — in één overzicht. Weet op elk moment
-          precies hoeveel je hebt en waar je geld heen gaat, reserveer je belasting, en haal het
-          meeste uit je punten. Lokaal-first: je cijfers blijven op je eigen apparaat.
-        </p>
-        <div className="lp-cta-row lp-reveal">
-          <a className="lp-btn lp-btn-dark lp-btn-lg" href="#wachtlijst">
-            Kom op de wachtlijst <span aria-hidden="true">→</span>
-          </a>
-          <a className="lp-btn lp-btn-light lp-btn-lg" href="#how">
-            Bekijk hoe het werkt
-          </a>
-        </div>
-
-        {/* Floating product illustration */}
-        <div className="lp-stage lp-reveal" aria-hidden="true">
-          <div className="lp-device">
-            <div className="lp-device-eyebrow">Totaalpositie</div>
-            <div className="lp-device-value">€12.480</div>
-            <div className="lp-device-delta">▲ 4,6% deze maand</div>
-            <div className="lp-spark">
-              <svg viewBox="0 0 240 64" preserveAspectRatio="none" width="100%" height="64">
-                <polyline
-                  points="0,52 30,46 60,50 90,38 120,40 150,28 180,30 210,16 240,10"
-                  fill="none"
-                  stroke="var(--lp-tan-deep)"
-                  strokeWidth="2.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
-            </div>
-            <div className="lp-device-rows">
-              <div><span>Boodschappen</span><span>28%</span></div>
-              <div><span>Vaste lasten</span><span>34%</span></div>
-              <div><span>Sparen</span><span>18%</span></div>
-            </div>
-          </div>
-          <div className="lp-chip lp-chip-a lp-float">
-            <div className="lp-chip-label">Deze maand gespaard</div>
-            <div className="lp-chip-value lp-pos">+€420</div>
-          </div>
-          <div className="lp-chip lp-chip-b lp-float lp-float-slow">
-            <div className="lp-chip-label">Forecast · 13 weken</div>
-            <div className="lp-chip-value lp-pos">geen tekort</div>
-          </div>
-          <div className="lp-chip lp-chip-c lp-float lp-float-slower">
-            <span className="lp-lock">🔒</span> Lokaal &amp; versleuteld
-          </div>
-        </div>
-      </section>
-
-      {/* Signature scroll section (GSAP card spiral + tagline) */}
-      <CardSpiral />
-
-      {/* Kern-tegels — waarom LaVega (SS1-inspired, our fonts + warm palet) */}
-      <section className="lp-section lp-strengths" id="waarom">
-        <div className="lp-strengths-head lp-reveal">
-          <h2 className="lp-h2 lp-strengths-title">Al je geldzaken, samen op één plek</h2>
-          <div className="lp-strengths-aside">
-            <p className="lp-sub lp-strengths-sub">
-              We doen er alles aan om je een naadloze ervaring te geven — snel, veilig en compleet.
-              Eén helder beeld van al je rekeningen, waar je ook bankiert.
+      <main id="main" tabIndex={-1}>
+        <section>
+          <div className="w">
+            <h2 className="r">
+              <Heading {...c.view.title} />
+            </h2>
+            <p className="lead r" style={delay(1)}>
+              {c.view.lead}
             </p>
-            <a className="lp-btn lp-btn-dark" href="#agents">
-              Ontdek meer <span aria-hidden="true">→</span>
-            </a>
           </div>
-        </div>
-        <div className="lp-tiles lp-reveal">
-          <article className="lp-tile">
-            <h3 className="lp-tile-title">Snel &amp; soepel</h3>
-            <div className="lp-ill lp-ill-fast" aria-hidden="true">
-              <span className="c c1" />
-              <span className="c c2" />
-              <span className="c c3" />
-              <span className="c c4" />
+        </section>
+
+        <section className="flush">
+          <div className="w problem">
+            <div className="r">
+              <h2>
+                <Heading {...c.problem.title} />
+              </h2>
             </div>
-          </article>
-          <article className="lp-tile">
-            <h3 className="lp-tile-title">Al je rekeningen gekoppeld</h3>
-            <div className="lp-ill lp-ill-toggles" aria-hidden="true">
-              <span className="tg" />
-              <span className="tg on" />
-              <span className="tg" />
+            <div className="r" style={delay(1)}>
+              <div className="stat">{c.problem.stat}</div>
+              <p className="statnote">{c.problem.note}</p>
             </div>
-          </article>
-          <article className="lp-tile">
-            <h3 className="lp-tile-title">Sterke versleuteling</h3>
-            <div className="lp-ill lp-ill-rings" aria-hidden="true">
-              <span className="ring r1" />
-              <span className="ring r2" />
-              <span className="orbit"><span className="odot" /></span>
-              <span className="core" />
+          </div>
+        </section>
+
+        <section className="flush">
+          <div className="w">
+            <RevealWords text={c.reveal} reduce={reduce} />
+          </div>
+        </section>
+
+        <section id="does" className="flush">
+          <div className="w">
+            <h2 className="r">
+              <Heading {...c.does.title} />
+            </h2>
+            <ThreeBoxes copy={c.does} animated={animated} reduce={reduce} />
+          </div>
+        </section>
+
+        <section className="flush">
+          <div className="w r">
+            <blockquote>
+              {c.quote.text}
+              <cite>{c.quote.cite}</cite>
+            </blockquote>
+          </div>
+        </section>
+
+        <section className="flush">
+          <div className="w">
+            <Conversation copy={c.acts} animated={animated} />
+          </div>
+        </section>
+
+        <section id="faq" className="flush">
+          <div className="w split">
+            <h2 className="r">
+              <Heading {...c.faq.title} />
+            </h2>
+            <div className="faq r">
+              {c.faq.items.map((item, i) => (
+                <details key={item.q} open={i === 0 ? true : undefined}>
+                  <summary>{item.q}</summary>
+                  <p>{item.a}</p>
+                </details>
+              ))}
             </div>
-          </article>
-          <article className="lp-tile">
-            <h3 className="lp-tile-title">Eén compleet overzicht</h3>
-            <div className="lp-ill lp-ill-tree" aria-hidden="true">
-              <svg viewBox="0 0 160 120" width="100%" height="120">
-                <circle cx="80" cy="28" r="15" className="tree-node" />
-                <circle cx="80" cy="28" r="5" className="tree-core" />
-                <path d="M80,43 V66 M32,96 V80 H128 V96 M80,80 V96" className="tree-branch" />
-                <circle cx="32" cy="100" r="4" className="tree-leaf" />
-                <circle cx="80" cy="100" r="4" className="tree-leaf" />
-                <circle cx="128" cy="100" r="4" className="tree-leaf" />
-              </svg>
-            </div>
-          </article>
-        </div>
-      </section>
-
-      {/* Agents — feature carousel (SS2-style, our fonts + warm palet) */}
-      <section className="lp-section" id="agents">
-        <div className="lp-carousel-head lp-reveal">
-          <div>
-            <p className="lp-eyebrow lp-eyebrow-left">De agents</p>
-            <h2 className="lp-h2 lp-strengths-title">Slimme agents die het werk doen</h2>
           </div>
-          <div className="lp-carousel-nav">
-            <button type="button" aria-label="Vorige" onClick={() => scrollAgents(-1)}>←</button>
-            <button type="button" aria-label="Volgende" className="accent" onClick={() => scrollAgents(1)}>→</button>
-          </div>
-        </div>
-        <div className="lp-carousel lp-reveal" ref={agentsRef}>
-          {[
-            {
-              icon: (
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M6 3h8l4 4v14H6z" />
-                  <path d="M14 3v4h4" />
-                  <path d="M9 13h6M9 17h6" />
-                </svg>
-              ),
-              t: "Facturen-agent",
-              d: "Sleep een PDF-factuur erin en de agent leest de bedragen en vervaldata automatisch uit — meteen zichtbaar in je cashflow, jij bevestigt.",
-            },
-            {
-              icon: (
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M12 3l7 3v5c0 4.5-3 7.6-7 9-4-1.4-7-4.5-7-9V6z" />
-                  <path d="M9 12l2 2 4-4" />
-                </svg>
-              ),
-              t: "Belasting-agent",
-              d: "Reserveert automatisch je btw en bewaakt elke aangifte-deadline, zodat je nooit voor verrassingen komt te staan.",
-            },
-            {
-              icon: (
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M4 8h13M17 8l-3-3M17 8l-3 3" />
-                  <path d="M20 16H7M7 16l3 3M7 16l3-3" />
-                </svg>
-              ),
-              t: "Koersen-agent",
-              d: "Moet je wisselen of overmaken in vreemde valuta? De agent zoekt realtime de goedkoopste route (Wise, Revolut, je bank).",
-            },
-            {
-              icon: (
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M12 3.5l2.5 5.2 5.7.8-4.1 4 1 5.7L12 16.6 6.9 19.2l1-5.7-4.1-4 5.7-.8z" />
-                </svg>
-              ),
-              t: "Punten-agent",
-              d: "Houdt je punten bij en zoekt live op wat ze écht waard zijn en hoe je ze het slimst inwisselt, bijvoorbeeld voor reizen.",
-            },
-          ].map((a) => (
-            <article className="lp-feature-card" key={a.t}>
-              <div className="lp-feature-medallion" aria-hidden="true">{a.icon}</div>
-              <h3 className="lp-feature-title">{a.t}</h3>
-              <p className="lp-feature-text">{a.d}</p>
-            </article>
-          ))}
-        </div>
-      </section>
+        </section>
+      </main>
 
-      {/* Privacy */}
-      <section className="lp-section lp-privacy" id="privacy">
-        <div className="lp-privacy-inner lp-reveal">
-          <h2 className="lp-h2">Jouw data blijft van jou.</h2>
-          <p className="lp-sub">
-            Alles staat versleuteld op je eigen apparaat. Bankkoppelingen zijn alleen-lezen. Geen cloud,
-            geen meekijken — tenzij jij een agent expliciet aanzet. Zo simpel is het.
-          </p>
-          <ul className="lp-ticks">
-            <li>Lokaal-first: geen server bewaart je transacties</li>
-            <li>Alleen-lezen bankkoppeling (geen betalingen)</li>
-            <li>Versleutelde kluis met je eigen wachtwoord</li>
-          </ul>
+      <div className="g g-end end">
+        <div className="w">
+          <h2 className="r">
+            <Heading {...c.end.title} />
+          </h2>
+          <button
+            type="button"
+            className="btn r"
+            style={delay(2)}
+            data-lp-tap="sign-up"
+            onClick={onCta}
+          >
+            {c.nav.cta}
+          </button>
         </div>
-      </section>
-
-      {/* How it works */}
-      <section className="lp-section" id="how">
-        <p className="lp-eyebrow lp-reveal">Hoe het werkt</p>
-        <h2 className="lp-h2 lp-reveal">In een paar minuten opgezet</h2>
-        <div className="lp-steps lp-reveal">
-          {[
-            { n: "1", t: "Importeer of koppel", d: "Sleep je bankexports erin of koppel je bank alleen-lezen." },
-            { n: "2", t: "LaVega rekent", d: "Categoriseert automatisch en voorspelt je kaspositie vooruit." },
-            { n: "3", t: "Vraag de assistent", d: "Stel je vraag — de agent zoekt realtime op en denkt met je mee." },
-          ].map((s) => (
-            <div className="lp-step" key={s.n}>
-              <div className="lp-step-n">{s.n}</div>
-              <h3 className="lp-card-title">{s.t}</h3>
-              <p className="lp-card-text">{s.d}</p>
-            </div>
-          ))}
+      </div>
+      <footer>
+        <div className="w foot">
+          <span>{c.footer.note}</span>
+          <span>
+            <a href="/privacy">{c.footer.privacy}</a> · <a href="/terms">{c.footer.terms}</a> ·{" "}
+            <a href={`mailto:${CONTACT_EMAIL}`}>{c.footer.contact}</a>
+          </span>
         </div>
-      </section>
-
-      {/* FAQ */}
-      <section className="lp-section" id="faq">
-        <p className="lp-eyebrow lp-reveal">FAQ</p>
-        <h2 className="lp-h2 lp-reveal">Veelgestelde vragen</h2>
-        <div className="lp-faq lp-reveal">
-          {[
-            {
-              q: "Is mijn data veilig?",
-              a: "Ja. Alles staat versleuteld op je eigen apparaat — er is geen cloud die je transacties bewaart. Bankkoppelingen zijn altijd alleen-lezen.",
-            },
-            {
-              q: "Moet ik mijn bank koppelen?",
-              a: "Nee. Je kunt ook simpelweg je bankexports importeren. Koppelen kan wél en is dan alleen-lezen (nooit betalingen).",
-            },
-            {
-              q: "Voor wie is LaVega?",
-              a: "Van studenten die grip willen op hun budget tot werkenden en ondernemers die hun rekeningen, cashflow en btw willen beheren.",
-            },
-            {
-              q: "Werkt het met meerdere rekeningen en BV's?",
-              a: "Ja — LaVega bundelt al je rekeningen, privé én zakelijk, in één helder overzicht per entiteit en geconsolideerd.",
-            },
-            {
-              q: "Gebruikt de AI-assistent mijn gegevens?",
-              a: "Alleen als jij dat aanzet, per onderdeel, en je bevestigt zelf wat er gedeeld wordt. Standaard staat het uit.",
-            },
-          ].map((f) => (
-            <details className="lp-faq-item" key={f.q}>
-              <summary>
-                <span>{f.q}</span>
-                <span className="lp-faq-mark" aria-hidden="true" />
-              </summary>
-              <p>{f.a}</p>
-            </details>
-          ))}
-        </div>
-      </section>
-
-      {/* Waitlist */}
-      <section className="lp-section lp-waitlist" id="wachtlijst">
-        <div className="lp-waitlist-inner lp-reveal">
-          <p className="lp-eyebrow">Wachtlijst</p>
-          <h2 className="lp-h2">Wees er als eerste bij</h2>
-          <p className="lp-sub">
-            LaVega rolt stap voor stap uit. Laat je e-mail achter en we laten je weten zodra je aan de
-            beurt bent — plus af en toe een update over nieuwe agents.
-          </p>
-          {wlStatus === "done" ? (
-            <p className="lp-waitlist-done">Je staat op de lijst! 🎉 We mailen je zodra je aan de beurt bent.</p>
-          ) : (
-            <form className="lp-waitlist-form" onSubmit={submitWaitlist}>
-              <input
-                type="text"
-                className="lp-input"
-                placeholder="Naam (optioneel)"
-                aria-label="Naam"
-                value={wlName}
-                onChange={(e) => setWlName(e.target.value)}
-                disabled={!wlReady || wlStatus === "sending"}
-              />
-              <input
-                type="email"
-                className="lp-input"
-                placeholder="jouw@email.nl"
-                aria-label="E-mailadres"
-                required
-                value={wlEmail}
-                onChange={(e) => setWlEmail(e.target.value)}
-                disabled={!wlReady || wlStatus === "sending"}
-              />
-              <button type="submit" className="lp-btn lp-btn-dark lp-btn-lg" disabled={!wlReady || wlStatus === "sending"}>
-                {wlReady ? (wlStatus === "sending" ? "Bezig…" : "Zet me op de lijst") : "Binnenkort"}
-              </button>
-            </form>
-          )}
-          {!wlReady && <p className="lp-waitlist-note">De wachtlijst opent zeer binnenkort.</p>}
-          {wlStatus === "error" && <p className="lp-waitlist-note">Er ging iets mis — probeer het zo nog eens.</p>}
-        </div>
-      </section>
-
-      {/* Footer */}
-      <footer className="lp-footer2">
-        <div className="lp-footer2-cta lp-reveal">
-          <h2 className="lp-h2">Klaar om grip te krijgen op je geld?</h2>
-          <a className="lp-btn lp-btn-tan lp-btn-lg" href="#wachtlijst">
-            Kom op de wachtlijst <span aria-hidden="true">→</span>
-          </a>
-        </div>
-        <div className="lp-footer2-grid">
-          <div className="lp-footer2-about">
-            <div className="lp-footer2-brand">LaVega</div>
-            <p className="lp-footer2-note">Lokaal-first personal finance — van student tot ondernemer.</p>
-          </div>
-          <div className="lp-footer2-col">
-            <span className="lp-footer2-h">Product</span>
-            <a href="#agents">Agents</a>
-            <a href="#how">Hoe het werkt</a>
-            <a href="#faq">FAQ</a>
-          </div>
-          <div className="lp-footer2-col">
-            <span className="lp-footer2-h">Juridisch</span>
-            <a href="/privacy">Privacy</a>
-            <a href="/terms">Voorwaarden</a>
-          </div>
-        </div>
-        <div className="lp-footer2-bottom">© 2026 LaVega · lokaal-first</div>
       </footer>
     </div>
   );

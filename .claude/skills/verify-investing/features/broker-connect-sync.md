@@ -5,45 +5,99 @@ dividends. This is where most investing reports originate.
 
 ## Sub-features
 
-- credential form (`Broker koppelen`) for Trading 212 (`API key`) and Interactive Brokers
-  (`Flex-token`, `Numeriek Query ID`), plus the vault passphrase.
-- vault (`Kluis`): `empty` / `locked` / `unlocked`. Credentials are AES-GCM encrypted; after
-  a restart the vault is locked and only the passphrase reopens it.
-- `Opslaan en synchroniseren` — save credentials, then force a sync.
-- `Ontgrendelen en synchroniseren` — unlock an existing vault, then force a sync.
-- sync progress: `Bezig`, `Gereed`, `API-pauze` / `API-capaciteit wordt afgewacht`,
-  and the failure states `Broker synchronisatie mislukt.`, `Broker koppelen mislukt.`,
-  `Kluis ontgrendelen mislukt.`
+- credential form (heading `Save credentials`, broker `<select aria-label="Broker">`) for Trading 212
+  (`API key` and `API secret`, both required) and Interactive Brokers (`Flex-token`,
+  field label `Query ID`; the setup card also says `Numeric Query ID`). Local file vault
+  also asks for `Vault password`.
+- vault (`Vault` chip): `Not set up` / `Locked` / `Open`, from the API states `empty` /
+  `locked` / `unlocked`. The local file vault is AES-GCM with that password; after a
+  restart it is locked and only the password reopens it. A hosted Neon vault encrypts
+  with the server key (`passphrase: unused` on credential status) and stays unlocked.
+  Do not expect `Unlock vault` on preview or prod.
+- `Save and sync` (`Saving and syncing…` while pending) — save credentials, then force a sync.
+- `Unlock and sync` (`Unlocking…` while pending) under `Unlock vault` — unlock an existing
+  vault, then force a sync. Success reads `Vault unlocked. Sync completed.` When that sync
+  POST returns no result, the status reads
+  `Vault unlocked. Sync continues in the background; progress is shown above.`
+- `Start sync` (`Syncing…` while pending) — the block stays on the page for an empty vault.
+  Heading `Data saved?`. Copy: `Start a new broker sync now. This bypasses the daily sync cache.`
+  The button force-posts `/api/brokers/sync?force=true`. On the local file vault an empty
+  vault sets sync status to `problem` and `message` to `credential vault is locked`
+  (the Brokers chip detail). The POST answers 503
+  `{ problems: ["Broker synchronization failed"] }`, so the alert under the button is
+  `Sync not completed` and `Broker synchronization failed`. That alert does not contain
+  `credential vault is locked`. Hosted Neon does not use this file-vault lock. Missing
+  keys come back as `credentials are not configured`, and Profile hides those problems,
+  so this lock alert is not the hosted empty-account result.
+- sync progress card (Profile, only while status is running, waiting, or completed;
+  hidden on idle and on problem). Eyebrow `Broker sync`. The heading is
+  `Trading 212 syncing` or `Trading 212 synced` even when the run is IBKR. Badge:
+  `In progress`, `API pause`, or `Completed`. The waiting line reads
+  `Waiting for new API capacity`, and appends ` · continuing in <n> sec.` while a
+  `waitUntil` is set.
+- Profile `Brokers` chip values, separate from that card: `Ready` (idle), `In progress`,
+  `Waiting`, `Up to date` (completed), `Problem`, `Unknown`. A waiting chip's detail falls
+  back to `Waiting for API capacity`. `Ready` is not a progress-card badge.
+  Failure copy, by surface: Overview after Allow Yahoo Finance shows heading
+  `Sync problems` and `Broker sync failed.` Profile Start sync shows `Sync not completed`
+  and `Broker synchronization failed`. Also `Failed to unlock vault.` and
+  `Broker credential storage is unavailable. Try again later.`
 
 ## How to get to it (user POV)
 
-`Brokers` in the main navigation, or `/investing/brokers/connect`. Pick a broker, paste the
-credentials, enter the vault passphrase, press `Opslaan en synchroniseren`. On a later visit
-the vault is already populated and the button reads `Ontgrendelen en synchroniseren`.
+Reach: `/profile#brokers` (mounted: `https://www.lavega.dev/investing/profile#brokers`), or the
+profile button in the top bar. `/brokers/connect` redirects to `/profile#brokers`.
+
+Pick a broker, paste the credentials, and press `Save and sync`. Trading 212 needs both
+`API key` and `API secret`. On the local file vault, also enter `Vault password`. The
+`Save credentials` form stays on the page after a vault exists. `Unlock vault` with
+`Unlock and sync` is an extra block above that form, and only when credential status is
+`locked` (a later local visit after a restart). An empty vault does not show `Unlock vault`.
+Hosted preview and prod keep the Neon vault unlocked (`passphrase: unused`), so that unlock
+block is not on the page there.
+
+The same page holds the other settings sections:
+
+- `#modules`, title `Modules`. Copy: `Choose which tabs appear in the top bar.` Overview is
+  `Always on.`
+- `#widgets`, title `Widgets`. Copy: `Choose which cards appear on Overview.`
+- `#data`, title `Data`. Switch label `Sector inference`. Copy says it sends each holding's
+  ticker and name, never quantities or values, and needs market-data consent. Without a
+  classifier the warning is `Sector inference is not available on this server.` Without
+  consent the warning is `Grant market-data consent from Overview before turning this on.`
+  `GET`/`PUT /api/investing/sector-inference` use `{ enabled, available }` on GET and
+  `{ enabled }` on PUT.
+- `#account`, title `Account`. Local standalone: `Authentication is not configured on this server.`
+  Anonymous: `Not signed in.` Signed in: the email. Button `Sign out`. Link `Go to LaVega Personal`
+  when that URL is configured.
 
 ## Driving it with control-investing
 
 ```bash
 C=".claude/skills/verify-investing/control-investing.mjs"
-node $C sync-status --target prod                       # vault + broker + price progress
+node $C sync-status --target prod                       # broker + prices + credentials
 node $C unlock --target prod --passphrase <passphrase>
 node $C sync --target prod --force --wait               # posts the same route the button does
 node $C dashboard --target prod                         # did the data actually land?
-node $C api POST /api/brokers/credentials --body '{"broker":"trading212","token":"...","passphrase":"..."}'
+node $C api POST /api/brokers/credentials --body '{"broker":"trading212","token":"...","secret":"...","passphrase":"..."}'
 ```
 
-Proof that it works, in order: `credentials.status` moves `empty` → `unlocked`, the sync
+Proof that it works, in order: `credentials.body.status` moves `empty` → `unlocked`, the sync
 settles at `status: "completed"`, `positionsRead`/`ordersRead` are non-zero, and the
-dashboard afterwards reports positions. A `completed` sync with an unchanged dashboard is a
-failure — the read model did not pick up the write.
+dashboard afterwards reports positions. `sync-status` puts the HTTP status on
+`credentials.status` (200 when the route answers) and the vault state (`empty`, `locked`,
+or `unlocked`) on `credentials.body.status`. A `completed` sync with an unchanged dashboard
+is a failure — the read model did not pick up the write.
 
 ## Gotchas
 
-- Credential rows existing in the database does not mean a sync has landed. A `sync_state`
-  of `0` means no completed sync has ever persisted for that tenant, whatever the credential
-  table shows.
-- `sync` without `--wait` returns as soon as the run is accepted. Progress lives at
-  `/api/brokers/sync/status`, and the UI polls it only while a sync is in flight.
+- Credential rows existing in the database does not mean a sync has landed. Never-synced
+  is `history.<broker>.lastSyncedAt: null` on `/api/brokers/sync/status`.
+  `investing.sync_state.state` is jsonb, not a numeric `0`.
+- `sync` without `--wait` returns as soon as the run is accepted. The CLI reads progress at
+  `/api/brokers/sync/status`; the web app no longer reads that route. It posts one
+  `POST /api/sync/refresh` intent and polls `GET /api/sync/state` every 2 s only while a run
+  is active, so a tab closed mid-run does not stop the server-owned work.
 - Trading 212 rate-limits hard. `waitUntil` in the progress payload is a real pause, not a
   hang; `--timeout` on `sync --wait` may need raising rather than the sync being retried.
 - `sync` and `unlock` are write commands. Run them against `--target prod` only when the user

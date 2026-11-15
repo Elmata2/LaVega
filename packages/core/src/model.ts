@@ -3,8 +3,25 @@ import type { CountryCode, VatFrequency } from "./taxpacks/index.js";
 // cyclus met crossScope.ts (dat Account/Tx hiervandaan haalt).
 import type { CrossScopeAnswer } from "./crossScope.js";
 
-export type Account = { key: string; iban: string; name: string; bank: string;
-  entity: string; currency: string; balance: number | null; balanceDate?: string; type?: string;
+export type Account = {
+  key: string;
+  iban: string;
+  name: string;
+  bank: string;
+  entity: string;
+  currency: string;
+  balance: number | null;
+  balanceDate?: string;
+  type?: string;
+  /* Absolute opening anchor (WS3.1, issue #291). A manual account knows where
+   * it STARTED, not where it is today: the balance series replays the ledger
+   * forward from here. Both fields are integer cents / ISO date and additive:
+   * a vault written before them decrypts unchanged, and an account without an
+   * opening keeps an UNKNOWN series (a gap, never a zero). */
+  /** Absolute balance on `openingDate`, in integer cents (ADR 0011). */
+  openingBalanceCents?: number;
+  /** ISO date the opening balance held. Absent with the amount means unknown. */
+  openingDate?: string;
   /** Optional annual interest rate (%) for the Optimisatie tab. User-set;
    *  suggested from detected "rente" bijschrijvingen when absent. */
   interestRate?: number;
@@ -32,7 +49,23 @@ export type Account = { key: string; iban: string; name: string; bank: string;
    *  van ophalen werd ingevuld voor een saldo van drie weken oud. `withLinkedAt`
    *  stempelt daarom alleen wat aantoonbaar nieuw is; de rest blijft leeg en het
    *  scherm zegt dat het onbekend is. */
-  linkedAt?: string };
+  linkedAt?: string;
+  /** WANNEER WIJ HET SALDO LAATST HEBBEN OPGEHAALD — weer iets anders dan de
+   *  twee hierboven.
+   *
+   *  `balanceDate` is de dag waarop het BEDRAG gold, zoals de bank hem noemt.
+   *  `linkedAt` is de dag waarop deze rekening binnenkwam. Dit is de dag waarop
+   *  we het laatst hebben gevraagd. Voor een geïmporteerd afschrift vallen die
+   *  laatste twee samen, maar voor een bankkoppeling die zichzelf ververst niet
+   *  meer: sinds `/api/eb/refresh` bestaat kan een rekening van vorige maand een
+   *  saldo van vanochtend dragen, en dan is "gekoppeld op 8 september" naast dat
+   *  bedrag pertinent misleidend — het suggereert dat het bedrag ook van toen is.
+   *
+   *  Alleen gezet waar het te bewijzen valt: op het antwoord van een bank. Een
+   *  import zet hem niet, want daar is "opgehaald" geen gebeurtenis die los
+   *  staat van het afschrift zelf. */
+  balanceFetchedAt?: string;
+};
 
 /** Het KOPPELMOMENT stempelen, en alleen daar waar dat te bewijzen valt.
  *
@@ -67,17 +100,117 @@ export function withLinkedAt(
     return prev.linkedAt ? { ...a, linkedAt: prev.linkedAt } : a;
   });
 }
-export type Tx = { id: string; accountKey: string; date: string; amount: number;
-  currency: string; counterparty: string; description: string; category: string; manual: boolean };
-export type Rule = { id: string; match: string; category: string };
+export type Tx = {
+  id: string;
+  accountKey: string;
+  date: string;
+  amount: number;
+  currency: string;
+  counterparty: string;
+  description: string;
+  category: string;
+  manual: boolean;
+  /* Transaction state (WS1.6, issue #284). None of these four is part of
+   * `tx.id`: `hash.ts`'s `txBase` reads only the identity fields, so a state
+   * change never re-keys a row. Optional because a vault written before they
+   * existed decrypts unchanged; `migrateTxStates` fills the defaults in ONE
+   * pass over an old vault. */
+  /** Owner or rule says this row is not spending (e.g. it was reimbursed). */
+  excluded?: boolean;
+  /** Booked by the bank but not settled yet. */
+  pending?: boolean;
+  /** Free-text note the owner attached to this row. */
+  notes?: string;
+  /** Tags a rule or the owner attached. Kept as a plain list; a tag has no
+   *  identity of its own in this slice. */
+  tags?: string[];
+};
+
+/** The defaults an old vault row gets, in one pass (`migrateTxStates`). They
+ *  are the values ABSENCE already meant everywhere: not excluded, not pending,
+ *  no note, no tags. `notes: ""` rather than absent keeps the row shape stable
+ *  after the pass; it states "no note", not an unknown amount (ADR 0011 §8
+ *  covers magnitudes and rates, not text). */
+export const TX_STATE_DEFAULTS = {
+  excluded: false,
+  pending: false,
+  notes: "",
+  tags: [] as string[],
+} as const;
+
+/** The ONE migration pass over an existing vault (issue #284): give every row
+ *  the state fields it predates. Idempotent — a row that already has all four
+ *  keeps its object identity, so a second open migrates nothing and the caller
+ *  can skip the single re-seal. Pure: the caller writes, this only decides. */
+export function migrateTxStates(txs: readonly Tx[]): { txs: Tx[]; changed: boolean } {
+  let changed = false;
+  const next = txs.map((tx) => {
+    if (
+      tx.excluded !== undefined &&
+      tx.pending !== undefined &&
+      tx.notes !== undefined &&
+      tx.tags !== undefined
+    ) {
+      return tx;
+    }
+    changed = true;
+    return {
+      ...tx,
+      excluded: tx.excluded ?? TX_STATE_DEFAULTS.excluded,
+      pending: tx.pending ?? TX_STATE_DEFAULTS.pending,
+      notes: tx.notes ?? TX_STATE_DEFAULTS.notes,
+      tags: tx.tags ?? [],
+    };
+  });
+  return { txs: changed ? next : [...txs], changed };
+}
+/** Whether an amount in this currency can be added straight into a EUR total.
+ *  Missing/empty defaults to EUR, matching every importer — `parseBankCsv` and
+ *  `mapEbTransaction`/`mapEbAccount` all default an absent currency to "EUR".
+ *
+ *  A currency that ISN'T EUR needs a conversion nothing at the point these
+ *  sums run has, so callers exclude it rather than adding its face value as
+ *  if it were euros. That silent add is the bug: a Revolut EUR pocket next to
+ *  a Revolut HUF pocket summed 4.500 EUR and 380.000 HUF into "384.500", a
+ *  number that was never a euro amount of anything — the HUF pocket (worth
+ *  roughly 950 EUR) was counted at 400x its value. */
+export function isEurCurrency(currency: string | null | undefined): boolean {
+  return (currency || "EUR").trim().toUpperCase() === "EUR";
+}
+
+/* The rules domain lives in `rules/model.ts` (legacy row shape + the v2 AST).
+ * Re-exported here so every existing `import type { Rule } from "./model.js"`
+ * keeps working; `categorize.ts`, the adapters and the web app import it from
+ * both places. */
+export type { LegacyRule, Rule, RuleV2 } from "./rules/model.js";
 
 /** A signed, dated future cash movement the forecast can see BEFORE the bank
  *  transaction lands (a VAT set-aside, an expected invoice, a manual plan).
  *  amountCents is a POSITIVE magnitude; `sign` gives direction (1 in / -1 out). */
+/** A flow's name as FACTS, for the screen to say in the reader's language.
+ *
+ *  Only the one shape LaVega writes itself. A VAT flow's name is `BTW Q2 2026`
+ *  / `USt Q2 2026` and a prepayment's is `Vorauszahlung 1/4 2026`: those come
+ *  from the country's tax pack and are the legal names of the things, so they
+ *  read the same to a Dutch and an English reader and are deliberately absent
+ *  here. `Factuur Acme` is not a name, it is a sentence we wrote. */
+export type FlowLabel = { kind: "invoice"; counterparty: string; invoiceNumber?: string };
+
 export type ScheduledFlow = {
   id: string;
   entity: string;
+  /** The flow's identity string, and the display fallback.
+   *
+   *  IT IS PART OF THE ID (`makeScheduledFlow` hashes it), so it must never be
+   *  translated in place: a flow whose label changed would hash to a new id,
+   *  and one the owner had marked paid would come back as a fresh expected
+   *  one. Hence `labelParts` beside it rather than a locale in here. */
   label: string;
+  /** Preferred over `label` for DISPLAY when present. Absent on every flow
+   *  stored before this existed, and on the tax flows whose label is a legal
+   *  name — both fall back to `label`, which is why this can be optional
+   *  without a migration. */
+  labelParts?: FlowLabel;
   sign: 1 | -1;
   amountCents: number;
   dueDate: string; // ISO YYYY-MM-DD
@@ -100,8 +233,8 @@ export type Invoice = {
   counterparty: string;
   invoiceNumber?: string;
   issueDate: string; // ISO
-  dueDate: string;   // ISO
-  amount: number;    // decimal euros (gross)
+  dueDate: string; // ISO
+  amount: number; // decimal euros (gross)
   vatAmount?: number;
   currency: string;
   status: "expected" | "paid" | "cancelled";
@@ -135,8 +268,8 @@ export type VatSettings = {
   entity: string;
   frequency: VatFrequency;
   defaultRatePct: number; // e.g. 21
-  mixedRates: boolean;    // true => don't auto-estimate; manual-only
-  manualCents?: number;   // manual override of the amount to set aside this period
+  mixedRates: boolean; // true => don't auto-estimate; manual-only
+  manualCents?: number; // manual override of the amount to set aside this period
   /** Which country's rule pack applies. Absent = "NL". */
   country?: CountryCode;
   /** Override of the pack's indicative profit-tax rate (%), e.g. a known

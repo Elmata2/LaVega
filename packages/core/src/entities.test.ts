@@ -2,18 +2,41 @@ import { expect, test } from "vitest";
 import type { Account, Tx } from "./model.js";
 import { consolidate } from "./ingest.js";
 import {
-  DEFAULT_ENTITY_SCOPE, ENTITY_SCOPES, ENTITY_SCOPE_LABELS,
-  accountScope, accountsInScope, clearEntityScope, consolidateByScope,
-  entityScope, entitySummaries, renameEntity, setEntityScope, suggestEntityScope,
+  DEFAULT_ENTITY_SCOPE,
+  ENTITY_SCOPES,
+  accountScope,
+  accountsInScope,
+  clearEntityScope,
+  consolidateByScope,
+  entityScope,
+  entitySummaries,
+  renameEntity,
+  setEntityScope,
+  suggestEntityScope,
   type EntityProfile,
 } from "./entities.js";
 
-const acc = (key: string, entity: string, balance: number | null = 100): Account =>
-  ({ key, iban: key, name: key, bank: "ING", entity, currency: "EUR", balance });
+const acc = (key: string, entity: string, balance: number | null = 100): Account => ({
+  key,
+  iban: key,
+  name: key,
+  bank: "ING",
+  entity,
+  currency: "EUR",
+  balance,
+});
 
-const tx = (accountKey: string, amount: number): Tx =>
-  ({ id: accountKey + amount, accountKey, date: "2026-08-01", amount, currency: "EUR",
-     counterparty: "x", description: "", category: "", manual: false });
+const tx = (accountKey: string, amount: number): Tx => ({
+  id: accountKey + amount,
+  accountKey,
+  date: "2026-08-01",
+  amount,
+  currency: "EUR",
+  counterparty: "x",
+  description: "",
+  category: "",
+  manual: false,
+});
 
 test("the default is personal: an unclassified entity, and an empty profile list, resolve to privé", () => {
   expect(DEFAULT_ENTITY_SCOPE).toBe("personal");
@@ -21,8 +44,6 @@ test("the default is personal: an unclassified entity, and an empty profile list
   expect(entityScope("BV1", [])).toBe("personal");
   expect(accountScope(acc("A", "Holding B.V."))).toBe("personal");
   expect(ENTITY_SCOPES).toEqual(["personal", "business"]);
-  expect(ENTITY_SCOPE_LABELS.personal).toBe("Privé");
-  expect(ENTITY_SCOPE_LABELS.business).toBe("Zakelijk");
 });
 
 test("an explicit classification wins, and it is matched case/space-insensitively", () => {
@@ -37,7 +58,7 @@ test("suggestEntityScope only SUGGESTS: a legal form reads business, a private n
   expect(suggestEntityScope("Steunenberg Holding B.V.")).toBe("business");
   expect(suggestEntityScope("BV1")).toBe("business");
   expect(suggestEntityScope("Generation C GmbH")).toBe("business");
-  expect(suggestEntityScope("Privé")).toBe("personal");   // accent-insensitive
+  expect(suggestEntityScope("Privé")).toBe("personal"); // accent-insensitive
   expect(suggestEntityScope("prive")).toBe("personal");
   expect(suggestEntityScope("Huishouden")).toBe("personal");
   expect(suggestEntityScope("Vakantiepot")).toBe("personal"); // no signal -> default
@@ -67,8 +88,18 @@ test("entitySummaries: one row per entity, with whether the owner classified it 
   const accounts = [acc("A", "BV1"), acc("B", "BV1"), acc("C", "Privé")];
   const rows = entitySummaries(accounts, [{ entity: "BV1", scope: "business" }]);
   expect(rows.map((r) => r.entity)).toEqual(["BV1", "Privé"]); // sorted, deterministic
-  expect(rows[0]).toMatchObject({ scope: "business", explicit: true, suggested: "business", accountKeys: ["A", "B"] });
-  expect(rows[1]).toMatchObject({ scope: "personal", explicit: false, suggested: "personal", accountKeys: ["C"] });
+  expect(rows[0]).toMatchObject({
+    scope: "business",
+    explicit: true,
+    suggested: "business",
+    accountKeys: ["A", "B"],
+  });
+  expect(rows[1]).toMatchObject({
+    scope: "personal",
+    explicit: false,
+    suggested: "personal",
+    accountKeys: ["C"],
+  });
 
   // An unclassified BV shows the default AS its scope but suggests business.
   const fresh = entitySummaries([acc("A", "Holding BV")]);
@@ -103,7 +134,10 @@ test("renameEntity is a no-op for an identical or blank target", () => {
 
 test("accountsInScope splits the accounts the classification actually applies to", () => {
   const accounts = [acc("A", "BV1"), acc("B", "Privé"), acc("C", "BV2")];
-  const profiles: EntityProfile[] = [{ entity: "BV1", scope: "business" }, { entity: "BV2", scope: "business" }];
+  const profiles: EntityProfile[] = [
+    { entity: "BV1", scope: "business" },
+    { entity: "BV2", scope: "business" },
+  ];
   expect(accountsInScope(accounts, "business", profiles).map((a) => a.key)).toEqual(["A", "C"]);
   expect(accountsInScope(accounts, "personal", profiles).map((a) => a.key)).toEqual(["B"]);
   expect(accountsInScope(accounts, "personal").map((a) => a.key)).toEqual(["A", "B", "C"]); // no profiles: all privé
@@ -112,16 +146,25 @@ test("accountsInScope splits the accounts the classification actually applies to
 test("the existing per-entity consolidation is untouched, and the scope rollup agrees with it", () => {
   const accounts = [acc("A", "BV1", 100), acc("B", "BV2", 200), acc("C", "Privé", 50)];
   const txs = [tx("A", 30), tx("B", -10), tx("C", 5)];
-  const profiles: EntityProfile[] = [{ entity: "BV1", scope: "business" }, { entity: "BV2", scope: "business" }];
+  const profiles: EntityProfile[] = [
+    { entity: "BV1", scope: "business" },
+    { entity: "BV2", scope: "business" },
+  ];
 
-  const perEntity = consolidate(accounts, txs);
+  const perEntity = consolidate(accounts, txs, "2026-08-01", { fxHistory: {}, mode: "separate" });
   expect(perEntity.byEntity).toEqual({
     BV1: { in: 30, out: 0, balance: 100 },
     BV2: { in: 0, out: -10, balance: 200 },
-    "Privé": { in: 5, out: 0, balance: 50 },
+    Privé: { in: 5, out: 0, balance: 50 },
   });
 
-  const { byScope, totalBalance } = consolidateByScope(accounts, txs, profiles);
+  const { byScope, totalBalance } = consolidateByScope(
+    accounts,
+    txs,
+    "2026-08-01",
+    { fxHistory: {}, mode: "separate" },
+    profiles,
+  );
   expect(byScope).toEqual({
     business: { in: 30, out: -10, balance: 300 },
     personal: { in: 5, out: 0, balance: 50 },
@@ -132,8 +175,17 @@ test("the existing per-entity consolidation is untouched, and the scope rollup a
 
 test("the scope rollup inherits consolidate's unknown-balance rule: one null makes the whole scope unknown", () => {
   const accounts = [acc("A", "BV1", 100), acc("B", "BV2", null), acc("C", "Privé", 50)];
-  const profiles: EntityProfile[] = [{ entity: "BV1", scope: "business" }, { entity: "BV2", scope: "business" }];
-  const { byScope, totalBalance } = consolidateByScope(accounts, [], profiles);
+  const profiles: EntityProfile[] = [
+    { entity: "BV1", scope: "business" },
+    { entity: "BV2", scope: "business" },
+  ];
+  const { byScope, totalBalance } = consolidateByScope(
+    accounts,
+    [],
+    "2026-08-01",
+    { fxHistory: {}, mode: "separate" },
+    profiles,
+  );
   expect(byScope.business.balance).toBeNull();
   expect(byScope.personal.balance).toBe(50);
   expect(totalBalance).toBeNull();
@@ -141,7 +193,12 @@ test("the scope rollup inherits consolidate's unknown-balance rule: one null mak
 
 test("with no profiles at all everything rolls up as privé — the default is genuinely the fallback", () => {
   const accounts = [acc("A", "BV1", 100), acc("B", "Privé", 50)];
-  const { byScope } = consolidateByScope(accounts, []);
+  // No `profiles` argument at all — proving the default is genuinely the
+  // fallback, not just a value passed explicitly.
+  const { byScope } = consolidateByScope(accounts, [], "2026-08-01", {
+    fxHistory: {},
+    mode: "separate",
+  });
   expect(Object.keys(byScope)).toEqual(["personal"]);
   expect(byScope.personal.balance).toBe(150);
 });

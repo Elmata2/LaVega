@@ -22,55 +22,80 @@ export type JsonFileStore<T> = {
  * atomic tmp+rename replacement. Corruption policy belongs to `validate` — some
  * stores must refuse bad rows (prices), others must survive them (sync state).
  */
-export function createJsonFileStore<T>(filePath: string, options: { empty: T; validate: (contents: string) => T }): JsonFileStore<T> {
+export function createJsonFileStore<T>(
+  filePath: string,
+  options: { empty: T; validate: (contents: string) => T },
+  fileSystem: Pick<
+    typeof import("node:fs/promises"),
+    "mkdir" | "readFile" | "rename" | "writeFile"
+  > = {
+    mkdir,
+    readFile,
+    rename,
+    writeFile,
+  },
+): JsonFileStore<T> {
   let writeQueue = Promise.resolve();
 
   // ponytail: process-local parse cache; external file edits need a restart.
-  let cache: T | null = null;
+  let cache: T | undefined;
+  let hasCache = false;
   let inflight: Promise<T> | null = null;
 
   const doRead = async (): Promise<T> => {
     let contents: string;
     try {
-      contents = await readFile(filePath, "utf8");
+      contents = await fileSystem.readFile(filePath, "utf8");
     } catch (error) {
-      if (error instanceof Error && "code" in error && error.code === "ENOENT") return options.empty;
+      if (error instanceof Error && "code" in error && error.code === "ENOENT") {
+        cache = structuredClone(options.empty);
+        hasCache = true;
+        return cache;
+      }
       throw error;
     }
     cache = options.validate(contents);
+    hasCache = true;
     return cache;
   };
 
   // Single-flight: concurrent callers share one read instead of each loading
   // the whole file (N x fileSize memory spike on large state files).
-  const read = (): Promise<T> => {
-    if (cache !== null) return Promise.resolve(cache);
+  const load = (): Promise<T> => {
+    if (hasCache) return Promise.resolve(cache as T);
     if (!inflight) {
-      inflight = doRead().finally(() => { inflight = null; });
+      inflight = doRead().finally(() => {
+        inflight = null;
+      });
     }
     return inflight;
   };
+  const read = async (): Promise<T> => structuredClone(await load());
 
   const queue = <R>(operation: () => Promise<R>): Promise<R> => {
     const result = writeQueue.then(operation);
-    writeQueue = result.then(() => undefined, () => undefined);
+    writeQueue = result.then(
+      () => undefined,
+      () => undefined,
+    );
     return result;
   };
 
   const writeValue = async (value: T) => {
-    await mkdir(dirname(filePath), { recursive: true });
+    await fileSystem.mkdir(dirname(filePath), { recursive: true });
     const temporaryPath = `${filePath}.tmp`;
-    await writeFile(temporaryPath, JSON.stringify(value), "utf8");
-    await rename(temporaryPath, filePath);
+    await fileSystem.writeFile(temporaryPath, JSON.stringify(value), "utf8");
+    await fileSystem.rename(temporaryPath, filePath);
   };
 
   return {
     read,
     async update(mutate) {
       await queue(async () => {
-        const next = mutate(await read());
-        cache = next;
+        const next = structuredClone(mutate(await read()));
         await writeValue(next);
+        cache = next;
+        hasCache = true;
       });
     },
   };

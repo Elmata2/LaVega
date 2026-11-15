@@ -26,7 +26,16 @@ type ModuleProps = {
   children: ReactNode;
 };
 
-export default function Module({ title, span, height, period, menu, footer, className, children }: ModuleProps) {
+export default function Module({
+  title,
+  span,
+  height,
+  period,
+  menu,
+  footer,
+  className,
+  children,
+}: ModuleProps) {
   return (
     <section className={moduleClass({ span, height, className })} aria-label={title}>
       <header className="module-head">
@@ -57,7 +66,12 @@ type ModulePeriodProps = {
 /** The reference's "Week ▾" pill dropdown. */
 export function ModulePeriod({ value, options, onChange, label = "Periode" }: ModulePeriodProps) {
   return (
-    <select className="module-period" aria-label={label} value={value} onChange={(e) => onChange(e.target.value)}>
+    <select
+      className="module-period"
+      aria-label={label}
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+    >
       {options.map((o) => (
         <option key={o.value} value={o.value}>
           {o.label}
@@ -75,7 +89,13 @@ type ModuleMenuProps = {
 /** The reference's "…" overflow button. */
 export function ModuleMenu({ label, onClick }: ModuleMenuProps) {
   return (
-    <button type="button" className="module-menu" aria-label={label} title={label} onClick={onClick}>
+    <button
+      type="button"
+      className="module-menu"
+      aria-label={label}
+      title={label}
+      onClick={onClick}
+    >
       <span aria-hidden="true">···</span>
     </button>
   );

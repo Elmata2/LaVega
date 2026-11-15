@@ -24,29 +24,48 @@ afterEach(() => {
   host = null;
 });
 
+/** Today's default and every existing test's mode: a non-EUR row is left out
+ *  exactly as it always was, never converted. */
+const SEPARATE = { fxHistory: {}, mode: "separate" as const };
+
 function mount(): HTMLDivElement {
   host = document.createElement("div");
   document.body.appendChild(host);
   const el = host;
   act(() => {
     root = createRoot(el);
-    root.render(<StatistiekBlock txs={txs} rules={rules} own={own} onSelectCategory={() => {}} />);
+    root.render(
+      <StatistiekBlock
+        txs={txs}
+        rules={rules}
+        own={own}
+        onSelectCategory={() => {}}
+        {...SEPARATE}
+      />,
+    );
   });
   return el;
 }
 
 /** React listens for the native input/change event and reads the value off the
  *  element, so the value has to be set through the prototype's own setter. */
-function setValue(el: HTMLInputElement | HTMLSelectElement, value: string, event: "input" | "change") {
-  const proto = el instanceof HTMLSelectElement ? HTMLSelectElement.prototype : HTMLInputElement.prototype;
+function setValue(
+  el: HTMLInputElement | HTMLSelectElement,
+  value: string,
+  event: "input" | "change",
+) {
+  const proto =
+    el instanceof HTMLSelectElement ? HTMLSelectElement.prototype : HTMLInputElement.prototype;
   Object.getOwnPropertyDescriptor(proto, "value")!.set!.call(el, value);
   act(() => {
     el.dispatchEvent(new Event(event, { bubbles: true }));
   });
 }
 
-const periodSelect = (el: HTMLElement) => el.querySelector("select.module-period") as HTMLSelectElement;
-const dateFields = (el: HTMLElement) => [...el.querySelectorAll('input[type="date"]')] as HTMLInputElement[];
+const periodSelect = (el: HTMLElement) =>
+  el.querySelector("select.module-period") as HTMLSelectElement;
+const dateFields = (el: HTMLElement) =>
+  [...el.querySelectorAll('input[type="date"]')] as HTMLInputElement[];
 
 test("choosing Aangepast opens two date fields, seeded with the window that was showing", () => {
   const el = mount();

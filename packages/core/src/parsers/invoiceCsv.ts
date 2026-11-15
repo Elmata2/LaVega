@@ -30,13 +30,26 @@ function pick(idx: Record<string, number>, names: string[]): number {
  * Ported verbatim from bankCsv.ts's sniffDelim(). --- */
 function sniffDelim(text: string): string {
   const head = text.split(/\r?\n/).slice(0, 5).join("\n");
-  const cands: Array<[string, number]> = [[";", 0], [",", 0], ["\t", 0], ["|", 0]];
+  const cands: Array<[string, number]> = [
+    [";", 0],
+    [",", 0],
+    ["\t", 0],
+    ["|", 0],
+  ];
   for (const c of cands) c[1] = head.split(c[0]).length - 1;
   cands.sort((a, b) => b[1] - a[1]);
   return cands[0][1] > 0 ? cands[0][0] : ",";
 }
 
-const CP_NAMES = ["relatie", "leverancier", "klant", "counterparty", "naam", "debiteur", "crediteur"];
+const CP_NAMES = [
+  "relatie",
+  "leverancier",
+  "klant",
+  "counterparty",
+  "naam",
+  "debiteur",
+  "crediteur",
+];
 const AMOUNT_NAMES = ["bedrag", "amount", "totaal", "total", "bedrag incl"];
 const ISSUE_DATE_NAMES = ["factuurdatum", "datum", "issue date"];
 const DUE_DATE_NAMES = ["vervaldatum", "due date", "verval"];
@@ -99,7 +112,7 @@ export function parseInvoiceCsv(text: string): Array<Omit<Invoice, "id">> {
       entity: "",
       direction: detectDirection(ci.direction > -1 ? String(r[ci.direction] ?? "") : undefined),
       counterparty: ci.cp > -1 ? String(r[ci.cp] ?? "").trim() : "",
-      invoiceNumber: ci.number > -1 ? (String(r[ci.number] ?? "").trim() || undefined) : undefined,
+      invoiceNumber: ci.number > -1 ? String(r[ci.number] ?? "").trim() || undefined : undefined,
       issueDate,
       dueDate,
       amount: Math.abs(amount),

@@ -30,9 +30,12 @@ test("fresh IV per encryption (no IV reuse) even for identical data", async () =
 test("ciphertext does not contain the plaintext", async () => {
   const salt = newSalt();
   const key = await deriveKey("pw", salt, PBKDF2_ITERATIONS);
-  const blob = await encryptJSON(key, salt, PBKDF2_ITERATIONS, { counterparty: "ALBERT HEIJN", balance: 1234.56 });
+  const blob = await encryptJSON(key, salt, PBKDF2_ITERATIONS, {
+    counterparty: "ALBERT HEIJN",
+    balance: 1234.56,
+  });
   // base64 ciphertext must not leak the plaintext substrings
-  const hay = (blob.ct + blob.iv + blob.salt);
+  const hay = blob.ct + blob.iv + blob.salt;
   expect(hay.includes("ALBERT")).toBe(false);
 });
 

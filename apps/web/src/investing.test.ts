@@ -14,9 +14,9 @@ test("with nothing configured, dev points at the local container and production 
 });
 
 test("a configured URL wins, without its trailing slash", () => {
-  expect(resolveInvestingUrl({ VITE_INVESTING_URL: "https://investing.lavega.dev/", DEV: false })).toBe(
-    "https://investing.lavega.dev",
-  );
+  expect(
+    resolveInvestingUrl({ VITE_INVESTING_URL: "https://investing.lavega.dev/", DEV: false }),
+  ).toBe("https://investing.lavega.dev");
   expect(resolveInvestingUrl({ VITE_INVESTING_URL: "  /beleggen  ", DEV: true })).toBe("/beleggen");
 });
 
@@ -33,23 +33,37 @@ test("no URL means no probe and no link", async () => {
 
 test("same origin is verified properly: only the investing server's own health answer counts", async () => {
   const health = (body: unknown, init: ResponseInit = {}) =>
-    (async () => new Response(JSON.stringify(body), { headers: { "content-type": "application/json" }, ...init })) as unknown as typeof fetch;
+    (async () =>
+      new Response(JSON.stringify(body), {
+        headers: { "content-type": "application/json" },
+        ...init,
+      })) as unknown as typeof fetch;
 
-  expect(await investingReachable("/investing", health({ ok: true, service: "investing-server" }))).toBe(true);
+  expect(
+    await investingReachable("/investing", health({ ok: true, service: "investing-server" })),
+  ).toBe(true);
 
   // The SPA's catch-all answers 200 with index.html for any unknown path. That
   // is exactly the false positive we cannot afford, so the body must say ok.
   const spaFallback = (async () =>
-    new Response("<!doctype html><title>LaVega</title>", { headers: { "content-type": "text/html" } })) as unknown as typeof fetch;
+    new Response("<!doctype html><title>LaVega</title>", {
+      headers: { "content-type": "text/html" },
+    })) as unknown as typeof fetch;
   expect(await investingReachable("/investing", spaFallback)).toBe(false);
 
-  expect(await investingReachable("/investing", health({ ok: false }, { status: 503 }))).toBe(false);
+  expect(await investingReachable("/investing", health({ ok: false }, { status: 503 }))).toBe(
+    false,
+  );
   expect(await investingReachable("/investing", health({ ok: false }))).toBe(false);
 });
 
 test("same origin asks the investing server's health route", async () => {
-  const fetchImpl = vi.fn(async (_url: string, _init?: RequestInit) =>
-    new Response(JSON.stringify({ ok: true }), { headers: { "content-type": "application/json" } }));
+  const fetchImpl = vi.fn(
+    async (_url: string, _init?: RequestInit) =>
+      new Response(JSON.stringify({ ok: true }), {
+        headers: { "content-type": "application/json" },
+      }),
+  );
   await investingReachable("/investing", fetchImpl as unknown as typeof fetch);
   expect(fetchImpl.mock.calls[0]?.[0]).toBe("/investing/health");
 });

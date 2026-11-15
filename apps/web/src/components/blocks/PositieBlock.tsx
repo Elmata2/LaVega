@@ -1,9 +1,13 @@
 import { useMemo } from "react";
-import type { Account } from "@lavega/core";
+import type { Account, ConversionMode } from "@lavega/core";
+import { isEurCurrency, toEur } from "@lavega/core";
 import type { View } from "../../App";
-import { formatEuro } from "../../format.js";
+import { formatSignedEuroIn } from "../../format.js";
 import Module from "../Module.js";
+import CardLink from "../ui/CardLink.js";
 import { useWidgetEnabled } from "../moduleRegistry";
+import { useAppLocale } from "../../appLocale.js";
+import { moneyCopy } from "../../copy/money.js";
 
 /* Positie over je bedrijven — which BV holds the money.
  *
@@ -13,8 +17,14 @@ import { useWidgetEnabled } from "../moduleRegistry";
  * too large". What is left is the answer itself: the split as one bar, and one
  * compact row per entity.
  *
- * One unknown balance inside an entity makes that entity's position unknown —
- * never a partial sum presented as a position, and never a zero. */
+ * A missing balance on any account makes that entity's position unknown —
+ * never a partial sum, and never a zero. A foreign-currency balance is
+ * different: in convert mode LaVega sums whatever it CAN price and names
+ * what it can't (mirrors SaldoBlock's excludedCurrencyKeys), because a
+ * missing rate for one date is a gap that might resolve with the next
+ * import. Separate mode never converts anything, so there the gap is
+ * permanent for as long as that mode is chosen — a foreign balance there
+ * still nulls the whole entity, same as before this file's partial-sum fix. */
 
 // One colour per entity, reused for the row's dot and its segment in the
 // proportion bar so the two read as the same thing. Design tokens only.
@@ -29,52 +39,113 @@ const ROWS = 4;
 type PositieBlockProps = {
   accounts: Account[];
   onNavigate: (view: View) => void;
+  asOf: string;
+  fxHistory: Record<string, Record<string, number>>;
+  mode: ConversionMode;
 };
 
-export default function PositieBlock({ accounts, onNavigate }: PositieBlockProps) {
+export default function PositieBlock({
+  accounts,
+  onNavigate,
+  asOf,
+  fxHistory,
+  mode,
+}: PositieBlockProps) {
+  const [locale] = useAppLocale();
+  const c = moneyCopy[locale].positie;
   const rows = useMemo(() => {
+    const eurBalanceOf = (a: Account): number | null => {
+      if (a.balance === null) return null;
+      if (isEurCurrency(a.currency)) return a.balance;
+      return mode === "convert" ? toEur(a.balance, a.currency, asOf, fxHistory) : null;
+    };
     const entities = Array.from(new Set(accounts.map((a) => a.entity).filter((e) => e.length > 0)));
     return entities
       .map((entity, i) => {
         const entityAccounts = accounts.filter((a) => a.entity === entity);
-        const balance = entityAccounts.some((a) => a.balance === null)
-          ? null
-          : entityAccounts.reduce((s, a) => s + (a.balance as number), 0);
-        return { entity, color: entityColor(i), count: entityAccounts.length, balance };
+        // A genuinely missing balance always wins the label when it and a
+        // foreign-currency gap both exist on the same entity (mirrors
+        // SaldoBlock's excludedCurrencyKeys, which only counts accounts that
+        // DO have a balance) — so unpricedAccounts stays empty once
+        // missingBalance is already true.
+        const missingBalance = entityAccounts.some((a) => a.balance === null);
+        const unpricedAccounts = missingBalance
+          ? []
+          : entityAccounts.filter(
+              (a) => a.balance !== null && !isEurCurrency(a.currency) && eurBalanceOf(a) === null,
+            );
+        const pricedAccounts = entityAccounts.filter((a) => eurBalanceOf(a) !== null);
+        const balance =
+          missingBalance ||
+          pricedAccounts.length === 0 ||
+          (mode === "separate" && unpricedAccounts.length > 0)
+            ? null
+            : pricedAccounts.reduce((s, a) => s + (eurBalanceOf(a) as number), 0);
+        return {
+          entity,
+          color: entityColor(i),
+          count: entityAccounts.length,
+          balance,
+          missingBalance,
+          unpricedAccounts,
+          converted: entityAccounts.some(
+            (a) => !isEurCurrency(a.currency) && eurBalanceOf(a) !== null,
+          ),
+        };
       })
       .sort((a, b) => (b.balance ?? -Infinity) - (a.balance ?? -Infinity));
-  }, [accounts]);
+  }, [accounts, asOf, fxHistory, mode]);
 
-  const positiveTotal = rows.reduce((s, r) => s + (r.balance !== null && r.balance > 0 ? r.balance : 0), 0);
+  const positiveTotal = rows.reduce(
+    (s, r) => s + (r.balance !== null && r.balance > 0 ? r.balance : 0),
+    0,
+  );
   const shown = rows.slice(0, ROWS);
   const hidden = rows.length - shown.length;
-  const unknown = rows.filter((r) => r.balance === null).length;
+  // Two different facts, worded differently in the footer (mirrors
+  // SaldoBlock's currencyCount / noBalanceCount split): a company with no
+  // balance at all is not the same claim as one that still has an unpriced
+  // foreign-currency account.
+  const noBalanceCount = rows.filter((r) => r.missingBalance).length;
+  const currencyCount = rows.filter((r) => r.unpricedAccounts.length > 0).length;
+  // Named the same way SaldoBlock names its excludedCurrencyKeys, so "why is
+  // this smaller than the account list" has an answer instead of a bare count.
+  const currencyNames = rows
+    .flatMap((r) => r.unpricedAccounts)
+    .map((a) => a.bank || a.name || a.key)
+    .join(", ");
+  // Whether something WAS actually converted — separate from currencyCount,
+  // which counts what is still excluded. Only worth a line once, not per row.
+  const anyConverted = rows.some((r) => r.converted);
 
   return (
     <Module
       title="Positie"
       height="short"
-      menu={
-        <button type="button" className="card-link" onClick={() => onNavigate("accounts")}>
-          Rekeningen →
-        </button>
-      }
+      menu={<CardLink onClick={() => onNavigate("accounts")}>{c.rekeningenArrow}</CardLink>}
       footer={
         rows.length > 0 ? (
           <>
-            {hidden > 0 && `+${hidden} meer · `}
-            {unknown > 0
-              ? `${unknown} bedrijf${unknown === 1 ? "" : "ven"} zonder compleet saldo`
-              : "Alle saldo's bekend"}
+            {hidden > 0 && c.meerSuffix(hidden)}
+            {[
+              noBalanceCount > 0 && c.bedrijfZonderCompleetSaldo(noBalanceCount),
+              currencyCount > 0 &&
+                (mode === "convert"
+                  ? c.vreemdeValutaConvert(currencyCount, currencyNames)
+                  : c.vreemdeValutaSeparate(currencyCount, currencyNames)),
+              anyConverted && c.omgerekendViaEcb,
+            ]
+              .filter(Boolean)
+              .join(" · ") || c.alleSaldosBekend}
           </>
         ) : undefined
       }
     >
       {rows.length === 0 ? (
-        <p className="block-empty">Nog geen rekeningen met een entiteit — importeer eerst een bestand.</p>
+        <p className="block-empty">{c.geenRekeningenMetEntiteit}</p>
       ) : (
         <>
-          <div className="proportion-bar" role="img" aria-label="Verhouding van positieve posities per bedrijf">
+          <div className="proportion-bar" role="img" aria-label={c.verhoudingAria}>
             {rows
               .filter((r) => r.balance !== null && r.balance > 0)
               .map((r) => (
@@ -88,17 +159,23 @@ export default function PositieBlock({ accounts, onNavigate }: PositieBlockProps
               ))}
           </div>
 
-          <div className="entity-rows">
+          <div className="flex flex-col mt-3">
             {shown.map((r) => (
-              <div className="entity-row" key={r.entity}>
+              <div
+                className="flex items-center gap-2 py-2 px-0 border-b border-line last:border-b-0"
+                key={r.entity}
+              >
                 <span className="dot" style={{ background: r.color }} aria-hidden="true" />
-                <span className="entity-row-name" title={`${r.entity} · ${r.count} rek.`}>
+                <span
+                  className="flex-1 min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-[0.9rem]"
+                  title={`${r.entity} · ${r.count} rek.`}
+                >
                   {r.entity}
                 </span>
                 <span
-                  className={`entity-row-balance ${r.balance === null ? "" : r.balance >= 0 ? "text-pos" : "text-neg"}`}
+                  className={`flex-none font-semibold text-[0.9rem] tabular-nums ${r.balance === null ? "" : r.balance >= 0 ? "text-pos" : "text-neg"}`}
                 >
-                  {r.balance === null ? "onbekend" : formatEuro(r.balance)}
+                  {r.balance === null ? c.onbekend : formatSignedEuroIn(locale, r.balance)}
                 </span>
               </div>
             ))}

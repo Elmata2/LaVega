@@ -83,14 +83,14 @@ export type GlobeFrame = {
  *  Een punt van de ene kant naar de andere verplaatsen zou dus van vlak
  *  verwisselen. */
 export function wrapLon(lon: number): number {
-  return (((lon + 180) % 360) + 360) % 360 - 180;
+  return ((((lon + 180) % 360) + 360) % 360) - 180;
 }
 
 /** Een hoekverschil terug naar (−π, π]. Gebruikt om te meten hoe ver een pad in
  *  de projectie ronddraait; zonder dit springt een verschil van 1° over de
  *  −180/180-grens naar 359°. */
 function wrapAngle(d: number): number {
-  return (((d + Math.PI) % TAU) + TAU) % TAU - Math.PI;
+  return ((((d + Math.PI) % TAU) + TAU) % TAU) - Math.PI;
 }
 
 /** De breedtegraad wordt GEKLEMD en de lengtegraad omgeslagen, en dat verschil is

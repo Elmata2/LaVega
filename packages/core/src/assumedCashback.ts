@@ -45,9 +45,9 @@
 import { norm } from "./hash.js";
 import type { FactSource } from "./facts.js";
 
-/** Hoe hard het cijfer is. Dit woord staat ook LETTERLIJK op het scherm — zie
- *  `describeCashback` — want een lezer die "aangenomen" ziet staan kan de vraag
- *  stellen; een lezer die alleen "0%" ziet kan dat niet. */
+/** Hoe hard het cijfer is. Dit woord staat ook LETTERLIJK op het scherm, in de
+ *  taal van de lezer, want wie "aangenomen" ziet staan kan de vraag stellen en
+ *  wie alleen "0%" ziet kan dat niet. */
 export type CashbackTier = "gemeten" | "aangenomen" | "onbekend";
 
 /** Waarom er niets mag worden aangenomen. De reden hoort erbij: "dit is een
@@ -118,7 +118,12 @@ export type CashbackKnowledge = MeasuredCashback | AssumedNoCashback | UnknownCa
  *  onder het pakket hangt (SNS noemt zijn Basis een pakket, ASN noemt hetzelfde
  *  ding een bankrekening) — dezelfde reden waarom `FeeGroup` in accountCosts.ts
  *  die twee samenneemt. */
-export const ASSUMABLE_KINDS = ["betaalpas", "betaalrekening", "betaalpakket", "creditcard"] as const;
+export const ASSUMABLE_KINDS = [
+  "betaalpas",
+  "betaalrekening",
+  "betaalpakket",
+  "creditcard",
+] as const;
 export type AssumableKind = (typeof ASSUMABLE_KINDS)[number];
 
 /** Welke catalogussoorten bij dit soort EIGEN rekening horen — de brug tussen
@@ -208,7 +213,8 @@ export function mayAssumeNoCashback(
   const k = norm(kind);
   const blocked = BLOCKING_KINDS[k];
   if (blocked) return { ok: false, reason: blocked };
-  if (!(ASSUMABLE_KINDS as readonly string[]).includes(k)) return { ok: false, reason: "soort-onbekend" };
+  if (!(ASSUMABLE_KINDS as readonly string[]).includes(k))
+    return { ok: false, reason: "soort-onbekend" };
 
   const hay = `${issuer} ${productName}`;
   // De uitsluiting eerst. Zie REWARD_ISSUERS: anders wint de eerste regel op de
@@ -267,44 +273,12 @@ export function assumptionDueForReview(lastCheckedAt: string | null, asOf: strin
   // tijd.
   const [ly, lm] = lastCheckedAt.split("-").map(Number);
   const [ay, am] = asOf.split("-").map(Number);
-  if (!Number.isFinite(ly) || !Number.isFinite(lm) || !Number.isFinite(ay) || !Number.isFinite(am)) return true;
-  return (ay * 12 + am) - (ly * 12 + lm) >= ASSUMPTION_REVIEW_MONTHS;
+  if (!Number.isFinite(ly) || !Number.isFinite(lm) || !Number.isFinite(ay) || !Number.isFinite(am))
+    return true;
+  return ay * 12 + am - (ly * 12 + lm) >= ASSUMPTION_REVIEW_MONTHS;
 }
 
 /* ─────────────────────────────────────────────────────────────── de woorden */
-
-/** Waarom er niets is aangenomen, in één Nederlandse zin. Staat in core en niet
- *  in een view, om dezelfde reden als `describeNetBenefit`: er zijn twee schermen
- *  die over hetzelfde gat praten (Optimalisatie en het reisblok) en die mogen
- *  niet op een dag iets anders beweren. */
-export const NO_ASSUMPTION_NL: Record<NoAssumptionReason, string> = {
-  verkoopargument:
-    "Bij prepaid- en cryptokaarten is cashback juist het verkoopargument, dus daar mag LaVega geen nul aannemen.",
-  beloningsuitgever:
-    "Deze uitgever verkoopt zijn kaarten op wat je ermee verdient, dus wat je terugkrijgt verschilt per kaart en staat hier niet vast.",
-  "geen-betaalproduct":
-    "Bij dit soort rekening hoort geen kaart, dus er valt geen cashback op te geven.",
-  "uitgever-buiten-de-aanname":
-    "Deze aanbieder verkoopt betaalde niveaus met extraatjes, dus nul aannemen zou een gok zijn.",
-  "soort-onbekend":
-    "LaVega weet niet wat voor product dit is, en zonder dat is er niets om op te steunen.",
-};
-
-/** Het cijfer in woorden, met de hardheid ervoor. De aangenomen tak zegt
- *  LETTERLIJK "aangenomen" — dat is het hele punt van deze module: een lezer moet
- *  aan de zin kunnen zien dat er niemand is die dit heeft opgeschreven. */
-export function describeCashback(k: CashbackKnowledge): string {
-  if (k.tier === "gemeten") {
-    const p = k.pct.toLocaleString("nl-NL", { maximumFractionDigits: 2 });
-    return k.pct === 0
-      ? `gemeten: geen cashback — de voorwaarden van dit product noemen het uitdrukkelijk (peildatum ${k.asOf})`
-      : `gemeten: ${p}% (peildatum ${k.asOf})`;
-  }
-  if (k.tier === "aangenomen") {
-    return "aangenomen: geen cashback — niet gevonden in de voorwaarden van dit product";
-  }
-  return `onbekend — ${NO_ASSUMPTION_NL[k.reason]}`;
-}
 
 /* ─────────────────────────── wat we van een EIGEN kaart weten, en hoe hard ──
  *
@@ -372,19 +346,27 @@ export function cashbackPctOf(k: HeldCashback): number | null {
   return null;
 }
 
-/** Wat er over deze eigen kaart op het scherm hoort, in één Nederlandse zin.
+/** Wat er over deze eigen kaart op het scherm hoort, als FEIT in plaats van
+ *  een kant-en-klare Nederlandse zin. Dit bouwde de zin hier zelf, inclusief
+ *  een hardgecodeerde `toLocaleString("nl-NL")` — core mag geen taal kiezen
+ *  voor een scherm dat ook Engels moet kunnen zijn, dus de zin verhuist naar
+ *  de copy-module die bij dat scherm hoort en rendert via een exhaustive
+ *  switch op `kind`.
  *
- *  Naast `describeCashback` en niet erin: die gaat over een catalogusrij met een
- *  URL en een peildatum, deze over een kaart met een feit en een bron. Ze in één
- *  functie proppen zou betekenen dat beide vormen overal optioneel worden, en dan
- *  is het type niet langer wat het onderscheid bewaakt. */
-export function describeHeldCashback(k: HeldCashback): string {
+ *  Eén kind per vorm en niet één type met overal optionele velden: een
+ *  catalogusrij draagt een URL en een peildatum, een kaart een feit en een bron.
+ *  Samengevoegd bewaakt het type het onderscheid niet meer. */
+export type HeldCashbackDescription =
+  | { kind: "measured"; pct: number; source: FactSource; updatedAt: string }
+  | { kind: "assumption-off" }
+  | { kind: "assumed-no-cashback" }
+  | { kind: "unknown"; reason: NoAssumptionReason };
+
+export function describeHeldCashback(k: HeldCashback): HeldCashbackDescription {
   if (k.tier === "gemeten") {
-    const p = k.pct.toLocaleString("nl-NL", { maximumFractionDigits: 2 });
-    return `${p}%, ${k.source === "user" ? "door jou ingesteld" : "gevonden door de reisagent"} op ${k.updatedAt}`;
+    return { kind: "measured", pct: k.pct, source: k.source, updatedAt: k.updatedAt };
   }
-  if (k.tier === "uitgezet") {
-    return "onbekend — je hebt de aanname “geen cashback” uitgezet bij Profiel → Cashback corrigeren.";
-  }
-  return describeCashback(k);
+  if (k.tier === "uitgezet") return { kind: "assumption-off" };
+  if (k.tier === "aangenomen") return { kind: "assumed-no-cashback" };
+  return { kind: "unknown", reason: k.reason };
 }

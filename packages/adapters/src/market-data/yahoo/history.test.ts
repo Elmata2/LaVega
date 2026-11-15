@@ -1,0 +1,221 @@
+import { expect, test, vi } from "vitest";
+import { YahooHttpClient } from "./http.js";
+import { createImmediatePartnerBudget } from "../../partnerBudget/fakes.js";
+import { loadYahooPriceHistory, YahooNoListingError } from "./history.js";
+import { createYahooPriceProvider } from "./priceProvider.js";
+import { notFoundYahooFixture } from "./__fixtures__/not-found.js";
+
+type Chart = {
+  currency?: string;
+  closes?: number[];
+  splits?: Array<{ day: number; numerator: number; denominator: number }>;
+};
+
+function stubClient(
+  charts: Record<string, Chart>,
+  search: Record<string, string> = {},
+): { client: YahooHttpClient; charts: string[] } {
+  const requested: string[] = [];
+  const fetchFn = (async (input: RequestInfo | URL) => {
+    const url = String(input);
+    if (url === "https://fc.yahoo.com/")
+      return new Response("", { headers: { "set-cookie": "A=B; Path=/" } });
+    if (url.includes("getcrumb")) return new Response("crumb-value");
+    const json = (body: unknown) =>
+      new Response(JSON.stringify(body), { headers: { "content-type": "application/json" } });
+    if (url.includes("/v1/finance/search")) {
+      const query = new URL(url).searchParams.get("q")!;
+      return json({ quotes: search[query] ? [{ symbol: search[query] }] : [] });
+    }
+    const symbol = decodeURIComponent(url.slice(url.indexOf("/chart/") + 7, url.indexOf("?")));
+    requested.push(symbol);
+    const chart = charts[symbol];
+    if (!chart)
+      return new Response(notFoundYahooFixture.body, { status: notFoundYahooFixture.status });
+    return json({
+      chart: {
+        result: [
+          {
+            meta: { currency: chart.currency },
+            timestamp: (chart.closes ?? []).map((_, index) => index * 86400),
+            indicators: { quote: [{ close: chart.closes ?? [] }] },
+            events: {
+              splits: Object.fromEntries(
+                (chart.splits ?? []).map((split) => [
+                  String(split.day),
+                  {
+                    date: split.day * 86400,
+                    numerator: split.numerator,
+                    denominator: split.denominator,
+                  },
+                ]),
+              ),
+            },
+          },
+        ],
+      },
+    });
+  }) as typeof fetch;
+  return {
+    client: new YahooHttpClient(fetchFn, 20_000, 1, {
+      partnerBudget: createImmediatePartnerBudget(),
+    }),
+    charts: requested,
+  };
+}
+
+test("does not guess another venue when the encoded listing has no closes", async () => {
+  const { client, charts } = stubClient({
+    "BY6.DE": { currency: "EUR", closes: [] },
+    "BY6.VI": { currency: "EUR", closes: [10, 11] },
+  });
+
+  const history = await loadYahooPriceHistory({ ticker: "BY6d_EQ", exchange: "UNKNOWN", client });
+
+  expect(history).toMatchObject({ symbol: "BY6.DE", points: [] });
+  expect(charts).toEqual(["BY6.DE"]);
+});
+
+test("uses the Yahoo ISIN lookup result before the encoded venue", async () => {
+  const { client, charts } = stubClient(
+    { "NOVN.SW": { currency: "CHF", closes: [90] } },
+    { CH0012005267: "NOVN.SW" },
+  );
+
+  const history = await loadYahooPriceHistory({
+    ticker: "NOVCd_EQ",
+    exchange: "UNKNOWN",
+    isin: "CH0012005267",
+    client,
+  });
+
+  expect(history).toMatchObject({ symbol: "NOVN.SW", currency: "CHF" });
+  expect(charts).toEqual(["NOVN.SW"]);
+});
+
+test("reports the quote currency so pence listings are not read as pounds", async () => {
+  const { client } = stubClient({ "HLMA.L": { currency: "GBp", closes: [3555] } });
+
+  const history = await loadYahooPriceHistory({ ticker: "HLMAl_EQ", exchange: "UNKNOWN", client });
+
+  expect(history.currency).toBe("GBp");
+});
+
+test("returns an empty series rather than failing when no listing has closes", async () => {
+  const { client } = stubClient({ "SOF.BR": { currency: "EUR", closes: [] } });
+
+  const history = await loadYahooPriceHistory({ ticker: "SOF_BE_EQ", exchange: "UNKNOWN", client });
+
+  expect(history).toMatchObject({ symbol: "SOF.BR", points: [] });
+});
+
+test("records each split on the bar of the session it takes effect", async () => {
+  const { client } = stubClient({
+    IBKR: {
+      currency: "USD",
+      closes: [50, 51, 52],
+      splits: [{ day: 1, numerator: 4, denominator: 1 }],
+    },
+  });
+  const provider = createYahooPriceProvider({ client, today: () => "1970-01-03" });
+
+  const result = await provider.get({
+    ticker: "IBKR_US_EQ",
+    exchange: "UNKNOWN",
+    symbol: "IBKR_US_EQ",
+    currency: "USD",
+    from: "1970-01-01",
+  });
+
+  expect(result?.bars.map(({ date, split }) => ({ date, split }))).toEqual([
+    { date: "1970-01-01", split: 1 },
+    { date: "1970-01-02", split: 4 },
+    { date: "1970-01-03", split: 1 },
+  ]);
+});
+
+test("reports no-listing naming the primary symbol when every candidate is genuinely not found", async () => {
+  const { client, charts } = stubClient({});
+
+  const rejection = await loadYahooPriceHistory({
+    ticker: "SKX_US_EQ",
+    exchange: "",
+    client,
+  }).catch((error: unknown) => error);
+
+  expect(rejection).toBeInstanceOf(YahooNoListingError);
+  const error = rejection as YahooNoListingError;
+  expect(error.candidates[0]).toBe("SKX");
+  expect(error.candidates).toHaveLength(1);
+  expect(charts).toEqual(error.candidates);
+});
+
+test("stops candidate lookup after a server failure", async () => {
+  const requested: string[] = [];
+  const fetchFn = (async (input: RequestInfo | URL) => {
+    const url = String(input);
+    if (url === "https://fc.yahoo.com/")
+      return new Response("", { headers: { "set-cookie": "A=B; Path=/" } });
+    if (url.includes("getcrumb")) return new Response("crumb-value");
+    const symbol = decodeURIComponent(url.slice(url.indexOf("/chart/") + 7, url.indexOf("?")));
+    requested.push(symbol);
+    if (symbol === "SKX") return new Response("Internal Server Error", { status: 500 });
+    return new Response(notFoundYahooFixture.body, { status: notFoundYahooFixture.status });
+  }) as typeof fetch;
+  const client = new YahooHttpClient(fetchFn, 20_000, 1, {
+    partnerBudget: createImmediatePartnerBudget(),
+  });
+
+  const rejection = await loadYahooPriceHistory({
+    ticker: "SKX_US_EQ",
+    exchange: "",
+    client,
+  }).catch((error: unknown) => error);
+
+  expect(requested).toEqual(["SKX"]);
+  expect(rejection).toBeInstanceOf(Error);
+  expect((rejection as Error).message).toContain("[500]");
+});
+
+test.each(["[403] Forbidden", "[429] Too Many Requests", "Request timed out"])(
+  "stops candidate lookup after %s",
+  async (message) => {
+    const fetchJsonWithCrumb = vi.fn().mockRejectedValue(new Error(message));
+    await expect(
+      loadYahooPriceHistory({
+        ticker: "MASI_US_EQ",
+        exchange: "UNKNOWN",
+        client: { fetchJsonWithCrumb } as never,
+      }),
+    ).rejects.toThrow(message);
+    expect(fetchJsonWithCrumb).toHaveBeenCalledTimes(1);
+    expect(fetchJsonWithCrumb.mock.calls[0]?.[0]).toContain("/chart/MASI?");
+  },
+);
+
+test("uses the broker ticker when ISIN search returns no listing", async () => {
+  const { client, charts } = stubClient({ MASI: { currency: "USD", closes: [150] } });
+  const history = await loadYahooPriceHistory({
+    ticker: "MASI_US_EQ",
+    exchange: "UNKNOWN",
+    isin: "US5747951003",
+    client,
+  });
+  expect(history.symbol).toBe("MASI");
+  expect(charts).toEqual(["MASI"]);
+});
+
+test("permits an alternate venue returned by Yahoo ISIN lookup", async () => {
+  const { client, charts } = stubClient(
+    { "BY6.VI": { currency: "EUR", closes: [10, 11] } },
+    { CNE100000296: "BY6.VI" },
+  );
+  const history = await loadYahooPriceHistory({
+    ticker: "BY6d_EQ",
+    exchange: "UNKNOWN",
+    isin: "CNE100000296",
+    client,
+  });
+  expect(history.symbol).toBe("BY6.VI");
+  expect(charts).toEqual(["BY6.VI"]);
+});

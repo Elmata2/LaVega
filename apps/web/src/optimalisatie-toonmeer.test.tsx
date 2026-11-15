@@ -56,14 +56,28 @@ afterEach(() => {
   host = null;
 });
 
-const acc = (over: Partial<Account>): Account =>
-  ({ key: "k", iban: "", name: "Rekening", bank: "ING", entity: "BV1",
-     currency: "EUR", balance: 1000, ...over });
+const acc = (over: Partial<Account>): Account => ({
+  key: "k",
+  iban: "",
+  name: "Rekening",
+  bank: "ING",
+  entity: "BV1",
+  currency: "EUR",
+  balance: 1000,
+  ...over,
+});
 
-const spend = (key: string, month: number): Tx =>
-  ({ id: key + month, accountKey: key, date: `2025-${String(month).padStart(2, "0")}-15`,
-     amount: -2500, currency: "EUR", counterparty: "Albert Heijn", description: "",
-     category: "", manual: false });
+const spend = (key: string, month: number): Tx => ({
+  id: key + month,
+  accountKey: key,
+  date: `2025-${String(month).padStart(2, "0")}-15`,
+  amount: -2500,
+  currency: "EUR",
+  counterparty: "Albert Heijn",
+  description: "",
+  category: "",
+  manual: false,
+});
 
 const ACCOUNTS = [
   acc({ key: "ing", bank: "ING", balance: 20_000, interestRate: 1.5 }),
@@ -73,7 +87,9 @@ const ACCOUNTS = [
 /** Een gestelde markt, zodat de bedragen rekenwerk zijn op getallen die in dit
  *  bestand staan. Dezelfde vorm als in optimalisatie-cashback.test.tsx: één
  *  kaart van 2%, tegen zijn beste eigen 1,5%. */
-const offer = (over: Partial<CatalogueEntryLike> & { pct: number; kind?: string; conditions?: string }): CatalogueEntryLike => ({
+const offer = (
+  over: Partial<CatalogueEntryLike> & { pct: number; kind?: string; conditions?: string },
+): CatalogueEntryLike => ({
   id: over.id ?? "test-card",
   product: over.product ?? "Testkaart",
   issuer: over.issuer ?? "Testbank N.V.",
@@ -92,13 +108,22 @@ const offer = (over: Partial<CatalogueEntryLike> & { pct: number; kind?: string;
 
 /** Dezelfde kaart, nu met een PRIJS. De periode staat er expliciet in: een bedrag
  *  zonder eenheid stilzwijgend maandelijks noemen scheelt een factor twaalf. */
-const withFee = (entry: CatalogueEntryLike, value: number, period: "maand" | "jaar"): CatalogueEntryLike => ({
+const withFee = (
+  entry: CatalogueEntryLike,
+  value: number,
+  period: "maand" | "jaar",
+): CatalogueEntryLike => ({
   ...entry,
   fields: {
     ...entry.fields,
     accountFee: {
-      value, period, route: "provider-pdf", sourceUrl: "https://example.test/kosten",
-      checkedAt: "2026-08-01", conditions: null, conditionsKnown: true,
+      value,
+      period,
+      route: "provider-pdf",
+      sourceUrl: "https://example.test/kosten",
+      checkedAt: "2026-08-01",
+      conditions: null,
+      conditionsKnown: true,
     } as unknown as CatalogValue,
   },
 });
@@ -106,10 +131,22 @@ const withFee = (entry: CatalogueEntryLike, value: number, period: "maand" | "ja
 const CARD = offer({ pct: 2, kind: "creditcard" });
 
 const FACTS = [
-  makeFact({ agent: TRAVEL_AGENT, subject: "Trading 212 betaalpas", key: "cashbackPct",
-             value: "1.5", source: "agent", updatedAt: "2026-08-18" }),
-  makeFact({ agent: TRAVEL_AGENT, subject: "ING betaalpas", key: "cashbackPct",
-             value: "0", source: "agent", updatedAt: "2026-08-18" }),
+  makeFact({
+    agent: TRAVEL_AGENT,
+    subject: "Trading 212 betaalpas",
+    key: "cashbackPct",
+    value: "1.5",
+    source: "agent",
+    updatedAt: "2026-08-18",
+  }),
+  makeFact({
+    agent: TRAVEL_AGENT,
+    subject: "ING betaalpas",
+    key: "cashbackPct",
+    value: "0",
+    source: "agent",
+    updatedAt: "2026-08-18",
+  }),
 ];
 
 /** Monteren én de rentetabel laten landen. Dat tweede `act` is niet
@@ -117,7 +154,9 @@ const FACTS = [
  *  eenmaal state, en zonder deze macrotask valt die update buiten de test —
  *  React waarschuwt daar terecht voor, en de waarschuwing zou elke echte
  *  act-fout onder zich begraven. */
-async function mount(props: Partial<Parameters<typeof Optimalisatie>[0]> = {}): Promise<HTMLDivElement> {
+async function mount(
+  props: Partial<Parameters<typeof Optimalisatie>[0]> = {},
+): Promise<HTMLDivElement> {
   host = document.createElement("div");
   document.body.appendChild(host);
   const el = host;
@@ -156,7 +195,9 @@ function byTestId(el: HTMLElement, id: string): HTMLElement {
  *  module. Zonder die filtering geeft `closest("details")` altijd null, omdat de
  *  bovenste treffer het scherm zelf is. */
 function node(el: HTMLElement, needle: string): HTMLElement {
-  const hits = [...el.querySelectorAll<HTMLElement>("*")].filter((n) => n.textContent?.includes(needle));
+  const hits = [...el.querySelectorAll<HTMLElement>("*")].filter((n) =>
+    n.textContent?.includes(needle),
+  );
   const leaves = hits.filter((n) => !hits.some((o) => o !== n && n.contains(o)));
   if (leaves.length === 0) throw new Error(`niet op het scherm: "${needle}"`);
   return leaves[0];
@@ -174,7 +215,10 @@ function staatVooraan(target: HTMLElement, wat: string) {
  *  waar niemand op klikt. */
 function opvouwbaar(target: HTMLElement, wat: string): string {
   const tekst = target.textContent ?? "";
-  expect(target.closest(".toonmeer-panel"), `"${wat}" staat niet in een toon-meer-paneel`).not.toBeNull();
+  expect(
+    target.closest(".toonmeer-panel"),
+    `"${wat}" staat niet in een toon-meer-paneel`,
+  ).not.toBeNull();
 
   const details = target.closest("details") as HTMLDetailsElement | null;
   expect(details, `"${wat}" heeft geen <details> om open te klikken`).not.toBeNull();
@@ -260,7 +304,10 @@ test("cashback: de drie beats, de basis en de peildatum zitten in de plooi en ga
 
   // Dicht is niet weg: alle vier de stukken staan er nog, in hetzelfde paneel.
   for (const id of ["cashback-nu", "cashback-beste", "cashback-basis", "cashback-kaarten"]) {
-    expect(byTestId(el, id).closest(".toonmeer-panel"), `${id} zit niet in de plooi`).not.toBeNull();
+    expect(
+      byTestId(el, id).closest(".toonmeer-panel"),
+      `${id} zit niet in de plooi`,
+    ).not.toBeNull();
   }
   expect(byTestId(el, "cashback-basis").textContent).toContain("334 dagen afschrift");
   expect(byTestId(el, "cashback-beste").textContent).toContain("peildatum");
@@ -280,8 +327,16 @@ test("cashback: de voorwaarden bij het tarief zitten in een eigen plooi, en het 
   // tekst mag opgevouwen maar het bestaan van de voorwaarde niet. Het label van
   // de plooi is daarom zelf de waarschuwing.
   const el = await mount({
-    entries: [offer({ id: "cc", product: "Obsidian", issuer: "Crypto.com", kind: "prepaid", pct: 5,
-                      conditions: "TIER GATE: staking van CRO vereist." })],
+    entries: [
+      offer({
+        id: "cc",
+        product: "Obsidian",
+        issuer: "Crypto.com",
+        kind: "prepaid",
+        pct: 5,
+        conditions: "TIER GATE: staking van CRO vereist.",
+      }),
+    ],
   });
   const tekst = node(el, "TIER GATE");
   const label = opvouwbaar(tekst, "de voorwaarden bij het tarief");
@@ -347,7 +402,16 @@ test("cashback: is er niets te onderbouwen, dan is er ook geen plooi die dat bel
  *  van het pakket erin herkent LaVega het tarief; zonder die naam niet, en juist
  *  dan moet zichtbaar zijn wat er wél bekend is. */
 const ING = (name: string): Account[] => [
-  { key: "B1", iban: "NL01INGB", name, bank: "ING", entity: "Prive", currency: "EUR", balance: 1000, type: "Betaalrekening" },
+  {
+    key: "B1",
+    iban: "NL01INGB",
+    name,
+    bank: "ING",
+    entity: "Prive",
+    currency: "EUR",
+    balance: 1000,
+    type: "Betaalrekening",
+  },
 ];
 
 test("kosten: wat het je per jaar kost om te houden wat je hebt, staat vooraan", async () => {
@@ -361,8 +425,18 @@ test("kosten: staat er van geen enkele rekening een tarief vast, dan is die weig
   // Een bank die de catalogus niet kent. Dan is er geen totaal, en dat is de
   // uitkomst — geen nul, en niets om weg te vouwen.
   const el = await mount({
-    accounts: [{ key: "X1", iban: "", name: "Rekening", bank: "Bank Zonder Documenten", entity: "Prive",
-                 currency: "EUR", balance: 100, type: "Betaalrekening" }],
+    accounts: [
+      {
+        key: "X1",
+        iban: "",
+        name: "Rekening",
+        bank: "Bank Zonder Documenten",
+        entity: "Prive",
+        currency: "EUR",
+        balance: 100,
+        type: "Betaalrekening",
+      },
+    ],
     entries: undefined,
     txs: [],
   });

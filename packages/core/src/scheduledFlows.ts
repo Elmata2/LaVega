@@ -22,7 +22,11 @@ const TAX_SOURCES = new Set<ScheduledFlow["source"]>(["vat", "prepayment"]);
  *  `fresh` flows. Invoice/manual flows and other entities' tax flows are
  *  preserved. Because ids are content-hashed (see makeScheduledFlow),
  *  recomputing an unchanged period yields the same flow rather than a duplicate. */
-export function rebuildTaxFlows(existing: ScheduledFlow[], entities: string[], fresh: ScheduledFlow[]): ScheduledFlow[] {
+export function rebuildTaxFlows(
+  existing: ScheduledFlow[],
+  entities: string[],
+  fresh: ScheduledFlow[],
+): ScheduledFlow[] {
   const shown = new Set(entities);
   const kept = existing.filter((f) => !(TAX_SOURCES.has(f.source) && shown.has(f.entity)));
   return [...kept, ...fresh];
@@ -38,6 +42,12 @@ export const rebuildVatFlows = rebuildTaxFlows;
  *  exists to prevent. */
 export function reservedCents(flows: ScheduledFlow[], _asOf: string): number {
   return flows
-    .filter((f) => TAX_SOURCES.has(f.source) && f.sign === -1 && f.status !== "paid" && f.status !== "cancelled")
+    .filter(
+      (f) =>
+        TAX_SOURCES.has(f.source) &&
+        f.sign === -1 &&
+        f.status !== "paid" &&
+        f.status !== "cancelled",
+    )
     .reduce((s, f) => s + f.amountCents, 0);
 }

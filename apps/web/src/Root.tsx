@@ -1,7 +1,22 @@
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import App from "./App";
 import Landing from "./views/Landing";
-import { APP_BASE, isAppPathname, normalizeAppLocation } from "./appRoutes";
+import { APP_BASE, authLinkFailed, isAppPathname, normalizeAppLocation } from "./appRoutes";
+import { localeForPath, type Locale } from "./locale";
+import { useAuthState } from "./authClient";
+import posthog from "./posthog";
+import { applyTheme, currentTheme } from "./lib/theme";
+
+/** The landing page is midnight in every theme (its CSS has its own palette).
+ *  Forces it while mounted and puts the stored theme back on unmount. A layout
+ *  effect, so the correction lands before the browser paints. */
+function MidnightScope({ children }: { children: ReactNode }) {
+  useLayoutEffect(() => {
+    applyTheme("midnight");
+    return () => applyTheme(currentTheme());
+  }, []);
+  return children;
+}
 
 /** Public landing at `/`. Vault app at `/app` and `/app/<view>`. Legacy
  *  `/#app` and `/?eb=…` normalise into `/app` so Enable Banking still lands. */
@@ -13,8 +28,37 @@ function routeFor(): "app" | "landing" {
 
 export default function Root() {
   const [route, setRoute] = useState<"app" | "landing">(routeFor);
+  /* The landing page exists in Dutch at `/` and English at `/en`. The vault app
+   * has no locale of its own — it is Dutch throughout — so this only ever
+   * changes what the public page reads. */
+  const [locale, setLocale] = useState<Locale>(() => localeForPath(window.location.pathname));
+  /* The client-side session gate. It is the only layer that sees every way
+   * into `/app` — `#app`, `?eb=…`, a pushState from the landing page, a
+   * direct load — because a hash never reaches the server and the Vercel
+   * edge gate (scripts/vercel-build.mjs) only checks cookie presence, not
+   * validity. */
+  const { state: authState } = useAuthState();
+  const identifiedUserId = useRef<string | null>(null);
+
+  /* The root session gate is the one place that sees both a freshly returned
+   * Better Auth session and every later page refresh. Keep identity here so
+   * event and error reporting inherit it without each call site re-identifying. */
   useEffect(() => {
-    const onChange = () => setRoute(routeFor());
+    if (authState.kind !== "signed-in" || identifiedUserId.current === authState.id) return;
+    if (identifiedUserId.current !== null) posthog.reset();
+    /* The account id is what analytics groups by; the e-mail is not sent. It is
+     * personal data with no analytical value here, and a hash of it would still
+     * be a stable cross-dataset identifier — so it is dropped rather than
+     * hashed, and posthog.ts's allowlist never carries it. */
+    posthog.identify(authState.id);
+    identifiedUserId.current = authState.id;
+  }, [authState]);
+
+  useEffect(() => {
+    const onChange = () => {
+      setRoute(routeFor());
+      setLocale(localeForPath(window.location.pathname));
+    };
     window.addEventListener("popstate", onChange);
     window.addEventListener("hashchange", onChange);
     return () => {
@@ -23,13 +67,42 @@ export default function Root() {
     };
   }, []);
 
-  if (route === "app") return <App />;
+  /* theme-init.js applies mono only on /app paths, so a legacy entry (`/#app`,
+   * `/?eb=…`) that normalises into /app after load has not been themed yet.
+   * Apply the stored theme whenever the vault is shown (not for a signed-out
+   * /app, which renders the landing page). */
+  const appShown =
+    route === "app" && (authState.kind === "unconfigured" || authState.kind === "signed-in");
+  useLayoutEffect(() => {
+    if (appShown) applyTheme(currentTheme());
+  }, [appShown]);
+
+  if (route === "app") {
+    // The first get-session answer has not arrived yet: render nothing
+    // rather than flash the landing page or the vault, same idiom as
+    // Profiel.tsx's own indeterminate-first-paint check.
+    if (authState.kind === "loading") return null;
+    // Self-hosted Docker/Railway with no DATABASE_URL/BETTER_AUTH_SECRET has
+    // no accounts at all — LaVega is local-first, so this MUST still mount
+    // the app or every self-hoster is locked out of their own vault.
+    if (authState.kind === "unconfigured") return <App owner={{ kind: "device" }} />;
+    if (authState.kind === "signed-in")
+      return <App key={authState.id} owner={{ kind: "account", id: authState.id }} />;
+    // Signed out: fall through to the landing page below. Any `?eb=` params
+    // normalizeAppLocation already captured stay in appRoutes' module-level
+    // handoff untouched — not consumed here — so a sign-in on the landing
+    // page still lets App pick them up once it mounts.
+  }
   return (
-    <Landing
-      onEnter={() => {
-        window.history.pushState({}, "", APP_BASE);
-        setRoute("app");
-      }}
-    />
+    <MidnightScope>
+      <Landing
+        locale={locale}
+        linkError={authLinkFailed()}
+        onEnter={() => {
+          window.history.pushState({}, "", APP_BASE);
+          setRoute("app");
+        }}
+      />
+    </MidnightScope>
   );
 }

@@ -12,7 +12,18 @@ export const DEFAULT_PORT = 8787;
 
 const PLACEHOLDER = "VUL-IN";
 const DEFAULT_REDIRECT_URL = `http://localhost:${DEFAULT_PORT}/api/eb/callback`;
-const DEFAULT_PSU_TYPE = "business";
+export type PsuType = "business" | "personal";
+const DEFAULT_PSU_TYPE: PsuType = "business";
+
+/** EB_PSU_TYPE is the default for callers that do not choose; the bank picker
+ *  sends one explicitly. A misspelt value falls back to the default with a
+ *  warning instead of reaching Enable Banking as garbage. */
+function psuTypeSetting(raw: string | undefined): PsuType {
+  if (raw === undefined || raw === "") return DEFAULT_PSU_TYPE;
+  if (raw === "business" || raw === "personal") return raw;
+  console.warn(`EB_PSU_TYPE "${raw}" is not business or personal; using ${DEFAULT_PSU_TYPE}`);
+  return DEFAULT_PSU_TYPE;
+}
 
 export interface EbConfig {
   configured: boolean;
@@ -22,7 +33,30 @@ export interface EbConfig {
   /** Path to a PEM file (config.json / EB_PRIVATE_KEY_FILE), if provided. */
   privateKeyFile: string | null;
   redirectUrl: string;
-  psuType: string;
+  psuType: PsuType;
+  /** Where the signing key comes from; "missing" means every EB call will fail. */
+  keySource: "env" | "env-not-pem" | "file" | "missing";
+  /** What the pasted EB_PRIVATE_KEY looks like, never its content: enough to
+   *  tell an operator what went wrong with the paste. */
+  keyShape: KeyShape;
+}
+
+export type KeyShape = {
+  kind: "pem" | "base64-pem" | "base64-body" | "path" | "other" | "none";
+  length: number;
+};
+
+function shapeOf(value: string | null): KeyShape {
+  if (!value) return { kind: "none", length: 0 };
+  const v = value.trim();
+  const length = v.length;
+  if (v.includes("-----BEGIN")) return { kind: "pem", length };
+  if (/\.pem$|^[./~]/.test(v) && !v.includes(" ") && length < 200) return { kind: "path", length };
+  if (/^[A-Za-z0-9+/=\s\\n]+$/.test(v)) {
+    const decoded = Buffer.from(v.replace(/\\n/g, ""), "base64").toString("utf8");
+    return { kind: decoded.includes("-----BEGIN") ? "base64-pem" : "base64-body", length };
+  }
+  return { kind: "other", length };
 }
 
 interface RawEbConfig {
@@ -50,20 +84,66 @@ function readJSON<T>(filePath: string, fallback: T): T {
  * Env: EB_APPLICATION_ID, EB_PRIVATE_KEY (inline PEM — literal `\n` is
  * un-escaped), EB_PRIVATE_KEY_FILE, EB_REDIRECT_URL, EB_PSU_TYPE.
  */
+/** The PEM as an operator may have pasted it into a dashboard: with literal
+ *  `\n` for line breaks, or base64-encoded as a whole file. Anything without a
+ *  `-----BEGIN` line after that is not a key we can sign with. */
+function pemFromSetting(value: string): string | null {
+  const unescaped = value.replace(/\\n/g, "\n").trim();
+  if (unescaped.includes("-----BEGIN")) return unescaped;
+  try {
+    const decoded = Buffer.from(unescaped, "base64").toString("utf8");
+    if (decoded.includes("-----BEGIN")) return decoded.trim();
+  } catch {
+    /* not base64 */
+  }
+  return wrapBareKeyBody(unescaped);
+}
+
+// The rsaEncryption OID that a PKCS#8 envelope carries right after its
+// version integer; a PKCS#1 body has the modulus integer there instead.
+const RSA_OID = Buffer.from("06092a864886f70d010101", "hex");
+
+/** A key pasted as only the base64 between the header lines (the most common
+ *  dashboard mistake) is wrapped in the envelope its DER bytes call for. */
+function wrapBareKeyBody(value: string): string | null {
+  const body = value.replace(/\s+/g, "");
+  if (!/^[A-Za-z0-9+/]+=*$/.test(body) || body.length < 200) return null;
+  const der = Buffer.from(body, "base64");
+  if (der.length < 64 || der[0] !== 0x30) return null;
+  const label = der.subarray(0, 32).includes(RSA_OID) ? "PRIVATE KEY" : "RSA PRIVATE KEY";
+  const lines = body.match(/.{1,64}/g) ?? [];
+  return `-----BEGIN ${label}-----\n${lines.join("\n")}\n-----END ${label}-----`;
+}
+
 export function loadConfig(configPath: string = DEFAULT_CONFIG_PATH): EbConfig {
   const raw = readJSON<RawEbConfig | null>(configPath, null);
   const applicationId = process.env.EB_APPLICATION_ID ?? raw?.applicationId ?? null;
-  const configured =
-    typeof applicationId === "string" && applicationId.length > 0 && !applicationId.includes(PLACEHOLDER);
-  const envKey = process.env.EB_PRIVATE_KEY;
-  const privateKey = envKey ? envKey.replace(/\\n/g, "\n") : (raw?.privateKey ?? null);
+  const hasApplicationId =
+    typeof applicationId === "string" &&
+    applicationId.length > 0 &&
+    !applicationId.includes(PLACEHOLDER);
+  const envKey = process.env.EB_PRIVATE_KEY || raw?.privateKey || null;
+  const privateKey = envKey ? pemFromSetting(envKey) : null;
+  const privateKeyFile = process.env.EB_PRIVATE_KEY_FILE ?? raw?.privateKeyFile ?? null;
+  const keySource = privateKey
+    ? "env"
+    : envKey
+      ? "env-not-pem"
+      : privateKeyFile
+        ? "file"
+        : "missing";
+  // An application id without a key is not configured: every call would fail
+  // at signing, and /api/eb/status must not claim otherwise (it did, once).
+  const configured = hasApplicationId && (keySource === "env" || keySource === "file");
   return {
     configured,
-    applicationId: configured ? (applicationId as string) : null,
+    keySource,
+    keyShape: shapeOf(envKey),
+    applicationId: hasApplicationId ? (applicationId as string) : null,
     privateKey,
-    privateKeyFile: process.env.EB_PRIVATE_KEY_FILE ?? raw?.privateKeyFile ?? null,
+    privateKeyFile,
     redirectUrl: process.env.EB_REDIRECT_URL ?? raw?.redirectUrl ?? DEFAULT_REDIRECT_URL,
-    psuType: process.env.EB_PSU_TYPE ?? raw?.psuType ?? DEFAULT_PSU_TYPE,
+    psuType: psuTypeSetting(process.env.EB_PSU_TYPE ?? raw?.psuType),
   };
 }
 
@@ -74,12 +154,12 @@ export function maskApplicationId(applicationId: string | null): string | null {
 }
 
 /**
- * Load the Anthropic LLM config (server-only; the API key never reaches the
- * client). `configured` is true only when ANTHROPIC_API_KEY is a non-empty
+ * Load the Mistral LLM config (server-only; the API key never reaches the
+ * client). `configured` is true only when MISTRAL_API_KEY is a non-empty
  * string.
  */
 export function loadLlmConfig(): { configured: boolean; apiKey: string | null } {
-  const apiKey = process.env.ANTHROPIC_API_KEY ?? null;
+  const apiKey = process.env.MISTRAL_API_KEY ?? null;
   return { configured: typeof apiKey === "string" && apiKey.length > 0, apiKey };
 }
 
@@ -89,4 +169,41 @@ export function loadLlmConfig(): { configured: boolean; apiKey: string | null } 
 export function loadIngestConfig(): { configured: boolean; token: string | null } {
   const token = process.env.CARD_TERMS_INGEST_TOKEN ?? null;
   return { configured: typeof token === "string" && token.length >= 16, token };
+}
+
+/** Shared credential for the invoice-queue webhook (n8n's "Geef de rij en leeg
+ *  hem" node) — server-only now; the browser used to hold this in the vault
+ *  (see docs/adr/0006-invoice-queue-server-proxy.md). `configured` is false
+ *  until both the URL and the token are set, same shape as loadIngestConfig
+ *  so the route answers a clean 503 rather than proxying to an empty URL. */
+export function loadN8nQueueConfig(): {
+  configured: boolean;
+  url: string | null;
+  token: string | null;
+} {
+  const url = process.env.N8N_QUEUE_URL?.trim() || null;
+  const token = process.env.N8N_QUEUE_TOKEN?.trim() || null;
+  return { configured: Boolean(url) && Boolean(token), url, token };
+}
+
+const DEFAULT_DAY_BUDGET_CENTS = 400;
+const DEFAULT_MONTH_BUDGET_CENTS = 2000;
+
+function budgetCentsSetting(raw: string | undefined, fallback: number): number {
+  // 0 means 0: an explicit zero is a hard off switch for AI spend, not an
+  // invalid value to fall back from. Only a missing, empty, negative or
+  // non-numeric setting takes the default — anything else would silently
+  // grant a budget to someone who asked for none.
+  if (raw === undefined || raw.trim() === "") return fallback;
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
+}
+
+/** Daily/monthly caps on AI spend, in euro cents. A missing env var is the
+ *  expected default case (same spirit as psuTypeSetting), so this never warns. */
+export function loadBudgetConfig(): { dayCents: number; monthCents: number } {
+  return {
+    dayCents: budgetCentsSetting(process.env.AI_DAILY_BUDGET_CENTS, DEFAULT_DAY_BUDGET_CENTS),
+    monthCents: budgetCentsSetting(process.env.AI_MONTHLY_BUDGET_CENTS, DEFAULT_MONTH_BUDGET_CENTS),
+  };
 }

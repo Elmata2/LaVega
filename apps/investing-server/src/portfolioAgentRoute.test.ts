@@ -1,64 +1,218 @@
+import { simulateReadableStream } from "ai";
+import { MockLanguageModelV4 } from "ai/test";
 import { expect, test, vi } from "vitest";
-import { createInMemoryPriceStore } from "@lavega/adapters";
-import { createRuntimeApp, type RuntimeApp } from "./index.js";
+import { createInMemorySharedPriceStore } from "@lavega/adapters";
+import { createRuntimeApp } from "./index.js";
 import type { AgentRunRecord, AgentRunStore } from "./fileAgentRunStore.js";
 
-function memoryAgentRunStore() {
-  let record: AgentRunRecord | null = null;
+const run = { judgments: [], model: "jev-test", snapshotHash: "snapshot" };
+function agentRunStore(): AgentRunStore {
+  let current: AgentRunRecord | null = null;
   return {
-    async get() {
-      return record;
+    get: async () => current,
+    start: async (record) => {
+      current = record;
+      return true;
     },
-    async put(next: AgentRunRecord) {
-      record = next;
+    finish: async (record) => {
+      current = record;
+      return true;
     },
-  } satisfies AgentRunStore;
+  };
 }
 
-async function appWith(runAgent: (options: { prompt: string }) => Promise<string>) {
-  const agentRunStore = memoryAgentRunStore();
-  const runtimeApp: RuntimeApp = await createRuntimeApp({ priceStore: createInMemoryPriceStore(), agentRunStore, runAgent });
-  return { runtimeApp, agentRunStore };
-}
-
-const post = async (runtimeApp: RuntimeApp) => runtimeApp.request("http://localhost/api/agents/portfolio/run", { method: "POST" });
-
-test("the portfolio agent route returns the model summary and persists a done run", async () => {
-  const runAgent = vi.fn(async () => "Portfolio is healthy.");
-  const { runtimeApp, agentRunStore } = await appWith(runAgent);
-
-  const response = await post(runtimeApp);
-  expect(response.status).toBe(200);
-  expect(await response.json()).toEqual({ summary: "Portfolio is healthy." });
-  expect(runAgent).toHaveBeenCalledOnce();
-  expect(await agentRunStore.get()).toMatchObject({ status: "done", summary: "Portfolio is healthy.", error: null });
-});
-
-test("a failed agent run returns 502 and persists the error", async () => {
-  const { runtimeApp, agentRunStore } = await appWith(vi.fn(async () => {
-    throw new Error("model unavailable");
-  }));
-
-  const response = await post(runtimeApp);
-  expect(response.status).toBe(502);
-  expect(await response.json()).toEqual({ problems: ["model unavailable"] });
-  expect(await agentRunStore.get()).toMatchObject({ status: "error", error: "model unavailable" });
-});
-
-test("concurrent runs share a single in-flight agent execution", async () => {
-  let release!: () => void;
-  const gate = new Promise<void>((resolve) => (release = resolve));
-  const runAgent = vi.fn(async () => {
-    await gate;
-    return "done";
+test("portfolio route returns aggregate typed judgments", async () => {
+  const runAgent = vi.fn(async () => run);
+  const app = await createRuntimeApp({
+    priceStore: createInMemorySharedPriceStore(),
+    runAgent,
+    agentRunStore: agentRunStore(),
   });
-  const { runtimeApp } = await appWith(runAgent);
-
-  const pending = [post(runtimeApp), post(runtimeApp)];
-  await new Promise((resolve) => setTimeout(resolve, 10));
-  release();
-  const [first, second] = await Promise.all(pending);
-
-  expect([first.status, second.status]).toEqual([200, 200]);
+  const response = await app.request("http://localhost/api/agents/portfolio/run", {
+    method: "POST",
+  });
+  expect(response.status).toBe(200);
+  expect(await response.json()).toEqual({ result: run });
   expect(runAgent).toHaveBeenCalledOnce();
+});
+
+test("portfolio catalog does not expose judgment instructions", async () => {
+  const app = await createRuntimeApp({
+    priceStore: createInMemorySharedPriceStore(),
+    runAgent: async () => run,
+    agentRunStore: agentRunStore(),
+  });
+  const response = await app.request("http://localhost/api/agents/portfolio");
+  const body = (await response.json()) as { agents: Array<Record<string, unknown>> };
+  expect(body.agents).toHaveLength(6);
+  expect(body.agents[0]).not.toHaveProperty("instructions");
+  expect(body.agents[0]).not.toHaveProperty("criteria");
+});
+
+test("provider error returns 502", async () => {
+  const app = await createRuntimeApp({
+    priceStore: createInMemorySharedPriceStore(),
+    runAgent: async () => {
+      throw new Error("provider unavailable");
+    },
+    agentRunStore: agentRunStore(),
+  });
+  const response = await app.request("http://localhost/api/agents/portfolio/run", {
+    method: "POST",
+  });
+  expect(response.status).toBe(502);
+  expect(await response.json()).toEqual({ problems: ["provider unavailable"] });
+});
+
+test("start storage failure returns 502 without model work", async () => {
+  const runAgent = vi.fn(async () => run);
+  const app = await createRuntimeApp({
+    priceStore: createInMemorySharedPriceStore(),
+    runAgent,
+    agentRunStore: {
+      ...agentRunStore(),
+      start: async () => {
+        throw new Error("disk full");
+      },
+    },
+  });
+  const response = await app.request("http://localhost/api/agents/portfolio/run", {
+    method: "POST",
+  });
+  expect(response.status).toBe(502);
+  expect(await response.json()).toEqual({ problems: ["Agent run storage failed to start"] });
+  expect(runAgent).not.toHaveBeenCalled();
+});
+
+function streamingModel(text: string) {
+  return new MockLanguageModelV4({
+    doStream: async () => ({
+      stream: simulateReadableStream({
+        chunks: [
+          { type: "text-start", id: "text-1" },
+          { type: "text-delta", id: "text-1", delta: text },
+          { type: "text-end", id: "text-1" },
+          {
+            type: "finish",
+            finishReason: { unified: "stop", raw: undefined },
+            usage: {
+              inputTokens: { total: 10, noCache: 10, cacheRead: undefined, cacheWrite: undefined },
+              outputTokens: { total: 5, text: 5, reasoning: undefined },
+            },
+          },
+        ],
+      }),
+    }),
+  });
+}
+
+function conversation(
+  app: { request: (url: string, init: RequestInit) => Response | Promise<Response> },
+  body: unknown,
+) {
+  return app.request("http://localhost/api/agents/portfolio/conversation", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+test("conversation streams one persona's answer without running the six-persona judgment", async () => {
+  const runAgent = vi.fn(async () => run);
+  const chatModel = streamingModel("ASML is your largest position.");
+  const app = await createRuntimeApp({
+    priceStore: createInMemorySharedPriceStore(),
+    runAgent,
+    chatModel,
+    agentRunStore: agentRunStore(),
+  });
+
+  const response = await conversation(app, {
+    agentId: "charlie_munger",
+    messages: [
+      {
+        id: "a1",
+        role: "assistant",
+        parts: [{ type: "text", text: "Ask me about your positions." }],
+      },
+      { id: "u1", role: "user", parts: [{ type: "text", text: "Why is ASML my largest risk?" }] },
+    ],
+  });
+
+  expect(response.status).toBe(200);
+  expect(response.headers.get("content-type")).toContain("text/event-stream");
+  expect(await response.text()).toContain("ASML is your largest position.");
+  expect(runAgent).not.toHaveBeenCalled();
+  const prompt = JSON.stringify(chatModel.doStreamCalls[0]?.prompt);
+  expect(prompt).toContain("You are Charlie Munger");
+  expect(prompt).toContain("Portfolio brief");
+  expect(prompt).toContain("Why is ASML my largest risk?");
+});
+
+test("conversation rejects an unknown persona or a missing user message", async () => {
+  const app = await createRuntimeApp({
+    priceStore: createInMemorySharedPriceStore(),
+    chatModel: streamingModel("unused"),
+    agentRunStore: agentRunStore(),
+  });
+
+  expect((await conversation(app, { agentId: "nobody", messages: [] })).status).toBe(400);
+  expect((await conversation(app, { agentId: "warren_buffett", messages: [] })).status).toBe(400);
+});
+
+test("a tagged agent answers in its own persona with the thread labelled by speaker", async () => {
+  const chatModel = streamingModel("Price matters more than I hear from you.");
+  const app = await createRuntimeApp({
+    priceStore: createInMemorySharedPriceStore(),
+    chatModel,
+    agentRunStore: agentRunStore(),
+  });
+
+  const response = await conversation(app, {
+    agentId: "charlie_munger",
+    messages: [
+      { id: "u1", role: "user", parts: [{ type: "text", text: "Is ASML too pricey?" }] },
+      {
+        id: "a1",
+        role: "assistant",
+        metadata: { agentId: "charlie_munger" },
+        parts: [{ type: "text", text: "Invert it first." }],
+      },
+      {
+        id: "u2",
+        role: "user",
+        parts: [{ type: "text", text: "@Warren Buffett what do you think?" }],
+      },
+    ],
+  });
+
+  expect(await response.text()).toContain('"messageMetadata":{"agentId":"warren_buffett"}');
+  const prompt = JSON.stringify(chatModel.doStreamCalls[0]?.prompt);
+  expect(prompt).toContain("You are Warren Buffett");
+  expect(prompt).not.toContain("You are Charlie Munger");
+  expect(prompt).toContain("tagged into the owner's conversation with Charlie Munger");
+  expect(prompt).toContain("[Charlie Munger]: Invert it first.");
+});
+
+test("a turn that tags nobody keeps the host's persona and an unlabelled thread", async () => {
+  const chatModel = streamingModel("Fine.");
+  const app = await createRuntimeApp({
+    priceStore: createInMemorySharedPriceStore(),
+    chatModel,
+    agentRunStore: agentRunStore(),
+  });
+
+  const response = await conversation(app, {
+    agentId: "charlie_munger",
+    messages: [
+      { id: "a1", role: "assistant", parts: [{ type: "text", text: "Ask me." }] },
+      { id: "u1", role: "user", parts: [{ type: "text", text: "mail a@buffett.com" }] },
+    ],
+  });
+  await response.text();
+
+  const prompt = JSON.stringify(chatModel.doStreamCalls[0]?.prompt);
+  expect(prompt).toContain("You are Charlie Munger");
+  expect(prompt).not.toContain("tagged into");
+  expect(prompt).not.toContain("[Charlie Munger]:");
 });

@@ -1,4 +1,8 @@
-import { useState, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from "react";
+import {
+  useState,
+  type MouseEvent as ReactMouseEvent,
+  type PointerEvent as ReactPointerEvent,
+} from "react";
 import type { CategorySlice } from "./blocks/statistics.js";
 
 /* SpendPie — what a period's spending is made of.
@@ -36,27 +40,17 @@ import type { CategorySlice } from "./blocks/statistics.js";
  * arrives somewhere (charts.css, [data-open]).
  */
 
-/** Eight tokens, then grey. Chosen to stay distinguishable in both themes and to
- *  avoid green/red, which mean income and expense everywhere else in this app —
- *  a green slice in a spending chart would read as money coming in. */
-const SLICE_COLORS = [
-  "#4c6ef5",
-  "#7950f2",
-  "#e8590c",
-  "#0c8599",
-  "#f08c00",
-  "#c2255c",
-  "#2b8a3e",
-  "#495057",
-];
+/** Eight theme tokens (--slice-1..8 in tokens.css), then grey. Per theme so the
+ *  slices stay distinguishable on both dark and white panels. */
+const SLICE_COUNT = 8;
 
 export function sliceColor(i: number): string {
-  return SLICE_COLORS[i] ?? "#adb5bd";
+  return i < SLICE_COUNT ? `var(--slice-${i + 1})` : "var(--slice-rest)";
 }
 
-/** Alpha suffix for the arcs that are NOT being read. The ring sits on the card,
- *  so a translucent stop blends into the card's own colour. */
-const DIMMED = "33";
+/** The arcs that are NOT being read. The ring sits on the card, so a translucent
+ *  stop blends into the card's own colour. */
+const dimmed = (colour: string) => `color-mix(in srgb, ${colour} 20%, transparent)`;
 
 /** How much of the ring's radius the hole takes up — .spend-pie-hole is 108 of
  *  the 168px ring, so the hole ends at 64% of the radius. Kept slightly under
@@ -92,13 +86,27 @@ export type SpendPieProps = {
   totalCents: number;
   /** How the caller formats euros — passed in so this file holds no locale. */
   euro: (cents: number) => string;
+  /** How the caller renders a category for DISPLAY — passed in so this file
+   *  holds no locale, same as `euro`. `onSelect` still receives the raw
+   *  category; this only touches what is shown. */
+  label?: (category: string) => string;
   /** Slices beyond this are summed into "Overig", so the ring stays readable and
    *  the legend stays short. */
   maxSlices?: number;
   onSelect?: (category: string) => void;
 };
 
-export default function SpendPie({ slices, totalCents, euro, maxSlices = 8, onSelect }: SpendPieProps) {
+/** Width of the --bg gap between arcs, in percent of the ring. */
+const SLICE_GAP = 0.6;
+
+export default function SpendPie({
+  slices,
+  totalCents,
+  euro,
+  label = (c) => c,
+  maxSlices = 8,
+  onSelect,
+}: SpendPieProps) {
   // Which slice is being asked about — by hover, by focus, or by a tap on the
   // ring. null means nobody asked, and then the hole shows the total.
   const [active, setActive] = useState<number | null>(null);
@@ -122,18 +130,36 @@ export default function SpendPie({ slices, totalCents, euro, maxSlices = 8, onSe
   const reading = active !== null ? (shown[active] ?? null) : null;
 
   // Build the gradient as cumulative stops. Rounding each boundary to two
-  // decimals keeps the string short without a visible seam.
-  let at = 0;
-  const stops = shown.map((s, i) => {
-    const from = at;
-    at += s.share * 100;
-    const to = i === shown.length - 1 ? 100 : Math.round(at * 100) / 100;
-    const colour = reading === null || i === active ? sliceColor(i) : `${sliceColor(i)}${DIMMED}`;
-    return `${colour} ${Math.round(from * 100) / 100}% ${to}%`;
+  // decimals keeps the string short without a visible seam. Between arcs sits a
+  // --bg gap of SLICE_GAP percent of the ring: about 2.6px at the mid radius of
+  // the 168px ring and about 2px on the 132px ring (wider toward the outer
+  // edge). In the black-and-white theme the slice greys alone cannot tell
+  // neighbours apart, so the gap is what draws the edge. One slice is a whole
+  // ring and needs none. Each slice gives up at most a quarter of its own arc
+  // per side, so a tiny slice stays a visible sliver instead of vanishing.
+  const r2 = (n: number) => Math.round(n * 100) / 100;
+  const half = (share: number) => (shown.length > 1 ? Math.min(SLICE_GAP / 2, share * 25) : 0);
+  const stops: string[] = [];
+  if (shown.length > 1) stops.push(`var(--bg) 0% ${r2(half(shown[0].share))}%`);
+  shown.forEach((s, i) => {
+    const from = shown.slice(0, i).reduce((sum, slice) => sum + slice.share * 100, 0);
+    const last = i === shown.length - 1;
+    const to = last ? 100 : r2(from + s.share * 100);
+    const h = half(s.share);
+    const colour = reading === null || i === active ? sliceColor(i) : dimmed(sliceColor(i));
+    stops.push(`${colour} ${r2(from + h)}% ${r2(to - h)}%`);
+    if (shown.length > 1) {
+      const next = last ? 0 : half(shown[i + 1].share);
+      stops.push(`var(--bg) ${r2(to - h)}% ${last ? 100 : r2(to + next)}%`);
+    }
   });
 
   /** Which arc a pointer event landed on, or null for the hole and the corners. */
-  function arcAt(e: { currentTarget: HTMLDivElement; clientX: number; clientY: number }): number | null {
+  function arcAt(e: {
+    currentTarget: HTMLDivElement;
+    clientX: number;
+    clientY: number;
+  }): number | null {
     const rect = e.currentTarget.getBoundingClientRect();
     if (rect.width === 0 || rect.height === 0) return null;
     return sliceAtPoint(
@@ -166,12 +192,14 @@ export default function SpendPie({ slices, totalCents, euro, maxSlices = 8, onSe
   const canOpen = onSelect !== undefined && reading !== null && reading.category !== "Overig";
 
   return (
-    <div className="spend-pie">
+    <div className="spend-pie flex flex-wrap items-center gap-6 pt-1 pb-2 [@media(max-width:560px)]:gap-4">
       <div
-        className="spend-pie-ring"
+        className="spend-pie-ring flex-none w-[168px] h-[168px] [@media(max-width:560px)]:w-[132px] [@media(max-width:560px)]:h-[132px] rounded-full grid place-items-center cursor-default data-[open=yes]:cursor-pointer"
         style={{ background: `conic-gradient(${stops.join(", ")})` }}
         role="img"
-        aria-label={shown.map((s) => `${s.category} ${Math.round(s.share * 100)}%`).join(", ")}
+        aria-label={shown
+          .map((s) => `${label(s.category)} ${Math.round(s.share * 100)}%`)
+          .join(", ")}
         data-active={active === null ? "none" : String(active)}
         data-open={canOpen ? "yes" : "no"}
         onPointerMove={pickArc}
@@ -183,27 +211,33 @@ export default function SpendPie({ slices, totalCents, euro, maxSlices = 8, onSe
             or a row is being read — what THAT slice cost and how much of the
             period it is. A bare euro amount in the middle of a ring would
             otherwise be read as the total it is sitting in. */}
-        <div className="spend-pie-hole">
+        <div className="spend-pie-hole w-[108px] h-[108px] [@media(max-width:560px)]:w-[86px] [@media(max-width:560px)]:h-[86px] rounded-full bg-surface grid place-items-center content-center gap-px text-center leading-[1.15]">
           {reading ? (
             <>
-              <div className="spend-pie-slice">{reading.category}</div>
-              <div className="spend-pie-total">{euro(reading.cents)}</div>
+              <div className="spend-pie-slice font-mono text-[0.6rem] tracking-[0.03em] uppercase text-muted max-w-[92%] whitespace-normal [overflow-wrap:anywhere]">
+                {label(reading.category)}
+              </div>
+              <div className="spend-pie-total font-[650] text-[1rem] tabular-nums">
+                {euro(reading.cents)}
+              </div>
               {/* "van totaal" and not "van de uitgaven": the phrase has to fit
                   on one line inside a 108px hole, and the caption it replaces
                   already said "uitgaven" one state ago. */}
-              <div className="spend-pie-caption spend-pie-share-of">
+              <div className="spend-pie-caption spend-pie-share-of text-[0.62rem] leading-[1.15] max-w-[92%] whitespace-nowrap opacity-60">
                 {Math.round(reading.share * 100)}% van totaal
               </div>
             </>
           ) : (
             <>
-              <div className="spend-pie-total">{euro(totalCents)}</div>
-              <div className="spend-pie-caption">uitgaven</div>
+              <div className="spend-pie-total font-[650] text-[1rem] tabular-nums">
+                {euro(totalCents)}
+              </div>
+              <div className="spend-pie-caption text-[0.72rem] opacity-60">uitgaven</div>
             </>
           )}
         </div>
       </div>
-      <ul className="spend-pie-legend">
+      <ul className="spend-pie-legend m-0 p-0 list-none grid gap-[0.15rem] min-w-0 [flex:1_1_14rem]">
         {shown.map((s, i) => {
           // "Overig" is several categories, so there is nothing to filter to; it
           // is still a button, because reading it — and lighting up its arc —
@@ -215,7 +249,7 @@ export default function SpendPie({ slices, totalCents, euro, maxSlices = 8, onSe
                   impossible to hit on the ring itself. */}
               <button
                 type="button"
-                className="spend-pie-item"
+                className="spend-pie-item grid grid-cols-[0.75rem_1fr_auto_2.6rem] items-center gap-2 w-full [padding:0.2rem_0.25rem] border-0 rounded-[6px] [background:none] [font:inherit] text-inherit text-left data-[filter=yes]:cursor-pointer hover:bg-surface-2 focus-visible:bg-surface-2 data-[active=on]:bg-surface-2 focus-visible:outline-2 focus-visible:outline-[var(--ink)] focus-visible:outline-offset-[-2px]"
                 data-filter={filters ? "yes" : "no"}
                 data-active={active === i ? "on" : "off"}
                 onClick={filters ? () => onSelect?.(s.category) : undefined}
@@ -226,10 +260,23 @@ export default function SpendPie({ slices, totalCents, euro, maxSlices = 8, onSe
                 onFocus={() => setActive(i)}
                 onBlur={() => setActive((a) => (a === i ? null : a))}
               >
-                <span className="spend-pie-swatch" style={{ background: sliceColor(i) }} aria-hidden="true" />
-                <span className="spend-pie-name">{s.category}</span>
-                <span className="spend-pie-value">{euro(s.cents)}</span>
-                <span className="spend-pie-share">{Math.round(s.share * 100)}%</span>
+                <span
+                  className="spend-pie-swatch w-[0.7rem] h-[0.7rem] rounded-[3px]"
+                  style={{ background: sliceColor(i) }}
+                  aria-hidden="true"
+                />
+                {/* spend-pie-item / spend-pie-name stay as class hooks: the
+                    un-clip on hover/focus/tap is a PARENT-state → CHILD-style
+                    rule (charts.css), which no utility variant can express
+                    without the same descendant selector underneath — see
+                    charts.css for why it stays hand-written. */}
+                <span className="spend-pie-name overflow-hidden text-ellipsis whitespace-nowrap min-w-0">
+                  {label(s.category)}
+                </span>
+                <span className="spend-pie-value tabular-nums text-right">{euro(s.cents)}</span>
+                <span className="spend-pie-share tabular-nums text-right opacity-60">
+                  {Math.round(s.share * 100)}%
+                </span>
               </button>
             </li>
           );

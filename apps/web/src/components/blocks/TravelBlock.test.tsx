@@ -5,13 +5,21 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, expect, test } from "vitest";
 import type { Account, CatalogValue, LearnedFact } from "@lavega/core";
 import { makeFact, planTravel, TRAVEL_AGENT } from "@lavega/core";
-import TravelBlock, { termsState, type TravelBlockProps, figureAge, TermsNotice, ROUTES_HEADING } from "./TravelBlock";
+import TravelBlock, {
+  termsState,
+  type TravelBlockProps,
+  figureAge,
+  TermsNotice,
+  payHeadlineSentence,
+} from "./TravelBlock";
 // De klassenamen van de uitklap uit hun eigen bestand, niet overgetikt: een
 // hernoeming daar komt dan ook hier langs in plaats van deze test stil te laten
 // slagen op een klasse die niet meer bestaat.
 import { TOONMEER_CLASS } from "../ToonMeer";
+import { moduleClass } from "../../module-grid.js";
+import { optimiseCopy } from "../../copy/optimise.js";
 import type { CatalogueEntryLike } from "@lavega/core";
-import { formatEuro } from "../../format";
+import { formatEuro, formatSignedEuroIn } from "../../format";
 import { accounts, ASOF, txs } from "./fixtures";
 
 /* The travel plan itself is covered by @lavega/core's travel tests; this pins
@@ -26,15 +34,19 @@ const props: TravelBlockProps = {
   facts: [],
   asOf: ASOF,
   homeCountry: "NL",
+  homeCountryChosen: true,
   busy: false,
   aiAvailable: false,
-  onRefreshTerms: () => {}, onRecheckAi: () => {},
+  onRefreshTerms: () => {},
+  onRecheckAi: () => {},
   onCorrectFact: () => {},
+  onNavigate: () => {},
 };
 
 test("TravelBlock renders as a module and asks for a destination first", () => {
   const html = renderToStaticMarkup(<TravelBlock {...props} />);
-  expect(html).toContain('class="module module-span-3 module-tall"');
+  // The exact class string is pinned once, in module-grid.ts / .test.ts.
+  expect(html).toContain(`class="${moduleClass({ span: 3, height: "tall" })}"`);
   // Named after the question he asks, not after the software that answers it
   // (review 3, item 4). The Module puts the title in its aria-label too.
   expect(html).toContain("Travel");
@@ -45,14 +57,42 @@ test("TravelBlock renders as a module and asks for a destination first", () => {
   expect(html).not.toContain("travel-terms");
 });
 
+test("a never-chosen home country says results assume the Netherlands", () => {
+  const c = optimiseCopy.nl.travel;
+  const chosen = renderToStaticMarkup(<TravelBlock {...props} homeCountryChosen={true} />);
+  expect(chosen).not.toContain(c.controls.homeAssumedNote);
+
+  const assumed = renderToStaticMarkup(<TravelBlock {...props} homeCountryChosen={false} />);
+  expect(assumed).toContain(c.controls.homeAssumedNote);
+  expect(assumed).toContain(c.controls.homeAssumedChange);
+});
+
 /* --- The block with a destination. Needs a real DOM because the destination,
  * the fold and the corrections are all interactions. --- */
 
 // The same shape as core's journey fixtures: two banks, so "move it first" is a
 // route that actually exists.
 const travelAccounts: Account[] = [
-  { key: "ing", iban: "NL01INGB0001", name: "Zakelijk", bank: "ING", entity: "Holding BV", currency: "EUR", balance: 4_000, type: "Betaalrekening" },
-  { key: "rev", iban: "LT01REVO0001", name: "Reisgeld", bank: "Revolut", entity: "Privé", currency: "EUR", balance: 100, type: "Betaalrekening" },
+  {
+    key: "ing",
+    iban: "NL01INGB0001",
+    name: "Zakelijk",
+    bank: "ING",
+    entity: "Holding BV",
+    currency: "EUR",
+    balance: 4_000,
+    type: "Betaalrekening",
+  },
+  {
+    key: "rev",
+    iban: "LT01REVO0001",
+    name: "Reisgeld",
+    bank: "Revolut",
+    entity: "Privé",
+    currency: "EUR",
+    balance: 100,
+    type: "Betaalrekening",
+  },
 ];
 
 const fact = (subject: string, key: string, value: string): LearnedFact =>
@@ -82,7 +122,8 @@ afterEach(() => {
 });
 
 function setNativeValue(el: HTMLInputElement | HTMLSelectElement, value: string) {
-  const proto = el instanceof HTMLSelectElement ? HTMLSelectElement.prototype : HTMLInputElement.prototype;
+  const proto =
+    el instanceof HTMLSelectElement ? HTMLSelectElement.prototype : HTMLInputElement.prototype;
   Object.getOwnPropertyDescriptor(proto, "value")!.set!.call(el, value);
   el.dispatchEvent(new Event("input", { bubbles: true }));
   el.dispatchEvent(new Event("change", { bubbles: true }));
@@ -98,7 +139,9 @@ function click(el: Element) {
  *  than returning undefined, so a renamed label breaks the test that relies on
  *  it instead of silently passing. */
 function byText(selector: string, text: string): HTMLElement {
-  const hit = [...container!.querySelectorAll(selector)].find((n) => (n.textContent ?? "").includes(text));
+  const hit = [...container!.querySelectorAll(selector)].find((n) =>
+    (n.textContent ?? "").includes(text),
+  );
   if (!hit) throw new Error(`no ${selector} containing "${text}"`);
   return hit as HTMLElement;
 }
@@ -141,7 +184,13 @@ function renderWithDestination(overrides: Partial<TravelBlockProps> = {}) {
   root = createRoot(container);
   act(() => {
     root!.render(
-      <TravelBlock {...props} accounts={travelAccounts} facts={travelFacts} txs={[]} {...overrides} />,
+      <TravelBlock
+        {...props}
+        accounts={travelAccounts}
+        facts={travelFacts}
+        txs={[]}
+        {...overrides}
+      />,
     );
   });
   const select = container.querySelector("select")!;
@@ -154,16 +203,39 @@ function renderWithDestination(overrides: Partial<TravelBlockProps> = {}) {
 function rerender(overrides: Partial<TravelBlockProps> = {}) {
   act(() => {
     root!.render(
-      <TravelBlock {...props} accounts={travelAccounts} facts={travelFacts} txs={[]} {...overrides} />,
+      <TravelBlock
+        {...props}
+        accounts={travelAccounts}
+        facts={travelFacts}
+        txs={[]}
+        {...overrides}
+      />,
     );
   });
 }
 
+test("the assumed-NL note's link navigates to the profile, where the country is set", () => {
+  const seen: string[] = [];
+  renderWithDestination({ homeCountryChosen: false, onNavigate: (v) => seen.push(v) });
+  click(byText("button", optimiseCopy.nl.travel.controls.homeAssumedChange));
+  expect(seen).toEqual(["profiel"]);
+});
+
 test("the block leads with the plan's headline — the one answer, in euros", () => {
   const c = renderWithDestination();
-  const expected = planTravel({
-    accounts: travelAccounts, txs: [], rates: [], facts: travelFacts, destination: "US", asOf: ASOF,
-  }).headline;
+  const expected = payHeadlineSentence(
+    planTravel({
+      accounts: travelAccounts,
+      txs: [],
+      rates: [],
+      facts: travelFacts,
+      destination: "US",
+      asOf: ASOF,
+    }).headline,
+    optimiseCopy.nl.travel,
+    "nl",
+    optimiseCopy.nl.travel.railFor("NL"),
+  );
 
   const answer = c.querySelector(".travel-winner-name")!;
   expect(answer.textContent).toBe(expected);
@@ -174,24 +246,37 @@ test("the block leads with the plan's headline — the one answer, in euros", ()
   // in het paneel van de uitklap, en die is dicht. Ze staan wél in de DOM — zo
   // werkt <details> — dus getoetst wordt de stand en de plaats, niet afwezigheid.
   expect(fold(c).open).toBe(false);
-  expect(c.querySelector(".travel-winner .travel-journeys")).toBeNull();
+  expect(c.querySelector('.travel-winner [data-testid="travel-journeys"]')).toBeNull();
   expect(foldText(c)).toContain("Bewaren");
   expect(c.querySelector(".travel-winner")!.textContent).not.toContain("Bewaren");
+});
+
+test("an NL home country names iDEAL as the free transfer rail", () => {
+  const nl = renderWithDestination({ homeCountry: "NL", homeCountryChosen: true });
+  expect(nl.textContent).toContain("iDEAL");
+});
+
+test("a DE home country never says iDEAL — it gets its own rail", () => {
+  const de = renderWithDestination({ homeCountry: "DE", homeCountryChosen: true });
+  expect(de.textContent).not.toContain("iDEAL");
+  expect(de.textContent).toContain("SEPA instant");
 });
 
 test("de uitklap toont de gerangschikte routes, elk met hun drie stappen", () => {
   const c = renderWithDestination();
   openFold();
 
-  const journeys = [...c.querySelectorAll(".travel-journey")];
+  const journeys = [...c.querySelectorAll('[data-testid="travel-journey"]')];
   expect(journeys.length).toBeGreaterThan(1);
 
   // Cheapest first, and the winner is the one the headline named.
-  expect(journeys[0].classList.contains("travel-journey-best")).toBe(true);
+  expect(journeys[0].getAttribute("data-best")).toBe("true");
   expect(journeys[0].textContent).toContain("Via Revolut betaalpas");
   expect(journeys[0].textContent).toContain("vanaf ING");
 
-  const legs = [...journeys[0].querySelectorAll(".travel-leg-name")].map((n) => n.textContent ?? "");
+  const legs = [...journeys[0].querySelectorAll('[data-testid="travel-leg-name"]')].map(
+    (n) => n.textContent ?? "",
+  );
   expect(legs[0]).toContain("Overzetten");
   expect(legs[1]).toContain("Wisselen");
   expect(legs[2]).toContain("Betalen");
@@ -210,18 +295,18 @@ test("a route with an unknown leg says so and never renders as free", () => {
   const c = renderWithDestination();
   openFold();
 
-  const unknown = c.querySelector(".travel-journey-unknown");
+  const unknown = c.querySelector('[data-testid="travel-journey"][data-unknown="true"]');
   expect(unknown).not.toBeNull();
   // ING's conversion leg was never learned, so the whole route is unpriced.
   expect(unknown!.textContent).toContain("Via ING betaalpas");
 
-  const total = unknown!.querySelector(".travel-journey-cost")!.textContent ?? "";
+  const total = unknown!.querySelector('[data-testid="travel-journey-cost"]')!.textContent ?? "";
   expect(total).toBe("onbekend");
   expect(total).not.toMatch(/[0-9]/); // not "€ 0,00", not any number
   expect(unknown!.textContent).toContain("Onbekend is niet gratis");
 
   // ...and it sorts behind the known winner.
-  const all = [...c.querySelectorAll(".travel-journey")];
+  const all = [...c.querySelectorAll('[data-testid="travel-journey"]')];
   expect(all.indexOf(unknown as Element)).toBeGreaterThan(0);
 });
 
@@ -248,10 +333,24 @@ test("convertFeePct is correctable inline and fires the same callback shape as f
 
   const today = new Date().toISOString().slice(0, 10);
   expect(convert).toEqual(
-    makeFact({ agent: TRAVEL_AGENT, subject: "Revolut betaalpas", key: "convertFeePct", value: "1.5", source: "user", updatedAt: today }),
+    makeFact({
+      agent: TRAVEL_AGENT,
+      subject: "Revolut betaalpas",
+      key: "convertFeePct",
+      value: "1.5",
+      source: "user",
+      updatedAt: today,
+    }),
   );
   expect(fx).toEqual(
-    makeFact({ agent: TRAVEL_AGENT, subject: "ING betaalpas", key: "fxFeePct", value: "2", source: "user", updatedAt: today }),
+    makeFact({
+      agent: TRAVEL_AGENT,
+      subject: "ING betaalpas",
+      key: "fxFeePct",
+      value: "2",
+      source: "user",
+      updatedAt: today,
+    }),
   );
   // Same shape, same learning rule: only agent/subject/key/value differ.
   expect(Object.keys(convert).sort()).toEqual(Object.keys(fx).sort());
@@ -262,7 +361,7 @@ test("convertFeePct is correctable inline and fires the same callback shape as f
 /* --- L1: never advise an action that cannot work. -------------------------
  *
  * The reported bug was "clicking a destination says 'ververs eerst de
- * voorwaarden'" while the server had no ANTHROPIC_API_KEY, so the refresh it
+ * voorwaarden'" while the server had no MISTRAL_API_KEY, so the refresh it
  * asked for answered 503. The block receives `aiAvailable`; these pin that it
  * now uses it, and that the three no-price situations read as three. --- */
 
@@ -271,7 +370,12 @@ const noFacts: LearnedFact[] = [];
 
 test("termsState separates a missing key, a lookup never run, and a lookup that found nothing", () => {
   const plan = planTravel({
-    accounts: travelAccounts, txs: [], rates: [], facts: noFacts, destination: "US", asOf: ASOF,
+    accounts: travelAccounts,
+    txs: [],
+    rates: [],
+    facts: noFacts,
+    destination: "US",
+    asOf: ASOF,
   });
   expect(plan.journeys.some((j) => j.known)).toBe(false); // the situation under test
 
@@ -282,7 +386,12 @@ test("termsState separates a missing key, a lookup never run, and a lookup that 
 
   // A priced plan is "known", and it still reports which cards are missing.
   const priced = planTravel({
-    accounts: travelAccounts, txs: [], rates: [], facts: travelFacts, destination: "US", asOf: ASOF,
+    accounts: travelAccounts,
+    txs: [],
+    rates: [],
+    facts: travelFacts,
+    destination: "US",
+    asOf: ASOF,
   });
   const known = termsState(priced, true, false);
   expect(known.kind).toBe("known");
@@ -290,7 +399,12 @@ test("termsState separates a missing key, a lookup never run, and a lookup that 
 
   // Euro destinations need no terms at all, key or no key.
   const euro = planTravel({
-    accounts: travelAccounts, txs: [], rates: [], facts: noFacts, destination: "ES", asOf: ASOF,
+    accounts: travelAccounts,
+    txs: [],
+    rates: [],
+    facts: noFacts,
+    destination: "ES",
+    asOf: ASOF,
   });
   expect(termsState(euro, false, false).kind).toBe("euro");
 });
@@ -299,7 +413,7 @@ test("with no API key the block names the key, not a refresh that cannot work", 
   const c = renderWithDestination({ facts: noFacts, aiAvailable: false });
 
   expect(c.textContent).toContain("deze server heeft geen AI-sleutel");
-  expect(c.textContent).toContain("ANTHROPIC_API_KEY");
+  expect(c.textContent).toContain("MISTRAL_API_KEY");
   // The exact advice that cost him an afternoon.
   expect(c.textContent).not.toContain("ververs eerst de voorwaarden");
   // And no button offering it, anywhere in the block.
@@ -318,13 +432,15 @@ test("never looked up says exactly that, and puts the lookup one click away", ()
 
   const button = byText("button", "Zoek voorwaarden");
   expect(button.textContent).toContain("(2)"); // both cards, counted
-  expect(button.className).toContain("btn-primary");
+  expect(button.dataset.testid).toBe("btn-primary");
 });
 
 test("a lookup that came back empty is not the same sentence as one never run", () => {
   const asked: string[] = [];
   const c = renderWithDestination({
-    facts: noFacts, aiAvailable: true, onRefreshTerms: (d: string) => asked.push(d),
+    facts: noFacts,
+    aiAvailable: true,
+    onRefreshTerms: (d: string) => asked.push(d),
   });
   expect(c.textContent).toContain("nog nooit opgezocht");
 
@@ -346,8 +462,8 @@ test("a lookup that came back empty is not the same sentence as one never run", 
 
 test("an unpriced answer card is not marked as a winning route", () => {
   const c = renderWithDestination({ facts: noFacts, aiAvailable: true });
-  expect(c.querySelector(".travel-winner-unpriced")).not.toBeNull();
-  expect(c.querySelector(".travel-journey-best")).toBeNull();
+  expect(c.querySelector('.travel-winner[data-priced="false"]')).not.toBeNull();
+  expect(c.querySelector('[data-testid="travel-journey"][data-best="true"]')).toBeNull();
 
   // ...and the "Wisselen" step does not repeat the impossible advice either.
   openFold();
@@ -443,7 +559,14 @@ test("the no-key state offers a way to re-check, because the key check runs once
 });
 
 test("'still looking' is not the same claim as 'nothing came back'", () => {
-  const plan = planTravel({ accounts, txs: [], rates: [], facts: [], destination: "US", asOf: ASOF });
+  const plan = planTravel({
+    accounts,
+    txs: [],
+    rates: [],
+    facts: [],
+    destination: "US",
+    asOf: ASOF,
+  });
 
   // The server said it is working on ING. Reporting that as a failed search told
   // the owner his lookup had come back empty while a banner two lines up said it
@@ -456,7 +579,15 @@ test("'still looking' is not the same claim as 'nothing came back'", () => {
   expect(termsState(plan, true, true, []).kind).toBe("searched-empty");
 
   const html = renderToStaticMarkup(
-    <TermsNotice state={busy} busy={false} aiAvailable={true} termsAsked={0} termsGaveUp={false} onSearch={() => {}} onRecheckAi={() => {}} />,
+    <TermsNotice
+      state={busy}
+      busy={false}
+      aiAvailable={true}
+      termsAsked={0}
+      termsGaveUp={false}
+      onSearch={() => {}}
+      onRecheckAi={() => {}}
+    />,
   );
   expect(html).toContain("zoekt de voorwaarden op");
   expect(html).not.toContain("geen bruikbaar tarief");
@@ -478,7 +609,7 @@ test("while the server is looking, the block SHOWS it working and counts up", ()
     />,
   );
 
-  expect(html).toContain("spinner");
+  expect(html).toContain('data-testid="spinner"');
   expect(html).toContain("2 van 4 gevonden"); // 4 asked, 2 still pending
   expect(html).toContain("werkt zichzelf bij");
   expect(html).toContain('aria-live="polite"'); // it changes under him; say so
@@ -507,56 +638,94 @@ test("when the lookups run out of time it says so, rather than spinning forever"
 
 const CATALOGUE: CatalogueEntryLike[] = [
   {
-    id: "ing-betaalpas", product: "ING betaalpas", issuer: "ING Bank N.V.", kind: "betaalpas",
+    id: "ing-betaalpas",
+    product: "ING betaalpas",
+    issuer: "ING Bank N.V.",
+    kind: "betaalpas",
     fields: {
       fxFeePct: {
-        value: 1.4, route: "agent", sourceUrl: "https://assets.ing.com/kosten.pdf", checkedAt: "2026-06-15",
+        value: 1.4,
+        route: "agent",
+        sourceUrl: "https://assets.ing.com/kosten.pdf",
+        checkedAt: "2026-06-15",
         conditionsKnown: true,
-        conditions: "Geldt bij betalen in vreemde valuta; bij geldopname in vreemde valuta geldt een apart tarief (€ 3,50 + 1,40%).",
+        conditions:
+          "Geldt bij betalen in vreemde valuta; bij geldopname in vreemde valuta geldt een apart tarief (€ 3,50 + 1,40%).",
       },
     },
   },
   {
-    id: "revolut-standard-betaalpas", product: "Revolut Standard betaalpas",
-    issuer: "Revolut Bank UAB", kind: "betaalpas",
+    id: "revolut-standard-betaalpas",
+    product: "Revolut Standard betaalpas",
+    issuer: "Revolut Bank UAB",
+    kind: "betaalpas",
     fields: {
       fxFeePct: {
-        value: 1, route: "provider-page", sourceUrl: "https://revolut.com/fees", checkedAt: "2026-08-01",
-        conditionsKnown: true, conditions: "1% opslag op het Standard-plan.",
+        value: 1,
+        route: "provider-page",
+        sourceUrl: "https://revolut.com/fees",
+        checkedAt: "2026-08-01",
+        conditionsKnown: true,
+        conditions: "1% opslag op het Standard-plan.",
       },
     },
   },
   {
-    id: "212-card", product: "212 Card", issuer: "Paynetics; Trading 212 Markets Ltd", kind: "betaalpas",
+    id: "212-card",
+    product: "212 Card",
+    issuer: "Paynetics; Trading 212 Markets Ltd",
+    kind: "betaalpas",
     fields: {
       fxFeePct: {
-        value: 0, route: "provider-page", sourceUrl: "https://trading212.com/card", checkedAt: "2026-08-01",
-        conditionsKnown: true, conditions: "Geen wisselkoersopslag op kaartbetalingen in vreemde valuta.",
+        value: 0,
+        route: "provider-page",
+        sourceUrl: "https://trading212.com/card",
+        checkedAt: "2026-08-01",
+        conditionsKnown: true,
+        conditions: "Geen wisselkoersopslag op kaartbetalingen in vreemde valuta.",
       },
     },
   },
   {
     // The one shape that proves a FREE foreign-currency withdrawal, in words.
-    id: "n26-go-betaalpas", product: "N26 Go betaalpas", issuer: "N26 Bank AG (Germany)", kind: "betaalpas",
+    id: "n26-go-betaalpas",
+    product: "N26 Go betaalpas",
+    issuer: "N26 Bank AG (Germany)",
+    kind: "betaalpas",
     fields: {
       fxFeePct: {
-        value: 0, route: "agent", sourceUrl: "https://docs.n26.com/pricelist.pdf", checkedAt: "2026-06-26",
+        value: 0,
+        route: "agent",
+        sourceUrl: "https://docs.n26.com/pricelist.pdf",
+        checkedAt: "2026-06-26",
         conditionsKnown: true,
-        conditions: "The 0 is written as 'Free'. Go ALSO gets foreign-currency ATM withdrawals free: 'For, N26 Go, N26 Business Go, N26 Metal Free'.",
+        conditions:
+          "The 0 is written as 'Free'. Go ALSO gets foreign-currency ATM withdrawals free: 'For, N26 Go, N26 Business Go, N26 Metal Free'.",
       },
     },
   },
   {
-    id: "wirex-card-wirex-one", product: "Wirex Card (Wirex One)", issuer: "Wirex", kind: "betaalpas",
+    id: "wirex-card-wirex-one",
+    product: "Wirex Card (Wirex One)",
+    issuer: "Wirex",
+    kind: "betaalpas",
     fields: {
       fxFeePct: {
-        value: 1.5, route: "provider-page", sourceUrl: "https://wirex.com/fees", checkedAt: "2026-08-01",
-        conditionsKnown: true, conditions: "1,5% opslag buiten de euro.",
+        value: 1.5,
+        route: "provider-page",
+        sourceUrl: "https://wirex.com/fees",
+        checkedAt: "2026-08-01",
+        conditionsKnown: true,
+        conditions: "1,5% opslag buiten de euro.",
       },
       cashbackPct: {
-        value: 0.5, route: "provider-page", sourceUrl: "https://wirex.com/cryptoback", checkedAt: "2026-08-01",
+        value: 0.5,
+        route: "provider-page",
+        sourceUrl: "https://wirex.com/cryptoback",
+        checkedAt: "2026-08-01",
         conditionsKnown: true,
-        conditions: "Standard plan, Entry tier. PAID IN CRYPTO (Cryptoback), not euro. Everything above 0.5% needs 150,000 WXT locked.",
+        conditions:
+          "Standard plan, Entry tier. PAID IN CRYPTO (Cryptoback), not euro. Everything above 0.5% needs 150,000 WXT locked.",
       },
     },
   },
@@ -593,9 +762,11 @@ test("cards he does not hold sit in their own section and are never offered to p
   expect(offers.textContent).toContain("212 Card");
   expect(offers.textContent).toContain("geen kaarten van jou");
   // Marked per row, not only in the section's intro sentence.
-  expect(offers.querySelectorAll(".badge").length).toBeGreaterThan(0);
+  expect(offers.querySelectorAll('[data-testid="badge"]').length).toBeGreaterThan(0);
   // And it is NOT inside the list of things to pay with.
-  const spend = [...el.querySelectorAll(".travel-step")].find((s) => s.textContent?.startsWith("Betalen"));
+  const spend = [...el.querySelectorAll(".travel-step")].find((s) =>
+    s.textContent?.startsWith("Betalen"),
+  );
   expect(spend?.textContent).not.toContain("212 Card");
 });
 
@@ -616,7 +787,7 @@ test("a cheaper card he does not hold LEADS the answer, and is marked as not his
   expect(winner.textContent).toContain("€ 10,00"); // 1% of € 1.000 saved
   expect(winner.textContent).toMatch(/nog niet van jou|heb je nog niet/i);
   // A card he cannot tap tomorrow morning must LOOK different from one he can.
-  expect(winner.querySelector(".badge")).not.toBeNull();
+  expect(winner.querySelector('[data-testid="badge"]')).not.toBeNull();
 });
 
 test("wat hij vandaag kan betalen blijft bestaan, maar staat in de uitklap", () => {
@@ -655,7 +826,7 @@ test("the cash line recommends the proven cheapest and names the card it cannot 
   expect(cash).toContain("ING betaalpas"); // his own cheapest proven, for comparison
   expect(cash).toContain("Revolut betaalpas"); // the gap, named
   expect(cash).not.toMatch(/gratis|kost je niets/i);
-  expect(el.querySelector(".travel-winner-cash .badge")).not.toBeNull();
+  expect(el.querySelector('.travel-winner-cash [data-testid="badge"]')).not.toBeNull();
 });
 
 test("catalogue cashback is shown with its gate, never subtracted from the price", () => {
@@ -665,7 +836,9 @@ test("catalogue cashback is shown with its gate, never subtracted from the price
   expect(offers.textContent).toContain("0,5% cashback");
   expect(offers.textContent).toMatch(/crypto/i);
   // 1,5% minus 0,5% would have put Wirex above Revolut's 1%; it does not.
-  const rows = [...offers.querySelectorAll(".travel-journey-name")].map((n) => n.textContent ?? "");
+  const rows = [...offers.querySelectorAll('[data-testid="travel-journey-name"]')].map(
+    (n) => n.textContent ?? "",
+  );
   expect(rows.indexOf("212 Card")).toBeLessThan(rows.findIndex((r) => r.includes("Wirex")));
 });
 
@@ -682,7 +855,13 @@ test("for a euro destination the cash line does not quote a foreign-currency tar
   root = createRoot(container);
   act(() => {
     root!.render(
-      <TravelBlock {...props} accounts={travelAccounts} facts={travelFacts} txs={[]} catalogue={CATALOGUE} />,
+      <TravelBlock
+        {...props}
+        accounts={travelAccounts}
+        facts={travelFacts}
+        txs={[]}
+        catalogue={CATALOGUE}
+      />,
     );
   });
   act(() => setNativeValue(container!.querySelector("select")!, "ES"));
@@ -717,9 +896,14 @@ test("for a euro destination the cash line does not quote a foreign-currency tar
  *  Vandaar de cast, en niet een opgerekt type. */
 const feeField = (value: number, period: "maand" | "jaar"): CatalogValue =>
   ({
-    value, period, route: "provider-page", sourceUrl: "https://example.test/tarieven",
-    checkedAt: "2026-08-01", conditions: null, conditionsKnown: true,
-  } as unknown as CatalogValue);
+    value,
+    period,
+    route: "provider-page",
+    sourceUrl: "https://example.test/tarieven",
+    checkedAt: "2026-08-01",
+    conditions: null,
+    conditionsKnown: true,
+  }) as unknown as CatalogValue;
 
 /** Eén kaart uit de catalogus: een opslag, en optioneel wat de kaart zelf kost.
  *  `fee: null` is een kaart waarvan geen bron de prijs noemt — de meest
@@ -732,11 +916,18 @@ const marketCard = (
   fee: { value: number; period: "maand" | "jaar" } | null,
   fxConditions = "Opslag buiten de euro.",
 ): CatalogueEntryLike => ({
-  id, product, issuer, kind: "betaalpas",
+  id,
+  product,
+  issuer,
+  kind: "betaalpas",
   fields: {
     fxFeePct: {
-      value: fxPct, route: "provider-page", sourceUrl: "https://example.test/tarieven",
-      checkedAt: "2026-08-01", conditionsKnown: true, conditions: fxConditions,
+      value: fxPct,
+      route: "provider-page",
+      sourceUrl: "https://example.test/tarieven",
+      checkedAt: "2026-08-01",
+      conditionsKnown: true,
+      conditions: fxConditions,
     },
     ...(fee ? { accountFee: feeField(fee.value, fee.period) } : {}),
   },
@@ -745,9 +936,15 @@ const marketCard = (
 /* Zijn eigen beste route is 1% bij Revolut (DEARER_OWN), dus € 10,00 opslag op
  * € 1.000. Elke kaart hieronder heeft 0% opslag: het verschil is altijd € 10,00
  * bruto, en wat er overblijft hangt alleen nog af van wat de kaart zelf kost. */
-const GOEDKOOP = [marketCard("licht", "Testkaart Licht", "Lichtbank N.V.", 0, { value: 1, period: "maand" })];
-const TE_DUUR = [marketCard("zwaar", "Testkaart Zwaar", "Zwaarbank N.V.", 0, { value: 16.9, period: "maand" })];
-const JAARKAART = [marketCard("jaar", "Testkaart Jaar", "Jaarbank N.V.", 0, { value: 42.95, period: "jaar" })];
+const GOEDKOOP = [
+  marketCard("licht", "Testkaart Licht", "Lichtbank N.V.", 0, { value: 1, period: "maand" }),
+];
+const TE_DUUR = [
+  marketCard("zwaar", "Testkaart Zwaar", "Zwaarbank N.V.", 0, { value: 16.9, period: "maand" }),
+];
+const JAARKAART = [
+  marketCard("jaar", "Testkaart Jaar", "Jaarbank N.V.", 0, { value: 42.95, period: "jaar" }),
+];
 const GEEN_PRIJS = [marketCard("stil", "Testkaart Stil", "Stilbank N.V.", 0, null)];
 
 test("de aanbevolen kaart toont zijn eigen prijs, de periode en wat er netto overblijft", () => {
@@ -762,7 +959,8 @@ test("de aanbevolen kaart toont zijn eigen prijs, de periode en wat er netto ove
   // € 10,00 opslagverschil min € 1,00 kaartkosten = € 9,00 netto, en de aftrek
   // staat erbij zodat hij hem kan navolgen.
   const netto = el.querySelector('[data-testid="travel-pay-kosten-netto"]')!;
-  expect(netto.textContent).toContain(formatEuro(9));
+  expect(netto.textContent).toContain(formatSignedEuroIn("nl", 9));
+  expect(netto.textContent).toMatch(/Netto: \+€\s9,00/);
   expect(netto.textContent).toContain(formatEuro(10));
   expect(netto.textContent).toContain(formatEuro(1));
 });
@@ -864,8 +1062,16 @@ test("de pinaanbeveling noemt de kaartprijs ook als er geen voordeel is om hem t
   // hoort de prijs er nog steeds te staan, zonder het woord netto.
   const el = renderWithDestination({
     facts: DEARER_OWN,
-    catalogue: [marketCard("pin", "Testkaart Pin", "Pinbank N.V.", 0, { value: 2.55, period: "maand" },
-      "Geldopnames in vreemde valuta zijn gratis.")],
+    catalogue: [
+      marketCard(
+        "pin",
+        "Testkaart Pin",
+        "Pinbank N.V.",
+        0,
+        { value: 2.55, period: "maand" },
+        "Geldopnames in vreemde valuta zijn gratis.",
+      ),
+    ],
   });
   const kosten = el.querySelector('[data-testid="travel-pin-kosten"]')!;
   expect(kosten).not.toBeNull();
@@ -897,7 +1103,8 @@ const times = (haystack: string, needle: string): number =>
 
 /** Alles wat VOORAAN staat — de samenvatting, zonder de uitklap. Die staat naast
  *  `.travel-winner` en niet erin, juist zodat deze telling iets betekent. */
-const winnerText = (el: HTMLElement): string => el.querySelector(".travel-winner")!.textContent ?? "";
+const winnerText = (el: HTMLElement): string =>
+  el.querySelector(".travel-winner")!.textContent ?? "";
 /** Alleen de KOPZIN. `.travel-winner-name` draagt sinds review 4 ook het chipje
  *  "nog niet van jou", en dat woord zou de prefix-vergelijking met core's eigen
  *  zin op het merkteken laten stuklopen in plaats van op een echte herformulering. */
@@ -912,7 +1119,7 @@ test("de kaartprijs en het nettobedrag staan één keer in de aanbeveling, in de
   // kaartkosten" — dat is geen tweede bewering maar de aftrek erbij, en zonder
   // die regel kan hij ons niet nakijken.)
   expect(times(winner, `${formatEuro(1)} per maand`)).toBe(1);
-  expect(times(winner, formatEuro(9))).toBe(1);
+  expect(times(winner, formatSignedEuroIn("nl", 9))).toBe(1);
   expect(winner).not.toContain("kost zelf");
 
   // En het is de KOP die loslaat, niet het veld: de kop zegt wat je moet doen,
@@ -920,16 +1127,30 @@ test("de kaartprijs en het nettobedrag staan één keer in de aanbeveling, in de
   const kop = headlineText(el);
   expect(times(kop, formatEuro(1))).toBe(0);
   expect(times(kop, formatEuro(9))).toBe(0);
-  expect(el.querySelector('[data-testid="travel-pay-kosten"]')!.textContent).toContain(`${formatEuro(1)} per maand`);
-  expect(el.querySelector('[data-testid="travel-pay-kosten-netto"]')!.textContent).toContain(formatEuro(9));
+  expect(el.querySelector('[data-testid="travel-pay-kosten"]')!.textContent).toContain(
+    `${formatEuro(1)} per maand`,
+  );
+  expect(el.querySelector('[data-testid="travel-pay-kosten-netto"]')!.textContent).toContain(
+    formatSignedEuroIn("nl", 9),
+  );
 });
 
 test("de kop is core's eigen zin minus precies de kostenstaart, niet een eigen zin", () => {
   const el = renderWithDestination({ facts: DEARER_OWN, catalogue: GOEDKOOP });
-  const full = planTravel({
-    accounts: travelAccounts, txs: [], rates: [], facts: DEARER_OWN, destination: "US", asOf: ASOF,
-    catalogue: GOEDKOOP,
-  }).headline;
+  const full = payHeadlineSentence(
+    planTravel({
+      accounts: travelAccounts,
+      txs: [],
+      rates: [],
+      facts: DEARER_OWN,
+      destination: "US",
+      asOf: ASOF,
+      catalogue: GOEDKOOP,
+    }).headline,
+    optimiseCopy.nl.travel,
+    "nl",
+    optimiseCopy.nl.travel.railFor("NL"),
+  );
   const shown = headlineText(el);
 
   // PREFIX, en dat is de hele bewaking: er mag een staart af, er mag niets aan
@@ -953,7 +1174,9 @@ test("in de begintoestand van een nieuwe gebruiker staat de prijs er nog steeds,
   // komt het uit de velden, en uit niets anders.
   const el = renderWithDestination({ facts: [], catalogue: GOEDKOOP });
   expect(times(winnerText(el), formatEuro(1))).toBe(1);
-  expect(el.querySelector('[data-testid="travel-pay-kosten"]')!.textContent).toContain(`${formatEuro(1)} per maand`);
+  expect(el.querySelector('[data-testid="travel-pay-kosten"]')!.textContent).toContain(
+    `${formatEuro(1)} per maand`,
+  );
 
   // En sinds review 4 draagt de kop de AANBEVELING, ook in deze toestand. Die
   // stond hier eerder alleen nog in de catalogusregel eronder — en die vouwt nu
@@ -988,7 +1211,6 @@ test("een onbekende kaartprijs wordt ook één keer gemeld — en blijft 'geen n
   expect(kosten).toContain("bruto");
 });
 
-
 /* ═════════ HET OVERZICHT IS EXACT EEN SAMENVATTING (app review 4) ═══════════
  *
  * Zijn woorden: "this overview should be exactly a summary." Wat vooraan mag
@@ -1017,16 +1239,27 @@ test("een onbekende kaartprijs wordt ook één keer gemeld — en blijft 'geen n
 const BRONREGEL = "1,4% koersopslag Bron: bank.nl-vergelijking, laatst gecontroleerd 15-1-2026.";
 const MET_BRON: LearnedFact[] = [
   makeFact({
-    agent: TRAVEL_AGENT, subject: "ING betaalpas", key: "fxFeePct", value: "1.4",
-    source: "agent", updatedAt: "2026-01-15", note: BRONREGEL,
+    agent: TRAVEL_AGENT,
+    subject: "ING betaalpas",
+    key: "fxFeePct",
+    value: "1.4",
+    source: "agent",
+    updatedAt: "2026-01-15",
+    note: BRONREGEL,
   }),
 ];
 
 /** Een catalogus­kaart met een HERKENDE grens aan haar tarief. Dit is de Revolut-
  *  fout in fixture-vorm: 0% dat alleen binnen een maandlimiet geldt. */
 const GEDEKT = [
-  marketCard("grens", "Testkaart Grens", "Grensbank N.V.", 0, { value: 1, period: "maand" },
-    "Tot € 1.000 per maand geen koersopslag, daarna 1%."),
+  marketCard(
+    "grens",
+    "Testkaart Grens",
+    "Grensbank N.V.",
+    0,
+    { value: 1, period: "maand" },
+    "Tot € 1.000 per maand geen koersopslag, daarna 1%.",
+  ),
 ];
 
 test("vooraan staan alleen de twee antwoorden en wat ze kosten", () => {
@@ -1041,9 +1274,9 @@ test("vooraan staan alleen de twee antwoorden en wat ze kosten", () => {
   expect(el.querySelector(".travel-winner .travel-winner-cash")).not.toBeNull();
 
   // En verder niets. Elk van deze punten wees hij één voor één aan.
-  expect(voor).not.toMatch(/vandaag/i);              // punt 14
+  expect(voor).not.toMatch(/vandaag/i); // punt 14
   expect(voor).not.toContain("staat in de catalogus"); // punt 13
-  expect(voor).not.toContain("Alle routes");           // punt 15
+  expect(voor).not.toContain("Alle routes"); // punt 15
   expect(voor).not.toContain("Bewaren");
   expect(voor).not.toContain("Alle bedragen gelden op");
   expect(el.querySelector(".travel-winner .travel-terms")).toBeNull(); // punt 16
@@ -1161,18 +1394,24 @@ test("mét een aanbeveling staat die in de kop en de oorzaak als eigen regel ero
 const TOESTANDEN = [
   {
     naam: "geen eigen route beprijsd",
-    facts: [] as LearnedFact[], catalogue: GOEDKOOP,
-    product: "Testkaart Licht", prijs: `${formatEuro(1)} per maand`,
+    facts: [] as LearnedFact[],
+    catalogue: GOEDKOOP,
+    product: "Testkaart Licht",
+    prijs: `${formatEuro(1)} per maand`,
   },
   {
     naam: "wel beprijsd",
-    facts: DEARER_OWN, catalogue: GOEDKOOP,
-    product: "Testkaart Licht", prijs: `${formatEuro(1)} per maand`,
+    facts: DEARER_OWN,
+    catalogue: GOEDKOOP,
+    product: "Testkaart Licht",
+    prijs: `${formatEuro(1)} per maand`,
   },
   {
     naam: "kosten onbekend",
-    facts: DEARER_OWN, catalogue: GEEN_PRIJS,
-    product: "Testkaart Stil", prijs: "Kaartkosten: onbekend",
+    facts: DEARER_OWN,
+    catalogue: GEEN_PRIJS,
+    product: "Testkaart Stil",
+    prijs: "Kaartkosten: onbekend",
   },
 ];
 
@@ -1193,7 +1432,7 @@ for (const t of TOESTANDEN) {
 
     // Het merkteken blijft vooraan: geen van deze drie kaarten heeft hij, en dat
     // moet zichtbaar anders zijn dan een kaart die hij morgen kan pinnen.
-    expect(el.querySelector(".travel-winner-name .badge")).not.toBeNull();
+    expect(el.querySelector('.travel-winner-name [data-testid="badge"]')).not.toBeNull();
 
     // En de herkomst is verplaatst, niet weggegooid.
     expect(foldText(el)).toContain("staat in de catalogus");
@@ -1222,10 +1461,12 @@ function keurDeUitweg(c: HTMLElement) {
   // De uitweg wordt genoemd, en niet meer met de naam van een knop die weg is.
   expect(tekst).toMatch(/zelf in/);
   expect(tekst).not.toContain("Waarom?");
-  expect(tekst).toContain(`“${ROUTES_HEADING}” hieronder`);
+  expect(tekst).toContain(`“${optimiseCopy.nl.travel.terms.routesHeading}” hieronder`);
 
   // De kop bestaat, en staat waar de zin zegt dat hij staat.
-  const kop = [...paneel.querySelectorAll("h3")].find((h) => h.textContent === ROUTES_HEADING);
+  const kop = [...paneel.querySelectorAll("h3")].find(
+    (h) => h.textContent === optimiseCopy.nl.travel.terms.routesHeading,
+  );
   expect(kop).toBeDefined();
   expect(melding.compareDocumentPosition(kop!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 
@@ -1235,7 +1476,9 @@ function keurDeUitweg(c: HTMLElement) {
     (b.textContent ?? "").includes("aanpassen"),
   );
   expect(aanpassen.length).toBeGreaterThan(0);
-  expect(kop!.compareDocumentPosition(aanpassen[0]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(
+    kop!.compareDocumentPosition(aanpassen[0]) & Node.DOCUMENT_POSITION_FOLLOWING,
+  ).toBeTruthy();
 }
 
 test("zonder sleutel wijst de melding naar de routelijst, niet naar de verdwenen knop", () => {
@@ -1253,8 +1496,51 @@ test("een zoekopdracht die niets opleverde wijst naar dezelfde bestaande plek", 
 
 test("een zoekopdracht die vastliep wijst naar dezelfde bestaande plek", () => {
   const c = renderWithDestination({
-    facts: noFacts, aiAvailable: true, pendingTerms: ["ING betaalpas"], termsAsked: 2, termsGaveUp: true,
+    facts: noFacts,
+    aiAvailable: true,
+    pendingTerms: ["ING betaalpas"],
+    termsAsked: 2,
+    termsGaveUp: true,
   });
   expect(foldText(c)).toContain("Er kwam niets meer binnen");
   keurDeUitweg(c);
+});
+
+/* DRIE ZINNEN DIE CORE ZELF SCHREEF. `describeWithdrawalFee`, `fxCaveat` en de
+ * spaarregel bouwden hun eigen Nederlandse tekst in packages/core, en de kop
+ * van de eerste noemde zichzelf al "de ene nog-Nederlandse string die WEL het
+ * scherm haalt". Core levert nu de componenten en de kinds; deze test bewaakt
+ * dat de zin de taal van de lezer volgt. Het CITAAT van een aanbieder blijft
+ * met opzet onvertaald — dat is de `quoted`-tak van `TravelCaveat`. */
+test("the travel caveats and the savings line follow the reader's language", () => {
+  for (const locale of ["nl", "en"] as const) {
+    const c = optimiseCopy[locale].travel;
+    expect(c.withdrawalFee([{ kind: "fixed", eur: 5 }])).toMatch(
+      locale === "nl" ? /per opname/ : /per withdrawal/,
+    );
+    expect(c.withdrawalFee([{ kind: "pct", pct: 1.7, minEur: null }])).toMatch(
+      locale === "nl" ? /over het opgenomen bedrag/ : /of the amount withdrawn/,
+    );
+    expect(c.caveat({ kind: "limited" })).toMatch(locale === "nl" ? /voorwaarden/ : /terms/);
+    expect(c.caveat({ kind: "capped", cap: "tot € 1.000 per maand" })).toContain(
+      "tot € 1.000 per maand",
+    );
+    // Een citaat gaat er ongewijzigd doorheen, in beide talen.
+    expect(c.caveat({ kind: "quoted", text: "fair usage applies" })).toBe("fair usage applies");
+    expect(c.storeNote({ kind: "already-best" })).toMatch(
+      locale === "nl" ? /beste plek/ : /best place/,
+    );
+    expect(
+      c.storeNote({
+        kind: "leaving-interest",
+        account: "Spaar",
+        best: { bank: "BigBank", ratePct: 3.1 },
+      }),
+    ).toContain("BigBank");
+  }
+  // En geen Nederlands op het Engelse scherm.
+  const en = optimiseCopy.en.travel;
+  expect(en.storeNote({ kind: "already-best" })).not.toMatch(/spaargeld|plek/);
+  expect(en.caveat({ kind: "limited" })).not.toMatch(/tarief|voorwaarden/);
+  expect(en.withdrawalFee([{ kind: "fixed", eur: 5 }])).not.toMatch(/opname/);
 });

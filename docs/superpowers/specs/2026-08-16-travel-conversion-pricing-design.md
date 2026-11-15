@@ -18,12 +18,12 @@ from where the money sits now to a payment in the destination currency.
 
 For a trip to the US, with euros at ING and a card at Revolut:
 
-| | Route | Cost on €1.000 |
-|---|---|---|
-| A — pay direct | ING betaalpas charges its own FX surcharge | `fxFeePct − cashbackPct` |
-| B — move first | ING → Revolut (transfer) → convert → pay | `transferCost + convertFeePct + fxFeePct − cashbackPct` |
+|                | Route                                      | Cost on €1.000                                          |
+| -------------- | ------------------------------------------ | ------------------------------------------------------- |
+| A — pay direct | ING betaalpas charges its own FX surcharge | `fxFeePct − cashbackPct`                                |
+| B — move first | ING → Revolut (transfer) → convert → pay   | `transferCost + convertFeePct + fxFeePct − cashbackPct` |
 
-Today LaVega prices only the last term of B and none of the first two, so B always *looks*
+Today LaVega prices only the last term of B and none of the first two, so B always _looks_
 free and A always looks expensive. That is the defect: the comparison is not like for like.
 
 ## New learned fact: `convertFeePct`
@@ -32,7 +32,7 @@ One new key in the travel agent's namespace (`agentFacts.ts`), the same shape an
 contract as `fxFeePct`:
 
 ```ts
-convertFeePct   // cost in % of converting EUR into the destination currency AT this provider
+convertFeePct; // cost in % of converting EUR into the destination currency AT this provider
 ```
 
 `transferFreeViaIdeal` already exists and covers the transfer leg for the free case. A
@@ -47,14 +47,14 @@ Correct Revolut's weekend surcharge once and it stays corrected.
 
 ```ts
 export type Journey = {
-  spend: SpendOption;              // the card at the end of the route
-  via: string | null;              // provider converted at, null = pay direct
-  fundedFrom: string | null;       // which account the money leaves
-  method: string | null;           // "iDEAL" when free
+  spend: SpendOption; // the card at the end of the route
+  via: string | null; // provider converted at, null = pay direct
+  fundedFrom: string | null; // which account the money leaves
+  method: string | null; // "iDEAL" when free
   transferPct: number | null;
   convertPct: number | null;
-  totalCostPct: number | null;     // null when ANY leg is unknown
-  costOnReference: number | null;  // euros on TRAVEL_REFERENCE_SPEND
+  totalCostPct: number | null; // null when ANY leg is unknown
+  costOnReference: number | null; // euros on TRAVEL_REFERENCE_SPEND
   why: string;
 };
 ```
@@ -92,7 +92,7 @@ The travel block leads with the journey, not the card:
 > **Zet €1.000 van ING naar Revolut via iDEAL (gratis) en betaal daar — €14 goedkoper dan
 > direct met je ING-pas.**
 
-with the legs and their sources behind the existing *waarom* disclosure, each correctable
+with the legs and their sources behind the existing _waarom_ disclosure, each correctable
 inline as today.
 
 ## Testing

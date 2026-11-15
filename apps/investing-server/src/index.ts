@@ -1,202 +1,359 @@
-import { app, createApp, type BrokerCredentialInput, type BrokerSyncProgress, type InvestingDashboardReader } from "./app.js";
-import { createFileAgentRunStore, type AgentRunRecord, type AgentRunStore } from "./fileAgentRunStore.js";
-import { createPortfolioAgentTools, runPortfolioAgent } from "./portfolioAgent.js";
-import { createProblemReporter } from "./observability.js";
-import { buildInvestingDashboard, type BenchmarkSelectionStore, type CashBalance, type CashFlow, type Dividend, type InvestingDashboardData, type Position, type Trade } from "@lavega/core";
 import {
-  cashBalancesComplete,
+  app,
+  createApp,
+  type BrokerCredentialInput,
+  type BrokerHistoryProgress,
+  type BrokerSyncProgress,
+  type InvestingHealth,
+  type InvestingDashboardReader,
+} from "./app.js";
+import {
+  createFileAgentRunStore,
+  discardPlaintextAgentRun,
+  migratePlaintextAgentRun,
+  type AgentRunRecord,
+  type AgentRunStore,
+} from "./fileAgentRunStore.js";
+import {
+  isPortfolioAgentId,
+  listPortfolioAgents,
+  runPortfolioAgent,
+  type PortfolioJudgmentRun,
+  type RunPortfolioAgentOptions,
+} from "./portfolioAgent.js";
+import { createProblemReporter } from "./observability.js";
+import {
+  CASH_FLOW_SUGGESTION_ROUTE,
+  createCashFlowSuggestionService,
+  createMemoryCashFlowStore,
+  type CashFlowStore,
+} from "./cashFlowSuggestions.js";
+import { parseSyncRunRow, type SyncRunStore } from "./syncRun.js";
+import { attributeHistory, findMentions } from "./agentMentions.js";
+import { createPortfolioChatAgent, type PortfolioChatContext } from "./portfolioChat.js";
+import { createCachedFundamentalsProvider } from "./fundamentalsCache.js";
+import { attachStockResearchRoutes } from "./stockResearchRoutes.js";
+import { resolvePortfolioSectors, resolveSectorListing } from "./sectorResolution.js";
+import { createAgentUIStreamResponse, type LanguageModel, type UIMessage } from "ai";
+import {
+  cashFlowSuggestionContexts,
+  suggestionSample,
+  resolveSecurityIdentities,
+  type CashFlowRule,
+  sentryOptions,
+  type AccountWrapperStore,
+  type FundamentalsProvider,
+  type BenchmarkSelectionStore,
+  type InvestingLayoutStore,
+} from "@lavega/core";
+import {
+  createBrokerDataCache,
   createCredentialsAwareBrokerAdapters,
   createFrankfurterFxProvider,
+  createPartnerBudgetClient,
+  createYahooFundamentalsProvider,
   createInMemoryBenchmarkSelectionStore,
-  historyPending,
-  positionsComplete,
+  createInMemoryInvestingLayoutStore,
+  SCHEDULED_BROKERS,
   syncScheduledBrokers,
-  tradesComplete,
-  type BrokerSyncStateStore,
-  type PriceStore,
+  PartnerBudget,
+  YahooHttpClient,
+  type BrokerSyncLane,
+  type BrokerSyncOperationStore,
+  type PartnerBudgetClient,
+  type SharedPriceStore,
   type ScheduledSyncResult,
   type Trading212DiagnosticEvent,
 } from "@lavega/adapters";
-import { createFileCredentialStore, type RuntimeBrokerDataSnapshot } from "./fileCredentialStore.js";
-import { createRuntimeCredentialStore, credentialsArePerTenant, runtimeDatabase, type RuntimeCredentialStore as RuntimeCredentialStoreType } from "./credentialStore.js";
-import { createNeonAgentRunStore, createNeonBrokerSyncStateStore } from "./neonStores.js";
-import { createFileBrokerSyncStateStore, runtimeBrokerSyncStateFile } from "./fileBrokerSyncStateStore.js";
-import { createInMemoryMarketDataConsentStore, type MarketDataConsentStore } from "./marketDataConsent.js";
+import type { PriceBar } from "@lavega/core";
+import { createFileCredentialStore } from "./fileCredentialStore.js";
+import {
+  createRuntimeCredentialStore,
+  credentialsArePerTenant,
+  runtimeDatabase,
+  type RuntimeCredentialStore as RuntimeCredentialStoreType,
+} from "./credentialStore.js";
+import {
+  createNeonAgentRunStore,
+  createNeonBrokerSyncStateStore,
+  createNeonPriceSyncProgressStore,
+} from "./neonStores.js";
+import { createInMemoryAccountWrapperStore } from "./accountWrapperStore.js";
+import {
+  createFileBrokerSyncStateStore,
+  runtimeBrokerSyncStateFile,
+} from "./fileBrokerSyncStateStore.js";
+import {
+  createInMemoryMarketDataConsentStore,
+  type MarketDataConsentStore,
+} from "./marketDataConsent.js";
+import {
+  createInMemoryPersonalNetWorthStore,
+  type PersonalNetWorthStore,
+} from "./personalNetWorthStore.js";
 import { createFileSectorProfileStore, runtimeSectorStoreFile } from "./fileSectorProfileStore.js";
-import { createDevFixtureBrokerData, createDevFixtureFxProvider, createDevFixturePriceBars } from "./devFixture.js";
-import { discoverPriceSyncTargets } from "./priceOrchestrator.js";
+import type { SectorProfileStore } from "./inMemorySectorProfileStore.js";
+import {
+  createInMemorySectorCorrectionStore,
+  type SectorCorrectionStore,
+} from "./sectorCorrectionStore.js";
+import {
+  createInMemorySectorInferenceSettingStore,
+  type SectorInferenceSettingStore,
+} from "./sectorInferenceSetting.js";
+import { createSystemOneSectorClassifier } from "./sectorClassifier.js";
+import {
+  createSystemOneIdentifierSelector,
+  IDENTIFIER_SELECTION_WORST_CASE_CENTS,
+} from "./identifierSelector.js";
+import { createSystemOneProvider } from "./systemOne.js";
+import { checkSystemOneBudget, useDatabaseSource } from "./systemOneUsage.js";
+import {
+  createInMemoryIdentifierOverrideStore,
+  createInMemoryIdentifierSelectionSettingStore,
+  type IdentifierOverrideStore,
+  type IdentifierSelectionSettingStore,
+} from "./identifierSelectionStore.js";
+import {
+  createDevFixtureBrokerData,
+  createDevFixtureFxProvider,
+  createDevFixturePriceBars,
+} from "./devFixture.js";
+import {
+  createInMemoryPriceSyncProgressStore,
+  discoverPriceSyncTargets,
+  instrumentKeys,
+  priceReadKeys,
+} from "./priceOrchestrator.js";
+import { createDashboardCache, type DashboardCache } from "./dashboardCache.js";
+import {
+  createAgentMemoryRepository,
+  createDashboardSnapshotRepository,
+  createFxRateRepository,
+  createSyncRunRepository,
+  type AgentMemoryRepository,
+} from "@lavega/database";
+import { attachMemoryRoutes, isUuid } from "./memoryRoutes.js";
+import { trimToolHistory, type ToolLoopTurnStatus } from "./toolLoop.js";
+import { attachMcpReadRoutes } from "./tools/readRoutes.js";
+import { attachLetterRoutes } from "./letterRoutes.js";
+import { createLetterGenerator, type LetterGenerator } from "./portfolioLetter.js";
+import { createStoredFxProvider } from "./storedFxProvider.js";
+import { effectiveBenchmarkSymbols } from "./defaultBenchmark.js";
+import { untimed } from "./serverTiming.js";
+import { createBrokerSnapshotReader } from "./brokerSnapshotReader.js";
+import { createDeGiroImportHandler } from "./degiroImport.js";
+import { PortfolioRead, portfolioReadLayer } from "./portfolioRead.js";
+import { DateTime, ManagedRuntime, type Layer } from "effect";
+import { createAgentRunController } from "./agentRun.js";
 
 export { app };
+export { createDashboardCache } from "./dashboardCache.js";
 
 const LOCAL_TENANT_ID = "local";
+const THREAD_TITLE_LENGTH = 80;
+const DASHBOARD_CACHE_TTL_MS = 15_000;
+const TRADING212_HEALTH_MAX_AGE_MS = 26 * 60 * 60 * 1_000;
 
 function environment(name: string): string | undefined {
   const value = process.env[name]?.trim();
   return value || undefined;
 }
 
+function trading212SyncHealth(
+  lastSyncedAt: string | null,
+  problem: boolean,
+): InvestingHealth["checks"]["trading212Sync"] {
+  if (problem) return "problem";
+  if (!lastSyncedAt) return "never";
+  const syncedAt = Date.parse(lastSyncedAt);
+  if (!Number.isFinite(syncedAt) || Date.now() - syncedAt > TRADING212_HEALTH_MAX_AGE_MS)
+    return "stale";
+  return "fresh";
+}
+
 type RuntimeCredentialStore = RuntimeCredentialStoreType;
 
-export function createRuntimeBrokerCredentialSetup(credentials: RuntimeCredentialStore, onUnlocked?: () => void | Promise<void>, tenantId: string = LOCAL_TENANT_ID) {
+export function createRuntimeBrokerCredentialSetup(
+  credentials: RuntimeCredentialStore,
+  onStored?: (broker: BrokerCredentialInput["broker"]) => void | Promise<void>,
+  tenantId: string = LOCAL_TENANT_ID,
+) {
   return async (input: BrokerCredentialInput): Promise<void> => {
     const status = await credentials.status();
     if (status === "empty") await credentials.setup(input.passphrase ?? "");
-    else if (!(await credentials.unlock(input.passphrase ?? ""))) throw new Error("Vault passphrase is incorrect");
-    await onUnlocked?.();
+    else if (!(await credentials.unlock(input.passphrase ?? "")))
+      throw new Error("Vault passphrase is incorrect");
     if (input.broker === "ibkr") {
-      await credentials.putCredentials({ broker: "ibkr", tenantId, token: input.token, queryId: input.queryId! });
+      await credentials.putCredentials({
+        broker: "ibkr",
+        tenantId,
+        token: input.token,
+        queryId: input.queryId!,
+      });
     } else {
-      await credentials.putCredentials({ broker: "trading212", tenantId, token: input.token, secret: input.secret! });
+      await credentials.putCredentials({
+        broker: "trading212",
+        tenantId,
+        token: input.token,
+        secret: input.secret!,
+      });
     }
+    await onStored?.(input.broker);
   };
 }
 
+/* No process-local dedupe: the claim in the store is what stops two runs, and
+ * it holds across instances and restarts, which a promise in one process never
+ * did. */
 export function createRuntimeBrokerSync(
   onCompleted?: (result: ScheduledSyncResult) => void | Promise<void>,
-  credentials = createFileCredentialStore(),
-  state: BrokerSyncStateStore = createFileBrokerSyncStateStore(),
+  credentials: RuntimeCredentialStore = createFileCredentialStore(),
+  operations: BrokerSyncOperationStore = createFileBrokerSyncStateStore(),
   onTrading212Diagnostic?: (event: Trading212DiagnosticEvent) => void,
   tenantId: string = LOCAL_TENANT_ID,
-): (force: boolean) => Promise<ScheduledSyncResult> {
-  let inFlight: Promise<ScheduledSyncResult> | null = null;
+  partnerBudget?: PartnerBudgetClient,
+  loadCashFlowRules?: () => Promise<readonly CashFlowRule[]>,
+): (
+  force: boolean,
+  lanes: readonly BrokerSyncLane[],
+  deadlineMs?: number,
+  rebuildOrders?: boolean,
+) => Promise<ScheduledSyncResult> {
   const entity = environment("LAVEGA_INVESTING_ENTITY") ?? "personal";
-  const adapters = createCredentialsAwareBrokerAdapters({ credentials, tenantId, onTrading212Diagnostic });
-  return async (force) => {
-    if (inFlight) return inFlight;
-    const run = syncScheduledBrokers({ adapters, credentials, state, tenantId, entity, force })
-      .then(async (result) => {
-        await onCompleted?.(result);
-        return result;
-      });
-    inFlight = run;
-    try {
-      return await run;
-    } finally {
-      if (inFlight === run) inFlight = null;
-    }
+  const adapters = createCredentialsAwareBrokerAdapters({
+    credentials,
+    tenantId,
+    onTrading212Diagnostic,
+    partnerBudget,
+  });
+  return async (force, lanes, deadlineMs, rebuildOrders) => {
+    const cashFlowKindRules = loadCashFlowRules ? await loadCashFlowRules() : [];
+    const result = await syncScheduledBrokers({
+      adapters,
+      credentials,
+      operations,
+      tenantId,
+      entity,
+      lanes,
+      force,
+      rebuildOrders,
+      deadlineMs,
+      cashFlowKindRules,
+    });
+    await onCompleted?.(result);
+    return result;
   };
 }
 
-export type RuntimeAppOptions = { priceStore: PriceStore; resolveTenantId?: () => string | Promise<string>; benchmarkSelectionStore?: BenchmarkSelectionStore; benchmarkSymbols?: (tenantId: string) => Promise<string[]> | string[]; marketDataConsentStore?: MarketDataConsentStore; agentRunStore?: AgentRunStore; runAgent?: typeof runPortfolioAgent };
+export type PortfolioAgentRunner = (
+  options: RunPortfolioAgentOptions,
+) => Promise<PortfolioJudgmentRun>;
+export type RuntimeAppOptions = {
+  /** The shared, instrument-keyed price store (#307). */
+  priceStore: SharedPriceStore;
+  /** True when that store is the shared database one: the cache route answers
+   *  405 instead of letting one account delete data every account reads. */
+  sharedPriceStore?: boolean;
+  /** Clears a local (file) shared store; the database store has no such
+   *  operation. */
+  clearPriceCache?: () => Promise<void>;
+  resolveTenantId?: () => string | Promise<string>;
+  benchmarkSelectionStore?: BenchmarkSelectionStore;
+  investingLayoutStore?: InvestingLayoutStore;
+  /** Account tax-treatment labels (WS4.4, #296). Defaults to Neon with a
+   *  database, in-memory without one. */
+  accountWrapperStore?: AccountWrapperStore;
+  benchmarkSymbols?: (tenantId: string) => Promise<string[]> | string[];
+  marketDataConsentStore?: MarketDataConsentStore;
+  personalNetWorthStore?: PersonalNetWorthStore;
+  sectorStore?: SectorProfileStore;
+  sectorCorrectionStore?: SectorCorrectionStore;
+  sectorInferenceSettingStore?: SectorInferenceSettingStore;
+  /** Identifier candidate selection (Jev-03, #136): the owner's switch and the
+   *  owner's symbol overrides. In-memory without an injected store. */
+  identifierSelectionSettingStore?: IdentifierSelectionSettingStore;
+  identifierOverrideStore?: IdentifierOverrideStore;
+  /** Single-tenant injection only. Multi-tenant runtimes must use agentRunStoreForTenant. */
+  agentRunStore?: AgentRunStore;
+  agentRunStoreForTenant?: (tenantId: string) => AgentRunStore;
+  runAgent?: PortfolioAgentRunner;
+  chatModel?: LanguageModel;
+  /** Defaults to a Munger call on the chat model. */
+  letterGenerator?: LetterGenerator;
+  fundamentalsProvider?: FundamentalsProvider;
+  dashboardCache?: DashboardCache;
+  /** Defaults to Neon when DATABASE_URL is set; without it agents have no memory. */
+  agentMemory?: (tenantId: string) => AgentMemoryRepository;
+  /** Where partner request slots come from. Built into one runtime per app.
+   *  Defaults to a memory budget. */
+  partnerBudget?: Layer.Layer<PartnerBudget>;
+  /** A budget the caller already bridged, for a runtime that outlives the app. */
+  partnerBudgetClient?: PartnerBudgetClient;
+  /** Owner-confirmed cash-flow rules + suggestions (issue #137). Defaults to an
+   *  in-memory store; the mounted app passes Neon or the file store. */
+  cashFlowStore?: CashFlowStore;
+};
 
-export type RuntimeApp = ReturnType<typeof createApp> & { runPortfolioAgentOnce: () => Promise<AgentRunRecord> };
+export type RuntimeApp = ReturnType<typeof createApp> & {
+  runPortfolioAgentOnce: (model?: string) => Promise<AgentRunRecord>;
+  portfolioChatContext: () => Promise<PortfolioChatContext>;
+};
 
-const PORTFOLIO_AGENT_PROMPT = [
-  "You are the portfolio health assistant of a personal investing dashboard.",
-  "Use the read-only tools to look at the current positions, prices and total portfolio value, then summarize the portfolio's health in at most five sentences:",
-  "total value, largest position, and anything that looks off such as missing prices or empty broker data.",
-].join(" ");
-
-function mergeById<T extends { id: string }>(existing: T[], incoming: T[]): T[] {
-  const byId = new Map(existing.map((item) => [item.id, item]));
-  for (const item of incoming) byId.set(item.id, item);
-  return [...byId.values()];
-}
-
-export function createRuntimeBrokerDataCache(initial: RuntimeBrokerDataSnapshot = {}) {
-  const positionsByBroker = new Map<string, Position[]>();
-  const tradesByBroker = new Map<string, Trade[]>();
-  const dividendsByBroker = new Map<string, Dividend[]>();
-  const cashBalancesByBroker = new Map<string, CashBalance[]>();
-  const cashFlowsByBroker = new Map<string, CashFlow[]>();
-  let problems: string[] = [];
-  let dataVersion = 0;
-
-  const restore = (snapshot: RuntimeBrokerDataSnapshot) => {
-    positionsByBroker.clear();
-    tradesByBroker.clear();
-    dividendsByBroker.clear();
-    cashBalancesByBroker.clear();
-    cashFlowsByBroker.clear();
-    for (const [broker, data] of Object.entries(snapshot)) {
-      if (!data) continue;
-      positionsByBroker.set(broker, structuredClone(data.positions));
-      tradesByBroker.set(broker, structuredClone(data.trades));
-      dividendsByBroker.set(broker, structuredClone(data.dividends ?? []));
-      cashBalancesByBroker.set(broker, structuredClone(data.cashBalances ?? []));
-      cashFlowsByBroker.set(broker, structuredClone(data.cashFlows ?? []));
-    }
-    dataVersion += 1;
-  };
-  restore(initial);
-
-  return {
-    apply(result: ScheduledSyncResult) {
-      for (const outcome of result.outcomes) {
-        // Partial results with problems still carry fresh broker data; discarding
-        // them left the vault stale while the UI showed only the problem.
-        if (outcome.result === null) continue;
-        const incoming = outcome.result;
-        const complete = tradesComplete(incoming) && !historyPending(incoming.resume);
-        // Holdings can fail independently of order history (different T212
-        // budgets). An empty positions array on that failure must not replace
-        // last-good rows, or the dashboard goes blank after a "completed" history.
-        if (incoming.positions.length > 0 || (complete && positionsComplete(incoming)) || !positionsByBroker.has(outcome.broker)) {
-          positionsByBroker.set(outcome.broker, incoming.positions);
-        }
-        const mappedTrades = incoming.trades.map((trade, index) => ({ ...trade, id: `${outcome.broker}:${trade.brokerTradeId ?? index}` }));
-        // A truncated trade history must not wipe good stored trades. A first
-        // truncated run (empty vault) must still keep the pages it did read,
-        // or a Vercel time-limit stop would persist nothing.
-        if (complete) tradesByBroker.set(outcome.broker, mappedTrades);
-        else if (mappedTrades.length > 0) tradesByBroker.set(outcome.broker, mergeById(tradesByBroker.get(outcome.broker) ?? [], mappedTrades));
-        const incomingDividends = incoming.dividends ?? [];
-        if (complete) dividendsByBroker.set(outcome.broker, incomingDividends);
-        else if (incomingDividends.length > 0) dividendsByBroker.set(outcome.broker, mergeById(dividendsByBroker.get(outcome.broker) ?? [], incomingDividends));
-        if ((incoming.cashBalances?.length ?? 0) > 0 || (complete && cashBalancesComplete(incoming)) || !cashBalancesByBroker.has(outcome.broker)) {
-          cashBalancesByBroker.set(outcome.broker, incoming.cashBalances ?? []);
-        }
-        const incomingFlows = incoming.cashFlows ?? [];
-        if (complete) cashFlowsByBroker.set(outcome.broker, incomingFlows);
-        else if (incomingFlows.length > 0) cashFlowsByBroker.set(outcome.broker, mergeById(cashFlowsByBroker.get(outcome.broker) ?? [], incomingFlows));
-      }
-      problems = result.problems;
-      if (result.outcomes.some((outcome) => outcome.result !== null)) dataVersion += 1;
-    },
-    read() {
-      return {
-        positions: [...positionsByBroker.values()].flat(),
-        trades: [...tradesByBroker.values()].flat(),
-        dividends: [...dividendsByBroker.values()].flat(),
-        cashBalances: [...cashBalancesByBroker.values()].flat(),
-        cashFlows: [...cashFlowsByBroker.values()].flat(),
-        problems: [...problems],
-        dataVersion,
-      };
-    },
-    restore,
-    snapshot(): RuntimeBrokerDataSnapshot {
-      const snapshot: RuntimeBrokerDataSnapshot = {};
-      for (const broker of new Set([...positionsByBroker.keys(), ...tradesByBroker.keys(), ...dividendsByBroker.keys(), ...cashBalancesByBroker.keys(), ...cashFlowsByBroker.keys()])) {
-        if (broker !== "ibkr" && broker !== "trading212") continue;
-        snapshot[broker] = {
-          positions: structuredClone(positionsByBroker.get(broker) ?? []),
-          trades: structuredClone(tradesByBroker.get(broker) ?? []),
-          dividends: structuredClone(dividendsByBroker.get(broker) ?? []),
-          cashBalances: structuredClone(cashBalancesByBroker.get(broker) ?? []),
-          cashFlows: structuredClone(cashFlowsByBroker.get(broker) ?? []),
-        };
-      }
-      return snapshot;
-    },
-  };
-}
+/* The merge rules and the snapshot shape live with the sync that produces
+ * them. The runtime keeps the name it has always exported. */
+export { createBrokerDataCache as createRuntimeBrokerDataCache };
 
 export async function createRuntimeApp(options: RuntimeAppOptions) {
   const dsn = process.env.SENTRY_DSN;
+  /* One budget for every partner call of this runtime: the broker adapters, the
+   * price and sector reads and the fundamentals. Hosted, it is Neon's. */
+  const partnerBudget =
+    options.partnerBudgetClient ??
+    createPartnerBudgetClient(options.partnerBudget ?? PartnerBudget.memoryLayer);
   const priceStore = options.priceStore;
-  const benchmarkSelectionStore = options.benchmarkSelectionStore ?? createInMemoryBenchmarkSelectionStore();
-  const marketDataConsentStore = options.marketDataConsentStore ?? createInMemoryMarketDataConsentStore();
+  const cashFlowStore = options.cashFlowStore ?? createMemoryCashFlowStore();
+  const benchmarkSelectionStore =
+    options.benchmarkSelectionStore ?? createInMemoryBenchmarkSelectionStore();
+  const investingLayoutStore = options.investingLayoutStore ?? createInMemoryInvestingLayoutStore();
+  const marketDataConsentStore =
+    options.marketDataConsentStore ?? createInMemoryMarketDataConsentStore();
+  const personalNetWorthStore =
+    options.personalNetWorthStore ?? createInMemoryPersonalNetWorthStore();
   const devFixtureEnabled = environment("INVESTING_DEV_FIXTURE") === "1";
-  const fxProvider = devFixtureEnabled ? createDevFixtureFxProvider() : createFrankfurterFxProvider();
-  let priceDataVersion = 0;
-  const onPriceDataChanged = () => { priceDataVersion += 1; };
-  const resolveTenantId = options.resolveTenantId ?? (() => LOCAL_TENANT_ID);
   const database = runtimeDatabase();
-  const agentRunStore = options.agentRunStore ?? (database ? createNeonAgentRunStore(database, resolveTenantId) : createFileAgentRunStore());
+  const fxProvider = devFixtureEnabled
+    ? createDevFixtureFxProvider()
+    : database
+      ? createStoredFxProvider(createFxRateRepository(database), createFrankfurterFxProvider())
+      : createFrankfurterFxProvider();
+  const dashboardCache = options.dashboardCache ?? createDashboardCache();
+  /* Wrapper labels are account metadata with no data path of their own: a
+   * runtime that can persist them injects its store (Neon when a database
+   * exists, a file locally). The default is in-memory so a bare runtime and a
+   * test still answer the same empty map instead of reaching for a database
+   * it may not have. */
+  const accountWrapperStore = options.accountWrapperStore ?? createInMemoryAccountWrapperStore();
+  let priceDataVersion = 0;
+  const onPriceDataChanged = () => {
+    priceDataVersion += 1;
+    dashboardCache.invalidate();
+  };
+  const resolveTenantId = options.resolveTenantId ?? (() => LOCAL_TENANT_ID);
+  /* The request path must not import node:async_hooks, so systemOneUsage is
+   * handed its database source here rather than importing it. See its comment. */
+  useDatabaseSource(runtimeDatabase);
+  /* Progress belongs next to the data on a hosted deployment, where the status
+   * poll and the run that answers it are different instances. A local process
+   * is both, so memory is the whole truth there. */
+  const priceSyncProgressStore = database
+    ? createNeonPriceSyncProgressStore(database)
+    : createInMemoryPriceSyncProgressStore();
   const tenantSyncStateFile = (tenantId: string) => {
     const base = runtimeBrokerSyncStateFile();
-    return tenantId === LOCAL_TENANT_ID ? base : base.replace(/\.json$/, `.${encodeURIComponent(tenantId)}.json`);
+    return tenantId === LOCAL_TENANT_ID
+      ? base
+      : base.replace(/\.json$/, `.${encodeURIComponent(tenantId)}.json`);
   };
 
   /* Everything below used to be built once per process. That was correct while
@@ -204,118 +361,513 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
    * store is per user, so the caches over it have to be too: a shared broker
    * data cache would serve the first signed-in user's positions to the second. */
   const buildTenantRuntime = async (tenantId: string) => {
-    let syncProgress: BrokerSyncProgress = { status: "idle", pages: 0, ordersRead: 0, positionsRead: 0, waitUntil: null, remaining: null, updatedAt: null, message: null };
+    let syncProgress: BrokerSyncProgress = {
+      status: "idle",
+      pages: 0,
+      ordersRead: 0,
+      positionsRead: 0,
+      waitUntil: null,
+      remaining: null,
+      updatedAt: null,
+      message: null,
+      history: null,
+    };
     const credentials = createRuntimeCredentialStore(tenantId);
+    if (options.agentRunStore && tenantId !== LOCAL_TENANT_ID)
+      throw new Error(
+        "Shared agent run store is single-tenant only; supply agentRunStoreForTenant",
+      );
+    const agentRunStore =
+      options.agentRunStoreForTenant?.(tenantId) ??
+      options.agentRunStore ??
+      (database
+        ? createNeonAgentRunStore(database, tenantId)
+        : createFileAgentRunStore(credentials as ReturnType<typeof createFileCredentialStore>));
+    const agentRuns = createAgentRunController(agentRunStore);
     const startupPassphrase = environment("LAVEGA_VAULT_PASSPHRASE");
-    if (startupPassphrase && await credentials.status() === "locked") await credentials.unlock(startupPassphrase);
-    const brokerData = createRuntimeBrokerDataCache(await credentials.status() === "unlocked" ? await credentials.getBrokerData() : {});
+    if (startupPassphrase && (await credentials.status()) === "locked")
+      await credentials.unlock(startupPassphrase);
+    if (!database && !options.agentRunStore && !options.agentRunStoreForTenant) {
+      if ((await credentials.status()) === "unlocked")
+        await migratePlaintextAgentRun(agentRunStore);
+      else await discardPlaintextAgentRun();
+    }
+    const brokerData = createBrokerDataCache({});
+    const dashboardSnapshots =
+      database && !devFixtureEnabled ? createDashboardSnapshotRepository(database, tenantId) : null;
     if (devFixtureEnabled) {
       brokerData.restore(createDevFixtureBrokerData());
-      await priceStore.upsert(createDevFixturePriceBars());
+      /* The fixture quotes by symbol; the shared store keys by instrument, and
+       * the read computes the key from the position (ISIN first), so the seed
+       * uses the same identity or the fixture would read unpriced. */
+      const fixtureData = brokerData.read();
+      const isinBySymbol = new Map(
+        [...fixtureData.positions, ...fixtureData.trades]
+          .filter((row) => row.isin)
+          .map((row) => [row.symbol.toUpperCase(), row.isin!.trim().toUpperCase()]),
+      );
+      const byKey = new Map<string, PriceBar[]>();
+      for (const bar of createDevFixturePriceBars()) {
+        const key = instrumentKeys({
+          symbol: bar.symbol,
+          ...(isinBySymbol.has(bar.symbol.toUpperCase())
+            ? { isin: isinBySymbol.get(bar.symbol.toUpperCase()) }
+            : {}),
+          currency: bar.currency,
+        }).key;
+        byKey.set(key, [...(byKey.get(key) ?? []), bar]);
+      }
+      for (const [key, bars] of byKey) {
+        await priceStore.upsert(
+          key,
+          bars.map(({ symbol: _symbol, ...rest }) => rest),
+        );
+      }
       onPriceDataChanged();
     }
-    const restoreBrokerData = async () => brokerData.restore(await credentials.getBrokerData());
+    const brokerSnapshot = createBrokerSnapshotReader({
+      cache: brokerData,
+      load: async () => (await credentials.getBrokerData()) ?? {},
+      hosted: Boolean(database) && !devFixtureEnabled,
+      isSyncing: () => syncProgress.status === "running" || syncProgress.status === "waiting",
+      ttlMs: DASHBOARD_CACHE_TTL_MS,
+    });
+    /* The runtime is built per request (docs/investing/STACK.md), and most
+     * requests never read positions, so the vault's snapshots are read on first
+     * use rather than here. */
+    let brokerDataLoad: Promise<void> | null = devFixtureEnabled ? Promise.resolve() : null;
+    const restoreBrokerData = async () => {
+      const snapshot = await credentials.getBrokerData();
+      if (snapshot) brokerSnapshot.restore(snapshot);
+      brokerDataLoad = Promise.resolve();
+    };
+    const loadBrokerData = () =>
+      (brokerDataLoad ??= restoreBrokerData().catch((error: unknown) => {
+        brokerDataLoad = null;
+        throw error;
+      }));
     const updateProgress = (event: Trading212DiagnosticEvent) => {
       const updatedAt = new Date().toISOString();
       if (event.type === "history-page") {
-        syncProgress = { ...syncProgress, status: "running", pages: event.page, ordersRead: event.ordersRead, waitUntil: null, updatedAt, message: event.hasNext ? "Order history is loading" : "Order history is complete" };
+        syncProgress = {
+          ...syncProgress,
+          status: "running",
+          pages: event.page,
+          ordersRead: event.ordersRead,
+          waitUntil: null,
+          updatedAt,
+          message: event.hasNext ? "Order history is loading" : "Order history is complete",
+        };
       } else if (event.type === "cash-history-page") {
-        syncProgress = { ...syncProgress, status: "running", updatedAt, message: `${event.history === "transactions" ? "Cash transaction" : "Dividend"} history ${event.hasNext ? "is loading" : "is complete"}` };
+        syncProgress = {
+          ...syncProgress,
+          status: "running",
+          updatedAt,
+          message: `${event.history === "transactions" ? "Cash transaction" : "Dividend"} history ${event.hasNext ? "is loading" : "is complete"}`,
+        };
       } else if (event.type === "wait") {
-        syncProgress = { ...syncProgress, status: "waiting", waitUntil: new Date(Date.now() + event.waitMs).toISOString(), remaining: 0, updatedAt, message: "Waiting for new Trading 212 API capacity" };
+        syncProgress = {
+          ...syncProgress,
+          status: "waiting",
+          waitUntil: new Date(Date.now() + event.waitMs).toISOString(),
+          remaining: 0,
+          updatedAt,
+          message: "Waiting for new Trading 212 API capacity",
+        };
       } else if (event.type === "positions") {
-        syncProgress = { ...syncProgress, status: "running", positionsRead: event.count, updatedAt, message: "Positions are loaded" };
-      } else {
-        syncProgress = { ...syncProgress, status: "running", remaining: event.remaining, updatedAt, message: event.status === 429 ? "Trading 212 rate limit response received" : syncProgress.message };
+        syncProgress = {
+          ...syncProgress,
+          status: "running",
+          positionsRead: event.count,
+          updatedAt,
+          message: "Positions are loaded",
+        };
+      } else if (event.type === "response") {
+        syncProgress = {
+          ...syncProgress,
+          status: "running",
+          remaining: event.remaining,
+          updatedAt,
+          message:
+            event.status === 429
+              ? "Trading 212 rate limit response received"
+              : syncProgress.message,
+        };
       }
     };
     /* Sync state is per tenant even though it holds no personal data: one
      * shared store would let one user's run clear another's rate-limit cooldown. */
     const syncStateStore = database
       ? createNeonBrokerSyncStateStore(database, tenantId)
-      : createFileBrokerSyncStateStore(tenantSyncStateFile(tenantId));
-    const scheduledBrokerSync = createRuntimeBrokerSync(async (result) => {
-      brokerData.apply(result);
-      if (result.outcomes.some((outcome) => outcome.result !== null)) await credentials.putBrokerData(brokerData.snapshot());
-    }, credentials, syncStateStore, updateProgress, tenantId);
-    const brokerSync = async (force: boolean) => {
+      : createFileBrokerSyncStateStore(tenantSyncStateFile(tenantId), {
+          read: async () => {
+            const snapshot = await credentials.getBrokerData();
+            if (!snapshot) throw new Error("credential vault is locked");
+            return snapshot;
+          },
+          write: (snapshot) => credentials.putBrokerData(snapshot),
+        });
+    /* DeGiro files land in the same encrypted vault an API sync writes. The
+     * handler is built per tenant, so its lease, snapshot write and cache
+     * invalidation can never reach another user. */
+    const deGiroImportRequest = createDeGiroImportHandler({
+      vault: {
+        getBrokerData: () => credentials.getBrokerData(),
+        putBrokerSnapshot: (broker, snapshot) => credentials.putBrokerSnapshot(broker, snapshot),
+        ensureWritable: async () => {
+          if (credentialsArePerTenant()) return;
+          const status = await credentials.status();
+          if (status === "empty") await credentials.setup("");
+          else if (status === "locked") throw new Error("credential vault is locked");
+        },
+      },
+      operations: syncStateStore,
+      entity: environment("LAVEGA_INVESTING_ENTITY") ?? "personal",
+      now: () => DateTime.formatIso(DateTime.nowUnsafe()),
+      onCommitted: async (snapshot) => {
+        await loadBrokerData().catch(() => undefined);
+        brokerData.restore({ ...brokerData.snapshot(), degiro: snapshot });
+        brokerSnapshot.markCurrent();
+        dashboardCache.invalidate(tenantId);
+      },
+    });
+    const readHistoryProgress = async (): Promise<BrokerHistoryProgress> => {
+      const entries = await Promise.all(
+        SCHEDULED_BROKERS.map(async (broker) => {
+          const state = await syncStateStore.get(broker);
+          const resume = state.resume ?? {};
+          return [
+            broker,
+            {
+              lastSyncedAt: state.lastSyncedAt,
+              retryAfter: state.retryAfter ?? null,
+              /* No resume cursor at all means nothing is half-read: either the last
+               * run finished every page or none has run yet, and lastSyncedAt tells
+               * those apart. */
+              ordersComplete: resume.ordersComplete ?? resume.ordersNextPagePath == null,
+              transactionsComplete:
+                resume.transactionsComplete ?? resume.transactionsNextPagePath == null,
+              dividendsComplete: resume.dividendsComplete ?? resume.dividendsNextPagePath == null,
+            },
+          ] as const;
+        }),
+      );
+      return Object.fromEntries(entries) as BrokerHistoryProgress;
+    };
+    const scheduledBrokerSync = createRuntimeBrokerSync(
+      /* The run stored what it read, so this only mirrors the stored data into
+       * the cache. Reading, merging and writing it here is what let two
+       * instances overwrite each other. */
+      async (result) => {
+        brokerData.apply({ outcomes: [], problems: result.problems });
+        if (Object.keys(result.committed).length === 0) return;
+        await loadBrokerData().catch(() => undefined);
+        brokerData.restore({ ...brokerData.snapshot(), ...result.committed });
+        brokerSnapshot.markCurrent();
+      },
+      credentials,
+      syncStateStore,
+      updateProgress,
+      tenantId,
+      partnerBudget,
+      () => cashFlowStore.listRules(),
+    );
+    /* Jev-04: suggestions run OFF the sync path. A model that is down, slow or
+     * disabled leaves today's state exactly as it is. */
+    const suggestCashFlows = async (result: ScheduledSyncResult) => {
+      try {
+        if (!(await cashFlowStore.suggestionsEnabled())) return;
+        if (!process.env.TYPESAFE_API_KEY?.trim()) return;
+        const [rules, suggestions] = await Promise.all([
+          cashFlowStore.listRules(),
+          cashFlowStore.listSuggestions(),
+        ]);
+        const candidates = [];
+        for (const [broker, snapshot] of Object.entries(result.committed)) {
+          const flows = snapshot.cashFlows ?? [];
+          for (const context of cashFlowSuggestionContexts({
+            broker,
+            flows,
+            problems: result.problems,
+            rules,
+            suggestions,
+          })) {
+            candidates.push({
+              context,
+              sample: suggestionSample(broker, context.typeKey, flows, result.problems),
+            });
+          }
+        }
+        if (candidates.length === 0) return;
+        const provider = createSystemOneProvider({
+          userId: tenantId,
+          route: CASH_FLOW_SUGGESTION_ROUTE as never,
+        });
+        await createCashFlowSuggestionService({
+          store: cashFlowStore,
+          provider: () => provider,
+          reportProblem: (message, error) =>
+            syncRunReporter({
+              source: "broker-sync",
+              problems: [message, ...(error instanceof Error ? [error.message] : [])],
+            }),
+        }).request(candidates);
+      } catch (error) {
+        syncRunReporter({
+          source: "broker-sync",
+          problems: [
+            "Cash-flow suggestions failed",
+            ...(error instanceof Error ? [error.message] : []),
+          ],
+        });
+      }
+    };
+    const brokerSync = async (
+      force: boolean,
+      lanes: readonly BrokerSyncLane[],
+      deadlineMs?: number,
+      rebuildOrders?: boolean,
+    ) => {
       if (devFixtureEnabled) {
-        syncProgress = { status: "completed", pages: 0, ordersRead: 0, positionsRead: 0, waitUntil: null, remaining: null, updatedAt: new Date().toISOString(), message: "Dev fixture data active — real broker sync skipped" };
-        return { outcomes: [], problems: [] };
+        syncProgress = {
+          status: "completed",
+          pages: 0,
+          ordersRead: 0,
+          positionsRead: 0,
+          waitUntil: null,
+          remaining: null,
+          updatedAt: new Date().toISOString(),
+          message: "Dev fixture data active — real broker sync skipped",
+          history: syncProgress.history,
+        };
+        return { outcomes: [], problems: [], committed: {} };
       }
       if (syncProgress.status !== "running" && syncProgress.status !== "waiting") {
-        syncProgress = { status: "running", pages: 0, ordersRead: 0, positionsRead: 0, waitUntil: null, remaining: null, updatedAt: new Date().toISOString(), message: "Broker synchronization started" };
+        syncProgress = {
+          status: "running",
+          pages: 0,
+          ordersRead: 0,
+          positionsRead: 0,
+          waitUntil: null,
+          remaining: null,
+          updatedAt: new Date().toISOString(),
+          message: "Broker synchronization started",
+          history: syncProgress.history,
+        };
       }
       try {
-        const result = await scheduledBrokerSync(force);
-        const trading212Problem = result.problems.find((problem) => problem.startsWith("trading212:"));
-        syncProgress = { ...syncProgress, status: trading212Problem ? "problem" : "completed", waitUntil: null, updatedAt: new Date().toISOString(), message: trading212Problem ?? "Trading 212 synchronization completed" };
+        const result = await scheduledBrokerSync(force, lanes, deadlineMs, rebuildOrders);
+        const trading212Problem = result.problems.find((problem) =>
+          problem.startsWith("trading212:"),
+        );
+        syncProgress = {
+          ...syncProgress,
+          status: trading212Problem ? "problem" : "completed",
+          waitUntil: null,
+          updatedAt: new Date().toISOString(),
+          message: trading212Problem ?? "Trading 212 synchronization completed",
+        };
+        /* Fire and forget: never awaited by the sync, never able to fail it. */
+        void suggestCashFlows(result);
         return result;
       } catch (error) {
-        syncProgress = { ...syncProgress, status: "problem", waitUntil: null, updatedAt: new Date().toISOString(), message: error instanceof Error ? error.message : "Broker synchronization failed" };
+        syncProgress = {
+          ...syncProgress,
+          status: "problem",
+          waitUntil: null,
+          updatedAt: new Date().toISOString(),
+          message: error instanceof Error ? error.message : "Broker synchronization failed",
+        };
         throw error;
       }
     };
-    const dashboardCache = new Map<string, { version: number; data: InvestingDashboardData }>();
-    const dashboardReader = async ({ symbol }: { symbol?: string }) => {
-      const { positions, trades, dividends, cashBalances, cashFlows, problems, dataVersion } = brokerData.read();
-      const version = dataVersion + priceDataVersion;
-      const selectedBenchmarks = options.benchmarkSymbols
-        ? await options.benchmarkSymbols(tenantId)
-        : (await benchmarkSelectionStore.get(tenantId)).symbols;
-      const cacheKey = `${symbol?.trim().toUpperCase() ?? ""}\u0000${selectedBenchmarks.join("\u0000")}`;
-      const cached = dashboardCache.get(cacheKey);
-      if (cached?.version === version) return cached.data;
-      const symbols = [...new Set([...positions.map((position) => position.symbol), ...trades.map((trade) => trade.symbol)])];
-      const priceBars = (await Promise.all(symbols.map((value) => priceStore.getRange(tenantId, value)))).flat();
-      const benchmarkBars = (await Promise.all(selectedBenchmarks.map((benchmark) => priceStore.getRange(tenantId, benchmark)))).flat();
-      const fxResult = await fxProvider.getLatestRate();
-      const data = buildInvestingDashboard({ positions, trades, dividends, cashBalances, cashFlows, priceBars, benchmarkBars, benchmarkInstruments: selectedBenchmarks.map((benchmark) => ({ symbol: benchmark, name: benchmark, exchange: "Yahoo Finance", currency: benchmarkBars.find((bar) => bar.symbol === benchmark)?.currency ?? "EUR" })), presentationCurrency: "EUR", fxRates: fxResult.rate, selectedSymbol: symbol, problems: [...problems, ...fxResult.problems], dataVersion: version });
-      dashboardCache.set(cacheKey, { version, data });
-      return data;
-    };
-    let agentInFlight: Promise<AgentRunRecord> | null = null;
-    const runPortfolioAgentOnce = async (): Promise<AgentRunRecord> => {
-      if (agentInFlight) return agentInFlight;
-      const record: AgentRunRecord = { id: crypto.randomUUID(), startedAt: new Date().toISOString(), finishedAt: null, status: "running", summary: null, error: null };
-      void agentRunStore.put(record);
-      const run = (async () => {
+    const benchmarkSymbols = options.benchmarkSymbols;
+    const portfolioRead = ManagedRuntime.make(
+      portfolioReadLayer({
+        priceStore,
+        loadBrokerData,
+        brokerData,
+        brokerSnapshot,
+        dashboardSnapshots,
+        dashboardCache,
+        syncState: syncStateStore,
+        fxProvider,
+        benchmarks: benchmarkSymbols
+          ? (id) => Promise.resolve(benchmarkSymbols(id))
+          : (id) => effectiveBenchmarkSymbols(benchmarkSelectionStore, id),
+        accountWrappers: (id) => accountWrapperStore.get(id),
+        priceDataVersion: () => priceDataVersion,
+      }),
+    );
+    /* The dashboard read is one module with one method (portfolioRead.ts). This
+     * adapter only resolves the tenant and runs the read; it holds no behaviour
+     * of its own, so the read is testable without HTTP and this stays wiring. */
+    const dashboardReader: InvestingDashboardReader = ({ symbol, timing = untimed }) =>
+      portfolioRead.runPromise(
+        PortfolioRead.use((read) => read.read({ tenantId, symbol, timing })),
+      );
+    const healthCheck = async (): Promise<InvestingHealth> => {
+      const checks: InvestingHealth["checks"] = {
+        database: database ? "ok" : "not-configured",
+        migrationLedger: database ? "ok" : "not-applicable",
+        tenantIsolation: database ? "enforced" : "not-applicable",
+        vault: "empty",
+        trading212Credentials: "missing",
+        trading212Sync: "never",
+        snapshot: "empty",
+      };
+      const trading212 = { lastSyncedAt: null as string | null, positions: 0 };
+
+      if (database) {
         try {
-          if ((await credentials.status()) === "unlocked") await restoreBrokerData();
-          const summary = await (options.runAgent ?? runPortfolioAgent)({ prompt: PORTFOLIO_AGENT_PROMPT, tools: createPortfolioAgentTools({ readBrokerData: () => brokerData.read(), priceStore }) });
-          const done: AgentRunRecord = { ...record, finishedAt: new Date().toISOString(), status: "done", summary };
-          await agentRunStore.put(done);
-          return done;
-        } catch (error) {
-          const failed: AgentRunRecord = { ...record, finishedAt: new Date().toISOString(), status: "error", error: error instanceof Error ? error.message : "Portfolio agent run failed" };
-          await agentRunStore.put(failed);
-          throw error;
+          const ledger = await database.query<{ ledger: string | null }>(
+            "SELECT to_regclass('public.schema_migrations') AS ledger",
+          );
+          if (!ledger.rows[0]?.ledger) checks.migrationLedger = "down";
+          const role = await database.query<{ bypasses: boolean }>(
+            "SELECT rolsuper OR rolbypassrls AS bypasses FROM pg_roles WHERE rolname = current_user",
+          );
+          if (role.rows[0]?.bypasses !== false) checks.tenantIsolation = "down";
+        } catch {
+          return {
+            status: "down",
+            storage: "neon",
+            checks: {
+              ...checks,
+              database: "down",
+              migrationLedger: "down",
+              tenantIsolation: "down",
+              vault: "down",
+              trading212Credentials: "down",
+              trading212Sync: "down",
+              snapshot: "down",
+            },
+            trading212,
+          };
         }
-      })();
-      agentInFlight = run;
-      try {
-        return await run;
-      } finally {
-        if (agentInFlight === run) agentInFlight = null;
       }
+
+      try {
+        const vaultStatus = await credentials.status();
+        checks.vault = vaultStatus === "unlocked" ? "ok" : vaultStatus;
+        const configured =
+          vaultStatus === "unlocked" &&
+          (await credentials.getCredentials(tenantId, "trading212")) !== null;
+        checks.trading212Credentials = configured ? "configured" : "missing";
+        if (configured) {
+          await restoreBrokerData();
+          const snapshot = brokerData.snapshot().trading212;
+          trading212.positions = snapshot?.positions.length ?? 0;
+          checks.snapshot = snapshot ? "loaded" : "empty";
+          const state = await syncStateStore.get("trading212");
+          const progress = await syncStateStore.progress("trading212");
+          trading212.lastSyncedAt = state.lastSyncedAt;
+          checks.trading212Sync = trading212SyncHealth(
+            state.lastSyncedAt,
+            progress?.status === "problem",
+          );
+        }
+      } catch {
+        checks.vault = "down";
+        checks.trading212Credentials = "down";
+        checks.trading212Sync = "down";
+        checks.snapshot = "down";
+      }
+
+      const status = Object.values(checks).some((value) => value === "down")
+        ? "down"
+        : checks.trading212Credentials === "configured" &&
+            checks.trading212Sync === "fresh" &&
+            checks.snapshot === "loaded" &&
+            checks.migrationLedger !== "down"
+          ? "ok"
+          : "degraded";
+      return { status, storage: database ? "neon" : "file", checks, trading212 };
+    };
+    const runPortfolioAgentOnce = async (model?: string): Promise<AgentRunRecord> => {
+      return agentRuns.run(model, async () => {
+        await restoreBrokerData();
+        const dashboard = await dashboardReader({});
+        return options.runAgent
+          ? await options.runAgent({ dashboard, model })
+          : await runPortfolioAgent({ dashboard, model, userId: tenantId });
+      });
+    };
+    const portfolioChatData = async () => {
+      await restoreBrokerData();
+      return {
+        dashboard: await dashboardReader({}),
+        trades: () => brokerData.read().trades,
+        price: async (symbol: string, date?: string) => {
+          /* A chat price question names a symbol; the shared store answers by
+           * instrument key, so the key is resolved the same way the dashboard
+           * resolves it (issue #307). Unknown symbols fall back to a `sym:` key,
+           * which is what an ISIN-less series uses anyway. */
+          const { positions, trades } = brokerData.read();
+          const match = priceReadKeys({ positions, trades }).find(
+            (entry) => entry.symbol.toUpperCase() === symbol.toUpperCase(),
+          );
+          const key = match?.key ?? instrumentKeys({ symbol, currency: "EUR" }).key;
+          const alias = match?.alias;
+          const bars = await priceStore.getRange(alias ? { key, alias } : { key }, undefined, date);
+          const bar = bars.at(-1);
+          return bar ? { symbol, date: bar.date, close: bar.close, currency: bar.currency } : null;
+        },
+      };
     };
     return {
       brokerSync,
-      brokerSyncStatus: () => ({ ...syncProgress }),
-      configureBroker: createRuntimeBrokerCredentialSetup(credentials, restoreBrokerData, tenantId),
+      brokerSyncStatus: async () => {
+        /* The counters above live in this invocation only. A problem the last
+         * run stored (a revoked key above all) must reach whichever invocation
+         * answers next, or the dashboard shows "idle" while nothing can sync. */
+        const stored =
+          syncProgress.status === "idle" ? await syncStateStore.progress("trading212") : null;
+        return {
+          ...syncProgress,
+          ...(stored?.status === "problem"
+            ? { status: "problem" as const, message: stored.message, updatedAt: stored.updatedAt }
+            : {}),
+          history: await readHistoryProgress(),
+        };
+      },
+      configureBroker: createRuntimeBrokerCredentialSetup(
+        credentials,
+        async (broker) => {
+          if (!database && !options.agentRunStore && !options.agentRunStoreForTenant)
+            await migratePlaintextAgentRun(agentRunStore);
+          if (!database)
+            await (syncStateStore as ReturnType<typeof createFileBrokerSyncStateStore>).reset(
+              broker,
+            );
+          await restoreBrokerData();
+        },
+        tenantId,
+      ),
       credentialStatus: () => credentials.status(),
+      brokerReadability: () => credentials.brokerReadability?.(),
       unlockCredentials: async (passphrase: string) => {
         const unlocked = await credentials.unlock(passphrase);
-        if (unlocked) await restoreBrokerData();
+        if (unlocked) {
+          if (!database && !options.agentRunStore && !options.agentRunStoreForTenant)
+            await migratePlaintextAgentRun(agentRunStore);
+          await restoreBrokerData();
+        }
         return unlocked;
       },
       dashboardReader,
+      deGiroImportRequest,
+      healthCheck,
       priceSyncTargets: async () => {
-        const { positions, trades } = brokerData.read();
-        const benchmarkSymbols = options.benchmarkSymbols ? await options.benchmarkSymbols(tenantId) : (await benchmarkSelectionStore.get(tenantId)).symbols;
+        await loadBrokerData();
+        const { positions, trades } = await brokerSnapshot.read("fresh");
+        const benchmarkSymbols = options.benchmarkSymbols
+          ? await options.benchmarkSymbols(tenantId)
+          : await effectiveBenchmarkSymbols(benchmarkSelectionStore, tenantId);
         return discoverPriceSyncTargets({ positions, trades, benchmarkSymbols });
       },
       runPortfolioAgentOnce,
+      portfolioChatData,
     };
   };
 
@@ -337,30 +889,403 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
   if (!credentialsArePerTenant()) await tenantRuntime(LOCAL_TENANT_ID);
 
   const credentialDependencies = {
-    configureBroker: async (input: BrokerCredentialInput) => (await currentRuntime()).configureBroker(input),
+    configureBroker: async (input: BrokerCredentialInput) =>
+      (await currentRuntime()).configureBroker(input),
     credentialStatus: async () => (await currentRuntime()).credentialStatus(),
-    unlockCredentials: async (passphrase: string) => (await currentRuntime()).unlockCredentials(passphrase),
+    brokerReadability: async () => (await currentRuntime()).brokerReadability(),
+    unlockCredentials: async (passphrase: string) =>
+      (await currentRuntime()).unlockCredentials(passphrase),
     brokerSyncStatus: async () => (await currentRuntime()).brokerSyncStatus(),
-    passphraseMode: () => credentialsArePerTenant() ? "unused" as const : "required" as const,
-    priceSyncTargets: async (tenantId: string) => (await tenantRuntime(tenantId)).priceSyncTargets(),
+    healthCheck: async () => (await currentRuntime()).healthCheck(),
+    passphraseMode: () => (credentialsArePerTenant() ? ("unused" as const) : ("required" as const)),
+    priceSyncTargets: async (tenantId: string) =>
+      (await tenantRuntime(tenantId)).priceSyncTargets(),
   };
-  const brokerSync = async (force: boolean) => (await currentRuntime()).brokerSync(force);
-  const dashboardReader: InvestingDashboardReader = async ({ symbol }) => (await currentRuntime()).dashboardReader({ symbol });
-  const runPortfolioAgentOnce = async (): Promise<AgentRunRecord> => (await currentRuntime()).runPortfolioAgentOnce();
+  const brokerSync = async (
+    force: boolean,
+    lanes: readonly BrokerSyncLane[],
+    deadlineMs?: number,
+    rebuildOrders?: boolean,
+  ) => {
+    const tenantId = await resolveTenantId();
+    const result = await (
+      await tenantRuntime(tenantId)
+    ).brokerSync(force, lanes, deadlineMs, rebuildOrders);
+    dashboardCache.invalidate(tenantId);
+    return result;
+  };
+  const dashboardReader: InvestingDashboardReader = async ({ symbol, timing = untimed }) =>
+    (await timing.measure("runtime", currentRuntime)).dashboardReader({ symbol, timing });
+  const deGiroImportRequest = async (request: Request): Promise<Response> =>
+    (await currentRuntime()).deGiroImportRequest(request);
+  const runPortfolioAgentOnce = async (model?: string): Promise<AgentRunRecord> =>
+    (await currentRuntime()).runPortfolioAgentOnce(model);
+  const freshFundamentals =
+    options.fundamentalsProvider ??
+    createYahooFundamentalsProvider(
+      new YahooHttpClient(undefined, undefined, undefined, { partnerBudget }),
+      // Awaited by a request (stock research, chat): no partner slot past 10 s.
+      { budgetMs: 10_000 },
+    );
+  const fundamentals = createCachedFundamentalsProvider(freshFundamentals);
+  const unavailableFundamentals: FundamentalsProvider = {
+    fetch: async () => {
+      throw new Error("Market data consent is not given");
+    },
+  };
+  /* Sectors resolve read-only, as for the Analyse card: stored profiles and
+   * the owner's corrections, never a provider fetch on the chat path.
+   * resolveListing is still wired in — it's a local PriceStore read, not a
+   * provider fetch — so the chat sees a renamed holding under the same
+   * listing the summary route already cached it under. */
+  const portfolioChatContext = async (): Promise<PortfolioChatContext> => {
+    const tenantId = await resolveTenantId();
+    const [data, consent, corrections, inferenceEnabled] = await Promise.all([
+      (await tenantRuntime(tenantId)).portfolioChatData(),
+      marketDataConsentStore.get(tenantId),
+      sectorDependencies.sectorCorrectionStore.getAll(tenantId),
+      sectorDependencies.sectorInferenceSettingStore.get(tenantId),
+    ]);
+    const { exposure } = await resolvePortfolioSectors(data.dashboard.positions, {
+      store: sectorDependencies.sectorStore,
+      correction: async (symbol) => corrections[symbol.toUpperCase()] ?? null,
+      showInferred: consent.accepted && inferenceEnabled,
+      resolveListing: (position) => {
+        const keys = instrumentKeys({
+          symbol: position.symbol,
+          ...(position.isin ? { isin: position.isin } : {}),
+          currency: position.currency ?? "EUR",
+        });
+        return resolveSectorListing(priceStore, { key: keys.key });
+      },
+    }).catch(() => ({ exposure: null }));
+    return {
+      ...data,
+      sectors: exposure,
+      fundamentals: consent.accepted ? fundamentals : unavailableFundamentals,
+    };
+  };
+
+  const agentMemory =
+    options.agentMemory ??
+    (database ? (tenantId: string) => createAgentMemoryRepository(database, tenantId) : null);
 
   const withPortfolioAgentRoute = (honoApp: ReturnType<typeof createApp>): RuntimeApp => {
+    attachMemoryRoutes(honoApp, {
+      resolveTenantId: async () => resolveTenantId(),
+      memory: (tenantId) => agentMemory?.(tenantId) ?? null,
+      /* The thesis migration's identity source (WS4.5, #297): the current
+       * broker snapshot's holdings and trades, grouped by ISIN first. */
+      instrumentKeys: async () => {
+        const tenantId = await resolveTenantId();
+        const data = await (await tenantRuntime(tenantId)).portfolioChatData();
+        const rows = [
+          ...data.dashboard.positions.map((position) => ({
+            symbol: position.symbol,
+            ...(position.isin ? { isin: position.isin } : {}),
+          })),
+          ...data.trades().map((trade) => ({
+            symbol: trade.symbol,
+            ...(trade.isin ? { isin: trade.isin } : {}),
+            ...(trade.broker ? { broker: trade.broker } : {}),
+          })),
+        ];
+        return resolveSecurityIdentities(rows).bySymbol;
+      },
+    });
+    attachLetterRoutes(honoApp, {
+      resolveTenantId: async () => resolveTenantId(),
+      memory: (tenantId) => agentMemory?.(tenantId) ?? null,
+      context: portfolioChatContext,
+      generate: options.letterGenerator ?? createLetterGenerator(options.chatModel),
+    });
+    attachStockResearchRoutes(honoApp, {
+      resolveTenantId: async () => resolveTenantId(),
+      consent: marketDataConsentStore,
+      fundamentals: freshFundamentals,
+      chatModel: options.chatModel,
+    });
+    /* The reads the external MCP tools call (#285). Projected from the same
+     * tenant-scoped context the chat uses, so the dashboard and `/mcp` cannot
+     * disagree about a position, a trade or a price. */
+    attachMcpReadRoutes(honoApp, {
+      resolveTenantId: async () => resolveTenantId(),
+      context: portfolioChatContext,
+      consent: async () => (await marketDataConsentStore.get(await resolveTenantId())).accepted,
+    });
+    honoApp.get("/api/agents/portfolio", (c) =>
+      c.json({
+        agents: listPortfolioAgents().map(
+          ({ instructions: _instructions, criteria: _criteria, ...agent }) => agent,
+        ),
+      }),
+    );
     honoApp.post("/api/agents/portfolio/run", async (c) => {
+      const body: { model?: unknown } = await c.req.json<{ model?: unknown }>().catch(() => ({}));
+      const model =
+        typeof body.model === "string" && body.model.trim() ? body.model.trim() : undefined;
       try {
-        return c.json({ summary: (await runPortfolioAgentOnce()).summary });
+        const run = await runPortfolioAgentOnce(model);
+        return c.json({ result: run.result ?? null });
       } catch (error) {
-        return c.json({ problems: [error instanceof Error ? error.message : "Portfolio agent run failed"] }, 502);
+        return c.json(
+          { problems: [error instanceof Error ? error.message : "Portfolio agent run failed"] },
+          502,
+        );
       }
     });
-    return Object.assign(honoApp, { runPortfolioAgentOnce });
+    honoApp.post("/api/agents/portfolio/conversation", async (c) => {
+      const body: { agentId?: unknown; id?: unknown; messages?: unknown } = await c.req
+        .json()
+        .catch(() => ({}));
+      if (!isPortfolioAgentId(body.agentId))
+        return c.json({ problems: ["Unknown portfolio agent"] }, 400);
+      /* Pair-safe trim: never hand the model a tool result whose assistant
+       * call was cut off (WS5.6). */
+      const messages = Array.isArray(body.messages)
+        ? trimToolHistory(body.messages as UIMessage[], 12)
+        : [];
+      const last = messages.at(-1);
+      const message =
+        last?.role === "user" && Array.isArray(last.parts)
+          ? last.parts.flatMap((part) => (part.type === "text" ? [part.text] : [])).join("\n")
+          : "";
+      if (!message.trim()) return c.json({ problems: ["Conversation message is required"] }, 400);
+      const host = body.agentId;
+      /* The first tagged agent answers inside the host's thread. Storage
+       * stays under the host, and a guest turn reads and writes no memory. */
+      const responder = findMentions(message)[0] ?? host;
+      /* The chat id is the thread id. The client's copy of the history feeds
+       * the model; only this turn's user message and the reply are stored. */
+      const repository = agentMemory?.(await resolveTenantId()) ?? null;
+      const threadId = isUuid(body.id) ? body.id : null;
+      if (repository && !threadId)
+        return c.json({ problems: ["Conversation thread id is required"] }, 400);
+      const title = message.trim().replace(/\s+/g, " ").slice(0, THREAD_TITLE_LENGTH);
+      try {
+        /* The hardened turn status (WS5.6): a turn that ran out of rounds
+         * without text, errored or was aborted is persisted as FAILED, never as
+         * a completed answer. */
+        let turnStatus: ToolLoopTurnStatus | null = null;
+        let streamError = false;
+        const persistFailedTurn = async (reason: string) => {
+          if (!repository || !threadId) return;
+          await repository
+            .appendMessages(threadId, host, title, [
+              {
+                id: crypto.randomUUID(),
+                role: "assistant",
+                parts: [
+                  {
+                    type: "text",
+                    text: "The agent could not finish this answer. Try again.",
+                  },
+                ],
+                metadata: { failed: true, reason },
+              },
+            ])
+            .catch((error: unknown) => console.error("[memory] failed turn not saved", error));
+        };
+        const [agent] = await Promise.all([
+          portfolioChatContext().then((context) =>
+            createPortfolioChatAgent({
+              agentId: responder,
+              host,
+              message,
+              context,
+              ...(repository && threadId && responder === host
+                ? { memory: { repository, agentId: host, threadId } }
+                : {}),
+              ...(options.chatModel ? { model: options.chatModel } : {}),
+              onTurnStatus: (status) => {
+                turnStatus = status;
+              },
+            }),
+          ),
+          repository && threadId
+            ? repository.appendMessages(threadId, host, title, [last])
+            : undefined,
+        ]);
+        return await createAgentUIStreamResponse({
+          agent,
+          uiMessages: attributeHistory(messages, responder, host),
+          messageMetadata: () => ({ agentId: responder }),
+          abortSignal: c.req.raw.signal,
+          onError: () => {
+            /* Remembered, not persisted here: a provider can error after
+             * producing usable text, and onEnd decides what the turn was. */
+            streamError = true;
+            return "The agent could not answer. Try again.";
+          },
+          generateMessageId: () => crypto.randomUUID(),
+          onEnd: async ({ responseMessage }) => {
+            if (!repository || !threadId) return;
+            const status = turnStatus as ToolLoopTurnStatus | null;
+            const failedTurn = status?.status === "failed" || streamError;
+            const hasText = responseMessage.parts.some((part) => part.type === "text");
+            /* A turn with no usable text is persisted as FAILED, never as an
+             * empty completed answer (WS5.6). A turn that produced text but
+             * ended on an error keeps the text and is marked failed. */
+            if (failedTurn && !hasText) {
+              await persistFailedTurn(status?.status === "failed" ? status.reason : "error");
+              return;
+            }
+            if (responseMessage.parts.length === 0) return;
+            await repository
+              .appendMessages(threadId, host, title, [
+                failedTurn
+                  ? {
+                      ...responseMessage,
+                      metadata: { ...responseMessage.metadata, failed: true },
+                    }
+                  : responseMessage,
+              ])
+              .catch((error: unknown) => console.error("[memory] reply not saved", error));
+          },
+        });
+      } catch (error) {
+        return c.json(
+          { problems: [error instanceof Error ? error.message : "Portfolio conversation failed"] },
+          502,
+        );
+      }
+    });
+    return Object.assign(honoApp, { runPortfolioAgentOnce, portfolioChatContext });
   };
-  const sectorDependencies = { sectorStore: createFileSectorProfileStore(runtimeSectorStoreFile()) };
-  if (!dsn) return withPortfolioAgentRoute(createApp({ brokerSync, ...credentialDependencies, ...sectorDependencies, resolveTenantId: options.resolveTenantId, store: priceStore, fxProvider, benchmarkSelectionStore, marketDataConsentStore, dashboardReader, onPriceDataChanged }));
+  const sectorDependencies = {
+    identifierSelectionSettingStore:
+      options.identifierSelectionSettingStore ?? createInMemoryIdentifierSelectionSettingStore(),
+    identifierOverrideStore:
+      options.identifierOverrideStore ?? createInMemoryIdentifierOverrideStore(),
+    sectorStore: options.sectorStore ?? createFileSectorProfileStore(runtimeSectorStoreFile()),
+    sectorCorrectionStore: options.sectorCorrectionStore ?? createInMemorySectorCorrectionStore(),
+    sectorInferenceSettingStore:
+      options.sectorInferenceSettingStore ?? createInMemorySectorInferenceSettingStore(),
+    /* Gated only on whether a System One client is configured — never on a
+     * per-account setting, since that's checked per request at the route
+     * (POST /api/investing/sectors/infer). resolveSystemOneConfig() throws
+     * when TYPESAFE_API_KEY is unset, so this must stay lazy: a set
+     * TYPESAFE_API_KEY builds a classifier, an unset one leaves inference
+     * dark instead of crashing the runtime at startup — the same mistake
+     * this app already made once with ANTHROPIC_API_KEY. userId is resolved
+     * fresh per call so System One usage is billed to the tenant asking. */
+    ...(process.env.TYPESAFE_API_KEY?.trim()
+      ? {
+          sectorClassifier: async (instrument: { symbol: string; description?: string }) =>
+            createSystemOneSectorClassifier(
+              createSystemOneProvider({
+                userId: await resolveTenantId(),
+                route: "sector-inference",
+                failedRequestInputTokens: 500,
+              }),
+            )(instrument),
+          /* The identifier selector is per tenant because its usage row is
+           * billed to the account asking; the provider only calls it on
+           * ambiguity and only when the request carries consent + the owner's
+           * enable setting (#136). */
+          identifierSelectorForTenant: (tenantId: string) =>
+            createSystemOneIdentifierSelector(
+              createSystemOneProvider({
+                userId: tenantId,
+                route: "identifier-selection",
+                failedRequestInputTokens: 2_000,
+                checkBudget: () =>
+                  checkSystemOneBudget(tenantId, IDENTIFIER_SELECTION_WORST_CASE_CENTS),
+              }),
+            ),
+        }
+      : {}),
+  };
+  if (!dsn)
+    return withPortfolioAgentRoute(
+      createApp({
+        brokerSync,
+        partnerBudgetClient: partnerBudget,
+        cashFlowStore,
+        ...credentialDependencies,
+        ...sectorDependencies,
+        resolveTenantId: options.resolveTenantId,
+        store: priceStore,
+        sharedPriceStore: options.sharedPriceStore ?? Boolean(database),
+        ...(options.clearPriceCache ? { clearPriceCache: options.clearPriceCache } : {}),
+        fxProvider,
+        benchmarkSelectionStore,
+        investingLayoutStore,
+        accountWrapperStore,
+        marketDataConsentStore,
+        personalNetWorthStore,
+        dashboardReader,
+        deGiroImportRequest,
+        onPriceDataChanged,
+        onAccountWrappersChanged: onPriceDataChanged,
+        priceSyncProgressStore,
+      }),
+    );
   const sentry = await import("@sentry/node");
-  sentry.init({ dsn, environment: process.env.NODE_ENV });
-  return withPortfolioAgentRoute(createApp({ brokerSync, ...credentialDependencies, ...sectorDependencies, resolveTenantId: options.resolveTenantId, store: priceStore, fxProvider, benchmarkSelectionStore, marketDataConsentStore, dashboardReader, onPriceDataChanged, problemReporter: createProblemReporter({ dsn, sentry }) }));
+  const sentryConfig = sentryOptions({
+    dsn,
+    environment: process.env.VERCEL_ENV ?? process.env.NODE_ENV,
+    app: "investing-server",
+  });
+  if (sentryConfig && !sentry.getClient()) sentry.init(sentryConfig);
+  const syncRunStore: SyncRunStore | undefined = database
+    ? {
+        async get() {
+          const repository = createSyncRunRepository(database, await resolveTenantId());
+          return parseSyncRunRow(await repository.get());
+        },
+        async claim(candidate, staleBefore) {
+          const repository = createSyncRunRepository(database, await resolveTenantId());
+          const held = await repository.claim(candidate, "running", staleBefore);
+          return held === null ? null : parseSyncRunRow(held);
+        },
+        async put(row, leaseId) {
+          const repository = createSyncRunRepository(database, await resolveTenantId());
+          const status =
+            row.outcome === "done" ? "done" : row.outcome === "failed" ? "failed" : "running";
+          return repository.put(row, status, leaseId);
+        },
+      }
+    : undefined;
+  const syncRunReporter = createProblemReporter({ dsn, sentry });
+  const syncRunBackground = async (work: Promise<unknown>) => {
+    if (process.env.VERCEL !== undefined) {
+      const { waitUntil } = await import("@vercel/functions");
+      waitUntil(work);
+      return;
+    }
+    void work.catch((error: unknown) => {
+      syncRunReporter({
+        source: "broker-sync",
+        problems: [error instanceof Error ? error.message : "Background sync run failed"],
+      });
+    });
+  };
+  return withPortfolioAgentRoute(
+    createApp({
+      syncRunStore,
+      syncRunBackground,
+      brokerSync,
+      cashFlowStore,
+      partnerBudgetClient: partnerBudget,
+      ...credentialDependencies,
+      ...sectorDependencies,
+      resolveTenantId: options.resolveTenantId,
+      store: priceStore,
+      sharedPriceStore: options.sharedPriceStore ?? Boolean(database),
+      ...(options.clearPriceCache ? { clearPriceCache: options.clearPriceCache } : {}),
+      fxProvider,
+      benchmarkSelectionStore,
+      investingLayoutStore,
+      accountWrapperStore,
+      marketDataConsentStore,
+      personalNetWorthStore,
+      dashboardReader,
+      deGiroImportRequest,
+      onPriceDataChanged,
+      onAccountWrappersChanged: onPriceDataChanged,
+      priceSyncProgressStore,
+      problemReporter: createProblemReporter({ dsn, sentry }),
+    }),
+  );
 }

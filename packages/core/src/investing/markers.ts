@@ -1,5 +1,6 @@
 import type { Dividend } from "./dividend.js";
 import type { PriceBar, Trade } from "./model.js";
+import { orderTrades } from "./quantity.js";
 
 export type PositionMarker = {
   kind: "buy" | "sell" | "dividend";
@@ -33,7 +34,7 @@ export function placePositionMarkers(
     return next >= 0 ? next : points.length - 1;
   };
 
-  for (const trade of trades) {
+  for (const trade of orderTrades(trades)) {
     if (trade.side === "other") continue;
     points[indexForDate(trade.date)]!.markers.push({
       kind: trade.side,

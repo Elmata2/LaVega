@@ -1,0 +1,192 @@
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import { isPublicApiPath } from "./apiGuard.js";
+import type { LayeredFxRate } from "./fx.js";
+import type { FxHistoryResponse } from "./fxHistory.js";
+
+/* The guard asks auth.js whether this request carries a verified session.
+ * Mocked so a test can be "logged in" without a Neon database. */
+const { verifiedSessionMock } = vi.hoisted(() => ({ verifiedSessionMock: vi.fn() }));
+vi.mock("./auth.js", async () => {
+  const actual = await vi.importActual<typeof import("./auth.js")>("./auth.js");
+  return { ...actual, verifiedSession: verifiedSessionMock };
+});
+
+// getFxRate and getFxHistory both hit the network (Frankfurter/ECB, open.er-api).
+// These tests only care about the guard's status code, not the fx data itself, so
+// mock the same way index.test.ts does — otherwise every run of this file makes a
+// real external call and is flaky/slow in CI.
+const { getFxRateMock } = vi.hoisted(() => ({
+  getFxRateMock: vi.fn<() => Promise<LayeredFxRate>>(),
+}));
+vi.mock("./fx.js", async () => {
+  const actual = await vi.importActual<typeof import("./fx.js")>("./fx.js");
+  return { ...actual, getFxRate: getFxRateMock };
+});
+
+const { getFxHistoryMock } = vi.hoisted(() => ({
+  getFxHistoryMock: vi.fn<() => Promise<FxHistoryResponse | null>>(),
+}));
+vi.mock("./fxHistory.js", async () => {
+  const actual = await vi.importActual<typeof import("./fxHistory.js")>("./fxHistory.js");
+  return { ...actual, getFxHistory: getFxHistoryMock };
+});
+
+const { app } = await import("./index.js");
+
+beforeEach(() => {
+  verifiedSessionMock.mockResolvedValue(null); // nobody is logged in
+  getFxRateMock.mockResolvedValue({
+    base: "EUR",
+    date: "2026-08-21",
+    rates: { USD: 1.1699 },
+    origins: { USD: "ecb" },
+    layers: { ecb: { status: "live", date: "2026-08-21", count: 1 }, aggregator: null },
+  });
+  getFxHistoryMock.mockResolvedValue({ base: "EUR", currency: "HUF", rates: {} });
+  delete process.env.LAVEGA_ALLOW_UNAUTHENTICATED;
+});
+
+afterEach(() => {
+  verifiedSessionMock.mockReset();
+  getFxRateMock.mockReset();
+  getFxHistoryMock.mockReset();
+  delete process.env.LAVEGA_ALLOW_UNAUTHENTICATED;
+});
+
+test("an anonymous POST to /api/agent/chat is refused with 401", async () => {
+  const res = await app.request("/api/agent/chat", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ messages: [] }),
+  });
+  expect(res.status).toBe(401);
+});
+
+test("an anonymous POST to /api/eb/auth is refused with 401", async () => {
+  const res = await app.request("/api/eb/auth", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ name: "ING", country: "NL" }),
+  });
+  expect(res.status).toBe(401);
+});
+
+test("a verified session is let through to the route", async () => {
+  verifiedSessionMock.mockResolvedValue({ user: { id: "u1" } });
+  const res = await app.request("/api/agent/chat", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ messages: [] }),
+  });
+  expect(res.status).not.toBe(401);
+});
+
+test("public data routes stay open without a session", async () => {
+  expect((await app.request("/api/fx/rate")).status).toBe(200);
+  expect((await app.request("/api/eb/status")).status).toBe(200);
+  expect((await app.request("/api/agent/status")).status).toBe(200);
+});
+
+test("/api/fx/history stays open without a session", async () => {
+  const res = await app.request("/api/fx/history?currency=huf&from=2026-08-01");
+  expect(res.status).not.toBe(401);
+});
+
+test("/api/auth/* stays open — it is how you log in", async () => {
+  const res = await app.request("/api/auth/get-session");
+  expect(res.status).not.toBe(401);
+});
+
+test("/api/card-terms/ingest keeps its own shared-secret auth, not the session guard", async () => {
+  // No session, no ingest token configured: the route's own 503 must be what
+  // answers, proving the session guard did not swallow the machine endpoint.
+  const res = await app.request("/api/card-terms/ingest", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ terms: [] }),
+  });
+  expect(res.status).toBe(503);
+});
+
+test("the machine endpoints /api/cron/* and /api/investing/health pass the guard without a session — each carries its own auth", async () => {
+  for (const path of [
+    "/api/cron/investing-sync",
+    "/api/cron/investing-drain",
+    "/api/investing/health",
+  ]) {
+    expect(isPublicApiPath(path)).toBe(true);
+    const res = await app.request(path);
+    expect(await res.text()).not.toContain('{"error":"unauthorized"}');
+  }
+});
+
+test("an anonymous GET to /api/agent/budget is refused with 401 — spend figures are operational data, unlike /api/agent/status's boolean", async () => {
+  const res = await app.request("/api/agent/budget");
+  expect(res.status).toBe(401);
+});
+
+test("a verified session reaches /api/agent/budget and gets the spend figures", async () => {
+  verifiedSessionMock.mockResolvedValue({ user: { id: "u1" } });
+  const res = await app.request("/api/agent/budget");
+  expect(res.status).toBe(200);
+  expect(await res.json()).toEqual(
+    expect.objectContaining({
+      dayCents: expect.any(Number),
+      monthCents: expect.any(Number),
+      spentTodayCents: expect.any(Number),
+      spentMonthCents: expect.any(Number),
+    }),
+  );
+});
+
+test("LAVEGA_ALLOW_UNAUTHENTICATED=1 opens the guard for local development", async () => {
+  process.env.LAVEGA_ALLOW_UNAUTHENTICATED = "1";
+  const res = await app.request("/api/agent/chat", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ messages: [] }),
+  });
+  expect(res.status).not.toBe(401);
+});
+
+/* A1 / #253 (security review 2026-10-17): the flag switches off BOTH guards,
+ * so a stray value in a platform's environment UI would publish the vault and
+ * the broker API. A hosted deployment refuses it. */
+test("the escape hatch is refused on a hosted deployment, whatever the env UI says", async () => {
+  const previous = process.env.NODE_ENV;
+  process.env.LAVEGA_ALLOW_UNAUTHENTICATED = "1";
+  process.env.NODE_ENV = "production";
+  try {
+    const res = await app.request("/api/agent/chat", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ messages: [] }),
+    });
+    expect(res.status).toBe(401);
+  } finally {
+    if (previous === undefined) delete process.env.NODE_ENV;
+    else process.env.NODE_ENV = previous;
+  }
+});
+
+test("a Vercel deployment marker also refuses the escape hatch", async () => {
+  process.env.LAVEGA_ALLOW_UNAUTHENTICATED = "1";
+  process.env.VERCEL_ENV = "production";
+  try {
+    expect((await app.request("/api/agent/budget")).status).toBe(401);
+  } finally {
+    delete process.env.VERCEL_ENV;
+  }
+});
+
+/* The old guard blanket-passed every OPTIONS, on the theory that a preflight
+ * carries no cookies. But the loopback CORS middleware already answers a
+ * preflight before the guard runs, so the bypass only ever let a non-browser
+ * probe through the one place that is meant to be closed by default. */
+test("a non-loopback OPTIONS is not a free pass through the guard", async () => {
+  const res = await app.request("/api/agent/budget", {
+    method: "OPTIONS",
+    headers: { Origin: "https://evil.example" },
+  });
+  expect(res.status).toBe(401);
+});

@@ -1,7 +1,13 @@
 import type { Tx, Rule } from "./model.js";
 import { categorize, type OwnAccounts } from "./views.js";
+import { ruleCategoryValue, ruleTextValue } from "./rules/parse.js";
 import { hash, norm } from "./hash.js";
-import { CREDIT_CARD_PAYMENT_CATEGORY, DIRECT_DEBIT_CATEGORY, foreignCodeIn, PERSON_CATEGORY } from "./categories.js";
+import {
+  CREDIT_CARD_PAYMENT_CATEGORY,
+  DIRECT_DEBIT_CATEGORY,
+  foreignCodeIn,
+  PERSON_CATEGORY,
+} from "./categories.js";
 
 /** The categories the AI may assign + the review dropdown offers — LaVega's
  *  existing taxonomy so results stay consistent with the rules engine. */
@@ -56,7 +62,11 @@ export type UncategorizedMonth = { month: string; txs: Tx[] };
  *  would ever reach. Running the pass month by month, newest month first, fixes
  *  what the owner is actually looking at, and keeps each request inside the
  *  server's 200-item cap on a realistic month. */
-export function uncategorizedByMonth(txs: Tx[], rules: Rule[], own?: OwnAccounts): UncategorizedMonth[] {
+export function uncategorizedByMonth(
+  txs: Tx[],
+  rules: Rule[],
+  own?: OwnAccounts,
+): UncategorizedMonth[] {
   const byMonth = new Map<string, Tx[]>();
   for (const t of uncategorizedTxs(txs, rules, own)) {
     const month = t.date.slice(0, 7);
@@ -65,7 +75,10 @@ export function uncategorizedByMonth(txs: Tx[], rules: Rule[], own?: OwnAccounts
     else byMonth.set(month, [t]);
   }
   return [...byMonth.entries()]
-    .map(([month, list]) => ({ month, txs: list.slice().sort((a, b) => b.date.localeCompare(a.date)) }))
+    .map(([month, list]) => ({
+      month,
+      txs: list.slice().sort((a, b) => b.date.localeCompare(a.date)),
+    }))
     .sort((a, b) => b.month.localeCompare(a.month));
 }
 
@@ -85,6 +98,97 @@ export function uncategorizedByMonth(txs: Tx[], rules: Rule[], own?: OwnAccounts
  * domain rule (what may leave the machine) and it has to be testable on its own.
  * ======================================================================== */
 
+/* ---------------------------------------------------------------------------
+ * Value-based PII patterns (privacy/security review 2026-08-28, M5 + L7).
+ *
+ * Shared between `redactForAi` below (blank-replaces, for the merchant-only
+ * text the categoriser reads) and `scrubPersonalValues` (token-replaces, the
+ * defence-in-depth boundary the server sanitisers call on every free-text
+ * field before it reaches Claude — a raw value that slipped past the browser
+ * must not slip past this too). One pattern set, two callers, so a fix here
+ * fixes both instead of drifting apart. ------------------------------------- */
+
+// Compact IBAN, any country: "NL91ABNA0417164300". Contiguous on purpose — see
+// the note on IBAN_SPACED below for why a pattern that can cross whitespace is
+// the actual bug this whole block exists to avoid.
+const IBAN_COMPACT = /\b[A-Z]{2}\d{2}[A-Z0-9]{8,30}\b/gi;
+// Space-grouped IBAN, any country: "NL91 ABNA 0417 1643 00" (L7 — this form
+// went uncaught before). The leading block is the country code glued to the
+// two check digits, a shape no merchant name has, so this cannot hop into an
+// ALL-CAPS name the way a looser "any grouped caps+digits" pattern would.
+const IBAN_SPACED = /\b[A-Z]{2}\d{2}(?: [A-Z0-9]{4}){2,7}(?: [A-Z0-9]{1,3})?\b/gi;
+const EMAIL = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi;
+// NL phone numbers: national (06 12345678, 010 1234567, ...) and +31. Digits
+// only — dashes/spaces between groups are optional so either printed form
+// matches, but a lookaround keeps it from firing inside a longer digit run.
+const PHONE = /(?<![\d+])(?:0[1-9](?:[ -]?\d){8}|\+31[ -]?[1-9](?:[ -]?\d){8})(?!\d)/g;
+// A candidate BSN: exactly nine digits, checked against the elfproef before
+// it counts as one — see passesElfproef. Without that check this would fire
+// on any nine-digit reference number, which real exports do carry.
+const BSN_CANDIDATE = /\b\d{9}\b/g;
+const AMOUNT_MARKER = /(?:€|eur)\s?\d[\d.,]*/gi; // € 45 / EUR 45,00
+
+/** The Dutch BSN checksum: multiply each digit by its position weight
+ *  (9..2, then -1) and the sum must be a multiple of 11. Most nine-digit
+ *  strings that are NOT a BSN fail this by chance, which is the whole point —
+ *  it is what lets a nine-digit invoice or reference number survive instead
+ *  of being scrubbed on shape alone. */
+function passesElfproef(nineDigits: string): boolean {
+  const weights = [9, 8, 7, 6, 5, 4, 3, 2, -1];
+  const sum = [...nineDigits].reduce((acc, d, i) => acc + Number(d) * weights[i], 0);
+  return sum !== 0 && sum % 11 === 0;
+}
+
+/** THE server-side value-scrub: replace an IBAN (compact or space-grouped,
+ *  any country), an email address, an NL phone number, a BSN that passes the
+ *  elfproef, or a currency-marked amount with a stable token — `[IBAN]`,
+ *  `[EMAIL]`, `[TEL]`, `[BSN]`, `[BEDRAG]` — so the sentence a model sees
+ *  keeps its shape without carrying the identifying value. Whitespace
+ *  (including newlines a chat message may hold) is left exactly as typed.
+ *
+ *  This exists because the redaction boundary used to check field NAMES only
+ *  ({id, text, sign} etc.) and copied whatever value sat under them — M5. It
+ *  is deliberately narrower than `redactForAi`: a chat message or a
+ *  categorize item should not lose every date or order number the way a
+ *  transaction description does, only what actually identifies someone. Pure. */
+export function scrubPersonalValues(text: string): string {
+  return text
+    .replace(IBAN_SPACED, "[IBAN]")
+    .replace(IBAN_COMPACT, "[IBAN]")
+    .replace(EMAIL, "[EMAIL]")
+    .replace(PHONE, "[TEL]")
+    .replace(BSN_CANDIDATE, (m) => (passesElfproef(m) ? "[BSN]" : m))
+    .replace(AMOUNT_MARKER, "[BEDRAG]");
+}
+
+/** `scrubPersonalValues` applied to every string ANYWHERE inside an already-
+ *  shaped value, returning the same shape. Objects come back as plain objects,
+ *  which is all a JSON context ever is.
+ *
+ *  The chat's context allowlist checks top-level KEY NAMES and nothing else, so
+ *  it cannot see what a key CONTAINS. Measured on the real builders: the
+ *  forecast tab allows one key, `summary`, and that key carries
+ *  `drivers[].label` — the raw counterparty of a bank row. For an ABN CSV or an
+ *  MT940 without a /NAME/ tag that string is the head of the statement line,
+ *  IBAN first: "NL17INGB0539576085 Albert Heijn 1234 Rotterdam". One allowed
+ *  key, a whole IBAN on the wire to Mistral.
+ *
+ *  Running this at both chat redaction boundaries makes the value rule
+ *  independent of which fields a builder happens to pick, so widening a builder
+ *  can no longer widen what identifies someone. Idempotent: the tokens it
+ *  writes match none of the patterns, so the browser pass and the server pass
+ *  compose. Pure. */
+export function scrubPersonalValuesDeep<T>(value: T): T {
+  if (typeof value === "string") return scrubPersonalValues(value) as T;
+  if (Array.isArray(value)) return value.map((v) => scrubPersonalValuesDeep(v)) as T;
+  if (value !== null && typeof value === "object") {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(value)) out[k] = scrubPersonalValuesDeep(v);
+    return out as T;
+  }
+  return value;
+}
+
 /** Best-effort scrub of sensitive numeric content from free text BEFORE it
  *  leaves the browser: IBANs, dates, money amounts and long digit runs
  *  (account/card fragments, payment references). Merchant names are alphabetic,
@@ -101,23 +205,27 @@ export function uncategorizedByMonth(txs: Tx[], rules: Rule[], own?: OwnAccounts
  *  name behind the IBAN is kept. Verified against the real exports: 747 rows
  *  arrived blank before, 0 after, and no IBAN survives either version.
  *
- *  Deliberately NOT handled: the space-grouped form ("NL91 ABNA 0417 1643 00").
- *  Zero rows in any of the owner's exports print an IBAN that way, and a pattern
- *  loose enough to catch it is loose enough to eat an ALL-CAPS merchant name
- *  ("BE68539007547034 ALBERT HEIJN" -> "HEIJN") — which is the bug above again.
- *  If a bank export ever does group them, add a separate pattern for it with a
- *  fixture, do not loosen this one.
+ *  The space-grouped form ("NL91 ABNA 0417 1643 00", L7) IS now handled, via
+ *  IBAN_SPACED above — its leading block anchors on the country-code+check-
+ *  digit shape, not on "any grouped caps+digits", so it cannot eat an ALL-CAPS
+ *  merchant name the way that looser pattern would.
+ *
+ *  BSNs and phone numbers need no pattern of their own here: the long-digit-
+ *  run strip below already blanks any 9- or 10-digit sequence. An email
+ *  address is the one value shape that has no digits to catch, hence EMAIL.
  *
  *  Privacy over recall: over-scrubbing a city or a store number is acceptable. */
 export function redactForAi(text: string): string {
   return text
-    .replace(/\b[A-Z]{2}\d{2}[A-Z0-9]{8,30}\b/gi, " ") // IBANs / account identifiers (one token, never across a space)
+    .replace(IBAN_SPACED, " ")
+    .replace(IBAN_COMPACT, " ") // IBANs / account identifiers (one token, never across a space)
+    .replace(EMAIL, " ")
     .replace(/\b\d{4}[-/.]\d{1,2}[-/.]\d{1,2}\b/g, " ") // ISO-ish dates: 2026-08-01
     .replace(/\b\d{1,2}[-/.]\d{1,2}[-/.]\d{2,4}\b/g, " ") // 01-08-2026 / 1/8/26
-    .replace(/(?:€|eur)\s?\d[\d.,]*/gi, " ") // € 45 / EUR 45,00
+    .replace(AMOUNT_MARKER, " ") // € 45 / EUR 45,00
     .replace(/\b\d{1,3}(?:[.\s]\d{3})+[,.]\d{2}\b/g, " ") // grouped amounts: 1.234,56
     .replace(/\b\d+[,.]\d{2}\b/g, " ") // plain amounts: 45,00 / 45.00
-    .replace(/\b\d{4,}\b/g, " ") // long digit runs (account/card/ref fragments)
+    .replace(/\b\d{4,}\b/g, " ") // long digit runs (account/card/ref fragments) — also covers BSNs and phone numbers
     .replace(/\s+/g, " ")
     .trim();
 }
@@ -158,7 +266,11 @@ export function foreignCode(tx: Tx): string | null {
  *   - "alleen-nummers"        only identifiers survive redaction; nothing any
  *                             model can read — this one needs a manual label
  *   - "geen-tekst"            the export carried no counterparty or description */
-export type UnknownReason = "buitenland" | "onbekende-tegenpartij" | "alleen-nummers" | "geen-tekst";
+export type UnknownReason =
+  | "buitenland"
+  | "onbekende-tegenpartij"
+  | "alleen-nummers"
+  | "geen-tekst";
 
 export function unknownReason(tx: Tx): UnknownReason {
   return classifyUnknown(tx).reason;
@@ -192,7 +304,10 @@ export function unknownBreakdown(
   rules: Rule[],
   own?: OwnAccounts,
 ): { count: number; amount: number; byReason: UnknownBucket[] } {
-  const buckets = new Map<UnknownReason, { count: number; amount: number; countries: Set<string> }>();
+  const buckets = new Map<
+    UnknownReason,
+    { count: number; amount: number; countries: Set<string> }
+  >();
   let count = 0;
   let amount = 0;
   for (const t of uncategorizedTxs(txs, rules, own)) {
@@ -206,7 +321,12 @@ export function unknownBreakdown(
     if (code) b.countries.add(code);
   }
   const byReason = [...buckets.entries()]
-    .map(([reason, b]) => ({ reason, count: b.count, amount: b.amount, countries: [...b.countries].sort() }))
+    .map(([reason, b]) => ({
+      reason,
+      count: b.count,
+      amount: b.amount,
+      countries: [...b.countries].sort(),
+    }))
     // Biggest bucket first so the UI leads with what actually matters; ties fall
     // back to the reason name so the order is stable across renders.
     .sort((a, b) => b.count - a.count || a.reason.localeCompare(b.reason));
@@ -230,7 +350,11 @@ export function unknownBreakdown(
  *
  *  Returns fresh arrays plus the number of transactions whose category changed,
  *  so the caller can say what the run actually did. Pure. */
-export function recategorize(txs: Tx[], rules: Rule[], own?: OwnAccounts): { txs: Tx[]; changed: number } {
+export function recategorize(
+  txs: Tx[],
+  rules: Rule[],
+  own?: OwnAccounts,
+): { txs: Tx[]; changed: number } {
   let changed = 0;
   const next = txs.map((t) => {
     if (t.manual) return t;
@@ -257,10 +381,17 @@ export function applyCategorizations(
   const byId = new Map<string, string>();
   for (const d of decisions) if (VALID.has(d.category)) byId.set(d.id, d.category);
 
-  const nextTxs = txs.map((t) => (byId.has(t.id) ? { ...t, category: byId.get(t.id)!, manual: true } : t));
+  const nextTxs = txs.map((t) =>
+    byId.has(t.id) ? { ...t, category: byId.get(t.id)!, manual: true } : t,
+  );
 
   // One rule per (counterparty, category), deduped against existing rules + within the batch.
-  const seen = new Set(rules.map((r) => `${norm(r.match)}|${r.category}`));
+  // Both shapes are read through the helpers: a v2 rule has no `.match` and no
+  // `.category`, so reading those fields would silently stop deduping the day a
+  // vault holds a v2 rule.
+  const seen = new Set(
+    rules.map((r) => `${norm(ruleTextValue(r) ?? "")}|${ruleCategoryValue(r) ?? ""}`),
+  );
   const nextRules = [...rules];
   for (const t of txs) {
     const cat = byId.get(t.id);
@@ -270,7 +401,15 @@ export function applyCategorizations(
     const key = `${norm(match)}|${cat}`;
     if (seen.has(key)) continue;
     seen.add(key);
-    nextRules.push({ id: hash([norm(match), cat].join("|")), match, category: cat });
+    // Canonical RuleV2: text contains + setCategory, and deliberately NO
+    // `stopProcessing` — a generated rule must not silence the rules the owner
+    // wrote after it.
+    nextRules.push({
+      v: 2,
+      id: hash([norm(match), cat].join("|")),
+      conditions: [{ kind: "text", target: "text", op: "contains", value: match }],
+      actions: [{ kind: "setCategory", category: cat }],
+    });
   }
   return { txs: nextTxs, rules: nextRules };
 }

@@ -27,8 +27,22 @@ import { own } from "./fixtures";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
-const tx = (id: string, date: string, amount: number, counterparty: string, description = ""): Tx => ({
-  id, accountKey: "A1", date, amount, currency: "EUR", counterparty, description, category: "", manual: false,
+const tx = (
+  id: string,
+  date: string,
+  amount: number,
+  counterparty: string,
+  description = "",
+): Tx => ({
+  id,
+  accountKey: "A1",
+  date,
+  amount,
+  currency: "EUR",
+  counterparty,
+  description,
+  category: "",
+  manual: false,
 });
 
 /** A realistic August: income, two real expenses, one transfer to an account the
@@ -55,6 +69,10 @@ afterEach(() => {
   picked.length = 0;
 });
 
+/** Today's default and every existing test's mode: a non-EUR row is left out
+ *  exactly as it always was, never converted. */
+const SEPARATE = { fxHistory: {}, mode: "separate" as const };
+
 function mount(rows: Tx[] = txs): HTMLDivElement {
   host = document.createElement("div");
   document.body.appendChild(host);
@@ -62,7 +80,13 @@ function mount(rows: Tx[] = txs): HTMLDivElement {
   act(() => {
     root = createRoot(el);
     root.render(
-      <StatistiekBlock txs={rows} rules={[]} own={own} onSelectCategory={(c) => picked.push(c)} />,
+      <StatistiekBlock
+        txs={rows}
+        rules={[]}
+        own={own}
+        onSelectCategory={(c) => picked.push(c)}
+        {...SEPARATE}
+      />,
     );
   });
   return el;
@@ -80,7 +104,17 @@ function tab(el: HTMLElement, label: string) {
  *  stated — what is under test is the angle, not the layout. */
 function box(el: HTMLElement, size = 168) {
   el.getBoundingClientRect = () =>
-    ({ left: 0, top: 0, right: size, bottom: size, width: size, height: size, x: 0, y: 0, toJSON: () => ({}) }) as DOMRect;
+    ({
+      left: 0,
+      top: 0,
+      right: size,
+      bottom: size,
+      width: size,
+      height: size,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    }) as DOMRect;
 }
 
 test("the ring prints euros, not cents read as euros", () => {

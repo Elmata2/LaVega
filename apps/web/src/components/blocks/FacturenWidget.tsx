@@ -2,9 +2,13 @@ import { useMemo } from "react";
 import type { Invoice } from "@lavega/core";
 import type { View } from "../../App";
 import type { ModuleSpan } from "../../module-grid.js";
-import { formatEuro } from "../../format.js";
+import { formatEuroIn } from "../../format.js";
 import Module from "../Module.js";
+import CardLink from "../ui/CardLink.js";
 import { useWidgetEnabled } from "../moduleRegistry";
+import type { Locale } from "../../locale.js";
+import { useAppLocale } from "../../appLocale.js";
+import { moneyCopy, type MoneyCopy } from "../../copy/money.js";
 
 /* Facturen op de startpagina — "dan moet de factuur ook in het overzicht komen,
  * als de gebruiker dat wilt".
@@ -123,15 +127,16 @@ export function openInvoiceSummary(
 
 /** Eén regel per kant, en alleen voor een kant waar iets staat. Een kant zonder
  *  facturen krijgt geen "€ 0": dat zou een bedrag suggereren dat gemeten is. */
-function SideRow({ label, side }: { label: string; side: InvoiceSide }) {
+function SideRow({ locale, label, side }: { locale: Locale; label: string; side: InvoiceSide }) {
   if (side.count === 0) return null;
+  const c = moneyCopy[locale].facturen;
   return (
-    <div className="entity-row">
-      <span className="entity-row-name">
-        {label} · {side.count} factu{side.count === 1 ? "ur" : "ren"}
+    <div className="flex items-center gap-2 py-2 px-0 border-b border-line last:border-b-0">
+      <span className="flex-1 min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-[0.9rem]">
+        {label} · {c.sideRowCount(side.count)}
       </span>
-      <span className="entity-row-balance">
-        {side.eurCount === 0 ? "bedrag onbekend" : formatEuro(side.eurTotal)}
+      <span className="flex-none font-semibold text-[0.9rem] tabular-nums">
+        {side.eurCount === 0 ? c.bedragOnbekend : formatEuroIn(locale, side.eurTotal)}
       </span>
     </div>
   );
@@ -140,14 +145,17 @@ function SideRow({ label, side }: { label: string; side: InvoiceSide }) {
 /** De zin over wat te laat is. Per kant, want "€ 5.000 te laat" waarin geld dat
  *  binnenkomt en geld dat weggaat bij elkaar geteld zijn, is geen bedrag dat
  *  ergens over gaat. */
-function lateSentence(s: FacturenSummary): string | null {
+function lateSentence(s: FacturenSummary, locale: Locale = "nl"): string | null {
+  const c: MoneyCopy["facturen"] = moneyCopy[locale].facturen;
   const total = s.ontvangen.lateCount + s.betalen.lateCount;
   if (total === 0) return null;
   const parts: string[] = [];
-  if (s.ontvangen.lateEurCount > 0) parts.push(`${formatEuro(s.ontvangen.lateEurTotal)} te ontvangen`);
-  if (s.betalen.lateEurCount > 0) parts.push(`${formatEuro(s.betalen.lateEurTotal)} te betalen`);
+  if (s.ontvangen.lateEurCount > 0)
+    parts.push(c.teOntvangenAmount(formatEuroIn(locale, s.ontvangen.lateEurTotal)));
+  if (s.betalen.lateEurCount > 0)
+    parts.push(c.teBetalenAmount(formatEuroIn(locale, s.betalen.lateEurTotal)));
   const bedragen = parts.length > 0 ? `: ${parts.join(", ")}` : "";
-  return `${total} factu${total === 1 ? "ur is" : "ren zijn"} over de vervaldatum${bedragen}.`;
+  return c.lateSentence(total, bedragen);
 }
 
 export type FacturenBlockProps = {
@@ -162,50 +170,42 @@ export type FacturenBlockProps = {
 };
 
 export function FacturenBlock({ invoices, entities, asOf, span, onNavigate }: FacturenBlockProps) {
+  const [locale] = useAppLocale();
+  const c = moneyCopy[locale].facturen;
   const s = useMemo(() => openInvoiceSummary(invoices, entities, asOf), [invoices, entities, asOf]);
 
   // Geen enkele factuur in beeld: dan heeft deze kaart niets te melden en staat
   // hij er niet. Hij vroeg eerder al om geen lege blokken.
   if (s.inScope === 0) return null;
 
-  const late = lateSentence(s);
+  const late = lateSentence(s, locale);
 
   return (
     <Module
       title="Facturen"
       span={span}
       height="short"
-      menu={
-        <button type="button" className="card-link" onClick={() => onNavigate("facturen")}>
-          Facturen →
-        </button>
-      }
+      menu={<CardLink onClick={() => onNavigate("facturen")}>{c.facturenArrow}</CardLink>}
       footer={
-        s.zonderEuroBedrag > 0 ? (
-          <>
-            Van {s.zonderEuroBedrag} factu{s.zonderEuroBedrag === 1 ? "ur" : "ren"} is het bedrag niet in euro&apos;s
-            bekend; {s.zonderEuroBedrag === 1 ? "die zit" : "die zitten"} niet in de bedragen hierboven.
-          </>
-        ) : undefined
+        s.zonderEuroBedrag > 0 ? <>{c.vanNFacturenBedragOnbekend(s.zonderEuroBedrag)}</> : undefined
       }
     >
       {s.open === 0 ? (
         /* Een UITGESPROKEN nul: er zijn facturen, en geen enkele staat nog
            open. Dat is iets anders dan niets weten, en mag dus gezegd worden. */
-        <p className="module-figure-label">
-          Niets staat open — alle {s.inScope} factu{s.inScope === 1 ? "ur" : "ren"} die LaVega kent zijn betaald of
-          vervallen.
-        </p>
+        <p className="module-figure-label">{c.nietsStaatOpen(s.inScope)}</p>
       ) : (
         <>
           <div className="module-figure">
             <span className="module-figure-value">{s.open}</span>
-            <span className="figure-vs">openstaand</span>
+            <span className="text-muted text-[0.8rem]">{c.openstaand}</span>
           </div>
-          <p className="module-figure-label">{late ?? "Geen enkele openstaande factuur is over zijn vervaldatum."}</p>
-          <div className="entity-rows">
-            <SideRow label="Te ontvangen" side={s.ontvangen} />
-            <SideRow label="Te betalen" side={s.betalen} />
+          <p className="module-figure-label">
+            {late ?? c.geenEnkeleOpenstaandeFactuurOverVervaldatum}
+          </p>
+          <div className="flex flex-col mt-3">
+            <SideRow locale={locale} label={c.teOntvangen} side={s.ontvangen} />
+            <SideRow locale={locale} label={c.teBetalen} side={s.betalen} />
           </div>
         </>
       )}

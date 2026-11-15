@@ -1,0 +1,361 @@
+import { createServer, type ServerResponse } from "node:http";
+import {
+  buildHistoricalRisk,
+  buildIndexedSeries,
+  buildInvestingDashboard,
+  computePortfolioValueSeries,
+  type FxRate,
+  type PriceBar,
+  type ScheduledBroker,
+} from "@lavega/core";
+import { afterEach, describe, expect, test, vi } from "vitest";
+import { allSections, type BrokerResult } from "./BrokerAccessAdapter.js";
+import { createBrokerDataCache, type BrokerDataSnapshot } from "./brokerSnapshot.js";
+import { parseFlexStatement } from "./ibkr/flexParser.js";
+import {
+  createTrading212Adapter as createPacedTrading212Adapter,
+  resolveTrading212CashHistory,
+  type Trading212Config,
+} from "./trading212/adapter.js";
+import { createImmediatePartnerBudget } from "../partnerBudget/fakes.js";
+
+/* The loopback server here has no rate limit to respect: grant every slot at once. */
+const createTrading212Adapter = (config: Trading212Config) =>
+  createPacedTrading212Adapter({ partnerBudget: createImmediatePartnerBudget(), ...config });
+
+const DATES = ["2026-01-05", "2026-01-06", "2026-01-07", "2026-01-08", "2026-01-09"];
+const FX: FxRate = { base: "EUR", date: "2026-01-05", rates: { USD: 1.25 } };
+const BARS: PriceBar[] = DATES.map((date) => ({
+  symbol: "AAPL",
+  date,
+  close: 100,
+  currency: "USD",
+}));
+
+// Synthetic EUR account that converts EUR 200 into USD 250 and buys two USD
+// shares. The Statement of Funds books the purchase and its commission as their
+// own rows, and repeats the purchase row, as a re-exported period would.
+const statement = `<FlexStatements><FlexStatement accountId="U1" fromDate="20260105" toDate="20260109"><OpenPositions>
+  <OpenPosition accountId="U1" symbol="AAPL" position="2" avgPrice="100.5" markPrice="100" positionValue="200" currency="USD" reportDate="20260109" />
+</OpenPositions><Trades>
+  <Trade accountId="U1" symbol="AAPL" transactionID="trade-1" tradeDate="20260107;101500" buySell="BUY" quantity="2" tradePrice="100" proceeds="-200" ibCommission="-1" currency="USD" />
+</Trades><Transfers></Transfers><CorporateActions></CorporateActions><CashReport>
+  <CashReportCurrency accountId="U1" currency="EUR" toDate="20260109" endingCash="1000" />
+  <CashReportCurrency accountId="U1" currency="USD" toDate="20260109" endingCash="49" />
+</CashReport><StatementOfFunds>
+  <StatementOfFundsLine accountId="U1" transactionID="dep-1" date="20260105" currency="EUR" activityCode="DEP" activityDescription="Deposit" amount="1200" />
+  <StatementOfFundsLine accountId="U1" transactionID="fx-1" date="20260106" currency="EUR" activityCode="FOREX" activityDescription="EUR.USD conversion" amount="-200" />
+  <StatementOfFundsLine accountId="U1" transactionID="fx-2" date="20260106" currency="USD" activityCode="FOREX" activityDescription="EUR.USD conversion" amount="250" />
+  <StatementOfFundsLine accountId="U1" transactionID="buy-1" date="20260107" currency="USD" activityCode="BUY" activityDescription="Buy 2 AAPL" amount="-200" />
+  <StatementOfFundsLine accountId="U1" transactionID="comm-1" date="20260107" currency="USD" activityCode="OFEE" activityDescription="Commission" amount="-1" />
+  <StatementOfFundsLine accountId="U1" transactionID="buy-1" date="20260107" currency="USD" activityCode="BUY" activityDescription="Buy 2 AAPL" amount="-200" />
+</StatementOfFunds></FlexStatement></FlexStatements>`;
+
+function ibkrResult(xml = statement): BrokerResult {
+  return { ...parseFlexStatement(xml, "personal"), source: "ibkr-flex" };
+}
+
+function outcome(broker: ScheduledBroker, result: BrokerResult) {
+  return {
+    outcomes: [{ broker, status: "synced" as const, lastSyncedAt: null, result }],
+    problems: [],
+  };
+}
+
+function valueSeries(cache: ReturnType<typeof createBrokerDataCache>) {
+  const data = cache.read();
+  return computePortfolioValueSeries(data.positions, data.trades, BARS, "EUR", FX, {
+    cashBalances: data.cashBalances,
+    cashFlows: data.cashFlows,
+    dividends: data.dividends,
+    cashCoverage: data.cashCoverage,
+    today: "2026-01-09",
+  }).map(({ date, value, cashUnknown, cashEstimated }) => ({
+    date,
+    value,
+    cashUnknown,
+    cashEstimated: cashEstimated ?? [],
+  }));
+}
+
+describe("IBKR cash history from adapter to portfolio", () => {
+  const settled = [
+    { date: "2026-01-05", value: 1200, cashUnknown: [], cashEstimated: [] },
+    { date: "2026-01-06", value: 1200, cashUnknown: [], cashEstimated: [] },
+    { date: "2026-01-07", value: 1199.2, cashUnknown: [], cashEstimated: [] },
+    { date: "2026-01-08", value: 1199.2, cashUnknown: [], cashEstimated: [] },
+    { date: "2026-01-09", value: 1199.2, cashUnknown: [], cashEstimated: [] },
+  ];
+
+  test("counts a USD execution and its commission once from the Statement of Funds", () => {
+    const cache = createBrokerDataCache();
+    cache.apply(outcome("ibkr", ibkrResult()));
+
+    expect(cache.read().cashCoverage).toEqual([
+      {
+        entity: "personal",
+        broker: "ibkr",
+        status: "complete",
+        from: "2026-01-05",
+        to: "2026-01-09",
+        tradeCash: "cash-flows",
+        quantityProvenFrom: "2026-01-05",
+      },
+    ]);
+    expect(valueSeries(cache)).toEqual(settled);
+  });
+
+  test("a repeated import and a snapshot round trip keep the same cash", () => {
+    const cache = createBrokerDataCache();
+    cache.apply(outcome("ibkr", ibkrResult()));
+    cache.apply(outcome("ibkr", ibkrResult()));
+    const restored = createBrokerDataCache(structuredClone(cache.snapshot()));
+
+    expect(cache.read().cashFlows).toHaveLength(5);
+    expect(valueSeries(restored)).toEqual(settled);
+  });
+
+  test("a failed sync keeps the stored cash and its proof together", () => {
+    const cache = createBrokerDataCache();
+    cache.apply(outcome("ibkr", ibkrResult()));
+    cache.apply(
+      outcome("ibkr", {
+        sections: allSections("unavailable"),
+        source: "ibkr-flex",
+        problems: ["down"],
+      }),
+    );
+
+    expect(valueSeries(cache)).toEqual(settled);
+  });
+
+  test("a statement without Statement of Funds proves nothing about past cash", () => {
+    const cache = createBrokerDataCache();
+    cache.apply(outcome("ibkr", ibkrResult()));
+    cache.apply(
+      outcome(
+        "ibkr",
+        ibkrResult(statement.replace(/<StatementOfFunds>[\s\S]*<\/StatementOfFunds>/, "")),
+      ),
+    );
+
+    expect(cache.read().cashCoverage).toEqual([
+      expect.objectContaining({ broker: "ibkr", status: "unknown" }),
+    ]);
+    /* No Statement of Funds means no proven window, so the cash report's own
+     * balances anchor a walk instead of standing alone. Nothing is unknown;
+     * every date before the closing statement is an estimate and says so. */
+    expect(valueSeries(cache).map(({ cashUnknown }) => cashUnknown)).toEqual([[], [], [], [], []]);
+    expect(valueSeries(cache).map(({ cashEstimated }) => cashEstimated ?? [])).toEqual([
+      ["ibkr:EUR", "ibkr:USD"],
+      ["ibkr:EUR", "ibkr:USD"],
+      ["ibkr:EUR", "ibkr:USD"],
+      ["ibkr:EUR", "ibkr:USD"],
+      [],
+    ]);
+  });
+
+  test("a snapshot stored before coverage existed reaches the same cash by arithmetic", () => {
+    const current = createBrokerDataCache();
+    current.apply(outcome("ibkr", ibkrResult()));
+    const legacy: BrokerDataSnapshot = { ibkr: { ...current.snapshot().ibkr! } };
+    delete legacy.ibkr!.cashHistory;
+
+    const restored = createBrokerDataCache(legacy);
+
+    expect(restored.read().cashCoverage).toEqual([]);
+    /* Nothing here says where IBKR books trade cash. Counting the executions
+     * on top of the ledger rows that already carry them double-counts and
+     * leaves the wallet short; counting the ledger alone closes it. The
+     * movements pick the same reading the statement would have declared, to
+     * the cent, and the only difference is that these figures say they were
+     * walked rather than proven. */
+    expect(valueSeries(restored)).toEqual(
+      settled.map((point) =>
+        point.date === "2026-01-09" ? point : { ...point, cashEstimated: ["ibkr:EUR", "ibkr:USD"] },
+      ),
+    );
+  });
+});
+
+test("Trading 212 cash with unproven history is estimated back from its balance", () => {
+  const sections = allSections("complete");
+  sections.cashBalances.rows = [
+    { entity: "personal", broker: "trading212", currency: "EUR", amount: 800, asOf: "2026-01-09" },
+  ];
+  sections.cashFlows.status = "partial";
+  sections.cashFlows.rows = [
+    {
+      id: "deposit",
+      entity: "personal",
+      broker: "trading212",
+      date: "2026-01-05",
+      currency: "EUR",
+      amount: 1000,
+      kind: "deposit",
+      brokerFlowId: "deposit",
+    },
+  ];
+  sections.trades.rows = [
+    {
+      entity: "personal",
+      broker: "trading212",
+      date: "2026-01-07",
+      symbol: "AAPL",
+      side: "buy",
+      quantity: 2,
+      price: 100,
+      amount: 200,
+      currency: "USD",
+      commission: 0,
+      settlement: { currency: "EUR", amount: -160 },
+      brokerTradeId: "fill-1",
+    },
+  ];
+  const cache = createBrokerDataCache();
+  cache.apply(
+    outcome("trading212", {
+      sections,
+      cashHistory: {
+        entity: "personal",
+        broker: "trading212",
+        tradeCash: "trade-settlement",
+        status: "unknown",
+        reason: "unproven",
+      },
+      source: "trading-212",
+      problems: [],
+    }),
+  );
+
+  /* This history is short a page, so its movements do not total back to an
+   * empty wallet and nothing is proven. The balance date stands; earlier
+   * dates are walked back from it through the purchase, 800 then 960, and
+   * said to be estimates. */
+  expect(valueSeries(cache).map(({ cashUnknown }) => cashUnknown)).toEqual([[], [], [], [], []]);
+  expect(valueSeries(cache).map(({ cashEstimated }) => cashEstimated ?? [])).toEqual([
+    ["trading212:EUR"],
+    ["trading212:EUR"],
+    ["trading212:EUR"],
+    ["trading212:EUR"],
+    [],
+  ]);
+});
+
+describe("Trading 212 history that is paginated short and holds an ambiguous transfer", () => {
+  const servers: ReturnType<typeof createServer>[] = [];
+
+  afterEach(async () => {
+    vi.useRealTimers();
+    await Promise.all(
+      servers.splice(0).map((server) => new Promise<void>((done) => server.close(() => done()))),
+    );
+  });
+
+  async function trading212(): Promise<string> {
+    const json = (response: ServerResponse, body: unknown) => {
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(JSON.stringify(body));
+    };
+    const server = createServer((request, response) => {
+      const url = request.url ?? "";
+      if (url === "/api/v0/equity/account/summary")
+        return json(response, {
+          currency: "EUR",
+          cash: { availableToTrade: 800, inPies: 0, reservedForOrders: 0 },
+        });
+      if (url === "/api/v0/equity/positions") return json(response, []);
+      if (url.startsWith("/api/v0/equity/history/transactions"))
+        return json(response, {
+          items: [
+            {
+              amount: 1000,
+              currency: "EUR",
+              dateTime: "2026-01-05T10:00:00Z",
+              reference: "deposit-1",
+              type: "DEPOSIT",
+            },
+            {
+              amount: 200,
+              currency: "EUR",
+              dateTime: "2026-01-06T10:00:00Z",
+              reference: "transfer-1",
+              type: "TRANSFER",
+            },
+          ],
+          nextPagePath: "/loop",
+        });
+      if (url === "/loop") return json(response, { items: [], nextPagePath: "/loop" });
+      return json(response, { items: [], nextPagePath: null });
+    });
+    servers.push(server);
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const address = server.address();
+    if (!address || typeof address === "string") throw new Error("Loopback server has no port");
+    return `http://127.0.0.1:${address.port}`;
+  }
+
+  test("keeps cash unknown and yields no complete return or risk", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-01-09T12:00:00Z"));
+    const result = await createTrading212Adapter({
+      token: "token",
+      secret: "secret",
+      baseUrl: await trading212(),
+    }).sync({ lanes: ["holdings", "history"], entity: "personal" });
+    /* The runtime proves from the merged history and refuses while pagination
+     * is unfinished; the adapter states no window on its own. */
+    const resolved = resolveTrading212CashHistory({
+      entity: "personal",
+      fxRates: FX,
+      historyComplete: result.resume == null,
+      balance: result.sections.cashBalances.rows[0] ?? null,
+      cashFlows: result.sections.cashFlows.rows,
+      dividends: result.sections.dividends.rows,
+      trades: result.sections.trades.rows,
+    });
+    const cache = createBrokerDataCache();
+    cache.apply(
+      outcome("trading212", { ...result, source: "trading-212", cashHistory: resolved.coverage }),
+    );
+    const data = cache.read();
+
+    expect(result.problems).toEqual(["Trading 212 transactions pagination repeated nextPagePath"]);
+    expect(resolved.coverage.status).toBe("unknown");
+    expect(data.cashCoverage).toEqual([
+      expect.objectContaining({ broker: "trading212", status: "unknown" }),
+    ]);
+
+    const dashboard = buildInvestingDashboard({
+      ...data,
+      priceBars: [],
+      benchmarkBars: [],
+      presentationCurrency: "EUR",
+      fxRates: FX,
+      today: "2026-01-09",
+    });
+    const points = dashboard.portfolio.All;
+    const history = points.filter((point) => point.date < "2026-01-09");
+
+    expect(history.map(({ date }) => date)).toEqual(DATES.slice(0, 4));
+    /* Short a page and holding a transfer whose direction was never stated:
+     * the movements cannot total back to an empty wallet, so no date is
+     * walked. Only the days after the transfer, which nothing reported
+     * separates from the balance, are estimated from it. */
+    expect(history.map((point) => point.cashUnknown)).toEqual([["trading212:EUR"], [], [], []]);
+    expect(history.map((point) => point.cashEstimated ?? [])).toEqual([
+      [],
+      ["trading212:EUR"],
+      ["trading212:EUR"],
+      ["trading212:EUR"],
+    ]);
+    expect(
+      buildIndexedSeries(history, [], dashboard.externalCashFlows).map(
+        (point) => point.portfolioReturn,
+      ),
+    ).toEqual([null, 0, 0, 0]);
+    const { risk } = buildHistoricalRisk(dashboard, "All");
+    expect(risk.status).toBe("unavailable");
+    expect(risk.reasons).toContain("Cash history missing: trading212:EUR.");
+  });
+});

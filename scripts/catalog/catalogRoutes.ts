@@ -1,7 +1,11 @@
 import { isCovered, type CatalogRoute, type CatalogValue } from "@lavega/core";
 
 export type RouteAttempt = { route: CatalogRoute; run: () => Promise<CatalogValue | null> };
-export type LadderResult = { value: CatalogValue | null; tried: CatalogRoute[]; reason: string | null };
+export type LadderResult = {
+  value: CatalogValue | null;
+  tried: CatalogRoute[];
+  reason: string | null;
+};
 
 /** Best first. The provider's own page and its own PDF outrank anything derived,
  *  and the agent is last because it costs money — not because it is inaccurate.
@@ -37,7 +41,13 @@ export function ladderOrder(): CatalogRoute[] {
  *  stripped HTML with nothing tying it to the product asked about.
  *
  *  Within each group the ladder's own order is kept. */
-const PARTIAL_ORDER: CatalogRoute[] = ["wayback", "agent", "provider-pdf", "provider-page", "comparison"];
+const PARTIAL_ORDER: CatalogRoute[] = [
+  "wayback",
+  "agent",
+  "provider-pdf",
+  "provider-page",
+  "comparison",
+];
 
 export function partialOrder(): CatalogRoute[] {
   return [...PARTIAL_ORDER];

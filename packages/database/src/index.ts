@@ -1,11 +1,40 @@
-import { Pool, type PoolClient, type QueryResult, type QueryResultRow } from "@neondatabase/serverless";
+import {
+  neon,
+  Pool,
+  type NeonQueryFunction,
+  type PoolClient,
+  type QueryResult,
+  type QueryResultRow,
+} from "@neondatabase/serverless";
 import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 
-export type Database = Pool;
+/** The pool carries multi-statement transactions; `http` carries the rest. */
+export type Database = Pool & { readonly http: NeonQueryFunction<false, true> };
+
+function poolErrorText(error: unknown): string {
+  if (typeof error === "object" && error !== null && "message" in error) {
+    const message = error.message;
+    if (typeof message === "string" && message.length > 0) return message;
+  }
+  return "connection closed";
+}
 
 export function createDatabase(connectionString = process.env.DATABASE_URL): Database {
   if (!connectionString?.trim()) throw new Error("DATABASE_URL is required");
-  return new Pool({ connectionString, max: 5, connectionTimeoutMillis: 5_000, idleTimeoutMillis: 10_000 });
+  const pool = new Pool({
+    connectionString,
+    max: 5,
+    connectionTimeoutMillis: 5_000,
+    idleTimeoutMillis: 10_000,
+  });
+  /* An idle Neon socket that dies without a close frame emits an ErrorEvent,
+   * not an Error, and the message is empty. This driver throws that as
+   * "Unhandled error. ()" unless the pool is listening. pg-pool has already
+   * discarded the client. */
+  pool.on("error", (error: unknown) => {
+    console.error(`database pool: ${poolErrorText(error)}`);
+  });
+  return Object.assign(pool, { http: neon(connectionString, { fullResults: true }) });
 }
 
 export function requireUserId(userId: string | undefined | null): string {
@@ -14,7 +43,11 @@ export function requireUserId(userId: string | undefined | null): string {
 }
 
 /** Every request gets its own transaction. SET LOCAL cannot leak to another request. */
-export async function withTenant<T>(db: Database, userId: string | undefined | null, fn: (client: PoolClient) => Promise<T>): Promise<T> {
+export async function withTenant<T>(
+  db: Database,
+  userId: string | undefined | null,
+  fn: (client: PoolClient) => Promise<T>,
+): Promise<T> {
   const identity = requireUserId(userId);
   const client = await db.connect();
   try {
@@ -31,10 +64,49 @@ export async function withTenant<T>(db: Database, userId: string | undefined | n
   }
 }
 
+export type TenantStatement = {
+  query<R extends QueryResultRow = QueryResultRow>(
+    text: string,
+    params?: unknown[],
+  ): Promise<QueryResult<R>>;
+};
+
+/**
+ * One statement as the tenant, in one round trip.
+ *
+ * `withTenant` over the pool costs five: connect, BEGIN, set_config, the
+ * statement and COMMIT. Neon's HTTP transaction sends set_config and the
+ * statement in one request and wraps them in BEGIN and COMMIT on the server, so
+ * RLS sees the same `app.user_id` for the same single transaction. The client
+ * takes one statement. A second would run outside that transaction, so it
+ * throws; code that needs two belongs in `withTenant`.
+ */
+export async function withTenantStatement<T>(
+  db: Database,
+  userId: string | undefined | null,
+  fn: (client: TenantStatement) => Promise<T>,
+): Promise<T> {
+  const identity = requireUserId(userId);
+  let sent = false;
+  return fn({
+    async query<R extends QueryResultRow>(text: string, params: unknown[] = []) {
+      if (sent) throw new Error("withTenantStatement runs one statement; use withTenant for more");
+      sent = true;
+      const [, result] = await db.http.transaction([
+        db.http.query("SELECT set_config('app.user_id', $1, true)", [identity]),
+        db.http.query(text, params),
+      ]);
+      return result as unknown as QueryResult<R>;
+    },
+  });
+}
+
 function encryptionKey(): Buffer {
   const value = process.env.LAVEGA_ENCRYPTION_KEY;
   if (!value) throw new Error("LAVEGA_ENCRYPTION_KEY is required");
-  const key = /^[0-9a-f]{64}$/i.test(value) ? Buffer.from(value, "hex") : Buffer.from(value, "base64");
+  const key = /^[0-9a-f]{64}$/i.test(value)
+    ? Buffer.from(value, "hex")
+    : Buffer.from(value, "base64");
   if (key.length !== 32) throw new Error("LAVEGA_ENCRYPTION_KEY must decode to 32 bytes");
   return key;
 }
@@ -55,7 +127,9 @@ export function encryptBlob(value: unknown): Buffer {
  * that hold a cache can carry on without it; callers that hold the only copy of
  * something must not pretend it was never there.
  */
-export function tryDecryptBlob<T>(blob: Buffer | Uint8Array): { readable: true; value: T } | { readable: false } {
+export function tryDecryptBlob<T>(
+  blob: Buffer | Uint8Array,
+): { readable: true; value: T } | { readable: false } {
   try {
     return { readable: true, value: decryptBlob<T>(blob) };
   } catch {
@@ -65,65 +139,247 @@ export function tryDecryptBlob<T>(blob: Buffer | Uint8Array): { readable: true; 
 
 export function decryptBlob<T>(blob: Buffer | Uint8Array): T {
   const bytes = Buffer.from(blob);
-  if (bytes[0] !== 1 || bytes[1] !== 12 || bytes.length < 30) throw new Error("Invalid encrypted blob");
+  if (bytes[0] !== 1 || bytes[1] !== 12 || bytes.length < 30)
+    throw new Error("Invalid encrypted blob");
   const iv = bytes.subarray(2, 14);
   const tag = bytes.subarray(14, 30);
   const decipher = createDecipheriv("aes-256-gcm", encryptionKey(), iv);
   decipher.setAuthTag(tag);
-  return JSON.parse(Buffer.concat([decipher.update(bytes.subarray(30)), decipher.final()]).toString("utf8")) as T;
-}
-
-export type VaultRepository = {
-  get<T>(): Promise<T | null>;
-  put(value: unknown): Promise<void>;
-};
-
-export function createVaultRepository(db: Database, userId: string | undefined | null): VaultRepository {
-  return {
-    async get<T>() {
-      return withTenant(db, userId, async (client) => {
-        const result = await client.query<QueryResultRow>("SELECT vault_blob FROM personal.vaults");
-        return result.rows[0] ? decryptBlob<T>(result.rows[0].vault_blob as Buffer) : null;
-      });
-    },
-    async put(value) {
-      const blob = encryptBlob(value);
-      await withTenant(db, userId, async (client) => {
-        await client.query("INSERT INTO personal.vaults (user_id, vault_blob) VALUES (current_setting('app.user_id'), $1) ON CONFLICT (user_id) DO UPDATE SET vault_blob = EXCLUDED.vault_blob, updated_at = CURRENT_TIMESTAMP", [blob]);
-      });
-    },
-  };
+  return JSON.parse(
+    Buffer.concat([decipher.update(bytes.subarray(30)), decipher.final()]).toString("utf8"),
+  ) as T;
 }
 
 export type EncryptedBrokerRepository = {
-  get<T>(broker: string): Promise<{ credentials: T; snapshot: unknown | null } | null>;
+  get<T>(broker: string): Promise<{ credentials: T; credentialGeneration: number } | null>;
+  /** Every broker's snapshot in one read. Snapshots are the large part of a
+   *  vault row, so `get` leaves them out and only this reads them. */
+  snapshots(): Promise<Record<string, unknown> | null>;
+  /** Writing credentials starts a new generation: whatever a running sync is
+   *  reading belongs to the connection this call replaces. */
   put(broker: string, credentials: unknown, snapshot?: unknown): Promise<void>;
+  /** Stores broker data alone. The credential blob is left untouched, so a
+   *  reconnect that lands mid-sync is not reverted by the snapshot write that
+   *  follows it. False means the credentials moved on and the data was dropped. */
+  putSnapshot(broker: string, snapshot: unknown, credentialGeneration: number): Promise<boolean>;
+  /** Creates a snapshot-only row for a broker the vault stores no credentials
+   *  for (a file import). False when the row carries credentials: that broker's
+   *  sync owns its snapshot. */
+  putSnapshotOnly(broker: string, snapshot: unknown): Promise<boolean>;
 };
 
-export function createBrokerRepository(db: Database, userId: string | undefined | null): EncryptedBrokerRepository {
+export class UnreadableBrokerCredentialsError extends Error {
+  constructor() {
+    super("Stored broker credentials cannot be read with the current LAVEGA_ENCRYPTION_KEY");
+    this.name = "UnreadableBrokerCredentialsError";
+  }
+}
+
+export function createBrokerRepository(
+  db: Database,
+  userId: string | undefined | null,
+): EncryptedBrokerRepository {
   return {
     async get<T>(broker: string) {
-      return withTenant(db, userId, async (client) => {
-        const result = await client.query<QueryResultRow>("SELECT credentials_blob, snapshot_blob FROM investing.broker_vaults WHERE broker = $1", [broker]);
+      return withTenantStatement(db, userId, async (client) => {
+        const result = await client.query<QueryResultRow>(
+          "SELECT credentials_blob, credential_generation FROM investing.broker_vaults WHERE broker = $1",
+          [broker],
+        );
         const row = result.rows[0];
         if (!row) return null;
         const credentials = tryDecryptBlob<T>(row.credentials_blob as Buffer);
         /* Credentials are the only copy there is. Reporting them as missing
          * would send the user to re-enter their broker tokens, and that write
          * would replace ciphertext a restored key could still have opened. */
-        if (!credentials.readable) throw new Error("Stored broker credentials cannot be read with the current LAVEGA_ENCRYPTION_KEY");
-        // The snapshot is a cache of broker data. A sync rebuilds it, so an
-        // unreadable one is dropped rather than taking the account down.
-        const snapshot = row.snapshot_blob ? tryDecryptBlob(row.snapshot_blob as Buffer) : null;
-        return { credentials: credentials.value, snapshot: snapshot?.readable ? snapshot.value : null };
+        if (!credentials.readable) throw new UnreadableBrokerCredentialsError();
+        return {
+          credentials: credentials.value,
+          credentialGeneration: Number(row.credential_generation ?? 1),
+        };
+      });
+    },
+    async snapshots() {
+      return withTenantStatement(db, userId, async (client) => {
+        const result = await client.query<QueryResultRow>(
+          "SELECT broker, snapshot_blob FROM investing.broker_vaults",
+        );
+        // No row at all is an empty vault, which callers treat unlike one without data yet.
+        if (result.rows.length === 0) return null;
+        const snapshots: Record<string, unknown> = {};
+        for (const row of result.rows) {
+          // The snapshot is a cache of broker data. A sync rebuilds it, so an
+          // unreadable one is dropped rather than taking the account down.
+          if (!row.snapshot_blob) continue;
+          const snapshot = tryDecryptBlob(row.snapshot_blob as Buffer);
+          if (snapshot.readable) snapshots[row.broker as string] = snapshot.value;
+        }
+        return snapshots;
       });
     },
     async put(broker: string, credentials: unknown, snapshot?: unknown) {
       const credentialsBlob = encryptBlob(credentials);
       const snapshotBlob = snapshot === undefined ? null : encryptBlob(snapshot);
       await withTenant(db, userId, async (client) => {
-        await client.query("INSERT INTO investing.broker_vaults (user_id, broker, credentials_blob, snapshot_blob) VALUES (current_setting('app.user_id'), $1, $2, $3) ON CONFLICT (user_id, broker) DO UPDATE SET credentials_blob = EXCLUDED.credentials_blob, snapshot_blob = COALESCE(EXCLUDED.snapshot_blob, investing.broker_vaults.snapshot_blob), updated_at = CURRENT_TIMESTAMP", [broker, credentialsBlob, snapshotBlob]);
+        await client.query(
+          "INSERT INTO investing.broker_vaults (user_id, broker, credentials_blob, snapshot_blob) VALUES (current_setting('app.user_id'), $1, $2, $3) ON CONFLICT (user_id, broker) DO UPDATE SET credentials_blob = EXCLUDED.credentials_blob, snapshot_blob = EXCLUDED.snapshot_blob, credential_generation = investing.broker_vaults.credential_generation + 1, updated_at = CURRENT_TIMESTAMP",
+          [broker, credentialsBlob, snapshotBlob],
+        );
+        // A new connection must never resume another account's history or lease.
+        await client.query("DELETE FROM investing.sync_state WHERE broker = $1", [broker]);
       });
+    },
+    async putSnapshot(broker: string, snapshot: unknown, credentialGeneration: number) {
+      const snapshotBlob = encryptBlob(snapshot);
+      return withTenantStatement(db, userId, async (client) => {
+        const result = await client.query(
+          "UPDATE investing.broker_vaults SET snapshot_blob = $2, updated_at = CURRENT_TIMESTAMP WHERE broker = $1 AND credential_generation = $3 RETURNING broker",
+          [broker, snapshotBlob, credentialGeneration],
+        );
+        return result.rows.length > 0;
+      });
+    },
+    async putSnapshotOnly(broker: string, snapshot: unknown) {
+      const snapshotBlob = encryptBlob(snapshot);
+      return withTenantStatement(db, userId, async (client) => {
+        /* The WHERE on the conflict update is the guard: a row that carries
+         * credentials belongs to a broker with an API, whose sync alone may
+         * write its snapshot. */
+        const result = await client.query(
+          "INSERT INTO investing.broker_vaults (user_id, broker, credentials_blob, snapshot_blob) VALUES (current_setting('app.user_id'), $1, NULL, $2) ON CONFLICT (user_id, broker) DO UPDATE SET snapshot_blob = EXCLUDED.snapshot_blob, updated_at = CURRENT_TIMESTAMP WHERE investing.broker_vaults.credentials_blob IS NULL RETURNING broker",
+          [broker, snapshotBlob],
+        );
+        return result.rows.length > 0;
+      });
+    },
+  };
+}
+
+/**
+ * Every user with a connected broker, least recently synced first.
+ *
+ * Deliberately the one read in this file with no tenant: it calls the
+ * SECURITY DEFINER function from 0022, which returns user ids and nothing else.
+ * The table's own policy is untouched, so a query for anything more still sees
+ * only the tenant it names.
+ */
+export async function listBrokerSyncTenants(db: Database): Promise<string[]> {
+  const result = await db.http.query("SELECT tenant_id FROM investing.list_broker_sync_tenants()");
+  return result.rows.map((row) => String(row.tenant_id));
+}
+
+export type DashboardSnapshotRepository = {
+  /** The stored dashboard for a query while it is still current, and the
+   *  source version a dashboard built now has to be stored under. `priceKeys`
+   *  are the instrument keys the stored build read (issue #307), so a shared
+   *  price write can invalidate it; `updatedAt` is its build time. */
+  get(cacheKey: string): Promise<{
+    version: number;
+    dashboard: unknown | null;
+    priceKeys: string[];
+    updatedAt: string | null;
+  }>;
+  put(
+    cacheKey: string,
+    version: number,
+    dashboard: unknown,
+    priceKeys?: readonly string[],
+  ): Promise<void>;
+};
+
+/**
+ * Built dashboards, one per query, current while their source version is
+ * (see 0010_dashboard_snapshots.sql). The tenant is also named in each
+ * statement: a connection that bypasses RLS must still see one user's row.
+ */
+export function createDashboardSnapshotRepository(
+  db: Database,
+  userId: string | undefined | null,
+): DashboardSnapshotRepository {
+  return {
+    async get(cacheKey) {
+      return withTenantStatement(db, userId, async (client) => {
+        const result = await client.query<QueryResultRow>(
+          `SELECT current.version, stored.blob, stored.price_keys,
+                  to_char(stored.updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS updated_at
+           FROM (
+             SELECT COALESCE(
+               (SELECT version FROM investing.dashboard_sources
+                WHERE user_id = current_setting('app.user_id')),
+               0
+             ) AS version
+           ) AS current
+           LEFT JOIN investing.dashboard_snapshots AS stored
+             ON stored.user_id = current_setting('app.user_id')
+            AND stored.cache_key = $1
+            AND stored.version = current.version
+            AND stored.as_of = CURRENT_DATE`,
+          [cacheKey],
+        );
+        const row = result.rows[0];
+        const stored = row?.blob ? tryDecryptBlob(row.blob as Buffer) : null;
+        return {
+          version: Number(row?.version ?? 0),
+          dashboard: stored?.readable ? stored.value : null,
+          priceKeys: Array.isArray(row?.price_keys) ? (row.price_keys as string[]) : [],
+          updatedAt: (row?.updated_at as string | null) ?? null,
+        };
+      });
+    },
+    async put(cacheKey, version, dashboard, priceKeys = []) {
+      const blob = encryptBlob(dashboard);
+      await withTenantStatement(db, userId, async (client) => {
+        await client.query(
+          `INSERT INTO investing.dashboard_snapshots
+             (user_id, cache_key, version, as_of, blob, price_keys)
+           VALUES (current_setting('app.user_id'), $1, $2, CURRENT_DATE, $3, $4::text[])
+           ON CONFLICT (user_id, cache_key) DO UPDATE
+             SET version = EXCLUDED.version, as_of = EXCLUDED.as_of, blob = EXCLUDED.blob,
+                 price_keys = EXCLUDED.price_keys, updated_at = CURRENT_TIMESTAMP
+             WHERE investing.dashboard_snapshots.version <= EXCLUDED.version`,
+          [cacheKey, version, blob, [...priceKeys]],
+        );
+      });
+    },
+  };
+}
+
+export type FxRateRow = {
+  base: string;
+  date: string;
+  rates: Record<string, number>;
+};
+
+export type FxRateRepository = {
+  /** Oldest first, starting at the last published date on or before `from`. */
+  range(base: string, from: string, to: string): Promise<FxRateRow[]>;
+  put(rows: readonly FxRateRow[]): Promise<void>;
+};
+
+/** Published exchange rates. They belong to no user, so no tenant is set. */
+export function createFxRateRepository(db: Database): FxRateRepository {
+  return {
+    async range(base, from, to) {
+      const result = await db.http.query(
+        `SELECT base, to_char(date, 'YYYY-MM-DD') AS date, rates FROM investing.fx_rates
+         WHERE base = $1 AND date <= $3::date
+           AND date >= COALESCE(
+             (SELECT max(date) FROM investing.fx_rates WHERE base = $1 AND date <= $2::date),
+             $2::date)
+         ORDER BY date`,
+        [base, from, to],
+      );
+      return result.rows as FxRateRow[];
+    },
+    async put(rows) {
+      if (rows.length === 0) return;
+      await db.http.query(
+        `INSERT INTO investing.fx_rates (base, date, rates)
+         SELECT row->>'base', (row->>'date')::date, row->'rates'
+         FROM jsonb_array_elements($1::jsonb) AS row
+         ON CONFLICT (base, date) DO UPDATE SET rates = EXCLUDED.rates`,
+        [JSON.stringify(rows)],
+      );
     },
   };
 }
@@ -131,81 +387,332 @@ export function createBrokerRepository(db: Database, userId: string | undefined 
 export type { PoolClient, QueryResult };
 
 /* Investing tables. Every repository is bound to one user and runs inside
- * withTenant, so `app.user_id` is set and the RLS policy in 0001_lavega.sql
- * decides what the statement can see. The explicit tenant checks below are
- * belt-and-braces: they turn a caller passing the wrong user into an error
- * here rather than a silent write under the bound one. */
-
-const sameTenant = (bound: string, candidate: string) => {
-  if (candidate !== bound) throw new Error("Row belongs to another tenant");
-};
+ * withTenant or withTenantStatement, so `app.user_id` is set and the RLS policy in 0001_lavega.sql
+ * decides what the statement can see. Rows never name a tenant of their own, so
+ * there is no wrong-user value for a caller to pass. */
 
 const isoDate = (value: unknown): string | null =>
   value == null ? null : value instanceof Date ? value.toISOString() : String(value);
 
-export type PriceBarRepository = {
-  /** Omitting a bound means no bound. There is no date that stands for "all time". */
-  getRange(symbol: string, from?: string, to?: string): Promise<PriceBarRow[]>;
-  lastDate(symbol: string): Promise<string | null>;
-  upsert(bars: readonly PriceBarRow[]): Promise<void>;
-  purgeAll(): Promise<void>;
+/* ---------- shared market data (issue #307) ---------- */
+
+/** One stored bar of a shared series: keyed by instrument, no symbol. */
+export type SharedPriceBarRow = {
+  instrumentKey: string;
+  date: string;
+  close: number;
+  currency: string;
+  split?: number;
 };
 
-export type PriceBarRow = { tenantId: string; symbol: string; date: string; close: number; currency: string };
+/** One shared coverage row. `provider` is always known (the write path
+ *  requires it); the rest mirror the per-user coverage shape. */
+export type SharedPriceCoverageRow = {
+  instrumentKey: string;
+  from: string;
+  to: string;
+  listing: string | null;
+  currency: string;
+  provider: string;
+  delistedSince?: string;
+  listingMissingSince?: string;
+  listingStart?: string;
+  provisionalThrough?: string;
+};
+
+/** A read address: the instrument key plus the `sym:` alias to fall back to. */
+export type SharedPriceKey = { key: string; alias?: string };
+
+const SHARED_PRICE_BAR_COLUMNS =
+  "instrument_key AS \"instrumentKey\", to_char(date, 'YYYY-MM-DD') AS date, close, currency, split";
+
+const SHARED_PRICE_COVERAGE_COLUMNS = `instrument_key AS "instrumentKey",
+  to_char(from_date, 'YYYY-MM-DD') AS "from",
+  to_char(to_date, 'YYYY-MM-DD') AS "to",
+  listing, currency, provider,
+  to_char(delisted_since, 'YYYY-MM-DD') AS "delistedSince",
+  to_char(listing_missing_since AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS "listingMissingSince",
+  to_char(listing_start, 'YYYY-MM-DD') AS "listingStart",
+  to_char(provisional_through, 'YYYY-MM-DD') AS "provisionalThrough"`;
+
+function sharedPriceBarRow(row: QueryResultRow): SharedPriceBarRow {
+  return {
+    instrumentKey: row.instrumentKey as string,
+    date: row.date as string,
+    close: Number(row.close),
+    currency: row.currency as string,
+    ...(row.split == null ? {} : { split: Number(row.split) }),
+  };
+}
+
+function sharedPriceCoverageRow(row: QueryResultRow): SharedPriceCoverageRow {
+  const coverage = row as QueryResultRow & {
+    delistedSince: string | null;
+    listingMissingSince: string | null;
+    listingStart: string | null;
+    provisionalThrough: string | null;
+  };
+  return {
+    instrumentKey: coverage.instrumentKey as string,
+    from: coverage.from as string,
+    to: coverage.to as string,
+    listing: (coverage.listing as string | null) ?? null,
+    currency: coverage.currency as string,
+    provider: coverage.provider as string,
+    ...(coverage.delistedSince == null ? {} : { delistedSince: coverage.delistedSince }),
+    ...(coverage.listingMissingSince == null
+      ? {}
+      : { listingMissingSince: coverage.listingMissingSince }),
+    ...(coverage.listingStart == null ? {} : { listingStart: coverage.listingStart }),
+    ...(coverage.provisionalThrough == null
+      ? {}
+      : { provisionalThrough: coverage.provisionalThrough }),
+  };
+}
+
+const UPSERT_SHARED_PRICE_BARS = `INSERT INTO investing.instrument_price_bars
+  (instrument_key, date, close, currency, provider, split)
+  SELECT $1, d, c, cur, COALESCE(
+    (SELECT provider FROM investing.instrument_price_coverage WHERE instrument_key = $1),
+    'unknown'
+  ), sp
+  FROM unnest($2::date[], $3::numeric[], $4::text[], $5::numeric[]) AS rows(d, c, cur, sp)
+  ON CONFLICT (instrument_key, date) DO UPDATE SET
+    close = EXCLUDED.close, currency = EXCLUDED.currency,
+    provider = EXCLUDED.provider, split = EXCLUDED.split, updated_at = CURRENT_TIMESTAMP`;
+
+function sharedPriceBarParams(
+  instrumentKey: string,
+  bars: readonly { date: string; close: number; currency: string; split?: number }[],
+): unknown[] {
+  return [
+    instrumentKey,
+    bars.map((bar) => bar.date),
+    bars.map((bar) => bar.close),
+    bars.map((bar) => bar.currency),
+    bars.map((bar) => bar.split ?? null),
+  ];
+}
+
+export type SharedPriceRepository = {
+  getRange(key: SharedPriceKey, from?: string, to?: string): Promise<SharedPriceBarRow[]>;
+  getRanges(keys: readonly SharedPriceKey[]): Promise<Map<string, SharedPriceBarRow[]>>;
+  lastDate(key: SharedPriceKey): Promise<string | null>;
+  upsert(instrumentKey: string, bars: readonly SharedPriceBarRow[]): Promise<void>;
+  replaceRange(
+    instrumentKey: string,
+    bars: readonly SharedPriceBarRow[],
+    from?: string,
+    to?: string,
+  ): Promise<void>;
+  getCoverage(key: SharedPriceKey): Promise<SharedPriceCoverageRow | null>;
+  putCoverage(instrumentKey: string, coverage: SharedPriceCoverageRow): Promise<void>;
+  latestChange(instrumentKeys: readonly string[]): Promise<string | null>;
+  adoptAlias(key: string, alias: string): Promise<void>;
+  claim(key: string, owner: string, ttlMs: number): Promise<boolean>;
+  release(key: string, owner: string): Promise<void>;
+};
 
 /**
- * Daily bars for one user. `provider` records where a bar came from; the bar
- * itself does not carry that, so the caller names its provider once.
+ * The shared, instrument-keyed price data (issue #307). These tables belong to
+ * no user and have no row-level security, so no `app.user_id` is set: exactly
+ * like `createFxRateRepository`. Rows are keyed by the `PriceKey` from
+ * `packages/core/src/investing/instrumentKey.ts`.
  */
-export function createPriceBarRepository(db: Database, userId: string | undefined | null, provider = "yahoo"): PriceBarRepository {
-  const tenantId = requireUserId(userId);
+export function createSharedPriceRepository(db: Database): SharedPriceRepository {
+  /** The key a read must use: the requested key when it has any rows, else its
+   *  `sym:` alias. "Any rows" means a bar or a coverage row. */
+  const resolveReadKey = async (key: SharedPriceKey): Promise<string> => {
+    const exists = async (candidate: string): Promise<boolean> => {
+      const result = await db.http.query(
+        `SELECT EXISTS (
+           SELECT 1 FROM investing.instrument_price_bars WHERE instrument_key = $1
+           UNION ALL
+           SELECT 1 FROM investing.instrument_price_coverage WHERE instrument_key = $1
+         ) AS present`,
+        [candidate],
+      );
+      return Boolean(result.rows[0]?.present);
+    };
+    if (key.alias === undefined || (await exists(key.key))) return key.key;
+    return (await exists(key.alias)) ? key.alias : key.key;
+  };
+
+  const touchCoverage = (instrumentKey: string) =>
+    db.http.query(
+      "UPDATE investing.instrument_price_coverage SET updated_at = CURRENT_TIMESTAMP WHERE instrument_key = $1",
+      [instrumentKey],
+    );
+
   return {
-    async getRange(symbol, from, to) {
-      /* Built from the bounds actually given. A caller wanting the whole history
-       * passes none: spelling it as a wide date range is how '0000-01-01' — a
-       * year Postgres does not have — got into this query. */
-      const values: unknown[] = [symbol];
-      const conditions = ["symbol = $1"];
+    async getRange(key, from, to) {
+      const resolved = await resolveReadKey(key);
+      const values: unknown[] = [resolved];
+      const conditions = ["instrument_key = $1"];
       if (from !== undefined) conditions.push(`date >= $${values.push(from)}`);
       if (to !== undefined) conditions.push(`date <= $${values.push(to)}`);
-      return withTenant(db, tenantId, async (client) => {
-        const result = await client.query<QueryResultRow>(
-          `SELECT symbol, to_char(date, 'YYYY-MM-DD') AS date, close, currency FROM investing.price_bars WHERE ${conditions.join(" AND ")} ORDER BY date`,
-          values,
-        );
-        // NUMERIC arrives as a string; a bar with a string close silently breaks every sum downstream.
-        return result.rows.map((row) => ({ tenantId, symbol: row.symbol as string, date: row.date as string, close: Number(row.close), currency: row.currency as string }));
-      });
+      const result = await db.http.query(
+        `SELECT ${SHARED_PRICE_BAR_COLUMNS} FROM investing.instrument_price_bars
+         WHERE ${conditions.join(" AND ")} ORDER BY date`,
+        values,
+      );
+      return result.rows.map(sharedPriceBarRow);
     },
-    async lastDate(symbol) {
-      return withTenant(db, tenantId, async (client) => {
-        const result = await client.query<QueryResultRow>(
-          "SELECT to_char(max(date), 'YYYY-MM-DD') AS date FROM investing.price_bars WHERE symbol = $1",
-          [symbol],
-        );
-        return (result.rows[0]?.date as string | null) ?? null;
-      });
+    async getRanges(keys) {
+      const resolved = await Promise.all(
+        keys.map(async (key) => ({ requested: key.key, actual: await resolveReadKey(key) })),
+      );
+      const out = new Map<string, SharedPriceBarRow[]>();
+      for (const key of keys) out.set(key.key, []);
+      if (resolved.length === 0) return out;
+      const result = await db.http.query(
+        `SELECT ${SHARED_PRICE_BAR_COLUMNS} FROM investing.instrument_price_bars
+         WHERE instrument_key = ANY($1::text[]) ORDER BY date`,
+        [[...new Set(resolved.map((entry) => entry.actual))]],
+      );
+      const byActual = new Map<string, SharedPriceBarRow[]>();
+      for (const row of result.rows.map(sharedPriceBarRow)) {
+        const list = byActual.get(row.instrumentKey) ?? [];
+        list.push(row);
+        byActual.set(row.instrumentKey, list);
+      }
+      for (const entry of resolved) out.set(entry.requested, byActual.get(entry.actual) ?? []);
+      return out;
     },
-    async upsert(bars) {
+    async lastDate(key) {
+      const resolved = await resolveReadKey(key);
+      const result = await db.http.query(
+        "SELECT to_char(max(date), 'YYYY-MM-DD') AS date FROM investing.instrument_price_bars WHERE instrument_key = $1",
+        [resolved],
+      );
+      return (result.rows[0]?.date as string | null) ?? null;
+    },
+    async upsert(instrumentKey, bars) {
       if (bars.length === 0) return;
-      for (const bar of bars) sameTenant(tenantId, bar.tenantId);
-      await withTenant(db, tenantId, async (client) => {
-        await client.query(
-          "INSERT INTO investing.price_bars (user_id, symbol, date, close, currency, provider) SELECT current_setting('app.user_id'), * FROM unnest($1::text[], $2::date[], $3::numeric[], $4::text[], $5::text[]) ON CONFLICT (user_id, symbol, date) DO UPDATE SET close = EXCLUDED.close, currency = EXCLUDED.currency, provider = EXCLUDED.provider, updated_at = CURRENT_TIMESTAMP",
-          [
-            bars.map((bar) => bar.symbol),
-            bars.map((bar) => bar.date),
-            bars.map((bar) => bar.close),
-            bars.map((bar) => bar.currency.toUpperCase()),
-            bars.map(() => provider),
-          ],
-        );
-      });
+      await db.http.transaction([
+        db.http.query(UPSERT_SHARED_PRICE_BARS, sharedPriceBarParams(instrumentKey, bars)),
+        touchCoverage(instrumentKey),
+      ]);
     },
-    async purgeAll() {
-      await withTenant(db, tenantId, async (client) => {
-        await client.query("DELETE FROM investing.price_bars");
-      });
+    async replaceRange(instrumentKey, bars, from, to) {
+      const conditions = ["instrument_key = $1", "date <> ALL($2::date[])"];
+      const params: unknown[] = [instrumentKey, bars.map((bar) => bar.date)];
+      if (from !== undefined) conditions.push(`date >= $${params.push(from)}`);
+      if (to !== undefined) conditions.push(`date <= $${params.push(to)}`);
+      const statements = [
+        db.http.query(
+          `DELETE FROM investing.instrument_price_bars WHERE ${conditions.join(" AND ")}`,
+          params,
+        ),
+      ];
+      if (bars.length > 0)
+        statements.push(
+          db.http.query(UPSERT_SHARED_PRICE_BARS, sharedPriceBarParams(instrumentKey, bars)),
+        );
+      statements.push(touchCoverage(instrumentKey));
+      await db.http.transaction(statements);
+    },
+    async getCoverage(key) {
+      const resolved = await resolveReadKey(key);
+      const result = await db.http.query(
+        `SELECT ${SHARED_PRICE_COVERAGE_COLUMNS} FROM investing.instrument_price_coverage WHERE instrument_key = $1`,
+        [resolved],
+      );
+      const row = result.rows[0];
+      return row ? sharedPriceCoverageRow(row) : null;
+    },
+    async putCoverage(instrumentKey, coverage) {
+      await db.http.query(
+        `INSERT INTO investing.instrument_price_coverage
+           (instrument_key, from_date, to_date, listing, currency, provider,
+            delisted_since, listing_missing_since, listing_start, provisional_through)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+         ON CONFLICT (instrument_key) DO UPDATE SET
+           from_date = EXCLUDED.from_date, to_date = EXCLUDED.to_date,
+           listing = EXCLUDED.listing, currency = EXCLUDED.currency,
+           provider = EXCLUDED.provider, delisted_since = EXCLUDED.delisted_since,
+           listing_missing_since = EXCLUDED.listing_missing_since,
+           listing_start = EXCLUDED.listing_start,
+           provisional_through = EXCLUDED.provisional_through,
+           updated_at = CURRENT_TIMESTAMP`,
+        [
+          instrumentKey,
+          coverage.from,
+          coverage.to,
+          coverage.listing,
+          coverage.currency,
+          coverage.provider,
+          coverage.delistedSince ?? null,
+          coverage.listingMissingSince ?? null,
+          coverage.listingStart ?? null,
+          coverage.provisionalThrough ?? null,
+        ],
+      );
+    },
+    async latestChange(instrumentKeys) {
+      if (instrumentKeys.length === 0) return null;
+      const result = await db.http.query(
+        `SELECT to_char(max(updated_at) AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS at
+         FROM investing.instrument_price_coverage WHERE instrument_key = ANY($1::text[])`,
+        [[...new Set(instrumentKeys)]],
+      );
+      return (result.rows[0]?.at as string | null) ?? null;
+    },
+    async adoptAlias(key, alias) {
+      const present = await db.http.query(
+        `SELECT EXISTS (SELECT 1 FROM investing.instrument_price_bars WHERE instrument_key = $1)
+             OR EXISTS (SELECT 1 FROM investing.instrument_price_coverage WHERE instrument_key = $1) AS present`,
+        [alias],
+      );
+      if (!present.rows[0]?.present) return;
+      await db.http.transaction([
+        db.http.query(
+          `INSERT INTO investing.instrument_price_bars
+             (instrument_key, date, close, currency, provider, split, updated_at)
+           SELECT $1, date, close, currency, provider, split, updated_at
+           FROM investing.instrument_price_bars WHERE instrument_key = $2
+           ON CONFLICT (instrument_key, date) DO NOTHING`,
+          [key, alias],
+        ),
+        db.http.query("DELETE FROM investing.instrument_price_bars WHERE instrument_key = $1", [
+          alias,
+        ]),
+        db.http.query(
+          `INSERT INTO investing.instrument_price_coverage
+             (instrument_key, from_date, to_date, listing, currency, provider,
+              delisted_since, listing_missing_since, listing_start, provisional_through, updated_at)
+           SELECT $1, from_date, to_date, listing, currency, provider,
+              delisted_since, listing_missing_since, listing_start, provisional_through, updated_at
+           FROM investing.instrument_price_coverage WHERE instrument_key = $2
+           ON CONFLICT (instrument_key) DO UPDATE SET
+             from_date = LEAST(investing.instrument_price_coverage.from_date, EXCLUDED.from_date),
+             to_date = GREATEST(investing.instrument_price_coverage.to_date, EXCLUDED.to_date),
+             updated_at = CURRENT_TIMESTAMP`,
+          [key, alias],
+        ),
+        db.http.query("DELETE FROM investing.instrument_price_coverage WHERE instrument_key = $1", [
+          alias,
+        ]),
+        touchCoverage(key),
+      ]);
+    },
+    async claim(key, owner, ttlMs) {
+      const result = await db.http.query(
+        `INSERT INTO investing.instrument_price_claims (instrument_key, owner, claimed_until)
+         VALUES ($1, $2, now() + ($3::double precision * INTERVAL '1 millisecond'))
+         ON CONFLICT (instrument_key) DO UPDATE
+           SET owner = EXCLUDED.owner, claimed_until = EXCLUDED.claimed_until
+           WHERE investing.instrument_price_claims.claimed_until < now()
+         RETURNING instrument_key`,
+        [key, owner, ttlMs],
+      );
+      return result.rows.length > 0;
+    },
+    async release(key, owner) {
+      await db.http.query(
+        "DELETE FROM investing.instrument_price_claims WHERE instrument_key = $1 AND owner = $2",
+        [key, owner],
+      );
     },
   };
 }
@@ -215,36 +722,125 @@ export type PreferencesRepository = {
   setBenchmarkSymbols(symbols: readonly string[]): Promise<void>;
   getMarketDataConsent(): Promise<unknown | null>;
   setMarketDataConsent(decision: unknown): Promise<void>;
+  getLayout(): Promise<unknown | null>;
+  setLayout(layout: unknown): Promise<void>;
+  /** Account tax-treatment labels (plan §3 WS4.4, #296). */
+  getAccountWrappers(): Promise<unknown | null>;
+  setAccountWrappers(entries: unknown): Promise<void>;
+  /** The owner's switch for identifier candidate selection (Jev-03, #136). */
+  getIdentifierSelectionEnabled(): Promise<boolean>;
+  setIdentifierSelectionEnabled(enabled: boolean): Promise<void>;
+  /** The owner's symbol choice per ISIN, most trusted resolution tier (#136). */
+  getIdentifierOverrides(): Promise<unknown | null>;
+  setIdentifierOverrides(overrides: unknown): Promise<void>;
+  getSectorCorrections(): Promise<Record<string, string>>;
+  setSectorCorrection(symbol: string, sector: string): Promise<void>;
+  clearSectorCorrection(symbol: string): Promise<void>;
+  /** Owner-facing switch for sector inference (#135), default off — a
+   *  per-account preference, not a server env flag, because inference sends
+   *  an instrument's name and description to an external model. */
+  getSectorInferenceEnabled(): Promise<boolean>;
+  setSectorInferenceEnabled(enabled: boolean): Promise<void>;
+  /** Owner-confirmed cash-flow vocabulary rules (issue #137). */
+  getCashFlowRules(): Promise<unknown>;
+  setCashFlowRules(rules: unknown): Promise<void>;
+  /** Stored suggestions, separate from rules; no effect until confirmed. */
+  getCashFlowSuggestions(): Promise<unknown>;
+  setCashFlowSuggestions(suggestions: unknown): Promise<void>;
+  /** Explicit owner switch for the suggestion step, default off. */
+  getCashFlowSuggestionsEnabled(): Promise<boolean>;
+  setCashFlowSuggestionsEnabled(enabled: boolean): Promise<void>;
 };
 
-/** Benchmarks and market-data consent share one row, so each write names its own column. */
-export function createPreferencesRepository(db: Database, userId: string | undefined | null): PreferencesRepository {
+/** Benchmarks, market-data consent, layout, sector corrections and the sector-inference switch
+ *  share one row, so each write names its own column. */
+export function createPreferencesRepository(
+  db: Database,
+  userId: string | undefined | null,
+): PreferencesRepository {
   const tenantId = requireUserId(userId);
   const read = async <T>(column: string, fallback: T): Promise<T> =>
-    withTenant(db, tenantId, async (client) => {
-      const result = await client.query<QueryResultRow>(`SELECT ${column} FROM investing.preferences`);
+    withTenantStatement(db, tenantId, async (client) => {
+      const result = await client.query<QueryResultRow>(
+        `SELECT ${column} FROM investing.preferences`,
+      );
       const value = result.rows[0]?.[column];
-      return value == null ? fallback : value as T;
+      return value == null ? fallback : (value as T);
     });
   const write = async (column: string, value: unknown) => {
-    await withTenant(db, tenantId, async (client) => {
+    await withTenantStatement(db, tenantId, async (client) => {
       await client.query(
         `INSERT INTO investing.preferences (user_id, ${column}) VALUES (current_setting('app.user_id'), $1::jsonb) ON CONFLICT (user_id) DO UPDATE SET ${column} = EXCLUDED.${column}, updated_at = CURRENT_TIMESTAMP`,
         [JSON.stringify(value)],
       );
     });
   };
+  const writeBoolean = async (column: string, value: boolean) => {
+    await withTenantStatement(db, tenantId, async (client) => {
+      await client.query(
+        `INSERT INTO investing.preferences (user_id, ${column}) VALUES (current_setting('app.user_id'), $1) ON CONFLICT (user_id) DO UPDATE SET ${column} = EXCLUDED.${column}, updated_at = CURRENT_TIMESTAMP`,
+        [value],
+      );
+    });
+  };
+  const readCorrections = () => read<Record<string, string>>("sector_corrections", {});
+  const writeCorrections = (value: Record<string, string>) => write("sector_corrections", value);
   return {
     getBenchmarkSymbols: () => read<string[]>("benchmark_symbols", []),
     setBenchmarkSymbols: (symbols) => write("benchmark_symbols", [...symbols]),
     getMarketDataConsent: () => read<unknown | null>("market_data_consent", null),
     setMarketDataConsent: (decision) => write("market_data_consent", decision),
+    getLayout: () => read<unknown | null>("layout", null),
+    setLayout: (layout) => write("layout", layout),
+    getAccountWrappers: () => read<unknown | null>("account_wrappers", null),
+    setAccountWrappers: (entries) => write("account_wrappers", entries),
+    getIdentifierSelectionEnabled: () => read<boolean>("identifier_selection_enabled", false),
+    setIdentifierSelectionEnabled: (enabled) =>
+      writeBoolean("identifier_selection_enabled", enabled),
+    getIdentifierOverrides: () => read<unknown | null>("identifier_overrides", null),
+    setIdentifierOverrides: (overrides) => write("identifier_overrides", overrides),
+    getSectorCorrections: readCorrections,
+    async setSectorCorrection(symbol, sector) {
+      const current = await readCorrections();
+      await writeCorrections({ ...current, [symbol.toUpperCase()]: sector });
+    },
+    async clearSectorCorrection(symbol) {
+      const current = await readCorrections();
+      const { [symbol.toUpperCase()]: _removed, ...rest } = current;
+      await writeCorrections(rest);
+    },
+    getSectorInferenceEnabled: () => read<boolean>("sector_inference_enabled", false),
+    setSectorInferenceEnabled: (enabled) => writeBoolean("sector_inference_enabled", enabled),
+    getCashFlowRules: () => read<unknown>("cash_flow_rules", []),
+    setCashFlowRules: (rules) => write("cash_flow_rules", rules),
+    getCashFlowSuggestions: () => read<unknown>("cash_flow_suggestions", []),
+    setCashFlowSuggestions: (suggestions) => write("cash_flow_suggestions", suggestions),
+    getCashFlowSuggestionsEnabled: () => read<boolean>("cash_flow_suggestions_enabled", false),
+    setCashFlowSuggestionsEnabled: (enabled) =>
+      writeBoolean("cash_flow_suggestions_enabled", enabled),
   };
 }
+
+/** The worker that currently owns a broker's sync, and when it last said so. */
+export type SyncLeaseRow = {
+  id: string;
+  startedAt: string;
+  heartbeatAt: string;
+};
+
+/** What a status request on any instance reports about the run. */
+export type SyncProgressRow = {
+  status: "idle" | "running" | "waiting" | "completed" | "problem";
+  message: string | null;
+  updatedAt: string | null;
+  leaseId: string | null;
+};
 
 export type SyncStateRow = {
   lastSyncedAt: string | null;
   retryAfter?: string | null;
+  lease?: SyncLeaseRow | null;
+  progress?: SyncProgressRow | null;
   resume?: {
     ordersNextPagePath?: string | null;
     transactionsNextPagePath?: string | null;
@@ -260,18 +856,24 @@ export type SyncStateRepository = {
   put(broker: string, state: SyncStateRow): Promise<void>;
 };
 
-export function createSyncStateRepository(db: Database, userId: string | undefined | null): SyncStateRepository {
+export function createSyncStateRepository(
+  db: Database,
+  userId: string | undefined | null,
+): SyncStateRepository {
   const tenantId = requireUserId(userId);
   return {
     async get(broker) {
-      return withTenant(db, tenantId, async (client) => {
-        const result = await client.query<QueryResultRow>("SELECT state FROM investing.sync_state WHERE broker = $1", [broker]);
+      return withTenantStatement(db, tenantId, async (client) => {
+        const result = await client.query<QueryResultRow>(
+          "SELECT state FROM investing.sync_state WHERE broker = $1",
+          [broker],
+        );
         const state = result.rows[0]?.state as SyncStateRow | undefined;
         return state ?? { lastSyncedAt: null, retryAfter: null };
       });
     },
     async put(broker, state) {
-      await withTenant(db, tenantId, async (client) => {
+      await withTenantStatement(db, tenantId, async (client) => {
         /* `status` is the table's own vocabulary for a run's outcome, which this
          * store does not track — it records when a sync last succeeded and when
          * a provider will talk to us again. 'idle' is the honest value. */
@@ -284,37 +886,460 @@ export function createSyncStateRepository(db: Database, userId: string | undefin
   };
 }
 
-export type AgentRunRow = { id: string; startedAt: string; finishedAt: string | null; status: "running" | "done" | "error"; summary: string | null; error: string | null };
+export type BrokerSyncCommit = {
+  leaseId: string;
+  state: SyncStateRow;
+  progress: SyncProgressRow;
+  /** Omitted when a run produced no data worth storing. */
+  snapshot?: { value: unknown; credentialGeneration: number };
+};
+
+export type BrokerSyncOperationRepository = {
+  claim(
+    broker: string,
+    input: { leaseId: string; staleBefore: string; progress: SyncProgressRow },
+  ): Promise<{
+    claimed: boolean;
+    state: SyncStateRow;
+    snapshot: unknown | null;
+    credentialGeneration: number;
+  }>;
+  /** The run is alive and this is what it is doing. Rejected once the lease is gone. */
+  publish(broker: string, leaseId: string, progress: SyncProgressRow): Promise<boolean>;
+  progress(broker: string): Promise<SyncProgressRow | null>;
+  /** Broker data and cursor in one transaction, or neither. */
+  commit(broker: string, input: BrokerSyncCommit): Promise<boolean>;
+  release(broker: string, leaseId: string, progress: SyncProgressRow): Promise<void>;
+};
+
+const EMPTY_SYNC_STATE: SyncStateRow = { lastSyncedAt: null, retryAfter: null };
+
+/** Thrown to roll a commit back; never leaves this module. */
+class RejectedCommit extends Error {}
+
+/**
+ * Broker synchronization as one durable operation.
+ *
+ * A run claims the tenant's broker, works, and commits what it read. Both
+ * guards are in the WHERE clause rather than in a read the caller did earlier:
+ * a worker whose lease expired and was taken over cannot commit, and a run that
+ * started before a reconnect cannot write the old account's holdings over the
+ * new ones. Snapshot and cursor move together, so a failure leaves neither
+ * changed and the next run resumes from what it can prove it stored.
+ */
+export function createBrokerSyncOperationRepository(
+  db: Database,
+  userId: string | undefined | null,
+): BrokerSyncOperationRepository {
+  const tenantId = requireUserId(userId);
+  const readState = (value: unknown): SyncStateRow => {
+    const state = value as SyncStateRow | undefined;
+    return state && Object.keys(state).length > 0 ? state : EMPTY_SYNC_STATE;
+  };
+  return {
+    async claim(broker, input) {
+      return withTenant(db, tenantId, async (client) => {
+        const lease: SyncLeaseRow = {
+          id: input.leaseId,
+          startedAt: input.progress.updatedAt ?? new Date().toISOString(),
+          heartbeatAt: input.progress.updatedAt ?? new Date().toISOString(),
+        };
+        const claim = JSON.stringify({ lease, progress: input.progress });
+        /* The cursor already in the row is the whole point of resuming, so the
+         * claim merges into it instead of replacing it. */
+        const result = await client.query<QueryResultRow>(
+          `WITH claimed AS (
+             INSERT INTO investing.sync_state (user_id, broker, status, state, last_started_at)
+             VALUES (current_setting('app.user_id'), $1, 'running', $2::jsonb, CURRENT_TIMESTAMP)
+             ON CONFLICT (user_id, broker) DO UPDATE
+               SET status = 'running',
+                   state = investing.sync_state.state || $2::jsonb,
+                   last_started_at = CURRENT_TIMESTAMP,
+                   updated_at = CURRENT_TIMESTAMP,
+                   last_error = NULL
+             WHERE investing.sync_state.state->'lease'->>'id' IS NULL
+                OR (investing.sync_state.state->'lease'->>'heartbeatAt')::timestamptz < $3::timestamptz
+             RETURNING state, true AS claimed
+           )
+           SELECT state, claimed FROM claimed
+           UNION ALL
+           SELECT state, false AS claimed
+           FROM investing.sync_state
+           WHERE broker = $1 AND NOT EXISTS (SELECT 1 FROM claimed)
+           LIMIT 1`,
+          [broker, claim, input.staleBefore],
+        );
+        const row = result.rows[0];
+        /* The stored broker data is read under the same claim that grants the
+         * right to replace it, so the run merges into what it will overwrite. */
+        const vault = await client.query<QueryResultRow>(
+          "SELECT snapshot_blob, credential_generation FROM investing.broker_vaults WHERE broker = $1",
+          [broker],
+        );
+        const stored = vault.rows[0]?.snapshot_blob
+          ? tryDecryptBlob(vault.rows[0].snapshot_blob as Buffer)
+          : null;
+        return {
+          claimed: Boolean(row?.claimed),
+          state: readState(row?.state),
+          snapshot: stored?.readable ? stored.value : null,
+          credentialGeneration: Number(vault.rows[0]?.credential_generation ?? 0),
+        };
+      });
+    },
+    async publish(broker, leaseId, progress) {
+      return withTenantStatement(db, tenantId, async (client) => {
+        const result = await client.query(
+          `UPDATE investing.sync_state
+             SET state = state || jsonb_build_object(
+                   'progress', $3::jsonb,
+                   'lease', state->'lease' || jsonb_build_object('heartbeatAt', $4::text)
+                 ),
+                 updated_at = CURRENT_TIMESTAMP
+           WHERE broker = $1 AND state->'lease'->>'id' = $2
+           RETURNING broker`,
+          [
+            broker,
+            leaseId,
+            JSON.stringify(progress),
+            progress.updatedAt ?? new Date().toISOString(),
+          ],
+        );
+        return result.rows.length > 0;
+      });
+    },
+    async progress(broker) {
+      return withTenantStatement(db, tenantId, async (client) => {
+        const result = await client.query<QueryResultRow>(
+          "SELECT state->'progress' AS progress FROM investing.sync_state WHERE broker = $1",
+          [broker],
+        );
+        return (result.rows[0]?.progress as SyncProgressRow | null) ?? null;
+      });
+    },
+    async commit(broker, input) {
+      const snapshotBlob = input.snapshot ? encryptBlob(input.snapshot.value) : null;
+      try {
+        return await withTenant(db, tenantId, async (client) => {
+          if (input.snapshot) {
+            const stored = await client.query(
+              "UPDATE investing.broker_vaults SET snapshot_blob = $2, updated_at = CURRENT_TIMESTAMP WHERE broker = $1 AND credential_generation = $3 RETURNING broker",
+              [broker, snapshotBlob, input.snapshot.credentialGeneration],
+            );
+            if (stored.rows.length === 0) throw new RejectedCommit();
+          }
+          const state = await client.query(
+            `UPDATE investing.sync_state
+               SET status = $3,
+                   state = $4::jsonb,
+                   last_succeeded_at = CASE WHEN $5::text IS NULL THEN last_succeeded_at ELSE $5::timestamptz END,
+                   last_error = $6,
+                   updated_at = CURRENT_TIMESTAMP
+             WHERE broker = $1 AND state->'lease'->>'id' = $2
+             RETURNING broker`,
+            [
+              broker,
+              input.leaseId,
+              input.progress.status === "problem" ? "failed" : "succeeded",
+              JSON.stringify({ ...input.state, lease: null, progress: input.progress }),
+              input.state.lastSyncedAt,
+              input.progress.status === "problem" ? input.progress.message : null,
+            ],
+          );
+          if (state.rows.length === 0) throw new RejectedCommit();
+          return true;
+        });
+      } catch (error) {
+        if (error instanceof RejectedCommit) return false;
+        throw error;
+      }
+    },
+    async release(broker, leaseId, progress) {
+      await withTenantStatement(db, tenantId, async (client) => {
+        await client.query(
+          `UPDATE investing.sync_state
+             SET status = $4,
+                 state = (state - 'lease') || jsonb_build_object('progress', $3::jsonb),
+                 updated_at = CURRENT_TIMESTAMP
+           WHERE broker = $1 AND state->'lease'->>'id' = $2`,
+          [
+            broker,
+            leaseId,
+            JSON.stringify(progress),
+            progress.status === "problem" ? "failed" : "idle",
+          ],
+        );
+      });
+    },
+  };
+}
+
+export type PriceSyncStateRepository = {
+  get(): Promise<unknown | null>;
+  put(progress: unknown, status: string, leaseId: string): Promise<boolean>;
+  claim(progress: unknown, status: string, staleBefore: string): Promise<unknown | null>;
+};
+
+/* Price synchronization is a sync like any other, so it lives in the sync
+ * state table under its own name rather than in a table of its own. `broker`
+ * is the key of what was synchronized, and 'prices' is what this one reads. */
+const PRICE_SYNC_KEY = "prices";
+const PRICE_SYNC_STATUS_COLUMN: Record<string, string> = {
+  idle: "idle",
+  running: "running",
+  waiting: "running",
+  paused: "partial",
+  completed: "succeeded",
+  problem: "failed",
+};
+
+/** The progress of a price run, readable by whichever instance is asked for it. */
+export function createPriceSyncStateRepository(
+  db: Database,
+  userId: string | undefined | null,
+): PriceSyncStateRepository {
+  const tenantId = requireUserId(userId);
+  return {
+    async get() {
+      return withTenantStatement(db, tenantId, async (client) => {
+        const result = await client.query<QueryResultRow>(
+          "SELECT state FROM investing.sync_state WHERE broker = $1",
+          [PRICE_SYNC_KEY],
+        );
+        const state = result.rows[0]?.state as Record<string, unknown> | undefined;
+        // A row written before this repository existed holds `{}`, which is not progress.
+        return state && Object.keys(state).length > 0 ? state : null;
+      });
+    },
+    async put(progress, status, leaseId) {
+      return withTenantStatement(db, tenantId, async (client) => {
+        if (!leaseId) throw new Error("Price progress write requires a lease");
+        const result = await client.query<QueryResultRow>(
+          "UPDATE investing.sync_state SET status = $2, state = $3::jsonb, updated_at = CURRENT_TIMESTAMP, last_succeeded_at = CASE WHEN $2 = 'succeeded' THEN CURRENT_TIMESTAMP ELSE last_succeeded_at END, last_error = CASE WHEN $2 = 'failed' THEN $5 ELSE NULL END WHERE broker = $1 AND state->>'leaseId' = $4 RETURNING state",
+          [
+            PRICE_SYNC_KEY,
+            PRICE_SYNC_STATUS_COLUMN[status] ?? "idle",
+            JSON.stringify(progress),
+            leaseId,
+            (progress as { problems?: unknown }).problems instanceof Array
+              ? (progress as { problems: unknown[] }).problems.join("; ")
+              : null,
+          ],
+        );
+        return result.rows.length > 0;
+      });
+    },
+    async claim(progress, status, staleBefore) {
+      return withTenantStatement(db, tenantId, async (client) => {
+        const result = await client.query<QueryResultRow>(
+          `WITH claimed AS (
+             INSERT INTO investing.sync_state (user_id, broker, status, state, last_started_at)
+             VALUES (current_setting('app.user_id'), $1, $2, $3::jsonb, CURRENT_TIMESTAMP)
+             ON CONFLICT (user_id, broker) DO UPDATE
+               SET status = EXCLUDED.status,
+                   state = EXCLUDED.state,
+                   last_started_at = CURRENT_TIMESTAMP,
+                   updated_at = CURRENT_TIMESTAMP,
+                   last_error = NULL
+             WHERE NOT (
+               investing.sync_state.state->>'status' IN ('running', 'waiting')
+               AND investing.sync_state.state->>'updatedAt' IS NOT NULL
+               AND (investing.sync_state.state->>'updatedAt')::timestamptz >= $4::timestamptz
+             )
+             RETURNING state, true AS claimed
+           )
+           SELECT state, claimed FROM claimed
+           UNION ALL
+           SELECT state, false AS claimed
+           FROM investing.sync_state
+           WHERE broker = $1 AND NOT EXISTS (SELECT 1 FROM claimed)
+           LIMIT 1`,
+          [
+            PRICE_SYNC_KEY,
+            PRICE_SYNC_STATUS_COLUMN[status] ?? "running",
+            JSON.stringify(progress),
+            staleBefore,
+          ],
+        );
+        const row = result.rows[0];
+        return row?.claimed ? null : (row?.state ?? null);
+      });
+    },
+  };
+}
+
+export type SyncRunRepository = {
+  get(): Promise<unknown | null>;
+  /** Writes the run state only while `leaseId` still owns it. */
+  put(state: unknown, status: string, leaseId: string): Promise<boolean>;
+  /** Atomic claim. Returns null when claimed, the live state when another run holds it. */
+  claim(state: unknown, status: string, staleBefore: string): Promise<unknown | null>;
+};
+
+/* The server-owned run is a sync like any other: one row, keyed by what it
+ * drives. `state.lease.heartbeatAt` is what makes a run live; a lease older
+ * than the caller's staleBefore may be taken over. */
+const SYNC_RUN_KEY = "run";
+const SYNC_RUN_STATUS_COLUMN: Record<string, string> = {
+  running: "running",
+  waiting: "running",
+  done: "succeeded",
+  failed: "failed",
+};
+
+export function createSyncRunRepository(
+  db: Database,
+  userId: string | undefined | null,
+): SyncRunRepository {
+  const tenantId = requireUserId(userId);
+  return {
+    async get() {
+      return withTenantStatement(db, tenantId, async (client) => {
+        const result = await client.query<QueryResultRow>(
+          "SELECT state FROM investing.sync_state WHERE broker = $1",
+          [SYNC_RUN_KEY],
+        );
+        const state = result.rows[0]?.state as Record<string, unknown> | undefined;
+        return state && Object.keys(state).length > 0 ? state : null;
+      });
+    },
+    async put(state, status, leaseId) {
+      return withTenantStatement(db, tenantId, async (client) => {
+        const result = await client.query<QueryResultRow>(
+          "UPDATE investing.sync_state SET status = $2, state = $3::jsonb, updated_at = CURRENT_TIMESTAMP, last_succeeded_at = CASE WHEN $2 = 'succeeded' THEN CURRENT_TIMESTAMP ELSE last_succeeded_at END, last_error = CASE WHEN $2 = 'failed' THEN $5 ELSE NULL END WHERE broker = $1 AND state->'lease'->>'id' = $4 RETURNING state",
+          [
+            SYNC_RUN_KEY,
+            SYNC_RUN_STATUS_COLUMN[status] ?? "running",
+            JSON.stringify(state),
+            leaseId,
+            (state as { outcome?: unknown }).outcome === "failed" ? "run failed" : null,
+          ],
+        );
+        return result.rows.length > 0;
+      });
+    },
+    async claim(state, status, staleBefore) {
+      return withTenantStatement(db, tenantId, async (client) => {
+        const result = await client.query<QueryResultRow>(
+          `WITH claimed AS (
+             INSERT INTO investing.sync_state (user_id, broker, status, state, last_started_at)
+             VALUES (current_setting('app.user_id'), $1, $2, $3::jsonb, CURRENT_TIMESTAMP)
+             ON CONFLICT (user_id, broker) DO UPDATE
+               SET status = EXCLUDED.status,
+                   state = EXCLUDED.state,
+                   last_started_at = CURRENT_TIMESTAMP,
+                   updated_at = CURRENT_TIMESTAMP,
+                   last_error = NULL
+             WHERE investing.sync_state.state->'lease'->>'heartbeatAt' IS NULL
+                OR (investing.sync_state.state->'lease'->>'heartbeatAt')::timestamptz < $4::timestamptz
+             RETURNING state, true AS claimed
+           )
+           SELECT state, claimed FROM claimed
+           UNION ALL
+           SELECT state, false AS claimed
+           FROM investing.sync_state
+           WHERE broker = $1 AND NOT EXISTS (SELECT 1 FROM claimed)
+           LIMIT 1`,
+          [
+            SYNC_RUN_KEY,
+            SYNC_RUN_STATUS_COLUMN[status] ?? "running",
+            JSON.stringify(state),
+            staleBefore,
+          ],
+        );
+        const row = result.rows[0];
+        return row?.claimed ? null : (row?.state ?? null);
+      });
+    },
+  };
+}
+
+export type AgentRunRow = {
+  id: string;
+  agentId?: string;
+  startedAt: string;
+  finishedAt: string | null;
+  status: "running" | "done" | "error";
+  summary: string | null;
+  error: string | null;
+  result?: unknown;
+};
 
 const AGENT_STATUS_TO_COLUMN = { running: "running", done: "succeeded", error: "failed" } as const;
-const AGENT_STATUS_FROM_COLUMN: Record<string, AgentRunRow["status"]> = { running: "running", queued: "running", succeeded: "done", failed: "error", cancelled: "error" };
+const AGENT_STATUS_FROM_COLUMN: Record<string, AgentRunRow["status"]> = {
+  running: "running",
+  queued: "running",
+  succeeded: "done",
+  failed: "error",
+  cancelled: "error",
+};
 
 /** Only the latest run per user is kept; this is operational state, not history. */
 export function createAgentRunRepository(db: Database, userId: string | undefined | null) {
   const tenantId = requireUserId(userId);
   return {
     async get(): Promise<AgentRunRow | null> {
-      return withTenant(db, tenantId, async (client) => {
-        const result = await client.query<QueryResultRow>("SELECT run_id, status, run_result, started_at, finished_at FROM investing.agent_runs");
+      return withTenantStatement(db, tenantId, async (client) => {
+        const result = await client.query<QueryResultRow>(
+          "SELECT run_id, status, run_result, started_at, finished_at FROM investing.agent_runs",
+        );
         const row = result.rows[0];
         if (!row) return null;
-        const runResult = (row.run_result ?? {}) as { summary?: string | null; error?: string | null };
+        const runResult = (row.run_result ?? {}) as {
+          agentId?: string | null;
+          summary?: string | null;
+          error?: string | null;
+          result?: unknown;
+        };
         return {
           id: row.run_id as string,
+          agentId: runResult.agentId ?? undefined,
           startedAt: isoDate(row.started_at) ?? new Date(0).toISOString(),
           finishedAt: isoDate(row.finished_at),
           status: AGENT_STATUS_FROM_COLUMN[row.status as string] ?? "error",
           summary: runResult.summary ?? null,
           error: runResult.error ?? null,
+          result: runResult.result,
         };
       });
     },
-    async put(record: AgentRunRow): Promise<void> {
-      await withTenant(db, tenantId, async (client) => {
-        await client.query(
-          "INSERT INTO investing.agent_runs (user_id, run_id, status, run_result, started_at, finished_at) VALUES (current_setting('app.user_id'), $1, $2, $3::jsonb, $4, $5) ON CONFLICT (user_id) DO UPDATE SET run_id = EXCLUDED.run_id, status = EXCLUDED.status, run_result = EXCLUDED.run_result, started_at = EXCLUDED.started_at, finished_at = EXCLUDED.finished_at, updated_at = CURRENT_TIMESTAMP",
-          [record.id, AGENT_STATUS_TO_COLUMN[record.status], JSON.stringify({ summary: record.summary, error: record.error }), record.startedAt, record.finishedAt],
+    async start(record: AgentRunRow): Promise<boolean> {
+      return withTenantStatement(db, tenantId, async (client) => {
+        const result = await client.query(
+          "INSERT INTO investing.agent_runs (user_id, run_id, status, run_result, started_at, finished_at) VALUES (current_setting('app.user_id'), $1, $2, $3::jsonb, $4, $5) ON CONFLICT (user_id) DO UPDATE SET run_id = EXCLUDED.run_id, status = EXCLUDED.status, run_result = EXCLUDED.run_result, started_at = EXCLUDED.started_at, finished_at = EXCLUDED.finished_at, updated_at = CURRENT_TIMESTAMP WHERE investing.agent_runs.started_at < EXCLUDED.started_at RETURNING run_id",
+          [
+            record.id,
+            AGENT_STATUS_TO_COLUMN[record.status],
+            JSON.stringify({
+              agentId: record.agentId,
+              summary: record.summary,
+              error: record.error,
+              result: record.result,
+            }),
+            record.startedAt,
+            record.finishedAt,
+          ],
         );
+        return result.rows.length > 0;
+      });
+    },
+    async finish(record: AgentRunRow): Promise<boolean> {
+      return withTenantStatement(db, tenantId, async (client) => {
+        const result = await client.query(
+          "UPDATE investing.agent_runs SET status = $2, run_result = $3::jsonb, finished_at = $4, updated_at = CURRENT_TIMESTAMP WHERE run_id = $1 AND status = 'running' RETURNING run_id",
+          [
+            record.id,
+            AGENT_STATUS_TO_COLUMN[record.status],
+            JSON.stringify({
+              agentId: record.agentId,
+              summary: record.summary,
+              error: record.error,
+              result: record.result,
+            }),
+            record.finishedAt,
+          ],
+        );
+        return result.rows.length > 0;
       });
     },
   };
@@ -336,42 +1361,105 @@ export type OpaqueVaultWrite = { status: "stored"; updatedAt: string } | { statu
 /**
  * The personal vault as bytes the server cannot read.
  *
- * `createVaultRepository` above encrypts with the server's key, which is right
- * for data the server has to act on. Personal finances are not that: the
- * browser encrypts them with a key derived from the user's own passphrase, and
- * this only holds the result. There is deliberately no `encryptBlob` here — if
- * a later change needs one, that is a decision to re-open, not a line to add.
+ * `encryptBlob` uses the SERVER's key, which is right for data the server has to
+ * act on — broker credentials it must present to a broker. Personal finances are
+ * not that: the browser encrypts them with a key derived from the user's own
+ * passphrase, and this only holds the result. There is deliberately no
+ * `encryptBlob` here — if a later change needs one, that is a decision to
+ * re-open, not a line to add.
+ *
+ * A `createVaultRepository` that sealed this table with the server's key used to
+ * sit above. It was wired to nothing, but an exported function that decrypts
+ * personal vaults server-side is one import away from making the promise below
+ * false, so it was deleted rather than left for someone to find and use.
  *
  * Writes are conditional on the copy the client last saw. Two devices holding
  * different vaults is a real situation, and last-write-wins would silently
  * destroy one of them, so a stale write is refused instead.
  */
+/**
+ * The key the browser seals the personal vault with (0024_personal_vault_keys.sql,
+ * docs/adr/0009-account-held-vault-key.md).
+ *
+ * Created on first use, never replaced: a new key would orphan the vault sealed
+ * under the old one. The server hands the key to its signed-in owner and never
+ * uses it itself; nothing here reads `personal.vaults`.
+ */
+export function createVaultKeyRepository(db: Database, userId: string | undefined | null) {
+  const tenantId = requireUserId(userId);
+  const read = () =>
+    withTenantStatement(db, tenantId, async (client) => {
+      const result = await client.query<QueryResultRow>(
+        `WITH created AS (
+           INSERT INTO personal.vault_keys (user_id, wrapped_key)
+           VALUES (current_setting('app.user_id'), $1)
+           ON CONFLICT (user_id) DO NOTHING
+           RETURNING wrapped_key
+         )
+         SELECT wrapped_key FROM created
+         UNION ALL
+         SELECT wrapped_key FROM personal.vault_keys WHERE NOT EXISTS (SELECT 1 FROM created)`,
+        [encryptBlob({ key: randomBytes(32).toString("base64") })],
+      );
+      const row = result.rows[0];
+      return row ? Buffer.from(row.wrapped_key as Buffer) : null;
+    });
+  return {
+    /** The raw 32-byte key. Throws when LAVEGA_ENCRYPTION_KEY cannot open it. */
+    async getOrCreate(): Promise<Buffer> {
+      /* Two first requests at once: the one that loses the insert can run its
+       * SELECT on a snapshot taken before the winner committed and see no row.
+       * The second read sees it. */
+      const wrapped = (await read()) ?? (await read());
+      if (!wrapped) throw new Error("Vault key could not be created");
+      const opened = tryDecryptBlob<{ key: string }>(wrapped);
+      if (!opened.readable) throw new UnreadableVaultKeyError();
+      const key = Buffer.from(opened.value.key, "base64");
+      if (key.length !== 32) throw new UnreadableVaultKeyError();
+      return key;
+    },
+  };
+}
+
+export class UnreadableVaultKeyError extends Error {
+  constructor() {
+    super("The stored vault key cannot be read with the current LAVEGA_ENCRYPTION_KEY");
+    this.name = "UnreadableVaultKeyError";
+  }
+}
+
 export function createOpaqueVaultRepository(db: Database, userId: string | undefined | null) {
   const tenantId = requireUserId(userId);
   return {
     async get(): Promise<OpaqueVaultRow | null> {
-      return withTenant(db, tenantId, async (client) => {
-        const result = await client.query<QueryResultRow>(`SELECT vault_blob, ${VAULT_VERSION} FROM personal.vaults`);
+      return withTenantStatement(db, tenantId, async (client) => {
+        const result = await client.query<QueryResultRow>(
+          `SELECT vault_blob, ${VAULT_VERSION} FROM personal.vaults`,
+        );
         const row = result.rows[0];
-        return row ? { blob: Buffer.from(row.vault_blob as Buffer), updatedAt: row.updated_at as string } : null;
+        return row
+          ? { blob: Buffer.from(row.vault_blob as Buffer), updatedAt: row.updated_at as string }
+          : null;
       });
     },
     /** `expectedUpdatedAt` is the copy the client is replacing; `null` means it believes there is none. */
     async put(blob: Buffer, expectedUpdatedAt: string | null): Promise<OpaqueVaultWrite> {
       if (blob.length === 0) throw new Error("Vault blob is empty");
-      return withTenant(db, tenantId, async (client) => {
+      return withTenantStatement(db, tenantId, async (client) => {
         const result = await client.query<QueryResultRow>(
           `INSERT INTO personal.vaults (user_id, vault_blob) VALUES (current_setting('app.user_id'), $1) ON CONFLICT (user_id) DO UPDATE SET vault_blob = EXCLUDED.vault_blob, updated_at = CURRENT_TIMESTAMP WHERE personal.vaults.updated_at = $2::timestamptz RETURNING ${VAULT_VERSION}`,
           [blob, expectedUpdatedAt],
         );
         const row = result.rows[0];
-        return row ? { status: "stored", updatedAt: row.updated_at as string } : { status: "conflict" };
+        return row
+          ? { status: "stored", updatedAt: row.updated_at as string }
+          : { status: "conflict" };
       });
     },
     /** Replace whatever the server holds. Only for a user who has been shown the conflict and chose. */
     async overwrite(blob: Buffer): Promise<{ updatedAt: string }> {
       if (blob.length === 0) throw new Error("Vault blob is empty");
-      return withTenant(db, tenantId, async (client) => {
+      return withTenantStatement(db, tenantId, async (client) => {
         const result = await client.query<QueryResultRow>(
           `INSERT INTO personal.vaults (user_id, vault_blob) VALUES (current_setting('app.user_id'), $1) ON CONFLICT (user_id) DO UPDATE SET vault_blob = EXCLUDED.vault_blob, updated_at = CURRENT_TIMESTAMP RETURNING ${VAULT_VERSION}`,
           [blob],
@@ -381,3 +1469,737 @@ export function createOpaqueVaultRepository(db: Database, userId: string | undef
     },
   };
 }
+
+export type PersonalNetWorthTotal = {
+  date: string;
+  totalCents: number;
+  /** The agent-path citation for this valuation (#300, WS5.5), as stored JSON.
+   *  Absent on rows the browser's own share flow wrote. */
+  provenance?: Record<string, unknown>;
+};
+
+/**
+ * Personal's opt-in share of its own "Totale positie" into Investing's net
+ * worth (0019_personal_net_worth_totals.sql). Personal owns every write —
+ * `put` is called once per day, from the browser, only while the switch is on
+ * and the vault is unlocked. `list` is Investing's read side: it needs the
+ * whole history to carry the latest total forward onto days with no total of
+ * their own, so unlike every other repository in this file it takes no
+ * upper bound and returns everything the tenant has.
+ */
+export function createPersonalNetWorthRepository(db: Database, userId: string | undefined | null) {
+  const tenantId = requireUserId(userId);
+  return {
+    async put(
+      date: string,
+      totalCents: number,
+      provenance?: Record<string, unknown>,
+    ): Promise<void> {
+      await withTenantStatement(db, tenantId, async (client) => {
+        await client.query(
+          `INSERT INTO personal.net_worth_totals (user_id, date, total_cents, currency, provenance)
+           VALUES (current_setting('app.user_id'), $1, $2, 'EUR', $3::jsonb)
+           ON CONFLICT (user_id, date) DO UPDATE SET
+             total_cents = EXCLUDED.total_cents,
+             provenance = EXCLUDED.provenance,
+             updated_at = CURRENT_TIMESTAMP`,
+          [date, totalCents, provenance === undefined ? null : JSON.stringify(provenance)],
+        );
+      });
+    },
+    /** Every stored total, oldest first — Investing carries the latest one on
+     *  or before a date forward, so it needs the full series, not a window.
+     *  `date` is formatted in SQL rather than trusted from the driver: a DATE
+     *  column round-trips as a string over Neon but as a JS `Date` under the
+     *  PGlite driver these repositories are tested against, and `to_char`
+     *  gives one answer regardless of which one is reading it back. */
+    async list(): Promise<PersonalNetWorthTotal[]> {
+      return withTenantStatement(db, tenantId, async (client) => {
+        const result = await client.query<QueryResultRow>(
+          `SELECT to_char(date, 'YYYY-MM-DD') AS date, total_cents, provenance
+           FROM personal.net_worth_totals ORDER BY date ASC`,
+        );
+        return result.rows.map((row) => ({
+          date: row.date as string,
+          totalCents: Number(row.total_cents),
+          ...(row.provenance && typeof row.provenance === "object"
+            ? { provenance: row.provenance as Record<string, unknown> }
+            : {}),
+        }));
+      });
+    },
+    /** Turning the share switch off: every stored total for this user, gone. */
+    async deleteAll(): Promise<void> {
+      await withTenantStatement(db, tenantId, async (client) => {
+        await client.query("DELETE FROM personal.net_worth_totals");
+      });
+    },
+  };
+}
+
+/* The tables that hold anything belonging to a person. Deliberately a
+ * literal list rather than a query over the catalogue: a table added later
+ * should have to be considered here by a human, not silently swept up or —
+ * worse — silently missed. Order is child-before-parent: agent memory
+ * (0020) references investing.agent_threads, so its children go first. */
+const USER_DATA_TABLES = [
+  "personal.eb_sessions",
+  "personal.eb_pending_auth",
+  "personal.n8n_forwarding",
+  "investing.portfolio_letters",
+  "investing.agent_observations",
+  "investing.agent_messages",
+  "investing.goals",
+  "investing.theses",
+  "investing.agent_threads",
+  "investing.agent_runs",
+  "investing.sync_state",
+  "investing.preferences",
+  "investing.broker_vaults",
+  // After the tables above: deleting their rows raises this user's dashboard version.
+  "investing.dashboard_snapshots",
+  "investing.dashboard_sources",
+  "personal.vaults",
+  // After the vault: with its key gone, any copy left in a browser is unreadable.
+  "personal.vault_keys",
+  "personal.net_worth_totals",
+  // 0013 made this ledger per-account, so an erasure has to take it too. It was
+  // missing here because 0005 had declared it aggregate owner spend; 0025 gives
+  // it the same forced RLS as every other table in `personal` for the same reason.
+  "personal.ai_usage",
+] as const;
+
+/* The Better Auth identity, which 0002_auth.sql keeps in `public` — deliberately
+ * outside the tenant schemas — so its scoping column is not `user_id` and one
+ * `WHERE user_id = $1` shape does not cover it. `session` and `account` both
+ * carry `"userId"` and both cascade from `public."user"`; they are still deleted
+ * explicitly so the erasure report can evidence them. `verification` has no user
+ * column at all: its `identifier` is whatever a token was minted for, which is
+ * the address for an email confirmation and the account id for other flows, so
+ * both are matched. */
+const AUTH_IDENTITY_DELETES = [
+  { table: "public.session", sql: `DELETE FROM public.session WHERE "userId" = $1` },
+  { table: "public.account", sql: `DELETE FROM public.account WHERE "userId" = $1` },
+] as const;
+
+export type ErasureReport = { table: string; rows: number }[];
+
+/**
+ * Erase everything this deployment stores about one person (GDPR art. 17).
+ *
+ * Until this existed there was exactly one `DELETE` in this file and it emptied
+ * the price cache. Encryption was doing the privacy work, and encryption is a
+ * mitigation, not a lawful basis: a user asking to be forgotten could not be,
+ * because nothing could remove their rows.
+ *
+ * It runs in ONE transaction inside `withTenant`, and every DELETE below
+ * carries an explicit `WHERE user_id = $1` (or `"userId"`/`identifier` for the
+ * Better Auth tables, which live in `public`). RLS is a second belt, not the
+ * only one: `personal.eb_pending_auth` deliberately has no RLS policy at all
+ * (`0003_eb_flow.sql`), so an unqualified `DELETE FROM` against it would
+ * empty every user's pending bank authorisations, not just this one's.
+ * Either every table is cleared or none is; a half-erased account
+ * is worse than a failed request, because the caller is told they are gone.
+ *
+ * The Better Auth identity is part of this transaction, not a second step
+ * someone has to remember. Clearing application data alone left the person
+ * forgotten but able to sign back in with the same password, which recreated a
+ * vault under the same account id — the erasure appeared to succeed and did
+ * not. Deleting `public."user"` takes `session` and `account` with it by
+ * cascade, so the old cookie stops resolving and the old credentials stop
+ * authenticating in the same commit that removed the rows. Doing the two in
+ * separate transactions would reopen exactly the half-erased window this doc
+ * warns about, so there is one transaction and no ordering to get wrong.
+ *
+ * It returns what it deleted per table. An erasure you cannot evidence is one
+ * you cannot answer a regulator about, and "0 rows" is a legitimate result that
+ * needs to be distinguishable from "never ran".
+ */
+export async function eraseUserData(
+  db: Database,
+  userId: string | undefined | null,
+): Promise<ErasureReport> {
+  const identity = requireUserId(userId);
+  return withTenant(db, identity, async (client) => {
+    const report: ErasureReport = [];
+    for (const table of USER_DATA_TABLES) {
+      const result = await client.query(`DELETE FROM ${table} WHERE user_id = $1`, [identity]);
+      report.push({ table, rows: result.rowCount ?? 0 });
+    }
+
+    /* `verification` is keyed by `identifier`, which is the email for a
+     * confirmation token and the account id elsewhere, so read the address
+     * back before its row is gone and match on both. A missing user row simply
+     * yields no email; the id is still matched. */
+    const found = await client.query<QueryResultRow>(
+      'SELECT email FROM public."user" WHERE id = $1',
+      [identity],
+    );
+    const email = (found.rows[0]?.email as string | undefined) ?? null;
+
+    for (const { table, sql } of AUTH_IDENTITY_DELETES) {
+      const result = await client.query(sql, [identity]);
+      report.push({ table, rows: result.rowCount ?? 0 });
+    }
+    const verification = await client.query(
+      "DELETE FROM public.verification WHERE identifier = $1 OR identifier = $2",
+      [identity, email ?? identity],
+    );
+    report.push({ table: "public.verification", rows: verification.rowCount ?? 0 });
+    const user = await client.query('DELETE FROM public."user" WHERE id = $1', [identity]);
+    report.push({ table: 'public."user"', rows: user.rowCount ?? 0 });
+
+    return report;
+  });
+}
+
+export type PendingEbAuth = { userId: string; name: string; country: string };
+
+/**
+ * The Enable Banking authorisation flow's two stores.
+ *
+ * `pending` is read WITHOUT a tenant, on purpose. The callback is a cross-site
+ * redirect from the bank and may arrive with no session cookie; the state is
+ * what authenticates it — server-issued, unguessable, single-use, minutes long
+ * — and the row is where the user's identity comes back from. It is the one
+ * place in this file that queries outside `withTenant`, and it holds nothing
+ * financial: a bank name, a country, and who started the flow.
+ *
+ * `sessions` holds the account list the bank returned, which IS personal data,
+ * so it is written under the user the state named and read back inside
+ * `withTenant` where RLS applies.
+ */
+export function createEbFlowRepository(db: Database) {
+  return {
+    /** Record a started authorisation. Called for an authenticated user. */
+    async startAuth(state: string, pending: PendingEbAuth): Promise<void> {
+      const identity = requireUserId(pending.userId);
+      await withTenantStatement(db, identity, async (client) => {
+        await client.query(
+          "INSERT INTO personal.eb_pending_auth (state, user_id, aspsp_name, aspsp_country) VALUES ($1, $2, $3, $4)",
+          [state, identity, pending.name, pending.country],
+        );
+      });
+    },
+
+    /**
+     * Take the pending authorisation, or nothing.
+     *
+     * One shot: the DELETE ... RETURNING is the read, so two callbacks racing
+     * the same state cannot both win — a replay gets nothing rather than a
+     * second exchange. Expired rows are refused by the same statement, so a
+     * stale state is indistinguishable from an unknown one, which is what a
+     * caller should be told anyway.
+     */
+    async consumeAuth(state: string, ttlMs: number): Promise<PendingEbAuth | null> {
+      if (!state.trim()) return null;
+      const client = await db.connect();
+      try {
+        const result = await client.query<QueryResultRow>(
+          "DELETE FROM personal.eb_pending_auth WHERE state = $1 AND created_at > CURRENT_TIMESTAMP - ($2::bigint * INTERVAL '1 millisecond') RETURNING user_id, aspsp_name, aspsp_country",
+          [state, String(ttlMs)],
+        );
+        const row = result.rows[0];
+        return row
+          ? {
+              userId: row.user_id as string,
+              name: row.aspsp_name as string,
+              country: row.aspsp_country as string,
+            }
+          : null;
+      } finally {
+        client.release();
+      }
+    },
+
+    /** Housekeeping: drop authorisations nobody came back for. */
+    async sweepAuth(ttlMs: number): Promise<void> {
+      const client = await db.connect();
+      try {
+        await client.query(
+          "DELETE FROM personal.eb_pending_auth WHERE created_at <= CURRENT_TIMESTAMP - ($1::bigint * INTERVAL '1 millisecond')",
+          [String(ttlMs)],
+        );
+      } finally {
+        client.release();
+      }
+    },
+
+    /**
+     * Housekeeping: drop this user's own stale sessions — ones the app never
+     * came back to collect. Unlike `sweepAuth`, this cannot run table-wide:
+     * `personal.eb_sessions` carries FORCE ROW LEVEL SECURITY and the runtime
+     * role has no BYPASSRLS, so an unscoped DELETE would only ever reach the
+     * caller's own rows anyway. Called per-tenant, inside the request that
+     * already runs as that user.
+     */
+    async sweepSessions(userId: string, ttlMs: number): Promise<number> {
+      const identity = requireUserId(userId);
+      return withTenantStatement(db, identity, async (client) => {
+        const result = await client.query(
+          "DELETE FROM personal.eb_sessions WHERE created_at <= CURRENT_TIMESTAMP - ($1::bigint * INTERVAL '1 millisecond')",
+          [String(ttlMs)],
+        );
+        return result.rowCount ?? 0;
+      });
+    },
+
+    /** Stash the bank's account list for the user the state named. */
+    async putSession(userId: string, sessionId: string, payload: unknown): Promise<void> {
+      const identity = requireUserId(userId);
+      const blob = encryptBlob(payload);
+      await withTenantStatement(db, identity, async (client) => {
+        await client.query(
+          "INSERT INTO personal.eb_sessions (session_id, user_id, payload_blob) VALUES ($1, $2, $3) ON CONFLICT (session_id) DO UPDATE SET payload_blob = EXCLUDED.payload_blob",
+          [sessionId, identity, blob],
+        );
+      });
+    },
+
+    /** Read it back for its owner. RLS means another user's id finds nothing. */
+    async getSession<T>(userId: string, sessionId: string, ttlMs: number): Promise<T | null> {
+      return withTenantStatement(db, userId, async (client) => {
+        const result = await client.query<QueryResultRow>(
+          "SELECT payload_blob FROM personal.eb_sessions WHERE session_id = $1 AND created_at > CURRENT_TIMESTAMP - ($2::bigint * INTERVAL '1 millisecond')",
+          [sessionId, String(ttlMs)],
+        );
+        const row = result.rows[0];
+        if (!row) return null;
+        const payload = tryDecryptBlob<T>(row.payload_blob as Buffer);
+        return payload.readable ? payload.value : null;
+      });
+    },
+
+    /** Every live connection this user has, newest first.
+     *
+     *  Exists so the browser never has to hold a session id to refresh: it asks
+     *  the server what it is connected to, and the server answers from rows
+     *  that RLS already scopes to the caller. */
+    async listSessions<T>(
+      userId: string,
+      ttlMs: number,
+      limit = 25,
+    ): Promise<Array<{ sessionId: string; payload: T; createdAt: string }>> {
+      const identity = requireUserId(userId);
+      return withTenantStatement(db, identity, async (client) => {
+        /* `user_id = $1` AS WELL AS RLS, and deliberately belt-and-braces —
+         * the same call this file's `eraseUserData` makes, for the same
+         * reason: RLS is a second belt, not the only one. It matters more here
+         * than on `getSession`, which at least needs an unguessable id to say
+         * anything: this query returns EVERY row it is allowed to see, so a
+         * misconfigured DATABASE_URL naming an owner-class role (which
+         * bypasses even FORCE'd RLS) would hand one caller every tenant's bank
+         * list in a single request.
+         *
+         * LIMIT because nothing else bounds this. Every reconnect mints a new
+         * session_id and `putSession` upserts on that id alone, so a user who
+         * reconnects repeatedly accumulates rows, and the refresh path calls
+         * the bank once per account per row. */
+        const result = await client.query<QueryResultRow>(
+          "SELECT session_id, payload_blob, created_at FROM personal.eb_sessions WHERE user_id = $1 AND created_at > CURRENT_TIMESTAMP - ($2::bigint * INTERVAL '1 millisecond') ORDER BY created_at DESC LIMIT $3",
+          [identity, String(ttlMs), limit],
+        );
+        const out: Array<{ sessionId: string; payload: T; createdAt: string }> = [];
+        for (const row of result.rows) {
+          const payload = tryDecryptBlob<T>(row.payload_blob as Buffer);
+          // An unreadable blob is skipped, not thrown: one row written under a
+          // key we no longer hold must not take the whole list down with it.
+          if (payload.readable)
+            out.push({
+              sessionId: String(row.session_id),
+              payload: payload.value,
+              createdAt: new Date(row.created_at as string).toISOString(),
+            });
+        }
+        return out;
+      });
+    },
+
+    /** Drop one connection — the owner disconnecting, or a dead consent. */
+    async deleteSession(userId: string, sessionId: string): Promise<void> {
+      await withTenantStatement(db, userId, async (client) => {
+        await client.query("DELETE FROM personal.eb_sessions WHERE session_id = $1", [sessionId]);
+      });
+    },
+  };
+}
+
+export type AiUsageOutcome = "ok" | "failed";
+
+export type AiUsage = {
+  day: string; // "YYYY-MM-DD"
+  route:
+    | "categorize"
+    | "extract-invoice"
+    | "chat"
+    | "travel"
+    | "portfolio-persona"
+    | "sector-inference"
+    | "cash-flow-suggestion"
+    | "identifier-selection";
+  model: string;
+  inputTokens: number;
+  outputTokens: number;
+  pages: number;
+  searches: number;
+  costCents: number;
+  /** Provider-reported prompt-cache usage (#300, WS5.7). 0 when it reports none. */
+  cacheWriteTokens?: number;
+  cacheReadTokens?: number;
+  /** "ok" for a call that completed; "failed" for one that reached the model
+   *  and threw. Failed rows carry cost 0 and error metadata instead of a price. */
+  outcome?: AiUsageOutcome;
+  /** The route's own machine code for a failure; never a provider message. */
+  errorCode?: string;
+  /** Upstream HTTP status for a failure, 0 for timeout/transport. */
+  httpStatus?: number;
+};
+
+export type AiBudgetReservation = { ok: true; id: number } | { ok: false; scope: "day" | "month" };
+
+/* How long an unreconciled reservation still counts toward the cap. Wide
+ * enough that no call actually in flight can ever age out from under itself —
+ * mistral.ts's own SEARCH_TIMEOUT_MS ceiling is 240s, so this clears it with
+ * a 2.5x margin — narrow enough that a reservation orphaned by a hard crash
+ * (nothing left alive to release it) self-heals well within the same day
+ * instead of squatting on the cap until midnight. See 0009_ai_usage_reservation.sql. */
+const RESERVATION_FRESH_SQL =
+  "(reconciled_at IS NOT NULL OR reserved_at IS NULL OR reserved_at > CURRENT_TIMESTAMP - INTERVAL '10 minutes')";
+
+/**
+ * The internal AI-spend ledger (`personal.ai_usage`), read and written by the
+ * budget guard in front of the agent routes. One model key, one cap per
+ * account: `userId` is the session user, and sums never cross accounts.
+ * Rows with a NULL `user_id` are the pre-signup ledger and count toward no
+ * account.
+ *
+ * Every method here runs as the account it names: `reserve` sets
+ * `app.user_id` transaction-locally, the rest go through `withTenantStatement`,
+ * and `reconcile`/`release` also carry an explicit `user_id` predicate. That is
+ * belt and braces for the same reason `eraseUserData` writes its own predicate:
+ * 0025 forces row-level security on this table, and a query that named another
+ * account's row would match nothing even if the predicate were ever dropped.
+ */
+export function createAiUsageRepository(db: Database) {
+  return {
+    /** Atomically checks BOTH caps against worst case and, if there is room,
+     *  inserts a placeholder row at that worst-case price — the check and the
+     *  charge are one statement's transaction, so two callers racing each
+     *  other can never both read "under cap" before either has written
+     *  anything, which is the whole bug this closes (see budget.ts's own
+     *  former comment on checkBudget()/recordUsage() not being atomic).
+     *
+     *  `pg_advisory_xact_lock` serializes every reservation attempt for the
+     *  same account and month behind one lock (day is a subset of month, so
+     *  this also covers the day cap), auto-released on COMMIT or ROLLBACK — a
+     *  crashed client can never leave it held. Locking on month rather than
+     *  day means a request landing right at midnight still serializes against
+     *  the request just before it. */
+    async reserve(params: {
+      userId: string;
+      day: string;
+      month: string;
+      route: AiUsage["route"];
+      worstCaseCents: number;
+      dayCapCents: number;
+      monthCapCents: number;
+    }): Promise<AiBudgetReservation> {
+      const client = await db.connect();
+      try {
+        await client.query("BEGIN");
+        /* 0025 puts `personal.ai_usage` under FORCE row security scoped to
+         * `app.user_id`. Set it here, transaction-local, before the sums and
+         * the INSERT below read or write a row. The identity is the ACCOUNT
+         * this reservation is for — `aiAccountId()` substitutes "unscoped"
+         * when there is no session — never a value a request supplied. */
+        await client.query("SELECT set_config('app.user_id', $1, true)", [params.userId]);
+        await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [
+          `ai_budget:${params.userId}:${params.month}`,
+        ]);
+        const dayResult = await client.query<QueryResultRow>(
+          `SELECT COALESCE(SUM(cost_cents), 0)::int AS total FROM personal.ai_usage
+           WHERE day = $1 AND user_id = $2 AND ${RESERVATION_FRESH_SQL}`,
+          [params.day, params.userId],
+        );
+        const dayCents = Number(dayResult.rows[0]?.total ?? 0);
+        if (dayCents + params.worstCaseCents >= params.dayCapCents) {
+          await client.query("ROLLBACK");
+          return { ok: false, scope: "day" };
+        }
+        const monthResult = await client.query<QueryResultRow>(
+          `SELECT COALESCE(SUM(cost_cents), 0)::int AS total FROM personal.ai_usage
+           WHERE to_char(day, 'YYYY-MM') = $1 AND user_id = $2 AND ${RESERVATION_FRESH_SQL}`,
+          [params.month, params.userId],
+        );
+        const monthCents = Number(monthResult.rows[0]?.total ?? 0);
+        if (monthCents + params.worstCaseCents >= params.monthCapCents) {
+          await client.query("ROLLBACK");
+          return { ok: false, scope: "month" };
+        }
+        const inserted = await client.query<QueryResultRow>(
+          `INSERT INTO personal.ai_usage (day, route, model, cost_cents, reserved_at, user_id)
+           VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP, $5) RETURNING id`,
+          [params.day, params.route, "pending", params.worstCaseCents, params.userId],
+        );
+        await client.query("COMMIT");
+        return { ok: true, id: Number(inserted.rows[0]!.id) };
+      } catch (e) {
+        await client.query("ROLLBACK").catch(() => undefined);
+        throw e;
+      } finally {
+        client.release();
+      }
+    },
+
+    /** Turns a reservation into the real, final record — same row, so the
+     *  cap's accounting for this call goes from "worst case" to "actual" in
+     *  place rather than adding a second row on top of the first. A no-op
+     *  once the row is already reconciled (or already released out from
+     *  under it), which is what makes calling this safe even from a path
+     *  that cannot know whether a release already ran.
+     *
+     *  `userId` is the account that reserved the row, not a value chosen here.
+     *  The id alone used to be enough to reach any account's reservation
+     *  (`id` is server-side, so that was latent rather than reachable); the
+     *  predicate now says whose row it may be, and RLS says the same thing
+     *  again in the transaction `withTenantStatement` opens. */
+    async reconcile(
+      usage: Omit<AiUsage, "day" | "route"> & { id: number },
+      userId: string,
+    ): Promise<void> {
+      const identity = requireUserId(userId);
+      await withTenantStatement(db, identity, async (client) => {
+        await client.query(
+          `UPDATE personal.ai_usage
+           SET model = $2, input_tokens = $3, output_tokens = $4, pages = $5, searches = $6,
+               cost_cents = $7, cache_write_tokens = $9, cache_read_tokens = $10,
+               outcome = 'ok', reconciled_at = CURRENT_TIMESTAMP
+           WHERE id = $1 AND user_id = $8 AND reconciled_at IS NULL`,
+          [
+            usage.id,
+            usage.model,
+            usage.inputTokens,
+            usage.outputTokens,
+            usage.pages,
+            usage.searches,
+            usage.costCents,
+            identity,
+            usage.cacheWriteTokens ?? 0,
+            usage.cacheReadTokens ?? 0,
+          ],
+        );
+      });
+    },
+
+    /** Turn a reservation into a FAILED ledger row (#300, WS5.7 leftover).
+     *
+     *  Before this, the failure path deleted the placeholder, so a provider
+     *  refusal, timeout or 5xx left no trace and an operator could not see why
+     *  spend stopped. The row keeps the reservation id, records the route's own
+     *  machine error code and the upstream HTTP status (0 = timeout/transport),
+     *  sets cost 0 — nothing was billed with certainty — and marks
+     *  `reconciled_at`, so the budget sums ignore it while the ledger keeps it.
+     *
+     *  `costCents` applies only when the row was NOT already reconciled. The
+     *  provider call sites deliberately record their worst-case/ceiling usage
+     *  BEFORE they throw ("a failed call was still billed"), so a row marked
+     *  failed afterwards usually already carries a real charge: that charge and
+     *  its cache counts are KEPT and only the outcome/error columns are added.
+     *  Either way the row ends up `reconciled_at`-stamped, so it counts exactly
+     *  once in the cap sums. */
+    async fail(
+      failure: {
+        id: number;
+        model: string;
+        errorCode: string;
+        httpStatus?: number;
+        cacheWriteTokens?: number;
+        cacheReadTokens?: number;
+        costCents?: number;
+      },
+      userId: string,
+    ): Promise<void> {
+      const identity = requireUserId(userId);
+      await withTenantStatement(db, identity, async (client) => {
+        await client.query(
+          `UPDATE personal.ai_usage
+           SET model = $2,
+               input_tokens = CASE WHEN reconciled_at IS NULL THEN 0 ELSE input_tokens END,
+               output_tokens = CASE WHEN reconciled_at IS NULL THEN 0 ELSE output_tokens END,
+               pages = CASE WHEN reconciled_at IS NULL THEN 0 ELSE pages END,
+               searches = CASE WHEN reconciled_at IS NULL THEN 0 ELSE searches END,
+               cost_cents = CASE WHEN reconciled_at IS NULL THEN $8 ELSE cost_cents END,
+               cache_write_tokens = CASE WHEN reconciled_at IS NULL THEN $4 ELSE cache_write_tokens END,
+               cache_read_tokens = CASE WHEN reconciled_at IS NULL THEN $5 ELSE cache_read_tokens END,
+               outcome = 'failed', error_code = $3, http_status = $6,
+               reconciled_at = COALESCE(reconciled_at, CURRENT_TIMESTAMP)
+           WHERE id = $1 AND user_id = $7`,
+          [
+            failure.id,
+            failure.model,
+            failure.errorCode,
+            failure.cacheWriteTokens ?? 0,
+            failure.cacheReadTokens ?? 0,
+            failure.httpStatus ?? null,
+            identity,
+            Math.max(0, Math.round(failure.costCents ?? 0)),
+          ],
+        );
+      });
+    },
+
+    /** The call this reservation was holding room for never reached
+     *  `reconcile` — it threw first. Deletes the placeholder row rather than
+     *  reconciling it to 0, so a failed call leaves exactly the same trace it
+     *  left before this reservation step existed: none. Guarded the same way
+     *  as `reconcile`, so whichever of the two runs first on a given row
+     *  wins and the other is a no-op. Scoped to the reserving account the same
+     *  way `reconcile` is, and for the same reason. */
+    async release(id: number, userId: string): Promise<void> {
+      const identity = requireUserId(userId);
+      await withTenantStatement(db, identity, async (client) => {
+        await client.query(
+          "DELETE FROM personal.ai_usage WHERE id = $1 AND user_id = $2 AND reconciled_at IS NULL",
+          [id, identity],
+        );
+      });
+    },
+
+    async record(usage: AiUsage & { userId: string }): Promise<void> {
+      const identity = requireUserId(usage.userId);
+      await withTenantStatement(db, identity, async (client) => {
+        await client.query(
+          `INSERT INTO personal.ai_usage
+             (day, route, model, input_tokens, output_tokens, pages, searches, cost_cents,
+              cache_write_tokens, cache_read_tokens, outcome, error_code, http_status, user_id)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
+          [
+            usage.day,
+            usage.route,
+            usage.model,
+            usage.inputTokens,
+            usage.outputTokens,
+            usage.pages,
+            usage.searches,
+            usage.costCents,
+            usage.cacheWriteTokens ?? 0,
+            usage.cacheReadTokens ?? 0,
+            usage.outcome ?? "ok",
+            usage.errorCode ?? null,
+            usage.httpStatus ?? null,
+            identity,
+          ],
+        );
+      });
+    },
+
+    async spentCents(range: { userId: string; day: string; month: string }): Promise<{
+      dayCents: number;
+      monthCents: number;
+    }> {
+      /* Two statements, so a tenant transaction rather than a single tenant
+       * statement — the same reason `eraseUserData` uses `withTenant`. */
+      const identity = requireUserId(range.userId);
+      return withTenant(db, identity, async (client) => {
+        const dayResult = await client.query<QueryResultRow>(
+          `SELECT COALESCE(SUM(cost_cents), 0)::int AS total FROM personal.ai_usage
+           WHERE day = $1 AND user_id = $2 AND ${RESERVATION_FRESH_SQL}`,
+          [range.day, identity],
+        );
+        const monthResult = await client.query<QueryResultRow>(
+          `SELECT COALESCE(SUM(cost_cents), 0)::int AS total FROM personal.ai_usage
+           WHERE to_char(day, 'YYYY-MM') = $1 AND user_id = $2 AND ${RESERVATION_FRESH_SQL}`,
+          [range.month, identity],
+        );
+        return {
+          dayCents: Number(dayResult.rows[0]?.total ?? 0),
+          monthCents: Number(monthResult.rows[0]?.total ?? 0),
+        };
+      });
+    },
+  };
+}
+
+export type N8nForwardingWrite =
+  | { status: "stored"; localPart: string }
+  | { status: "invalid" }
+  | { status: "taken" };
+
+/* `ON CONFLICT (user_id)` in setLocalPart's INSERT covers the primary key,
+ * not local_part's own unique index — a taken local part reaches Postgres as
+ * a unique-violation error instead of triggering the upsert. */
+function isUniqueViolation(err: unknown): boolean {
+  return (
+    typeof err === "object" &&
+    err !== null &&
+    "code" in err &&
+    (err as { code?: unknown }).code === "23505"
+  );
+}
+
+/**
+ * Where each user's invoice-forwarding local part lives.
+ *
+ * n8n partitions its invoice queue by `queueKey` — the local part of the
+ * address a forwarded invoice mail arrived on (packages/core/src/n8n/queue.js).
+ * The browser used to send that key itself; the server now derives it from the
+ * caller's session and this table is where it looks it up
+ * (docs/adr/0006-invoice-queue-server-proxy.md). At most one row per user
+ * (`user_id` is the primary key), and `local_part` carries its own UNIQUE
+ * index — two users sharing a local part would each drain the other's queue,
+ * so the database refuses that before it can ever happen.
+ */
+export function createN8nForwardingRepository(db: Database) {
+  return {
+    /** The caller's own local part, or null when none is recorded yet. RLS
+     *  means another user's row is invisible here regardless of what `userId`
+     *  claims — but callers must still pass the SESSION's id, never one a
+     *  request supplied. */
+    async getLocalPart(userId: string | undefined | null): Promise<string | null> {
+      const identity = requireUserId(userId);
+      return withTenantStatement(db, identity, async (client) => {
+        const result = await client.query<QueryResultRow>(
+          "SELECT local_part FROM personal.n8n_forwarding WHERE user_id = $1",
+          [identity],
+        );
+        return (result.rows[0]?.local_part as string | undefined) ?? null;
+      });
+    },
+
+    /** Record or replace the caller's own local part. The write path for
+     *  `apps/server/src/n8n-routes.ts`'s `POST /api/n8n/forward-address`. */
+    async setLocalPart(
+      userId: string | undefined | null,
+      localPart: string,
+    ): Promise<N8nForwardingWrite> {
+      const identity = requireUserId(userId);
+      /* SAME CANONICAL FORM THE COLUMN ENFORCES, applied here so an ordinary
+       * copy-paste does not become a constraint violation the caller has to
+       * interpret. Lowercase, because the email worker lowercases when it
+       * decides which n8n bucket a mail goes into and n8n does not lowercase
+       * when it reads one back — a capitalised row and its lowercase twin are
+       * two rows here and one bucket there, and the one that matches drains
+       * the other's invoices. The CHECK stays the backstop for every writer
+       * that is not this function. */
+      const trimmed = localPart.trim().toLowerCase();
+      if (!/^[a-z0-9._%+-]{1,120}$/.test(trimmed)) return { status: "invalid" };
+      try {
+        await withTenantStatement(db, identity, async (client) => {
+          await client.query(
+            "INSERT INTO personal.n8n_forwarding (user_id, local_part) VALUES ($1, $2) ON CONFLICT (user_id) DO UPDATE SET local_part = EXCLUDED.local_part, updated_at = CURRENT_TIMESTAMP",
+            [identity, trimmed],
+          );
+        });
+      } catch (err) {
+        if (isUniqueViolation(err)) return { status: "taken" };
+        throw err;
+      }
+      return { status: "stored", localPart: trimmed };
+    },
+  };
+}
+
+export * from "./agentMemory.js";
+export * from "./rateLimit.js";
+export * from "./mcpTokens.js";
+export * from "./partnerBudget.js";

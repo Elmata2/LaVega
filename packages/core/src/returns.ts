@@ -73,7 +73,8 @@ export function annualSpendCents(
   asOf: string,
 ): SpendBase {
   const mine = txs.filter((t) => t.accountKey === account.key && t.date <= asOf);
-  if (mine.length === 0) return { perYearCents: null, kind: "unknown", observedDays: 0, extrapolated: false };
+  if (mine.length === 0)
+    return { perYearCents: null, kind: "unknown", observedDays: 0, extrapolated: false };
 
   const dates = mine.map((t) => t.date).sort();
   const lastDate = dates[dates.length - 1];
@@ -187,9 +188,10 @@ export type ReturnGap = {
 /** Below this the advice is noise. Same threshold `analyzeInterest` uses. */
 const MARGIN_PCT = 0.1;
 
-export function optimiseReturns(
-  returns: readonly AccountReturn[],
-): { actions: ReturnAction[]; gaps: ReturnGap[] } {
+export function optimiseReturns(returns: readonly AccountReturn[]): {
+  actions: ReturnAction[];
+  gaps: ReturnGap[];
+} {
   const actions: ReturnAction[] = [];
   const gaps: ReturnGap[] = [];
 
@@ -204,7 +206,10 @@ export function optimiseReturns(
     gaps.push(g);
   };
 
-  const currencyOf = (a: Account) => String(a.currency ?? "").trim().toUpperCase();
+  const currencyOf = (a: Account) =>
+    String(a.currency ?? "")
+      .trim()
+      .toUpperCase();
 
   /** The best rate you could move THIS money to without converting it. A
    *  conversion sits between the balance and the rate, costs a spread nothing

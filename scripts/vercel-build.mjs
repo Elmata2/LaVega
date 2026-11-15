@@ -1,4 +1,4 @@
-import { cp, mkdir, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 
@@ -23,45 +23,173 @@ const esbuild = `${root}/node_modules/.pnpm/esbuild@0.28.1/node_modules/esbuild/
 const output = `${root}/.vercel/output`;
 const functionDir = `${output}/functions/api/[...route].func`;
 
+/*
+ * REFUSE TO DEPLOY CODE THE DATABASE IS NOT READY FOR.
+ *
+ * 0006_broker_sync_lease.sql was committed, merged and deployed while the ALTER
+ * was never run against Neon, so the Brokers page failed with `column
+ * "credential_generation" does not exist` — in production, on a page that had
+ * passed every test, because the tests bring their own database. A deploy is
+ * the last moment where that difference is still cheap to notice.
+ *
+ * This only reads the ledger; applying stays a deliberate act by the schema
+ * owner (`pnpm db:migrate`). A build that applies DDL on its own would let a
+ * rolled-back deploy leave the schema ahead of the code that ran it.
+ *
+ * Without DATABASE_URL there is no database to be behind — a build for the file
+ * stores, or a fork's preview — so the check reports that and moves on.
+ */
+if (process.env.DATABASE_URL?.trim()) {
+  try {
+    const { stdout } = await exec("pnpm", ["db:migrate:check"], execOptions);
+    process.stdout.write(stdout);
+  } catch (error) {
+    process.stdout.write(error.stdout ?? "");
+    process.stderr.write(error.stderr ?? "");
+    throw new Error(
+      "vercel-build: the database is missing a migration in db/migrations. " +
+        "Apply it as the schema owner (pnpm db:migrate), then redeploy.",
+    );
+  }
+} else {
+  console.log("vercel-build: no DATABASE_URL, skipping the migration check");
+}
+
 await rm(output, { recursive: true, force: true });
 await mkdir(functionDir, { recursive: true });
 
-await exec(esbuild, [
-  "scripts/vercel-api.ts",
-  "--bundle",
-  "--platform=node",
-  "--format=esm",
-  "--target=node22",
-  /* Some dependencies are CommonJS and call require() for Node builtins at load
-   * time. In an ESM bundle there is no require, and esbuild's shim throws
-   * "Dynamic require of \"path\" is not supported" the moment the function is
-   * imported. Giving the module a real one is what lets them be inlined at all. */
-  "--banner:js=import { createRequire as __createRequire } from 'node:module'; const require = __createRequire(import.meta.url);",
-  `--outfile=${functionDir}/index.mjs`,
-  "--alias:@lavega/core=./packages/core/src/index.ts",
-  "--alias:@lavega/adapters=./packages/adapters/src/index.ts",
-  "--alias:@lavega/investing-server=./apps/investing-server",
-], execOptions);
+await exec(
+  esbuild,
+  [
+    "scripts/vercel-api.ts",
+    "--bundle",
+    "--platform=node",
+    "--format=esm",
+    "--target=node22",
+    /* Some dependencies are CommonJS and call require() for Node builtins at load
+     * time. In an ESM bundle there is no require, and esbuild's shim throws
+     * "Dynamic require of \"path\" is not supported" the moment the function is
+     * imported. Giving the module a real one is what lets them be inlined at all. */
+    "--banner:js=import { createRequire as __createRequire } from 'node:module'; const require = __createRequire(import.meta.url);",
+    `--outfile=${functionDir}/index.mjs`,
+    "--alias:@lavega/core=./packages/core/src/index.ts",
+    "--alias:@lavega/adapters=./packages/adapters/src/index.ts",
+    "--alias:@lavega/investing-server=./apps/investing-server",
+  ],
+  execOptions,
+);
+
+/* THE AGENT PROMPTS ARE DATA, AND esbuild DOES NOT SHIP DATA.
+ *
+ * Every agent's instructions live in Markdown next to prompts.ts, which reads
+ * them at runtime with readFileSync against a directory derived from
+ * import.meta.url. Bundled, that resolves to this function directory — and
+ * nothing was putting the Markdown here, so every readFileSync threw, prompts.ts
+ * swallowed it (`catch { return "" }`) and EVERY agent in production ran with an
+ * empty system prompt. Invoice extraction, chat, categorize, travel.
+ *
+ * It was invisible from every angle that gets checked: local dev runs from
+ * source so the files are always there, the unit tests read the same source
+ * tree, and the failure produces a plausible-looking answer rather than an
+ * error. Found 17 Sep 2026 when an invoice extraction came back with every
+ * field blank.
+ *
+ * The assertion below is the point, not the copy: if this ever stops landing,
+ * the build fails here instead of the agents quietly going stupid. */
+await cp(`${root}/apps/server/src/agent/prompts`, `${functionDir}/prompts`, { recursive: true });
+{
+  const shipped = (await readdir(`${functionDir}/prompts`)).filter((f) => f.endsWith(".md"));
+  if (shipped.length === 0) throw new Error("vercel-build: no agent prompts shipped");
+  for (const required of ["_base.md", "facturen-extract.md"])
+    if (!shipped.includes(required))
+      throw new Error(`vercel-build: ${required} did not ship into the function`);
+}
 
 /* Nothing is left external: the function ships no node_modules of its own, so
  * anything not inlined here would only fail at runtime. */
 await writeFile(`${functionDir}/package.json`, JSON.stringify({ type: "module" }, null, 2));
-await writeFile(`${functionDir}/.vc-config.json`, JSON.stringify({
-  runtime: "nodejs24.x",
-  handler: "index.mjs",
-  launcherType: "Nodejs",
-  shouldAddHelpers: true,
-  /* Trading 212 order history is 6 req/min. A first sync is ~40 pages and
-   * cannot finish inside the 10s/15s default. 300s is the Pro ceiling that
-   * still lets the adapter stop on INVESTING_SYNC_BUDGET_MS and persist a
-   * resume cursor instead of dying mid-history. */
-  maxDuration: 300,
-}, null, 2));
+await writeFile(
+  `${functionDir}/.vc-config.json`,
+  JSON.stringify(
+    {
+      runtime: "nodejs24.x",
+      handler: "index.mjs",
+      launcherType: "Nodejs",
+      shouldAddHelpers: true,
+      /* Trading 212 order history is 6 req/min. A first sync is ~40 pages and
+       * cannot finish inside the 10s/15s default. 300s is the Pro ceiling that
+       * still lets the adapter stop on INVESTING_SYNC_BUDGET_MS and persist a
+       * resume cursor instead of dying mid-history. */
+      maxDuration: 300,
+    },
+    null,
+    2,
+  ),
+);
 
-await exec("pnpm", ["--filter", "@lavega/web", "build"], execOptions);
+/*
+ * Typecheck before building — but only the packages we own.
+ *
+ * esbuild bundles the API function above, and esbuild STRIPS types without
+ * checking them. Nothing else in this pipeline runs `tsc`, so until now a type
+ * error could reach production and only show up as a runtime TypeError. Railway
+ * used to catch that by accident, as the one place that ran `pnpm build`; it is
+ * gone, so the check has to live where the deploys happen.
+ *
+ * `@lavega/investing-web` and `@lavega/investing-server` are deliberately NOT in
+ * this list. They belong to the investing side and are typechecked there; adding
+ * them here would let a failure in that tree block the personal app's deploys.
+ * `@lavega/server` IS checked, and checking it also checks the investing tree:
+ * its `investing-mount.ts` imports `@lavega/investing-server/src/index.js`
+ * directly, so `tsc` cannot look at ours without looking at theirs. That was
+ * briefly a reason to leave it out — the investing side had a type error we did
+ * not own, and including it would have blocked our deploys on someone else's
+ * fix. That error is gone, so the coupling now works in our favour: one command
+ * covers both trees.
+ */
+const TYPECHECKED = [
+  "@lavega/core",
+  "@lavega/adapters",
+  "@lavega/database",
+  "@lavega/server",
+  "@lavega/web",
+  "@lavega/email-worker",
+  "@lavega/site",
+];
+await exec(
+  "pnpm",
+  [...TYPECHECKED.flatMap((name) => ["--filter", name]), "typecheck"],
+  execOptions,
+);
+
+/* The Sentry Vercel integration sets SENTRY_DSN for the server, but a Vite
+ * browser bundle only sees variables Vite exposes (VITE_*) and turbo's strict
+ * envMode strips undeclared names. A DSN is public by design — it ships inside
+ * the client bundle — so the integration's DSN is forwarded under the name the
+ * browser code reads. An explicit VITE_SENTRY_DSN, if set, wins; absent DSN
+ * means the SDK stays uninitialised and the bundles make no Sentry request. */
+const sentryDsn = process.env.VITE_SENTRY_DSN ?? process.env.SENTRY_DSN;
+const browserEnv = sentryDsn ? { VITE_SENTRY_DSN: sentryDsn } : {};
+
+await exec("pnpm", ["--filter", "@lavega/web", "build"], {
+  cwd: root,
+  env: { ...process.env, CI: "true", ...browserEnv },
+});
+/* PRE-RENDER THE LANDING PAGES.
+ *
+ * Vite emits one empty SPA shell, so a crawler that does not run JavaScript
+ * (most AI crawlers, and Google's first pass) saw `<title>LaVega</title>` and an
+ * empty <div id="root">: nothing to index, nothing to quote. The prerender step
+ * renders the real nl and en landing markup into dist/index.html and
+ * dist/en/index.html. The bare shell is kept as dist/app-shell.html, which the
+ * non-landing SPA routes (/app, /reset-password) are served; the landing is not
+ * hydrated, the bundle replaces it with createRoot. It runs only
+ * after `build` and refuses to run twice on the same dist; it also checks its
+ * own output, so a broken render fails the deploy here. */
+await exec("pnpm", ["--filter", "@lavega/web", "prerender"], execOptions);
 await exec("pnpm", ["--filter", "@lavega/investing-web", "build"], {
   cwd: root,
-  env: { ...process.env, CI: "true", VITE_INVESTING_BASE: "/investing/" },
+  env: { ...process.env, CI: "true", VITE_INVESTING_BASE: "/investing/", ...browserEnv },
 });
 
 const staticDir = `${output}/static`;
@@ -69,24 +197,219 @@ await mkdir(`${staticDir}/investing`, { recursive: true });
 await cp("apps/web/dist", staticDir, { recursive: true });
 await cp("apps/investing-web/dist", `${staticDir}/investing`, { recursive: true });
 
+/* THE CONTENT SITE GOES INTO THE SAME STATIC DIRECTORY.
+ *
+ * apps/site renders the published Markdown pages (vragen, gids, vs, ...) plus
+ * robots.txt, sitemap.xml and llms.txt as plain HTML. Two things differ from a
+ * standalone site build. `--no-clean`: its output dir already holds the web app,
+ * and the default clean would delete it. And clean URLs: pages are written as
+ * `vragen/x.html` but served at `/vragen/x`, which the Build Output API calls
+ * `overrides` in config.json (merged into the config below). The overrides file
+ * is written OUTSIDE staticDir on purpose — inside it, it would be published.
+ *
+ * buildSite fails on any published page that breaks the content rules (advice
+ * wording, missing disclaimer, duplicate urls) and on a file that does not
+ * parse, and that failure is the check: it throws here, before anything is
+ * deployed. Only `status: published` pages are built — drafts never ship. */
+const siteOverridesFile = `${root}/.vercel/site-overrides.json`;
+await exec(
+  "pnpm",
+  [
+    "--filter",
+    "@lavega/site",
+    "exec",
+    "tsx",
+    "src/cli-build.ts",
+    "--content",
+    `${root}/content`,
+    "--out",
+    staticDir,
+    "--no-clean",
+    "--overrides",
+    siteOverridesFile,
+  ],
+  execOptions,
+);
+const siteOverrides = JSON.parse(await readFile(siteOverridesFile, "utf8"));
+
 /* Routing. `handle: filesystem` serves anything that really exists first; what
  * is left is either an API path or an SPA view. The SPA fallbacks come last so
  * a missing asset 404s instead of being answered with index.html — that is how
  * a blank /investing page hid behind green probes once before. */
-await writeFile(`${output}/config.json`, JSON.stringify({
-  version: 3,
-  routes: [
-    { handle: "filesystem" },
-    { src: "/api/(.*)", dest: "/api/[...route]" },
-    { src: "/health", dest: "/api/[...route]" },
-    { src: "/privacy", dest: "/api/[...route]" },
-    { src: "/terms", dest: "/api/[...route]" },
-    { src: "/investing/(.*)", dest: "/investing/index.html" },
-    { src: "/investing", dest: "/investing/index.html" },
-    { src: "/app/(.*)", dest: "/index.html" },
-    { src: "/app", dest: "/index.html" },
-  ],
-}, null, 2));
+/*
+ * Security headers for everything the CDN serves.
+ *
+ * `secureHeaders()` in apps/server only covers requests that reach the Hono
+ * function. On Vercel the static build is served by the CDN and never touches
+ * it, so /, /app and /en — the pages that actually run our JavaScript and hold
+ * the vault — came back with no CSP and no clickjacking protection, while
+ * /health and /privacy had both. Exactly backwards.
+ *
+ * Kept deliberately identical to the server's policy: two policies that drift
+ * are worse than one, because whichever is laxer is the one that decides.
+ */
+const SECURITY_HEADERS = {
+  "Content-Security-Policy": [
+    "default-src 'self'",
+    "script-src 'self' https://*.posthog.com",
+    "style-src 'self' 'unsafe-inline'",
+    "img-src 'self' data: blob: https:",
+    "font-src 'self' data:",
+    "connect-src 'self' https:",
+    "worker-src 'self' blob:",
+    "object-src 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+    "frame-ancestors 'none'",
+  ].join("; "),
+  "X-Content-Type-Options": "nosniff",
+  "X-Frame-Options": "DENY",
+  "Referrer-Policy": "no-referrer",
+  /* The same policy the Hono server sets (apps/server/src/index.ts). The CDN
+   * serves the shell without ever reaching that server, so leaving this out
+   * here meant the pages that hold the vault had no Permissions-Policy at all
+   * (security review 2026-10-17, A6 / #253). Byte-for-byte parity is asserted
+   * by apps/server/src/secureHeaders.test.ts. */
+  "Permissions-Policy": [
+    "camera=()",
+    "microphone=()",
+    "geolocation=()",
+    "payment=()",
+    "usb=()",
+    "serial=()",
+    "hid=()",
+    "midi=()",
+    "bluetooth=()",
+    "magnetometer=()",
+    "gyroscope=()",
+    "accelerometer=()",
+    "display-capture=()",
+    "idle-detection=()",
+    "autoplay=()",
+    "fullscreen=()",
+    "clipboard-write=(self)",
+  ].join(", "),
+  /* Vercel terminates TLS in front of every deployment hostname and answers a
+   * plain-http request with a redirect before this table applies, so HSTS here
+   * is only ever attached to an https response. The Hono server cannot make
+   * that assumption and gates HSTS on the request scheme instead. */
+  "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
+};
+
+await writeFile(
+  `${output}/config.json`,
+  JSON.stringify(
+    {
+      version: 3,
+      /* The daily pass is the BACKSTOP. The external scheduler
+       * (.github/workflows/investing-sync.yml) calls
+       * POST /api/cron/investing-drain every 15 minutes and is what finishes a
+       * run that needs more than one 240 s budget (issue #311); this pass still
+       * covers a deployment that has not configured the runner. The app-open
+       * path refreshes holdings on its own lane; this pass runs both lanes, and
+       * the history gate no longer reads "synced 18 h ago" as fresh, so a user
+       * who synced at 10:00 is not skipped the next morning. */
+      crons: [{ path: "/api/cron/investing-sync", schedule: "0 4 * * *" }],
+      routes: [
+        /* Applied to every response, then `continue` so routing carries on and
+         * the filesystem handler still serves the file. */
+        { src: "/(.*)", headers: SECURITY_HEADERS, continue: true },
+        /* Locale redirect for the landing page: an English-device visitor to
+         * `/` goes to `/en`, unless a `lavega_locale` cookie already picked a
+         * locale. Keep these two routes in sync with the pure implementation
+         * at packages/core/src/localeRedirect.ts and its parity test at
+         * packages/core/src/localeRedirect.vercelParity.test.ts, which embeds
+         * its own literal copy of these exact objects. */
+        {
+          src: "/",
+          has: [{ type: "cookie", key: "lavega_locale", value: "^en$" }],
+          status: 302,
+          headers: { Location: "/en", Vary: "Accept-Language, Cookie" },
+        },
+        {
+          src: "/",
+          missing: [{ type: "cookie", key: "lavega_locale" }],
+          has: [{ type: "header", key: "accept-language", value: "^[Ee][Nn].*" }],
+          status: 302,
+          headers: { Location: "/en", Vary: "Accept-Language, Cookie" },
+        },
+        /* The app and the investing dashboard are behind a login and hold no
+         * public content; keep them out of search indexes even if a link to
+         * them leaks. robots.txt Disallow alone does not do that (a blocked URL
+         * can still be indexed from links), a noindex header does. `continue`
+         * so routing carries on to the gate and the filesystem handler. */
+        { src: "/app(?:/.*)?", headers: { "X-Robots-Tag": "noindex" }, continue: true },
+        { src: "/investing(?:/.*)?", headers: { "X-Robots-Tag": "noindex" }, continue: true },
+        { src: "/app-shell.html", headers: { "X-Robots-Tag": "noindex" }, continue: true },
+        { handle: "filesystem" },
+        { src: "/api/(.*)", dest: "/api/[...route]" },
+        { src: "/health", dest: "/api/[...route]" },
+        { src: "/privacy", dest: "/api/[...route]" },
+        { src: "/terms", dest: "/api/[...route]" },
+        { src: "/investing/(.*)", dest: "/investing/index.html" },
+        { src: "/investing", dest: "/investing/index.html" },
+        /* Layer 2 (edge) of the /app session gate — see apps/web/src/Root.tsx
+         * for layer 1 (the one that actually closes the hole; a hash route
+         * like `#app` never reaches here at all) and requireAppSession in
+         * apps/server/src/index.ts for layer 3 (Docker/Railway/`pnpm dev`,
+         * where the Hono function runs and this static routing table does
+         * not apply). This layer checks cookie PRESENCE only, not validity —
+         * a funnel gate ahead of the CDN-served static shell below, not an
+         * auth check; /api/* still verifies for real. Ordered ahead of the
+         * static /app routes so a request with no session cookie never
+         * reaches them; a request that DOES carry the cookie falls through
+         * to those routes unchanged, so a signed-in visitor keeps the CDN
+         * HIT and costs no function invocation. The cookie name is
+         * better-auth 1.7.1's emitted name for an https baseURL — true for
+         * every Vercel deployment, preview or production, since VERCEL_URL
+         * is always https — proved empirically against its getCookies() with
+         * apps/server/src/auth.ts's exact options; see the comment and the
+         * parity test at apps/server/src/appGateCookie.vercelParity.test.ts,
+         * which reads this literal array and fails if the two diverge. */
+        /* An expired or reused confirmation link: better-auth sends a
+         * signed-out visitor to /app?error=…. The gate below would 302 that
+         * to "/" and drop the query, so the landing page never learned the
+         * link failed. The shell is public, and Root shows the landing page
+         * with the "link expired" notice. */
+        {
+          src: "/app",
+          has: [{ type: "query", key: "error" }],
+          dest: "/app-shell.html",
+        },
+        // APP_GATE_ROUTES_START
+        {
+          src: "/app/(.*)",
+          missing: [{ type: "cookie", key: "__Secure-better-auth.session_token" }],
+          status: 302,
+          headers: { Location: "/", Vary: "Cookie", "Cache-Control": "private, no-store" },
+        },
+        {
+          src: "/app",
+          missing: [{ type: "cookie", key: "__Secure-better-auth.session_token" }],
+          status: 302,
+          headers: { Location: "/", Vary: "Cookie", "Cache-Control": "private, no-store" },
+        },
+        // APP_GATE_ROUTES_END
+        { src: "/app/(.*)", dest: "/app-shell.html" },
+        { src: "/app", dest: "/app-shell.html" },
+        /* The English landing page. It is pre-rendered to en/index.html (English
+         * markup for crawlers); the same SPA bundle replaces it on load (createRoot,
+         * no hydration) and `Root` reads the locale off the path. */
+        /* Where the emailed password-reset link lands (authClient.ts,
+         * RESET_PASSWORD_PATH). Public: the token in the query is the proof. */
+        { src: "/reset-password", dest: "/app-shell.html" },
+        { src: "/en", dest: "/en/index.html" },
+        { src: "/en/", dest: "/en/index.html" },
+      ],
+      /* Clean URLs for the content site's pages (see the site build above). */
+      overrides: siteOverrides,
+    },
+    null,
+    2,
+  ),
+);
+
+await exec("node", ["scripts/verify-seo-output.mjs", output], execOptions);
 
 // Kept so a local `pnpm build`-style check still has something to look at.
 await rm("dist", { recursive: true, force: true });

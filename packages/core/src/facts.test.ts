@@ -1,5 +1,13 @@
 import { expect, test } from "vitest";
-import { factId, makeFact, upsertFacts, factValue, factNumber, factsFor, renameFactSubject } from "./facts.js";
+import {
+  factId,
+  makeFact,
+  upsertFacts,
+  factValue,
+  factNumber,
+  factsFor,
+  renameFactSubject,
+} from "./facts.js";
 import type { LearnedFact } from "./facts.js";
 
 const fact = (over: Partial<LearnedFact> = {}): LearnedFact =>
@@ -14,8 +22,12 @@ const fact = (over: Partial<LearnedFact> = {}): LearnedFact =>
   });
 
 test("factId is stable and case/whitespace-insensitive, so a refresh upserts in place", () => {
-  expect(factId("travel", "Trading 212", "fxFeePct")).toBe(factId("TRAVEL", " trading 212 ", "FxFeePct"));
-  expect(factId("travel", "Revolut", "fxFeePct")).not.toBe(factId("travel", "Trading 212", "fxFeePct"));
+  expect(factId("travel", "Trading 212", "fxFeePct")).toBe(
+    factId("TRAVEL", " trading 212 ", "FxFeePct"),
+  );
+  expect(factId("travel", "Revolut", "fxFeePct")).not.toBe(
+    factId("travel", "Trading 212", "fxFeePct"),
+  );
 });
 
 test("an agent refresh updates its own earlier fact instead of duplicating it", () => {
@@ -43,7 +55,10 @@ test("the owner can still overwrite an agent fact, and his own earlier one", () 
 });
 
 test("factNumber parses a human-typed value but keeps unknown as null", () => {
-  const facts = [fact({ key: "fxFeePct", value: "0,5%" }), fact({ key: "cashbackPct", value: "1" })];
+  const facts = [
+    fact({ key: "fxFeePct", value: "0,5%" }),
+    fact({ key: "cashbackPct", value: "1" }),
+  ];
   expect(factNumber(facts, "travel", "Trading 212", "fxFeePct")).toBe(0.5);
   expect(factNumber(facts, "travel", "Trading 212", "cashbackPct")).toBe(1);
   // Unknown must NOT read as 0 — else an unknown card would rank as the cheapest.
@@ -52,10 +67,21 @@ test("factNumber parses a human-typed value but keeps unknown as null", () => {
 });
 
 test("factValue and factsFor read back what was stored", () => {
-  const facts = upsertFacts([], [fact({ key: "fxFeePct", value: "0" }), fact({ key: "cashbackPct", value: "1" }), fact({ subject: "Revolut", value: "1.2" })]);
+  const facts = upsertFacts(
+    [],
+    [
+      fact({ key: "fxFeePct", value: "0" }),
+      fact({ key: "cashbackPct", value: "1" }),
+      fact({ subject: "Revolut", value: "1.2" }),
+    ],
+  );
   expect(factValue(facts, "travel", "Trading 212", "fxFeePct")).toBe("0");
   expect(factValue(facts, "travel", "Onbekend", "fxFeePct")).toBeNull();
-  expect(factsFor(facts, "travel", "Trading 212").map((f) => f.key).sort()).toEqual(["cashbackPct", "fxFeePct"]);
+  expect(
+    factsFor(facts, "travel", "Trading 212")
+      .map((f) => f.key)
+      .sort(),
+  ).toEqual(["cashbackPct", "fxFeePct"]);
 });
 
 /* --- renameFactSubject: a product name is generated, so it can change, and
@@ -101,6 +127,20 @@ test("renameFactSubject never lets a carried agent fact overwrite the owner's at
 test("renameFactSubject is a no-op for the same name, a blank name, or an unknown subject", () => {
   const facts = [fact()];
   expect(renameFactSubject(facts, "travel", "Trading 212", " trading 212 ")).toHaveLength(1);
-  expect(factValue(renameFactSubject(facts, "travel", "Trading 212", ""), "travel", "Trading 212", "fxFeePct")).toBe("0");
-  expect(factValue(renameFactSubject(facts, "travel", "Knab", "Knab betaalpas"), "travel", "Trading 212", "fxFeePct")).toBe("0");
+  expect(
+    factValue(
+      renameFactSubject(facts, "travel", "Trading 212", ""),
+      "travel",
+      "Trading 212",
+      "fxFeePct",
+    ),
+  ).toBe("0");
+  expect(
+    factValue(
+      renameFactSubject(facts, "travel", "Knab", "Knab betaalpas"),
+      "travel",
+      "Trading 212",
+      "fxFeePct",
+    ),
+  ).toBe("0");
 });

@@ -2,11 +2,22 @@
  * factor twaalf is en op het scherm nergens aan te zien. */
 
 import { describe, it, expect } from "vitest";
-import { minimumCharge, comparableHorizonMonths, MINIMUM_PERIODS, DEFAULT_HORIZON_MONTHS } from "./horizon.js";
+import {
+  minimumCharge,
+  comparableHorizonMonths,
+  MINIMUM_PERIODS,
+  DEFAULT_HORIZON_MONTHS,
+} from "./horizon.js";
 import type { CardFee } from "./types.js";
 
 function fee(value: number, period: "maand" | "jaar"): CardFee {
-  return { value, period, sourceUrl: "https://voorbeeld.nl/tarieven", checkedAt: "2026-01-15", conditions: null };
+  return {
+    value,
+    period,
+    sourceUrl: "https://voorbeeld.nl/tarieven",
+    checkedAt: "2026-01-15",
+    conditions: null,
+  };
 }
 
 describe("de ondergrens", () => {
@@ -24,7 +35,11 @@ describe("de ondergrens", () => {
     /* Nul maanden bestaat niet: er wordt naar boven afgerond op hele jaren, dus
      * ook hier betaal je een heel jaar en niet één termijn. */
     expect(minimumCharge(fee(2.55, "maand"), 0)).toEqual({
-      cents: 3060, periods: 12, label: "12 maanden", spanMonths: 12, spanLabel: "1 jaar",
+      cents: 3060,
+      periods: 12,
+      label: "12 maanden",
+      spanMonths: 12,
+      spanLabel: "1 jaar",
     });
   });
 
@@ -53,7 +68,9 @@ describe("dezelfde eenheid voor élke kaart", () => {
 
   it("spanMonths is gelijk bij een maandkaart en een jaarkaart, bij elke horizon", () => {
     for (const h of [1, 5, 12, 13, 30]) {
-      expect(minimumCharge(fee(9, "maand"), h).spanMonths).toBe(minimumCharge(fee(60, "jaar"), h).spanMonths);
+      expect(minimumCharge(fee(9, "maand"), h).spanMonths).toBe(
+        minimumCharge(fee(60, "jaar"), h).spanMonths,
+      );
     }
   });
 
@@ -73,7 +90,11 @@ describe("een jaarprijs is geen maandprijs", () => {
      * te laag inschatten maakt van een verlies een aanbeveling, en dat is de
      * enige fout in dit bestand die echt geld kost. */
     expect(minimumCharge(fee(270, "jaar"), 1)).toEqual({
-      cents: 27000, periods: 1, label: "1 jaar", spanMonths: 12, spanLabel: "1 jaar",
+      cents: 27000,
+      periods: 1,
+      label: "1 jaar",
+      spanMonths: 12,
+      spanLabel: "1 jaar",
     });
     expect(minimumCharge(fee(270, "jaar"), 1).cents).not.toBe(2250);
   });

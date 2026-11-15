@@ -72,7 +72,8 @@ function pathArea(ops: Op[], view: Viewport): number {
   const flush = () => {
     if (pts.length > 2) {
       let s = 0;
-      for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) s += pts[j][0] * pts[i][1] - pts[i][0] * pts[j][1];
+      for (let i = 0, j = pts.length - 1; i < pts.length; j = i++)
+        s += pts[j][0] * pts[i][1] - pts[i][0] * pts[j][1];
       total += Math.abs(s) / 2;
     }
     pts = [];
@@ -300,9 +301,7 @@ test("een ring die half achter de bol zit wordt op de rand afgekapt en met een b
 test("een lijn wordt op de rand afgekapt en niet gesloten", () => {
   const f = globeFrame({ lon: 0, lat: 0 }, VIEW);
   const { ops, sink } = recorder();
-  const meridiaan = prepareRing(
-    Array.from({ length: 37 }, (_, i) => [80, -90 + i * 5] as const),
-  );
+  const meridiaan = prepareRing(Array.from({ length: 37 }, (_, i) => [80, -90 + i * 5] as const));
   expect(traceLine(meridiaan, f, sink)).toBe(true);
   expect(ops.some((o) => o.op === "closePath")).toBe(false);
   expect(ops.some((o) => o.op === "arc")).toBe(false);

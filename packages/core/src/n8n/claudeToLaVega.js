@@ -81,9 +81,10 @@
  * @property {string} subject
  * @property {string} from
  * @property {string} receivedAt
- * @property {'notification'|'reminder'|'no-amount'|'unreadable'} kind
+ * @property {'notification'|'reminder'|'no-amount'|'unreadable'|'forwarding-confirmation'|'setup-test'} kind
  * @property {string} reason
  * @property {string} mailUrl
+ * @property {string} [code]   alleen bij de twee setup-soorten: cijfers resp. vier tekens
  * @property {string} [deliveredTo]
  * @property {string} [queueKey]
  * @property {'passed'|'failed'|'unknown'} [senderCheck]
@@ -98,7 +99,7 @@
  * @returns {string}
  */
 function gmailUrl(messageId) {
-  return messageId ? 'https://mail.google.com/mail/u/0/#all/' + messageId : '';
+  return messageId ? "https://mail.google.com/mail/u/0/#all/" + messageId : "";
 }
 
 /**
@@ -111,7 +112,7 @@ function gmailUrl(messageId) {
  * @returns {string}
  */
 function mailUrlFor(msg) {
-  return msg.source === 'gmail' ? gmailUrl(String(msg.messageId || '')) : '';
+  return msg.source === "gmail" ? gmailUrl(String(msg.messageId || "")) : "";
 }
 
 /**
@@ -126,21 +127,22 @@ function mailUrlFor(msg) {
  * @returns {Provenance}
  */
 function provenanceOf(msg) {
-  const deliveredTo = typeof msg.deliveredTo === 'string' ? msg.deliveredTo.trim() : '';
+  const deliveredTo = typeof msg.deliveredTo === "string" ? msg.deliveredTo.trim() : "";
   if (!deliveredTo) return {};
   const checks = /** @type {Record<string, unknown>} */ (
-    msg.senderChecks && typeof msg.senderChecks === 'object' ? msg.senderChecks : {}
+    msg.senderChecks && typeof msg.senderChecks === "object" ? msg.senderChecks : {}
   );
   return {
     deliveredTo: deliveredTo.slice(0, 200),
-    queueKey: String(msg.queueKey || '').slice(0, 120),
+    queueKey: String(msg.queueKey || "").slice(0, 120),
     // 'passed' betekent: het domein van de afzender doorstond SPF of DKIM. Het
     // betekent NIET dat de factuur echt is, en LaVega mag dat ook niet zeggen.
-    senderCheck: msg.senderCheck === 'passed' || msg.senderCheck === 'failed' ? msg.senderCheck : 'unknown',
+    senderCheck:
+      msg.senderCheck === "passed" || msg.senderCheck === "failed" ? msg.senderCheck : "unknown",
     senderChecks: {
-      spf: String(checks.spf || 'unknown'),
-      dkim: String(checks.dkim || 'unknown'),
-      dmarc: String(checks.dmarc || 'unknown'),
+      spf: String(checks.spf || "unknown"),
+      dkim: String(checks.dkim || "unknown"),
+      dmarc: String(checks.dmarc || "unknown"),
     },
   };
 }
@@ -150,7 +152,7 @@ function provenanceOf(msg) {
  * @returns {number|null}
  */
 function toCents(v) {
-  return typeof v === 'number' && isFinite(v) ? Math.round(v * 100) : null;
+  return typeof v === "number" && isFinite(v) ? Math.round(v * 100) : null;
 }
 
 /**
@@ -158,7 +160,7 @@ function toCents(v) {
  * @returns {string|null}
  */
 function toIsoDate(v) {
-  return typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : null;
+  return typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : null;
 }
 
 /**
@@ -167,7 +169,7 @@ function toIsoDate(v) {
  * @returns {string|null}
  */
 function toText(v, max) {
-  return typeof v === 'string' && v.trim() ? v.trim().slice(0, max) : null;
+  return typeof v === "string" && v.trim() ? v.trim().slice(0, max) : null;
 }
 
 /**
@@ -178,13 +180,13 @@ function toText(v, max) {
  * @returns {Record<string, unknown>|null}
  */
 function parseModelJson(text) {
-  if (typeof text !== 'string') return null;
+  if (typeof text !== "string") return null;
   const match = text.match(/\{[\s\S]*\}/);
   if (!match) return null;
   try {
     const parsed = JSON.parse(match[0]);
-    return parsed && typeof parsed === 'object' ? parsed : null;
-  } catch (e) {
+    return parsed && typeof parsed === "object" ? parsed : null;
+  } catch {
     return null;
   }
 }
@@ -198,10 +200,16 @@ function parseModelJson(text) {
  */
 function modelKind(parsed) {
   const kind = parsed.kind;
-  if (kind === 'invoice' || kind === 'notification' || kind === 'reminder' || kind === 'receipt' || kind === 'other') {
+  if (
+    kind === "invoice" ||
+    kind === "notification" ||
+    kind === "reminder" ||
+    kind === "receipt" ||
+    kind === "other"
+  ) {
     return kind;
   }
-  return parsed.isInvoice === true ? 'invoice' : 'other';
+  return parsed.isInvoice === true ? "invoice" : "other";
 }
 
 /**
@@ -213,7 +221,9 @@ function modelKind(parsed) {
  * @returns {{ invoice: QueueInvoice|null, notice: QueueNotice|null, dropped: string|null }}
  */
 function toQueueEntry(msg, parsed) {
-  const provenance = provenanceOf(/** @type {Record<string, unknown>} */ (/** @type {unknown} */ (msg)));
+  const provenance = provenanceOf(
+    /** @type {Record<string, unknown>} */ (/** @type {unknown} */ (msg)),
+  );
 
   if (!parsed) {
     return {
@@ -222,11 +232,11 @@ function toQueueEntry(msg, parsed) {
         /** @type {QueueNotice} */ ({
           source: msg.source,
           messageId: msg.messageId,
-          subject: String(msg.subject || '').slice(0, 200),
-          from: String(msg.from || '').slice(0, 200),
-          receivedAt: String(msg.date || ''),
-          kind: 'unreadable',
-          reason: 'Het model gaf geen leesbaar antwoord over deze mail. Kijk er zelf even naar.',
+          subject: String(msg.subject || "").slice(0, 200),
+          from: String(msg.from || "").slice(0, 200),
+          receivedAt: String(msg.date || ""),
+          kind: "unreadable",
+          reason: "Het model gaf geen leesbaar antwoord over deze mail. Kijk er zelf even naar.",
           mailUrl: mailUrlFor(msg),
         }),
         provenance,
@@ -244,9 +254,9 @@ function toQueueEntry(msg, parsed) {
       {
         source: msg.source,
         messageId: msg.messageId,
-        subject: String(msg.subject || '').slice(0, 200),
-        from: String(msg.from || '').slice(0, 200),
-        receivedAt: String(msg.date || ''),
+        subject: String(msg.subject || "").slice(0, 200),
+        from: String(msg.from || "").slice(0, 200),
+        receivedAt: String(msg.date || ""),
         kind: k,
         reason: reason,
         mailUrl: mailUrlFor(msg),
@@ -255,22 +265,36 @@ function toQueueEntry(msg, parsed) {
     );
   };
 
-  if (kind === 'notification') {
-    return { invoice: null, notice: notice('notification', note || 'Deze mail meldt een factuur die er niet in staat; haal hem zelf op.'), dropped: null };
+  if (kind === "notification") {
+    return {
+      invoice: null,
+      notice: notice(
+        "notification",
+        note || "Deze mail meldt een factuur die er niet in staat; haal hem zelf op.",
+      ),
+      dropped: null,
+    };
   }
-  if (kind === 'reminder') {
+  if (kind === "reminder") {
     // Een aanmaning NOEMT vaak het bedrag. Boeken we hem, dan staat dezelfde
     // factuur twee keer in de boekhouding — dedup gaat op messageId en die is
     // anders. Dus: melding, en de eigenaar kijkt zelf of hij hem al heeft.
-    return { invoice: null, notice: notice('reminder', note || 'Herinnering of aanmaning: controleer of deze factuur al in LaVega staat.'), dropped: null };
+    return {
+      invoice: null,
+      notice: notice(
+        "reminder",
+        note || "Herinnering of aanmaning: controleer of deze factuur al in LaVega staat.",
+      ),
+      dropped: null,
+    };
   }
-  if (kind === 'receipt') {
+  if (kind === "receipt") {
     // Al betaald, dus het staat al in de bankafschriften. Als verwachte factuur
     // inboeken zou het bedrag dubbel in de prognose zetten.
-    return { invoice: null, notice: null, dropped: 'betaalbewijs' };
+    return { invoice: null, notice: null, dropped: "betaalbewijs" };
   }
-  if (kind !== 'invoice' || parsed.isInvoice !== true) {
-    return { invoice: null, notice: null, dropped: 'geen factuur' };
+  if (kind !== "invoice" || parsed.isInvoice !== true) {
+    return { invoice: null, notice: null, dropped: "geen factuur" };
   }
 
   const amountCents = toCents(parsed.amount);
@@ -279,33 +303,40 @@ function toQueueEntry(msg, parsed) {
     // stil weggooien: dan lijkt een gemiste factuur op geen factuur.
     return {
       invoice: null,
-      notice: notice('no-amount', note || 'Het model herkende een factuur maar las er geen bedrag in. Zoek het bedrag zelf op.'),
+      notice: notice(
+        "no-amount",
+        note ||
+          "Het model herkende een factuur maar las er geen bedrag in. Zoek het bedrag zelf op.",
+      ),
       dropped: null,
     };
   }
 
   const currency = toText(parsed.currency, 3);
   return {
-    invoice: Object.assign(/** @type {QueueInvoice} */ ({
-      source: msg.source,
-      messageId: msg.messageId,
-      subject: String(msg.subject || '').slice(0, 200),
-      // De afzender stond tot nu toe alleen op een MELDING. Op een factuurregel
-      // hoort hij ook: bij een doorstuuradres is "wie stuurde dit" het enige
-      // waarmee hij een regel kan beoordelen die hij niet verwachtte.
-      from: String(msg.from || '').slice(0, 200),
-      invoiceNumber: toText(parsed.invoiceNumber, 60),
-      issueDate: toIsoDate(parsed.issueDate),
-      dueDate: toIsoDate(parsed.dueDate),
-      amountCents: amountCents,
-      vatCents: toCents(parsed.vatAmount),
-      // Geen valuta gelezen? Dan null, nooit stilzwijgend 'EUR' — zie de
-      // systeemprompt en de Grenzen in FACTUREN.md.
-      currency: currency && /^[A-Za-z]{3}$/.test(currency) ? currency.toUpperCase() : null,
-      counterparty: toText(parsed.counterparty, 120),
-      direction: parsed.direction === 'income' ? 'income' : 'expense',
-      note: note || undefined,
-    }), provenance),
+    invoice: Object.assign(
+      /** @type {QueueInvoice} */ ({
+        source: msg.source,
+        messageId: msg.messageId,
+        subject: String(msg.subject || "").slice(0, 200),
+        // De afzender stond tot nu toe alleen op een MELDING. Op een factuurregel
+        // hoort hij ook: bij een doorstuuradres is "wie stuurde dit" het enige
+        // waarmee hij een regel kan beoordelen die hij niet verwachtte.
+        from: String(msg.from || "").slice(0, 200),
+        invoiceNumber: toText(parsed.invoiceNumber, 60),
+        issueDate: toIsoDate(parsed.issueDate),
+        dueDate: toIsoDate(parsed.dueDate),
+        amountCents: amountCents,
+        vatCents: toCents(parsed.vatAmount),
+        // Geen valuta gelezen? Dan null, nooit stilzwijgend 'EUR' — zie de
+        // systeemprompt en de Grenzen in FACTUREN.md.
+        currency: currency && /^[A-Za-z]{3}$/.test(currency) ? currency.toUpperCase() : null,
+        counterparty: toText(parsed.counterparty, 120),
+        direction: parsed.direction === "income" ? "income" : "expense",
+        note: note || undefined,
+      }),
+      provenance,
+    ),
     notice: null,
     dropped: null,
   };
@@ -323,15 +354,53 @@ function noticeForUnreadable(msg) {
     /** @type {QueueNotice} */ ({
       source: msg.source,
       messageId: msg.messageId,
-      subject: String(msg.subject || '').slice(0, 200),
-      from: String(msg.from || '').slice(0, 200),
-      receivedAt: String(msg.date || ''),
-      kind: 'unreadable',
-      reason: (msg.reason || 'Er viel niets uit deze mail te lezen.') + ' Open hem zelf.',
+      subject: String(msg.subject || "").slice(0, 200),
+      from: String(msg.from || "").slice(0, 200),
+      receivedAt: String(msg.date || ""),
+      kind: "unreadable",
+      reason: (msg.reason || "Er viel niets uit deze mail te lezen.") + " Open hem zelf.",
       mailUrl: mailUrlFor(msg),
     }),
     provenanceOf(/** @type {Record<string, unknown>} */ (/** @type {unknown} */ (msg))),
   );
 }
 
-export { gmailUrl, mailUrlFor, provenanceOf, parseModelJson, modelKind, toQueueEntry, noticeForUnreadable };
+/**
+ * Een setup-mail (Gmail-bevestiging of testmail) als melding: ALLEEN soort en
+ * code. Onderwerp en afzender blijven leeg met opzet: het onderwerp van Gmails
+ * bevestiging bevat het Gmail-adres van de eigenaar, en wat niet nodig is gaat
+ * niet mee. `messageId` valt terug op soort+code, want `addToQueue` slaat een
+ * melding zonder id stilzwijgend over (queue.js) en dan wacht de handleiding
+ * eeuwig.
+ * @param {{source: string, messageId: string, date: string, setup: {kind: 'forwarding-confirmation'|'setup-test', code: string}} & ProvenanceInput} msg
+ * @returns {QueueNotice}
+ */
+function noticeForSetup(msg) {
+  const kind = msg.setup.kind;
+  const code = String(msg.setup.code);
+  return Object.assign(
+    /** @type {QueueNotice} */ ({
+      source: msg.source,
+      messageId: msg.messageId || "setup-" + kind + "-" + code,
+      subject: "",
+      from: "",
+      receivedAt: String(msg.date || ""),
+      kind: kind,
+      code: code,
+      reason: "",
+      mailUrl: "",
+    }),
+    provenanceOf(/** @type {Record<string, unknown>} */ (/** @type {unknown} */ (msg))),
+  );
+}
+
+export {
+  gmailUrl,
+  mailUrlFor,
+  provenanceOf,
+  parseModelJson,
+  modelKind,
+  toQueueEntry,
+  noticeForUnreadable,
+  noticeForSetup,
+};

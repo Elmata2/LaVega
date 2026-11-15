@@ -27,7 +27,7 @@ const MAX_TRACKED = 60;
  *               n8n workflow (`ingestCardTerms`). The most precise thing there is.
  *  · comparison — bank.nl's koersopslag table. One step removed from the source,
  *               but curated, dated, and it covers banks that block us outright.
- *  · agent    — Claude + web search. Last, because its weak step was never
+ *  · agent    — Mistral + web search. Last, because its weak step was never
  *               reading a tariff but FINDING one: Revolut kept coming back empty
  *               while ING, ABN and Amex succeeded.
  *
@@ -61,19 +61,35 @@ function fresh(e: Entry | undefined): boolean {
   return e != null && Date.now() - e.at < TTL_MS;
 }
 
+/** A field is unstated whether the JS caller left the key out entirely
+ *  (`undefined`) or an external JSON body carried it as `null` — the ingest
+ *  route casts an n8n-supplied body straight through (`body.terms as never`),
+ *  bypassing the type checker, and a template that has nothing to put in a
+ *  field commonly emits `null` there rather than omitting the key. Both must
+ *  read as "not stated", never as a value, or a boundary-crossing `null`
+ *  would overwrite a figure another source already established. */
+function isStated(v: unknown): boolean {
+  return v !== undefined && v !== null;
+}
+
 /** Does this reply contain anything we can actually rank with? A note alone is
  *  not an answer — the ranking needs a number. */
 function usable(t: ProviderTerms): boolean {
-  return t.fxFeePct !== undefined || t.convertFeePct !== undefined || t.cashbackPct !== undefined
-    || t.pointsPerEuro !== undefined || t.transferFreeViaIdeal !== undefined;
+  return (
+    isStated(t.fxFeePct) ||
+    isStated(t.convertFeePct) ||
+    isStated(t.cashbackPct) ||
+    isStated(t.pointsPerEuro) ||
+    isStated(t.topUpFree)
+  );
 }
 
-/** Drop keys whose value is `undefined` — the lookup builds every field and
- *  leaves the unverified ones undefined, and "unverified" must not erase a
- *  figure another source already established. */
+/** Drop keys that are not stated (see `isStated`) — the lookup builds every
+ *  field and leaves the unverified ones unstated, and "unverified" must not
+ *  erase a figure another source already established. */
 function stated(t: ProviderTerms): Partial<ProviderTerms> {
   const out: Record<string, unknown> = {};
-  for (const [k, v] of Object.entries(t)) if (v !== undefined) out[k] = v;
+  for (const [k, v] of Object.entries(t)) if (isStated(v)) out[k] = v;
   return out as Partial<ProviderTerms>;
 }
 
@@ -102,9 +118,10 @@ function figureDate(e: Entry): number {
 
 function write(key: string, terms: ProviderTerms, source: TermsSource): boolean {
   const prev = cache.get(key);
-  const incomingDate = terms.checkedAt && Number.isFinite(Date.parse(terms.checkedAt))
-    ? Date.parse(terms.checkedAt)
-    : Date.now();
+  const incomingDate =
+    terms.checkedAt && Number.isFinite(Date.parse(terms.checkedAt))
+      ? Date.parse(terms.checkedAt)
+      : Date.now();
   // Age beats precision once the gap is wide enough. Without this the ladder
   // says a tidy source wins forever, and a stale figure freezes in place -
   // which is exactly how bank.nl's January table would have overwritten a
@@ -135,7 +152,7 @@ function write(key: string, terms: ProviderTerms, source: TermsSource): boolean 
   // opgezocht op 15 jan 2026" about something minutes old. A source that states
   // no date is as of now, which `at` already records.
   const merged = prev ? { ...prev.terms, ...stated(terms) } : { ...terms };
-  if (terms.checkedAt === undefined) delete merged.checkedAt;
+  if (!isStated(terms.checkedAt)) delete merged.checkedAt;
   cache.set(key, { terms: merged, at: Date.now(), source });
   return true;
 }
@@ -162,14 +179,50 @@ function incomplete(e: Entry): boolean {
   return e.terms.cashbackPct === undefined || e.terms.convertFeePct === undefined;
 }
 
-function startLookup(provider: string, base: Omit<TravelInput, "providers">, apiKey: string, deps: Deps): void {
+/** Test seam: resolves once every background lookup queued so far has finished.
+ *  The tests used to wait one macrotask tick, which worked while the lookups
+ *  were detached and independent. Chained, that is a guess about how many
+ *  microtask hops a run takes. Awaiting the chain itself is exact. */
+export function awaitLookups(): Promise<void> {
+  return queue;
+}
+
+/* The serial chain every background lookup joins. Rejections are swallowed so
+ * one failed lookup cannot break the chain for the ones behind it; each link
+ * already logs its own failure. */
+let queue: Promise<void> = Promise.resolve();
+
+function startLookup(
+  provider: string,
+  base: Omit<TravelInput, "providers">,
+  apiKey: string,
+  deps: Deps,
+): void {
   const key = keyOf(provider, base.homeCountry, base.currency);
   const held = cache.get(key);
   if (inFlight.has(key) || (fresh(held) && !incomplete(held as Entry))) return;
   inFlight.add(key);
-  void (async () => {
+  /* ONE AT A TIME, ON PURPOSE.
+   *
+   * These used to fire together, up to MAX_PROVIDERS of them from a single
+   * request. Each lookup checks the spend cap before it calls, but twelve
+   * concurrent checks all read the ledger before any of them has written to
+   * it, so every one is admitted and the cap is decided by a number that is
+   * already stale. A review measured it: 240 concurrent lookups were all
+   * admitted against a one-cent cap and landed EUR 14.39 past it.
+   *
+   * Chaining them is the smallest change that makes the gate real, because
+   * each lookup's check now sees the previous one's recorded spend and the
+   * run stops when the cap is reached. Nobody waits on these anyway: the
+   * request has already returned what it had, and a lookup takes 40s to 5min,
+   * so serial is the right shape for them regardless of cost. */
+  queue = queue.then(async () => {
     try {
-      const found = await (deps.lookup ?? lookupProviderTerms)({ ...base, providers: [provider] }, apiKey);
+      const found = await (deps.lookup ?? lookupProviderTerms)(
+        { ...base, providers: [provider] },
+        apiKey,
+        { userId: deps.userId },
+      );
       // Only cache an answer that actually carries a NUMBER. A reply with just
       // a note ("couldn't verify — the search tool hit its limit") is a failed
       // lookup wearing an answer's clothes; caching it for a week would lock in
@@ -180,16 +233,21 @@ function startLookup(provider: string, base: Omit<TravelInput, "providers">, api
       // must not be re-asked on every request for the rest of the TTL.
       const after = cache.get(key);
       if (after) cache.set(key, { ...after, agentTried: true });
-    } catch {
-      /* stays unknown; the UI says so and the owner can correct it */
+    } catch (e) {
+      // Stays unknown; the UI says so and the owner can correct it. Logged
+      // (not surfaced) so a run of upstream failures is visible in the
+      // server log without ever putting Mistral's raw error text in front
+      // of the user, who never sees this lookup fail — only "unknown".
+      console.error(`agent/travel-facts: ${e instanceof Error ? e.message : String(e)}`);
     } finally {
       inFlight.delete(key);
     }
-  })();
+  });
+  queue = queue.catch(() => {});
 }
 
 /** Fill the gaps from the bank.nl comparison table — ONE HTTP GET covering
- *  seven Dutch banks and both card kinds, against a Claude+search lookup per
+ *  seven Dutch banks and both card kinds, against a Mistral+search lookup per
  *  provider that takes 40s-5min and fails outright on the sites behind
  *  Cloudflare. Runs in the background like `startLookup`, and for the same
  *  reason: the request must not wait on it.
@@ -199,7 +257,11 @@ function startLookup(provider: string, base: Omit<TravelInput, "providers">, api
  *  koersopslag to compare. Only the gaps are filled: an entry that is already
  *  fresh has already been answered, and if it later expires it becomes a gap
  *  and gets the comparison figure then. */
-function startComparisonFill(gaps: string[], base: Omit<TravelInput, "providers">, deps: Deps): void {
+function startComparisonFill(
+  gaps: string[],
+  base: Omit<TravelInput, "providers">,
+  deps: Deps,
+): void {
   const load = deps.comparison;
   if (!load || gaps.length === 0) return;
   if (base.homeCountry !== "NL" || base.currency === "EUR") return;
@@ -214,7 +276,8 @@ function startComparisonFill(gaps: string[], base: Omit<TravelInput, "providers"
         // A bank this page says nothing about, or a card kind it never priced,
         // returns null and stays UNKNOWN. Never a zero, never the other card's
         // figure — that is what makes the ranking trustworthy.
-        if (found) write(keyOf(found.provider, base.homeCountry, base.currency), found, "comparison");
+        if (found)
+          write(keyOf(found.provider, base.homeCountry, base.currency), found, "comparison");
       }
     } catch {
       /* the comparison stays unknown; the agent lookup still runs alongside */
@@ -229,6 +292,8 @@ export type Deps = {
   /** The bank.nl comparison table. Injected rather than imported so a test can
    *  never reach the network, and so the layer can simply be absent. */
   comparison?: () => Promise<BankNlTable>;
+  /** Session user charged for the model calls this request starts. */
+  userId?: string;
 };
 
 export type CardTermsResult = {
@@ -369,4 +434,9 @@ export function resetCardTerms(): void {
   cache.clear();
   inFlight.clear();
   comparisonInFlight.clear();
+  /* The lookup chain is module state too. Without this a test that leaves a
+   * lookup pending blocks every later `awaitLookups()` forever, which is a
+   * test-only hazard but an instructive one: the same chain couples every
+   * background lookup in a process to the slowest one ahead of it. */
+  queue = Promise.resolve();
 }

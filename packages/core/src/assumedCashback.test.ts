@@ -1,5 +1,10 @@
 import { describe, expect, test } from "vitest";
-import { cashbackPctOf, describeHeldCashback, heldCashbackOf, type HeldCashback } from "./assumedCashback.js";
+import {
+  cashbackPctOf,
+  describeHeldCashback,
+  heldCashbackOf,
+  type HeldCashback,
+} from "./assumedCashback.js";
 
 /* DE EIGEN KAARTEN, en hoe hard we hun cashback kennen (app review 4, punt 22).
  *
@@ -25,23 +30,38 @@ describe("heldCashbackOf", () => {
       assumptionOn: true,
     });
     expect(k).toEqual({ tier: "gemeten", pct: 1.5, source: "user", updatedAt: "2026-08-21" });
-    expect(describeHeldCashback(k)).toBe("1,5%, door jou ingesteld op 2026-08-21");
+    expect(describeHeldCashback(k)).toEqual({
+      kind: "measured",
+      pct: 1.5,
+      source: "user",
+      updatedAt: "2026-08-21",
+    });
   });
 
-  test("een feit van de reisagent wint óók, maar zegt op het scherm wie het vond", () => {
+  test("een feit van de reisagent wint óók, en draagt zijn eigen bron mee", () => {
     const k = heldCashbackOf({
       ...ing,
       fact: { pct: 0.5, source: "agent", updatedAt: "2026-03-02" },
       assumptionOn: true,
     });
-    expect(describeHeldCashback(k)).toBe("0,5%, gevonden door de reisagent op 2026-03-02");
+    expect(describeHeldCashback(k)).toEqual({
+      kind: "measured",
+      pct: 0.5,
+      source: "agent",
+      updatedAt: "2026-03-02",
+    });
   });
 
   test("een gewone ING-pas zonder feit is AANGENOMEN nul, met het woord erbij", () => {
-    const k = heldCashbackOf({ ...ing, fact: null, assumptionOn: true, lastCheckedAt: "2026-06-15" });
+    const k = heldCashbackOf({
+      ...ing,
+      fact: null,
+      assumptionOn: true,
+      lastCheckedAt: "2026-06-15",
+    });
     expect(k.tier).toBe("aangenomen");
     expect(cashbackPctOf(k)).toBe(0);
-    expect(describeHeldCashback(k)).toContain("aangenomen: geen cashback");
+    expect(describeHeldCashback(k)).toEqual({ kind: "assumed-no-cashback" });
   });
 
   test("met de schakelaar uit is het antwoord onbekend, en de melding noemt de schakelaar", () => {
@@ -51,7 +71,7 @@ describe("heldCashbackOf", () => {
     const k = heldCashbackOf({ ...ing, fact: null, assumptionOn: false });
     expect(k).toEqual({ tier: "uitgezet" });
     expect(cashbackPctOf(k)).toBeNull();
-    expect(describeHeldCashback(k)).toContain("uitgezet");
+    expect(describeHeldCashback(k)).toEqual({ kind: "assumption-off" });
   });
 
   test("de schakelaar raakt alleen de aanname, nooit een gemeten cijfer", () => {
@@ -84,7 +104,10 @@ describe("cashbackPctOf", () => {
   test("alleen gemeten en aangenomen leveren een getal", () => {
     const cases: [HeldCashback, number | null][] = [
       [{ tier: "gemeten", pct: 2, source: "agent", updatedAt: "2026-01-01" }, 2],
-      [{ tier: "aangenomen", pct: 0, issuerFamily: "ING", kind: "betaalpas", lastCheckedAt: null }, 0],
+      [
+        { tier: "aangenomen", pct: 0, issuerFamily: "ING", kind: "betaalpas", lastCheckedAt: null },
+        0,
+      ],
       [{ tier: "onbekend", reason: "soort-onbekend" }, null],
       [{ tier: "uitgezet" }, null],
     ];

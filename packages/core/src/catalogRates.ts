@@ -37,17 +37,22 @@ export type CatalogueEntryLike = {
  *  Dutch DGS") down to the name a saver would recognise, which is also the name
  *  the comparison scrape uses. */
 export function issuerToBank(issuer: string): string {
-  return issuer
-    .split(/[—–(;]/)[0]
-    // Trailing legal form only. `\b` cannot follow "N.V." — a period is not a word
-    // character — so these are anchored to the end instead, which is where they
-    // sit anyway.
-    .replace(/\s+(N\.?V\.?|B\.?V\.?|S\.?A\.?|A\.?S\.?|U\.?A\.?|AG|SA|AB|AS|UAB|GmbH|Ltd\.?|Limited|PLC|SE)\s*$/i, "")
-    // NOT the word "Bank". "Triodos Bank" and "DHB Bank" are how the comparison
-    // table names them and how a saver would recognise them; stripping it would
-    // turn a correct match into a mismatch for the sake of one that already works.
-    .replace(/\s+/g, " ")
-    .trim();
+  return (
+    issuer
+      .split(/[—–(;]/)[0]
+      // Trailing legal form only. `\b` cannot follow "N.V." — a period is not a word
+      // character — so these are anchored to the end instead, which is where they
+      // sit anyway.
+      .replace(
+        /\s+(N\.?V\.?|B\.?V\.?|S\.?A\.?|A\.?S\.?|U\.?A\.?|AG|SA|AB|AS|UAB|GmbH|Ltd\.?|Limited|PLC|SE)\s*$/i,
+        "",
+      )
+      // NOT the word "Bank". "Triodos Bank" and "DHB Bank" are how the comparison
+      // table names them and how a saver would recognise them; stripping it would
+      // turn a correct match into a mismatch for the sake of one that already works.
+      .replace(/\s+/g, " ")
+      .trim()
+  );
 }
 
 /** Drop the bank's own name from the front of a product name, so "ABN AMRO Direct
@@ -68,7 +73,10 @@ export function productWithoutBank(product: string, bank: string): string {
     const next = p.charAt(prefix.length);
     const boundary = next === "" || /[\s-–—]/.test(next);
     if (p.toLowerCase().startsWith(prefix.toLowerCase()) && p.length > prefix.length && boundary) {
-      const rest = p.slice(prefix.length).replace(/^[\s-–—]+/, "").trim();
+      const rest = p
+        .slice(prefix.length)
+        .replace(/^[\s-–—]+/, "")
+        .trim();
       if (rest) return rest;
     }
   }
@@ -100,7 +108,8 @@ const NOT_THE_STANDING_RATE = /not the standing rate|do not serve [^ ]+ bare/i;
  *  de tabel voor de Welkom Spaarrekening, NIET voor de Nexent Bank Spaarrekening"
  *  — a sentence about a different product, which the old note regex printed as
  *  this product's promo. */
-const PROMO_SENTENCE = /Actierente\s+([\d]+(?:[.,]\d+)?)\s*%[^.]*?\bdaarna\s+([\d]+(?:[.,]\d+)?)\s*%[^.]*\./i;
+const PROMO_SENTENCE =
+  /Actierente\s+([\d]+(?:[.,]\d+)?)\s*%[^.]*?\bdaarna\s+([\d]+(?:[.,]\d+)?)\s*%[^.]*\./i;
 
 const asPct = (s: string): number => Number(s.replace(",", "."));
 
@@ -397,7 +406,13 @@ export function lastTermsCheckedForIssuer(
 export function cashbackKnowledgeOfEntry(entry: CatalogueEntryLike): CashbackKnowledge {
   const v = entry.fields?.cashbackPct;
   if (isCovered(v) && v) {
-    return { tier: "gemeten", pct: v.value, sourceUrl: v.sourceUrl, asOf: v.checkedAt, conditions: v.conditions };
+    return {
+      tier: "gemeten",
+      pct: v.value,
+      sourceUrl: v.sourceUrl,
+      asOf: v.checkedAt,
+      conditions: v.conditions,
+    };
   }
   return assumeNoCashback({
     issuer: entry.issuer ?? "",

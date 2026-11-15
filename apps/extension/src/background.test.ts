@@ -23,9 +23,15 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { AMEX_MATCH } from "./amex.js";
 import { ING_MATCH } from "./ing.js";
+import { SITES } from "./sites.js";
 
 const FIXTURES = join(dirname(fileURLToPath(import.meta.url)), "__fixtures__");
-const KASSA_MATCH = "<all_urls>";
+/* De enige winkel in sites.ts. De test leest hem uit die lijst en schrijft het
+ * patroon niet over: een test die zijn eigen "<all_urls>" of IKEA-patroon
+ * meebrengt, blijft groen als de lijst verandert — en dan bewijst hij niets. */
+const IKEA = SITES[0]!;
+const KASSA_ID = `paneel-${IKEA.id}`;
+const KASSA_MATCH = IKEA.match;
 
 type Injectie = { target: { tabId: number }; func: (...a: never[]) => unknown; args?: unknown[] };
 
@@ -69,7 +75,8 @@ const luister = {
     onChanged: { addListener: (cb: never) => luister.opslagWijziging.push(cb) },
   },
   permissions: {
-    contains: async (p: { origins?: string[] }) => (p.origins ?? []).every((o) => toegestaan.has(o)),
+    contains: async (p: { origins?: string[] }) =>
+      (p.origins ?? []).every((o) => toegestaan.has(o)),
     request: async () => true,
     remove: async (p: { origins?: string[] }) => {
       for (const o of p.origins ?? []) toegestaan.delete(o);
@@ -170,7 +177,7 @@ describe("welk script waar geregistreerd staat", () => {
     expect(scripts.map((s) => s.js?.[0])).toEqual(["aanbod-content.js"]);
 
     reset();
-    opslag.set("kassaOveralAan", true);
+    opslag.set("enabledSiteIds", [IKEA.id]);
     toegestaan.add(KASSA_MATCH);
     await sync();
     expect(scripts.map((s) => s.js?.[0])).toEqual(["content.js"]);
@@ -188,25 +195,25 @@ describe("welk script waar geregistreerd staat", () => {
   });
 });
 
-describe("de brede kassa-toestemming heeft twee onafhankelijke schakelaars", () => {
+describe("de kassa-toestemming is per winkel, met twee onafhankelijke schakelaars", () => {
   it("registreert niets als het vinkje aan staat maar de toestemming ontbreekt", async () => {
-    opslag.set("kassaOveralAan", true);
+    opslag.set("enabledSiteIds", [IKEA.id]);
     await sync();
-    expect(scripts.some((s) => s.id === "paneel-kassa-overal")).toBe(false);
+    expect(scripts.some((s) => s.id === KASSA_ID)).toBe(false);
   });
 
   it("registreert niets als de toestemming er is maar het vinkje uit staat", async () => {
     toegestaan.add(KASSA_MATCH);
-    opslag.set("kassaOveralAan", false);
+    opslag.set("enabledSiteIds", []);
     await sync();
-    expect(scripts.some((s) => s.id === "paneel-kassa-overal")).toBe(false);
+    expect(scripts.some((s) => s.id === KASSA_ID)).toBe(false);
   });
 
-  it("registreert <all_urls> zodra beide aan staan", async () => {
+  it("registreert het site-patroon uit sites.ts zodra beide aan staan", async () => {
     toegestaan.add(KASSA_MATCH);
-    opslag.set("kassaOveralAan", true);
+    opslag.set("enabledSiteIds", [IKEA.id]);
     await sync();
-    const kassa = scripts.find((s) => s.id === "paneel-kassa-overal");
+    const kassa = scripts.find((s) => s.id === KASSA_ID);
     expect(kassa?.matches).toEqual([KASSA_MATCH]);
     expect(kassa?.js).toEqual(["content.js"]);
     /* Regressietest voor het paneel-botsingprobleem: zonder deze uitsluiting
@@ -214,18 +221,35 @@ describe("de brede kassa-toestemming heeft twee onafhankelijke schakelaars", () 
     expect(kassa?.excludeMatches).toEqual([AMEX_MATCH, ING_MATCH]);
   });
 
+  it("registreert NOOIT <all_urls> — dat was de M14-fout", async () => {
+    /* De brede toestemming liet de worker elke https-pagina lezen. Nu komt het
+     * patroon uit sites.ts en nergens anders; deze test houdt dat tegen. */
+    toegestaan.add(KASSA_MATCH);
+    opslag.set("enabledSiteIds", [IKEA.id]);
+    await sync();
+    expect(scripts.map((s) => s.matches?.[0])).not.toContain("<all_urls>");
+  });
+
+  it("zet een id dat niet in SITES staat niet om in een registratie", async () => {
+    /* Een kapotte schrijfactie mag geen extra leestoestemming opleveren. */
+    toegestaan.add(KASSA_MATCH);
+    opslag.set("enabledSiteIds", ["kassa-overal", "onbekende-winkel"]);
+    await sync();
+    expect(scripts).toEqual([]);
+  });
+
   it("haalt de registratie weg en zet het vinkje uit zodra de toestemming wordt ingetrokken", async () => {
     toegestaan.add(KASSA_MATCH);
-    opslag.set("kassaOveralAan", true);
+    opslag.set("enabledSiteIds", [IKEA.id]);
     await sync();
-    expect(scripts.some((s) => s.id === "paneel-kassa-overal")).toBe(true);
+    expect(scripts.some((s) => s.id === KASSA_ID)).toBe(true);
 
     toegestaan.delete(KASSA_MATCH);
     for (const cb of luister.verwijderd) cb();
     for (let i = 0; i < 20; i++) await Promise.resolve();
 
-    expect(scripts.some((s) => s.id === "paneel-kassa-overal")).toBe(false);
-    expect(opslag.get("kassaOveralAan")).toBe(false);
+    expect(scripts.some((s) => s.id === KASSA_ID)).toBe(false);
+    expect(opslag.get("enabledSiteIds")).toEqual([]);
   });
 });
 
@@ -236,7 +260,14 @@ describe("intrekken doet het opgeslagene weg, ook buiten ons scherm om", () => {
      * net heeft gezegd dat LaVega daar niet meer mag kijken. */
     opslag.set("amexAan", true);
     opslag.set("amexAanbiedingen", [
-      { winkel: "JBL", prijsTekst: "30% korting", tot: null, totRuw: "", domein: "jbl.nl", gelezenOp: "2026-08-22" },
+      {
+        winkel: "JBL",
+        prijsTekst: "30% korting",
+        tot: null,
+        totRuw: "",
+        domein: "jbl.nl",
+        gelezenOp: "2026-08-22",
+      },
     ]);
     opslag.set("amexLezing", { uitkomst: "gelezen", aantal: 1, op: "2026-08-22", citaat: "" });
     toegestaan.add(AMEX_MATCH);
@@ -261,11 +292,14 @@ describe("wie er antwoord krijgt op een leesverzoek", () => {
     opslag.set("amexAan", true);
     toegestaan.add(AMEX_MATCH);
     await sync();
-    const a = (await stuur({ soort: "aanbod-vragen" }, {
-      tab: { id: 7, url: "https://global.americanexpress.com/activity" },
-      url: "https://global.americanexpress.com/activity",
-      origin: "https://global.americanexpress.com",
-    })) as { soort: string };
+    const a = (await stuur(
+      { soort: "aanbod-vragen" },
+      {
+        tab: { id: 7, url: "https://global.americanexpress.com/activity" },
+        url: "https://global.americanexpress.com/activity",
+        origin: "https://global.americanexpress.com",
+      },
+    )) as { soort: string };
     expect(a.soort).toBe("zwijg");
     expect(opslag.has("amexAanbiedingen")).toBe(false);
   });
@@ -274,11 +308,14 @@ describe("wie er antwoord krijgt op een leesverzoek", () => {
     opslag.set("amexAan", true);
     toegestaan.add(AMEX_MATCH);
     await sync();
-    const a = (await stuur({ soort: "aanbod-vragen" }, {
-      tab: { id: 7, url: "https://www.ikea.com/nl/nl/p/billy" },
-      url: "https://global.americanexpress.com/offers/eligible",
-      origin: "https://global.americanexpress.com",
-    })) as { soort: string };
+    const a = (await stuur(
+      { soort: "aanbod-vragen" },
+      {
+        tab: { id: 7, url: "https://www.ikea.com/nl/nl/p/billy" },
+        url: "https://global.americanexpress.com/offers/eligible",
+        origin: "https://global.americanexpress.com",
+      },
+    )) as { soort: string };
     expect(a.soort).toBe("zwijg");
   });
 
@@ -332,14 +369,25 @@ describe("wie er antwoord krijgt op een leesverzoek", () => {
     opslag.set("amexAan", true);
     toegestaan.add(AMEX_MATCH);
     opslag.set("amexAanbiedingen", [
-      { winkel: "JBL", prijsTekst: "30% korting", tot: null, totRuw: "", domein: "jbl.nl", gelezenOp: "2026-08-19" },
+      {
+        winkel: "JBL",
+        prijsTekst: "30% korting",
+        tot: null,
+        totRuw: "",
+        domein: "jbl.nl",
+        gelezenOp: "2026-08-19",
+      },
     ]);
     await sync();
 
     const html = readFileSync(join(FIXTURES, "kunstmatig-amex-blok-veranderd.html"), "utf8");
     document.documentElement.innerHTML = html.slice(html.indexOf("<body"));
 
-    const a = (await stuur({ soort: "aanbod-vragen" }, AMEX_SENDER)) as { gelukt: boolean; opnieuw: boolean; regel: string };
+    const a = (await stuur({ soort: "aanbod-vragen" }, AMEX_SENDER)) as {
+      gelukt: boolean;
+      opnieuw: boolean;
+      regel: string;
+    };
     expect(a.gelukt).toBe(false);
     /* En hij mag het over een paar seconden nog eens vragen: de pagina bouwt
      * haar aanbiedingen na het laden op, dus "nog niets" kan "nog niet klaar"
@@ -356,59 +404,109 @@ describe("wie er antwoord krijgt op een leesverzoek", () => {
     await sync();
     const html = readFileSync(join(FIXTURES, "kunstmatig-amex-geen-aanbiedingen.html"), "utf8");
     document.documentElement.innerHTML = html.slice(html.indexOf("<body"));
-    const a = (await stuur({ soort: "aanbod-vragen" }, AMEX_SENDER)) as { opnieuw: boolean; regel: string };
+    const a = (await stuur({ soort: "aanbod-vragen" }, AMEX_SENDER)) as {
+      opnieuw: boolean;
+      regel: string;
+    };
     expect(a.opnieuw).toBe(false);
     expect(a.regel).toContain("zegt zelf");
   });
 });
 
 describe("wie er antwoord krijgt op een paneel-vraag", () => {
-  it("zwijgt zolang kassa-overal uitstaat, ook als de toestemming er is", async () => {
+  it("zwijgt zolang deze winkel niet is aangevinkt, ook als de toestemming er is", async () => {
     toegestaan.add(KASSA_MATCH);
-    opslag.set("kassaOveralAan", false);
-    const a = (await stuur({ soort: "paneel-vragen" }, {
-      tab: { id: 7, url: "https://www.ikea.com/nl/nl/p/billy" },
-      url: "https://www.ikea.com/nl/nl/p/billy",
-      origin: "https://www.ikea.com",
-    })) as { soort: string; reden?: string };
+    opslag.set("enabledSiteIds", []);
+    const a = (await stuur(
+      { soort: "paneel-vragen" },
+      {
+        tab: { id: 7, url: "https://www.ikea.com/nl/nl/p/billy" },
+        url: "https://www.ikea.com/nl/nl/p/billy",
+        origin: "https://www.ikea.com",
+      },
+    )) as { soort: string; reden?: string };
     expect(a.soort).toBe("zwijg");
-    expect(a.reden).toBe("kassa-overal staat uit");
+    expect(a.reden).toBe(`${IKEA.id} staat uit`);
+  });
+
+  it("zwijgt tegen elke https-pagina die niet in sites.ts staat, ook met alles aan", async () => {
+    /* DIT IS M14. Vóór deze fix stond het vinkje "kassa-overal" op <all_urls>:
+     * elke https-pagina die de worker aansprak werd gelezen (prijzen,
+     * productnamen, host) zonder enige sitelijst. Nu beslist sites.ts, en een
+     * willekeurige winkel valt erbuiten. */
+    toegestaan.add(KASSA_MATCH);
+    opslag.set("enabledSiteIds", [IKEA.id]);
+    const a = (await stuur(
+      { soort: "paneel-vragen" },
+      {
+        tab: { id: 9, url: "https://www.hema.nl/winkelwagen" },
+        url: "https://www.hema.nl/winkelwagen",
+        origin: "https://www.hema.nl",
+      },
+    )) as { soort: string; reden?: string };
+    expect(a.soort).toBe("zwijg");
+    expect(a.reden).toBe("afzender hoort niet bij een ondersteunde winkel");
+  });
+
+  it("zwijgt tegen een ander pad op een ondersteunde winkel (de winkelwagen)", async () => {
+    /* De host alleen is niet genoeg: de belofte onder het vinkje is dat alleen
+     * de productpagina gelezen wordt. */
+    toegestaan.add(KASSA_MATCH);
+    opslag.set("enabledSiteIds", [IKEA.id]);
+    const a = (await stuur(
+      { soort: "paneel-vragen" },
+      {
+        tab: { id: 7, url: "https://www.ikea.com/nl/nl/shoppingcart/" },
+        url: "https://www.ikea.com/nl/nl/shoppingcart/",
+        origin: "https://www.ikea.com",
+      },
+    )) as { soort: string };
+    expect(a.soort).toBe("zwijg");
   });
 
   it("zwijgt tegen een afzender die geen https is", async () => {
     toegestaan.add(KASSA_MATCH);
-    opslag.set("kassaOveralAan", true);
-    const a = (await stuur({ soort: "paneel-vragen" }, {
-      tab: { id: 7, url: "http://www.ikea.com/nl/nl/p/billy" },
-      url: "http://www.ikea.com/nl/nl/p/billy",
-      origin: "http://www.ikea.com",
-    })) as { soort: string; reden?: string };
+    opslag.set("enabledSiteIds", [IKEA.id]);
+    const a = (await stuur(
+      { soort: "paneel-vragen" },
+      {
+        tab: { id: 7, url: "http://www.ikea.com/nl/nl/p/billy" },
+        url: "http://www.ikea.com/nl/nl/p/billy",
+        origin: "http://www.ikea.com",
+      },
+    )) as { soort: string; reden?: string };
     expect(a.soort).toBe("zwijg");
-    expect(a.reden).toBe("afzender is geen geldige https-pagina");
+    expect(a.reden).toBe("afzender hoort niet bij een ondersteunde winkel");
   });
 
   it("zwijgt als het tabblad ergens anders staat dan het frame dat vraagt", async () => {
     toegestaan.add(KASSA_MATCH);
-    opslag.set("kassaOveralAan", true);
-    const a = (await stuur({ soort: "paneel-vragen" }, {
-      tab: { id: 7, url: "https://www.hema.nl/" },
-      url: "https://www.ikea.com/nl/nl/p/billy",
-      origin: "https://www.ikea.com",
-    })) as { soort: string; reden?: string };
+    opslag.set("enabledSiteIds", [IKEA.id]);
+    const a = (await stuur(
+      { soort: "paneel-vragen" },
+      {
+        tab: { id: 7, url: "https://www.hema.nl/" },
+        url: "https://www.ikea.com/nl/nl/p/billy",
+        origin: "https://www.ikea.com",
+      },
+    )) as { soort: string; reden?: string };
     expect(a.soort).toBe("zwijg");
-    expect(a.reden).toBe("afzender is geen geldige https-pagina");
+    expect(a.reden).toBe("afzender hoort niet bij een ondersteunde winkel");
   });
 
   it("zwijgt tegen een afwijkende poort", async () => {
     toegestaan.add(KASSA_MATCH);
-    opslag.set("kassaOveralAan", true);
-    const a = (await stuur({ soort: "paneel-vragen" }, {
-      tab: { id: 7, url: "https://www.ikea.com:8443/nl/nl/p/billy" },
-      url: "https://www.ikea.com:8443/nl/nl/p/billy",
-      origin: "https://www.ikea.com:8443",
-    })) as { soort: string; reden?: string };
+    opslag.set("enabledSiteIds", [IKEA.id]);
+    const a = (await stuur(
+      { soort: "paneel-vragen" },
+      {
+        tab: { id: 7, url: "https://www.ikea.com:8443/nl/nl/p/billy" },
+        url: "https://www.ikea.com:8443/nl/nl/p/billy",
+        origin: "https://www.ikea.com:8443",
+      },
+    )) as { soort: string; reden?: string };
     expect(a.soort).toBe("zwijg");
-    expect(a.reden).toBe("afzender is geen geldige https-pagina");
+    expect(a.reden).toBe("afzender hoort niet bij een ondersteunde winkel");
   });
 });
 
@@ -453,10 +551,7 @@ describe("de ING Winkel staat naast Amex en niet in plaats van", () => {
   });
 
   it("leest de ING Winkel en slaat alleen ING-sleutels op", async () => {
-    document.body.innerHTML = readFileSync(
-      join(FIXTURES, "kunstmatig-ing-winkel.html"),
-      "utf8",
-    );
+    document.body.innerHTML = readFileSync(join(FIXTURES, "kunstmatig-ing-winkel.html"), "utf8");
     opslag.set("ingAan", true);
     toegestaan.add(ING_MATCH);
     await sync();
@@ -501,7 +596,14 @@ describe("de ING Winkel staat naast Amex en niet in plaats van", () => {
      * te blijven staan, want dat was een andere vraag met een ander antwoord. */
     opslag.set("amexAan", true);
     opslag.set("amexAanbiedingen", [
-      { winkel: "JBL", prijsTekst: "30% korting", gelezenOp: "2026-08-22", tot: null, totRuw: "", domein: "jbl.nl" },
+      {
+        winkel: "JBL",
+        prijsTekst: "30% korting",
+        gelezenOp: "2026-08-22",
+        tot: null,
+        totRuw: "",
+        domein: "jbl.nl",
+      },
     ]);
     opslag.set("ingAan", true);
     opslag.set("ingAanbiedingen", [

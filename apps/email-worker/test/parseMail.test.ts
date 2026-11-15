@@ -74,7 +74,9 @@ test("D — alleen een afbeelding: geen tekst, wél een bijlage die zichtbaar ge
 
 test("headers worden uitgevouwen; een tweede From: wint niet van de eerste", () => {
   const headers = parseHeaders(
-    ["Subject: regel een", " en de rest", "From: echt@voorbeeld.nl", "From: nep@voorbeeld.nl"].join("\r\n"),
+    ["Subject: regel een", " en de rest", "From: echt@voorbeeld.nl", "From: nep@voorbeeld.nl"].join(
+      "\r\n",
+    ),
   );
   expect(headers.subject).toBe("regel een en de rest");
   expect(headers.from).toBe("echt@voorbeeld.nl");
@@ -98,9 +100,17 @@ test("base64 heen en terug, inclusief padding", () => {
 
 test("een multipart zonder boundary levert géén delen op in plaats van rauwe MIME als tekst", () => {
   const mail = parseMail(
-    ["Subject: kapot", "Content-Type: multipart/mixed", "", "--iets", "Content-Type: text/plain", "", "tekst", "--iets--", ""].join(
-      "\r\n",
-    ),
+    [
+      "Subject: kapot",
+      "Content-Type: multipart/mixed",
+      "",
+      "--iets",
+      "Content-Type: text/plain",
+      "",
+      "tekst",
+      "--iets--",
+      "",
+    ].join("\r\n"),
   );
   // Beter geen tekst dan boundaries als factuurtekst naar het model sturen. Dat
   // "geen tekst" wordt in packages/core een melding met een reden, niet stilte.

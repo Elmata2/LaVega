@@ -109,7 +109,13 @@ export function readIngTariffs(text: string): PdfFigure[] {
           // 0% in footnote 2 ("tot het aangegeven maximum per creditcardperiode")
           // with nothing in its row to show for it, and no local rule can tell
           // that row apart from the debit card's genuinely uncapped 1,40%.
-          out.push({ field: "fxFeePct", value, line: evidence, conditions: cond, conditionsKnown: cond !== null });
+          out.push({
+            field: "fxFeePct",
+            value,
+            line: evidence,
+            conditions: cond,
+            conditionsKnown: cond !== null,
+          });
         }
       }
       // a line about koersopslag with no number states nothing
@@ -122,8 +128,18 @@ export function readIngTariffs(text: string): PdfFigure[] {
 }
 
 const MONTHS_NL = [
-  "januari", "februari", "maart", "april", "mei", "juni",
-  "juli", "augustus", "september", "oktober", "november", "december",
+  "januari",
+  "februari",
+  "maart",
+  "april",
+  "mei",
+  "juni",
+  "juli",
+  "augustus",
+  "september",
+  "oktober",
+  "november",
+  "december",
 ];
 
 /** "Deze brochure is geldig vanaf 15 juni 2026" -> "2026-06-15".
@@ -143,7 +159,10 @@ export function readDocumentDate(text: string): string | null {
   // it, so 32 of 43 covered figures were stamped with the day they were READ
   // rather than the day their document took effect — in the very document genre
   // that had just become the sweep's primary source.
-  const fid = /\b(?:datum|ingangsdatum|geldig\s+op)\s*:\s*(\d{1,2})\s+([a-zA-Z\u00C0-\u00FF]+)\s+(\d{4})/i.exec(text);
+  const fid =
+    /\b(?:datum|ingangsdatum|geldig\s+op)\s*:\s*(\d{1,2})\s+([a-zA-Z\u00C0-\u00FF]+)\s+(\d{4})/i.exec(
+      text,
+    );
   if (fid) {
     const month = MONTHS_NL.indexOf(fid[2].toLowerCase());
     const day = Number(fid[1]);
@@ -177,7 +196,9 @@ export function readDocumentDate(text: string): string | null {
   // wanted the adjective "geldig", not the verb — so a fifteen-month-old rate was
   // stamped with the day it was fetched and would have looked like the freshest
   // figure in the table.
-  const verb = /\b(?:gelden|geldt)\s+vanaf\s+(\d{1,2})\s+([a-zA-Z\u00C0-\u00FF]+)\s+(\d{4})/i.exec(text);
+  const verb = /\b(?:gelden|geldt)\s+vanaf\s+(\d{1,2})\s+([a-zA-Z\u00C0-\u00FF]+)\s+(\d{4})/i.exec(
+    text,
+  );
   if (verb) {
     const month = MONTHS_NL.indexOf(verb[2].toLowerCase());
     const day = Number(verb[1]);
@@ -185,7 +206,10 @@ export function readDocumentDate(text: string): string | null {
       return `${verb[3]}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
     }
   }
-  const m = /\bgeldig\s+(?:vanaf|per|met\s+ingang\s+van)\s+(\d{1,2})\s+([a-zA-Z\u00C0-\u00FF]+)\s+(\d{4})/i.exec(text);
+  const m =
+    /\bgeldig\s+(?:vanaf|per|met\s+ingang\s+van)\s+(\d{1,2})\s+([a-zA-Z\u00C0-\u00FF]+)\s+(\d{4})/i.exec(
+      text,
+    );
   if (m) {
     const month = MONTHS_NL.indexOf(m[2].toLowerCase());
     const day = Number(m[1]);
@@ -213,7 +237,8 @@ export function readDocumentDate(text: string): string | null {
  *  the edition can have been in force — the conservative direction, since it makes
  *  the figure look older rather than fresher than it is. */
 function readMonthYearEdition(text: string): string | null {
-  const re = /\b(?:geldig\s+per|per|versie|uitgave|editie)\s+([a-zA-Z\u00C0-\u00FF]+)\s+(\d{4})\b/gi;
+  const re =
+    /\b(?:geldig\s+per|per|versie|uitgave|editie)\s+([a-zA-Z\u00C0-\u00FF]+)\s+(\d{4})\b/gi;
   const found: { at: number; iso: string }[] = [];
   for (const m of text.matchAll(re)) {
     const month = MONTHS_NL.indexOf(m[1].toLowerCase());

@@ -1,9 +1,26 @@
 // @vitest-environment jsdom
 import { useState, act } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, expect, test } from "vitest";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
+
+/* These suites pin the behaviour that stays in the code while the business side
+ * is archived (scope switch, entity classifier, invoice forwarding, the
+ * registry entries). They run with the switch OFF; archive.test.ts and
+ * archive-ui.test.tsx cover the switch ON. */
+vi.mock("../archive", () => ({
+  ARCHIVE_BUSINESS: false,
+  ARCHIVED_VIEWS: [],
+  ARCHIVED_WIDGETS: [],
+  SHOW_SCOPE_SWITCH: true,
+  SHOW_INVOICE_FORWARDING: true,
+  SHOW_ENTITY_CLASSIFIER: true,
+  isArchivedView: () => false,
+  isArchivedWidget: () => false,
+  initialScope: () =>
+    localStorage.getItem("lavega.defaultScope") === "business" ? "business" : "personal",
+}));
 import ModulePicker, { WidgetPicker } from "./ModulePicker";
-import NavBar from "./NavBar";
+import { Rail } from "./Rail";
 import {
   DEFAULT_MODULES,
   DEFAULT_WIDGETS,
@@ -53,7 +70,12 @@ function Shell() {
   const [modules, setModules] = useState<ModuleId[]>(() => enabledModules(getEnabledModules()));
   return (
     <>
-      <NavBar view="overview" modules={navModules(modules)} onNavigate={() => {}} onOpenProfile={() => {}} />
+      <Rail
+        view="overview"
+        modules={navModules(modules)}
+        onNavigate={() => {}}
+        onOpenProfile={() => {}}
+      />
       <ModulePicker
         enabled={modules}
         onChange={(next) => {
@@ -74,7 +96,9 @@ function render() {
 }
 
 function navLabels(): string[] {
-  return [...container!.querySelectorAll(".navrail .nav-item")].map((n) => (n.textContent ?? "").trim());
+  return [...container!.querySelectorAll(".shell2-rail-list a")].map((n) =>
+    (n.textContent ?? "").trim(),
+  );
 }
 
 function toggle(label: string): HTMLButtonElement {
@@ -106,18 +130,18 @@ test("the picker toggles a module out of the nav and back in again", () => {
 
 test("the selection survives a reload — it is a local preference, not React state", () => {
   render();
-  click(toggle("Punten"));
-  expect(navLabels()).not.toContain("Punten");
+  click(toggle("Valuta"));
+  expect(navLabels()).not.toContain("Valuta");
 
   // What a reload actually reads back: the choice is stored, and it is the
-  // ABSENCE of "punten" that has to survive.
-  expect(JSON.parse(localStorage.getItem("lavega.navModules") ?? "null")).not.toContain("punten");
+  // ABSENCE of "valuta" that has to survive.
+  expect(JSON.parse(localStorage.getItem("lavega.navModules") ?? "null")).not.toContain("valuta");
 
   // Tear the whole tree down and mount a fresh one, as a reload would.
   act(() => root!.unmount());
   container!.remove();
   render();
-  expect(navLabels()).not.toContain("Punten");
+  expect(navLabels()).not.toContain("Valuta");
 });
 
 test("Overzicht cannot be switched off — an app with no home is a broken app", () => {
@@ -131,6 +155,22 @@ test("Overzicht cannot be switched off — an app with no home is a broken app",
 
   expect(toggleModule(["overview", "valuta"], HOME_MODULE, false)).toContain("overview");
   expect(enabledModules([])).toEqual(["overview"]);
+});
+
+test("the default nav is overview, optimalisatie, accounts, plan; the rest is optional but in the picker", () => {
+  expect(DEFAULT_MODULES).toEqual(
+    expect.arrayContaining(["overview", "accounts", "optimalisatie"]),
+  );
+  for (const id of ["forecast", "bills", "punten", "transactions"] as const) {
+    expect(DEFAULT_MODULES).not.toContain(id);
+  }
+  render();
+  expect(navLabels()).not.toContain("Forecast");
+  for (const label of ["Forecast", "Verplichtingen", "Punten", "Transacties"]) {
+    expect(toggle(label).getAttribute("aria-checked")).toBe("false");
+  }
+  click(toggle("Forecast"));
+  expect(navLabels()).toContain("Forecast");
 });
 
 test("an unset preference is the default set, an emptied one is not", () => {
@@ -175,7 +215,8 @@ test("Transacties is een module die je kunt aanzetten, en die uit begint", () =>
 
 test("every registry entry carries what the picker shows: label, one line, icon, preview", () => {
   render();
-  for (const m of MODULES) {
+  const offered = MODULES.filter((m) => m.nav !== false);
+  for (const m of offered) {
     expect(m.label.length, `${m.id} needs a Dutch label`).toBeGreaterThan(0);
     expect(m.what.length, `${m.id} needs a line of what it does`).toBeGreaterThan(0);
     expect(m.icon).toBeTruthy();
@@ -184,7 +225,15 @@ test("every registry entry carries what the picker shows: label, one line, icon,
     expect(container!.textContent).toContain(m.what);
   }
   // One preview thumbnail per module, drawn (not screenshotted).
-  expect(container!.querySelectorAll(".mp-preview svg.mp-thumb").length).toBe(MODULES.length);
+  expect(container!.querySelectorAll(".mp-preview svg.mp-thumb").length).toBe(offered.length);
+});
+
+test("the picker renders in English when the locale cookie says en", () => {
+  document.cookie = "lavega_locale=en";
+  const container = render();
+  expect(container.textContent).toContain("Currency");
+  expect(container.textContent).not.toContain("Valuta");
+  document.cookie = "lavega_locale=; Max-Age=0; Path=/";
 });
 
 /* ---------------------------------------------------------------------- *
@@ -225,8 +274,20 @@ test("een verse installatie toont alleen de kaarten die standaard aan staan", ()
   // dezelfde zin met de tegenovergestelde opdracht ("als de gebruiker dat wilt")
   // en begint daarom uit.
   expect(getEnabledWidgets()).toBeNull();
-  expect(DEFAULT_WIDGETS).toEqual(["betaalagenda", "btw-stand"]);
-  expect(enabledWidgets(null)).toEqual(["betaalagenda", "btw-stand"]);
+  expect(DEFAULT_WIDGETS).toEqual([
+    "intake-invite",
+    "room-card",
+    "connect-checklist",
+    "betaalagenda",
+    "btw-stand",
+  ]);
+  expect(enabledWidgets(null)).toEqual([
+    "intake-invite",
+    "room-card",
+    "connect-checklist",
+    "betaalagenda",
+    "btw-stand",
+  ]);
   expect(DEFAULT_WIDGETS).not.toContain("facturen-open");
 });
 
@@ -237,11 +298,24 @@ test("een oude opgeslagen lijst zet alleen uit waar hij toen over ging", () => {
    * Aandacht en Positie, en daar is afwezig een echt antwoord. Voor elke kaart
    * die er later bij kwam geldt hetzelfde als voor de Betaalagenda: zijn eigen
    * `defaultOn` beslist, niet zijn afwezigheid. */
-  expect(enabledWidgets(["aandacht"])).toEqual(["aandacht", "betaalagenda", "btw-stand"]);
-  expect(enabledWidgets([])).toEqual(["betaalagenda", "btw-stand"]);
+  expect(enabledWidgets(["aandacht"])).toEqual([
+    "aandacht",
+    "intake-invite",
+    "room-card",
+    "connect-checklist",
+    "betaalagenda",
+    "btw-stand",
+  ]);
+  expect(enabledWidgets([])).toEqual([
+    "intake-invite",
+    "room-card",
+    "connect-checklist",
+    "betaalagenda",
+    "btw-stand",
+  ]);
   // Een nav-lijst die per ongeluk hier belandt levert geen enkele widget op
   // behalve de standaard: geen van die ids is een widget.
-  expect(enabledWidgets(["overview", "valuta", "punten"])).toEqual(["betaalagenda", "btw-stand"]);
+  expect(enabledWidgets(["overview", "valuta", "punten"])).toEqual(DEFAULT_WIDGETS);
 });
 
 test("geen enkele widget-id is ook een module-id", () => {
@@ -252,6 +326,9 @@ test("geen enkele widget-id is ook een module-id", () => {
    * een nav-voorkeur met de MODULE facturen erin de kaart aanzetten. */
   const moduleIds = new Set<string>(MODULES.map((m) => m.id));
   for (const w of WIDGETS) expect(moduleIds.has(w.id), `${w.id} is ook een route`).toBe(false);
+  // De routes van de intake (en de latere "about-you") mogen ook geen widget-id zijn.
+  const routeIds = new Set<string>(["intake", "about-you"]);
+  for (const w of WIDGETS) expect(routeIds.has(w.id), `${w.id} is een intake-route`).toBe(false);
   expect(enabledWidgets(MODULES.map((m) => m.id))).toEqual(DEFAULT_WIDGETS);
 });
 
@@ -264,24 +341,39 @@ test("uitzetten werkt ook voor de kaart die standaard aan staat", () => {
   expect(enabledWidgets({ on: ["aandacht"], seen: alles })).toEqual(["aandacht"]);
   // Alleen BTW is gevraagd en uitgezet; de Betaalagenda is nooit gevraagd en
   // valt dus nog steeds terug op zijn eigen `defaultOn`.
-  expect(enabledWidgets({ on: [], seen: ["btw-stand"] })).toEqual(["betaalagenda"]);
+  expect(enabledWidgets({ on: [], seen: ["btw-stand"] })).toEqual([
+    "intake-invite",
+    "room-card",
+    "connect-checklist",
+    "betaalagenda",
+  ]);
 
   /* En de andere kant van diezelfde regel, nu voor de twee nieuwe kaarten: een
    * `seen` uit de tijd van de eerste drie zegt niets over hen, dus hun eigen
    * `defaultOn` beslist — BTW verschijnt, Facturen niet. */
   const gezienToen = ["aandacht", "positie", "betaalagenda"];
-  expect(enabledWidgets({ on: [], seen: gezienToen })).toEqual(["btw-stand"]);
-  expect(enabledWidgets({ on: ["aandacht"], seen: gezienToen })).toEqual(["aandacht", "btw-stand"]);
+  expect(enabledWidgets({ on: [], seen: gezienToen })).toEqual([
+    "intake-invite",
+    "room-card",
+    "connect-checklist",
+    "btw-stand",
+  ]);
+  expect(enabledWidgets({ on: ["aandacht"], seen: gezienToen })).toEqual([
+    "aandacht",
+    "intake-invite",
+    "room-card",
+    "connect-checklist",
+    "btw-stand",
+  ]);
 });
 
 test("een lijst ids opschonen is iets anders dan een voorkeur lezen", () => {
   /* `normaliseWidgets` schoont een LIJST op; `enabledWidgets` leest een
    * VOORKEUR. Toen dat één functie was, kwam een uitgezette kaart terug: de
    * opgeschoonde lijst ging weer door de "nooit gevraagd"-deur. */
-  expect(normaliseWidgets(["positie", "aandacht", "positie", "een-widget-die-niet-bestaat"])).toEqual([
-    "aandacht",
-    "positie",
-  ]);
+  expect(
+    normaliseWidgets(["positie", "aandacht", "positie", "een-widget-die-niet-bestaat"]),
+  ).toEqual(["aandacht", "positie"]);
   expect(toggleWidget([], "positie", true)).toEqual(["positie"]);
   expect(toggleWidget(["aandacht", "positie"], "aandacht", false)).toEqual(["positie"]);
   // Geen enkele widget zit vast aan: anders dan Overzicht in de nav gaat de
@@ -300,9 +392,16 @@ const widgetAccounts = [
  *  niet kunnen zien of de schakelaar of de leegte de kaart weghoudt. */
 const widgetInvoices = [
   {
-    id: "inv1", entity: "BV1 Holding", direction: "in", counterparty: "Klant BV",
-    issueDate: "2026-07-10", dueDate: "2026-09-10", amount: 1_210, currency: "EUR",
-    status: "expected", sourceType: "manual",
+    id: "inv1",
+    entity: "BV1 Holding",
+    direction: "in",
+    counterparty: "Klant BV",
+    issueDate: "2026-07-10",
+    dueDate: "2026-09-10",
+    amount: 1_210,
+    currency: "EUR",
+    status: "expected",
+    sourceType: "manual",
   },
 ] as unknown as Parameters<typeof FacturenWidget>[0]["invoices"];
 
@@ -318,7 +417,13 @@ function WidgetShell() {
   return (
     <>
       <AandachtWidget alerts={[]} bufferCents={250_000} onBufferChange={() => {}} />
-      <PositieWidget accounts={widgetAccounts} onNavigate={() => {}} />
+      <PositieWidget
+        accounts={widgetAccounts}
+        onNavigate={() => {}}
+        asOf="2026-08-16"
+        fxHistory={{}}
+        mode="separate"
+      />
       <BetaalschemaWidget scheduledFlows={[]} txs={[]} asOf="2026-08-16" />
       <BtwWidget
         entities={["BV1 Holding"]}
@@ -386,7 +491,14 @@ test("a widget he switched on survives a reload; one he never touched stays off"
    * meenemen. En `seen` is de hele registerlijst, want de picker toont ze
    * allemaal tegelijk: wie er één omzet heeft de rest ook voor zich gehad. */
   expect(JSON.parse(localStorage.getItem("lavega.overviewWidgets") ?? "null")).toEqual({
-    on: ["aandacht", "betaalagenda", "btw-stand"],
+    on: [
+      "aandacht",
+      "intake-invite",
+      "room-card",
+      "connect-checklist",
+      "betaalagenda",
+      "btw-stand",
+    ],
     seen: WIDGETS.map((w) => w.id),
   });
 
@@ -467,7 +579,74 @@ test("every widget entry carries what the picker shows: label, one line, preview
     expect(container!.textContent).toContain(w.label);
     expect(container!.textContent).toContain(w.what);
   }
-  expect(container!.querySelectorAll(".module-picker .mp-preview svg.mp-thumb").length).toBeGreaterThanOrEqual(
-    WIDGETS.length,
+  expect(
+    container!.querySelectorAll(".module-picker .mp-preview svg.mp-thumb").length,
+  ).toBeGreaterThanOrEqual(WIDGETS.length);
+});
+
+test("the core three lead the nav (Overzicht, Optimalisatie, Rekeningen); plan is in neither the default nor the nav, and no widget id is 'plan'", () => {
+  const ids = navModules(enabledModules(null)).map((m) => m.id);
+  expect(ids.slice(0, 3)).toEqual(["overview", "optimalisatie", "accounts"]);
+  expect(ids).not.toContain("plan");
+  expect(DEFAULT_MODULES).not.toContain("plan");
+  expect(navModules(MODULES.map((m) => m.id)).map((m) => m.id)).not.toContain("plan");
+  expect(HOME_MODULE).toBe("overview");
+  expect(WIDGETS.map((w) => w.id as string)).not.toContain("plan");
+});
+
+test("the module picker never offers Jouw plan as a toggle", () => {
+  render();
+  expect(container!.textContent).not.toContain("Jouw plan");
+  expect(container!.querySelector('[aria-label*="Jouw plan"]')).toBeNull();
+});
+
+const CORE_LABELS = ["Overzicht", "Optimalisatie", "Rekeningen"];
+
+test("a never-chosen preference renders the default set, core four first", () => {
+  render();
+  /* This file mocks the business archive off, so the default also holds the
+   * three business modules; archive.test.ts pins the real four-item default. */
+  expect(navLabels().slice(0, 3)).toEqual(CORE_LABELS);
+  expect(navLabels()).toEqual(navModules(DEFAULT_MODULES).map((m) => m.label));
+});
+
+test("garbage in the stored preference renders like never chosen", () => {
+  for (const raw of ["{not json", '{"a":1}', '"plan"', "42"]) {
+    localStorage.setItem("lavega.navModules", raw);
+    expect(getEnabledModules()).toBeNull();
+    render();
+    expect(navLabels(), raw).toEqual(navModules(DEFAULT_MODULES).map((m) => m.label));
+    act(() => root!.unmount());
+    container!.remove();
+    root = null;
+  }
+});
+
+test("a legacy stored list naming plan keeps working: plan is ignored for navigation", () => {
+  const legacy = ["plan", "overview", "accounts", "optimalisatie", "forecast"];
+  localStorage.setItem("lavega.navModules", JSON.stringify(legacy));
+  render();
+  expect(navLabels()).toEqual([...CORE_LABELS, "Forecast"]);
+  expect([...navLabels()].sort()).toEqual(
+    navModules(enabledModules(legacy))
+      .map((m) => m.label)
+      .sort(),
   );
+  expect(new Set(enabledModules(legacy))).toEqual(new Set(legacy.filter((id) => id !== "plan")));
+});
+
+test("optional modules keep their current relative order after the core four", () => {
+  const all = navModules(enabledModules(MODULES.map((m) => m.id))).map((m) => m.id);
+  expect(all).toEqual([
+    "overview",
+    "optimalisatie",
+    "accounts",
+    "transactions",
+    "bills",
+    "forecast",
+    "valuta",
+    "punten",
+    "belasting",
+    "facturen",
+  ]);
 });

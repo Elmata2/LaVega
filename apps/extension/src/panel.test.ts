@@ -3,7 +3,15 @@
  * verzinnen. */
 
 import { describe, it, expect } from "vitest";
-import { buildPanel, panelRows, PANEEL_CAPS, ONGEKAPT, amountNote, footer, puntenBlok } from "./panel.js";
+import {
+  buildPanel,
+  panelRows,
+  PANEEL_CAPS,
+  ONGEKAPT,
+  amountNote,
+  footer,
+  puntenBlok,
+} from "./panel.js";
 import { rankCheckout, type Ranking } from "./rank.js";
 import { pointsCoverage } from "./points.js";
 import { POINTS_RATES } from "./generated/points-rates.generated.js";
@@ -14,19 +22,56 @@ function sourced(value: number) {
   return { value, sourceUrl: "https://voorbeeld.nl/x", checkedAt: "2026-06-15", conditions: null };
 }
 function fee(value: number, period: "maand" | "jaar"): CardFee {
-  return { value, period, sourceUrl: "https://voorbeeld.nl/t", checkedAt: "2026-01-15", conditions: null };
+  return {
+    value,
+    period,
+    sourceUrl: "https://voorbeeld.nl/t",
+    checkedAt: "2026-01-15",
+    conditions: null,
+  };
 }
 function card(p: Partial<CheckoutCard> & { id: string; product: string }): CheckoutCard {
-  return { issuer: "Bank Voorbeeld", kind: "creditcard", fxFeePct: null, cashbackPct: null, pointsPerEuro: null, fee: null, ...p };
+  return {
+    issuer: "Bank Voorbeeld",
+    kind: "creditcard",
+    fxFeePct: null,
+    cashbackPct: null,
+    pointsPerEuro: null,
+    fee: null,
+    ...p,
+  };
 }
 /* Twee kaarten met een controledatum ver uit elkaar, zodat de voetregel iets te
  * spreiden heeft. */
 const BUNDEL: CheckoutCard[] = [
-  card({ id: "oud", product: "Oude Kaart", fxFeePct: { value: 2, sourceUrl: "https://voorbeeld.nl/a", checkedAt: "2022-10-01", conditions: null } }),
-  card({ id: "nieuw", product: "Nieuwe Kaart", fxFeePct: { value: 1, sourceUrl: "https://voorbeeld.nl/b", checkedAt: "2026-08-20", conditions: null } }),
+  card({
+    id: "oud",
+    product: "Oude Kaart",
+    fxFeePct: {
+      value: 2,
+      sourceUrl: "https://voorbeeld.nl/a",
+      checkedAt: "2022-10-01",
+      conditions: null,
+    },
+  }),
+  card({
+    id: "nieuw",
+    product: "Nieuwe Kaart",
+    fxFeePct: {
+      value: 1,
+      sourceUrl: "https://voorbeeld.nl/b",
+      checkedAt: "2026-08-20",
+      conditions: null,
+    },
+  }),
 ];
 const GEEN_PUNTEN: ReturnType<typeof pointsCoverage> = [];
-function rank(cards: CheckoutCard[], heldIds: string[], amountCents: number | null, currency = "EUR"): Ranking {
+function rank(
+  cards: CheckoutCard[],
+  heldIds: string[],
+  amountCents: number | null,
+  currency = "EUR",
+): Ranking {
   return rankCheckout({ cards, heldIds, currency, amountCents, asOf: "2026-08-21" });
 }
 /* Het geslaagde geval apart getypeerd. `Reading` is een unie, en amountNote
@@ -34,8 +79,16 @@ function rank(cards: CheckoutCard[], heldIds: string[], amountCents: number | nu
  * terecht een fout, terwijl vitest (esbuild, geen typecheck) vrolijk doorloopt.
  * Precies het soort verschil dat je pas ziet als je allebei draait. */
 type Gelukt = Extract<Reading, { ok: true }>;
-const gelezen = (amountCents: number, currency = "EUR", basis: "artikel" | "bestelling" = "artikel"): Gelukt => ({
-  ok: true, amountCents, currency, basis, via: "JSON-LD Offer",
+const gelezen = (
+  amountCents: number,
+  currency = "EUR",
+  basis: "artikel" | "bestelling" = "artikel",
+): Gelukt => ({
+  ok: true,
+  amountCents,
+  currency,
+  basis,
+  via: "JSON-LD Offer",
 });
 
 describe("als het bedrag niet te lezen is, wordt er niet gegokt", () => {
@@ -77,7 +130,9 @@ describe("als het bedrag niet te lezen is, wordt er niet gegokt", () => {
 describe("wat een gelezen bedrag is, staat erbij", () => {
   it("een artikelprijs wordt niet als ordertotaal gepresenteerd", () => {
     expect(amountNote(gelezen(4999, "EUR", "artikel"))).toContain("prijs van één artikel");
-    expect(amountNote(gelezen(4999, "EUR", "artikel"))).toContain("Aantal, bezorgkosten en korting zitten er niet in");
+    expect(amountNote(gelezen(4999, "EUR", "artikel"))).toContain(
+      "Aantal, bezorgkosten en korting zitten er niet in",
+    );
     expect(amountNote(gelezen(31245, "EUR", "bestelling"))).toContain("totaal van je bestelling");
   });
 
@@ -99,11 +154,38 @@ describe("wat een gelezen bedrag is, staat erbij", () => {
 });
 
 describe("de volgorde en de afkapping van de rijen", () => {
-  const mijn1 = card({ id: "m1", product: "Mijn Beste", cashbackPct: sourced(2), fxFeePct: sourced(0) });
-  const mijn2 = card({ id: "m2", product: "Mijn Tweede", cashbackPct: sourced(1), fxFeePct: sourced(0) });
-  const beter = card({ id: "o1", product: "Beter Met Prijs", cashbackPct: sourced(5), fxFeePct: sourced(0), fee: fee(1, "maand") });
-  const achteruit = card({ id: "o2", product: "Beter Maar Duur", cashbackPct: sourced(4), fxFeePct: sourced(0), fee: fee(50, "maand") });
-  const geenPrijs = card({ id: "o3", product: "Beter Zonder Prijskaartje", cashbackPct: sourced(3), fxFeePct: sourced(0) });
+  const mijn1 = card({
+    id: "m1",
+    product: "Mijn Beste",
+    cashbackPct: sourced(2),
+    fxFeePct: sourced(0),
+  });
+  const mijn2 = card({
+    id: "m2",
+    product: "Mijn Tweede",
+    cashbackPct: sourced(1),
+    fxFeePct: sourced(0),
+  });
+  const beter = card({
+    id: "o1",
+    product: "Beter Met Prijs",
+    cashbackPct: sourced(5),
+    fxFeePct: sourced(0),
+    fee: fee(1, "maand"),
+  });
+  const achteruit = card({
+    id: "o2",
+    product: "Beter Maar Duur",
+    cashbackPct: sourced(4),
+    fxFeePct: sourced(0),
+    fee: fee(50, "maand"),
+  });
+  const geenPrijs = card({
+    id: "o3",
+    product: "Beter Zonder Prijskaartje",
+    cashbackPct: sourced(3),
+    fxFeePct: sourced(0),
+  });
   const onbekend = card({ id: "m3", product: "Mijn Onbekende", fxFeePct: sourced(1) });
 
   const r = rank([mijn1, mijn2, beter, achteruit, geenPrijs, onbekend], ["m1", "m2", "m3"], 30000);
@@ -143,7 +225,12 @@ describe("de volgorde en de afkapping van de rijen", () => {
 
 describe("het volledige paneel", () => {
   it("draagt het bedrag, de kop en de voet", () => {
-    const mijn = card({ id: "m", product: "Mijn Kaart", cashbackPct: sourced(1), fxFeePct: sourced(0) });
+    const mijn = card({
+      id: "m",
+      product: "Mijn Kaart",
+      cashbackPct: sourced(1),
+      fxFeePct: sourced(0),
+    });
     const a = buildPanel({
       reading: gelezen(4999),
       ranking: rank([mijn], ["m"], 4999),
@@ -159,10 +246,11 @@ describe("het volledige paneel", () => {
   });
 });
 
-
 describe("het puntenblok", () => {
-  const rijen = (saldi: { program: string; points: number; updatedAt: string }[], amountCents: number | null) =>
-    pointsCoverage({ balances: saldi, rates: POINTS_RATES, amountCents, asOf: "2026-08-22" });
+  const rijen = (
+    saldi: { program: string; points: number; updatedAt: string }[],
+    amountCents: number | null,
+  ) => pointsCoverage({ balances: saldi, rates: POINTS_RATES, amountCents, asOf: "2026-08-22" });
 
   it("verschijnt OOK als het bedrag niet te lezen is — dat is de hele winst", () => {
     /* Op een IKEA-actiepagina is het bedrag een bereik en zei het paneel
@@ -188,7 +276,10 @@ describe("het puntenblok", () => {
       reading: gelezen(36000),
       ranking: rank([], [], 36000),
       cards: BUNDEL,
-      punten: rijen([{ program: "American Express", points: 42000, updatedAt: "2026-08-12" }], 36000),
+      punten: rijen(
+        [{ program: "American Express", points: 42000, updatedAt: "2026-08-12" }],
+        36000,
+      ),
     });
     expect(a.soort).toBe("toon");
     if (a.soort !== "toon") return;
@@ -207,7 +298,11 @@ describe("het puntenblok", () => {
     expect(leegBlok.leeg).toContain("nog geen puntensaldo");
     expect(leegBlok.voetnoot).toBe("");
 
-    const vol = puntenBlok(rijen([{ program: "Amex", points: 1000, updatedAt: "2026-08-12" }], 4999), 4999, "EUR");
+    const vol = puntenBlok(
+      rijen([{ program: "Amex", points: 1000, updatedAt: "2026-08-12" }], 4999),
+      4999,
+      "EUR",
+    );
     expect(vol.leeg).toBe("");
     expect(vol.voetnoot).toContain("herinnering");
   });
@@ -220,7 +315,7 @@ describe("het puntenblok", () => {
 });
 
 describe("twee soorten onbekend krijgen twee groepskoppen", () => {
-  it("een opbrengst in een token staat niet onder \"kaartkosten onbekend\"", () => {
+  it('een opbrengst in een token staat niet onder "kaartkosten onbekend"', () => {
     /* Bij Crypto.com Obsidian staan de kaartkosten letterlijk in de voorwaarde
      * ("€450,000 12-month CRO staking"). "Kaartkosten onbekend" boven die rij is
      * onwaar, en een groepskop is de sterkste uitspraak in het blok. */
@@ -235,7 +330,12 @@ describe("twee soorten onbekend krijgen twee groepskoppen", () => {
         conditions: "Rewards are PAID IN CRO, not euro.",
       },
     });
-    const geenPrijs = card({ id: "g", product: "Geen Prijskaartje", fxFeePct: sourced(0), cashbackPct: sourced(3) });
+    const geenPrijs = card({
+      id: "g",
+      product: "Geen Prijskaartje",
+      fxFeePct: sourced(0),
+      cashbackPct: sourced(3),
+    });
     const r = rank([inToken, geenPrijs], [], 30000);
     const groepen = panelRows(r, ONGEKAPT);
     expect(groepen.find((x) => x.titel === "Tokenkaart")?.groep).toBe("geen-euro-uitkomst");

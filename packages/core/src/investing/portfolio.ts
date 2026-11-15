@@ -1,7 +1,16 @@
 import { crossRate, type FxRate } from "../fx.js";
 import type { Dividend } from "./dividend.js";
-import type { CashBalance, CashFlow, Position, PriceBar, Trade } from "./model.js";
-import { businessDateRange } from "./calendar.js";
+import type {
+  CashBalance,
+  CashFlow,
+  CashHistoryCoverage,
+  Position,
+  PriceBar,
+  Trade,
+} from "./model.js";
+import { businessDateRange, isPriceFresh } from "./calendar.js";
+import { ownershipKey, type Ownership } from "./ownership.js";
+import { tradeDelta } from "./quantity.js";
 
 export type PortfolioValuePoint = {
   date: string;
@@ -9,24 +18,100 @@ export type PortfolioValuePoint = {
   cashValue: number | null;
   value: number | null;
   unpriced: string[];
+  /** Valued at a close from before this date with no later close yet: the
+   *  session has not settled, so the value can still move. */
   forwardFilled: string[];
   cashUnknown: string[];
+  /** Wallets whose balance here was walked from a history the broker could not
+   *  prove complete. The figure is what the reported movements support, not a
+   *  statement, and absent when no wallet on this date needed one. */
+  cashEstimated?: string[];
+  /** For a wallet that could not be valued because its movements do not total
+   *  back to an empty account, what they total to instead, per wallet. The
+   *  amount is what the history is missing and the sign is which side of it. */
+  cashShortfall?: Record<string, number>;
+  /** Holdings inferred from a later snapshot without dated ownership evidence. */
+  holdingsUnknown?: string[];
+  /** Value, in `presentationCurrency`, of the `unpriced`/`holdingsUnknown`/
+   *  `forwardFilled` symbols on this date — what `buildHistoricalRisk`'s
+   *  materiality gate weighs against `value`. An unpriced symbol is bounded
+   *  by its own last known value, never invented. Present only when one of
+   *  those three sets is non-empty. Null when an unpriced symbol has no
+   *  known value at all (nothing to bound the gap by), which keeps the date
+   *  disqualifying. */
+  unaccountedValue?: number | null;
+  /** Return since the previous date of the holdings held then, repriced here.
+   *  Trades and cash cannot move it, so it stays measurable when the cash
+   *  history cannot be proven. Null when a holding of the previous date is
+   *  priced on only one of the two dates; absent on the first date. */
+  holdingsReturn?: number | null;
 };
 export type PortfolioRange = "1M" | "6M" | "1Y" | "YTD" | "All";
-export type FxRates = FxRate | FxRate[];
+/** Undefined means the FX provider failed. Conversions then throw and every
+ *  caller already reports that as missing-fx rather than a wrong number. */
+export type FxRates = FxRate | FxRate[] | undefined;
+const FX_CARRY_DAYS = 10;
+const sortedFxRates = new WeakMap<FxRate[], FxRate[]>();
 
-function rateFor(rates: FxRates, date: string): FxRate {
-  const candidates = Array.isArray(rates) ? rates : [rates];
-  if (candidates.length === 0) throw new Error(`No FX rate available for ${date}`);
-  // Runtime often holds only the latest rate; fall forward to the nearest known
-  // rate instead of failing conversion for bars older than that rate's date.
-  const sorted = [...candidates].sort((a, b) => a.date.localeCompare(b.date));
-  return sorted.filter((candidate) => candidate.date <= date).at(-1) ?? sorted[0]!;
+function daysSince(observation: string, date: string): number | null {
+  const observedAt = Date.parse(`${observation}T00:00:00Z`);
+  const requestedAt = Date.parse(`${date}T00:00:00Z`);
+  if (!Number.isFinite(observedAt) || !Number.isFinite(requestedAt)) return null;
+  return (requestedAt - observedAt) / 86_400_000;
 }
 
-export function convertCurrency(value: number, from: string, to: string, date: string, fxRates: FxRates): number {
+/** No candidate rate reaches `date`, either because none was supplied or
+ *  because the nearest one is more than `FX_CARRY_DAYS` stale. Carries the
+ *  pair and date so a caller can report exactly what is missing, and so
+ *  `calculatePositionReturn` can tell this apart from any other failure a
+ *  conversion might raise (e.g. `UnknownCurrencyError` from `crossRate`). */
+export class MissingFxRateError extends Error {
+  readonly from: string;
+  readonly to: string;
+  readonly date: string;
+  constructor(from: string, to: string, date: string) {
+    super(`No FX rate available for ${date} (${from} to ${to})`);
+    this.name = "MissingFxRateError";
+    this.from = from;
+    this.to = to;
+    this.date = date;
+  }
+}
+
+function rateFor(rates: FxRates, from: string, to: string, date: string): FxRate {
+  const candidates = rates === undefined ? [] : Array.isArray(rates) ? rates : [rates];
+  if (candidates.length === 0) throw new MissingFxRateError(from, to, date);
+  let sorted: FxRate[];
+  if (Array.isArray(rates)) {
+    sorted =
+      sortedFxRates.get(rates) ??
+      [...rates].sort((left, right) => left.date.localeCompare(right.date));
+    sortedFxRates.set(rates, sorted);
+  } else {
+    sorted = candidates;
+  }
+  let low = 0;
+  let high = sorted.length;
+  while (low < high) {
+    const middle = Math.floor((low + high) / 2);
+    if (sorted[middle]!.date <= date) low = middle + 1;
+    else high = middle;
+  }
+  const rate = sorted[low - 1];
+  const age = rate ? daysSince(rate.date, date) : null;
+  if (age === null || age < 0 || age > FX_CARRY_DAYS) throw new MissingFxRateError(from, to, date);
+  return rate;
+}
+
+export function convertCurrency(
+  value: number,
+  from: string,
+  to: string,
+  date: string,
+  fxRates: FxRates,
+): number {
   if (from === to) return value;
-  return value * crossRate(from, to, rateFor(fxRates, date));
+  return value * crossRate(from, to, rateFor(fxRates, from, to, date));
 }
 
 function isoDate(date: Date): string {
@@ -34,39 +119,25 @@ function isoDate(date: Date): string {
 }
 
 function businessCalendar(from: string, to: string, priceBars: readonly PriceBar[]): string[] {
-  const dates = new Set(priceBars.filter((bar) => bar.date >= from && bar.date <= to).map((bar) => bar.date));
+  const dates = new Set(
+    priceBars.filter((bar) => bar.date >= from && bar.date <= to).map((bar) => bar.date),
+  );
   for (const date of businessDateRange(from, to)) dates.add(date);
   return [...dates].sort();
 }
 
-function businessDates(from: string, to: string): string[] {
-  return businessDateRange(from, to);
-}
-
-function upperBound(sortedDates: readonly string[], date: string): number {
-  let low = 0;
-  let high = sortedDates.length;
-  while (low < high) {
-    const middle = Math.floor((low + high) / 2);
-    if (sortedDates[middle] <= date) low = middle + 1;
-    else high = middle;
-  }
-  return low;
-}
-
-function signedQuantity(trade: Trade): number {
-  return trade.side === "buy" ? trade.quantity : trade.side === "sell" ? -trade.quantity : 0;
-}
-
-function cashKey(value: { tenantId: string; entity: string; broker: string; currency: string }): string {
-  return `${value.tenantId}\u0000${value.entity}\u0000${value.broker}\u0000${value.currency}`;
+function cashKey(value: { entity: string; broker: string; currency: string }): string {
+  return `${value.entity}\u0000${value.broker}\u0000${value.currency}`;
 }
 
 function displayCashKey(value: { broker: string; currency: string }): string {
   return `${value.broker}:${value.currency}`;
 }
 
-function uniqueByIdentity<T extends { id: string }>(items: readonly T[], brokerId: (item: T) => string | undefined): T[] {
+function uniqueByIdentity<T extends { id: string }>(
+  items: readonly T[],
+  brokerId: (item: T) => string | undefined,
+): T[] {
   const seen = new Set<string>();
   return items.filter((item) => {
     const identity = brokerId(item) ?? item.id;
@@ -77,21 +148,443 @@ function uniqueByIdentity<T extends { id: string }>(items: readonly T[], brokerI
 }
 
 type CashEvent = { date: string; amount: number };
+type Anchor = { asOf: string; amount: number };
 
-function cashAmountOnDate(date: string, anchors: readonly CashBalance[], events: readonly CashEvent[]): number | null {
+function sumBetween(events: readonly CashEvent[], after: string, through: string): number {
+  return events
+    .filter((event) => event.date > after && event.date <= through)
+    .reduce((sum, event) => sum + event.amount, 0);
+}
+
+/** Walk events out from the nearest broker anchor: forwards from the last anchor
+ *  on or before the date, otherwise backwards from the first anchor after it.
+ *  Null when no anchor reaches the date at all. */
+function anchoredAmountOnDate(
+  date: string,
+  anchors: readonly Anchor[],
+  events: readonly CashEvent[],
+): number | null {
   const sortedAnchors = [...anchors].sort((a, b) => a.asOf.localeCompare(b.asOf));
   const before = sortedAnchors.filter((anchor) => anchor.asOf <= date).at(-1);
-  if (before) {
-    return before.amount + events
-      .filter((event) => event.date > before.asOf && event.date <= date)
-      .reduce((sum, event) => sum + event.amount, 0);
-  }
+  if (before) return before.amount + sumBetween(events, before.asOf, date);
   const after = sortedAnchors.find((anchor) => anchor.asOf > date);
-  const firstEvent = [...events].sort((a, b) => a.date.localeCompare(b.date))[0];
-  if (!after || !firstEvent || date < firstEvent.date) return null;
-  return after.amount - events
-    .filter((event) => event.date > date && event.date <= after.asOf)
-    .reduce((sum, event) => sum + event.amount, 0);
+  if (!after) return null;
+  return after.amount - sumBetween(events, date, after.asOf);
+}
+
+/** A balance a broker's own statements disagree with is not a balance.
+ *
+ *  Two statements with no movement between them that explains the difference
+ *  mean the history is missing something, and walking either one across the
+ *  gap states a figure the other contradicts. */
+const RECONCILIATION_TOLERANCE = 0.01;
+
+/**
+ * How far a total may drift before it means something.
+ *
+ *  Every amount a broker reports is rounded to its currency's last place, and
+ *  a foreign one is rounded again by the rate that converts it, so a total of
+ *  many of them carries the error of all of them. A cent per movement is what
+ *  that comes to at worst, and it grows with the count because that is where
+ *  it comes from.
+ *
+ *  It stays far below what a missing movement looks like. A live account
+ *  reconciled to 1.15 EUR across some eighteen hundred movements, while the
+ *  same account with its purchases dropped was out by 16,627: the whole of its
+ *  funding, and three orders of magnitude past any rounding.
+ */
+function reconciliationTolerance(movements: number): number {
+  return Math.max(RECONCILIATION_TOLERANCE, movements * RECONCILIATION_TOLERANCE);
+}
+
+function bracketsReconcile(leg: CashLeg, date: string): boolean {
+  const sorted = [...leg.anchors].sort((left, right) => left.asOf.localeCompare(right.asOf));
+  const before = sorted.filter((anchor) => anchor.asOf <= date).at(-1);
+  const after = sorted.find((anchor) => anchor.asOf > date);
+  if (!before || !after) return true;
+  const implied = before.amount + sumBetween(leg.events, before.asOf, after.asOf);
+  return Number.isFinite(implied) && Math.abs(implied - after.amount) <= RECONCILIATION_TOLERANCE;
+}
+
+/**
+ * Does the whole history close on an empty wallet?
+ *
+ *  A wallet begins empty. Walk every movement back off the earliest statement
+ *  and the day before the first of them must come to nothing, because there
+ *  was nothing there yet. Anything else is the size of what the history is
+ *  missing, and it is missing in a direction the number itself names: too
+ *  negative and the spending is recorded without the funding, too positive and
+ *  the funding is recorded without the spending.
+ *
+ *  This is the check that a declaration cannot stand in for. A broker naming
+ *  its trade-cash stream is the broker's word; this is the arithmetic. The two
+ *  came apart in production, where rows stored before that field existed read
+ *  as a broker that had named nothing, so trades were dropped and the walk put
+ *  a wallet 16,627 EUR overdrawn on the day it was opened, months before its
+ *  owner had spent anything. Nothing in the reported movements was wrong; the
+ *  set of them was incomplete, and only totalling them says so.
+ */
+function historyResidual(leg: CashLeg): number | null {
+  const earliest = [...leg.anchors].sort((left, right) => left.asOf.localeCompare(right.asOf))[0];
+  if (!earliest) return null;
+  const movements = leg.events.filter((event) => event.date <= earliest.asOf);
+  if (movements.length === 0) return 0;
+  const opening = earliest.amount - movements.reduce((sum, event) => sum + event.amount, 0);
+  return Number.isFinite(opening) ? opening : null;
+}
+
+function historyCloses(leg: CashLeg): boolean {
+  const residual = historyResidual(leg);
+  if (residual === null) return false;
+  const earliest = [...leg.anchors].sort((left, right) => left.asOf.localeCompare(right.asOf))[0];
+  const counted = leg.events.filter((event) => event.date <= (earliest?.asOf ?? "")).length;
+  return Math.abs(residual) <= reconciliationTolerance(counted);
+}
+
+/**
+ * Walk a balance back to an earlier date through the movements reported
+ * between them, or null once the walk would overdraw the wallet.
+ *
+ *  A history that does not close is missing something, but not necessarily
+ *  anything recent: a sync dates its balance after the last market day, and
+ *  the days just before it are best read off that balance and the movements
+ *  in between. A wallet cannot hold less than nothing, so the first day the
+ *  walk would put it there proves a movement is missing between that day and
+ *  the balance, and from there back nothing is stated.
+ */
+function walkBackUntilOverdrawn(
+  date: string,
+  anchor: Anchor,
+  events: readonly CashEvent[],
+): number | null {
+  const perDay = new Map<string, number>();
+  const counts = new Map<string, number>();
+  for (const event of events) {
+    if (event.date <= date || event.date > anchor.asOf) continue;
+    perDay.set(event.date, (perDay.get(event.date) ?? 0) + event.amount);
+    counts.set(event.date, (counts.get(event.date) ?? 0) + 1);
+  }
+  /* Only an end-of-day balance can overdraw: a statement lists a day's lines in
+   * order, and undoing them one by one backwards dips below nothing on a day
+   * whose closing balance never did. */
+  let balance = anchor.amount;
+  let seen = 0;
+  for (const day of [...perDay.keys()].sort((left, right) => right.localeCompare(left))) {
+    balance -= perDay.get(day) ?? 0;
+    seen += counts.get(day) ?? 0;
+    if (!Number.isFinite(balance) || balance < -reconciliationTolerance(seen)) return null;
+  }
+  return balance;
+}
+
+/** What a leg held on a date, and whether the broker's history proves it.
+ *
+ *  A walk may only cross the proven window. Outside it the balance is known on
+ *  the broker's own statement dates, and the last known balance (the latest
+ *  statement, or the window's end when that is later) stands for later dates
+ *  until the wallet's next cash flow, dividend or trade: unknown history must
+ *  not hide the current balance, and an unwalked movement must not hide behind
+ *  it.
+ *
+ *  Past those the walk still runs, and what it returns is marked an estimate.
+ *  A history we cannot prove complete is not a history we lack: every movement
+ *  the broker did report is dated, so walking them back from a live balance is
+ *  the best the evidence supports. Refusing to state it is not the cautious
+ *  choice it resembles, because cash is one part of a portfolio and withholding
+ *  it withholds the whole value and every return drawn from it. A wallet
+ *  holding a rounding error would erase the reported performance of everything
+ *  beside it. The estimate is only offered where the statements it sits between
+ *  agree with the movements reported between them. */
+function cashAmountOnDate(
+  date: string,
+  leg: CashLeg,
+): { amount: number | null; estimated: boolean } {
+  const result = cashAmountFromHistory(date, leg);
+  const { proven } = leg;
+  if (result.amount !== null || !proven || date >= proven.from) return result;
+  /* Before the proven window the broker has stated nothing. When it also moved
+   * nothing before it (no cash events, no trades), the opening balance is the
+   * balance all along, so it stands in, marked estimated. Any earlier movement
+   * would make that a fabricated flat line, so the walk's null stands. */
+  const movedBefore = [...leg.events.map((event) => event.date), ...leg.tradeDates].some(
+    (day) => day <= proven.from,
+  );
+  if (movedBefore) return result;
+  const opening = anchoredAmountOnDate(
+    proven.from,
+    leg.anchors.filter((anchor) => anchor.asOf >= proven.from && anchor.asOf <= proven.to),
+    leg.events,
+  );
+  return opening === null || !Number.isFinite(opening)
+    ? result
+    : { amount: opening, estimated: true };
+}
+
+function cashAmountFromHistory(
+  date: string,
+  leg: CashLeg,
+): { amount: number | null; estimated: boolean } {
+  const known = (amount: number | null) => ({ amount, estimated: false });
+  const { proven } = leg;
+  const walk = (day: string) =>
+    proven
+      ? anchoredAmountOnDate(
+          day,
+          leg.anchors.filter((anchor) => anchor.asOf >= proven.from && anchor.asOf <= proven.to),
+          leg.events,
+        )
+      : null;
+  if (proven && date >= proven.from && date <= proven.to) return known(walk(date));
+  const statement = leg.anchors.find((anchor) => anchor.asOf === date);
+  if (statement) return known(statement.amount);
+  const latest = leg.anchors.reduce<CashBalance | undefined>(
+    (last, anchor) => (last && last.asOf >= anchor.asOf ? last : anchor),
+    undefined,
+  );
+  const carried =
+    proven && proven.to >= (latest?.asOf ?? "")
+      ? { asOf: proven.to, amount: walk(proven.to) }
+      : latest;
+  if (carried && date > carried.asOf) {
+    const moved = [...leg.events.map((event) => event.date), ...leg.tradeDates].some(
+      (day) => day > carried.asOf && day <= date,
+    );
+    if (!moved) return known(carried.amount);
+  }
+  if (!bracketsReconcile(leg, date)) return known(null);
+  if (!leg.tradeCashResolved || !historyCloses(leg)) {
+    const next = leg.anchors
+      .filter((anchor) => anchor.asOf > date)
+      .reduce<CashBalance | undefined>(
+        (first, anchor) => (first && first.asOf <= anchor.asOf ? first : anchor),
+        undefined,
+      );
+    const walked =
+      next && leg.tradeCashResolved ? walkBackUntilOverdrawn(date, next, leg.events) : null;
+    return walked === null ? known(null) : { amount: walked, estimated: true };
+  }
+  const estimate = anchoredAmountOnDate(date, leg.anchors, leg.events);
+  return estimate === null || !Number.isFinite(estimate)
+    ? known(null)
+    : { amount: estimate, estimated: true };
+}
+
+type CashLeg = {
+  entity: string;
+  broker: string;
+  /** It is settled which stream books the cash a trade moves: the broker named
+   *  it, or one reading of the movements closed and the other did not. While
+   *  it is unsettled the walk cannot know whether trades are among these
+   *  events, so what it sums may be missing every purchase. */
+  tradeCashResolved: boolean;
+  currency: string;
+  proven?: { from: string; to: string };
+  anchors: CashBalance[];
+  events: CashEvent[];
+  /** Every trade date of the owner, whatever stream books its cash: a trade
+   *  may settle in any of the owner's wallets. */
+  tradeDates: string[];
+};
+
+/** Signed cash a trade moved: the broker's own wallet figure when reported,
+ *  otherwise amount plus commission in the trade currency. NaN when neither
+ *  is known, which leaves every date the walk crosses it unknown. */
+function tradeSettlement(trade: Trade): { currency: string; amount: number } {
+  if (trade.settlement) return trade.settlement;
+  const gross = Math.abs(trade.amount ?? Number.NaN);
+  const commission = Math.abs(trade.commission ?? 0);
+  const amount =
+    trade.side === "buy" ? -gross - commission : trade.side === "sell" ? gross - commission : 0;
+  return { currency: trade.currency, amount };
+}
+
+/** Every cash wallet with its broker anchors and the events that move it.
+ *
+ *  A broker that reports one cash balance per entity (Trading 212) holds one
+ *  wallet: a movement it lists in another currency was converted into that
+ *  wallet, so it folds in at the day's rate instead of forming a leg no anchor
+ *  can ever reach. Brokers that anchor each currency keep separate legs. */
+function ownerKey(value: { entity: string; broker: string }): string {
+  return `${value.entity}\u0000${value.broker}`;
+}
+
+function cashLegs(
+  cashBalances: readonly CashBalance[],
+  cashFlows: readonly CashFlow[],
+  dividends: readonly Dividend[],
+  trades: readonly Trade[],
+  cashCoverage: readonly CashHistoryCoverage[],
+  fxRates: FxRates,
+): CashLeg[] {
+  const coverage = new Map(cashCoverage.map((value) => [ownerKey(value), value] as const));
+  const proven = new Map(
+    cashCoverage.flatMap((value) =>
+      value.status === "complete" ? [[ownerKey(value), value] as const] : [],
+    ),
+  );
+
+  const build = (countTrades: boolean): CashLeg[] => {
+    const legs = new Map<string, CashLeg>();
+    const leg = (value: { entity: string; broker: string; currency: string }): CashLeg => {
+      const key = cashKey(value);
+      const existing = legs.get(key);
+      if (existing) return existing;
+      const window = proven.get(ownerKey(value));
+      const created: CashLeg = {
+        entity: value.entity,
+        broker: value.broker,
+        currency: value.currency,
+        tradeCashResolved: false,
+        ...(window ? { proven: { from: window.from, to: window.to } } : {}),
+        anchors: [],
+        events: [],
+        tradeDates: [],
+      };
+      legs.set(key, created);
+      return created;
+    };
+    for (const balance of cashBalances) leg(balance).anchors.push(balance);
+    for (const flow of [...cashFlows, ...dividends])
+      leg(flow).events.push({ date: flow.date, amount: flow.amount ?? Number.NaN });
+    if (countTrades)
+      for (const trade of trades) {
+        if (!trade.broker) continue;
+        const settlement = tradeSettlement(trade);
+        leg({
+          entity: trade.entity,
+          broker: trade.broker,
+          currency: settlement.currency,
+        }).events.push({ date: trade.date, amount: settlement.amount });
+      }
+
+    const wallets = new Map<string, CashLeg[]>();
+    for (const candidate of legs.values()) {
+      if (candidate.anchors.length === 0) continue;
+      wallets.set(ownerKey(candidate), [...(wallets.get(ownerKey(candidate)) ?? []), candidate]);
+    }
+    for (const [key, candidate] of legs) {
+      if (candidate.anchors.length > 0) continue;
+      const owned = wallets.get(ownerKey(candidate));
+      if (owned?.length !== 1) continue;
+      const wallet = owned[0]!;
+      for (const event of candidate.events) {
+        let amount: number;
+        try {
+          amount = convertCurrency(
+            event.amount,
+            candidate.currency,
+            wallet.currency,
+            event.date,
+            fxRates,
+          );
+        } catch {
+          amount = Number.NaN;
+        }
+        wallet.events.push({ date: event.date, amount });
+      }
+      legs.delete(key);
+    }
+    for (const candidate of legs.values())
+      candidate.tradeDates = trades
+        .filter((trade) => trade.entity === candidate.entity && trade.broker === candidate.broker)
+        .map((trade) => trade.date);
+    return [...legs.values()];
+  };
+
+  const counted = build(true);
+  const uncounted = build(false);
+  const owners = new Set([...counted, ...uncounted].map(ownerKey));
+  const chosen: CashLeg[] = [];
+  for (const owner of owners) {
+    const mine = (from: CashLeg[]) => from.filter((candidate) => ownerKey(candidate) === owner);
+    const declared = coverage.get(owner)?.tradeCash;
+    if (declared === "trade-settlement" || declared === "cash-flows") {
+      const picked = mine(declared === "trade-settlement" ? counted : uncounted);
+      for (const candidate of picked) candidate.tradeCashResolved = true;
+      chosen.push(...picked);
+      continue;
+    }
+    /* Nothing said where this broker books trade cash, so the movements are
+     * asked instead. A wallet begins empty: whichever reading totals back to
+     * nothing on the day before its first movement is the reading that has all
+     * of them. Both readings closing means the trades net to nothing over the
+     * whole history, which the ledger reading already accounts for. */
+    const closes = (from: CashLeg[]) => {
+      const anchored = from.filter((candidate) => candidate.anchors.length > 0);
+      return anchored.length > 0 && anchored.every(historyCloses);
+    };
+    const withTrades = mine(counted);
+    const withoutTrades = mine(uncounted);
+    const countedCloses = closes(withTrades);
+    const uncountedCloses = closes(withoutTrades);
+    const picked =
+      countedCloses && !uncountedCloses
+        ? withTrades
+        : uncountedCloses && !countedCloses
+          ? withoutTrades
+          : countedCloses && uncountedCloses
+            ? withoutTrades
+            : withTrades;
+    for (const candidate of picked) candidate.tradeCashResolved = countedCloses !== uncountedCloses;
+    chosen.push(...picked);
+  }
+  return chosen;
+}
+
+/** One symbol held by one owner: broker quantity snapshots plus signed trades.
+ *
+ *  The owner is the full ownership identity, not just the entity. Two brokers
+ *  holding the same instrument for the same entity each report their own dated
+ *  snapshots; folded into one holding those dates read as a single timeline and
+ *  whichever broker synced last silently replaces the other's anchor. */
+type Holding = {
+  owner: Ownership;
+  anchors: Map<string, number>;
+  events: CashEvent[];
+};
+
+function holdingsBySymbol(
+  positions: readonly Position[],
+  trades: readonly Trade[],
+): Map<string, Holding[]> {
+  const byKey = new Map<string, Holding>();
+  const bySymbol = new Map<string, Holding[]>();
+  const holding = (symbol: string, owner: Ownership): Holding => {
+    const key = `${symbol}\u0000${ownershipKey(owner)}`;
+    const existing = byKey.get(key);
+    if (existing) return existing;
+    const created: Holding = {
+      owner: { entity: owner.entity, broker: owner.broker, account: owner.account },
+      anchors: new Map(),
+      events: [],
+    };
+    byKey.set(key, created);
+    const group = bySymbol.get(symbol) ?? [];
+    group.push(created);
+    bySymbol.set(symbol, group);
+    return created;
+  };
+  for (const position of positions) {
+    const anchors = holding(position.symbol, position).anchors;
+    anchors.set(position.asOf, (anchors.get(position.asOf) ?? 0) + position.quantity);
+  }
+  for (const trade of trades)
+    holding(trade.symbol, trade).events.push({
+      date: trade.date,
+      amount: tradeDelta(trade),
+    });
+  return bySymbol;
+}
+
+/** Quantity held on a date, anchored on the broker's reported position. Order
+ *  history is routinely short, and pie trades never appear in it at all, so
+ *  accumulating trades forward from the start silently undercounts a holding. */
+function quantityOnDate(date: string, holdings: readonly Holding[]): number {
+  return holdings.reduce((sum, holding) => {
+    const anchors = [...holding.anchors].map(([asOf, amount]) => ({ asOf, amount }));
+    const anchored = anchoredAmountOnDate(date, anchors, holding.events);
+    return sum + (anchored ?? sumBetween(holding.events, "", date));
+  }, 0);
 }
 
 /** Build cash-aware daily portfolio values from trade history and broker anchors. */
@@ -105,104 +598,272 @@ export function computePortfolioValueSeries(
     cashBalances?: readonly CashBalance[];
     cashFlows?: readonly CashFlow[];
     dividends?: readonly Dividend[];
+    cashCoverage?: readonly CashHistoryCoverage[];
     today?: string;
   } = {},
 ): PortfolioValuePoint[] {
   const firstTrade = [...trades].sort((a, b) => a.date.localeCompare(b.date))[0]?.date;
-  if (!firstTrade) return [];
+  // Market history is not evidence that the account owned a position then.
+  const start = [
+    firstTrade,
+    ...positions.map((position) => position.asOf),
+    ...(options.cashBalances ?? []).map((balance) => balance.asOf),
+    ...(options.cashFlows ?? []).map((flow) => flow.date),
+  ]
+    .filter((date): date is string => Boolean(date))
+    .sort()[0];
+  if (!start) return [];
   const today = options.today ?? isoDate(new Date());
-  const dates = businessCalendar(firstTrade, today, priceBars);
-  const weekdays = businessDates(firstTrade, today);
-  const symbols = [...new Set([...trades.map((trade) => trade.symbol), ...positions.map((position) => position.symbol)])].sort();
-  const tradesBySymbol = new Map(symbols.map((symbol) => [symbol, trades.filter((trade) => trade.symbol === symbol).sort((a, b) => a.date.localeCompare(b.date))]));
-  const barsBySymbol = new Map(symbols.map((symbol) => [symbol, priceBars.filter((bar) => bar.symbol === symbol).sort((a, b) => a.date.localeCompare(b.date))]));
-  const cashFlows = uniqueByIdentity(options.cashFlows ?? [], (flow) => `${cashKey(flow)}\u0000${flow.brokerFlowId ?? flow.id}`);
-  const dividends = uniqueByIdentity(options.dividends ?? [], (dividend) => `${cashKey(dividend)}\u0000${dividend.brokerDividendId ?? dividend.id}`);
-  const cashBalances = options.cashBalances ?? [];
-  const cashLegKeys = new Set([...cashBalances.map(cashKey), ...cashFlows.map(cashKey), ...dividends.map(cashKey)]);
+  const dates = businessCalendar(start, today, priceBars);
+  const symbols = [
+    ...new Set([
+      ...trades.map((trade) => trade.symbol),
+      ...positions.map((position) => position.symbol),
+    ]),
+  ].sort();
+  const holdings = holdingsBySymbol(positions, trades);
+  const barsBySymbol = new Map(
+    symbols.map((symbol) => [
+      symbol,
+      {
+        bars: priceBars
+          .filter((bar) => bar.symbol === symbol)
+          .sort((left, right) => left.date.localeCompare(right.date)),
+        index: 0,
+        latest: null as PriceBar | null,
+      },
+    ]),
+  );
+  const cashFlows = uniqueByIdentity(
+    options.cashFlows ?? [],
+    (flow) => `${cashKey(flow)}\u0000${flow.brokerFlowId ?? flow.id}`,
+  );
+  const dividends = uniqueByIdentity(
+    options.dividends ?? [],
+    (dividend) => `${cashKey(dividend)}\u0000${dividend.brokerDividendId ?? dividend.id}`,
+  );
+  const legs = cashLegs(
+    options.cashBalances ?? [],
+    cashFlows,
+    dividends,
+    trades,
+    options.cashCoverage ?? [],
+    fxRates,
+  );
+  const tradeWindows = new Map(
+    (options.cashCoverage ?? []).flatMap((value) =>
+      value.status === "complete" && value.quantityProvenFrom
+        ? [[ownerKey(value), { from: value.quantityProvenFrom, to: value.to }] as const]
+        : [],
+    ),
+  );
+  const lastKnownValue = new Map<string, number>();
+  let previousHoldings: Map<string, { quantity: number; value: number }> | null = null;
 
   return dates.map((date) => {
+    const currentHoldings = new Map<string, { quantity: number; value: number }>();
     let positionsValue = 0;
     let held = 0;
     let priced = 0;
     const unpriced = new Set<string>();
     const forwardFilled = new Set<string>();
+    const holdingsUnknown = new Set<string>();
+    let unaccountedValue = 0;
+    let unaccountedUnknown = false;
 
     for (const symbol of symbols) {
-      const quantity = (tradesBySymbol.get(symbol) ?? [])
-        .filter((trade) => trade.date <= date)
-        .reduce((sum, trade) => sum + signedQuantity(trade), 0);
+      const quantity = quantityOnDate(date, holdings.get(symbol) ?? []);
       if (Math.abs(quantity) < 1e-12) continue;
+      let symbolHoldingUnknown = false;
+      for (const holding of holdings.get(symbol) ?? []) {
+        const firstAnchor = [...holding.anchors.keys()].sort()[0];
+        if (!firstAnchor || date >= firstAnchor) continue;
+        const inferredOpening =
+          holding.anchors.get(firstAnchor)! - sumBetween(holding.events, "", firstAnchor);
+        if (Math.abs(inferredOpening) < 1e-8) continue;
+        /* A complete trade list from `from` through the anchor leaves no room
+         * for an unseen execution after `from`, so the walk back from the
+         * anchor is exact there. A negative result contradicts that proof and
+         * stays unknown rather than becoming a short position. */
+        const window = holding.owner.broker
+          ? tradeWindows.get(
+              ownerKey({ entity: holding.owner.entity, broker: holding.owner.broker }),
+            )
+          : undefined;
+        const walked = window && date >= window.from && firstAnchor <= window.to;
+        if (!walked || quantityOnDate(date, [holding]) < 0) {
+          holdingsUnknown.add(symbol);
+          symbolHoldingUnknown = true;
+        }
+      }
       held += 1;
-      const bars = barsBySymbol.get(symbol) ?? [];
-      const exact = bars.find((bar) => bar.date === date);
-      const latest = exact ?? bars.filter((bar) => bar.date < date).at(-1);
-      if (!latest) {
+      const prices = barsBySymbol.get(symbol);
+      while (prices && prices.index < prices.bars.length && prices.bars[prices.index]!.date <= date)
+        prices.latest = prices.bars[prices.index++]!;
+      const latest = prices?.latest;
+      const exact = latest?.date === date ? latest : undefined;
+      const bound = (): void => {
         unpriced.add(symbol);
+        const known = lastKnownValue.get(symbol);
+        if (known === undefined) unaccountedUnknown = true;
+        else unaccountedValue += Math.abs(known);
+      };
+      if (!latest) {
+        bound();
         continue;
       }
-      const missedBusinessDays = upperBound(weekdays, date) - upperBound(weekdays, latest.date);
-      if (!exact && missedBusinessDays > 5) {
-        unpriced.add(symbol);
+      if (!exact && !isPriceFresh(latest.date, date)) {
+        bound();
         continue;
       }
       try {
-        positionsValue += convertCurrency(quantity * latest.close, latest.currency, presentationCurrency, date, fxRates);
+        const symbolValue = convertCurrency(
+          quantity * latest.close,
+          latest.currency,
+          presentationCurrency,
+          date,
+          fxRates,
+        );
+        positionsValue += symbolValue;
         priced += 1;
-        if (!exact) forwardFilled.add(symbol);
+        lastKnownValue.set(symbol, symbolValue);
+        currentHoldings.set(symbol, { quantity, value: symbolValue });
+        // A later bar means the market traded again after this date, so the
+        // gap was a closed session and the last close is the true value.
+        const tradedLater = prices !== undefined && prices.index < prices.bars.length;
+        const symbolForwardFilled = !exact && !tradedLater;
+        if (symbolForwardFilled) forwardFilled.add(symbol);
+        if (symbolHoldingUnknown || symbolForwardFilled) unaccountedValue += Math.abs(symbolValue);
       } catch {
-        unpriced.add(symbol);
+        bound();
       }
     }
 
     let cashValue = 0;
     let reachableCashLegs = 0;
     const cashUnknown = new Set<string>();
-    for (const key of cashLegKeys) {
-      const anchorGroup = cashBalances.filter((anchor) => cashKey(anchor) === key);
-      const sample = anchorGroup[0] ?? cashFlows.find((flow) => cashKey(flow) === key) ?? dividends.find((dividend) => cashKey(dividend) === key);
-      if (!sample) continue;
-      const events: CashEvent[] = [
-        ...cashFlows.filter((flow) => cashKey(flow) === key).map(({ date: eventDate, amount }) => ({ date: eventDate, amount })),
-        ...dividends.filter((dividend) => cashKey(dividend) === key).map(({ date: eventDate, amount }) => ({ date: eventDate, amount })),
-      ];
-      const amount = cashAmountOnDate(date, anchorGroup, events);
-      if (amount === null) {
-        cashUnknown.add(displayCashKey(sample));
+    const cashEstimated = new Set<string>();
+    const cashShortfall: Record<string, number> = {};
+    for (const leg of legs) {
+      const { amount, estimated } = cashAmountOnDate(date, leg);
+      const unknown = amount === null || !Number.isFinite(amount);
+      if (unknown || estimated) {
+        /* What the movements come to when they do not come to nothing. This
+         * is the size of the history that is missing, and its sign says which
+         * side: below zero the spending is recorded without the funding,
+         * above it the funding without the spending. */
+        const residual = historyResidual(leg);
+        if (residual !== null && !historyCloses(leg)) cashShortfall[displayCashKey(leg)] = residual;
+      }
+      if (unknown) {
+        cashUnknown.add(displayCashKey(leg));
         continue;
       }
       try {
-        cashValue += convertCurrency(amount, sample.currency, presentationCurrency, date, fxRates);
+        cashValue += convertCurrency(amount, leg.currency, presentationCurrency, date, fxRates);
         reachableCashLegs += 1;
+        if (estimated) cashEstimated.add(displayCashKey(leg));
       } catch {
-        cashUnknown.add(displayCashKey(sample));
+        cashUnknown.add(displayCashKey(leg));
       }
     }
 
+    let holdingsReturn: number | null | undefined;
+    if (previousHoldings) {
+      let before = 0;
+      let after = 0;
+      for (const [symbol, previous] of previousHoldings) {
+        const now = currentHoldings.get(symbol);
+        if (now) {
+          before += previous.value;
+          after += (now.value * previous.quantity) / now.quantity;
+          continue;
+        }
+        if (Math.abs(quantityOnDate(date, holdings.get(symbol) ?? [])) >= 1e-12) continue;
+        const prices = barsBySymbol.get(symbol);
+        while (
+          prices &&
+          prices.index < prices.bars.length &&
+          prices.bars[prices.index]!.date <= date
+        )
+          prices.latest = prices.bars[prices.index++]!;
+        const latest = prices?.latest;
+        let repriced: number | null = null;
+        if (latest && (latest.date === date || isPriceFresh(latest.date, date))) {
+          try {
+            repriced = convertCurrency(
+              previous.quantity * latest.close,
+              latest.currency,
+              presentationCurrency,
+              date,
+              fxRates,
+            );
+          } catch {
+            repriced = null;
+          }
+        }
+        if (repriced === null) {
+          before = Number.NaN;
+          break;
+        }
+        before += previous.value;
+        after += repriced;
+      }
+      holdingsReturn = Number.isFinite(before) && before > 0 ? after / before - 1 : null;
+    }
+    previousHoldings = currentHoldings;
+
     const knownPositionsValue = held > 0 && priced === 0 ? null : positionsValue;
-    const knownCashValue = cashLegKeys.size === 0 || reachableCashLegs === 0 ? null : cashValue;
-    const reachableValues = [knownPositionsValue, knownCashValue].filter((value): value is number => value !== null);
+    const knownCashValue = legs.length === 0 || reachableCashLegs === 0 ? null : cashValue;
+    const reachableValues = [knownPositionsValue, knownCashValue].filter(
+      (value): value is number => value !== null,
+    );
     return {
       date,
       positionsValue: knownPositionsValue,
       cashValue: knownCashValue,
-      value: reachableValues.length === 0 ? null : reachableValues.reduce((sum, value) => sum + value, 0),
+      value:
+        reachableValues.length === 0
+          ? null
+          : reachableValues.reduce((sum, value) => sum + value, 0),
       unpriced: [...unpriced].sort(),
       forwardFilled: [...forwardFilled].sort(),
       cashUnknown: [...cashUnknown].sort(),
+      ...(cashEstimated.size ? { cashEstimated: [...cashEstimated].sort() } : {}),
+      ...(Object.keys(cashShortfall).length ? { cashShortfall } : {}),
+      ...(holdingsUnknown.size ? { holdingsUnknown: [...holdingsUnknown].sort() } : {}),
+      ...(unpriced.size || holdingsUnknown.size || forwardFilled.size
+        ? { unaccountedValue: unaccountedUnknown ? null : unaccountedValue }
+        : {}),
+      ...(holdingsReturn !== undefined ? { holdingsReturn } : {}),
     };
   });
 }
 
+/** Calendar-month arithmetic for range windows. `setUTCMonth` rolls a day that
+ *  the target month does not have into the next month (31 March minus one month
+ *  became 3 March), which silently shortened or lengthened the window. Clamp to
+ *  the target month's last day instead. */
 function subtractMonths(date: string, months: number): string {
-  const value = new Date(`${date}T00:00:00Z`);
-  value.setUTCMonth(value.getUTCMonth() - months);
-  return value.toISOString().slice(0, 10);
+  const [year, month, day] = date.split("-").map(Number);
+  const target = new Date(Date.UTC(year!, month! - 1 - months, 1));
+  const lastDay = new Date(
+    Date.UTC(target.getUTCFullYear(), target.getUTCMonth() + 1, 0),
+  ).getUTCDate();
+  const clampedDay = Math.min(day!, lastDay);
+  const targetMonth = String(target.getUTCMonth() + 1).padStart(2, "0");
+  return `${target.getUTCFullYear()}-${targetMonth}-${String(clampedDay).padStart(2, "0")}`;
 }
 
-export function filterPortfolioValueRange<T extends { date: string }>(points: T[], range: PortfolioRange): T[] {
+export function filterPortfolioValueRange<T extends { date: string }>(
+  points: T[],
+  range: PortfolioRange,
+): T[] {
   if (points.length === 0 || range === "All") return [...points];
   const latest = [...points].sort((a, b) => a.date.localeCompare(b.date)).at(-1)!.date;
-  const start = range === "YTD" ? `${latest.slice(0, 4)}-01-01` : subtractMonths(latest, range === "1M" ? 1 : range === "6M" ? 6 : 12);
+  const start =
+    range === "YTD"
+      ? `${latest.slice(0, 4)}-01-01`
+      : subtractMonths(latest, range === "1M" ? 1 : range === "6M" ? 6 : 12);
   return points.filter((point) => point.date >= start);
 }

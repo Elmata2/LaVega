@@ -1,5 +1,15 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
-import type { Account, EntityScope, EntitySummary, LearnedFact, Rule } from "@lavega/core";
+import type {
+  Account,
+  EntityScope,
+  EntitySummary,
+  ImportSession,
+  LearnedFact,
+  Tx,
+  Valuation,
+  VaultDocument,
+} from "@lavega/core";
+import type { ConversionMode } from "../settings.js";
 import {
   accountType,
   assumptionDueForReview,
@@ -20,18 +30,37 @@ import type { VaultStorage } from "@lavega/adapters";
 import ModulePicker, { WidgetPicker } from "../components/ModulePicker";
 import { WIDGETS, useOverviewWidgets, type ModuleId } from "../components/moduleRegistry";
 import { CATALOGUE_ENTRIES } from "../catalogue-rates";
-import { countryList, countryName, regionLabel, regionsFor } from "../countries.js";
+import { countryListIn, countryNameIn, regionLabelIn, regionsFor } from "../countries.js";
 import {
   getCashbackAssumptionEnabled,
   ownerDisplayName,
   setCashbackAssumptionEnabled,
   type OwnerName,
 } from "../settings.js";
-import { SCOPE_LABELS, SCOPE_ORDER } from "../scope.js";
+import { SHOW_ENTITY_CLASSIFIER, SHOW_INVOICE_FORWARDING, isArchivedWidget } from "../archive";
+import { SCOPE_ORDER } from "../scope.js";
+import { signOut, useAuthState } from "../authClient.js";
+import posthog from "../posthog.js";
+import type { ShellNotice } from "../shellNotice.js";
+import { useAppLocale } from "../appLocale.js";
+import { useTheme } from "../hooks/useTheme.js";
+import type { Theme } from "../lib/theme.js";
+import { shellCopy } from "../copy/shell.js";
+import { intakeCopy } from "../copy/intake.js";
+import type { View } from "../appRoutes.js";
+import { heldCashbackSentence } from "../copy/optimise.js";
+import DocumentsCard, { type DocumentNotice } from "../components/documents/DocumentsCard.js";
+import GenericImportCard, {
+  type GenericImportRequest,
+} from "../components/import/GenericImportCard.js";
 import Import from "./Import";
-import Regels from "./Regels";
 import Koppelingen from "./Koppelingen";
 import Backup from "./Backup";
+import Button from "../components/ui/Button.js";
+import Card, { CardHeader } from "../components/ui/Card.js";
+import SaldoInput from "../components/ui/SaldoInput.js";
+import StatusLine from "../components/ui/StatusLine.js";
+import SignInForm from "../components/SignInForm.js";
 
 /* Profiel — everything that is a setting rather than a place you work.
  *
@@ -46,6 +75,11 @@ import Backup from "./Backup";
  * card terms, and Vergrendelen. */
 
 type ProfielProps = {
+  /** Opens "what LaVega knows about you". Absent: the card is not shown. */
+  onNavigate?: (view: View) => void;
+  /** The intake has produced something to plan with (App's rule, unchanged).
+   *  Unlocked, the top card opens the plan; locked, it starts the intake. */
+  planUnlocked: boolean;
   /** Module picker. */
   enabledModules: ModuleId[];
   onModulesChange: (next: ModuleId[]) => void;
@@ -61,6 +95,21 @@ type ProfielProps = {
   /** The level under the country. "" means he has not said — never a default. */
   homeRegion: string;
   onHomeRegionChange: (region: string) => void;
+  /** Whether a non-EUR balance/transaction counts toward the euro totals. Owned
+   *  by App (see homeCountry above) so every view sees the same flip. */
+  fxConversionMode: ConversionMode;
+  onFxConversionModeChange: (mode: ConversionMode) => void;
+  /** Opt-in share of Totale positie into LaVega Investing's net worth. Owned by
+   *  App: turning it off must fire the DELETE exactly once, from the same
+   *  place the preference itself changes. `shareNetWorthEnabled` is the
+   *  EFFECTIVE state the checkbox shows (App keeps the underlying preference
+   *  on internally until the delete that turning it off triggers actually
+   *  succeeds, so the checkbox itself must not wait for that to uncheck). */
+  shareNetWorthEnabled: boolean;
+  onShareNetWorthEnabledChange: (on: boolean) => void;
+  /** True while a delete triggered by turning the switch off has not yet
+   *  succeeded — shows the retry note; App keeps retrying on its own. */
+  shareNetWorthPendingDelete: boolean;
   /** The owner's own name. A local preference; it never leaves this browser. */
   ownerName: OwnerName;
   onOwnerNameChange: (name: OwnerName) => void;
@@ -69,20 +118,69 @@ type ProfielProps = {
   entity: string;
   onEntityChange: (entity: string) => void;
   busy: boolean;
-  problems: string[];
+  problems: ShellNotice[];
   onImport: (file: File) => void;
-  /** Regels (unchanged component). */
-  rules: Rule[];
-  ruleMatch: string;
-  onRuleMatchChange: (match: string) => void;
-  ruleCategory: string;
-  onRuleCategoryChange: (category: string) => void;
-  onSaveRules: (next: Rule[]) => void;
+  onRefreshBank: () => void;
   /** Back-up (unchanged component). */
   storage: VaultStorage;
   asOf: string;
   onRestored: () => void;
+  /** Statement documents (WS3.4/WS3.5, issue #293): metadata only; the bytes
+   *  live sealed in their own store. */
+  documents?: VaultDocument[];
+  documentNotice?: DocumentNotice | null;
+  documentErased?: number | null;
+  accounts?: readonly Account[];
+  txs?: readonly Tx[];
+  valuations?: readonly Valuation[];
+  onDocumentUpload?: (file: File) => void;
+  onDocumentLink?: (id: string, accountKey: string) => void;
+  onDocumentReject?: (id: string) => void;
+  onDocumentRemove?: (id: string) => void;
+  onDocumentEraseAll?: () => void;
+  /** Generic import sessions (WS3.6, issue #294). */
+  importSessions?: ImportSession[];
+  importNotice?: string | null;
+  onGenericImport?: (request: GenericImportRequest) => void;
+  onGenericRevert?: (sessionId: string) => void;
 };
+
+/* Account — sign in against the configured LaVega server so the owner can test
+ * the Enable Banking flow. Sign-up lives in the landing page's auth dialog, not
+ * here, and the server still requires a verified email. Nothing renders while the state is
+ * `loading`: a signed-out default would flash the login form at someone who
+ * is already signed in, for the one render before the real check lands. */
+function AccountBlock() {
+  const [locale] = useAppLocale();
+  const c = shellCopy[locale];
+  const { state, refresh } = useAuthState();
+
+  async function handleSignOut() {
+    await signOut();
+    posthog.reset();
+    refresh();
+  }
+
+  if (state.kind === "loading") return null;
+
+  return (
+    <Card as="section" aria-label={c.profiel.account.ariaLabel}>
+      <h2>{c.profiel.account.heading}</h2>
+      {state.kind === "unconfigured" && (
+        <p className="cell-sub">{c.profiel.account.unconfigured}</p>
+      )}
+      {state.kind === "signed-out" && (
+        <SignInForm locale={locale} intro={c.profiel.account.signedOutIntro} onSuccess={refresh} />
+      )}
+      {state.kind === "signed-in" && (
+        <>
+          <p className="cell-sub">{state.email}</p>
+          <Button onClick={() => void handleSignOut()}>{c.profiel.account.signOut}</Button>
+        </>
+      )}
+    </Card>
+  );
+}
 
 /* ── CASHBACK CORRIGEREN — de feedbackmodule (app review 4, punt 22) ─────────
  *
@@ -124,6 +222,8 @@ function CashbackCorrigeren({
   asOf: string;
   onRestored: () => void;
 }) {
+  const [locale] = useAppLocale();
+  const c = shellCopy[locale];
   const [cards, setCards] = useState<Account[] | null>(null);
   const [facts, setFacts] = useState<LearnedFact[]>([]);
   const [loadProblem, setLoadProblem] = useState<string | null>(null);
@@ -136,7 +236,10 @@ function CashbackCorrigeren({
     let alive = true;
     (async () => {
       try {
-        const [loadedAccounts, loadedFacts] = await Promise.all([storage.getAccounts(), storage.getFacts()]);
+        const [loadedAccounts, loadedFacts] = await Promise.all([
+          storage.getAccounts(),
+          storage.getFacts(),
+        ]);
         if (!alive) return;
         setCards(loadedAccounts.filter(isSpendable));
         setFacts(loadedFacts);
@@ -156,12 +259,20 @@ function CashbackCorrigeren({
      vraag met één antwoord — twee regels zouden suggereren dat je ze los kunt
      zetten, en de tweede zou de eerste stil overschrijven. */
   const rows = useMemo(() => {
-    const byProduct = new Map<string, { product: string; bank: string; kind: "betaalpas" | "creditcard"; names: string[] }>();
+    const byProduct = new Map<
+      string,
+      { product: string; bank: string; kind: "betaalpas" | "creditcard"; names: string[] }
+    >();
     for (const a of cards ?? []) {
       const product = productOf(a);
       if (!product) continue;
       const kind = accountType(a) === "Creditcard" ? "creditcard" : "betaalpas";
-      const row = byProduct.get(product) ?? { product, bank: String(a.bank ?? ""), kind, names: [] };
+      const row = byProduct.get(product) ?? {
+        product,
+        bank: String(a.bank ?? ""),
+        kind,
+        names: [],
+      };
       row.names.push(a.name || a.key);
       byProduct.set(product, row);
     }
@@ -173,7 +284,9 @@ function CashbackCorrigeren({
     setProblem(null);
     const raw = (drafts[product] ?? "").trim();
     if (raw === "") {
-      setProblem(`Vul eerst een percentage in bij ${product}.`);
+      setProblem(
+        `${c.profiel.cashback.emptyPercentPrefix}${product}${c.profiel.cashback.emptyPercentSuffix}`,
+      );
       return;
     }
     const incoming = makeFact({
@@ -195,7 +308,9 @@ function CashbackCorrigeren({
     try {
       await storage.putFacts(next);
     } catch (e) {
-      setProblem(`Opslaan in de kluis lukte niet: ${e instanceof Error ? e.message : String(e)}.`);
+      setProblem(
+        `${c.profiel.cashback.saveFailedPrefix}${e instanceof Error ? e.message : String(e)}.`,
+      );
       return;
     }
     setFacts(next);
@@ -212,7 +327,9 @@ function CashbackCorrigeren({
     try {
       await storage.putFacts(next);
     } catch (e) {
-      setProblem(`Wissen lukte niet: ${e instanceof Error ? e.message : String(e)}.`);
+      setProblem(
+        `${c.profiel.cashback.clearFailedPrefix}${e instanceof Error ? e.message : String(e)}.`,
+      );
       return;
     }
     setFacts(next);
@@ -225,56 +342,52 @@ function CashbackCorrigeren({
   }
 
   return (
-    <section className="card" aria-label="Cashback corrigeren">
-      <div className="card-header">
-        <h2>Cashback corrigeren</h2>
-        <span className="eyebrow">{rows.length} {rows.length === 1 ? "kaart" : "kaarten"}</span>
-      </div>
-      <p className="cell-sub">
-        Bij een gewone Nederlandse betaalpas of grootbankcreditcard neemt LaVega aan dat er geen cashback is.
-        Dat is een aanname van ons en geen zin uit een document, dus je kunt hem hier terugdraaien: vul het
-        percentage in dat jouw kaart echt geeft. Wat jij invult gaat vóór alles wat LaVega zelf vindt, ook na
-        een volgende zoekopdracht.
-      </p>
-      <p className="cell-sub">
-        Er gaat niets naar een server. Je correctie blijft in je eigen kluis, op dit apparaat.
-      </p>
+    <Card as="section" aria-label={c.profiel.cashback.ariaLabel}>
+      <CardHeader>
+        <h2>{c.profiel.cashback.heading}</h2>
+        <span className="eyebrow">
+          {rows.length}{" "}
+          {rows.length === 1 ? c.profiel.cashback.cardSingular : c.profiel.cashback.cardPlural}
+        </span>
+      </CardHeader>
+      <p className="cell-sub">{c.profiel.cashback.intro}</p>
+      <p className="cell-sub">{c.profiel.cashback.privacyNote}</p>
       {/* DE KEERZIJDE VAN DE REGEL, en die is net zo hard: een uitgesproken nul
           is een BEKENDE nul. Wie in de voorwaarden van zijn eigen kaart heeft
           gelezen dat er geen cashback is, hoort dat te kunnen vastleggen — dan
           staat er geen aanname meer maar zijn eigen vaststelling, en die
           verdwijnt niet als de aanname ooit wordt teruggedraaid. */}
       <p className="cell-sub">
-        Weet je zeker dat een kaart niets teruggeeft? Vul dan <strong>0</strong> in. Dat is geen aanname meer
-        maar jouw eigen vaststelling, en die blijft staan ook als je de aanname hieronder uitzet.
+        {c.profiel.cashback.zeroNoteBefore}
+        <strong>{c.profiel.cashback.zeroNoteBold}</strong>
+        {c.profiel.cashback.zeroNoteAfter}
       </p>
 
       <label>
         <input
           type="checkbox"
           checked={assumptionOn}
-          aria-label="Neem aan dat een gewone kaart geen cashback geeft"
+          aria-label={c.profiel.cashback.assumptionLabel}
           onChange={(e) => toggleAssumption(e.target.checked)}
         />{" "}
-        Neem aan dat een gewone kaart geen cashback geeft
+        {c.profiel.cashback.assumptionLabel}
       </label>
       <p className="cell-sub">
         {assumptionOn
-          ? "Staat aan. Zet hem uit om te zien wat er overblijft als LaVega alleen toont wat het echt gelezen heeft — dan staat er bij deze kaarten weer “onbekend”."
-          : "Staat uit. Bij kaarten zonder gelezen cijfer staat nu “onbekend” in plaats van nul, en de vergelijking op Optimalisatie kan daar geen bedrag bij noemen."}
+          ? c.profiel.cashback.assumptionOnStatus
+          : c.profiel.cashback.assumptionOffStatus}
       </p>
 
       {loadProblem !== null ? (
-        <p role="alert" className="text-warn">
-          LaVega kon je rekeningen niet uit de kluis lezen: {loadProblem}. Zonder die lijst is er niets om te
-          corrigeren.
-        </p>
+        <StatusLine tone="problem" role="alert">
+          {c.profiel.cashback.loadProblemPrefix}
+          {loadProblem}
+          {c.profiel.cashback.loadProblemSuffix}
+        </StatusLine>
       ) : cards === null ? (
-        <p className="text-muted">Bezig met lezen uit je kluis…</p>
+        <p className="text-muted">{c.profiel.cashback.loading}</p>
       ) : rows.length === 0 ? (
-        <p className="text-muted">
-          Nog geen betaalrekening of creditcard in je kluis. Importeer er één, dan verschijnt hij hier.
-        </p>
+        <p className="text-muted">{c.profiel.cashback.empty}</p>
       ) : (
         <ul className="scope-list">
           {rows.map((row) => {
@@ -284,43 +397,55 @@ function CashbackCorrigeren({
               issuer: row.bank,
               kind: row.kind,
               productName: row.product,
-              fact: pctNow !== null && entry ? { pct: pctNow, source: entry.source, updatedAt: entry.updatedAt } : null,
+              fact:
+                pctNow !== null && entry
+                  ? { pct: pctNow, source: entry.source, updatedAt: entry.updatedAt }
+                  : null,
               assumptionOn,
               // Dezelfde omweg als op Optimalisatie: zijn eigen kaart heeft geen
               // catalogusrij, dus de peildatum komt van de rijen van DEZE bank in
               // DIT soort product. Zonder die datum heet elke aanname voor altijd
               // "nog nooit nagekeken" en zegt de jaarlijkse blik niets meer.
-              lastCheckedAt: lastTermsCheckedForIssuer(CATALOGUE_ENTRIES, row.bank, CATALOGUE_KINDS_FOR[row.kind]),
+              lastCheckedAt: lastTermsCheckedForIssuer(
+                CATALOGUE_ENTRIES,
+                row.bank,
+                CATALOGUE_KINDS_FOR[row.kind],
+              ),
             });
-            const due = known.tier === "aangenomen" && assumptionDueForReview(known.lastCheckedAt, asOf);
+            const due =
+              known.tier === "aangenomen" && assumptionDueForReview(known.lastCheckedAt, asOf);
             return (
-              <li key={row.product} className="scope-item" data-testid={`cashback-fix-${row.product}`}>
+              <li
+                key={row.product}
+                className="scope-item"
+                data-testid={`cashback-fix-${row.product}`}
+              >
                 <div className="scope-item-text">
                   <span className="scope-item-name">{row.product}</span>
                   <span className="mp-what">
-                    {describeHeldCashback(known)}
-                    {due && " · een jaar of langer niet nagekeken"}
-                    {row.names.length > 1 && ` · geldt voor ${row.names.length} rekeningen`}
+                    {heldCashbackSentence(describeHeldCashback(known), locale)}
+                    {due && c.profiel.cashback.dueSuffix}
+                    {row.names.length > 1 &&
+                      `${c.profiel.cashback.namesSuffixPrefix}${row.names.length}${c.profiel.cashback.namesSuffixSuffix}`}
                   </span>
                 </div>
                 <div>
                   <label>
-                    <input
-                      className="saldo-input"
+                    <SaldoInput
                       inputMode="decimal"
-                      aria-label={`Cashback ${row.product}`}
+                      aria-label={`${c.profiel.cashback.cashbackInputAriaLabelPrefix} ${row.product}`}
                       placeholder={pctNow === null ? "%" : String(pctNow)}
                       value={drafts[row.product] ?? ""}
                       onChange={(e) => setDrafts((d) => ({ ...d, [row.product]: e.target.value }))}
                     />
                   </label>{" "}
-                  <button type="button" className="btn btn-primary" onClick={() => void saveCorrection(row.product)}>
-                    Opslaan
-                  </button>{" "}
+                  <Button variant="primary" onClick={() => void saveCorrection(row.product)}>
+                    {c.profiel.cashback.save}
+                  </Button>{" "}
                   {entry !== null && entry.source === "user" && (
-                    <button type="button" className="btn" onClick={() => void clearCorrection(row.product)}>
-                      Wis mijn correctie
-                    </button>
+                    <Button onClick={() => void clearCorrection(row.product)}>
+                      {c.profiel.cashback.clearCorrection}
+                    </Button>
                   )}
                 </div>
               </li>
@@ -330,16 +455,24 @@ function CashbackCorrigeren({
       )}
 
       {problem !== null && (
-        <p role="alert" className="text-warn">
+        <StatusLine tone="problem" role="alert">
           {problem}
+        </StatusLine>
+      )}
+      {saved !== null && (
+        <p data-testid="cashback-opgeslagen">
+          {c.profiel.cashback.savedPrefix}
+          {saved}.
         </p>
       )}
-      {saved !== null && <p data-testid="cashback-opgeslagen">Opgeslagen voor {saved}.</p>}
-    </section>
+    </Card>
   );
 }
 
+const THEME_OPTIONS: readonly Theme[] = ["midnight", "mono"];
+
 export default function Profiel({
+  planUnlocked,
   enabledModules,
   onModulesChange,
   focusModules,
@@ -349,6 +482,11 @@ export default function Profiel({
   onHomeCountryChange,
   homeRegion,
   onHomeRegionChange,
+  fxConversionMode,
+  onFxConversionModeChange,
+  shareNetWorthEnabled,
+  onShareNetWorthEnabledChange,
+  shareNetWorthPendingDelete,
   ownerName,
   onOwnerNameChange,
   onLock,
@@ -357,23 +495,37 @@ export default function Profiel({
   busy,
   problems,
   onImport,
-  rules,
-  ruleMatch,
-  onRuleMatchChange,
-  ruleCategory,
-  onRuleCategoryChange,
-  onSaveRules,
+  onRefreshBank,
   storage,
   asOf,
   onRestored,
+  documents = [],
+  documentNotice = null,
+  documentErased = null,
+  accounts = [],
+  txs = [],
+  valuations = [],
+  onDocumentUpload,
+  onDocumentLink,
+  onDocumentReject,
+  onDocumentRemove,
+  onDocumentEraseAll,
+  importSessions = [],
+  importNotice = null,
+  onGenericImport,
+  onGenericRevert,
+  onNavigate,
 }: ProfielProps) {
+  const [locale, setLocale] = useAppLocale();
+  const [theme, setTheme] = useTheme();
+  const c = shellCopy[locale];
   const modulesRef = useRef<HTMLElement>(null);
   // The widget preference is read here rather than passed in: the switch lives
   // on this page and the cards live on the homescreen, two branches of the tree
   // that share nothing above them but App itself. See moduleRegistry.
   const [widgets, setWidgets] = useOverviewWidgets();
   // 249 countries; built once rather than on every keystroke elsewhere on the page.
-  const countries = useMemo(() => countryList(), []);
+  const countries = useMemo(() => countryListIn(locale), [locale]);
   const regions = regionsFor(homeCountry);
   const fullName = ownerDisplayName(ownerName);
   // The initials are drawn, not fetched: a remote avatar would tell that server
@@ -391,145 +543,236 @@ export default function Profiel({
     modulesRef.current?.scrollIntoView?.({ block: "start" });
   }, [focusModules]);
 
+  const invite = intakeCopy[locale].home.invite;
   return (
     <>
+      <Card as="section" aria-label={c.nav.moduleLabels.plan} className="profiel-plan">
+        <h2>{c.nav.moduleLabels.plan}</h2>
+        <p>{planUnlocked ? c.profiel.plan.line : invite.intro}</p>
+        <Button
+          variant="primary"
+          onClick={() => onNavigate?.(planUnlocked ? "plan" : "intake")}
+        >
+          {planUnlocked ? c.profiel.plan.open : invite.start}
+        </Button>
+      </Card>
+      <Card as="section" aria-label={c.profiel.languageSwitch.ariaLabel}>
+        <h2>{c.profiel.languageSwitch.cardLabel}</h2>
+        <div className="scope-switch" role="group" aria-label={c.profiel.languageSwitch.ariaLabel}>
+          <button
+            type="button"
+            className={`scope-option${locale === "nl" ? " scope-on" : ""}`}
+            aria-pressed={locale === "nl"}
+            onClick={() => setLocale("nl")}
+          >
+            {c.profiel.languageSwitch.nl}
+          </button>
+          <span className="scope-rule" aria-hidden="true" />
+          <button
+            type="button"
+            className={`scope-option${locale === "en" ? " scope-on" : ""}`}
+            aria-pressed={locale === "en"}
+            onClick={() => setLocale("en")}
+          >
+            {c.profiel.languageSwitch.en}
+          </button>
+        </div>
+      </Card>
+
+      <AccountBlock />
+
+      {onNavigate && (
+        <Card as="section" aria-label={intakeCopy[locale].aboutYou.profielCard.title}>
+          <h2>{intakeCopy[locale].aboutYou.profielCard.title}</h2>
+          <p className="text-muted text-[0.85rem]">
+            {intakeCopy[locale].aboutYou.profielCard.body}
+          </p>
+          <Button onClick={() => onNavigate("about-you")}>
+            {intakeCopy[locale].aboutYou.profielCard.open}
+          </Button>
+        </Card>
+      )}
+
       {/* The owner, at the very top, so the page reads as his own screen and not
           as a settings menu. The name is a local preference like the buffer and
           the country: this browser only, never in the vault, never in a
           back-up, and deliberately never in anything a model is given. */}
-      <section className="card profile-head" aria-label="Profiel">
-        <span className="profile-head-avatar" aria-hidden="true">
+      <Card
+        as="section"
+        className="flex items-start gap-4 [@media(max-width:640px)]:flex-col"
+        aria-label={c.profiel.head.ariaLabel}
+      >
+        <span
+          className="inline-flex items-center justify-center flex-none w-[56px] h-[56px] rounded-pill border border-line bg-surface-2 text-ink font-body text-[1.15rem] font-semibold tracking-[0.02em]"
+          aria-hidden="true"
+          data-testid="profile-head-avatar"
+        >
           {initials}
         </span>
-        <div className="profile-head-text">
-          <h2 className="profile-head-name">{fullName || "Nog geen naam ingevuld"}</h2>
-          <p className="cell-sub">
-            Alleen voor dit scherm. Je naam blijft in deze browser — niet in de kluis, niet in een
-            back-up, en hij wordt nooit meegestuurd naar een model.
-          </p>
-          <div className="profile-head-fields">
+        <div className="min-w-0 flex-1">
+          <h2 className="mb-1" data-testid="profile-head-name">
+            {fullName || c.profiel.head.noName}
+          </h2>
+          <p className="cell-sub">{c.profiel.head.note}</p>
+          <div className="mt-3">
             <label>
-              Voornaam{" "}
+              {c.profiel.head.firstName}{" "}
               <input
                 value={ownerName.first}
-                aria-label="Voornaam"
+                aria-label={c.profiel.head.firstName}
                 autoComplete="off"
                 onChange={(e) => onOwnerNameChange({ ...ownerName, first: e.target.value })}
               />
             </label>{" "}
             <label>
-              Achternaam{" "}
+              {c.profiel.head.lastName}{" "}
               <input
                 value={ownerName.last}
-                aria-label="Achternaam"
+                aria-label={c.profiel.head.lastName}
                 autoComplete="off"
                 onChange={(e) => onOwnerNameChange({ ...ownerName, last: e.target.value })}
               />
             </label>
           </div>
         </div>
-      </section>
+      </Card>
 
-      <section className="card" aria-label="Modules" ref={modulesRef}>
-        <div className="card-header">
-          <h2>Modules</h2>
-          <span className="eyebrow">{enabledModules.length} in je navigatie</span>
+      <Card as="section" aria-label={c.profiel.appearance.ariaLabel}>
+        <h2>{c.profiel.appearance.heading}</h2>
+        <div
+          className="module-tabs theme-switch"
+          role="radiogroup"
+          aria-label={c.profiel.appearance.groupLabel}
+        >
+          {THEME_OPTIONS.map((option) => (
+            <label
+              key={option}
+              className={`module-tab theme-option${theme === option ? " module-tab-on" : ""}`}
+            >
+              <input
+                type="radio"
+                name="lavega-theme"
+                value={option}
+                checked={theme === option}
+                onChange={() => setTheme(option)}
+              />
+              <span className={`theme-swatch theme-swatch-${option}`} aria-hidden="true" />
+              {c.profiel.appearance[option]}
+            </label>
+          ))}
         </div>
-        <p className="cell-sub">
-          Zet aan wat jij gebruikt. Wat aan staat verschijnt in de balk bovenin; wat uit staat verdwijnt
-          daaruit — je gegevens blijven staan en je kunt het hier altijd weer aanzetten.
-        </p>
+      </Card>
+
+      <Card as="section" aria-label={c.profiel.modules.ariaLabel} ref={modulesRef}>
+        <CardHeader>
+          <h2>{c.profiel.modules.heading}</h2>
+          <span className="eyebrow">
+            {enabledModules.length} {c.profiel.modules.countSuffix}
+          </span>
+        </CardHeader>
+        <p className="cell-sub">{c.profiel.modules.description}</p>
         <ModulePicker enabled={enabledModules} onChange={onModulesChange} />
-      </section>
+      </Card>
 
       {/* The homescreen cards that are a choice rather than a fixture. Same
           switch as the modules above, one screen lower, because "welke tab" and
           "welke kaart" are the same question asked about a different surface.
           Both start off: he asked for a widget he can click on "instead of it
           always being default there". */}
-      <section className="card" aria-label="Widgets">
-        <div className="card-header">
-          <h2>Widgets op je overzicht</h2>
+      <Card as="section" aria-label={c.profiel.widgets.ariaLabel}>
+        <CardHeader>
+          <h2>{c.profiel.widgets.heading}</h2>
           <span className="eyebrow">
-            {widgets.length} van {WIDGETS.length} aan
+            {widgets.length} {c.profiel.widgets.of}{" "}
+            {WIDGETS.filter((w) => !isArchivedWidget(w.id)).length} {c.profiel.widgets.on}
           </span>
-        </div>
-        <p className="cell-sub">
-          Deze twee kaarten staan uit tot je ze hier aanzet. Wat uit staat verschijnt niet op je
-          startpagina — je gegevens blijven staan en je kunt het hier altijd weer aanzetten.
-        </p>
+        </CardHeader>
+        <p className="cell-sub">{c.profiel.widgets.description}</p>
         <WidgetPicker enabled={widgets} onChange={setWidgets} />
-      </section>
+      </Card>
 
-      <section className="card" aria-label="Persoonlijk of zakelijk">
-        <div className="card-header">
-          <h2>Persoonlijk of zakelijk</h2>
-          <span className="eyebrow">{entities.length} {entities.length === 1 ? "eenheid" : "eenheden"}</span>
-        </div>
-        <p className="cell-sub">
-          De schakelaar bovenin toont één helft van je geld. Hier bepaal je zelf welke helft een bedrijf of
-          rekening bij hoort. Wat je niet indeelt telt als persoonlijk — LaVega gokt dat nooit voor je.
-        </p>
+      {SHOW_ENTITY_CLASSIFIER && (
+        <Card as="section" aria-label={c.profiel.scopeSection.ariaLabel}>
+          <CardHeader>
+            <h2>{c.profiel.scopeSection.heading}</h2>
+            <span className="eyebrow">
+              {entities.length}{" "}
+              {entities.length === 1
+                ? c.profiel.scopeSection.unitSingular
+                : c.profiel.scopeSection.unitPlural}
+            </span>
+          </CardHeader>
+          <p className="cell-sub">{c.profiel.scopeSection.description}</p>
 
-        {entities.length === 0 ? (
-          <p className="text-muted">Nog geen rekeningen. Importeer er één, dan verschijnt hij hier.</p>
-        ) : (
-          <ul className="scope-list">
-            {entities.map((e) => (
-              <li key={e.entity} className="scope-item">
-                <div className="scope-item-text">
-                  <span className="scope-item-name">{e.entity}</span>
-                  <span className="mp-what">
-                    {e.accountKeys.length} {e.accountKeys.length === 1 ? "rekening" : "rekeningen"}
-                    {!e.explicit && ` · niet ingedeeld, telt als ${SCOPE_LABELS.personal.toLowerCase()}`}
-                    {!e.explicit && e.suggested !== e.scope && ` · de naam leest als ${SCOPE_LABELS[e.suggested].toLowerCase()}`}
-                  </span>
-                </div>
+          {entities.length === 0 ? (
+            <p className="text-muted">{c.profiel.scopeSection.noAccounts}</p>
+          ) : (
+            <ul className="scope-list">
+              {entities.map((e) => (
+                <li key={e.entity} className="scope-item">
+                  <div className="scope-item-text">
+                    <span className="scope-item-name">{e.entity}</span>
+                    <span className="mp-what">
+                      {e.accountKeys.length}{" "}
+                      {e.accountKeys.length === 1
+                        ? c.profiel.scopeSection.accountSingular
+                        : c.profiel.scopeSection.accountPlural}
+                      {!e.explicit &&
+                        `${c.profiel.scopeSection.unclassifiedPrefix}${c.scope.personal.toLowerCase()}`}
+                      {!e.explicit &&
+                        e.suggested !== e.scope &&
+                        `${c.profiel.scopeSection.nameReadsAsPrefix}${c.scope[e.suggested].toLowerCase()}`}
+                    </span>
+                  </div>
 
-                <div className="scope-switch" role="group" aria-label={`${e.entity}: persoonlijk of zakelijk`}>
-                  {SCOPE_ORDER.map((s, i) => (
-                    <Fragment key={s}>
-                      {i > 0 && <span className="scope-rule" aria-hidden="true" />}
-                      <button
-                        type="button"
-                        className={`scope-option${e.scope === s ? " scope-on" : ""}`}
-                        aria-pressed={e.scope === s}
-                        aria-label={`${e.entity} ${SCOPE_LABELS[s].toLowerCase()}`}
-                        onClick={() => onClassifyEntity(e.entity, s)}
-                      >
-                        {SCOPE_LABELS[s]}
-                      </button>
-                    </Fragment>
-                  ))}
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+                  <div
+                    className="scope-switch"
+                    role="group"
+                    aria-label={`${e.entity}: ${c.profiel.scopeSection.groupAriaLabelSuffix}`}
+                  >
+                    {SCOPE_ORDER.map((s, i) => (
+                      <Fragment key={s}>
+                        {i > 0 && <span className="scope-rule" aria-hidden="true" />}
+                        <button
+                          type="button"
+                          className={`scope-option${e.scope === s ? " scope-on" : ""}`}
+                          aria-pressed={e.scope === s}
+                          aria-label={`${e.entity} ${c.scope[s].toLowerCase()}`}
+                          onClick={() => onClassifyEntity(e.entity, s)}
+                        >
+                          {c.scope[s]}
+                        </button>
+                      </Fragment>
+                    ))}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
+      )}
 
-      <section className="card" aria-label="Land en regio">
-        <h2>Land en regio</h2>
-        <p className="cell-sub">
-          Bepaalt welke belastingregels LaVega gebruikt en in welke markt het de voorwaarden van je kaarten
-          opzoekt. De belastingmodules zijn op dit moment alleen voor Nederland uitgewerkt.
-        </p>
-        <p className="cell-sub">
-          Je vult dit zelf in. LaVega leidt nooit af waar je bent — geen locatie, geen IP, geen tijdzone.
-        </p>
+      <Card as="section" aria-label={c.profiel.countryRegion.ariaLabel}>
+        <h2>{c.profiel.countryRegion.heading}</h2>
+        <p className="cell-sub">{c.profiel.countryRegion.purpose}</p>
+        <p className="cell-sub">{c.profiel.countryRegion.neverInferred}</p>
         <div className="facturen-form">
           <label>
-            Land{" "}
-            <select value={homeCountry} onChange={(e) => onHomeCountryChange(e.target.value)} aria-label="Land">
-              {countries.map((c) => (
-                <option key={c.code} value={c.code}>
-                  {c.name}
+            {c.profiel.countryRegion.countryLabel}{" "}
+            <select
+              value={homeCountry}
+              onChange={(e) => onHomeCountryChange(e.target.value)}
+              aria-label={c.profiel.countryRegion.countryLabel}
+            >
+              {countries.map((country) => (
+                <option key={country.code} value={country.code}>
+                  {country.name}
                 </option>
               ))}
             </select>
           </label>{" "}
           <label>
-            {regionLabel(homeCountry)}{" "}
+            {regionLabelIn(locale, homeCountry)}{" "}
             {/* A list where we have a verified one, free text everywhere else:
                 belasting in Texas is niet belasting in New York, maar een
                 verzonnen keuzelijst voor de andere 247 landen zou een gok voor
@@ -537,8 +780,12 @@ export default function Profiel({
             <input
               value={homeRegion}
               list={regions.length > 0 ? "home-regions" : undefined}
-              aria-label={`${regionLabel(homeCountry)} in ${countryName(homeCountry)}`}
-              placeholder={regions.length > 0 ? "Kies of typ" : "Optioneel"}
+              aria-label={`${regionLabelIn(locale, homeCountry)} in ${countryNameIn(locale, homeCountry)}`}
+              placeholder={
+                regions.length > 0
+                  ? c.profiel.countryRegion.chooseOrType
+                  : c.profiel.countryRegion.optional
+              }
               autoComplete="off"
               onChange={(e) => onHomeRegionChange(e.target.value)}
             />
@@ -553,39 +800,108 @@ export default function Profiel({
         </div>
         <p className="cell-sub">
           {regions.length > 0
-            ? `LaVega kent de lijst voor ${countryName(homeCountry)}; je mag ook zelf iets intypen.`
-            : `Voor ${countryName(homeCountry)} heeft LaVega geen geverifieerde regiolijst — typ hem zelf, of laat hem leeg.`}
+            ? `${c.profiel.countryRegion.knownListNotePrefix}${countryNameIn(locale, homeCountry)}${c.profiel.countryRegion.knownListNoteSuffix}`
+            : `${c.profiel.countryRegion.noListNotePrefix}${countryNameIn(locale, homeCountry)}${c.profiel.countryRegion.noListNoteSuffix}`}
         </p>
-      </section>
+      </Card>
 
-      <Import entity={entity} onEntityChange={onEntityChange} busy={busy} problems={problems} onImport={onImport} />
+      <Card as="section" aria-label={c.profiel.fx.ariaLabel}>
+        <CardHeader>
+          <h2>{c.profiel.fx.heading}</h2>
+        </CardHeader>
+        <label>
+          <input
+            type="checkbox"
+            checked={fxConversionMode === "convert"}
+            aria-label={c.profiel.fx.convertLabel}
+            onChange={(e) => onFxConversionModeChange(e.target.checked ? "convert" : "separate")}
+          />{" "}
+          {c.profiel.fx.convertLabel}
+        </label>
+        <p className="cell-sub">{c.profiel.fx.description}</p>
+      </Card>
 
-      <Koppelingen />
+      <Card as="section" aria-label={c.profiel.netWorthShare.ariaLabel}>
+        <CardHeader>
+          <h2>{c.profiel.netWorthShare.heading}</h2>
+        </CardHeader>
+        <p className="cell-sub">{c.profiel.netWorthShare.description}</p>
+        <p className="cell-sub">{c.profiel.netWorthShare.privacyNote}</p>
+        <p className="cell-sub">{c.profiel.netWorthShare.perDeviceNote}</p>
+        <label>
+          <input
+            type="checkbox"
+            checked={shareNetWorthEnabled}
+            aria-label={c.profiel.netWorthShare.toggleLabel}
+            onChange={(e) => onShareNetWorthEnabledChange(e.target.checked)}
+          />{" "}
+          {c.profiel.netWorthShare.toggleLabel}
+        </label>
+        <p className="cell-sub">
+          {shareNetWorthEnabled
+            ? c.profiel.netWorthShare.onStatus
+            : c.profiel.netWorthShare.offStatus}
+        </p>
+        {shareNetWorthPendingDelete && (
+          <StatusLine tone="warning" role="alert">
+            {c.profiel.netWorthShare.pendingDeleteStatus}
+          </StatusLine>
+        )}
+      </Card>
 
-      <Regels
-        rules={rules}
+      <Import
+        entity={entity}
+        onEntityChange={onEntityChange}
         busy={busy}
-        ruleMatch={ruleMatch}
-        onRuleMatchChange={onRuleMatchChange}
-        ruleCategory={ruleCategory}
-        onRuleCategoryChange={onRuleCategoryChange}
-        onSaveRules={onSaveRules}
+        problems={problems}
+        onImport={onImport}
+        onRefreshBank={onRefreshBank}
       />
+
+      {onGenericImport != null && (
+        <GenericImportCard
+          accounts={[...accounts]}
+          existingTxs={[...txs]}
+          sessions={importSessions}
+          busy={busy}
+          notice={importNotice}
+          onImport={onGenericImport}
+          onRevert={onGenericRevert ?? (() => {})}
+        />
+      )}
+
+      {onDocumentUpload != null && (
+        <DocumentsCard
+          documents={documents}
+          accounts={[...accounts]}
+          txs={[...txs]}
+          valuations={valuations}
+          asOf={asOf}
+          busy={busy}
+          notice={documentNotice}
+          erased={documentErased}
+          onUpload={onDocumentUpload}
+          onLink={onDocumentLink ?? (() => {})}
+          onReject={onDocumentReject ?? (() => {})}
+          onRemove={onDocumentRemove ?? (() => {})}
+          onEraseAll={onDocumentEraseAll ?? (() => {})}
+        />
+      )}
+
+      {SHOW_INVOICE_FORWARDING && <Koppelingen />}
 
       <CashbackCorrigeren storage={storage} asOf={asOf} onRestored={onRestored} />
 
       <Backup storage={storage} asOf={asOf} onRestored={onRestored} />
 
-      <section className="card" aria-label="Vergrendelen">
-        <h2>Vergrendelen</h2>
-        <p className="cell-sub">
-          Sluit de kluis en wist alles uit het geheugen van deze browser. Je hebt je wachtwoord nodig om weer
-          binnen te komen.
-        </p>
-        <button type="button" className="btn" onClick={onLock}>
-          Vergrendel
-        </button>
-      </section>
+      <Card as="section" aria-label={c.profiel.lock.ariaLabel}>
+        <h2>{c.profiel.lock.heading}</h2>
+        <p className="cell-sub">{c.profiel.lock.description}</p>
+        <Button onClick={onLock}>{c.profiel.lock.button}</Button>
+      </Card>
+      <p className="cell-sub" data-testid="build-stamp">
+        LaVega build {__LAVEGA_BUILD__}
+      </p>
     </>
   );
 }

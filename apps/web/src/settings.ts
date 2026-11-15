@@ -3,6 +3,8 @@
  * localStorage — outside the encrypted vault, and available before unlock.
  * Guarded so it no-ops where localStorage is absent (SSR/tests). */
 
+import type { ConversionMode, EntityScope } from "@lavega/core";
+
 const BUFFER_KEY = "lavega.bufferCents";
 
 /** The alert buffer in integer cents (>= 0). Defaults to 0 (warn only when a
@@ -21,7 +23,8 @@ export function getBufferCents(): number {
 
 export function setBufferCents(cents: number): void {
   try {
-    if (typeof localStorage !== "undefined") localStorage.setItem(BUFFER_KEY, String(Math.max(0, Math.round(cents))));
+    if (typeof localStorage !== "undefined")
+      localStorage.setItem(BUFFER_KEY, String(Math.max(0, Math.round(cents))));
   } catch {
     /* quota/serialization errors are non-fatal for a preference */
   }
@@ -30,7 +33,7 @@ export function setBufferCents(cents: number): void {
 const AI_KEY = "lavega.aiExtraction";
 
 /** Opt-in toggle for AI PDF invoice extraction. Defaults false: no document is
- *  ever sent to the server (and onward to Anthropic) unless the owner turns this
+ *  ever sent to the server (and onward to Mistral) unless the owner turns this
  *  on AND picks a specific PDF. A preference, so it lives in localStorage. */
 export function getAiExtractionEnabled(): boolean {
   try {
@@ -51,7 +54,7 @@ export function setAiExtractionEnabled(on: boolean): void {
 const CHAT_KEY = "lavega.chatEnabled";
 
 /** Opt-in toggle for the LaVega chat assistant. Defaults false: no tab
- *  context or message is ever sent to the server (and onward to Claude)
+ *  context or message is ever sent to the server (and onward to Mistral)
  *  until the owner explicitly turns this on. A preference, so it lives in
  *  localStorage. */
 export function getChatEnabled(): boolean {
@@ -74,7 +77,7 @@ const CATEGORIZE_KEY = "lavega.aiCategorize";
 
 /** Opt-in toggle for AI transaction-categorization. Defaults false: the
  *  merchant text of your onbekend transactions is only sent to the server
- *  (and onward to Claude) after the owner turns this on. A preference, so it
+ *  (and onward to Mistral) after the owner turns this on. A preference, so it
  *  lives in localStorage. */
 export function getAiCategorizeEnabled(): boolean {
   try {
@@ -129,94 +132,121 @@ export function getCashbackAssumptionEnabled(): boolean {
 
 export function setCashbackAssumptionEnabled(on: boolean): void {
   try {
-    if (typeof localStorage !== "undefined") localStorage.setItem(CASHBACK_ASSUMPTION_KEY, on ? "1" : "0");
+    if (typeof localStorage !== "undefined")
+      localStorage.setItem(CASHBACK_ASSUMPTION_KEY, on ? "1" : "0");
   } catch {
     /* quota/serialization errors are non-fatal for a preference */
   }
 }
 
-/* --- The owner's own n8n invoice webhook (see docs/n8n/FACTUREN.md).
- * URL and token are HIS, for HIS n8n: they live in this browser only — never in
- * the vault-synced data (a back-up file would then carry a live token), never
- * in the repo, and they are never sent to the LaVega server. The whole point of
- * the n8n design is that the invoice path is mailbox -> his n8n -> his browser,
- * with our server nowhere in it. --- */
+/** Exported so callers that need to recognize this preference's own storage
+ *  events (the cross-tab sync in App.tsx) or read it directly at send time
+ *  (netWorthShare.ts, immediately before a PUT) don't hardcode the string a
+ *  second time. */
+export const SHARE_NET_WORTH_KEY = "lavega.shareNetWorth";
 
-const N8N_URL_KEY = "lavega.n8nInvoiceUrl";
-const N8N_TOKEN_KEY = "lavega.n8nInvoiceToken";
-
-export function getN8nInvoiceUrl(): string {
+/** Opt-in toggle for sharing today's "Totale positie" with LaVega Investing's
+ *  net worth (see apps/web/src/netWorthShare.ts). Defaults false: no number
+ *  leaves this browser until the owner turns this on, exactly like AI
+ *  extraction, chat and AI-categorisation above — the switch itself is a
+ *  preference, so it lives in localStorage; the totals it sends are the truth
+ *  Investing reads, and live on the server instead. */
+export function getShareNetWorthEnabled(): boolean {
   try {
-    return (typeof localStorage === "undefined" ? null : localStorage.getItem(N8N_URL_KEY)) ?? "";
+    return typeof localStorage !== "undefined" && localStorage.getItem(SHARE_NET_WORTH_KEY) === "1";
   } catch {
-    return "";
+    return false;
   }
 }
 
-export function setN8nInvoiceUrl(url: string): void {
+export function setShareNetWorthEnabled(on: boolean): void {
   try {
-    if (typeof localStorage !== "undefined") localStorage.setItem(N8N_URL_KEY, String(url ?? "").trim());
+    if (typeof localStorage !== "undefined")
+      localStorage.setItem(SHARE_NET_WORTH_KEY, on ? "1" : "0");
   } catch {
-    /* non-fatal for a preference */
+    /* quota/serialization errors are non-fatal for a preference */
   }
 }
 
-export function getN8nInvoiceToken(): string {
+/** Exported for the same reason as SHARE_NET_WORTH_KEY above. */
+export const SHARE_NET_WORTH_PENDING_DELETE_KEY = "lavega.shareNetWorthPendingDelete";
+
+/** Set the moment the owner switches sharing off, before the DELETE that is
+ *  supposed to remove every total this account ever sent is known to have
+ *  succeeded. Cleared only once that DELETE actually lands — a failed or
+ *  interrupted attempt (closed tab, lost connection) leaves this set, so the
+ *  next unlock retries instead of quietly leaving rows behind on the server.
+ *  Per device, like the switch itself: this browser's pending delete says
+ *  nothing about whether another device is still sharing. */
+export function getShareNetWorthPendingDelete(): boolean {
   try {
-    return (typeof localStorage === "undefined" ? null : localStorage.getItem(N8N_TOKEN_KEY)) ?? "";
+    return (
+      typeof localStorage !== "undefined" &&
+      localStorage.getItem(SHARE_NET_WORTH_PENDING_DELETE_KEY) === "1"
+    );
   } catch {
-    return "";
+    return false;
   }
 }
 
-export function setN8nInvoiceToken(token: string): void {
+export function setShareNetWorthPendingDelete(pending: boolean): void {
   try {
-    if (typeof localStorage !== "undefined") localStorage.setItem(N8N_TOKEN_KEY, String(token ?? "").trim());
+    if (typeof localStorage === "undefined") return;
+    if (pending) localStorage.setItem(SHARE_NET_WORTH_PENDING_DELETE_KEY, "1");
+    else localStorage.removeItem(SHARE_NET_WORTH_PENDING_DELETE_KEY);
   } catch {
-    /* non-fatal for a preference */
+    /* quota/serialization errors are non-fatal for a preference */
   }
 }
 
-/* --- The owner's own n8n API access (see n8n-provision.ts).
- * The base URL of HIS n8n and an API key for it. Same rule as the two above and
- * for the same reason, one notch sharper: this key can create and modify
- * workflows. It stays in THIS browser, it is never put in the vault (a back-up
- * file would then carry it), and it is never sent to the LaVega server — a
- * server-side proxy would work around CORS but would park a workflow-modifying
- * key on a shared host. --- */
+export type { ConversionMode };
 
-const N8N_BASE_KEY = "lavega.n8nBaseUrl";
-const N8N_API_KEY_KEY = "lavega.n8nApiKey";
+const FX_CONVERSION_MODE_KEY = "lavega.fxConversionMode";
 
-export function getN8nBaseUrl(): string {
+/** Converting into the totals is the stated default, not an opt-in — so, like
+ *  the cashback assumption above, "never set" must read as ON: `!== "0"`,
+ *  not `=== "1"`. */
+export function getFxConversionMode(): ConversionMode {
   try {
-    return (typeof localStorage === "undefined" ? null : localStorage.getItem(N8N_BASE_KEY)) ?? "";
+    if (typeof localStorage === "undefined") return "convert";
+    return localStorage.getItem(FX_CONVERSION_MODE_KEY) !== "0" ? "convert" : "separate";
   } catch {
-    return "";
+    return "convert";
   }
 }
 
-export function setN8nBaseUrl(url: string): void {
+export function setFxConversionMode(mode: ConversionMode): void {
   try {
-    if (typeof localStorage !== "undefined") localStorage.setItem(N8N_BASE_KEY, String(url ?? "").trim());
+    if (typeof localStorage !== "undefined")
+      localStorage.setItem(FX_CONVERSION_MODE_KEY, mode === "convert" ? "1" : "0");
   } catch {
-    /* non-fatal for a preference */
+    /* quota/serialization errors are non-fatal for a preference */
   }
 }
 
-export function getN8nApiKey(): string {
+/** A browser that set an n8n webhook URL/token before the 2026-09-08 vault
+ *  migration, and never reopened Koppelingen since, still has that token
+ *  sitting in plaintext localStorage — `migrateLegacyN8nSettings` used to
+ *  import-then-delete it on every Koppelingen open, but the whole vault-
+ *  backed webhook feature (and that migration with it) is gone, so nothing
+ *  reads or deletes these keys anymore. Nothing needs migrating either — the
+ *  values these keys held have no reader left — so this only finishes the
+ *  deletion the old migration used to do, closing the plaintext-secret
+ *  exposure that migration existed to close in the first place. Safe to call
+ *  on every load: once the keys are gone, this is a no-op. */
+export function clearLegacyN8nLocalStorage(): void {
   try {
-    return (typeof localStorage === "undefined" ? null : localStorage.getItem(N8N_API_KEY_KEY)) ?? "";
+    if (typeof localStorage === "undefined") return;
+    for (const key of [
+      "lavega.n8nInvoiceUrl",
+      "lavega.n8nInvoiceToken",
+      "lavega.n8nBaseUrl",
+      "lavega.n8nApiKey",
+    ]) {
+      localStorage.removeItem(key);
+    }
   } catch {
-    return "";
-  }
-}
-
-export function setN8nApiKey(key: string): void {
-  try {
-    if (typeof localStorage !== "undefined") localStorage.setItem(N8N_API_KEY_KEY, String(key ?? "").trim());
-  } catch {
-    /* non-fatal for a preference */
+    /* non-fatal: a blocked localStorage has nothing to clear */
   }
 }
 
@@ -231,8 +261,9 @@ export function setN8nApiKey(key: string): void {
 
 export const INVOICE_FORWARD_DOMAIN = "invoices.lavega.dev";
 const FORWARD_KEY = "lavega.invoiceForwardAddress";
-/** Zo veel willekeur dat niemand hem kan raden, kort genoeg om over te typen. */
-const FORWARD_RANDOM_CHARS = 10;
+/** Zo veel willekeur dat niemand hem kan raden: het adres werkt als een sleutel
+ *  (wie het kent kan er post in leggen), dus 16 tekens, ~80 bits. */
+const FORWARD_RANDOM_CHARS = 16;
 const FORWARD_ALPHABET = "abcdefghijkmnpqrstuvwxyz23456789"; // geen l/o/0/1: dit adres wordt overgetikt
 /* WELK ADRES GELDIG IS, en dit is bijgesteld nadat de echte er was.
  *
@@ -254,7 +285,8 @@ const FORWARD_ALPHABET = "abcdefghijkmnpqrstuvwxyz23456789"; // geen l/o/0/1: di
  * Wat de validatie nog wél doet: het moet één adres zijn, met een @ en een domein,
  * zonder spaties. Dat houdt een half overgetikt adres tegen zonder te doen alsof wij
  * weten welk adres zijn provider aanvaardt. */
-const FORWARD_PATTERN = /^[a-z0-9](?:[a-z0-9._%+-]{0,62}[a-z0-9])?@[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z]{2,})+$/i;
+const FORWARD_PATTERN =
+  /^[a-z0-9](?:[a-z0-9._%+-]{0,62}[a-z0-9])?@[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z]{2,})+$/i;
 
 /** Het opgeslagen adres, of "" als er nog nooit een gemaakt is. "" betekent
  *  "nog geen", nooit "gebruik maar iets" — er wordt hier niets verzonnen. */
@@ -270,16 +302,15 @@ export function getInvoiceForwardAddress(): string {
 function randomLocalSuffix(): string {
   const c = globalThis.crypto;
   if (!c || typeof c.getRandomValues !== "function") {
-    throw new Error("Deze browser heeft geen crypto.getRandomValues — LaVega weigert een raadbaar adres te maken.");
+    throw new Error(
+      "Deze browser heeft geen crypto.getRandomValues — LaVega weigert een raadbaar adres te maken.",
+    );
   }
   const buf = new Uint8Array(FORWARD_RANDOM_CHARS);
   c.getRandomValues(buf);
   return Array.from(buf, (b) => FORWARD_ALPHABET[b % FORWARD_ALPHABET.length]).join("");
 }
 
-/** Het adres van deze kluis-browser: bestaat hij al, dan komt precies díe terug.
- *  `makeSuffix` is injecteerbaar zodat een test kan bewijzen dat een tweede
- *  aanroep met ándere willekeur tóch hetzelfde adres oplevert. */
 /** Zijn eigen adres, zoals Cloudflare het routeert. Leeg maakt het adres leeg —
  *  dat is een echte keuze en geen fout. Ongeldig wordt geweigerd en niet stil
  *  genegeerd: een adres dat niet wordt opgeslagen terwijl het scherm zegt van wel,
@@ -299,16 +330,13 @@ export function setInvoiceForwardAddress(address: string): boolean {
   }
 }
 
-export function ensureInvoiceForwardAddress(makeSuffix: () => string = randomLocalSuffix): string {
-  const existing = getInvoiceForwardAddress();
-  if (existing) return existing;
-  const address = `lavega-${makeSuffix()}@${INVOICE_FORWARD_DOMAIN}`;
-  try {
-    if (typeof localStorage !== "undefined") localStorage.setItem(FORWARD_KEY, address);
-  } catch {
-    /* non-fatal for a preference */
-  }
-  return address;
+/** A fresh, unguessable address that is NOT stored. The caller records it on the
+ *  server first and persists it locally only after the server said yes, so a
+ *  failed or colliding attempt leaves nothing behind. */
+export function generateInvoiceForwardAddress(
+  makeSuffix: () => string = randomLocalSuffix,
+): string {
+  return `lavega-${makeSuffix()}@${INVOICE_FORWARD_DOMAIN}`;
 }
 
 const N8N_HANDLED_KEY = "lavega.n8nHandledMessageIds";
@@ -336,7 +364,10 @@ export function getHandledInvoiceMessageIds(): string[] {
 export function addHandledInvoiceMessageIds(ids: string[]): void {
   try {
     if (typeof localStorage === "undefined") return;
-    const merged = [...getHandledInvoiceMessageIds(), ...ids.filter((id) => typeof id === "string" && id.length > 0)];
+    const merged = [
+      ...getHandledInvoiceMessageIds(),
+      ...ids.filter((id) => typeof id === "string" && id.length > 0),
+    ];
     const deduped = Array.from(new Set(merged));
     localStorage.setItem(N8N_HANDLED_KEY, JSON.stringify(deduped.slice(-HANDLED_MAX)));
   } catch {
@@ -376,6 +407,42 @@ export function setEnabledModules(ids: string[]): void {
   }
 }
 
+const TAX_COUNTRY_KEY = "lavega.taxCountry";
+
+/** Which country's tax rules the Belasting screen applies.
+ *
+ *  Deliberately NOT the same setting as the home country. The home country also
+ *  decides which market's card terms the travel agent looks up and which
+ *  regions the border module offers, so picking "Germany" on the tax screen
+ *  would quietly move a Dutch owner's travel origin too. This is the narrower
+ *  question: whose tax law am I reading right now.
+ *
+ *  Unset means "follow the home country", which is right for the owner who
+ *  never thinks about this. It only becomes an explicit value when someone
+ *  chooses on the tax screen itself. */
+export function getTaxCountryOverride(): string | null {
+  try {
+    const raw = typeof localStorage === "undefined" ? null : localStorage.getItem(TAX_COUNTRY_KEY);
+    return raw && /^[A-Z]{2}$/.test(raw) ? raw : null;
+  } catch {
+    return null;
+  }
+}
+
+export function setTaxCountryOverride(code: string | null): void {
+  try {
+    if (typeof localStorage === "undefined") return;
+    if (code === null) {
+      localStorage.removeItem(TAX_COUNTRY_KEY);
+      return;
+    }
+    const c = String(code).trim().toUpperCase();
+    if (/^[A-Z]{2}$/.test(c)) localStorage.setItem(TAX_COUNTRY_KEY, c);
+  } catch {
+    /* non-fatal for a preference */
+  }
+}
+
 const HOME_COUNTRY_KEY = "lavega.homeCountry";
 
 /** The owner's home country as a 2-letter code, default NL. A local-first app
@@ -391,10 +458,29 @@ export function getHomeCountry(): string {
   }
 }
 
+/** The country AS STORED, or "" when he has never said.
+ *
+ *  `getHomeCountry()` answers "which rules do we apply" and falls back to NL,
+ *  which is the right answer for a computation and the WRONG one for a form:
+ *  seeding a picker with the fallback shows NL as chosen when nothing was, and
+ *  then submitting writes a country he never picked. Two questions, two
+ *  readers. */
+export function storedHomeCountry(): string {
+  try {
+    const raw = typeof localStorage === "undefined" ? null : localStorage.getItem(HOME_COUNTRY_KEY);
+    return raw && /^[A-Z]{2}$/.test(raw) ? raw : "";
+  } catch {
+    return "";
+  }
+}
+
 export function setHomeCountry(code: string): void {
   try {
-    const c = String(code ?? "").trim().toUpperCase();
-    if (typeof localStorage !== "undefined" && /^[A-Z]{2}$/.test(c)) localStorage.setItem(HOME_COUNTRY_KEY, c);
+    const c = String(code ?? "")
+      .trim()
+      .toUpperCase();
+    if (typeof localStorage !== "undefined" && /^[A-Z]{2}$/.test(c))
+      localStorage.setItem(HOME_COUNTRY_KEY, c);
   } catch {
     /* non-fatal for a preference */
   }
@@ -414,7 +500,9 @@ const REGION_MAX = 80;
  *  different thing from a region — nothing downstream may read it as one. */
 export function getHomeRegion(): string {
   try {
-    return (typeof localStorage === "undefined" ? null : localStorage.getItem(HOME_REGION_KEY)) ?? "";
+    return (
+      (typeof localStorage === "undefined" ? null : localStorage.getItem(HOME_REGION_KEY)) ?? ""
+    );
   } catch {
     return "";
   }
@@ -423,7 +511,12 @@ export function getHomeRegion(): string {
 export function setHomeRegion(region: string): void {
   try {
     if (typeof localStorage !== "undefined") {
-      localStorage.setItem(HOME_REGION_KEY, String(region ?? "").trim().slice(0, REGION_MAX));
+      localStorage.setItem(
+        HOME_REGION_KEY,
+        String(region ?? "")
+          .trim()
+          .slice(0, REGION_MAX),
+      );
     }
   } catch {
     /* non-fatal for a preference */
@@ -462,8 +555,18 @@ export function getOwnerName(): OwnerName {
 export function setOwnerName(name: OwnerName): void {
   try {
     if (typeof localStorage === "undefined") return;
-    localStorage.setItem(NAME_FIRST_KEY, String(name.first ?? "").trim().slice(0, NAME_MAX));
-    localStorage.setItem(NAME_LAST_KEY, String(name.last ?? "").trim().slice(0, NAME_MAX));
+    localStorage.setItem(
+      NAME_FIRST_KEY,
+      String(name.first ?? "")
+        .trim()
+        .slice(0, NAME_MAX),
+    );
+    localStorage.setItem(
+      NAME_LAST_KEY,
+      String(name.last ?? "")
+        .trim()
+        .slice(0, NAME_MAX),
+    );
   } catch {
     /* non-fatal for a preference */
   }
@@ -473,5 +576,64 @@ export function setOwnerName(name: OwnerName): void {
  *  nothing at all when he gave neither — the header says something else then,
  *  rather than greeting an empty space. */
 export function ownerDisplayName(name: OwnerName): string {
-  return [name.first, name.last].map((s) => s.trim()).filter(Boolean).join(" ");
+  return [name.first, name.last]
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .join(" ");
+}
+
+const DEFAULT_SCOPE_KEY = "lavega.defaultScope";
+
+/** Welke helft de app opent: persoonlijk of zakelijk.
+ *
+ *  Gezet in de eenmalige instelstap en daarna alleen nog in Profiel. De
+ *  terugval is `personal` en niet "wat hij het laatst aanstond": de schakelaar
+ *  bovenin is een filter binnen een sessie, en een filter dat zichzelf
+ *  onthoudt laat iemand een lege app openen zonder te weten waarom. Core's
+ *  eigen default voor een niet-ingedeelde entiteit is ook personal, dus deze
+ *  twee wijzen dezelfde kant op. */
+export function getDefaultScope(): EntityScope {
+  try {
+    if (typeof localStorage === "undefined") return "personal";
+    return localStorage.getItem(DEFAULT_SCOPE_KEY) === "business" ? "business" : "personal";
+  } catch {
+    return "personal";
+  }
+}
+
+export function setDefaultScope(scope: EntityScope): void {
+  try {
+    if (typeof localStorage !== "undefined") localStorage.setItem(DEFAULT_SCOPE_KEY, scope);
+  } catch {
+    /* non-fatal for a preference */
+  }
+}
+
+const DEFAULT_ENTITY_KEY = "lavega.defaultEntity";
+
+/** The name an import files new accounts under, until the owner types another.
+ *
+ *  PINNED ON FIRST USE, and that is the whole reason this is stored rather than
+ *  read from the copy module every time. The word should be in the reader's
+ *  language — "Persoonlijk" is meaningless to someone who opened the app in
+ *  English — but an entity name is DATA, not a label: it is stored on every
+ *  account it files and it is what the company filter groups on. Deriving it
+ *  from the current locale would mean that switching language halfway splits
+ *  one entity into two ("Persoonlijk" and "Personal"), and the owner would see
+ *  two groups of accounts that are the same thing.
+ *
+ *  So the language decides it once, and after that it is a name like any other
+ *  name the owner could have typed. Existing vaults are untouched: an account
+ *  already filed under "Persoonlijk" keeps that, because renaming someone's
+ *  data to tidy it is not ours to do. */
+export function getDefaultEntity(fallback: string): string {
+  try {
+    if (typeof localStorage === "undefined") return fallback;
+    const raw = localStorage.getItem(DEFAULT_ENTITY_KEY);
+    if (raw && raw.trim()) return raw;
+    localStorage.setItem(DEFAULT_ENTITY_KEY, fallback);
+    return fallback;
+  } catch {
+    return fallback;
+  }
 }

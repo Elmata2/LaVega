@@ -1,4 +1,21 @@
-/* Module system — the homescreen's building blocks (BACKLOG item 6).
+/* WRAPPED IN @layer components, AND THE REASON MATTERS.
+ *
+ * Tailwind's utilities compile into `@layer utilities`. Per the cascade-layers
+ * spec an UNLAYERED rule beats a layered one regardless of specificity, so
+ * while this file sat outside any layer it silently won against every utility
+ * touching the same property — no error, no failing test, the utility simply
+ * did nothing. Two workers hit that independently and worked around it by
+ * adding Tailwind's `!` modifier to hundreds of classes.
+ *
+ * Putting this file in `components` puts it where it belongs in the order
+ * tokens.css declares (theme, base, components, utilities): it still beats the
+ * theme, and a utility written on a converted element beats it, which is what
+ * a utility is for. The `!` workarounds become unnecessary.
+ *
+ * Relative order between these stylesheets is unchanged — they are all in the
+ * same layer, so main.tsx's import order still decides. */
+@layer components {
+  /* Module system — the homescreen's building blocks (BACKLOG item 6).
  *
  * Layout language borrowed from Alexander's reference dashboards: white cards
  * with a generous radius floating on the soft canvas, an uppercase
@@ -10,232 +27,207 @@
  * `height` (short/tall) and the grid places it. See module-grid.ts; the rules
  * below are pinned by module-grid.test.ts. */
 
-/* ---------- Grid ---------- */
+  /* ---------- Grid ---------- */
 
-.module-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: var(--grid-gap);
-  align-items: start;
-  margin-bottom: var(--sp-5);
-}
+  .module-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: var(--grid-gap);
+    align-items: start;
+    margin-bottom: var(--sp-5);
+  }
 
-.module-span-1 {
-  grid-column: span 1;
-}
-.module-span-2 {
-  grid-column: span 2;
-}
-.module-span-3 {
-  grid-column: 1 / -1;
-}
+  /* module-span-1/2/3 and module-short/tall used to live here as hand-written
+ * rules. They are now Tailwind utility strings computed by moduleClass() in
+ * module-grid.ts (SPAN_CLASS / HEIGHT_CLASS) — the grid-column and min-height
+ * declarations below are gone because a Tailwind class carries its own
+ * declaration, not because the layout changed. */
 
-.module-short {
-  min-height: var(--module-h-short);
-}
-.module-tall {
-  min-height: var(--module-h-tall);
-}
+  /* ---------- Module card ---------- */
 
-/* ---------- Module card ---------- */
-
-/* Flatter than it was: the reference announces a block with a title and a rule
+  /* Flatter than it was: the reference announces a block with a title and a rule
  * under it, not with a round-edged tile, so the radius came down to the small
  * one and the shadow went. The hairline border still holds the block together.
  * Same treatment as .card / .card-header in base.css — one header language. */
-.module {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: var(--r-sm);
-  padding: var(--module-pad);
-}
-
-/* The shared block header. Every block built on <Module> inherits the rule. */
-.module-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--sp-3);
-  min-height: 32px;
-  padding-bottom: var(--sp-3);
-  margin-bottom: var(--sp-4);
-  border-bottom: 1px solid var(--ink);
-}
-
-/* Uppercase, letter-spaced, mono — the reference's card title register. */
-.module-title {
-  margin: 0;
-  font-family: var(--font-mono);
-  font-size: 0.74rem;
-  font-weight: 500;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--ink);
-}
-
-.module-controls {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-2);
-  flex: none;
-}
-
-/* Period control ("Week ▾") — a pill select on the nested surface. */
-.module-period {
-  appearance: none;
-  border-radius: var(--pill);
-  border: 1px solid var(--line);
-  background: var(--surface-2);
-  color: var(--ink);
-  font-size: 0.8rem;
-  padding: 6px 26px 6px 14px;
-  cursor: pointer;
-  background-image: linear-gradient(45deg, transparent 50%, var(--muted) 50%),
-    linear-gradient(135deg, var(--muted) 50%, transparent 50%);
-  background-position: calc(100% - 14px) 52%, calc(100% - 10px) 52%;
-  background-size: 4px 4px, 4px 4px;
-  background-repeat: no-repeat;
-}
-.module-period:hover {
-  border-color: var(--accent);
-}
-
-/* The "…" menu slot. */
-.module-menu {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  padding: 0;
-  border-radius: 50%;
-  border: 1px solid var(--line);
-  background: var(--surface-2);
-  color: var(--muted);
-  font-size: 1rem;
-  line-height: 1;
-  cursor: pointer;
-}
-.module-menu:hover {
-  color: var(--ink);
-  border-color: var(--accent);
-}
-
-.module-body {
-  flex: 1;
-  min-width: 0;
-  min-height: 0;
-}
-
-.module-foot {
-  margin-top: var(--sp-4);
-  padding-top: var(--sp-3);
-  border-top: 1px solid var(--line);
-  color: var(--muted);
-  font-size: 0.85rem;
-}
-
-/* ---------- Big number + delta pill (reference: "$14,300.00 ↗2.03%") ---------- */
-
-.module-figure {
-  display: flex;
-  align-items: baseline;
-  gap: var(--sp-3);
-  flex-wrap: wrap;
-}
-.module-figure-value {
-  font-size: 2.1rem;
-  font-weight: 700;
-  letter-spacing: -0.02em;
-  line-height: 1.1;
-  font-variant-numeric: tabular-nums;
-}
-.module-figure-label {
-  margin: var(--sp-2) 0 0;
-  color: var(--muted);
-  font-size: 0.85rem;
-}
-
-.delta-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  border-radius: var(--pill);
-  padding: 3px 10px;
-  font-size: 0.78rem;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-  background: var(--surface-2);
-  color: var(--muted);
-}
-/* Money semantics, not chart semantics: up = more money out is handled by the
- * caller choosing the class, so a rising balance and a rising cost can differ. */
-.delta-pill.delta-up {
-  background: rgba(78, 122, 58, 0.12);
-  color: var(--pos);
-}
-.delta-pill.delta-down {
-  background: rgba(176, 68, 46, 0.12);
-  color: var(--neg);
-}
-.delta-pill.delta-flat {
-  background: var(--surface-2);
-  color: var(--muted);
-}
-
-/* ---------- Breakpoints: the grid collapses, spans clamp to full width ---------- */
-
-@media (max-width: 1200px) {
-  .module-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-  .module-span-2,
-  .module-span-3 {
-    grid-column: 1 / -1;
-  }
-}
-
-@media (max-width: 900px) {
-  .module-grid {
-    grid-template-columns: minmax(0, 1fr);
-  }
-  .module-span-1,
-  .module-span-2,
-  .module-span-3 {
-    grid-column: 1 / -1;
-  }
-  /* One column of stacked cards: a fixed tall height only adds dead space. */
-  .module-tall {
-    min-height: var(--module-h-short);
-  }
   .module {
-    padding: var(--sp-4);
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--r-sm);
+    padding: var(--module-pad);
   }
-  /* The card is full-width now, so the figure keeps its desktop size rather
-   * than shrinking — the mobile reference leads with big numbers. */
+
+  /* The shared block header. Every block built on <Module> inherits the rule. */
+  .module-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--sp-3);
+    min-height: 32px;
+    padding-bottom: var(--sp-3);
+    margin-bottom: var(--sp-4);
+    border-bottom: 1px solid var(--line);
+  }
+
+  /* Uppercase, letter-spaced, mono — the reference's card title register. */
+  .module-title {
+    margin: 0;
+    font-family: var(--font-mono);
+    font-size: 0.74rem;
+    font-weight: 500;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--ink);
+  }
+
+  .module-controls {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    flex: none;
+  }
+
+  /* Period control ("Week ▾") — a pill select on the nested surface. */
+  .module-period {
+    appearance: none;
+    border-radius: var(--pill);
+    border: 1px solid var(--line);
+    background: var(--surface-2);
+    color: var(--ink);
+    font-size: 0.8rem;
+    padding: 6px 26px 6px 14px;
+    cursor: pointer;
+    background-image:
+      linear-gradient(45deg, transparent 50%, var(--muted) 50%),
+      linear-gradient(135deg, var(--muted) 50%, transparent 50%);
+    background-position:
+      calc(100% - 14px) 52%,
+      calc(100% - 10px) 52%;
+    background-size:
+      4px 4px,
+      4px 4px;
+    background-repeat: no-repeat;
+  }
+  .module-period:hover {
+    border-color: var(--accent);
+  }
+
+  /* The "…" menu slot. */
+  .module-menu {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    border-radius: 50%;
+    border: 1px solid var(--line);
+    background: var(--surface-2);
+    color: var(--muted);
+    font-size: 1rem;
+    line-height: 1;
+    cursor: pointer;
+  }
+  .module-menu:hover {
+    color: var(--ink);
+    border-color: var(--accent);
+  }
+
+  .module-body {
+    flex: 1;
+    min-width: 0;
+    min-height: 0;
+  }
+
+  .module-foot {
+    margin-top: var(--sp-4);
+    padding-top: var(--sp-3);
+    border-top: 1px solid var(--line);
+    color: var(--muted);
+    font-size: 0.85rem;
+  }
+
+  /* ---------- Big number + delta pill (reference: "$14,300.00 ↗2.03%") ---------- */
+
+  .module-figure {
+    display: flex;
+    align-items: baseline;
+    gap: var(--sp-3);
+    flex-wrap: wrap;
+  }
   .module-figure-value {
     font-size: 2.1rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    line-height: 1.1;
+    font-variant-numeric: tabular-nums;
   }
-  /* A period pill and a "…" button next to a long uppercase title do not fit
-   * one phone-width line; let the header wrap instead of squeezing the title. */
-  .module-head {
-    flex-wrap: wrap;
-    row-gap: var(--sp-2);
+  .module-figure-label {
+    margin: var(--sp-2) 0 0;
+    color: var(--muted);
+    font-size: 0.85rem;
   }
-}
 
-/* ---------- "Toon meer" — de onderbouwing opgevouwen ----------
+  /* ---------- Breakpoints: the grid collapses, spans clamp to full width ----------
+ * Container queries on .content-container, the wrapper inside the scrolling
+ * main, so they follow what is left beside the rail and the sidebar rather than
+ * the viewport. module-grid.ts explains the numbers (1200 / 900). */
+
+  .content-container {
+    container-type: inline-size;
+  }
+
+  @container (max-width: 1200px) {
+    .module-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    /* span-2/span-3 clamping to the full row at this width is now the
+   * `[@container(max-width:1200px)]:col-span-full` variant on module-span-2 in
+   * module-grid.ts (span-3 is always the full row and carries no variant). */
+  }
+
+  @container (max-width: 900px) {
+    .module-grid {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    /* span-1/2/3 clamping to the full row, and module-tall collapsing to the
+   * short height, at this width are now the `[@container(max-width:900px)]:…`
+   * variants in module-grid.ts's SPAN_CLASS / HEIGHT_CLASS. */
+    .module {
+      padding: var(--sp-4);
+    }
+    /* The card is full-width now, so the figure keeps its desktop size rather
+   * than shrinking — the mobile reference leads with big numbers. */
+    .module-figure-value {
+      font-size: 2.1rem;
+    }
+    /* A period pill and a "…" button next to a long uppercase title do not fit
+   * one phone-width line; let the header wrap instead of squeezing the title. */
+    .module-head {
+      flex-wrap: wrap;
+      row-gap: var(--sp-2);
+    }
+    /* Once the header wraps, the controls may use the whole line and shrink
+     * with it; at `flex: none` a full-width search plus a link ran past the card. */
+    .module-controls {
+      flex: 1 1 auto;
+      min-width: 0;
+      justify-content: flex-end;
+    }
+  }
+
+  /* ---------- "Toon meer" — de onderbouwing opgevouwen ----------
  *
  * Hoort bij components/ToonMeer.tsx; dat bestand legt de vorm uit, dit legt de
  * opmaak uit. Twee verschijningsvormen op één element: `.toonmeer-regel` is de
  * volle regel onder een blok, `.toonmeer-info` het kleine ⓘ naast een kop.
  *
- * GEEN @media-blok in deze sectie, en dat is geen luiheid. module-grid.test.ts
- * leest dit stylesheet en zet elk @media-blok in een Map met de breedte als
- * sleutel; een tweede `@media (max-width: 900px)` overschrijft daar het
+ * GEEN @media- of @container-blok in deze sectie, en dat is geen luiheid.
+ * test-support/resolveStyle.ts (gebruikt door module-grid.test.tsx) leest dit
+ * stylesheet en zet elk @media- en @container-blok in een Map met de breedte als
+ * sleutel; een tweede `@container (max-width: 900px)` overschrijft daar het
  * bestaande blok en laat de gridtests slagen op de verkeerde regels. Het
  * onderdeel is vloeiend, dus het heeft er ook geen nodig — heb je er tóch een
  * nodig, kies dan een breedte die hierboven nog niet voorkomt (nu: 1200, 900).
@@ -243,138 +235,232 @@
  * En geen transition, geen animation, geen keyframes: open en dicht mogen
  * gewoon gebeuren. */
 
-.toonmeer {
-  min-width: 0;
-}
+  .toonmeer {
+    min-width: 0;
+  }
 
-/* De <summary> is het klikvlak. Het driehoekje van de browser gaat eraf omdat
+  /* De <summary> is het klikvlak. Het driehoekje van de browser gaat eraf omdat
  * het teken rechts (regel) of het ⓘ (info) de stand al draagt; `list-style` doet
  * dat in Chrome en Firefox, de ::-webkit-regel in Safari. Beide zijn nodig. */
-.toonmeer-summary {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-2);
-  list-style: none;
-  cursor: pointer;
-}
-.toonmeer-summary::-webkit-details-marker {
-  display: none;
-}
+  .toonmeer-summary {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    list-style: none;
+    cursor: pointer;
+  }
+  .toonmeer-summary::-webkit-details-marker {
+    display: none;
+  }
 
-/* base.css geeft een focusring aan `button:focus-visible`, en een <summary> is
+  /* base.css geeft een focusring aan `button:focus-visible`, en een <summary> is
  * geen button. Zonder deze regel is het onderdeel met het toetsenbord wel te
  * bedienen maar niet te zíen — dan valt de hele onderbouwing weg voor wie
  * tabt. */
-.toonmeer-summary:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-  border-radius: var(--r-sm);
-}
+  .toonmeer-summary:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+    border-radius: var(--r-sm);
+  }
 
-/* Het paneel is bewust rustiger dan de inhoud erboven: het cijfer is waarvoor
+  /* Het paneel is bewust rustiger dan de inhoud erboven: het cijfer is waarvoor
  * je kwam, dit is wat je erbij vraagt. */
-.toonmeer-panel {
-  color: var(--muted);
-  font-size: 0.88rem;
-  line-height: 1.55;
-}
-.toonmeer-panel > :first-child {
-  margin-top: 0;
-}
-.toonmeer-panel > :last-child {
-  margin-bottom: 0;
-}
+  .toonmeer-panel {
+    color: var(--muted);
+    font-size: 0.88rem;
+    line-height: 1.55;
+  }
+  .toonmeer-panel > :first-child {
+    margin-top: 0;
+  }
+  .toonmeer-panel > :last-child {
+    margin-bottom: 0;
+  }
 
-/* ---------- variant "regel": de volle regel onder een blok ---------- */
+  /* ---------- variant "regel": de volle regel onder een blok ---------- */
 
-.toonmeer-regel {
-  margin-top: var(--sp-4);
-  border-top: 1px solid var(--line);
-}
-.toonmeer-regel > .toonmeer-summary {
-  justify-content: space-between;
-  padding: var(--sp-3) 0;
-  color: var(--muted);
-  font-size: 0.85rem;
-}
-.toonmeer-regel > .toonmeer-summary:hover {
-  color: var(--ink);
-}
-.toonmeer-regel > .toonmeer-panel {
-  padding-bottom: var(--sp-3);
-}
+  .toonmeer-regel {
+    margin-top: var(--sp-4);
+    border-top: 1px solid var(--line);
+  }
+  .toonmeer-regel > .toonmeer-summary {
+    justify-content: space-between;
+    padding: var(--sp-3) 0;
+    color: var(--muted);
+    font-size: 0.85rem;
+  }
+  .toonmeer-regel > .toonmeer-summary:hover {
+    color: var(--ink);
+  }
+  .toonmeer-regel > .toonmeer-panel {
+    padding-bottom: var(--sp-3);
+  }
 
-/* Het teken komt uit CSS en niet uit de JSX, want alleen het stylesheet weet of
+  /* Het teken komt uit CSS en niet uit de JSX, want alleen het stylesheet weet of
  * de <details> openstaat; React houdt die stand juist met opzet niet bij. Een
  * vaste breedte zodat de regel niet verspringt als + een − wordt. */
-.toonmeer-regel .toonmeer-mark {
-  flex: none;
-  width: 1em;
-  text-align: center;
-  line-height: 1;
-}
-.toonmeer-regel .toonmeer-mark::after {
-  content: "+";
-}
-.toonmeer-regel[open] .toonmeer-mark::after {
-  content: "\2212"; /* een echt minteken, niet een koppelteken */
-}
+  .toonmeer-regel .toonmeer-mark {
+    flex: none;
+    width: 1em;
+    text-align: center;
+    line-height: 1;
+  }
+  .toonmeer-regel .toonmeer-mark::after {
+    content: "+";
+  }
+  .toonmeer-regel[open] .toonmeer-mark::after {
+    content: "\2212"; /* een echt minteken, niet een koppelteken */
+  }
 
-/* ---------- variant "info": het kleine ⓘ naast een kop ---------- */
+  /* ---------- variant "info": het kleine ⓘ naast een kop ---------- */
 
-/* De kop staat ín de <summary> (zie ToonMeer.tsx), dus zijn eigen marge zou hier
+  /* De kop staat ín de <summary> (zie ToonMeer.tsx), dus zijn eigen marge zou hier
  * een gat slaan tussen kop en paneel. */
-.toonmeer-info > .toonmeer-summary > h2,
-.toonmeer-info > .toonmeer-summary > h3,
-.toonmeer-info > .toonmeer-summary > h4 {
-  margin: 0;
-}
+  .toonmeer-info > .toonmeer-summary > h2,
+  .toonmeer-info > .toonmeer-summary > h3,
+  .toonmeer-info > .toonmeer-summary > h4 {
+    margin: 0;
+  }
 
-/* Zelfde vorm als .module-info en .field-info in views.css: één rond, stil
+  /* Zelfde vorm als .module-info en .field-info in views.css: één rond, stil
  * teken, zodat de drie plekken als één idee lezen op drie formaten. */
-.toonmeer-info .toonmeer-mark {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex: none;
-  width: 22px;
-  height: 22px;
-  border-radius: 50%;
-  border: 1px solid var(--line);
-  background: var(--surface-2);
-  color: var(--muted);
-  font-family: var(--font-display);
-  font-size: 0.85rem;
-  font-weight: 600;
-  line-height: 1;
-}
-.toonmeer-info > .toonmeer-summary:hover .toonmeer-mark,
-.toonmeer-info[open] > .toonmeer-summary .toonmeer-mark {
-  color: var(--ink);
-  border-color: var(--accent);
-}
+  .toonmeer-info .toonmeer-mark {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: none;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    border: 1px solid var(--line);
+    background: var(--surface-2);
+    color: var(--muted);
+    font-family: var(--font-body);
+    font-size: 0.85rem;
+    font-weight: 600;
+    line-height: 1;
+  }
+  .toonmeer-info > .toonmeer-summary:hover .toonmeer-mark,
+  .toonmeer-info[open] > .toonmeer-summary .toonmeer-mark {
+    color: var(--ink);
+    border-color: var(--accent);
+  }
 
-/* De belofte staat er wel, maar niet in beeld: naast een kop is een hele zin te
+  /* De belofte staat er wel, maar niet in beeld: naast een kop is een hele zin te
  * veel, terwijl een schermlezer anders alleen "i" te horen krijgt en niemand
  * weet waar hij op klikt. Vandaar deze klassieke verbergtruc in plaats van
  * display:none — dat laatste haalt hem ook uit de schermlezer. */
-.toonmeer-info > .toonmeer-summary > .toonmeer-label {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  margin: -1px;
-  padding: 0;
-  border: 0;
-  overflow: hidden;
-  clip-path: inset(50%);
-  white-space: nowrap;
-}
+  .toonmeer-info > .toonmeer-summary > .toonmeer-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    border: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
 
-.toonmeer-info > .toonmeer-panel {
-  margin-top: var(--sp-3);
-  padding: var(--sp-3) var(--sp-4);
-  border: 1px solid var(--line);
-  border-left: 3px solid var(--accent);
-  border-radius: var(--r-sm);
-  background: var(--surface-2);
+  .toonmeer-info > .toonmeer-panel {
+    margin-top: var(--sp-3);
+    padding: var(--sp-3) var(--sp-4);
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--accent);
+    border-radius: var(--r-sm);
+    background: var(--surface-2);
+  }
+
+  /* Forwarding-guide modal (ForwardingGuide.tsx). Native <dialog>, same pattern
+   * and the same transition values as the landing sign-in dialog, on app tokens. */
+  .guide-dialog {
+    position: relative;
+    padding: 0;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--r);
+    box-shadow: var(--shadow-float);
+    max-width: min(640px, calc(100vw - 32px));
+    max-height: calc(100vh - 32px);
+    overflow-y: auto;
+    width: 100%;
+    font-family: var(--font-body);
+    color: var(--ink);
+    transform-origin: center;
+    opacity: 0;
+    transform: scale(0.96);
+    transition:
+      opacity 250ms var(--ease-emphasized),
+      transform 250ms var(--ease-emphasized),
+      overlay 250ms allow-discrete,
+      display 250ms allow-discrete;
+  }
+  /* Content is unmounted on close, so an exit fade would show an empty dialog. */
+  .guide-dialog:not([open]) {
+    transition: none;
+  }
+  .guide-dialog-body {
+    padding: 32px;
+  }
+  .guide-dialog[open] {
+    opacity: 1;
+    transform: scale(1);
+  }
+  @starting-style {
+    .guide-dialog[open] {
+      opacity: 0;
+      transform: scale(0.96);
+    }
+  }
+  .guide-dialog::backdrop {
+    background: var(--scrim);
+    opacity: 0;
+    transition: opacity 250ms var(--ease-emphasized);
+  }
+  .guide-dialog[open]::backdrop {
+    opacity: 1;
+  }
+  @starting-style {
+    .guide-dialog[open]::backdrop {
+      opacity: 0;
+    }
+  }
+  .guide-dialog-close {
+    position: absolute;
+    top: 14px;
+    right: 14px;
+    width: 32px;
+    height: 32px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: none;
+    border: none;
+    border-radius: var(--pill);
+    font-size: 1.3rem;
+    line-height: 1;
+    color: var(--muted);
+    cursor: pointer;
+  }
+  .guide-dialog-close:hover {
+    background: var(--surface-2);
+    color: var(--ink);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .guide-dialog {
+      transform: none;
+      transition:
+        opacity 250ms ease,
+        overlay 250ms allow-discrete,
+        display 250ms allow-discrete;
+    }
+    .guide-dialog:not([open]) {
+      transition: none;
+    }
+    @starting-style {
+      .guide-dialog[open] {
+        opacity: 0;
+      }
+    }
+  }
 }

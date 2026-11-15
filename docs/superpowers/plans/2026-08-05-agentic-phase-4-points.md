@@ -34,15 +34,36 @@
 **Files:** Create `packages/core/src/rewards.ts`, `packages/core/src/rewards.test.ts`; modify `packages/core/src/index.ts`.
 
 **Interfaces produced:**
+
 ```ts
-export type RewardsBalance = { id: string; program: string; points: number; updatedAt: string; note?: string };
-export type RewardProgram = { name: string; centsPerPoint: number; category: string; note?: string };
+export type RewardsBalance = {
+  id: string;
+  program: string;
+  points: number;
+  updatedAt: string;
+  note?: string;
+};
+export type RewardProgram = {
+  name: string;
+  centsPerPoint: number;
+  category: string;
+  note?: string;
+};
 export type AmexTransfer = { partner: string; ratio: number; note?: string };
 export function makeRewardsBalance(r: Omit<RewardsBalance, "id">): RewardsBalance; // id = norm(program) — one row per program
-export function estimateValueCents(b: RewardsBalance, programs?: readonly RewardProgram[]): number | null; // null if program not in table
-export function totalValueCents(balances: RewardsBalance[], programs?: readonly RewardProgram[]): number;
+export function estimateValueCents(
+  b: RewardsBalance,
+  programs?: readonly RewardProgram[],
+): number | null; // null if program not in table
+export function totalValueCents(
+  balances: RewardsBalance[],
+  programs?: readonly RewardProgram[],
+): number;
 export function isStale(b: RewardsBalance, asOf: string, maxDays?: number): boolean; // default maxDays = 90
-export function amexTransferOptions(points: number, transfers?: readonly AmexTransfer[]): { partner: string; miles: number; note?: string }[];
+export function amexTransferOptions(
+  points: number,
+  transfers?: readonly AmexTransfer[],
+): { partner: string; miles: number; note?: string }[];
 export const REWARDS_AS_OF: string;
 export const REWARD_PROGRAMS: readonly RewardProgram[];
 export const AMEX_MR_TRANSFERS: readonly AmexTransfer[];
@@ -53,15 +74,32 @@ export const AMEX_MR_TRANSFERS: readonly AmexTransfer[];
 ```ts
 import { expect, test } from "vitest";
 import {
-  makeRewardsBalance, estimateValueCents, totalValueCents, isStale, amexTransferOptions,
-  REWARD_PROGRAMS, AMEX_MR_TRANSFERS,
+  makeRewardsBalance,
+  estimateValueCents,
+  totalValueCents,
+  isStale,
+  amexTransferOptions,
+  REWARD_PROGRAMS,
+  AMEX_MR_TRANSFERS,
 } from "./rewards.js";
 
-const amex = makeRewardsBalance({ program: "American Express Membership Rewards", points: 10000, updatedAt: "2026-06-01" });
+const amex = makeRewardsBalance({
+  program: "American Express Membership Rewards",
+  points: 10000,
+  updatedAt: "2026-06-01",
+});
 
 test("makeRewardsBalance: stable id per program (same program -> same id)", () => {
-  const a = makeRewardsBalance({ program: "American Express Membership Rewards", points: 1, updatedAt: "2026-01-01" });
-  const b = makeRewardsBalance({ program: "  american express membership rewards ", points: 999, updatedAt: "2026-07-01" });
+  const a = makeRewardsBalance({
+    program: "American Express Membership Rewards",
+    points: 1,
+    updatedAt: "2026-01-01",
+  });
+  const b = makeRewardsBalance({
+    program: "  american express membership rewards ",
+    points: 999,
+    updatedAt: "2026-07-01",
+  });
   expect(a.id).toBe(b.id); // dedupe by normalized program name
   expect(typeof a.id).toBe("string");
   expect(a.id.length).toBeGreaterThan(0);
@@ -70,7 +108,11 @@ test("makeRewardsBalance: stable id per program (same program -> same id)", () =
 test("estimateValueCents uses the program's cents-per-point; null for an unknown program", () => {
   // Amex MR default cpp is 1.0 -> 10000 pts = 10000 cents = €100
   expect(estimateValueCents(amex)).toBe(10000);
-  const unknown = makeRewardsBalance({ program: "Kruidvat zegeltjes", points: 500, updatedAt: "2026-06-01" });
+  const unknown = makeRewardsBalance({
+    program: "Kruidvat zegeltjes",
+    points: 500,
+    updatedAt: "2026-06-01",
+  });
   expect(estimateValueCents(unknown)).toBeNull();
 });
 
@@ -81,14 +123,16 @@ test("totalValueCents sums only the balances whose program is known", () => {
 
 test("isStale: true past maxDays, false within", () => {
   expect(isStale(amex, "2026-06-15", 90)).toBe(false); // 14 days
-  expect(isStale(amex, "2026-10-01", 90)).toBe(true);   // ~122 days
+  expect(isStale(amex, "2026-10-01", 90)).toBe(true); // ~122 days
 });
 
 test("amexTransferOptions applies each partner ratio", () => {
   const opts = amexTransferOptions(10000);
   expect(opts.length).toBe(AMEX_MR_TRANSFERS.length);
   const fb = opts.find((o) => o.partner.includes("Flying Blue"));
-  expect(fb?.miles).toBe(10000 * (AMEX_MR_TRANSFERS.find((t) => t.partner.includes("Flying Blue"))!.ratio));
+  expect(fb?.miles).toBe(
+    10000 * AMEX_MR_TRANSFERS.find((t) => t.partner.includes("Flying Blue"))!.ratio,
+  );
 });
 
 test("reference tables are non-empty and well-formed", () => {
@@ -104,8 +148,19 @@ test("reference tables are non-empty and well-formed", () => {
 ```ts
 import { norm } from "./hash.js";
 
-export type RewardsBalance = { id: string; program: string; points: number; updatedAt: string; note?: string };
-export type RewardProgram = { name: string; centsPerPoint: number; category: string; note?: string };
+export type RewardsBalance = {
+  id: string;
+  program: string;
+  points: number;
+  updatedAt: string;
+  note?: string;
+};
+export type RewardProgram = {
+  name: string;
+  centsPerPoint: number;
+  category: string;
+  note?: string;
+};
 export type AmexTransfer = { partner: string; ratio: number; note?: string };
 
 /** One row per program: id is the normalized program name, so editing a
@@ -121,13 +176,19 @@ function findProgram(name: string, programs: readonly RewardProgram[]): RewardPr
 
 /** Indicative euro value in cents using the program's cents-per-point, or null
  *  when the program isn't in the reference table (UI shows "waarde onbekend"). */
-export function estimateValueCents(b: RewardsBalance, programs: readonly RewardProgram[] = REWARD_PROGRAMS): number | null {
+export function estimateValueCents(
+  b: RewardsBalance,
+  programs: readonly RewardProgram[] = REWARD_PROGRAMS,
+): number | null {
   const p = findProgram(b.program, programs);
   if (!p) return null;
   return Math.round(b.points * p.centsPerPoint);
 }
 
-export function totalValueCents(balances: RewardsBalance[], programs: readonly RewardProgram[] = REWARD_PROGRAMS): number {
+export function totalValueCents(
+  balances: RewardsBalance[],
+  programs: readonly RewardProgram[] = REWARD_PROGRAMS,
+): number {
   return balances.reduce((sum, b) => sum + (estimateValueCents(b, programs) ?? 0), 0);
 }
 
@@ -146,14 +207,23 @@ export function amexTransferOptions(
   points: number,
   transfers: readonly AmexTransfer[] = AMEX_MR_TRANSFERS,
 ): { partner: string; miles: number; note?: string }[] {
-  return transfers.map((t) => ({ partner: t.partner, miles: Math.round(points * t.ratio), note: t.note }));
+  return transfers.map((t) => ({
+    partner: t.partner,
+    miles: Math.round(points * t.ratio),
+    note: t.note,
+  }));
 }
 
 /* Indicative reference — owner-maintained, re-verify periodically. cents/point
  * are rough "typical redemption" values; actual value varies by how you redeem. */
 export const REWARDS_AS_OF = "2026-08-05";
 export const REWARD_PROGRAMS: readonly RewardProgram[] = [
-  { name: "American Express Membership Rewards", centsPerPoint: 1.0, category: "Creditcard", note: "0,5–2 ct/punt; transfer naar airline is vaak het meest waard" },
+  {
+    name: "American Express Membership Rewards",
+    centsPerPoint: 1.0,
+    category: "Creditcard",
+    note: "0,5–2 ct/punt; transfer naar airline is vaak het meest waard",
+  },
   { name: "Flying Blue (KLM/Air France)", centsPerPoint: 0.8, category: "Airline" },
   { name: "Avios (BA/Iberia)", centsPerPoint: 1.0, category: "Airline" },
   { name: "Miles & More (Lufthansa)", centsPerPoint: 0.8, category: "Airline" },
@@ -162,7 +232,12 @@ export const REWARD_PROGRAMS: readonly RewardProgram[] = [
   { name: "IHG One Rewards", centsPerPoint: 0.4, category: "Hotel" },
   { name: "Hilton Honors", centsPerPoint: 0.4, category: "Hotel" },
   { name: "bunq", centsPerPoint: 1.0, category: "Bank", note: "cashback in euro's" },
-  { name: "ING", centsPerPoint: 1.0, category: "Bank", note: "ING NL heeft geen puntenprogramma — gebruik dit voor cashback/acties" },
+  {
+    name: "ING",
+    centsPerPoint: 1.0,
+    category: "Bank",
+    note: "ING NL heeft geen puntenprogramma — gebruik dit voor cashback/acties",
+  },
 ];
 export const AMEX_MR_TRANSFERS: readonly AmexTransfer[] = [
   { partner: "Flying Blue (KLM/Air France)", ratio: 1.0 },
@@ -197,6 +272,7 @@ test("rewards round-trip through the vault (additive field)", async () => {
   expect(await storage.getRewards()).toEqual(rows);
 });
 ```
+
 (Adapt the setup to match the sibling `invoices`/`scheduledFlows` test exactly — reuse its harness. If there is no existing storage test that unlocks a vault, put the round-trip alongside the closest existing one.)
 
 - [ ] **Step 3: Run → PASS** (`pnpm vitest run packages/adapters`), `pnpm typecheck`. **Step 4: Commit** (`encryptedStorage.ts` + test): `feat(adapters): persist rewards balances in the vault (additive)`.
@@ -222,9 +298,21 @@ import { makeRewardsBalance } from "@lavega/core";
 import { upsertBalance } from "./views/Punten.js";
 
 test("upsertBalance replaces the same-program row and appends a new one", () => {
-  const a = makeRewardsBalance({ program: "American Express Membership Rewards", points: 100, updatedAt: "2026-01-01" });
-  const a2 = makeRewardsBalance({ program: "American Express Membership Rewards", points: 5000, updatedAt: "2026-07-01" });
-  const b = makeRewardsBalance({ program: "Flying Blue (KLM/Air France)", points: 200, updatedAt: "2026-07-01" });
+  const a = makeRewardsBalance({
+    program: "American Express Membership Rewards",
+    points: 100,
+    updatedAt: "2026-01-01",
+  });
+  const a2 = makeRewardsBalance({
+    program: "American Express Membership Rewards",
+    points: 5000,
+    updatedAt: "2026-07-01",
+  });
+  const b = makeRewardsBalance({
+    program: "Flying Blue (KLM/Air France)",
+    points: 200,
+    updatedAt: "2026-07-01",
+  });
   let list = upsertBalance([], a);
   expect(list).toHaveLength(1);
   list = upsertBalance(list, a2); // same id -> replace
@@ -242,8 +330,13 @@ test("upsertBalance replaces the same-program row and appends a new one", () => 
 import { useMemo, useState } from "react";
 import type { RewardsBalance } from "@lavega/core";
 import {
-  makeRewardsBalance, estimateValueCents, totalValueCents, isStale, amexTransferOptions,
-  REWARD_PROGRAMS, REWARDS_AS_OF,
+  makeRewardsBalance,
+  estimateValueCents,
+  totalValueCents,
+  isStale,
+  amexTransferOptions,
+  REWARD_PROGRAMS,
+  REWARDS_AS_OF,
 } from "@lavega/core";
 import { formatEuro } from "../format";
 
@@ -257,8 +350,16 @@ export function upsertBalance(list: RewardsBalance[], b: RewardsBalance): Reward
 }
 
 export default function Punten({
-  balances, asOf, busy, onSave,
-}: { balances: RewardsBalance[]; asOf: string; busy: boolean; onSave: (next: RewardsBalance[]) => void }) {
+  balances,
+  asOf,
+  busy,
+  onSave,
+}: {
+  balances: RewardsBalance[];
+  asOf: string;
+  busy: boolean;
+  onSave: (next: RewardsBalance[]) => void;
+}) {
   const [program, setProgram] = useState(REWARD_PROGRAMS[0].name);
   const [points, setPoints] = useState("");
   const [updatedAt, setUpdatedAt] = useState(asOf);
@@ -272,7 +373,12 @@ export default function Punten({
   function add() {
     const pts = Number(points.replace(/\./g, "").replace(",", "."));
     if (!program.trim() || !Number.isFinite(pts) || pts <= 0 || !updatedAt) return;
-    onSave(upsertBalance(balances, makeRewardsBalance({ program: program.trim(), points: Math.round(pts), updatedAt })));
+    onSave(
+      upsertBalance(
+        balances,
+        makeRewardsBalance({ program: program.trim(), points: Math.round(pts), updatedAt }),
+      ),
+    );
     setPoints("");
   }
   function remove(id: string) {
@@ -286,28 +392,53 @@ export default function Punten({
         <span className="eyebrow">loyalty &amp; rewards</span>
       </div>
       <p className="cell-sub">
-        Houd je punten- en cashback-saldi bij. Waardes zijn <strong>schattingen</strong> (indicatieve
-        cent-per-punt, peildatum {REWARDS_AS_OF}) en je vult de saldi zelf bij — er is geen koppeling
-        die punten automatisch ophaalt.
+        Houd je punten- en cashback-saldi bij. Waardes zijn <strong>schattingen</strong>{" "}
+        (indicatieve cent-per-punt, peildatum {REWARDS_AS_OF}) en je vult de saldi zelf bij — er is
+        geen koppeling die punten automatisch ophaalt.
       </p>
 
       <div className="facturen-form">
-        <label>Programma{" "}
-          <input list="reward-programs" value={program} disabled={busy} aria-label="Programma"
-            onChange={(e) => setProgram(e.target.value)} />
+        <label>
+          Programma{" "}
+          <input
+            list="reward-programs"
+            value={program}
+            disabled={busy}
+            aria-label="Programma"
+            onChange={(e) => setProgram(e.target.value)}
+          />
           <datalist id="reward-programs">
-            {REWARD_PROGRAMS.map((p) => <option key={p.name} value={p.name} />)}
+            {REWARD_PROGRAMS.map((p) => (
+              <option key={p.name} value={p.name} />
+            ))}
           </datalist>
         </label>{" "}
-        <label>Punten{" "}
-          <input className="saldo-input" type="number" min={0} step={1} value={points}
-            disabled={busy} aria-label="Punten" onChange={(e) => setPoints(e.target.value)} />
+        <label>
+          Punten{" "}
+          <input
+            className="saldo-input"
+            type="number"
+            min={0}
+            step={1}
+            value={points}
+            disabled={busy}
+            aria-label="Punten"
+            onChange={(e) => setPoints(e.target.value)}
+          />
         </label>{" "}
-        <label>Bijgewerkt{" "}
-          <input type="date" value={updatedAt} disabled={busy} aria-label="Bijgewerkt op"
-            onChange={(e) => setUpdatedAt(e.target.value)} />
+        <label>
+          Bijgewerkt{" "}
+          <input
+            type="date"
+            value={updatedAt}
+            disabled={busy}
+            aria-label="Bijgewerkt op"
+            onChange={(e) => setUpdatedAt(e.target.value)}
+          />
         </label>{" "}
-        <button type="button" className="btn btn-primary" disabled={busy} onClick={add}>Opslaan</button>
+        <button type="button" className="btn btn-primary" disabled={busy} onClick={add}>
+          Opslaan
+        </button>
       </div>
 
       {balances.length === 0 ? (
@@ -320,7 +451,13 @@ export default function Punten({
           <div className="table-wrap">
             <table className="table">
               <thead>
-                <tr><th>Programma</th><th>Punten</th><th>Geschatte waarde</th><th>Bijgewerkt</th><th></th></tr>
+                <tr>
+                  <th>Programma</th>
+                  <th>Punten</th>
+                  <th>Geschatte waarde</th>
+                  <th>Bijgewerkt</th>
+                  <th></th>
+                </tr>
               </thead>
               <tbody>
                 {balances.map((b) => {
@@ -330,9 +467,31 @@ export default function Punten({
                     <tr key={b.id}>
                       <td>{b.program}</td>
                       <td>{b.points.toLocaleString("nl-NL")}</td>
-                      <td>{val === null ? <span className="cell-sub">onbekend</span> : formatEuro(val / 100)}</td>
-                      <td>{b.updatedAt}{stale ? <span className="badge" style={{ marginLeft: "var(--sp-1)" }}>verouderd</span> : null}</td>
-                      <td><button type="button" className="btn" disabled={busy} onClick={() => remove(b.id)}>verwijder</button></td>
+                      <td>
+                        {val === null ? (
+                          <span className="cell-sub">onbekend</span>
+                        ) : (
+                          formatEuro(val / 100)
+                        )}
+                      </td>
+                      <td>
+                        {b.updatedAt}
+                        {stale ? (
+                          <span className="badge" style={{ marginLeft: "var(--sp-1)" }}>
+                            verouderd
+                          </span>
+                        ) : null}
+                      </td>
+                      <td>
+                        <button
+                          type="button"
+                          className="btn"
+                          disabled={busy}
+                          onClick={() => remove(b.id)}
+                        >
+                          verwijder
+                        </button>
+                      </td>
                     </tr>
                   );
                 })}
@@ -344,13 +503,26 @@ export default function Punten({
 
       {amex && amex.points > 0 && (
         <>
-          <p className="eyebrow" style={{ marginTop: "var(--sp-3)" }}>Amex MR overzetten (indicatief)</p>
+          <p className="eyebrow" style={{ marginTop: "var(--sp-3)" }}>
+            Amex MR overzetten (indicatief)
+          </p>
           <div className="table-wrap">
             <table className="table">
-              <thead><tr><th>Partner</th><th>Miles/punten</th></tr></thead>
+              <thead>
+                <tr>
+                  <th>Partner</th>
+                  <th>Miles/punten</th>
+                </tr>
+              </thead>
               <tbody>
                 {amexTransferOptions(amex.points).map((o) => (
-                  <tr key={o.partner}><td>{o.partner}{o.note ? <span className="cell-sub"> · {o.note}</span> : null}</td><td>{o.miles.toLocaleString("nl-NL")}</td></tr>
+                  <tr key={o.partner}>
+                    <td>
+                      {o.partner}
+                      {o.note ? <span className="cell-sub"> · {o.note}</span> : null}
+                    </td>
+                    <td>{o.miles.toLocaleString("nl-NL")}</td>
+                  </tr>
                 ))}
               </tbody>
             </table>
@@ -365,6 +537,7 @@ export default function Punten({
 - [ ] **Step 5: Verify** — `pnpm vitest run apps/web/src/punten.test.ts` (PASS), `pnpm test`, `pnpm typecheck`, `pnpm --filter @lavega/web build`. **Step 6: Commit** (`Punten.tsx`, `punten.test.ts`, `App.tsx`, `Sidebar.tsx`, `TopBar.tsx`): `feat(web): Punten tab — rewards balances, value, staleness, Amex transfers`.
 
 ## Self-Review notes
+
 - No LLM, no network, no credentials — fully local + deterministic; testable/usable immediately.
 - Honesty enforced: values are labelled schattingen; the view states balances are manual (no auto-sync — the design's "no consumer point API" reality).
 - Vault field is additive (`rewards?`) — a legacy vault decrypts and defaults to `[]`, no migration (same as `invoices`).

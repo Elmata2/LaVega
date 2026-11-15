@@ -25,8 +25,8 @@ import { ING_BRON } from "./ing.js";
 export const BRONNEN: readonly Bron[] = [AMEX_BRON, ING_BRON];
 
 /** De patronen die in `optional_host_permissions` van het manifest horen, naast
- *  de brede <all_urls>-toestemming voor het kassa-paneel (zie background.ts en
- *  copy-static.mjs). */
+ *  de per-winkel-patronen uit sites.ts voor het kassa-paneel (zie background.ts
+ *  en copy-static.mjs, dat de twee lijsten tegen het manifest controleert). */
 export const BRON_MATCHES: readonly string[] = BRONNEN.map((b) => b.match);
 
 /** Het ENE content script dat op al deze pagina's draait.

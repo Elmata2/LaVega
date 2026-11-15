@@ -1,7 +1,5 @@
 # Lavega
 
-
-
 ## Agent skills
 
 When you are using a research agents, you can downscale to the cheapest model for the fetching etcetera, otherwise it cost a lot of tokens that we can better use elsewhere.
@@ -36,9 +34,10 @@ ask-sonner — Your guide to working with Sonner, my toast library. Contains set
 Issues live as GitHub issues in `Elmata2/lavega`, driven through the `gh` CLI.
 
 When you finish a Github Issue, commit and push it to main, with a summary of the changes.
-You can use the /caveman-commit skill for that, to create a dense but thoughtful summary 
+You can use the /caveman-commit skill for that, to create a dense but thoughtful summary
 
 When issues are solved in github, we will provide a short summary of what our changes are doing inside the repo
+
 ### Triage labels
 
 Five canonical triage roles, used with their default label strings.
@@ -51,15 +50,57 @@ See `docs/agents/domain.md`.
 
 ### Monorepo
 
-[Turborepo](https://turbo.build) + Bun workspaces. `apps/*` for deployables (MCP server,
+[Turborepo](https://turbo.build) + pnpm workspaces. `apps/*` for deployables (MCP server,
 web UI, macOS daemon); `packages/*` for shared libraries and config. Root scripts:
-`bun run build`, `bun run dev`, `
-bun run lint`, `bun run test`, `bun run typecheck`.
+`pnpm run build`, `pnpm run dev`, `pnpm run lint`, `pnpm run format`, `pnpm run test`,
+`pnpm run typecheck`. Lint = oxlint; format = oxfmt (ESLint/Prettier replacements).
 
+Git worktrees share one global pnpm store. `.githooks/post-checkout` (installed by the
+root `prepare` script via `core.hooksPath`) runs `pnpm install --frozen-lockfile
+--prefer-offline` when a fresh worktree has no `node_modules`, so `git worktree add`
+provisions itself offline. Set `LAVEGA_SKIP_WORKTREE_INSTALL=1` to opt out.
+
+### TypeScript: Effect
+
+All new TypeScript logic uses Effect 4 (`effect@4.0.1`). Read `repos/effect/LLMS.md`
+before writing any Effect code — it is the source of truth for style. See
+`docs/adr/0008-effect-as-typescript-standard.md`.
+
+- `import { Effect, Schema } from "effect"`. Platform modules are subpaths:
+  `effect/schema`, `effect/sql`, `effect/ai`, `effect/http`, `effect/testing`,
+  `effect/cli`, `effect/process`.
+- Domain models and untrusted input go through `Schema` (`Schema.Class`,
+  `Schema.TaggedError`). No hand-written predicates — use `Predicate`.
+- Services: `Context.Service` with a static `layer`; compose `Layer`s and swap
+  them in tests.
+- Errors are typed values: `Schema.TaggedError`, recovered with
+  `Effect.catchTag` / `Effect.catchTags`.
+- Reusable effects use `Effect.fn("name")` (tracing) or `Effect.fnUntraced` (hot
+  paths, libraries). Never a function that only wraps and returns `Effect.gen`.
+- Time uses Effect's `DateTime`, not `Date` / `Date.now`.
+- Entry points run through an Effect runtime. Bridge existing frameworks (Hono)
+  with `ManagedRuntime` — see
+  `repos/effect/ai-docs/src/04_integration/10_managed-runtime.ts`.
+- Tests: `@effect/vitest` (`it.effect`); `TestClock` / `TestConsole` from
+  `effect/testing`.
+- Existing non-Effect code is ported when touched, not in bulk. Keep effects at
+  the service / entry-point boundary; JSX stays plain React.
+
+### Vendored repositories
+
+External source is vendored under `repos/` as read-only reference material.
+
+- Read it; never import from it (`@repos/*` is not a package).
+- Never edit it. Update with
+  `git subtree pull --prefix=repos/effect https://github.com/Effect-TS/effect.git main --squash`.
+- It is excluded from lint, format, search and editor tooling.
+- Prefer examples in `repos/effect/ai-docs/src/` and the vendored tests over web
+  search.
 
 Respond terse like smart caveman. All technical substance stay. Only fluff die.
 
 Rules:
+
 - Drop: articles (a/an/the), filler (just/really/basically), pleasantries, hedging
 - Fragments OK. Short synonyms. Technical terms exact. Code unchanged.
 - Pattern: [thing] [action] [reason]. [next step].

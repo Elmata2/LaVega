@@ -279,7 +279,11 @@ export function pointsCoverage(input: CoverageInput): PuntenRij[] {
     const ra = rang(a);
     const rb = rang(b);
     if (ra !== rb) return ra - rb;
-    if (a.coverageCents !== null && b.coverageCents !== null && a.coverageCents !== b.coverageCents) {
+    if (
+      a.coverageCents !== null &&
+      b.coverageCents !== null &&
+      a.coverageCents !== b.coverageCents
+    ) {
       return b.coverageCents - a.coverageCents;
     }
     if (a.points !== b.points) return b.points - a.points;

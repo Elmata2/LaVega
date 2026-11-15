@@ -131,7 +131,9 @@ export function randomToken(bytes = 24): string {
   if (!c || typeof c.getRandomValues !== "function") {
     // No CSPRNG = no token. Guessing with Math.random would produce a value that
     // LOOKS like a secret and is not one, which is worse than refusing.
-    throw new Error("Deze browser heeft geen crypto.getRandomValues — LaVega weigert een zwak token te verzinnen.");
+    throw new Error(
+      "Deze browser heeft geen crypto.getRandomValues — LaVega weigert een zwak token te verzinnen.",
+    );
   }
   c.getRandomValues(buf);
   return Array.from(buf, (b) => b.toString(16).padStart(2, "0")).join("");
@@ -154,7 +156,9 @@ export function findQueueWebhookNode(wf: N8nWorkflow): N8nNode | null {
   const webhooks = wf.nodes.filter(isWebhook);
   return (
     webhooks.find((n) => {
-      const method = String((n.parameters as Record<string, unknown> | undefined)?.httpMethod ?? "GET").toUpperCase();
+      const method = String(
+        (n.parameters as Record<string, unknown> | undefined)?.httpMethod ?? "GET",
+      ).toUpperCase();
       return method === "GET";
     }) ?? null
   );
@@ -171,10 +175,15 @@ export function findQueueWebhookNode(wf: N8nWorkflow): N8nNode | null {
  * printing advice that cannot work, we add the origin we are actually running
  * on and keep the ones already there.
  */
-export function bindWebhookNode(node: N8nNode, credentialId: string, origin: string, isQueue: boolean): N8nNode {
-  const params = { ...(node.parameters ?? {}) } as Record<string, unknown>;
+export function bindWebhookNode(
+  node: N8nNode,
+  credentialId: string,
+  origin: string,
+  isQueue: boolean,
+): N8nNode {
+  const params = { ...node.parameters } as Record<string, unknown>;
   if (isQueue) {
-    const options = { ...((params.options as Record<string, unknown>) ?? {}) };
+    const options = { ...(params.options as Record<string, unknown>) };
     const existing = String(options.allowedOrigins ?? "")
       .split(",")
       .map((s) => s.trim())
@@ -188,7 +197,7 @@ export function bindWebhookNode(node: N8nNode, credentialId: string, origin: str
     ...node,
     parameters: params,
     credentials: {
-      ...(node.credentials ?? {}),
+      ...node.credentials,
       httpHeaderAuth: { id: credentialId, name: CREDENTIAL_NAME },
     },
   };
@@ -206,8 +215,15 @@ export function bindWebhookNode(node: N8nNode, credentialId: string, origin: str
  * One token for both entry points is also the simpler thing to explain: the
  * Email Worker sends the same `x-lavega-token` header this browser does.
  */
-function bindWebhookNodes(nodes: N8nNode[], queue: N8nNode, credentialId: string, origin: string): N8nNode[] {
-  return nodes.map((n) => (isWebhook(n) ? bindWebhookNode(n, credentialId, origin, n === queue) : n));
+function bindWebhookNodes(
+  nodes: N8nNode[],
+  queue: N8nNode,
+  credentialId: string,
+  origin: string,
+): N8nNode[] {
+  return nodes.map((n) =>
+    isWebhook(n) ? bindWebhookNode(n, credentialId, origin, n === queue) : n,
+  );
 }
 
 /** The production URL n8n will serve this webhook on. n8n's public API does not
@@ -224,7 +240,13 @@ export function productionWebhookUrl(base: string, node: N8nNode): string {
 
 type ApiResult =
   | { ok: true; body: unknown; status: number }
-  | { ok: false; failure: Extract<ProvisionOutcome, { kind: "cors" | "unauthorized" | "http-error" | "bad-response" }> };
+  | {
+      ok: false;
+      failure: Extract<
+        ProvisionOutcome,
+        { kind: "cors" | "unauthorized" | "http-error" | "bad-response" }
+      >;
+    };
 
 async function call(
   base: string,
@@ -270,7 +292,10 @@ async function call(
   try {
     body = res.status === 204 ? {} : await res.json();
   } catch {
-    return { ok: false, failure: { kind: "bad-response", step, detail: "het antwoord was geen JSON" } };
+    return {
+      ok: false,
+      failure: { kind: "bad-response", step, detail: "het antwoord was geen JSON" },
+    };
   }
   return { ok: true, body, status: res.status };
 }
@@ -280,7 +305,10 @@ function asWorkflow(body: unknown): N8nWorkflow | null {
   const w = body as Record<string, unknown>;
   // n8n wraps some responses in { data: ... }; both shapes are accepted, neither
   // is guessed at.
-  const inner = w.data && typeof w.data === "object" && !Array.isArray(w.data) ? (w.data as Record<string, unknown>) : w;
+  const inner =
+    w.data && typeof w.data === "object" && !Array.isArray(w.data)
+      ? (w.data as Record<string, unknown>)
+      : w;
   if (typeof inner.id !== "string" && typeof inner.id !== "number") return null;
   if (!Array.isArray(inner.nodes)) return null;
   return {
@@ -316,7 +344,10 @@ export async function provisionN8n(input: ProvisionInput): Promise<ProvisionOutc
   const rawBase = String(input.baseUrl ?? "").trim();
   const apiKey = String(input.apiKey ?? "").trim();
   if (!rawBase || !apiKey) {
-    return { kind: "not-configured", missing: !rawBase && !apiKey ? "both" : !rawBase ? "url" : "key" };
+    return {
+      kind: "not-configured",
+      missing: !rawBase && !apiKey ? "both" : !rawBase ? "url" : "key",
+    };
   }
   const base = normalizeBaseUrl(rawBase);
   if (!base) return { kind: "bad-url", value: rawBase };
@@ -326,7 +357,15 @@ export async function provisionN8n(input: ProvisionInput): Promise<ProvisionOutc
   const token = (input.makeToken ?? randomToken)();
 
   // 1 — is it already there?
-  const list = await call(base, apiKey, "/workflows?limit=250", { method: "GET" }, "workflows opvragen", fetchImpl, origin);
+  const list = await call(
+    base,
+    apiKey,
+    "/workflows?limit=250",
+    { method: "GET" },
+    "workflows opvragen",
+    fetchImpl,
+    origin,
+  );
   if (!list.ok) {
     // A 404 on the very first call is not "no workflows": it is n8n telling us
     // the public API isn't there at all. Reported as its own cause, because the
@@ -338,9 +377,15 @@ export async function provisionN8n(input: ProvisionInput): Promise<ProvisionOutc
   }
   const listBody = list.body as { data?: unknown };
   if (!Array.isArray(listBody?.data)) {
-    return { kind: "bad-response", step: "workflows opvragen", detail: "n8n stuurde geen lijst met workflows terug" };
+    return {
+      kind: "bad-response",
+      step: "workflows opvragen",
+      detail: "n8n stuurde geen lijst met workflows terug",
+    };
   }
-  const existing = (listBody.data as Array<Record<string, unknown>>).find((w) => w?.name === WORKFLOW_NAME);
+  const existing = (listBody.data as Array<Record<string, unknown>>).find(
+    (w) => w?.name === WORKFLOW_NAME,
+  );
 
   // 2 — the credential, always fresh. n8n's API has no way to LIST credentials,
   // so LaVega cannot find the one it made last time and reuse it. A new one each
@@ -365,7 +410,11 @@ export async function provisionN8n(input: ProvisionInput): Promise<ProvisionOutc
   const credBody = credRes.body as { id?: unknown; data?: { id?: unknown } };
   const credentialId = String(credBody?.id ?? credBody?.data?.id ?? "");
   if (!credentialId) {
-    return { kind: "bad-response", step: "credential aanmaken", detail: "n8n gaf geen credential-id terug" };
+    return {
+      kind: "bad-response",
+      step: "credential aanmaken",
+      detail: "n8n gaf geen credential-id terug",
+    };
   }
 
   // 3 — write the workflow.
@@ -395,13 +444,31 @@ export async function provisionN8n(input: ProvisionInput): Promise<ProvisionOutc
     if (!res.ok) return res.failure;
     saved = asWorkflow(res.body);
     created = true;
-    if (!saved) return { kind: "bad-response", step: "workflow aanmaken", detail: "n8n gaf geen workflow met id en nodes terug" };
+    if (!saved)
+      return {
+        kind: "bad-response",
+        step: "workflow aanmaken",
+        detail: "n8n gaf geen workflow met id en nodes terug",
+      };
   } else {
     const id = String(existing.id ?? "");
-    const full = await call(base, apiKey, `/workflows/${encodeURIComponent(id)}`, { method: "GET" }, "workflows opvragen", fetchImpl, origin);
+    const full = await call(
+      base,
+      apiKey,
+      `/workflows/${encodeURIComponent(id)}`,
+      { method: "GET" },
+      "workflows opvragen",
+      fetchImpl,
+      origin,
+    );
     if (!full.ok) return full.failure;
     const current = asWorkflow(full.body);
-    if (!current) return { kind: "bad-response", step: "workflows opvragen", detail: "n8n gaf geen workflow met id en nodes terug" };
+    if (!current)
+      return {
+        kind: "bad-response",
+        step: "workflows opvragen",
+        detail: "n8n gaf geen workflow met id en nodes terug",
+      };
     const node = findQueueWebhookNode(current);
     if (!node) return { kind: "no-webhook-node", workflowId: id };
     const nodes = bindWebhookNodes(current.nodes, node, credentialId, origin);
@@ -457,14 +524,26 @@ export async function provisionN8n(input: ProvisionInput): Promise<ProvisionOutc
   }
 
   // 5 — read the URL back out of n8n instead of assuming our own copy landed.
-  const back = await call(base, apiKey, `/workflows/${encodeURIComponent(workflowId)}`, { method: "GET" }, "webhook-URL teruglezen", fetchImpl, origin);
+  const back = await call(
+    base,
+    apiKey,
+    `/workflows/${encodeURIComponent(workflowId)}`,
+    { method: "GET" },
+    "webhook-URL teruglezen",
+    fetchImpl,
+    origin,
+  );
   if (!back.ok) return back.failure;
   const readBack = asWorkflow(back.body);
   const webhookNode = readBack ? findQueueWebhookNode(readBack) : null;
   if (!webhookNode) return { kind: "no-webhook-node", workflowId };
   const webhookUrl = productionWebhookUrl(base, webhookNode);
   if (!webhookUrl) {
-    return { kind: "bad-response", step: "webhook-URL teruglezen", detail: "de webhook-node had geen pad" };
+    return {
+      kind: "bad-response",
+      step: "webhook-URL teruglezen",
+      detail: "de webhook-node had geen pad",
+    };
   }
 
   return { kind: "ok", created, workflowId, webhookUrl, token, active, activationProblem };
@@ -476,9 +555,10 @@ export async function provisionN8n(input: ProvisionInput): Promise<ProvisionOutc
  *  and so the Koppelingen screen can show it before he even presses anything. */
 export function corsHelp(base: string, origin: string): string {
   const covered = CORS_ENV_VARS[1].split("=")[1].split(",");
-  const originNote = origin && !covered.includes(origin)
-    ? ` Deze pagina draait op ${origin}, dus zet dat adres er ook bij — anders blokkeert de browser het antwoord alsnog.`
-    : "";
+  const originNote =
+    origin && !covered.includes(origin)
+      ? ` Deze pagina draait op ${origin}, dus zet dat adres er ook bij — anders blokkeert de browser het antwoord alsnog.`
+      : "";
   return (
     `De browser kreeg geen antwoord van ${base}/api/v1. Bijna altijd is dat CORS: n8n stuurt daar standaard geen ` +
     `CORS-headers, en dan blokkeert de browser het antwoord voordat LaVega het ziet. Zet op je eigen n8n deze twee ` +

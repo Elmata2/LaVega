@@ -1,43 +1,104 @@
-import { afterEach, expect, test, vi } from "vitest";
-import { createInMemoryPriceStore } from "@lavega/adapters";
-import type { Position, PriceBar, Trade } from "@lavega/core";
-import { createPortfolioAgentTools, resolveAgentConfig } from "./portfolioAgent.js";
+import { expect, test } from "vitest";
+import type { InvestingDashboardData } from "@lavega/core";
+import { portfolioJudgmentQuestions, runPortfolioAgent } from "./portfolioAgent.js";
 
-afterEach(() => vi.unstubAllEnvs());
-
-const position: Position = { tenantId: "local", entity: "personal", symbol: "AAPL", quantity: 2, averagePrice: 10, marketPrice: null, marketValue: null, currency: "EUR", asOf: "2026-08-19" };
-const trade: Trade = { id: "t1", tenantId: "local", entity: "personal", date: "2026-08-10", symbol: "AAPL", side: "buy", quantity: 2, price: 10, amount: 20, currency: "EUR", commission: 0 };
-const bars: PriceBar[] = [
-  { tenantId: "local", symbol: "AAPL", date: "2026-08-18", close: 14, currency: "EUR" },
-  { tenantId: "local", symbol: "AAPL", date: "2026-08-19", close: 15, currency: "EUR" },
-];
-
-async function tools() {
-  const priceStore = createInMemoryPriceStore();
-  await priceStore.upsert(bars);
-  return createPortfolioAgentTools({ readBrokerData: () => ({ positions: [position], trades: [trade], dividends: [], cashBalances: [], cashFlows: [] }), priceStore });
+function dashboard(): InvestingDashboardData {
+  return {
+    dataVersion: 3,
+    presentationCurrency: "EUR",
+    portfolio: {
+      "1M": [],
+      "6M": [],
+      "1Y": [],
+      YTD: [],
+      All: [
+        {
+          date: "2026-09-18",
+          positionsValue: 100,
+          cashValue: 0,
+          value: 100,
+          unpriced: [],
+          forwardFilled: [],
+          cashUnknown: [],
+        },
+      ],
+    },
+    benchmarks: [],
+    externalCashFlows: [],
+    allocation: {
+      instrument: { buckets: [], unpriced: [] },
+      entity: { buckets: [], unpriced: [] },
+    },
+    positions: [],
+    position: null,
+    problems: [],
+    risk: { byBenchmark: {}, defaultBenchmark: null },
+    composition: {
+      topPositions: [],
+      pricedHoldings: 0,
+      missingHoldings: 0,
+      estimatedHoldings: 0,
+    },
+  };
 }
 
-const executeOptions = () => ({ toolCallId: `call-${Math.random()}`, messages: [] }) as never;
-
-test("get_positions returns the restored broker positions", async () => {
-  expect(await (await tools()).get_positions.execute!({}, executeOptions())).toEqual([position]);
+const choice = (value: "bullish" | "bearish" | "neutral" | "no_view", probability = 0.8) => ({
+  type: "choice" as const,
+  choice: value,
+  confidence: probability,
+  probabilities: { bullish: 0, bearish: 0, neutral: 0, no_view: 0, [value]: probability },
+});
+const score = (value = 3) => ({
+  type: "score" as const,
+  score: value,
+  confidence: 0.8,
+  legend: { 0: "none", 1: "weak", 2: "some", 3: "strong", 4: "very strong" },
+  probabilities: { 0: 0, 1: 0, 2: 0, 3: 1, 4: 0 },
 });
 
-test("get_price returns the latest close and honours an as-of date", async () => {
-  const agentTools = await tools();
-  expect(await agentTools.get_price.execute!({ symbol: "aapl" }, executeOptions())).toEqual({ symbol: "AAPL", date: "2026-08-19", close: 15, currency: "EUR" });
-  expect(await agentTools.get_price.execute!({ symbol: "AAPL", date: "2026-08-18" }, executeOptions())).toMatchObject({ date: "2026-08-18", close: 14 });
-  expect(await agentTools.get_price.execute!({ symbol: "MSFT" }, executeOptions())).toBeNull();
+test("typed provider returns all personas from one request", async () => {
+  const questions = portfolioJudgmentQuestions();
+  const result = await runPortfolioAgent({
+    dashboard: dashboard(),
+    provider: {
+      judge: async (request) => {
+        expect(Object.keys(request.questions)).toHaveLength(12);
+        return {
+          model: "jev-test",
+          usage: { inputTokens: 1, outputTokens: 1 },
+          answers: Object.fromEntries(
+            Object.keys(questions).map((key) => [
+              key,
+              key.endsWith("signal") ? choice("bullish") : score(),
+            ]),
+          ),
+        };
+      },
+    },
+  });
+  expect(result.model).toBe("jev-test");
+  expect(result.judgments).toHaveLength(6);
+  expect(result.judgments[0]?.signal?.choice).toBe("bullish");
 });
 
-test("compute_portfolio_value delegates to the core portfolio calculation", async () => {
-  expect(await (await tools()).compute_portfolio_value.execute!({}, executeOptions())).toMatchObject({ date: "2026-08-19", value: 30 });
-});
-
-test("runPortfolioAgent refuses to start without an API key", async () => {
-  const { runPortfolioAgent } = await import("./portfolioAgent.js");
-  vi.stubEnv("LAVEGA_AGENT_API_KEY", "");
-  expect(() => resolveAgentConfig()).toThrow("LAVEGA_AGENT_API_KEY is not set");
-  await expect(runPortfolioAgent({ prompt: "hello" })).rejects.toThrow("LAVEGA_AGENT_API_KEY");
+test("no view remains distinct from neutral and one missing answer leaves other personas usable", async () => {
+  const questions = portfolioJudgmentQuestions();
+  const result = await runPortfolioAgent({
+    dashboard: dashboard(),
+    provider: {
+      judge: async () => ({
+        model: "jev-test",
+        usage: { inputTokens: 1, outputTokens: 1 },
+        answers: Object.fromEntries(
+          Object.keys(questions).flatMap((key) =>
+            key.startsWith("charlie_munger")
+              ? []
+              : [[key, key.endsWith("signal") ? choice("no_view") : score()]],
+          ),
+        ),
+      }),
+    },
+  });
+  expect(result.judgments[0]?.signal?.choice).toBe("no_view");
+  expect(result.judgments.find((item) => item.agentId === "charlie_munger")?.signal).toBeNull();
 });

@@ -1,34 +1,77 @@
 import { serve } from "@hono/node-server";
 import { serveStatic } from "@hono/node-server/serve-static";
-import { Hono } from "hono";
+import { Hono, type Context, type Next } from "hono";
+import { bodyLimit } from "hono/body-limit";
+import { secureHeaders } from "hono/secure-headers";
 import { fileURLToPath } from "node:url";
+import { existsSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { loadConfig, maskApplicationId } from "./config.js";
 import { getRates } from "./rates.js";
 import { getFxRate } from "./fx.js";
+import { getFxHistory, validateCurrency, validateFromDate } from "./fxHistory.js";
 import { privacyHtml, termsHtml } from "./legal.js";
-import { registerEbRoutes } from "./eb-routes.js";
+import { registerEbRoutes, ebRouteDependencies } from "./eb-routes.js";
+import { registerN8nRoutes, n8nRouteDependencies } from "./n8n-routes.js";
 import { registerAgentRoutes } from "./agent-routes.js";
 import { registerVaultRoutes, vaultRouteDependencies } from "./vault-routes.js";
+import { registerAccountRoutes, accountRouteDependencies } from "./account-routes.js";
+import { registerNetWorthRoutes, netWorthRouteDependencies } from "./net-worth-routes.js";
+import { initServerSentry, serverErrorResponse } from "./observability.js";
+import { initPosthogLogs, logPosthogInfo } from "./posthogLogs.js";
 import { loadCatalogue } from "./catalogFile.js";
-import { forwardInvesting, investingTenantId, shouldMountInvesting } from "./investing-mount.js";
-import { getAuth } from "./auth.js";
+import {
+  forwardInvesting,
+  investingOwnsApiPath,
+  investingTenantId,
+  runInvestingCron,
+  shouldMountInvesting,
+  runInvestingDrain,
+} from "./investing-mount.js";
+import { authTrustedOrigins, getAuth, verifiedSession } from "./auth.js";
+import { authEmailConfig } from "./authEmail.js";
+import { createPublicAuthLimiter } from "./authLimits.js";
+import { apiGuard, guardIsDisabled, INVESTING_API_ALIAS } from "./apiGuard.js";
+import { mcpRouteDependencies, registerMcpRoutes } from "./mcp/routes.js";
+import { sameOriginGuard } from "./sameOrigin.js";
+import { withRuntimeDatabase } from "@lavega/investing-server/src/credentialStore.js";
+import { LOCAL_TENANT_ID, localeRedirectTarget } from "@lavega/core";
 
 export const PORT = Number(process.env.PORT) || 8787;
 // Absolute path to the built web app, derived from THIS file (apps/server/src)
 // so it resolves the same whether the process runs from the repo root or the
 // package dir (pnpm --filter runs scripts in the package dir). Overridable via env.
-const WEB_DIST = process.env.WEB_DIST || resolve(dirname(fileURLToPath(import.meta.url)), "../../web/dist");
+const WEB_DIST =
+  process.env.WEB_DIST || resolve(dirname(fileURLToPath(import.meta.url)), "../../web/dist");
 
 /* Extensions that mean "a file", so a miss must 404 instead of falling back to
  * index.html. An allowlist, deliberately — the tempting rule ("the path has a
  * dot in it") breaks real deep links: the investing SPA routes /positions/:symbol
  * and a ticker like BRK.B would be read as a file request and refused. */
 const STATIC_ASSET_EXTENSIONS = new Set([
-  ".js", ".mjs", ".cjs", ".css", ".map", ".json", ".wasm",
-  ".woff", ".woff2", ".ttf", ".otf", ".eot",
-  ".svg", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".avif", ".ico",
-  ".webmanifest", ".xml", ".txt",
+  ".js",
+  ".mjs",
+  ".cjs",
+  ".css",
+  ".map",
+  ".json",
+  ".wasm",
+  ".woff",
+  ".woff2",
+  ".ttf",
+  ".otf",
+  ".eot",
+  ".svg",
+  ".png",
+  ".jpg",
+  ".jpeg",
+  ".gif",
+  ".webp",
+  ".avif",
+  ".ico",
+  ".webmanifest",
+  ".xml",
+  ".txt",
 ]);
 
 /** Is `pathname` a request for a file rather than for an SPA view? Everything
@@ -44,6 +87,15 @@ export function isStaticAssetPath(pathname: string): boolean {
 
 export const app = new Hono();
 
+initServerSentry();
+initPosthogLogs();
+app.onError((error) => serverErrorResponse(error));
+
+/** One Neon WebSocket pool belongs to one completed HTTP request. */
+export async function serverFetch(request: Request): Promise<Response> {
+  return withRuntimeDatabase(async () => await app.fetch(request));
+}
+
 /* The committed catalogue, read once as this module loads — before any request
  * can arrive. Every figure it holds is one the travel block answers from a file
  * instead of waiting 40s-5min on a lookup; every figure it does NOT hold (no
@@ -52,6 +104,96 @@ export const app = new Hono();
  * broken loader" look identical otherwise. A missing or malformed file logs and
  * the server boots anyway. */
 loadCatalogue();
+
+/**
+ * Security headers on every response, including the static HTML.
+ *
+ * There were none. For an app that holds bank transactions in the browser and a
+ * vault unlock screen, the two that matter most are `frame-ancestors 'none'`
+ * (the unlock screen was clickjackable) and `no-referrer` (the Enable Banking
+ * flow puts a session_id in the URL, which a Referer header would hand to any
+ * link the user then follows).
+ *
+ * The CSP is strict where it counts and honest where it cannot be. `script-src
+ * 'self'` is the anti-XSS directive and is pinned. `connect-src` is NOT pinned
+ * to 'self': the n8n features call
+ * a base URL the user types in themselves, so an enumerated list would break
+ * shipped features the first time someone used their own instance. `style-src`
+ * allows inline because that is what React renders a `style={{…}}` prop as.
+ *
+ * HSTS is emitted only over https (below), and a restrictive Permissions-Policy
+ * names the browser features this app does not use, so a stray third-party
+ * script cannot reach the camera, the microphone or the clipboard without
+ * permission (security review 2026-10-17, A6).
+ */
+app.use(
+  "*",
+  secureHeaders({
+    // Off here; set conditionally by the middleware below. `secureHeaders`
+    // cannot know the request's scheme, and HSTS sent over plaintext is either
+    // ignored (browsers) or, worse, pins `includeSubDomains` for a host once
+    // reached over https by accident.
+    strictTransportSecurity: false,
+    permissionsPolicy: {
+      camera: ["none"],
+      microphone: ["none"],
+      geolocation: ["none"],
+      payment: ["none"],
+      usb: ["none"],
+      serial: ["none"],
+      hid: ["none"],
+      midi: ["none"],
+      bluetooth: ["none"],
+      magnetometer: ["none"],
+      gyroscope: ["none"],
+      accelerometer: ["none"],
+      displayCapture: ["none"],
+      idleDetection: ["none"],
+      autoplay: ["none"],
+      fullscreen: ["none"],
+      // The one the app genuinely uses: the copy-to-clipboard button next to
+      // the forwarding address (apps/web/src/views/Koppelingen.tsx).
+      clipboardWrite: ["self"],
+    },
+    xContentTypeOptions: "nosniff",
+    xFrameOptions: "DENY",
+    referrerPolicy: "no-referrer",
+    contentSecurityPolicy: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", "https://*.posthog.com"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      imgSrc: ["'self'", "data:", "blob:", "https:"],
+      fontSrc: ["'self'", "data:"],
+      connectSrc: ["'self'", "https:"],
+      workerSrc: ["'self'", "blob:", "data:"],
+      objectSrc: ["'none'"],
+      baseUri: ["'self'"],
+      formAction: ["'self'"],
+      frameAncestors: ["'none'"],
+    },
+  }),
+);
+
+/** Is this request arriving over TLS, as far as the proxy tells us? */
+function isHttpsRequest(protoHeader: string | undefined, url: string): boolean {
+  /* Behind Vercel/Cloudflare the function sees `http://<internal>`; the edge
+   * states the original scheme in `x-forwarded-proto`. Direct (a local host
+   * with a TLS cert) falls back to the request's own URL. */
+  const forwarded = protoHeader?.split(",")[0]?.trim().toLowerCase();
+  if (forwarded) return forwarded === "https";
+  return new URL(url).protocol === "https:";
+}
+
+/* HSTS ONLY WHERE IT MEANS SOMETHING. `secureHeaders` emitted it unconditionally
+ * (also on plaintext) with `includeSubDomains`, which a browser would latch onto
+ * for the whole registrable domain the first time any response came back over
+ * https — including a dev tunnel or a preview host that also serves http
+ * (security review 2026-10-17, A6). */
+app.use("*", async (c, next) => {
+  if (isHttpsRequest(c.req.header("x-forwarded-proto"), c.req.url))
+    c.header("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+  await next();
+});
 
 /** A loopback origin — localhost or 127.0.0.1, any port. */
 const LOOPBACK_ORIGIN = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/;
@@ -68,7 +210,7 @@ const LOOPBACK_ORIGIN = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/;
  * `configured: true` to curl while the app on screen insisted there was no key.
  *
  * Deliberately NOT `Access-Control-Allow-Origin: *` the way /api/rates is. Those
- * two endpoints return public data; these routes SPEND the owner's Anthropic
+ * two endpoints return public data; these routes SPEND the owner's Mistral
  * key, so an open policy would let any page on the internet spend it. Only a
  * loopback origin is echoed back, which no remote site can claim.
  */
@@ -85,11 +227,84 @@ app.use("/api/*", async (c, next) => {
   await next();
 });
 
+/* A CEILING ON EVERY REQUEST BODY, before any route reads one. Without it a
+ * large POST to a public JSON endpoint (`/api/auth/*`, `/api/eb/callback`,
+ * `/api/card-terms/ingest`) was buffered whole into memory — a plain
+ * unauthenticated memory-exhaustion vector (security review 2026-10-17, M1).
+ *
+ * 8 MB, chosen from both sides. The largest body this API legitimately accepts
+ * is the sealed personal-vault back-up (`PUT /api/vault/backup`), which stores
+ * every account, statement and invoice as one encrypted JSON blob — kilobytes
+ * for a normal user, and an order of magnitude under this even for a busy
+ * multi-year ledger. Everything else here is a small JSON object. 8 MB caps
+ * the attack long before the platform's own (Vercel's function body limit is
+ * 4.5 MB, so the platform refuses first in production; this is what protects
+ * the long-lived Docker/Railway path, which has no such ceiling). */
+const MAX_REQUEST_BODY_BYTES = 8 * 1024 * 1024;
+
+/* The two paths that carry the API surface: the canonical prefix and the
+ * investing SPA's alias. Every guard below is registered on BOTH — an alias
+ * that skips one is exactly how H1 shipped. */
+const API_SURFACES = ["/api/*", `${INVESTING_API_ALIAS}/*`];
+
+const limitBody = bodyLimit({
+  maxSize: MAX_REQUEST_BODY_BYTES,
+  onError: (c) => c.json({ error: "Het verzoek is te groot.", code: "payload-too-large" }, 413),
+});
+for (const path of API_SURFACES) app.use(path, limitBody);
+
+/* Cross-site state-changing requests are refused. Inert-but-latent CSRF was a
+ * real hole here: `GET /api/n8n/queue` drained and destroyed the caller's
+ * invoice queue, and the `sameSite:"lax"` cookie rode along on that top-level
+ * navigation (security review 2026-10-17, M4). Applied BEFORE the session
+ * guard, so a cross-site call is refused on its own merits rather than only
+ * when it happens to be signed out. */
+const crossSite = sameOriginGuard(authTrustedOrigins());
+for (const path of API_SURFACES) app.use(path, crossSite);
+
+/* Session guard for /api/* and its `/investing/api/*` alias. Registered BEFORE
+ * every API route below, so a route added later is closed by default rather
+ * than open by omission — which is exactly how `verifiedSession` came to guard
+ * nothing at all, and how the investing alias came to be unguarded. */
+const sessionGuard = apiGuard();
+for (const path of API_SURFACES) app.use(path, sessionGuard);
+
+/* The external agent endpoint (#285, ADR 0012). It speaks JSON-RPC to machine
+ * clients, so it is not on `/api/*`, but it registers the SAME guard: that guard
+ * has a bearer branch for `/mcp` and does not honour the `pnpm dev` escape hatch
+ * there, because "no token" must always be 401 (ADR 0012 §2). Registered before
+ * the static catch-all so the route wins. */
+app.use("/mcp", limitBody);
+app.use("/mcp", sessionGuard);
+registerMcpRoutes(app, mcpRouteDependencies());
+
 app.get("/health", (c) => c.json({ ok: true }));
 
+/* One limiter for the three mail/account endpoints, per address AND across all
+ * callers. `send-verification-email` and `request-password-reset` were open and
+ * unlimited: they answered differently for a known and an unknown address
+ * (account enumeration) and could be made to mail a stranger repeatedly
+ * (security review 2026-10-17, A1 / #253). The reply is the same generic 429
+ * for every one of them, so the response does not itself say which endpoint
+ * was hit or whether the address exists. */
+const publicAuthLimits = createPublicAuthLimiter();
+
 app.all("/api/auth/*", async (c) => {
+  if (!publicAuthLimits(c.req.method, c.req.path, c.req.raw.headers))
+    return c.json({ message: "Too many attempts. Try again later." }, 429);
   const auth = getAuth();
   if (!auth) return c.json({ problems: ["Authentication is not configured"] }, 503);
+  if (
+    c.req.method === "POST" &&
+    [
+      "/api/auth/sign-up/email",
+      "/api/auth/send-verification-email",
+      "/api/auth/request-password-reset",
+    ].includes(c.req.path) &&
+    !authEmailConfig().configured
+  ) {
+    return c.json({ message: "Email service is unavailable. Try again later." }, 503);
+  }
   return auth.handler(c.req.raw);
 });
 
@@ -116,6 +331,31 @@ app.get("/api/fx/rate", async (c) => {
 });
 
 /**
+ * ECB historical daily FX rates (base EUR) for one currency, from a given
+ * date. Public data only, same reasoning as /api/fx/rate above.
+ */
+app.get("/api/fx/history", async (c) => {
+  c.header("Access-Control-Allow-Origin", "*");
+  const currency = validateCurrency(c.req.query("currency"));
+  if (!currency) {
+    c.header("Cache-Control", "no-store");
+    return c.json({ error: "ongeldige valuta" }, 400);
+  }
+  const from = validateFromDate(c.req.query("from"));
+  if (!from) {
+    c.header("Cache-Control", "no-store");
+    return c.json({ error: "ongeldige datum" }, 400);
+  }
+  const history = await getFxHistory(currency, from);
+  if (!history) {
+    c.header("Cache-Control", "no-store");
+    return c.json({ error: "koershistorie tijdelijk niet beschikbaar" }, 503);
+  }
+  c.header("Cache-Control", "public, max-age=3600");
+  return c.json(history);
+});
+
+/**
  * Enable Banking config status. The Enable Banking routes themselves
  * (aspsps/auth/callback/sync/forget) are Task 3 — this is scaffold-only.
  */
@@ -124,11 +364,20 @@ app.get("/api/eb/status", (c) => {
   return c.json({
     configured: config.configured,
     applicationId: maskApplicationId(config.applicationId),
+    privateKey: config.keySource,
+    privateKeyShape: config.keyShape,
   });
 });
 
-/* Enable Banking AIS flow: /api/eb/aspsps, /auth, /callback, /accounts. */
-registerEbRoutes(app);
+/* Enable Banking AIS flow: /api/eb/aspsps, /auth, /callback, /accounts.
+ * Its two intermediate states live in Neon, not in this process — a serverless
+ * function does not survive between /auth and the bank's redirect back. */
+registerEbRoutes(app, ebRouteDependencies());
+
+/* Invoice-queue proxy: /api/n8n/queue. The server holds the n8n webhook
+ * credential and derives `queueKey` from the caller's own session — see
+ * docs/adr/0006-invoice-queue-server-proxy.md. */
+registerN8nRoutes(app, n8nRouteDependencies());
 
 /* Agent proxy: /api/agent/status, /api/agent/extract-invoice. Must precede the
  * static catch-all below so the API routes win. */
@@ -140,6 +389,17 @@ registerAgentRoutes(app);
 const vaultDependencies = vaultRouteDependencies();
 if (vaultDependencies) registerVaultRoutes(app, vaultDependencies);
 
+/* Erasure of everything this deployment stores about the caller. Same condition
+ * as the vault routes: without a database there is nothing to erase. */
+const accountDependencies = accountRouteDependencies();
+if (accountDependencies) registerAccountRoutes(app, accountDependencies);
+
+/* The owner's opt-in share of their Personal total into LaVega Investing's net
+ * worth: PUT/DELETE /api/personal/net-worth-total. Same condition as the vault
+ * and account routes — without a database there is nowhere to put it. */
+const netWorthDependencies = netWorthRouteDependencies();
+if (netWorthDependencies) registerNetWorthRoutes(app, netWorthDependencies);
+
 /* Legal pages (standalone HTML) — required for the Enable Banking app
  * registration and linked from the app footer. Before the static catch-all. */
 app.get("/privacy", (c) => c.html(privacyHtml));
@@ -149,29 +409,91 @@ app.get("/terms", (c) => c.html(termsHtml));
  * with API routes at `/api/investing/*`, `/api/brokers/*`, etc. Enabled when the
  * investing-web dist exists (production Docker build). */
 if (shouldMountInvesting()) {
+  app.get("/api/cron/investing-sync", (c) => runInvestingCron(c.req.raw));
+  /* The external scheduler's entry point (issue #311). One call advances the
+   * queue by one invocation budget; it never self-continues. GET as well as
+   * POST so a plain external cron service can drive it. */
+  app.get("/api/cron/investing-drain", (c) => runInvestingDrain(c.req.raw));
+  app.post("/api/cron/investing-drain", (c) => runInvestingDrain(c.req.raw));
   /* Every investing API call is served under one tenant, and the session names
    * it. A request that cannot name a tenant is refused rather than falling back
    * to the local one — that fallback would hand one user another user's data. */
   const toInvesting = async (c: { req: { raw: Request } }) => {
     const tenantId = await investingTenantId(c.req.raw);
-    if (!tenantId) return Response.json({ problems: ["Authentication is required"] }, { status: 401 });
+    if (!tenantId)
+      return Response.json({ problems: ["Authentication is required"] }, { status: 401 });
     return forwardInvesting(c.req.raw, tenantId);
   };
-  const toInvestingStatic = (c: { req: { raw: Request } }) => forwardInvesting(c.req.raw);
+  /* Static/health forwarding has no tenant of its own to name — the SPA shell
+   * is HTML, and `health` names the runtime. It names `LOCAL_TENANT_ID`
+   * EXPLICITLY: the old `forwardInvesting` default did this silently, which is
+   * how `/investing/api/*` ended up served as the local tenant with no session
+   * (security review 2026-10-17, H1). */
+  const toInvestingStatic = (c: { req: { raw: Request } }) =>
+    forwardInvesting(c.req.raw, LOCAL_TENANT_ID);
   /* Ahead of the wildcard, and without a session: the health line names the
    * runtime, not a tenant, and the footer that shows it renders before anyone
    * has signed in. */
   app.get("/api/investing/health", toInvestingStatic);
-  app.all("/api/investing/*", toInvesting);
-  app.all("/api/brokers/*", toInvesting);
-  app.all("/api/prices/*", toInvesting);
-  app.all("/api/market-data/*", toInvesting);
-  app.all("/api/config/status", toInvesting);
+  /* Which /api namespaces to forward comes from the investing app's own routing
+   * table. Listing them here instead kept a second copy, and that copy went
+   * stale the moment the app grew one: /api/agents shipped and 404'd in
+   * production. Anything the investing app does not claim falls through, so a
+   * wrong method or a route this server only registers conditionally still gets
+   * this server's own answer rather than a misleading 401. */
+  app.all("/api/*", async (c, next) =>
+    (await investingOwnsApiPath(c.req.path)) ? toInvesting(c) : next(),
+  );
   /* The SPA shell itself is public: it has to load before anyone can sign in.
    * Its data comes from the /api routes above, which are not. */
   app.get("/investing", (c) => c.redirect("/investing/"));
+  /* `/investing/api/*` is the same API surface through the SPA's own prefix
+   * (`rewriteInvestingRequest` strips `/investing`, so it becomes `/api/*`).
+   * It goes to `toInvesting`, NOT `toInvestingStatic`: the guard above already
+   * refuses an unauthenticated caller, and this keeps an authenticated one on
+   * their OWN tenant rather than the local one. Registered before the SPA
+   * wildcard so the two do not overlap. */
+  app.all(`${INVESTING_API_ALIAS}/*`, toInvesting);
   app.all("/investing/*", toInvestingStatic);
 }
+
+/* The Dutch landing page is canonical at `/` (SEO-critical — see the header
+ * comment in apps/web/src/locale.ts); English lives at `/en`. English-device
+ * visitors get redirected here, unless a `lavega_locale` cookie already
+ * picked a locale. */
+app.get("/", async (c, next) => {
+  const target = localeRedirectTarget(c.req.header("accept-language"), c.req.header("cookie"));
+  if (target === null) return next();
+  return c.body(null, 302, { Location: target, Vary: "Accept-Language, Cookie" });
+});
+
+/* /app and /app/* are the personal vault's SPA shell, so a request here is
+ * gated on the same verified session as /api/* — anonymous visitors are sent
+ * to `/`, where sign-in has moved. It had to move out of /app first: locking
+ * this door before the way in existed would have trapped everyone, including
+ * a legitimate user, behind it. This gate respects the same
+ * `guardIsDisabled()` escape hatch as apiGuard for the same reason —
+ * `pnpm dev`'s cross-origin Vite page never carries the session cookie either. */
+async function requireAppSession(c: Context, next: Next) {
+  if (guardIsDisabled()) return next();
+  /* Whether this path answers 302 or the shell is decided by the session
+   * cookie, and a shared cache that does not know that can serve one user's
+   * answer to another — either bouncing a signed-in user to `/`, or handing
+   * the shell to an anonymous one and voiding the gate. Vercel currently
+   * revalidates this path on every request, so `Vary` is what keeps that true
+   * if a caching layer is ever put in front. */
+  c.header("Vary", "Cookie");
+  /* better-auth sends a failed confirmation link to /app?error=…. Bouncing it
+   * to "/" drops the query, and with it the landing page's "link expired"
+   * notice. The shell is public; Root shows the landing page to a signed-out
+   * visitor. Mirrors the same route in scripts/vercel-build.mjs. */
+  if (c.req.path === "/app" && c.req.query("error") !== undefined) return next();
+  const session = await verifiedSession(c.req.raw);
+  if (!session) return c.body(null, 302, { Location: "/", "Cache-Control": "private, no-store" });
+  return next();
+}
+app.use("/app", requireAppSession);
+app.use("/app/*", requireAppSession);
 
 /* Serve the built web app (all-in-one deploy). Registered AFTER the API routes,
  * so /health and /api/* win; everything else serves a static file from the web
@@ -186,14 +508,22 @@ app.use("/*", serveStatic({ root: WEB_DIST }));
  * we had still saw 200s. Cloudflare then cached the HTML under the .js URL for
  * four hours. A file that is not there is a 404. */
 app.get("/*", (c, next) => (isStaticAssetPath(c.req.path) ? c.text("Not Found", 404) : next()));
-app.get("/*", serveStatic({ path: `${WEB_DIST}/index.html` }));
+/* The view fallback is the bare SPA shell (app-shell.html), not index.html: the
+ * build pre-renders index.html into the Dutch landing page for crawlers, and
+ * /app or /reset-password must not start from that markup. Older builds without
+ * app-shell.html still get index.html. */
+app.get("/*", (c, next) => {
+  const shell = existsSync(`${WEB_DIST}/app-shell.html`) ? "app-shell.html" : "index.html";
+  return serveStatic({ path: `${WEB_DIST}/${shell}` })(c, next);
+});
 
 /* Only start listening when run directly (`tsx src/index.ts`), not when imported by tests. */
 if (import.meta.url === `file://${process.argv[1]}`) {
   // Bind 0.0.0.0 so a container host (Railway) can reach it for the health check
   // and public traffic — not just loopback.
-  serve({ fetch: app.fetch, port: PORT, hostname: "0.0.0.0" }, (info) => {
+  serve({ fetch: serverFetch, port: PORT, hostname: "0.0.0.0" }, (info) => {
     // eslint-disable-next-line no-console
     console.log(`LaVega server listening on 0.0.0.0:${info.port}`);
+    logPosthogInfo("server started", { event: "server_started", transport: "http" });
   });
 }

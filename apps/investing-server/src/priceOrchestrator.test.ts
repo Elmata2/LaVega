@@ -1,23 +1,75 @@
+import { DateTime } from "effect";
 import { expect, test, vi } from "vitest";
+import { PartnerBudgetUnavailable, PartnerWait } from "@lavega/adapters";
 import type { Position, Trade } from "@lavega/core";
-import { createPriceOrchestrator, discoverPriceSyncTargets, type PriceSyncTarget } from "./priceOrchestrator.js";
+import { priceSyncLeaseContract } from "../../../packages/database/src/priceSyncLease.contract.js";
+import {
+  createInMemoryPriceSyncProgressStore,
+  createPriceOrchestrator,
+  discoverPriceSyncTargets,
+  priceSyncDeadlineMs,
+  syncBudgets,
+  type PriceSyncTarget,
+} from "./priceOrchestrator.js";
 
-const position = (symbol: string, quantity = 1): Position => ({ tenantId: "local", entity: "personal", symbol, quantity, averagePrice: 10, marketPrice: 10, marketValue: 10, currency: "EUR", asOf: "2026-08-20" });
-const trade = (symbol: string, date: string): Trade => ({ id: `${symbol}:${date}`, tenantId: "local", entity: "personal", symbol, date, side: "buy", quantity: 1, price: 10, amount: 10, currency: "EUR", commission: 0 });
-const result = (problems: string[] = []) => ({ bars: [], fetched: true, problems });
+const position = (symbol: string, quantity = 1): Position => ({
+  entity: "personal",
+  symbol,
+  quantity,
+  averagePrice: 10,
+  marketPrice: 10,
+  marketValue: 10,
+  currency: "EUR",
+  asOf: "2026-08-20",
+});
+const trade = (symbol: string, date: string): Trade => ({
+  id: `${symbol}:${date}`,
+  entity: "personal",
+  symbol,
+  date,
+  side: "buy",
+  quantity: 1,
+  price: 10,
+  amount: 10,
+  currency: "EUR",
+  commission: 0,
+});
+const result = (problems: string[] = [], fetched = true) => ({ bars: [], fetched, problems });
 
-test("discovers current, closed, and benchmark symbols in request order with correct starts", () => {
+priceSyncLeaseContract("memory price progress", createInMemoryPriceSyncProgressStore);
+
+async function waitForAssertion(assertion: () => void) {
+  let lastError: unknown;
+  for (let attempts = 0; attempts < 20; attempts += 1) {
+    try {
+      assertion();
+      return;
+    } catch (error) {
+      lastError = error;
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+  }
+  throw lastError;
+}
+
+test("discovers selected benchmarks before holdings with correct starts", () => {
   const targets = discoverPriceSyncTargets({
     positions: [position("ASML"), position("ZERO", 0)],
-    trades: [trade("CLOSED", "2024-02-01"), trade("ASML", "2025-03-04"), trade("ASML", "2024-01-02")],
+    trades: [
+      trade("CLOSED", "2024-02-01"),
+      trade("ASML", "2025-03-04"),
+      trade("ASML", "2024-01-02"),
+    ],
     benchmarkSymbols: ["^STOXX50E", "ASML"],
   });
 
-  expect(targets.map(({ symbol, kind, backfillFrom }) => ({ symbol, kind, backfillFrom }))).toEqual([
-    { symbol: "ASML", kind: "current", backfillFrom: "2024-01-02" },
-    { symbol: "CLOSED", kind: "closed", backfillFrom: "2024-02-01" },
-    { symbol: "^STOXX50E", kind: "benchmark", backfillFrom: "2024-01-02" },
-  ]);
+  expect(targets.map(({ symbol, kind, backfillFrom }) => ({ symbol, kind, backfillFrom }))).toEqual(
+    [
+      { symbol: "^STOXX50E", kind: "benchmark", backfillFrom: "2024-01-02" },
+      { symbol: "ASML", kind: "current", backfillFrom: "2024-01-02" },
+      { symbol: "CLOSED", kind: "closed", backfillFrom: "2024-02-01" },
+    ],
+  );
 });
 
 test("position without trades backfills full history, not the snapshot date", () => {
@@ -26,12 +78,50 @@ test("position without trades backfills full history, not the snapshot date", ()
   expect(targets[0]!.backfillFrom).not.toBe("2026-08-20");
 });
 
+test("an ISIN-only holding carries the venue of its latest execution and says it has no ticker", () => {
+  const isin = "XS00PF000003";
+  const targets = discoverPriceSyncTargets({
+    positions: [{ ...position(isin), isin, description: "VOORBEELD GLOBAL EQUITY ETF" }],
+    trades: [
+      { ...trade(isin, "2024-01-02"), isin, venue: "XLON" },
+      { ...trade(isin, "2025-03-04"), isin, venue: "XAMS" },
+    ],
+  });
+
+  expect(targets).toHaveLength(1);
+  expect(targets[0]).toMatchObject({ symbol: isin, isin, venue: "XAMS", noTicker: true });
+});
+
+test("a broker ticker keeps its listing identity: venue is a hint, never a noTicker", () => {
+  const targets = discoverPriceSyncTargets({
+    positions: [position("ASML")],
+    trades: [trade("ASML", "2025-03-04")],
+  });
+
+  expect(targets[0]).toMatchObject({ symbol: "ASML", ticker: "ASML" });
+  expect(targets[0]!.venue).toBeUndefined();
+  expect(targets[0]!.noTicker).toBeUndefined();
+});
+
 test("concurrent tenant triggers join one orchestration", async () => {
   let release!: () => void;
-  const pending = new Promise<void>((resolve) => { release = resolve; });
-  const sync = vi.fn(async () => { await pending; return result(); });
-  const target: PriceSyncTarget = { kind: "current", symbol: "ASML", ticker: "ASML", exchange: "AMS", currency: "EUR", backfillFrom: "2024-01-01" };
-  const orchestrator = createPriceOrchestrator({ discover: () => [target], sync, paceMs: 0 });
+  const pending = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const sync = vi.fn(async () => {
+    await pending;
+    return result();
+  });
+  const target: PriceSyncTarget = {
+    instrumentKey: `sym:${"ASML"}:${"EUR"}`,
+    kind: "current",
+    symbol: "ASML",
+    ticker: "ASML",
+    exchange: "AMS",
+    currency: "EUR",
+    backfillFrom: "2024-01-01",
+  };
+  const orchestrator = createPriceOrchestrator({ discover: () => [target], sync });
 
   const first = orchestrator.run("local");
   const second = orchestrator.run("local");
@@ -43,39 +133,689 @@ test("concurrent tenant triggers join one orchestration", async () => {
 
 test("partial failure continues later symbols and remains retryable on next run", async () => {
   const targets: PriceSyncTarget[] = [
-    { kind: "current", symbol: "FAIL", ticker: "FAIL", exchange: "UNKNOWN", currency: "EUR", backfillFrom: "2024-01-01" },
-    { kind: "closed", symbol: "OK", ticker: "OK", exchange: "UNKNOWN", currency: "EUR", backfillFrom: "2024-02-01" },
+    {
+      instrumentKey: `sym:${"FAIL"}:${"EUR"}`,
+      kind: "current",
+      symbol: "FAIL",
+      ticker: "FAIL",
+      exchange: "UNKNOWN",
+      currency: "EUR",
+      backfillFrom: "2024-01-01",
+    },
+    {
+      instrumentKey: `sym:${"OK"}:${"EUR"}`,
+      kind: "closed",
+      symbol: "OK",
+      ticker: "OK",
+      exchange: "UNKNOWN",
+      currency: "EUR",
+      backfillFrom: "2024-02-01",
+    },
   ];
-  const sync = vi.fn(async (target: PriceSyncTarget) => result(target.symbol === "FAIL" ? ["rate limited"] : []));
-  const orchestrator = createPriceOrchestrator({ discover: () => targets, sync, paceMs: 0 });
+  const sync = vi.fn(async (target: PriceSyncTarget) =>
+    result(target.symbol === "FAIL" ? ["rate limited"] : []),
+  );
+  const orchestrator = createPriceOrchestrator({ discover: () => targets, sync });
 
-  await expect(orchestrator.run("local")).resolves.toMatchObject({ status: "problem", completed: 2, problems: ["FAIL: rate limited"] });
+  await expect(orchestrator.run("local")).resolves.toMatchObject({
+    status: "problem",
+    completed: 2,
+    problems: ["FAIL: rate limited"],
+  });
   await orchestrator.run("local");
 
   expect(sync.mock.calls.map(([target]) => target.symbol)).toEqual(["FAIL", "OK", "FAIL", "OK"]);
 });
 
-test("reports waiting state and remaining symbols during 300 ms pacing", async () => {
-  let release!: () => void;
-  const pending = new Promise<void>((resolve) => { release = resolve; });
-  const wait = vi.fn(() => pending);
-  const targets: PriceSyncTarget[] = [
-    { kind: "current", symbol: "NOW", ticker: "NOW", exchange: "UNKNOWN", currency: "EUR", backfillFrom: "2024-01-01" },
-    { kind: "closed", symbol: "NEXT", ticker: "NEXT", exchange: "UNKNOWN", currency: "EUR", backfillFrom: "2024-02-01" },
-  ];
-  const orchestrator = createPriceOrchestrator({ discover: () => targets, sync: async () => result(), wait });
+test("hands each run's deadline to every sync, so the partner budget can stop a slice on it", async () => {
+  const sync = vi.fn(
+    async (
+      _target: PriceSyncTarget,
+      _tenantId: string,
+      _context: { deadline: number | undefined; leaseId: string },
+    ) => result(),
+  );
+  const orchestrator = createPriceOrchestrator({
+    discover: () => ["ONE", "TWO"].map(symbolTarget),
+    sync,
+  });
 
-  const run = orchestrator.run("local");
-  await vi.waitFor(() => expect(wait).toHaveBeenCalledWith(300));
-  expect(orchestrator.status("local")).toMatchObject({ status: "waiting", completed: 1, remainingSymbols: ["NEXT"] });
-  release();
-  await expect(run).resolves.toMatchObject({ status: "completed", completed: 2 });
+  const deadline = Date.now() + 3_600_000;
+  await orchestrator.run("local", deadline);
+
+  expect(sync.mock.calls.map((call) => call[2].deadline)).toEqual([deadline, deadline]);
+  expect(sync.mock.calls.every((call) => typeof call[2].leaseId === "string")).toBe(true);
+});
+
+test("a slot past the deadline pauses the run with the symbol unreached, not failed", async () => {
+  const sync = vi.fn(async (target: PriceSyncTarget) => {
+    if (target.symbol === "TWO")
+      throw new PartnerWait({ until: DateTime.makeUnsafe(Date.now() + 60_000) });
+    return result();
+  });
+  const orchestrator = createPriceOrchestrator({
+    discover: () => ["ONE", "TWO", "THREE"].map(symbolTarget),
+    sync,
+  });
+
+  await expect(orchestrator.run("local")).resolves.toMatchObject({
+    status: "paused",
+    completed: 1,
+    remainingSymbols: ["TWO", "THREE"],
+    problems: [],
+    message: "Price synchronization paused for the host time budget",
+  });
+  expect(sync).toHaveBeenCalledTimes(2);
+});
+
+test("a paused run is resumed from the symbol that had no slot", async () => {
+  let blocked = true;
+  const sync = vi.fn(async (target: PriceSyncTarget) => {
+    if (target.symbol === "TWO" && blocked)
+      throw new PartnerWait({ until: DateTime.makeUnsafe(Date.now() + 60_000) });
+    return result();
+  });
+  const orchestrator = createPriceOrchestrator({
+    discover: () => ["ONE", "TWO", "THREE"].map(symbolTarget),
+    sync,
+  });
+
+  await orchestrator.run("local");
+  blocked = false;
+  await expect(orchestrator.run("local")).resolves.toMatchObject({
+    status: "completed",
+    completed: 3,
+    problems: [],
+  });
+  expect(sync.mock.calls.map(([target]) => target.symbol)).toEqual(["ONE", "TWO", "TWO", "THREE"]);
+});
+
+test("a budget store that is down pauses the run and says why, instead of failing every symbol", async () => {
+  const sync = vi.fn(async () => {
+    throw new PartnerBudgetUnavailable({ message: "down" });
+  });
+  const orchestrator = createPriceOrchestrator({
+    discover: () => ["ONE", "TWO"].map(symbolTarget),
+    sync,
+  });
+
+  await expect(orchestrator.run("local")).resolves.toMatchObject({
+    status: "paused",
+    completed: 0,
+    remainingSymbols: ["ONE", "TWO"],
+    problems: [],
+    message: "Price synchronization paused: the shared request budget is unavailable",
+  });
+  expect(sync).toHaveBeenCalledTimes(1);
+});
+
+test("any other failure still marks only that symbol and the run goes on", async () => {
+  const sync = vi.fn(async (target: PriceSyncTarget) => {
+    if (target.symbol === "ONE") throw new Error("boom");
+    return result();
+  });
+  const orchestrator = createPriceOrchestrator({
+    discover: () => ["ONE", "TWO"].map(symbolTarget),
+    sync,
+  });
+
+  await expect(orchestrator.run("local")).resolves.toMatchObject({
+    status: "problem",
+    completed: 2,
+    problems: ["ONE: boom"],
+  });
 });
 
 test("empty discovery completes without a provider request", async () => {
   const sync = vi.fn();
-  const orchestrator = createPriceOrchestrator({ discover: () => [], sync, paceMs: 0 });
+  const orchestrator = createPriceOrchestrator({ discover: () => [], sync });
 
-  await expect(orchestrator.run("local")).resolves.toMatchObject({ status: "completed", total: 0, remainingSymbols: [] });
+  await expect(orchestrator.run("local")).resolves.toMatchObject({
+    status: "completed",
+    total: 0,
+    remainingSymbols: [],
+  });
   expect(sync).not.toHaveBeenCalled();
+});
+
+const symbolTarget = (symbol: string): PriceSyncTarget => ({
+  instrumentKey: `sym:${symbol}:EUR`,
+  kind: "current",
+  symbol,
+  ticker: symbol,
+  exchange: "UNKNOWN",
+  currency: "EUR",
+  backfillFrom: "2024-01-01",
+});
+
+test("throttles progress writes by symbol count so store latency cannot gate cache-hit throughput", async () => {
+  const targets = Array.from({ length: 7 }, (_, index) => symbolTarget(`SYM${index}`));
+  const sync = vi.fn(async () => result([], false));
+  const put = vi.fn(async () => true);
+  const progressStore = { get: vi.fn(async () => null), put, claim: vi.fn(async () => null) };
+  const orchestrator = createPriceOrchestrator({
+    discover: () => targets,
+    sync,
+    progressStore,
+  });
+
+  await expect(orchestrator.run("local")).resolves.toMatchObject({
+    status: "completed",
+    completed: 7,
+  });
+
+  // Symbol 0 starts the row (so a lost lease is still caught immediately),
+  // symbol 5 crosses the throttle threshold, and the terminal write always
+  // persists: three writes total, not one per cache-hit symbol.
+  expect(put).toHaveBeenCalledTimes(3);
+});
+
+test("elapsed time forces progress renewal before symbol count threshold", async () => {
+  let clock = 0;
+  const backing = createInMemoryPriceSyncProgressStore();
+  const put = vi.fn(backing.put);
+  const orchestrator = createPriceOrchestrator({
+    discover: () => ["ONE", "TWO"].map(symbolTarget),
+    sync: async () => {
+      clock += 11_000;
+      return result([], false);
+    },
+    progressStore: { ...backing, put },
+    now: () => new Date(clock),
+  });
+  await expect(orchestrator.run("tenant")).resolves.toMatchObject({ status: "completed" });
+  expect(put.mock.calls.length).toBeGreaterThan(2);
+});
+
+test("run stops on the host budget and names what is left instead of continuing past it", async () => {
+  const targets = ["ONE", "TWO", "THREE"].map(symbolTarget);
+  let clock = 0;
+  const sync = vi.fn(async (_target: PriceSyncTarget) => {
+    clock += 4_000;
+    return result();
+  });
+  const orchestrator = createPriceOrchestrator({
+    discover: () => targets,
+    sync,
+    pauseMarginMs: 3_000,
+    now: () => new Date(clock),
+  });
+
+  await expect(orchestrator.run("local", 10_000)).resolves.toMatchObject({
+    status: "paused",
+    total: 3,
+    completed: 2,
+    remainingSymbols: ["THREE"],
+  });
+  expect(sync.mock.calls.map(([target]) => target.symbol)).toEqual(["ONE", "TWO"]);
+});
+
+test("a paused run resumes at the symbol it stopped on and finishes", async () => {
+  const targets = ["ONE", "TWO", "THREE"].map(symbolTarget);
+  const progressStore = createInMemoryPriceSyncProgressStore();
+  let clock = 0;
+  const sync = vi.fn(async (_target: PriceSyncTarget) => {
+    clock += 4_000;
+    return result();
+  });
+  const orchestrator = createPriceOrchestrator({
+    discover: () => targets,
+    sync,
+    pauseMarginMs: 3_000,
+    progressStore,
+    now: () => new Date(clock),
+  });
+
+  await orchestrator.run("local", 10_000);
+  await expect(orchestrator.run("local", clock + 60_000)).resolves.toMatchObject({
+    status: "completed",
+    total: 3,
+    completed: 3,
+    remainingSymbols: [],
+  });
+  // Symbols the first slice already stored cost the second one no request at all.
+  expect(sync.mock.calls.map(([target]) => target.symbol)).toEqual(["ONE", "TWO", "THREE"]);
+});
+
+test("a resumed run uses fresh benchmark priority for its remaining symbols", async () => {
+  const holdingsFirst = ["ONE", "TWO", "^AEX"].map(symbolTarget);
+  let discovered = holdingsFirst;
+  const progressStore = createInMemoryPriceSyncProgressStore();
+  let clock = 0;
+  const sync = vi.fn(async (_target: PriceSyncTarget) => {
+    clock += 4_000;
+    return result();
+  });
+  const orchestrator = createPriceOrchestrator({
+    discover: () => discovered,
+    sync,
+    pauseMarginMs: 3_000,
+    progressStore,
+    now: () => new Date(clock),
+  });
+
+  await expect(orchestrator.run("local", 6_000)).resolves.toMatchObject({
+    status: "paused",
+    remainingSymbols: ["TWO", "^AEX"],
+  });
+  discovered = [holdingsFirst[2]!, ...holdingsFirst.slice(0, 2)];
+  await expect(orchestrator.run("local", clock + 60_000)).resolves.toMatchObject({
+    status: "completed",
+  });
+  expect(sync.mock.calls.map(([target]) => target.symbol)).toEqual(["ONE", "^AEX", "TWO"]);
+});
+
+test("a benchmark selected during a paused run joins its next slice", async () => {
+  const holdings = ["ONE", "TWO", "THREE"].map(symbolTarget);
+  let discovered = holdings;
+  const progressStore = createInMemoryPriceSyncProgressStore();
+  let clock = 0;
+  const sync = vi.fn(async (_target: PriceSyncTarget) => {
+    clock += 4_000;
+    return result();
+  });
+  const orchestrator = createPriceOrchestrator({
+    discover: () => discovered,
+    sync,
+    pauseMarginMs: 3_000,
+    progressStore,
+    now: () => new Date(clock),
+  });
+
+  await expect(orchestrator.run("local", 6_000)).resolves.toMatchObject({
+    status: "paused",
+    remainingSymbols: ["TWO", "THREE"],
+  });
+  discovered = [{ ...symbolTarget("^AEX"), kind: "benchmark" }, ...holdings];
+  await expect(orchestrator.run("local", clock + 60_000)).resolves.toMatchObject({
+    status: "completed",
+    total: 4,
+  });
+  expect(sync.mock.calls.map(([target]) => target.symbol)).toEqual(["ONE", "^AEX", "TWO", "THREE"]);
+});
+
+test("a benchmark selected mid-run through the shared selection store is fetched next by the instance already running", async () => {
+  // Two orchestrator instances sharing only the durable stores, exactly like two
+  // separate Vercel invocations: no in-process object (an activeRuns registry,
+  // say) may be the thing that carries the new benchmark into the run.
+  const holdings = ["ONE", "TWO", "THREE"].map(symbolTarget);
+  const progressStore = createInMemoryPriceSyncProgressStore();
+  let selectedBenchmarks: string[] = [];
+  const discover = () => [
+    ...selectedBenchmarks.map((symbol) => ({
+      ...symbolTarget(symbol),
+      kind: "benchmark" as const,
+    })),
+    ...holdings,
+  ];
+  let releaseOne!: () => void;
+  const firstPending = new Promise<void>((resolve) => {
+    releaseOne = resolve;
+  });
+  // Past the default 5 s re-check throttle, so the periodic recheck before TWO
+  // is due once ONE finishes, instead of being skipped for arriving too soon.
+  let clock = 0;
+  const sync = vi.fn(async (target: PriceSyncTarget) => {
+    if (target.symbol === "ONE") await firstPending;
+    clock += 6_000;
+    return result();
+  });
+  const instanceRunningTheSync = createPriceOrchestrator({
+    discover,
+    sync,
+    progressStore,
+    now: () => new Date(clock),
+  });
+  // Never used to run anything: it stands in for the invocation that serves the
+  // PUT and a later status poll, and shares no JS object with the run above.
+  const anotherInstance = createPriceOrchestrator({
+    discover,
+    sync: async () => result(),
+    progressStore,
+    now: () => new Date(clock),
+  });
+
+  const run = instanceRunningTheSync.run("local");
+  await waitForAssertion(() =>
+    expect(sync).toHaveBeenCalledWith(
+      expect.objectContaining({ symbol: "ONE" }),
+      "local",
+      expect.anything(),
+    ),
+  );
+
+  // The PUT handler only writes the selection store; it never calls into the
+  // orchestrator that happens to be running.
+  selectedBenchmarks = ["^AEX"];
+
+  releaseOne();
+  await run;
+
+  expect(sync.mock.calls.map(([target]) => target.symbol)).toEqual(["ONE", "^AEX", "TWO", "THREE"]);
+  await expect(anotherInstance.status("local")).resolves.toMatchObject({
+    status: "completed",
+    total: 4,
+    completed: 4,
+  });
+});
+
+test("re-checking for a new benchmark is throttled by the clock, not called once per symbol", async () => {
+  // In production this re-check is an uncached Neon round trip (the benchmark
+  // selection store), so it must not scale with symbol count: a 200-symbol
+  // sync would otherwise cost 200 extra round trips. Freeze the clock so no
+  // amount of real time passes between symbols; only the initial discover()
+  // at run start should ever fire.
+  const targets = Array.from({ length: 20 }, (_, index) => symbolTarget(`SYM${index}`));
+  const discover = vi.fn(() => targets);
+  const sync = vi.fn(async () => result());
+  const orchestrator = createPriceOrchestrator({
+    discover,
+    sync,
+    now: () => new Date(0),
+  });
+
+  await expect(orchestrator.run("local")).resolves.toMatchObject({
+    status: "completed",
+    completed: 20,
+  });
+
+  expect(discover).toHaveBeenCalledTimes(1);
+});
+
+test("progress survives the process that produced it", async () => {
+  const progressStore = createInMemoryPriceSyncProgressStore();
+  const shared = {
+    discover: () => [symbolTarget("ONE")],
+    sync: async () => result(),
+    progressStore,
+  };
+  await createPriceOrchestrator(shared).run("local");
+
+  // A second instance answers the status poll from the row, not from memory it never had.
+  await expect(createPriceOrchestrator(shared).status("local")).resolves.toMatchObject({
+    status: "completed",
+    total: 1,
+    completed: 1,
+    updatedAt: expect.any(String),
+  });
+});
+
+test("a fresh run by another instance is left alone rather than doubled", async () => {
+  const progressStore = createInMemoryPriceSyncProgressStore();
+  await progressStore.claim(
+    "local",
+    {
+      status: "running",
+      total: 2,
+      completed: 1,
+      remainingSymbols: ["TWO"],
+      currentSymbol: "TWO",
+      waitUntil: null,
+      updatedAt: new Date().toISOString(),
+      message: null,
+      problems: [],
+      leaseId: "other",
+    },
+    new Date(Date.now() - 30_000).toISOString(),
+  );
+  const sync = vi.fn(async () => result());
+  const orchestrator = createPriceOrchestrator({
+    discover: () => [symbolTarget("TWO")],
+    sync,
+    progressStore,
+  });
+
+  await expect(orchestrator.run("local")).resolves.toMatchObject({
+    status: "running",
+    currentSymbol: "TWO",
+  });
+  expect(sync).not.toHaveBeenCalled();
+});
+
+test("a stale run is taken over so a dead instance cannot strand the work", async () => {
+  const progressStore = createInMemoryPriceSyncProgressStore();
+  await progressStore.claim(
+    "local",
+    {
+      status: "running",
+      total: 1,
+      completed: 0,
+      remainingSymbols: ["TWO"],
+      currentSymbol: "TWO",
+      waitUntil: null,
+      updatedAt: new Date(Date.now() - 120_000).toISOString(),
+      message: null,
+      problems: [],
+      leaseId: "stale",
+    },
+    new Date(Date.now() - 150_000).toISOString(),
+  );
+  const sync = vi.fn(async () => result());
+  const orchestrator = createPriceOrchestrator({
+    discover: () => [symbolTarget("TWO")],
+    sync,
+    progressStore,
+  });
+
+  await expect(orchestrator.run("local")).resolves.toMatchObject({ status: "completed" });
+  expect(sync).toHaveBeenCalledOnce();
+});
+
+test("a worker that loses its durable lease stops before another provider request", async () => {
+  const owner = {
+    status: "running" as const,
+    total: 1,
+    completed: 0,
+    remainingSymbols: ["TWO"],
+    currentSymbol: "TWO",
+    waitUntil: null,
+    updatedAt: new Date().toISOString(),
+    message: "New owner",
+    problems: [],
+    leaseId: "new-owner",
+  };
+  const progressStore = {
+    get: vi.fn().mockResolvedValueOnce(null).mockResolvedValue(owner),
+    put: vi.fn(async () => false),
+    claim: vi.fn(async () => null),
+  };
+  const sync = vi.fn(async () => result());
+  const orchestrator = createPriceOrchestrator({
+    discover: () => [symbolTarget("TWO")],
+    sync,
+    progressStore,
+  });
+
+  await expect(orchestrator.run("local")).resolves.toMatchObject({
+    leaseId: "new-owner",
+    currentSymbol: "TWO",
+  });
+  expect(sync).not.toHaveBeenCalled();
+  expect(progressStore.put).toHaveBeenCalled();
+});
+
+test.each(["start", "final"])(
+  "durable %s write failure rejects instead of reporting completion",
+  async (point) => {
+    const backing = createInMemoryPriceSyncProgressStore();
+    let writes = 0;
+    const progressStore = {
+      ...backing,
+      put: async (...args: Parameters<typeof backing.put>) => {
+        writes += 1;
+        if ((point === "start" && writes === 1) || (point === "final" && writes === 2))
+          throw new Error("storage unavailable");
+        return backing.put(...args);
+      },
+    };
+    const sync = vi.fn(async () => result());
+    const orchestrator = createPriceOrchestrator({
+      discover: () => [symbolTarget("ONE")],
+      sync,
+      progressStore,
+    });
+    await expect(orchestrator.run("local")).rejects.toThrow("storage unavailable");
+    await expect(backing.get("local")).resolves.not.toMatchObject({ status: "completed" });
+    if (point === "start") expect(sync).not.toHaveBeenCalled();
+  },
+);
+
+test("failed progress read rejects before claim or provider work", async () => {
+  const readError = new Error("storage unavailable");
+  const store = {
+    get: vi.fn(async () => {
+      throw readError;
+    }),
+    claim: vi.fn(async () => null),
+    put: vi.fn(async () => true),
+  };
+  const discover = vi.fn(async () => [symbolTarget("ONE")]);
+  const sync = vi.fn(async () => result());
+  const orchestrator = createPriceOrchestrator({ discover, sync, progressStore: store });
+
+  await expect(orchestrator.run("tenant")).rejects.toBe(readError);
+  expect(store.claim).not.toHaveBeenCalled();
+  expect(store.put).not.toHaveBeenCalled();
+  expect(discover).not.toHaveBeenCalled();
+  expect(sync).not.toHaveBeenCalled();
+});
+
+test.each(["empty", "error"])("%s discovery cannot overwrite an active lease", async (kind) => {
+  const store = createInMemoryPriceSyncProgressStore();
+  const active = {
+    status: "running" as const,
+    total: 1,
+    completed: 0,
+    remainingSymbols: ["ONE"],
+    currentSymbol: "ONE",
+    waitUntil: null,
+    updatedAt: new Date(0).toISOString(),
+    message: null,
+    problems: [] as string[],
+    leaseId: "owner",
+  };
+  await store.claim("tenant", active, new Date(-1).toISOString());
+  const discover = vi.fn(() => {
+    if (kind === "error") throw new Error("discovery failed");
+    return [];
+  });
+  const orchestrator = createPriceOrchestrator({
+    discover,
+    sync: async () => result(),
+    progressStore: store,
+    now: () => new Date(1_000),
+  });
+  await expect(orchestrator.run("tenant")).resolves.toMatchObject({ leaseId: "owner" });
+  await expect(store.get("tenant")).resolves.toEqual(active);
+  expect(discover).not.toHaveBeenCalled();
+});
+
+test("slow provider cannot publish stale progress after another worker claims expired lease", async () => {
+  const store = createInMemoryPriceSyncProgressStore();
+  let clock = 0;
+  let release!: () => void;
+  const pending = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const sync = vi.fn(async () => {
+    await pending;
+    return result();
+  });
+  const first = createPriceOrchestrator({
+    discover: () => [symbolTarget("ONE"), symbolTarget("TWO")],
+    sync,
+    progressStore: store,
+    now: () => new Date(clock),
+    takeoverAfterMs: 30_000,
+  });
+  const running = first.run("tenant");
+  await waitForAssertion(() => expect(sync).toHaveBeenCalledTimes(1));
+  clock = 31_000;
+  const second = createPriceOrchestrator({
+    discover: () => [],
+    sync: async () => result(),
+    progressStore: store,
+    now: () => new Date(clock),
+    takeoverAfterMs: 30_000,
+  });
+  const winner = await second.run("tenant");
+  release();
+  await expect(running).resolves.toEqual(winner);
+  await expect(store.get("tenant")).resolves.toEqual(winner);
+});
+
+test("heartbeat keeps slow provider lease fresh past takeover threshold", async () => {
+  vi.useFakeTimers();
+  try {
+    const store = createInMemoryPriceSyncProgressStore();
+    let release!: () => void;
+    const pending = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const sync = vi.fn(async () => {
+      await pending;
+      return result();
+    });
+    const clock = () => new Date(Date.now());
+    const first = createPriceOrchestrator({
+      discover: () => [symbolTarget("ONE")],
+      sync,
+      progressStore: store,
+      now: clock,
+      takeoverAfterMs: 30_000,
+      heartbeatEveryMs: 5_000,
+    });
+    const running = first.run("tenant");
+    await vi.waitFor(() => expect(sync).toHaveBeenCalledOnce());
+    const owner = (await store.get("tenant"))?.leaseId;
+    await vi.advanceTimersByTimeAsync(35_000);
+    const secondSync = vi.fn(async () => result());
+    const second = createPriceOrchestrator({
+      discover: () => [symbolTarget("ONE")],
+      sync: secondSync,
+      progressStore: store,
+      now: clock,
+      takeoverAfterMs: 30_000,
+    });
+    await expect(second.run("tenant")).resolves.toMatchObject({ leaseId: owner });
+    expect(secondSync).not.toHaveBeenCalled();
+    release();
+    await expect(running).resolves.toMatchObject({ status: "completed" });
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test("the budget is the broker sync budget unless prices are given their own", () => {
+  const environment = (values: Record<string, string>) => (name: string) => values[name];
+  expect(priceSyncDeadlineMs(environment({ INVESTING_SYNC_BUDGET_MS: "240000" }), 1_000)).toBe(
+    241_000,
+  );
+  expect(
+    priceSyncDeadlineMs(
+      environment({ INVESTING_SYNC_BUDGET_MS: "240000", INVESTING_PRICE_SYNC_BUDGET_MS: "60000" }),
+      1_000,
+    ),
+  ).toBe(61_000);
+  expect(priceSyncDeadlineMs(environment({ VERCEL: "1" }), 1_000)).toBe(46_000);
+  // A local or Docker run has no host limit, so it waits out the whole list.
+  expect(priceSyncDeadlineMs(environment({}), 1_000)).toBeUndefined();
+});
+
+test("syncBudgets gives the cron and the per-tenant slice from one reading", () => {
+  const environment = (values: Record<string, string>) => (name: string) => values[name];
+  expect(
+    syncBudgets(
+      environment({ INVESTING_SYNC_BUDGET_MS: "240000", INVESTING_PRICE_SYNC_BUDGET_MS: "60000" }),
+    ),
+  ).toEqual({ cronMs: 240_000, sliceMs: 60_000 });
+  expect(syncBudgets(environment({ INVESTING_SYNC_BUDGET_MS: "90000" }))).toEqual({
+    cronMs: 90_000,
+    sliceMs: 90_000,
+  });
+  expect(syncBudgets(environment({ VERCEL: "1" }))).toEqual({ cronMs: 240_000, sliceMs: 45_000 });
+  expect(syncBudgets(environment({ INVESTING_SYNC_BUDGET_MS: "nope" }))).toEqual({
+    cronMs: undefined,
+    sliceMs: undefined,
+  });
 });

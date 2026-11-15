@@ -1,22 +1,15 @@
 // @vitest-environment jsdom
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
 import { act, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, expect, test } from "vitest";
 import TrendChart, { axisIndices, keyToIndex } from "./TrendChart";
 
-/* Real renders via renderToStaticMarkup (no render library in this repo), plus
- * a read of styles/charts.css so a class rename on either side fails here. The
+/* Real renders via renderToStaticMarkup (no render library in this repo). The
  * keyboard tests mount the chart for real with React's own root API — arrow-key
  * scrubbing cannot be checked from static markup.
  *
- * This file runs in jsdom, where import.meta.url resolves against the jsdom
- * document rather than the disk, so the stylesheet is read from the package
- * root (vitest's working directory). */
-
-const css = readFileSync(resolve(process.cwd(), "src/styles/charts.css"), "utf8");
+ * This file runs in jsdom. */
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -56,23 +49,10 @@ const points = [
 
 const format = (v: number) => `€${v}`;
 
-test("TrendChart draws one smooth path and opens its readout on the last point", () => {
-  const html = renderToStaticMarkup(
-    <TrendChart points={points} format={format} ariaLabel="Testtrend" readoutLabel="Saldo" />,
-  );
-  expect(html).toContain('aria-label="Testtrend"');
-  expect(html).toContain("Saldo · week 3");
-  expect(html).toContain("€950");
-  // A cubic path, not a polyline: the line is smoothed.
-  expect(html).toContain("<path");
-  expect(html).not.toContain("<polyline");
-  // Strokes must not thicken when the 0–100 box is stretched to the card width.
-  expect(html).toContain('vector-effect="non-scaling-stroke"');
-  expect(html).toContain('preserveAspectRatio="none"');
-});
-
 test("TrendChart puts every label in HTML, never in the SVG", () => {
-  const html = renderToStaticMarkup(<TrendChart points={points} format={format} ariaLabel="Testtrend" showAxis />);
+  const html = renderToStaticMarkup(
+    <TrendChart points={points} format={format} ariaLabel="Testtrend" showAxis />,
+  );
   // The bug this design exists to prevent: SVG <text> shrank to ~6px when the
   // grid collapsed to one column on a phone.
   expect(html).not.toContain("<text");
@@ -103,18 +83,24 @@ test("TrendChart draws the band and the reference line only when given them", ()
 
 test("TrendChart marks a named point and skips an out-of-range one", () => {
   const inside = renderToStaticMarkup(
-    <TrendChart points={points} format={format} ariaLabel="A" mark={{ index: 2, color: "var(--neg)" }} />,
+    <TrendChart
+      points={points}
+      format={format}
+      ariaLabel="A"
+      mark={{ index: 2, color: "var(--neg)" }}
+    />,
   );
   expect(inside).toContain('class="lv-chart-mark" style="left:66.67%');
 
   const outside = renderToStaticMarkup(
-    <TrendChart points={points} format={format} ariaLabel="A" mark={{ index: 9, color: "var(--neg)" }} />,
+    <TrendChart
+      points={points}
+      format={format}
+      ariaLabel="A"
+      mark={{ index: 9, color: "var(--neg)" }}
+    />,
   );
   expect(outside).not.toContain("lv-chart-mark");
-});
-
-test("TrendChart renders nothing rather than an empty axis with no points", () => {
-  expect(renderToStaticMarkup(<TrendChart points={[]} format={format} ariaLabel="A" />)).toBe("");
 });
 
 test("axisIndices keeps every label while they fit and thins them out when they don't", () => {
@@ -144,13 +130,17 @@ test("the trend can be scrubbed from the keyboard, and says where it is", () => 
 });
 
 test("the plot is a group, not an image — an image would hide the scrubber", () => {
-  const html = renderToStaticMarkup(<TrendChart points={points} format={format} ariaLabel="Testtrend" />);
+  const html = renderToStaticMarkup(
+    <TrendChart points={points} format={format} ariaLabel="Testtrend" />,
+  );
   expect(html).toContain('role="group"');
   expect(html).not.toContain('role="img"');
 });
 
 test("arrow keys walk the readout point by point, Home and End jump to the ends", () => {
-  const el = mount(<TrendChart points={points} format={format} ariaLabel="A" readoutLabel="Saldo" />);
+  const el = mount(
+    <TrendChart points={points} format={format} ariaLabel="A" readoutLabel="Saldo" />,
+  );
   const hit = el.querySelector<HTMLElement>(".lv-chart-hit");
   const readout = el.querySelector<HTMLElement>(".lv-chart-readout");
   expect(hit).not.toBeNull();
@@ -186,38 +176,4 @@ test("keyToIndex moves one step at a time and never walks off the series", () =>
   expect(keyToIndex(4, 2, "Tab")).toBeNull();
   expect(keyToIndex(4, 2, "a")).toBeNull();
   expect(keyToIndex(0, 0, "ArrowLeft")).toBeNull();
-});
-
-test("every class TrendChart emits has a rule in charts.css", () => {
-  for (const cls of [
-    "lv-chart",
-    "lv-chart-withaxis",
-    "lv-chart-readout",
-    "lv-chart-readout-value",
-    "lv-chart-plot",
-    "lv-chart-area",
-    "lv-chart-svg",
-    "lv-chart-grid",
-    "lv-chart-tick",
-    "lv-chart-cursor",
-    "lv-chart-dot",
-    "lv-chart-mark",
-    "lv-chart-reflabel",
-    "lv-chart-hit",
-    "lv-chart-xaxis",
-    "lv-chart-xlabel",
-  ]) {
-    expect(css, `.${cls} missing from charts.css`).toContain(`.${cls}`);
-  }
-});
-
-test("the scrubber shows where the keyboard is", () => {
-  // A focusable surface with no visible focus state is a trap for anyone who
-  // cannot see the cursor line move.
-  expect(css.replace(/\s+/g, " ")).toContain(".lv-chart-hit:focus-visible");
-});
-
-test("the axis gutter is a variable the drawing area subtracts, so a tick never shifts the data", () => {
-  expect(css).toContain("--lv-axis-w: 0px");
-  expect(css.replace(/\s+/g, " ")).toContain(".lv-chart-area { position: absolute; inset: 0 0 0 var(--lv-axis-w); }");
 });

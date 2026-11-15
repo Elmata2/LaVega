@@ -28,7 +28,10 @@ const AGG_JSON = {
 };
 
 const ok = (body: unknown) =>
-  new Response(JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } });
+  new Response(JSON.stringify(body), {
+    status: 200,
+    headers: { "content-type": "application/json" },
+  });
 
 /** Beide bronnen op de rol, elk met zijn eigen antwoord of een storing. */
 function routes(opts: { ecb?: unknown | "down"; agg?: unknown | "down" }) {
@@ -116,7 +119,20 @@ test("dekt de aggregator alles, dan is er geen ECB-laag en zegt het antwoord dat
   // de ECB, dus als de ECB wegvalt houdt de bundel niets over om bij te dragen.
   const dekkend = {
     ...AGG_JSON,
-    rates: { EUR: 1, USD: 1.16819, GBP: 0.86, CHF: 0.93, JPY: 171, SEK: 11.3, NOK: 11.7, DKK: 7.46, PLN: 4.27, CAD: 1.59, AUD: 1.75, MAD: 10.79 },
+    rates: {
+      EUR: 1,
+      USD: 1.16819,
+      GBP: 0.86,
+      CHF: 0.93,
+      JPY: 171,
+      SEK: 11.3,
+      NOK: 11.7,
+      DKK: 7.46,
+      PLN: 4.27,
+      CAD: 1.59,
+      AUD: 1.75,
+      MAD: 10.79,
+    },
   };
   vi.stubGlobal("fetch", routes({ ecb: "down", agg: dekkend }));
   const r = await getFxRate();
@@ -172,8 +188,13 @@ test("parseAggregatorPayload weigert wat hij niet kan plaatsen", async () => {
   // Zonder eigen peildatum kan de koers zijn herkomst niet dragen.
   expect(parseAggregatorPayload({ ...AGG_JSON, time_last_update_utc: "ooit" })).toBeNull();
   // Eén rotte koers kost niet de hele laag, alleen die ene.
-  const partial = parseAggregatorPayload({ ...AGG_JSON, rates: { MAD: 10.7, AED: -1, ANG: "nee" } });
+  const partial = parseAggregatorPayload({
+    ...AGG_JSON,
+    rates: { MAD: 10.7, AED: -1, ANG: "nee" },
+  });
   expect(partial?.rates).toEqual({ MAD: 10.7 });
   // Geen opgave van de volgende ronde is null en niet een verzonnen datum.
-  expect(parseAggregatorPayload({ ...AGG_JSON, time_next_update_utc: undefined })?.nextUpdate).toBeNull();
+  expect(
+    parseAggregatorPayload({ ...AGG_JSON, time_next_update_utc: undefined })?.nextUpdate,
+  ).toBeNull();
 });

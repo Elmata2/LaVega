@@ -34,7 +34,7 @@ test("consolidate sums in/out per entity", () => {
       balance: 100,
     },
   ];
-  const c = consolidate(accounts, txs);
+  const c = consolidate(accounts, txs, "2026-01-02", { fxHistory: {}, mode: "separate" });
   expect(c.byEntity["BV1"]).toMatchObject({ in: 40, out: -10, balance: 100 });
 });
 
@@ -51,7 +51,7 @@ test("consolidate: account with null balance makes entity balance null (unknown)
       balance: null,
     },
   ];
-  const c = consolidate(accounts, txs);
+  const c = consolidate(accounts, txs, "2026-01-02", { fxHistory: {}, mode: "separate" });
   expect(c.byEntity["BV1"].balance).toBeNull();
   expect(c.totalBalance).toBeNull();
 });
@@ -77,13 +77,115 @@ test("consolidate: one known + one null balance in same entity means unknown win
       balance: null,
     },
   ];
-  const c = consolidate(accounts, []);
+  const c = consolidate(accounts, [], "2026-01-02", { fxHistory: {}, mode: "separate" });
   expect(c.byEntity["BV1"].balance).toBeNull();
 });
 
 test("consolidate: no entities/balances (pristine app, no accounts) -> totalBalance is null, not 0", () => {
-  const c = consolidate([], []);
+  const c = consolidate([], [], "2026-01-02", { fxHistory: {}, mode: "separate" });
   expect(c.totalBalance).toBeNull();
+});
+
+test("consolidate: a non-EUR account is excluded from the entity balance instead of added at face value, and does not make the balance unknown", () => {
+  const accounts = [
+    { key: "A", iban: "A", name: "", bank: "", entity: "BV1", currency: "EUR", balance: 4_500 },
+    { key: "B", iban: "B", name: "", bank: "", entity: "BV1", currency: "HUF", balance: 380_000 },
+  ];
+  const c = consolidate(accounts, [], "2026-01-02", { fxHistory: {}, mode: "separate" });
+  expect(c.byEntity["BV1"].balance).toBe(4_500);
+  expect(c.totalBalance).toBe(4_500);
+});
+
+test("consolidate: an entity whose only account is non-EUR reports an unknown balance, not a false zero", () => {
+  const accounts = [
+    { key: "A", iban: "A", name: "", bank: "", entity: "BV1", currency: "EUR", balance: 4_500 },
+    { key: "B", iban: "B", name: "", bank: "", entity: "BV2", currency: "USD", balance: 10_000 },
+  ];
+  const c = consolidate(accounts, [], "2026-01-02", { fxHistory: {}, mode: "separate" });
+  expect(c.byEntity["BV2"].balance).toBeNull();
+  // BV2's unknown balance makes the total unknown too, same as a missing one
+  // would — it must not silently drop out and leave BV1's 4.500 looking whole.
+  expect(c.totalBalance).toBeNull();
+});
+
+test("consolidate: a non-EUR transaction is excluded from in/out instead of added at face value", () => {
+  const txs = assignTxIds([mk({ amount: -10 }), mk({ amount: 300_000, currency: "HUF" })]);
+  const accounts = [
+    { key: "A", iban: "A", name: "", bank: "", entity: "BV1", currency: "EUR", balance: 100 },
+  ];
+  const c = consolidate(accounts, txs, "2026-01-02", { fxHistory: {}, mode: "separate" });
+  expect(c.byEntity["BV1"]).toMatchObject({ in: 0, out: -10, balance: 100 });
+});
+
+test("consolidate: convert mode folds a non-EUR balance in at asOf's rate instead of excluding it", () => {
+  const accounts = [
+    { key: "A", iban: "A", name: "", bank: "", entity: "BV1", currency: "HUF", balance: 300_000 },
+  ];
+  const c = consolidate(accounts, [], "2026-06-15", {
+    fxHistory: { HUF: { "2026-06-15": 400 } },
+    mode: "convert",
+  });
+  expect(c.byEntity["BV1"].balance).toBeCloseTo(750, 2);
+});
+
+test("consolidate: balance conversion reads only the injected asOf, never the wall clock", () => {
+  const accounts = [
+    { key: "A", iban: "A", name: "", bank: "", entity: "BV1", currency: "HUF", balance: 300_000 },
+  ];
+  const fxHistory = { HUF: { "2026-06-15": 400, "2026-07-15": 500 } };
+  const june = consolidate(accounts, [], "2026-06-15", { fxHistory, mode: "convert" });
+  const july = consolidate(accounts, [], "2026-07-15", { fxHistory, mode: "convert" });
+  expect(june.byEntity["BV1"].balance).toBeCloseTo(750, 2);
+  expect(july.byEntity["BV1"].balance).toBeCloseTo(600, 2);
+});
+
+test("consolidate: convert mode converts a non-EUR transaction at its OWN date, not asOf", () => {
+  const txs = assignTxIds([mk({ amount: -300_000, currency: "HUF", date: "2026-03-10" })]);
+  const accounts = [
+    { key: "A", iban: "A", name: "", bank: "", entity: "BV1", currency: "EUR", balance: 0 },
+  ];
+  const c = consolidate(accounts, txs, "2026-03-10", {
+    fxHistory: { HUF: { "2026-03-10": 400 } },
+    mode: "convert",
+  });
+  expect(c.byEntity["BV1"].out).toBeCloseTo(-750, 2);
+});
+
+test("consolidate: convert mode nulls the entity when a foreign account's OWN balance is missing, not just when its rate is", () => {
+  // A genuinely missing a.balance means the same thing here as it does for an
+  // EUR account: this account's contribution is unknown. It must not be
+  // funnelled into the same exclusion as "no FX rate" — the EUR sibling
+  // account has a real balance, but the whole entity is still incomplete.
+  const accounts = [
+    { key: "A", iban: "A", name: "", bank: "", entity: "BV1", currency: "EUR", balance: 100 },
+    { key: "B", iban: "B", name: "", bank: "", entity: "BV1", currency: "USD", balance: null },
+  ];
+  const c = consolidate(accounts, [], "2026-01-02", { fxHistory: {}, mode: "convert" });
+  expect(c.byEntity["BV1"].balance).toBeNull();
+});
+
+test("consolidate: convert mode excludes a no-rate foreign account without nulling a sibling EUR account's real balance", () => {
+  // The inverse of the null-a.balance test above: here the foreign account's
+  // OWN balance is known, only the FX rate is missing. That must exclude
+  // just this account's contribution — same as separate mode — and must not
+  // propagate unknown-ness onto the entity the way a genuinely missing
+  // a.balance does.
+  const accounts = [
+    { key: "A", iban: "A", name: "", bank: "", entity: "BV1", currency: "EUR", balance: 100 },
+    { key: "B", iban: "B", name: "", bank: "", entity: "BV1", currency: "HUF", balance: 5_000 },
+  ];
+  const c = consolidate(accounts, [], "2026-01-02", { fxHistory: {}, mode: "convert" });
+  expect(c.byEntity["BV1"].balance).toBe(100);
+});
+
+test("consolidate: convert mode with no matching rate excludes exactly like separate mode", () => {
+  const txs = assignTxIds([mk({ amount: -300_000, currency: "HUF", date: "2026-03-10" })]);
+  const accounts = [
+    { key: "A", iban: "A", name: "", bank: "", entity: "BV1", currency: "HUF", balance: 300_000 },
+  ];
+  const c = consolidate(accounts, txs, "2026-03-10", { fxHistory: {}, mode: "convert" });
+  expect(c.byEntity["BV1"].balance).toBeNull(); // no EUR-equivalent account for this entity at all
+  expect(c.byEntity["BV1"].out).toBe(0); // no rate found, so the tx is excluded
 });
 
 /* ── Eén betaling, twee bronnen (review 4, antwoord op vraag 1) ─────────────
@@ -100,8 +202,22 @@ test("consolidate: no entities/balances (pristine app, no accounts) -> totalBala
  * staan. Dat is de reden dat er alleen ontdubbeld wordt tegen wat er AL LAG, en
  * nooit binnen één zending. */
 
-const bron = (cp: string, date: string, amount: number, description: string, accountKey = "ING") =>
-  ({ accountKey, date, amount, currency: "EUR", counterparty: cp, description, category: "", manual: false });
+const bron = (
+  cp: string,
+  date: string,
+  amount: number,
+  description: string,
+  accountKey = "ING",
+) => ({
+  accountKey,
+  date,
+  amount,
+  currency: "EUR",
+  counterparty: cp,
+  description,
+  category: "",
+  manual: false,
+});
 
 const DATA = ["2026-05-04", "2026-06-02", "2026-07-02", "2026-08-03"];
 const uitCsv = DATA.map((d) => bron("SIMYO", d, -11.89, `Incasso ${d}`));
@@ -114,9 +230,25 @@ test("dezelfde incasso uit CSV en bankkoppeling wordt één rij — en Simyo kom
   expect(naBank).toHaveLength(4); // was 8
 
   // De uitgaven waren dubbel; dat is de bredere schade, niet alleen het gemiste abonnement.
-  const rekening = { key: "ING", iban: "NL17INGB0539576085", name: "", bank: "ING", entity: "Prive", currency: "EUR", balance: 0 };
-  expect(consolidate([rekening], naCsv).byEntity["Prive"].out).toBeCloseTo(-47.56, 2);
-  expect(consolidate([rekening], naBank).byEntity["Prive"].out).toBeCloseTo(-47.56, 2); // was -95,12
+  const rekening = {
+    key: "ING",
+    iban: "NL17INGB0539576085",
+    name: "",
+    bank: "ING",
+    entity: "Prive",
+    currency: "EUR",
+    balance: 0,
+  };
+  expect(
+    consolidate([rekening], naCsv, "2026-08-16", { fxHistory: {}, mode: "separate" }).byEntity[
+      "Prive"
+    ].out,
+  ).toBeCloseTo(-47.56, 2);
+  expect(
+    consolidate([rekening], naBank, "2026-08-16", { fxHistory: {}, mode: "separate" }).byEntity[
+      "Prive"
+    ].out,
+  ).toBeCloseTo(-47.56, 2); // was -95,12
 
   // En het abonnement, dat op de gaten [0, 29, 0, 30, 0, 32, 0] stukliep.
   const [sub] = detectSubscriptions(naBank, { asOf: "2026-08-16" });
@@ -142,18 +274,27 @@ test("twee ECHTE betalingen op dezelfde dag aan dezelfde partij blijven twee rij
 
   // En als de bankkoppeling diezelfde twee later nóg eens levert, anders
   // gespeld, blijven het er twee — niet vier, en ook niet één.
-  const viaBank = tanken.map((t) => ({ ...t, counterparty: "SHELL NEDERLAND VERKOOP", description: "Betaalautomaat" }));
+  const viaBank = tanken.map((t) => ({
+    ...t,
+    counterparty: "SHELL NEDERLAND VERKOOP",
+    description: "Betaalautomaat",
+  }));
   expect(ingest(opgeslagen, viaBank)).toHaveLength(2);
 });
 
 test("één opgeslagen rij slokt precies één rij op: de derde tankbeurt komt er gewoon bij", () => {
-  const opgeslagen = ingest([], [
-    bron("Shell Nederland", "2026-06-10", -70, "Tankstation A4"),
-    bron("Shell Nederland", "2026-06-10", -70, "Tankstation A4"),
-  ]);
+  const opgeslagen = ingest(
+    [],
+    [
+      bron("Shell Nederland", "2026-06-10", -70, "Tankstation A4"),
+      bron("Shell Nederland", "2026-06-10", -70, "Tankstation A4"),
+    ],
+  );
   // De bank levert de dag opnieuw, nu met een derde tankbeurt erbij, allemaal
   // anders gespeld. Twee worden opgeslokt, de derde is nieuw en blijft.
-  const drie = ["a", "b", "c"].map(() => bron("SHELL NEDERLAND VERKOOP", "2026-06-10", -70, "Betaalautomaat"));
+  const drie = ["a", "b", "c"].map(() =>
+    bron("SHELL NEDERLAND VERKOOP", "2026-06-10", -70, "Betaalautomaat"),
+  );
   expect(ingest(opgeslagen, drie)).toHaveLength(3);
 });
 
@@ -161,14 +302,24 @@ test("een andere winkel met hetzelfde bedrag op dezelfde dag wordt niet opgeslok
   // Zonder de tegenpartij-controle zou (rekening, datum, bedrag) hier een echte
   // betaling wissen: het toeval van € 11,89 op dezelfde dag is genoeg.
   const opgeslagen = ingest([], [bron("SIMYO", "2026-08-03", -11.89, "Incasso")]);
-  expect(ingest(opgeslagen, [bron("Albert Heijn 1234", "2026-08-03", -11.89, "Betaalautomaat")])).toHaveLength(2);
+  expect(
+    ingest(opgeslagen, [bron("Albert Heijn 1234", "2026-08-03", -11.89, "Betaalautomaat")]),
+  ).toHaveLength(2);
   // Dezelfde winkel, maar een ander bedrag, een andere dag of een andere
   // rekening is ook een andere betaling.
-  expect(ingest(opgeslagen, [bron("Simyo B.V.", "2026-08-03", -10, "SEPA Incasso")])).toHaveLength(2);
-  expect(ingest(opgeslagen, [bron("Simyo B.V.", "2026-08-04", -11.89, "SEPA Incasso")])).toHaveLength(2);
-  expect(ingest(opgeslagen, [bron("Simyo B.V.", "2026-08-03", -11.89, "SEPA Incasso", "ASN")])).toHaveLength(2);
+  expect(ingest(opgeslagen, [bron("Simyo B.V.", "2026-08-03", -10, "SEPA Incasso")])).toHaveLength(
+    2,
+  );
+  expect(
+    ingest(opgeslagen, [bron("Simyo B.V.", "2026-08-04", -11.89, "SEPA Incasso")]),
+  ).toHaveLength(2);
+  expect(
+    ingest(opgeslagen, [bron("Simyo B.V.", "2026-08-03", -11.89, "SEPA Incasso", "ASN")]),
+  ).toHaveLength(2);
   // Wél opgeslokt: dezelfde winkel, dezelfde dag, hetzelfde bedrag.
-  expect(ingest(opgeslagen, [bron("Simyo B.V.", "2026-08-03", -11.89, "SEPA Incasso")])).toHaveLength(1);
+  expect(
+    ingest(opgeslagen, [bron("Simyo B.V.", "2026-08-03", -11.89, "SEPA Incasso")]),
+  ).toHaveLength(1);
 });
 
 test("een rij zonder naam ontdubbelt nooit — geen naam is geen bewijs", () => {
@@ -209,8 +360,54 @@ test("een overboeking tussen zijn eigen twee rekeningen blijft twee rijen", () =
    * bijschrijving. Zelfde dag, zelfde bedrag in absolute zin, en straks ook
    * dezelfde tegenpartij (zijn eigen naam) — maar het zijn twee kanten van
    * hetzelfde en allebei horen ze in de kluis, anders klopt geen enkel saldo. */
-  const opgeslagen = assignTxIds([mk({ accountKey: "A", amount: -250, counterparty: "A Steunenberg" })]);
-  const nieuw = ingest(opgeslagen, [mk({ accountKey: "B", amount: 250, counterparty: "A Steunenberg" })]);
+  const opgeslagen = assignTxIds([
+    mk({ accountKey: "A", amount: -250, counterparty: "A Steunenberg" }),
+  ]);
+  const nieuw = ingest(opgeslagen, [
+    mk({ accountKey: "B", amount: 250, counterparty: "A Steunenberg" }),
+  ]);
   expect(nieuw).toHaveLength(2);
   expect(nieuw.map((t) => t.amount).sort((a, b) => a - b)).toEqual([-250, 250]);
+});
+
+test("a stored row without counterparty is upgraded in place when the same row arrives named", () => {
+  // Card-rail rows from Enable Banking landed with counterparty "" before the
+  // mapper read the party off the payment reference. The re-sync must fill the
+  // name in, not add a second row.
+  const stored = ingest(
+    [],
+    [mk({ counterparty: "", description: "SIMYO 0612345678", amount: -11.89 })],
+  );
+  const resynced = ingest(stored, [
+    mk({ counterparty: "SIMYO", description: "SIMYO 0612345678", amount: -11.89 }),
+  ]);
+  expect(resynced).toHaveLength(1);
+  expect(resynced[0]!.counterparty).toBe("SIMYO");
+  expect(resynced[0]!.id).toBe(stored[0]!.id);
+  // A genuinely different nameless row on the same day stays untouched.
+  const other = ingest(stored, [
+    mk({ counterparty: "SHELL", description: "SHELL 123", amount: -11.89 }),
+  ]);
+  expect(other).toHaveLength(2);
+});
+
+test("rule 4 refuses to guess when two stored nameless rows share the description", () => {
+  // Two genuinely different nameless rows, same account/date/amount/description
+  // (assignTxIds gives them distinct ids via the occurrence counter). A named
+  // row for one of them arrives, but nothing distinguishes which one it
+  // upgrades — so neither is touched and the incoming row is dropped rather
+  // than guessed into either.
+  const stored = ingest(
+    [],
+    [
+      mk({ counterparty: "", description: "ONBEKEND", amount: -11.89 }),
+      mk({ counterparty: "", description: "ONBEKEND", amount: -11.89 }),
+    ],
+  );
+  expect(stored).toHaveLength(2);
+  const resynced = ingest(stored, [
+    mk({ counterparty: "SIMYO", description: "ONBEKEND", amount: -11.89 }),
+  ]);
+  expect(resynced).toHaveLength(2);
+  expect(resynced.every((t) => t.counterparty === "")).toBe(true);
 });

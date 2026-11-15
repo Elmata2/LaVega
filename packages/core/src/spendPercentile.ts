@@ -260,10 +260,13 @@ export function categorySpendPercentiles(
   // vault whose newest statement is from June cannot say anything about August,
   // and must not report it as a quiet month.
   const measuredThrough =
-    coverage === null || coverage.end < current.start ? null : min(min(options.asOf, coverage.end), current.end);
+    coverage === null || coverage.end < current.start
+      ? null
+      : min(min(options.asOf, coverage.end), current.end);
 
   const complete = measuredThrough !== null && measuredThrough >= current.end;
-  const comparedDays = measuredThrough === null || complete ? null : daysBetween(current.start, measuredThrough) + 1;
+  const comparedDays =
+    measuredThrough === null || complete ? null : daysBetween(current.start, measuredThrough) + 1;
 
   // Earlier periods, newest first while walking back, kept only while the data
   // covers the whole of them.
@@ -295,7 +298,7 @@ export function categorySpendPercentiles(
   const firstSeen = new Map<string, string>();
   const currentCents = new Map<string, number>();
   const history = new Map<string, number[]>();
-  const blank = (): number[] => new Array(compared.length).fill(0);
+  const blank = (): number[] => Array.from({ length: compared.length }, () => 0);
   for (const r of dated) {
     const seen = firstSeen.get(r.category);
     if (seen === undefined || r.date < seen) firstSeen.set(r.category, r.date);

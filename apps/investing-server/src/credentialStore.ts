@@ -1,7 +1,9 @@
 import { createDatabase, createBrokerRepository, type Database } from "@lavega/database";
+import { AsyncLocalStorage } from "node:async_hooks";
 import { createFileCredentialStore, type ServerVaultStatus } from "./fileCredentialStore.js";
-import { createNeonCredentialStore } from "./neonCredentialStore.js";
-import type { CredentialStore } from "@lavega/core";
+import { createNeonCredentialStore, type BrokerReadability } from "./neonCredentialStore.js";
+import type { BrokerId, CredentialStore } from "@lavega/core";
+import type { BrokerAccountSnapshot } from "@lavega/adapters";
 import type { RuntimeBrokerDataSnapshot } from "./runtimeBrokerData.js";
 
 export type RuntimeCredentialStore = CredentialStore & {
@@ -9,18 +11,48 @@ export type RuntimeCredentialStore = CredentialStore & {
   setup(passphrase: string): Promise<void>;
   unlock(passphrase: string): Promise<boolean>;
   lock(): void;
-  getBrokerData(): Promise<RuntimeBrokerDataSnapshot>;
+  /** Null when the vault holds nothing it can read: empty, or still locked. */
+  getBrokerData(): Promise<RuntimeBrokerDataSnapshot | null>;
   putBrokerData(snapshot: RuntimeBrokerDataSnapshot): Promise<void>;
+  /** Write one broker's snapshot, leaving every other broker untouched. A file
+   *  import owns its broker's row; a sync is not running for it. */
+  putBrokerSnapshot(broker: BrokerId, snapshot: BrokerAccountSnapshot): Promise<void>;
+  brokerReadability?(): Promise<BrokerReadability>;
 };
 
-let pool: Database | null = null;
+const databaseScope = new AsyncLocalStorage<Database | null>();
 
-/** The Neon pool for this runtime, or `null` when there is no database configured. */
-export function runtimeDatabase(): Database | null {
+/**
+ * Run one request with one Neon pool. Vercel can freeze an invocation after a
+ * response, which makes a retained WebSocket stale on its next request.
+ */
+export async function withRuntimeDatabase<T>(fn: () => Promise<T>): Promise<T> {
+  if (databaseScope.getStore() !== undefined) return fn();
   const connectionString = process.env.DATABASE_URL?.trim();
-  if (!connectionString) return null;
-  pool ??= createDatabase(connectionString);
-  return pool;
+  if (!connectionString) return databaseScope.run(null, fn);
+  const database = createDatabase(connectionString);
+  try {
+    return await databaseScope.run(database, fn);
+  } finally {
+    await database.end();
+  }
+}
+
+/** Neon pool belonging to current request, or `null` when Neon is unavailable. */
+export function runtimeDatabase(): Database | null {
+  return databaseScope.getStore() ?? null;
+}
+
+/**
+ * The current request's Neon pool. Throws outside a request or without a
+ * database: a route factory that runs at module load must call this inside the
+ * handler, because `runtimeDatabase()` is `null` there and a factory that
+ * checks it at load silently never registers its routes.
+ */
+export function requireRuntimeDatabase(): Database {
+  const database = runtimeDatabase();
+  if (!database) throw new Error("geen database in dit verzoek");
+  return database;
 }
 
 /**

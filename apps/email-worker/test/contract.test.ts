@@ -15,7 +15,14 @@ import { expect, test } from "vitest";
 import { buildPayload, SECRET_HEADER } from "../src/handler.js";
 import { parseMail } from "../src/parseMail.js";
 import { fakeMessage } from "./fakeMessage.js";
-import { RAW_HTML_ONLY, RAW_IMAGE_ONLY, RAW_PDF_INVOICE, RAW_PLAIN_TEXT, RAW_SPOOFED } from "./rawMail.js";
+import {
+  RAW_GMAIL_CONFIRMATION,
+  RAW_HTML_ONLY,
+  RAW_IMAGE_ONLY,
+  RAW_PDF_INVOICE,
+  RAW_PLAIN_TEXT,
+  RAW_SPOOFED,
+} from "./rawMail.js";
 import { normalizeInboundMail } from "../../../packages/core/src/n8n/normalizeInboundMail.js";
 import { TOKEN_HEADER } from "../../web/src/n8n-provision.js";
 
@@ -33,8 +40,8 @@ test("platte tekst: van ruwe mail tot genormaliseerd bericht, in één keer", ()
   expect(m.text).toContain("10 < 12 maanden");
   expect(m.deliveredTo).toBe("alexander-7f3a@invoices.lavega.dev");
   expect(m.queueKey).toBe("alexander-7f3a");
-  expect(m.senderChecks).toEqual({ spf: "pass", dkim: "none", dmarc: "none" });
-  expect(m.senderCheck).toBe("passed");
+  expect(m.senderChecks).toEqual({ spf: "unknown", dkim: "unknown", dmarc: "unknown" });
+  expect(m.senderCheck).toBe("unknown");
 });
 
 test("alleen HTML: de Worker stuurt de HTML rauw mee, core maakt er tekst van", () => {
@@ -64,17 +71,28 @@ test("een gescande afbeelding levert een melding met een uitvoerbare instructie"
   expect(m.reason).toContain("stuur de PDF door");
 });
 
-test("een gezakte afzender komt door tot in het bericht, gemarkeerd", () => {
+test("ontrusted Authentication-Results becomes unknown end to end", () => {
   const m = through(RAW_SPOOFED);
-  expect(m.senderCheck).toBe("failed");
-  expect(m.senderChecks).toEqual({ spf: "softfail", dkim: "fail", dmarc: "fail" });
+  expect(m.senderCheck).toBe("unknown");
+  expect(m.senderChecks).toEqual({ spf: "unknown", dkim: "unknown", dmarc: "unknown" });
   expect(m.ok).toBe(true);
 });
 
 test("elke sleutel die de Worker stuurt is een sleutel die core leest, en omgekeerd", () => {
   const payload = buildPayload(fakeMessage({ raw: RAW_PDF_INVOICE }), parseMail(RAW_PDF_INVOICE));
   expect(Object.keys(payload).sort()).toEqual(
-    ["attachments", "auth", "date", "from", "html", "messageId", "queueKey", "subject", "text", "to"].sort(),
+    [
+      "attachments",
+      "auth",
+      "date",
+      "from",
+      "html",
+      "messageId",
+      "queueKey",
+      "subject",
+      "text",
+      "to",
+    ].sort(),
   );
   expect(Object.keys(payload.attachments[0]).sort()).toEqual(["data", "fileName", "mimeType"]);
 
@@ -100,4 +118,11 @@ test("the Worker's header name matches what LaVega binds on the n8n webhook", ()
   // did not, and every forwarded invoice would have been rejected by n8n while
   // the bounce blamed the wrong header.
   expect(SECRET_HEADER).toBe(TOKEN_HEADER);
+});
+
+test("a Gmail confirmation goes through the Worker and is recognised, code only (SYNTHETIC raw mail)", () => {
+  const m = through(RAW_GMAIL_CONFIRMATION);
+  expect(m.from).toBe("forwarding-noreply@google.com");
+  expect(m.setup).toEqual({ kind: "forwarding-confirmation", code: "123456789" });
+  expect(m.ok).toBe(false);
 });

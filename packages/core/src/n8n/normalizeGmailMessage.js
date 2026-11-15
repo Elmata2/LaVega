@@ -68,7 +68,7 @@ const MIN_TEXT_CHARS = 40;
  * @returns {string}
  */
 function asString(v) {
-  return typeof v === 'string' ? v : '';
+  return typeof v === "string" ? v : "";
 }
 
 /**
@@ -79,18 +79,18 @@ function asString(v) {
  * @returns {string}
  */
 function readHeader(v) {
-  if (typeof v === 'string') return v.replace(/^[A-Za-z-]+:\s*/, '').trim();
-  if (v && typeof v === 'object') {
+  if (typeof v === "string") return v.replace(/^[A-Za-z-]+:\s*/, "").trim();
+  if (v && typeof v === "object") {
     const o = /** @type {Record<string, unknown>} */ (v);
-    if (typeof o.text === 'string') return o.text.trim();
+    if (typeof o.text === "string") return o.text.trim();
     if (Array.isArray(o.value) && o.value.length > 0) {
       const first = /** @type {Record<string, unknown>} */ (o.value[0]);
       const name = asString(first.name);
       const address = asString(first.address);
-      return (name ? name + ' <' + address + '>' : address).trim();
+      return (name ? name + " <" + address + ">" : address).trim();
     }
   }
-  return '';
+  return "";
 }
 
 /**
@@ -102,26 +102,26 @@ function readHeader(v) {
  */
 function stripHtml(html) {
   return html
-    .replace(/<(script|style)[\s\S]*?<\/\1>/gi, ' ')
-    .replace(/<!--[\s\S]*?-->/g, ' ')
-    .replace(/<br\s*\/?>/gi, '\n')
-    .replace(/<\/(p|div|tr|li|h[1-6]|table|thead|tbody|section|article)>/gi, '\n')
-    .replace(/<\/t[dh]>/gi, ' │ ')
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/&nbsp;/gi, ' ')
-    .replace(/&amp;/gi, '&')
-    .replace(/&lt;/gi, '<')
-    .replace(/&gt;/gi, '>')
+    .replace(/<(script|style)[\s\S]*?<\/\1>/gi, " ")
+    .replace(/<!--[\s\S]*?-->/g, " ")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/(p|div|tr|li|h[1-6]|table|thead|tbody|section|article)>/gi, "\n")
+    .replace(/<\/t[dh]>/gi, " │ ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
     .replace(/&quot;/gi, '"')
     .replace(/&#0?39;/g, "'")
-    .replace(/&euro;/gi, '€')
-    .replace(/[ \t ]+/g, ' ')
-    .split('\n')
+    .replace(/&euro;/gi, "€")
+    .replace(/[ \t ]+/g, " ")
+    .split("\n")
     .map(function (line) {
-      return line.replace(/\s*│\s*$/, '').trim();
+      return line.replace(/\s*│\s*$/, "").trim();
     })
-    .join('\n')
-    .replace(/\n{3,}/g, '\n\n')
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
     .trim();
 }
 
@@ -133,14 +133,14 @@ function stripHtml(html) {
  */
 function tidyText(text) {
   return text
-    .replace(/\r\n/g, '\n')
-    .replace(/[ \t ]+/g, ' ')
-    .split('\n')
+    .replace(/\r\n/g, "\n")
+    .replace(/[ \t ]+/g, " ")
+    .split("\n")
     .map(function (line) {
       return line.trim();
     })
-    .join('\n')
-    .replace(/\n{3,}/g, '\n\n')
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
     .trim();
 }
 
@@ -156,15 +156,15 @@ function tidyText(text) {
 function pickBody(j) {
   /** @type {{ text: string, textSource: 'text'|'textAsHtml'|'html'|'snippet'|'none' }[]} */
   const candidates = [
-    { text: tidyText(asString(j.text)), textSource: 'text' },
-    { text: stripHtml(asString(j.textAsHtml)), textSource: 'textAsHtml' },
-    { text: stripHtml(asString(j.html)), textSource: 'html' },
+    { text: tidyText(asString(j.text)), textSource: "text" },
+    { text: stripHtml(asString(j.textAsHtml)), textSource: "textAsHtml" },
+    { text: stripHtml(asString(j.html)), textSource: "html" },
     // `snippet` bestaat niet onder Simplify OFF, maar kost niets als laatste
     // redmiddel — en als iemand de node ooit anders zet, is het er wél.
-    { text: tidyText(asString(j.snippet)), textSource: 'snippet' },
+    { text: tidyText(asString(j.snippet)), textSource: "snippet" },
   ];
   /** @type {{ text: string, textSource: 'text'|'textAsHtml'|'html'|'snippet'|'none' }} */
-  let best = { text: '', textSource: 'none' };
+  let best = { text: "", textSource: "none" };
   for (const candidate of candidates) {
     if (candidate.text.length > best.text.length) best = candidate;
   }
@@ -180,7 +180,7 @@ function pickBody(j) {
  * @returns {boolean}
  */
 function isBase64(value) {
-  const clean = String(value).replace(/\s+/g, '');
+  const clean = String(value).replace(/\s+/g, "");
   if (clean.length === 0 || clean.length % 4 !== 0) return false;
   return /^[A-Za-z0-9+/]+={0,2}$/.test(clean);
 }
@@ -205,7 +205,7 @@ function pickPdfs(attachments, source) {
   for (const attachment of attachments) {
     const name = attachment.fileName || attachment.key;
     const type = attachment.mimeType.toLowerCase();
-    const looksPdf = type === 'application/pdf' || /\.pdf$/i.test(name);
+    const looksPdf = type === "application/pdf" || /\.pdf$/i.test(name);
     // Een logo van 4 kB uit een handtekening is geen factuur en kost wel tokens.
     if (!looksPdf) continue;
     if (!attachment.data) {
@@ -213,16 +213,18 @@ function pickPdfs(attachments, source) {
       // op filesystem/s3/database). Dan staat hier geen base64 en mag dit NIET
       // als "geen bijlage" doorgaan.
       skipped.push(
-        source === 'inbound-mail'
-          ? name + ': de Worker stuurde geen inhoud mee voor deze bijlage'
-          : name + ': n8n leverde geen inhoud (binaire opslag staat niet op default)',
+        source === "inbound-mail"
+          ? name + ": de Worker stuurde geen inhoud mee voor deze bijlage"
+          : name + ": n8n leverde geen inhoud (binaire opslag staat niet op default)",
       );
       continue;
     }
     // base64 is ~4/3 van de bytes; zo weten we de grootte zonder te decoderen.
     const bytes = Math.floor((attachment.data.length * 3) / 4);
     if (bytes > MAX_PDF_BYTES) {
-      skipped.push(name + ': ' + Math.round(bytes / 1024 / 1024) + ' MB, groter dan de limiet van 4 MB');
+      skipped.push(
+        name + ": " + Math.round(bytes / 1024 / 1024) + " MB, groter dan de limiet van 4 MB",
+      );
       continue;
     }
     // Is dit ECHT base64? Toen n8n zijn binaire opslag buiten het item had staan,
@@ -232,15 +234,16 @@ function pickPdfs(attachments, source) {
     // hier weigeren en het MELDEN dan iets versturen dat we niet gelezen hebben.
     if (!isBase64(attachment.data)) {
       skipped.push(
-        source === 'inbound-mail'
+        source === "inbound-mail"
           ? name +
-              ': de inhoud is geen base64 maar een verwijzing — de Worker stuurde een opslagverwijzing in plaats van de bytes'
-          : name + ': de inhoud is geen base64 maar een verwijzing — controleer N8N_DEFAULT_BINARY_DATA_MODE',
+              ": de inhoud is geen base64 maar een verwijzing — de Worker stuurde een opslagverwijzing in plaats van de bytes"
+          : name +
+              ": de inhoud is geen base64 maar een verwijzing — controleer N8N_DEFAULT_BINARY_DATA_MODE",
       );
       continue;
     }
     if (pdfs.length >= MAX_PDFS) {
-      skipped.push(name + ': meer dan ' + MAX_PDFS + ' PDF-bijlagen in één mail');
+      skipped.push(name + ": meer dan " + MAX_PDFS + " PDF-bijlagen in één mail");
       continue;
     }
     pdfs.push({ name: name, data: attachment.data, bytes: bytes });
@@ -256,7 +259,7 @@ function pickPdfs(attachments, source) {
 function normalizeGmailMessage(json, attachments) {
   const j = json || {};
   const headers = /** @type {Record<string, unknown>} */ (
-    j.headers && typeof j.headers === 'object' ? j.headers : {}
+    j.headers && typeof j.headers === "object" ? j.headers : {}
   );
 
   const subject = asString(j.subject) || readHeader(headers.subject);
@@ -266,30 +269,30 @@ function normalizeGmailMessage(json, attachments) {
   const body = pickBody(j);
   const textChars = body.text.length;
   const text = body.text.slice(0, MAX_TEXT_CHARS);
-  const picked = pickPdfs(Array.isArray(attachments) ? attachments : [], 'gmail');
+  const picked = pickPdfs(Array.isArray(attachments) ? attachments : [], "gmail");
 
   const ok = picked.pdfs.length > 0 || text.length >= MIN_TEXT_CHARS;
-  let reason = '';
+  let reason = "";
   if (!ok) {
     if (j.payload) {
       reason =
-        'De Gmail-node leverde een onbewerkte payload in plaats van gelezen tekst. ' +
+        "De Gmail-node leverde een onbewerkte payload in plaats van gelezen tekst. " +
         'Zet Simplify uit in de node "Gmail: recente mail".';
     } else if (textChars > 0) {
-      reason = 'Maar ' + textChars + ' tekens tekst en geen PDF-bijlage.';
+      reason = "Maar " + textChars + " tekens tekst en geen PDF-bijlage.";
     } else {
-      reason = 'Geen leesbare tekst en geen PDF-bijlage in dit bericht.';
+      reason = "Geen leesbare tekst en geen PDF-bijlage in dit bericht.";
     }
   }
 
   return {
-    source: 'gmail',
+    source: "gmail",
     messageId: asString(j.id) || asString(j.messageId),
     subject: subject,
     from: from,
     date: date,
     text: text,
-    textSource: textChars === 0 ? 'none' : body.textSource,
+    textSource: textChars === 0 ? "none" : body.textSource,
     textChars: textChars,
     truncated: textChars > text.length,
     pdfs: picked.pdfs,
@@ -299,4 +302,16 @@ function normalizeGmailMessage(json, attachments) {
   };
 }
 
-export { MAX_PDFS, MAX_PDF_BYTES, MAX_TEXT_CHARS, MIN_TEXT_CHARS, asString, isBase64, stripHtml, tidyText, pickBody, pickPdfs, normalizeGmailMessage };
+export {
+  MAX_PDFS,
+  MAX_PDF_BYTES,
+  MAX_TEXT_CHARS,
+  MIN_TEXT_CHARS,
+  asString,
+  isBase64,
+  stripHtml,
+  tidyText,
+  pickBody,
+  pickPdfs,
+  normalizeGmailMessage,
+};

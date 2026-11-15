@@ -1,103 +1,190 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useAppLocale } from "../appLocale.js";
+import { adminCopy } from "../copy/admin.js";
 import {
-  getN8nInvoiceToken,
-  getN8nInvoiceUrl,
-  setN8nInvoiceToken,
-  setN8nInvoiceUrl,
   getInvoiceForwardAddress,
-  ensureInvoiceForwardAddress,
+  generateInvoiceForwardAddress,
+  INVOICE_FORWARD_DOMAIN,
+  setInvoiceForwardAddress,
+} from "../settings";
+import type { View } from "../App";
+import { fetchForwardAddress, recordForwardAddress } from "../n8n.js";
+import posthog from "../posthog.js";
+import { FORWARDING_GUIDE_ANCHOR } from "./ForwardingGuide.js";
+import Button from "../components/ui/Button.js";
+import Card, { CardHeader } from "../components/ui/Card.js";
+import StatusLine from "../components/ui/StatusLine.js";
 
-  setInvoiceForwardAddress,} from "../settings";
-
-/* Koppelingen — één blok: de webhook-URL en het token van jouw n8n.
+/* Koppelingen — één blok: het doorstuuradres voor facturen.
  *
- * Hier stonden er drie. Weg zijn "Verbind met n8n" (LaVega zette de workflow, het
- * token en de webhook zelf klaar via de n8n-API) en het doorstuuradres. Beide
- * waren OPZETHULP: eenmalig werk dat je in n8n zelf ook kunt doen, met een
- * CORS-uitleg, een API-sleutel en een provisioning-verslag eromheen die het
- * scherm vulden zonder dat er iets aan te zetten viel. Wat overblijft is het
- * paar dat Facturen élke keer nodig heeft — Facturen leest getN8nInvoiceUrl() en
- * getN8nInvoiceToken() en haalt daarmee de wachtrij op. Dat is de reden dat dit
- * blok blijft en de andere twee niet: zonder dit paar werkt de factuurketen niet.
- *
- * Beide waarden zijn een lokale voorkeur: localStorage, deze browser. Niet in de
- * kluis (een back-up zou dan een levend token bevatten) en nooit naar de
- * LaVega-server. */
+ * Hier stond ook het n8n-webhook-paar (URL + token). Dat is weg: de server
+ * bewaart nu zelf welk n8n hij aanroept, en dit scherm hoeft dat paar niet
+ * meer te tonen of op te slaan. Wat overblijft is het doorstuuradres — de
+ * LOKALE kant (typen, suggestie, genereren, kopiëren, in localStorage) en de
+ * SERVER-kant eronder: wat `/api/n8n/forward-address` daadwerkelijk heeft
+ * opgeslagen, en de knop die dat expliciet, met een tussenstap, zet. */
 
-/** The eye. Drawn inline: an icon fetched from anywhere would tell that server
- *  the owner opened his bank-integration screen. */
-function EyeIcon() {
-  return (
-    <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
-      <path d="M2 12s3.6-6 10-6 10 6 10 6-3.6 6-10 6-10-6-10-6z" />
-      <circle cx="12" cy="12" r="2.6" />
-    </svg>
-  );
-}
+type KoppelingenProps = {
+  fetchImpl?: typeof fetch;
+  onNavigate?: (view: View) => void;
+};
 
-type InfoKey = "koppeling" | "url" | "token";
-
-/** The eye beside a value. A button only — the panel it opens is rendered where
- *  the layout wants it, so a heading never has to contain a paragraph. */
-function InfoEye({ id, what, open, onToggle }: { id: InfoKey; what: string; open: boolean; onToggle: () => void }) {
-  return (
-    <button
-      type="button"
-      className="field-info"
-      aria-label={`Uitleg bij ${what}`}
-      title={`Uitleg bij ${what}`}
-      aria-expanded={open}
-      aria-controls={`${id}-uitleg`}
-      onClick={onToggle}
-    >
-      <EyeIcon />
-    </button>
-  );
-}
-
-function InfoNote({ id, children }: { id: InfoKey; children: ReactNode }) {
-  return (
-    <p className="field-note" id={`${id}-uitleg`}>
-      {children}
-    </p>
-  );
-}
-
-export default function Koppelingen() {
+export default function Koppelingen({ fetchImpl, onNavigate }: KoppelingenProps) {
+  const [locale] = useAppLocale();
+  const c = adminCopy[locale].koppelingen;
   const [forwardAddress, setForwardAddress] = useState(getInvoiceForwardAddress());
   const [forwardDraft, setForwardDraft] = useState(getInvoiceForwardAddress());
   const [forwardError, setForwardError] = useState(false);
-  const [url, setUrl] = useState<string>(() => getN8nInvoiceUrl());
-  const [token, setToken] = useState<string>(() => getN8nInvoiceToken());
-  const [showToken, setShowToken] = useState(false);
-  const [note, setNote] = useState<string | null>(null);
-  // One open explanation at a time: two panels at once and the fields are
-  // buried again, which is the thing this screen was supposed to stop doing.
-  const [info, setInfo] = useState<InfoKey | null>(null);
-  const toggle = (key: InfoKey) => () => setInfo((cur) => (cur === key ? null : key));
+  const [copied, setCopied] = useState(false);
+  const copiedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(
+    () => () => {
+      if (copiedTimer.current) clearTimeout(copiedTimer.current);
+    },
+    [],
+  );
 
-  const urlLooksWrong = url.trim().length > 0 && !/^https?:\/\//i.test(url.trim());
+  const [serverState, setServerState] = useState<"loading" | "ok" | "error">("loading");
+  const [serverLocalPart, setServerLocalPart] = useState<string | null>(null);
+  const [confirmRecord, setConfirmRecord] = useState(false);
+  const [recording, setRecording] = useState(false);
+  const [recordNote, setRecordNote] = useState<string | null>(null);
+  const [showOwn, setShowOwn] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [createNote, setCreateNote] = useState<string | null>(null);
+  const [createTaken, setCreateTaken] = useState(false);
+  const [createInfo, setCreateInfo] = useState<string | null>(null);
+  const createBusy = useRef(false);
+  const [readAttempt, setReadAttempt] = useState(0);
 
-  function handleSave() {
-    setN8nInvoiceUrl(url);
-    setN8nInvoiceToken(token);
-    setNote(
-      url.trim() && token.trim()
-        ? "Opgeslagen in deze browser. Facturen haalt de wachtrij vanzelf op zodra je dat scherm opent."
-        : "Opgeslagen — maar zolang URL óf token leeg is, kan LaVega niets ophalen.",
-    );
+  /* READ ONLY. Deze effect POST't nooit — het schrijft alleen naar de server
+   * op een expliciete klik door `doRecord`, nooit hierdoor, ongeacht wat
+   * localStorage op dat moment bevat. */
+  useEffect(() => {
+    let cancelled = false;
+    setServerState("loading");
+    void fetchForwardAddress(fetchImpl).then((outcome) => {
+      if (cancelled) return;
+      if (outcome.kind === "ok") {
+        setServerLocalPart(outcome.localPart);
+        setServerState("ok");
+      } else {
+        setServerState("error");
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [readAttempt]);
+
+  /* Eén stap: een vers adres verzinnen EN op de server vastleggen. Lokaal wordt
+   * pas geschreven als de server "stored" zei, zodat een mislukte of botsende
+   * poging niets achterlaat. Alleen aangeboden als de server nog geen adres
+   * heeft: anders zou dit een live adres vervangen en blijft post naar het oude
+   * adres onopgemerkt liggen. */
+  async function handleCreateAddress() {
+    if (createBusy.current) return;
+    createBusy.current = true;
+    setCreating(true);
+    setCreateInfo(null);
+    setCreateNote(null);
+    setCreateTaken(false);
+    try {
+      for (let attempt = 0; attempt < 3; attempt++) {
+        const candidate = generateInvoiceForwardAddress();
+        const localPart = candidate.split("@")[0];
+        const outcome = await recordForwardAddress(localPart, fetchImpl, { ifAbsent: true });
+        if (outcome.kind === "taken") continue;
+        if (outcome.kind === "already-set") {
+          adopt(`${outcome.localPart}@${INVOICE_FORWARD_DOMAIN}`, outcome.localPart);
+          setCreateInfo(c.forwardAddress.createAlreadySet(displayAddressFor(outcome.localPart)));
+          return;
+        }
+        if (outcome.kind !== "stored") {
+          setCreateNote(c.forwardAddress.createFailed);
+          return;
+        }
+        adopt(candidate, outcome.localPart);
+        posthog.capture("invoice_forward_address_created");
+        return;
+      }
+      setCreateTaken(true);
+    } finally {
+      createBusy.current = false;
+      setCreating(false);
+    }
   }
 
-  function handleClear() {
-    setUrl("");
-    setToken("");
-    setN8nInvoiceUrl("");
-    setN8nInvoiceToken("");
-    setNote("Gewist. LaVega haalt nu niets meer op uit n8n.");
+  /* The server is the truth. Keep a copy on this device when the browser lets us;
+   * when it does not, the server's address is still what we show. */
+  function adopt(address: string, serverPart: string) {
+    setServerLocalPart(serverPart);
+    setServerState("ok");
+    if (setInvoiceForwardAddress(address)) {
+      const now = getInvoiceForwardAddress();
+      setForwardAddress(now);
+      setForwardDraft(now);
+    }
   }
+
+  /* What this device now holds for that local part, else the bare local part. */
+  function displayAddressFor(localPart: string): string {
+    const stored = getInvoiceForwardAddress();
+    return stored.split("@")[0] === localPart ? stored : localPart;
+  }
+
+  async function handleCopyAddress() {
+    try {
+      await navigator.clipboard.writeText(forwardAddress);
+      setCopied(true);
+      if (copiedTimer.current) clearTimeout(copiedTimer.current);
+      copiedTimer.current = setTimeout(() => setCopied(false), 1500);
+    } catch {
+      /* clipboard permission denied, or unavailable (older browser, insecure
+       * context) — the address is still plain text in the field, selectable
+       * by hand. Nothing to recover from, so nothing to show. */
+    }
+  }
+
+  /* The server stores only the LOCAL PART (migration 0008) — never a domain.
+   * `INVOICE_FORWARD_DOMAIN` is this app's own assumed default, not a fact
+   * about what any given user actually typed; `settings.ts`'s FORWARD_PATTERN
+   * deliberately accepts any domain Cloudflare might route (see its own
+   * commentary). So a recorded local part is only safe to show as a full
+   * address when it matches the CURRENT local draft — the one place we still
+   * know the real domain the user confirmed. When it doesn't match (a
+   * different browser, or a draft typed after recording), showing a
+   * fabricated "@invoices.lavega.dev" would assert a domain nobody confirmed;
+   * the bare local part is the honest thing to show instead. */
+  function displayAddress(localPart: string): string {
+    const draftLocalPart = forwardAddress.includes("@") ? forwardAddress.split("@")[0] : "";
+    return draftLocalPart === localPart ? forwardAddress : localPart;
+  }
+
+  async function doRecord() {
+    setRecording(true);
+    setRecordNote(null);
+    const localPart = forwardAddress.split("@")[0];
+    const outcome = await recordForwardAddress(localPart, fetchImpl);
+    setRecording(false);
+    setConfirmRecord(false);
+    if (outcome.kind === "stored") {
+      setServerLocalPart(outcome.localPart);
+      setRecordNote(c.forwardAddress.server.recorded(displayAddress(outcome.localPart)));
+      posthog.capture("invoice_forward_address_recorded");
+      return;
+    }
+    if (outcome.kind === "taken") return setRecordNote(c.forwardAddress.server.taken);
+    if (outcome.kind === "invalid") return setRecordNote(c.forwardAddress.server.invalid);
+    if (outcome.kind === "unauthorized") return setRecordNote(c.forwardAddress.server.unauthorized);
+    setRecordNote(c.forwardAddress.server.recordFailed);
+  }
+
+  const canCreate = serverState === "ok" && !serverLocalPart;
 
   return (
-    <section className="card" aria-label="Koppelingen">
+    <Card as="section" aria-label={c.ariaLabel}>
       {/* HET DOORSTUURADRES, TERUG ALS ÉÉN REGEL.
        *
        * Hij vroeg deze kaart weg en dat is gebeurd — de opzethulp, de uitleg en de
@@ -109,10 +196,10 @@ export default function Koppelingen() {
        * Dus: één regel, het adres en een knop die er één maakt als hij er nog geen
        * heeft. Het adres verandert nooit meer nadat het bestaat — een doorstuuradres
        * dat wisselt is een adres waar post naartoe blijft gaan die niemand leest. */}
-      <div className="card-header">
-        <h2>Doorstuuradres voor facturen</h2>
-        <span className="eyebrow">stuur een factuur hiernaartoe en hij komt in de wachtrij</span>
-      </div>
+      <CardHeader>
+        <h2>{c.forwardAddress.heading}</h2>
+        <span className="eyebrow">{c.forwardAddress.eyebrow}</span>
+      </CardHeader>
       {/* INTYPEN GAAT VOOR GENEREREN, en dit commentaar noemt met opzet GEEN
           concreet adres meer. Het heeft er nu twee genoemd die geen van beide
           klopten: eerst het zelfverzonnen lavega-<random>@invoices.lavega.dev,
@@ -123,147 +210,172 @@ export default function Koppelingen() {
           Cloudflare, niet deze code, en elk adres dat wij hier hardop noemen is
           een gok die op een dag onwaar wordt. Een adres dat wij bedenken en dat
           niets routeert is erger dan geen adres — de post komt nergens aan
-          terwijl het scherm zegt van wel. Dus typt hij het in, en de generator
-          staat ernaast voor wie nog niets heeft. */}
-      <label style={{ display: "block", margin: "0 0 var(--sp-3)" }}>
-        Adres
-        <input
-          className="saldo-input"
-          value={forwardDraft}
-          placeholder="invoices@lavega.dev"
-          aria-label="Doorstuuradres"
-          onChange={(e) => {
-            setForwardDraft(e.target.value);
-            setForwardError(false);
-          }}
-          onBlur={() => {
-            if (setInvoiceForwardAddress(forwardDraft)) {
-              setForwardAddress(getInvoiceForwardAddress());
-              setForwardDraft(getInvoiceForwardAddress());
-            } else {
-              setForwardError(true);
-            }
-          }}
-        />
-      </label>
-      {forwardError && (
-        <p className="text-warn" role="alert" style={{ margin: "0 0 var(--sp-3)" }}>
-          Dat is geen e-mailadres. Niets opgeslagen — het vorige adres staat er nog.
-        </p>
+          terwijl het scherm zegt van wel. Dus typt hij het in, en de lege staat
+          hieronder biedt twee kant-en-klare opties naast elkaar, ieder met zijn
+          eigen afweging erbij — geen van beide is de "winnaar".
+
+          Het invoerveld is met opzet een gewone brede tekstregel en niet
+          SaldoInput: dat onderdeel is rechts uitgelijnd en 120px breed, gemaakt
+          voor een banksaldo, en een e-mailadres in dat vakje moet je met de
+          cursor heen en weer scrollen om te lezen. */}
+      {(forwardAddress || showOwn) && (
+        <>
+          <label htmlFor="forward-address" style={{ display: "block", margin: "0 0 var(--sp-1)" }}>
+            {c.forwardAddress.addressLabel}
+          </label>
+          <div className="flex gap-2" style={{ margin: "0 0 var(--sp-3)", maxWidth: "28rem" }}>
+            <input
+              id="forward-address"
+              className="w-full"
+              value={forwardDraft}
+              placeholder={c.forwardAddress.addressPlaceholder}
+              aria-label={c.forwardAddress.addressAriaLabel}
+              onChange={(e) => {
+                setForwardDraft(e.target.value);
+                setForwardError(false);
+              }}
+              onBlur={() => {
+                if (setInvoiceForwardAddress(forwardDraft)) {
+                  setForwardAddress(getInvoiceForwardAddress());
+                  setForwardDraft(getInvoiceForwardAddress());
+                } else {
+                  setForwardError(true);
+                }
+              }}
+            />
+            {forwardAddress && (
+              <Button
+                type="button"
+                onClick={() => void handleCopyAddress()}
+                aria-label={c.forwardAddress.copyButtonAriaLabel}
+              >
+                {copied ? c.forwardAddress.copiedLabel : c.forwardAddress.copyButton}
+              </Button>
+            )}
+          </div>
+          {forwardError && (
+            <StatusLine
+              tone="problem"
+              
+              role="alert"
+              style={{ margin: "0 0 var(--sp-3)" }}
+            >
+              {c.forwardAddress.invalidError}
+            </StatusLine>
+          )}
+        </>
       )}
       {!forwardAddress && !forwardError && (
-        <p style={{ margin: "0 0 var(--sp-3)" }} className="cell-sub">
-          Nog geen adres. Typ het adres dat je in Cloudflare hebt aangemaakt, of{" "}
-          <button
-            type="button"
-            className="btn"
+        <div style={{ margin: "0 0 var(--sp-3)" }}>
+          {!(serverState === "ok" && serverLocalPart) && (
+            <p className="cell-sub">{c.forwardAddress.emptyIntro}</p>
+          )}
+          {canCreate && (
+            <p>
+              <Button
+                variant="primary"
+                disabled={creating}
+                onClick={() => void handleCreateAddress()}
+              >
+                {creating
+                  ? c.forwardAddress.creating
+                  : createTaken
+                    ? c.forwardAddress.createTakenRetry
+                    : c.forwardAddress.createButton}
+              </Button>
+            </p>
+          )}
+          {!showOwn && (
+            <p>
+              <Button onClick={() => setShowOwn(true)}>{c.forwardAddress.useOwnButton}</Button>
+            </p>
+          )}
+          {createTaken && (
+            <p className="cell-sub" role="alert">
+              {c.forwardAddress.createTaken}
+            </p>
+          )}
+          {createNote && (
+            <StatusLine tone="warning" className="cell-sub" role="alert">
+              {createNote}
+            </StatusLine>
+          )}
+        </div>
+      )}
+      {createInfo && (
+        <p className="cell-sub" role="status">
+          {createInfo}
+        </p>
+      )}
+      {forwardAddress && onNavigate && (
+        <p>
+          <Button
             onClick={() => {
-              const made = ensureInvoiceForwardAddress();
-              setForwardAddress(made);
-              setForwardDraft(made);
+              // App.setView keeps the search but drops the hash, so the anchor
+              // is set after it has been told to change view; the guide card
+              // scrolls to it on mount and clears it again.
+              onNavigate("facturen");
+              try {
+                window.history.replaceState(
+                  window.history.state,
+                  "",
+                  `${window.location.pathname}${window.location.search}#${FORWARDING_GUIDE_ANCHOR}`,
+                );
+              } catch {
+                /* the view still changes; only the scroll is lost */
+              }
             }}
           >
-            laat LaVega er een maken
-          </button>
-          .
+            {c.forwardAddress.setupLink}
+          </Button>
         </p>
       )}
-      <div className="card-header">
-        <h2>Koppeling met n8n</h2>
-        <span className="eyebrow">
-          voor de facturenwachtrij{" "}
-          <InfoEye id="koppeling" what="deze koppeling" open={info === "koppeling"} onToggle={toggle("koppeling")} />
-        </span>
-      </div>
-      <p className="cell-sub">
-        Plak hier de <em>Production URL</em> van de webhook-node in jouw n8n en het token dat je daar
-        bij <em>Header Auth</em> hebt gezet. Facturen gebruikt die twee om de wachtrij op te halen.
-      </p>
 
-      {info === "koppeling" && (
-        <InfoNote id="koppeling">
-          Je eigen n8n leest je mailbox, laat Claude bepalen of er een factuur in zit, en houdt die vast
-          in een wachtrij. LaVega haalt die rij rechtstreeks op:{" "}
-          <strong>jouw mailbox → jouw n8n → jouw browser</strong>. De LaVega-server komt er niet aan te
-          pas en ziet dus nooit een factuurbedrag.
-          <br />
-          <br />
-          Opzetten doe je één keer, in n8n zelf: importeer <code>docs/n8n/lavega-invoices.json</code>,
-          zet een Header Auth-credential op de webhook-node, activeer de workflow, en plak de
-          Production URL en dat token hieronder. Beide blijven in deze browser — niet in de kluis, niet
-          in een back-up; op een andere computer vul je ze opnieuw in.
-          <br />
-          <br />
-          <strong>Er is met opzet geen testknop.</strong> De webhook leegt de wachtrij zodra hij
-          antwoordt: één lezer, één keer — een “test” zou dus echte facturen opgebruiken. Ophalen
-          gebeurt in Facturen, waar je elke regel te zien krijgt en zelf bevestigt.
-        </InfoNote>
+      {/* HET SERVER-ADRES, ERONDER. Dit blok leest wat de server daadwerkelijk
+       * gebruikt om de wachtrij mee op te halen — dat kan afwijken van het
+       * lokale concept hierboven totdat hij expliciet op "Gebruik dit adres"
+       * klikt en dat bevestigt. Zie doRecord: alleen die klik schrijft. */}
+      {serverState === "loading" && <p className="cell-sub">{c.forwardAddress.server.loading}</p>}
+      {serverState === "error" && (
+        <StatusLine tone="problem" className="cell-sub" role="status">
+          {c.forwardAddress.server.readFailed}{" "}
+          <Button onClick={() => setReadAttempt((n) => n + 1)}>
+            {c.forwardAddress.server.retryButton}
+          </Button>
+        </StatusLine>
       )}
-
-      <div className="facturen-form">
-        <label>
-          Webhook-URL (n8n, Production URL){" "}
-          <input
-            value={url}
-            aria-label="n8n webhook-URL"
-            placeholder="https://jouw-n8n/webhook/lavega-facturen"
-            style={{ minWidth: "22rem" }}
-            onChange={(e) => setUrl(e.target.value)}
-          />
-        </label>
-        <InfoEye id="url" what="de webhook-URL" open={info === "url"} onToggle={toggle("url")} />{" "}
-        <label>
-          Token (header x-lavega-token){" "}
-          <input
-            value={token}
-            type={showToken ? "text" : "password"}
-            aria-label="n8n token"
-            placeholder="openssl rand -hex 24"
-            style={{ minWidth: "16rem" }}
-            onChange={(e) => setToken(e.target.value)}
-          />
-        </label>
-        <InfoEye id="token" what="het token" open={info === "token"} onToggle={toggle("token")} />{" "}
-        <label>
-          <input
-            type="checkbox"
-            checked={showToken}
-            aria-label="Token tonen"
-            onChange={(e) => setShowToken(e.target.checked)}
-          />{" "}
-          token tonen
-        </label>{" "}
-        <button type="button" className="btn btn-primary" onClick={handleSave}>
-          Opslaan
-        </button>{" "}
-        <button type="button" className="btn" onClick={handleClear}>
-          Wissen
-        </button>
-      </div>
-
-      {info === "url" && (
-        <InfoNote id="url">
-          Het adres waarop jouw n8n luistert. In n8n staat hij op de Webhook-node onder{" "}
-          <em>Production URL</em> — niet de Test URL, die werkt alleen zolang je in n8n op “Listen” hebt
-          geklikt. Hij begint met http:// of https://.
-        </InfoNote>
-      )}
-      {info === "token" && (
-        <InfoNote id="token">
-          Een wachtwoord dat je zelf verzint, zodat alleen jouw browser die wachtrij mag leegmaken. Maak
-          er een met <code>openssl rand -hex 24</code> en zet dezelfde waarde in n8n bij{" "}
-          <em>Header Auth</em>, headernaam <code>x-lavega-token</code>. Hij blijft in deze browser en
-          gaat nooit naar de LaVega-server.
-        </InfoNote>
-      )}
-
-      {urlLooksWrong && (
-        <p className="cell-sub text-neg">
-          Dit ziet er niet uit als een webhook-URL — hij hoort met http:// of https:// te
-          beginnen.
+      {serverState === "ok" && (
+        <p className="cell-sub">
+          {serverLocalPart
+            ? c.forwardAddress.server.active(displayAddress(serverLocalPart))
+            : c.forwardAddress.server.none}
         </p>
       )}
-      {note && <p className="cell-sub">{note}</p>}
-    </section>
+      {forwardAddress && !confirmRecord && (
+        <p>
+          <Button onClick={() => setConfirmRecord(true)}>
+            {c.forwardAddress.server.recordButton}
+          </Button>
+        </p>
+      )}
+      {forwardAddress && confirmRecord && (
+        <>
+          <StatusLine tone="warning" role="alert">
+            {c.forwardAddress.server.confirmWarning(forwardAddress)}
+          </StatusLine>
+          <p>
+            <Button variant="primary" disabled={recording} onClick={() => void doRecord()}>
+              {recording
+                ? c.forwardAddress.server.recording
+                : c.forwardAddress.server.confirmButton}
+            </Button>{" "}
+            <Button disabled={recording} onClick={() => setConfirmRecord(false)}>
+              {c.forwardAddress.server.cancelButton}
+            </Button>
+          </p>
+        </>
+      )}
+      {recordNote && <p className="cell-sub">{recordNote}</p>}
+    </Card>
   );
 }

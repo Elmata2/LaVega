@@ -19,7 +19,9 @@ afterEach(() => {
   rmSync(dir, { recursive: true, force: true });
 });
 
-const log = (m: string) => { logged.push(m); };
+const log = (m: string) => {
+  logged.push(m);
+};
 
 /** A catalogue file on disk, written for one test. */
 function file(name: string, body: string): string {
@@ -38,14 +40,22 @@ const covered = {
 };
 
 /** What the travel route asks for. */
-const ask = (providers: string[]): TravelInput =>
-  ({ homeCountry: "NL", destination: "US", currency: "USD", providers, knownFacts: [] });
+const ask = (providers: string[]): TravelInput => ({
+  homeCountry: "NL",
+  destination: "US",
+  currency: "USD",
+  providers,
+  knownFacts: [],
+});
 
 test("a valid catalogue populates the card-terms cache, so the travel block is answered without a lookup", () => {
-  const path = file("catalog.json", JSON.stringify({
-    generatedAt: "2026-08-18",
-    entries: [{ id: "ing-betaalpas", product: "ING betaalpas", fields: { fxFeePct: covered } }],
-  }));
+  const path = file(
+    "catalog.json",
+    JSON.stringify({
+      generatedAt: "2026-08-18",
+      entries: [{ id: "ing-betaalpas", product: "ING betaalpas", fields: { fxFeePct: covered } }],
+    }),
+  );
 
   const res = loadCatalogue({ file: path, currency: "USD", log });
 
@@ -95,19 +105,34 @@ test("a figure whose conditions were never established is still refused after th
   // The rule the whole phase rests on, checked at the boundary that now feeds
   // the app: Revolut's 0% was true only inside a EUR 1.000 monthly cap, and it
   // shipped as unconditional and ranked first. A file cannot be a way around it.
-  const path = file("catalog.json", JSON.stringify({
-    entries: [{
-      id: "revolut-betaalpas",
-      product: "Revolut betaalpas",
-      fields: { fxFeePct: { ...covered, value: 0, route: "provider-page", sourceUrl: "https://revolut.com/x", conditionsKnown: false } },
-    }],
-  }));
+  const path = file(
+    "catalog.json",
+    JSON.stringify({
+      entries: [
+        {
+          id: "revolut-betaalpas",
+          product: "Revolut betaalpas",
+          fields: {
+            fxFeePct: {
+              ...covered,
+              value: 0,
+              route: "provider-page",
+              sourceUrl: "https://revolut.com/x",
+              conditionsKnown: false,
+            },
+          },
+        },
+      ],
+    }),
+  );
 
   const res = loadCatalogue({ file: path, currency: "USD", log });
 
   expect(res).toMatchObject({ accepted: 0, refused: 1, total: 1, loaded: true });
   // Nothing was served in its place. Unknown is never zero.
-  expect(getCardTerms(ask(["Revolut betaalpas"]), "k", { lookup: (async () => []) as never }).terms).toEqual([]);
+  expect(
+    getCardTerms(ask(["Revolut betaalpas"]), "k", { lookup: (async () => []) as never }).terms,
+  ).toEqual([]);
   expect(logged.join("\n")).toContain("1 refused");
 });
 

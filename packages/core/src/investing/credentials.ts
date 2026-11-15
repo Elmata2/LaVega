@@ -1,3 +1,5 @@
+import type { CredentialBroker } from "./brokers.js";
+
 /** Tenant used by local-only investing storage. Hosted implementations supply
  * their real tenant identifier through the same interface. */
 export const LOCAL_TENANT_ID = "local";
@@ -18,11 +20,13 @@ export type Trading212Credentials = {
 };
 
 export type BrokerCredentials = IbkrCredentials | Trading212Credentials;
-export type CredentialBroker = BrokerCredentials["broker"];
 
 /** Narrow credential seam. Implementations must not expose credentials while locked. */
 export interface CredentialStore {
-  getCredentials<T extends CredentialBroker>(tenantId: string, broker: T): Promise<Extract<BrokerCredentials, { broker: T }> | null>;
+  getCredentials<T extends CredentialBroker>(
+    tenantId: string,
+    broker: T,
+  ): Promise<Extract<BrokerCredentials, { broker: T }> | null>;
   putCredentials(credentials: BrokerCredentials): Promise<void>;
 }
 

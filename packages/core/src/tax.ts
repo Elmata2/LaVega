@@ -33,7 +33,20 @@ function lastDayOfMonth(y: number, m: number): string {
 }
 
 const Q_LABEL = ["Q1", "Q2", "Q3", "Q4"];
-const NL_MONTHS = ["jan", "feb", "mrt", "apr", "mei", "jun", "jul", "aug", "sep", "okt", "nov", "dec"];
+const NL_MONTHS = [
+  "jan",
+  "feb",
+  "mrt",
+  "apr",
+  "mei",
+  "jun",
+  "jul",
+  "aug",
+  "sep",
+  "okt",
+  "nov",
+  "dec",
+];
 
 /** Where a filing deadline lands, per the pack's rule: N months after the
  *  period end, on that month's `day` ("last" = its last day). */
@@ -42,7 +55,9 @@ function deadlineFrom(periodEnd: string, rule: DeadlineRule): string {
   const total = m + rule.monthsAfterEnd;
   const year = y + Math.floor((total - 1) / 12);
   const month = ((total - 1) % 12) + 1;
-  return rule.day === "last" ? lastDayOfMonth(year, month) : `${year}-${String(month).padStart(2, "0")}-${String(rule.day).padStart(2, "0")}`;
+  return rule.day === "last"
+    ? lastDayOfMonth(year, month)
+    : `${year}-${String(month).padStart(2, "0")}-${String(rule.day).padStart(2, "0")}`;
 }
 
 function quarterPeriod(y: number, q: number, pack: TaxPack): TaxPeriod {
@@ -148,7 +163,11 @@ export type ResolveVatSettingsInput = {
  * eigen uitkomst is. Er zelf een kiezen zou het bedrag veranderen op grond van
  * een aanname, en onbekend is geen keuze.
  */
-export function resolveVatSettings({ entity, saved, country }: ResolveVatSettingsInput): VatSettings {
+export function resolveVatSettings({
+  entity,
+  saved,
+  country,
+}: ResolveVatSettingsInput): VatSettings {
   const pack = taxPack(country);
   const base: VatSettings = saved ?? {
     entity,
@@ -157,7 +176,9 @@ export function resolveVatSettings({ entity, saved, country }: ResolveVatSetting
     mixedRates: false,
     country: pack.country as VatSettings["country"],
   };
-  const frequency = pack.vat.frequencies.includes(base.frequency) ? base.frequency : pack.vat.frequencies[0];
+  const frequency = pack.vat.frequencies.includes(base.frequency)
+    ? base.frequency
+    : pack.vat.frequencies[0];
   return { ...base, entity, country: pack.country as VatSettings["country"], frequency };
 }
 
@@ -269,7 +290,13 @@ export type VatPositionInput = {
  * reconciled invoice IS a bank movement. That is why the ladder picks one basis
  * whole, and why there is a test that fails if anyone ever sums them.
  */
-export function vatPosition({ txs, settings, asOf, figures, invoices }: VatPositionInput): VatPosition {
+export function vatPosition({
+  txs,
+  settings,
+  asOf,
+  figures,
+  invoices,
+}: VatPositionInput): VatPosition {
   const pack = taxPack(settings.country);
   const period = nextVatPeriod(settings.frequency, asOf, settings.country);
   const { periodStart, periodEnd } = period;
@@ -287,7 +314,12 @@ export function vatPosition({ txs, settings, asOf, figures, invoices }: VatPosit
     netCents: number | null,
     note: VatNote | null,
   ): VatPosition => ({
-    ...base, basis, chargedCents, paidCents, netCents, note,
+    ...base,
+    basis,
+    chargedCents,
+    paidCents,
+    netCents,
+    note,
     direction: netCents === null ? "onbekend" : netCents < 0 ? "terugvragen" : "betalen",
   });
 
@@ -299,19 +331,30 @@ export function vatPosition({ txs, settings, asOf, figures, invoices }: VatPosit
   // 2. His own bookkeeping.
   const sheet = vatFromSheet(figures, periodStart, periodEnd);
   if (sheet !== null) {
-    return finish("sheet", sheet.chargedCents, sheet.paidCents, sheet.chargedCents - sheet.paidCents, null);
+    return finish(
+      "sheet",
+      sheet.chargedCents,
+      sheet.paidCents,
+      sheet.chargedCents - sheet.paidCents,
+      null,
+    );
   }
 
   // 3. His own invoices — the only basis that sees an unpaid invoice's debt.
   const invoiceNote = invoiceBasisRefusal(settings, fromInvoices);
-  if (invoiceNote === null && fromInvoices.chargedCents !== null && fromInvoices.paidCents !== null) {
+  if (
+    invoiceNote === null &&
+    fromInvoices.chargedCents !== null &&
+    fromInvoices.paidCents !== null
+  ) {
     const charged = fromInvoices.chargedCents;
     const paid = fromInvoices.paidCents;
     return finish("invoices", charged, paid, charged - paid, null);
   }
 
   // 4. The margin proxy, or nothing at all when the rates are mixed.
-  const sheetNote: VatNote | null = figures && figures.rowCount > 0 ? "boekhouding-andere-periode" : null;
+  const sheetNote: VatNote | null =
+    figures && figures.rowCount > 0 ? "boekhouding-andere-periode" : null;
   if (settings.mixedRates) {
     return finish("proxy", null, null, null, "gemengde-tarieven");
   }
@@ -451,26 +494,30 @@ export function computeProfitTaxPrepayments(
       carryCents += amountCents;
       continue;
     }
-    flows.push(makeScheduledFlow({
-      entity: settings.entity,
-      label: `${rules.label} ${i + 1}/${n} ${year}`,
-      sign: -1,
-      amountCents,
-      dueDate,
-      source: "prepayment",
-      status: assessed ? "confirmed" : "expected",
-    }));
+    flows.push(
+      makeScheduledFlow({
+        entity: settings.entity,
+        label: `${rules.label} ${i + 1}/${n} ${year}`,
+        sign: -1,
+        amountCents,
+        dueDate,
+        source: "prepayment",
+        status: assessed ? "confirmed" : "expected",
+      }),
+    );
   }
   if (carryCents > 0) {
-    flows.push(makeScheduledFlow({
-      entity: settings.entity,
-      label: `${rules.settlementLabel} ${year}`,
-      sign: -1,
-      amountCents: carryCents,
-      dueDate: `${year + 1}-${rules.prepayDates[0]}`,
-      source: "prepayment",
-      status: assessed ? "confirmed" : "expected",
-    }));
+    flows.push(
+      makeScheduledFlow({
+        entity: settings.entity,
+        label: `${rules.settlementLabel} ${year}`,
+        sign: -1,
+        amountCents: carryCents,
+        dueDate: `${year + 1}-${rules.prepayDates[0]}`,
+        source: "prepayment",
+        status: assessed ? "confirmed" : "expected",
+      }),
+    );
   }
   return flows;
 }
@@ -498,7 +545,13 @@ export type TaxReservationInput = {
 /** Everything one entity must set aside under its country's rules: the VAT
  *  set-aside plus any profit-tax prepayments. One call per entity, so a view
  *  never has to know which countries prepay. */
-export function computeTaxReservations({ txs, settings, asOf, figures, invoices }: TaxReservationInput): ScheduledFlow[] {
+export function computeTaxReservations({
+  txs,
+  settings,
+  asOf,
+  figures,
+  invoices,
+}: TaxReservationInput): ScheduledFlow[] {
   const vat = computeVatSetAside(txs, settings, asOf, figures, invoices);
   return [...(vat ? [vat] : []), ...computeProfitTaxPrepayments(txs, settings, asOf, figures)];
 }

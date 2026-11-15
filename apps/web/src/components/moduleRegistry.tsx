@@ -1,6 +1,8 @@
 import { useSyncExternalStore } from "react";
 import type { ReactNode } from "react";
 import type { View } from "../App";
+import { isArchivedView, isArchivedWidget } from "../archive";
+import { shellCopy } from "../copy/shell";
 
 /* The module registry — the ONE place a module is declared.
  *
@@ -26,11 +28,13 @@ export type ModuleId = Extract<
   | "transactions"
   | "accounts"
   | "forecast"
+  | "bills"
   | "optimalisatie"
   | "valuta"
   | "punten"
   | "belasting"
   | "facturen"
+  | "plan"
 >;
 
 export type ModuleDef = {
@@ -46,6 +50,10 @@ export type ModuleDef = {
   /** IN DE NAV ZODRA ER NOG NIETS GEKOZEN IS? Standaard ja — zie
    *  DEFAULT_MODULES, waar staat waarom "alles aan" het juiste beginpunt is.
    *
+   *  Sinds de focus-beslissing (Overzicht, Optimalisatie, Rekeningen) zijn
+   *  Verplichtingen, Forecast en Punten ook optioneel: wel te openen en aan te
+   *  zetten in Profiel, niet standaard in de nav. De route blijft bereikbaar.
+   *
    *  Eén module zegt hier nee, en dat is geen uitzondering maar het gevolg van
    *  een eerder besluit: Transacties is in augustus BEWUST uit de navigatie
    *  gehaald (commit a52da45 — importeren hoort op de startpagina en transacties
@@ -54,6 +62,10 @@ export type ModuleDef = {
    *  gewone lijst zetten zou die verwijdering stilletjes terugdraaien bij
    *  iedereen die nooit iets koos. */
   defaultOn?: boolean;
+  /** `false`: the view stays routable but is in no nav list (rail, bottom bar,
+   *  drawer) and not in the module picker. Only Jouw plan: it is reached from a
+   *  card in Profiel. A stored `lavega.navModules` that names it is ignored. */
+  nav?: false;
 };
 
 /** The home module. An app with no home is a broken app, so this one is always
@@ -62,7 +74,16 @@ export const HOME_MODULE: ModuleId = "overview";
 
 function Icon({ children }: { children: ReactNode }) {
   return (
-    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      viewBox="0 0 24 24"
+      width="18"
+      height="18"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       {children}
     </svg>
   );
@@ -82,12 +103,24 @@ function Thumb({ children }: { children: ReactNode }) {
 
 /** A miniature module card inside a preview. */
 function Tile({ x, y, w, h }: { x: number; y: number; w: number; h: number }) {
-  return <rect x={x} y={y} width={w} height={h} rx="3" fill="var(--surface)" stroke="var(--line)" />;
+  return (
+    <rect x={x} y={y} width={w} height={h} rx="3" fill="var(--surface)" stroke="var(--line)" />
+  );
 }
 
 /** A miniature text line inside a preview. */
 function Line({ x, y, w, strong }: { x: number; y: number; w: number; strong?: boolean }) {
-  return <rect x={x} y={y} width={w} height={strong ? 4 : 2.5} rx="1.25" fill={strong ? "var(--ink)" : "var(--muted)"} opacity={strong ? 0.85 : 0.45} />;
+  return (
+    <rect
+      x={x}
+      y={y}
+      width={w}
+      height={strong ? 4 : 2.5}
+      rx="1.25"
+      fill={strong ? "var(--ink)" : "var(--muted)"}
+      opacity={strong ? 0.85 : 0.45}
+    />
+  );
 }
 
 export const MODULES: ModuleDef[] = [
@@ -118,9 +151,37 @@ export const MODULES: ModuleDef[] = [
     ),
   },
   {
+    id: "optimalisatie",
+    label: "Optimalisatie",
+    what: "Abonnementen die je kunt opzeggen en spaarrentes die meer opleveren.",
+    icon: (
+      <Icon>
+        <path d="M9 18h6" />
+        <path d="M10 21h4" />
+        <path d="M12 3a6 6 0 0 0-4 10.5c.6.6 1 1.3 1 2.5h6c0-1.2.4-1.9 1-2.5A6 6 0 0 0 12 3z" />
+      </Icon>
+    ),
+    preview: (
+      <Thumb>
+        <Line x={8} y={8} w={28} strong />
+        <rect x="8" y="20" width="18" height="28" rx="3" fill="var(--muted)" opacity="0.35" />
+        <rect x="32" y="30" width="18" height="18" rx="3" fill="var(--muted)" opacity="0.35" />
+        <rect x="56" y="14" width="18" height="34" rx="3" fill="var(--pos)" opacity="0.75" />
+        <path
+          d="M78 26 L84 18 L90 26"
+          fill="none"
+          stroke="var(--pos)"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </Thumb>
+    ),
+  },
+  {
     id: "accounts",
     label: "Rekeningen",
-    what: "Al je rekeningen en kaarten, per bank en per bedrijf, met hun saldo.",
+    what: "Al je rekeningen en kaarten, per bank, met hun saldo.",
     icon: (
       <Icon>
         <path d="M3 10l9-6 9 6" />
@@ -142,6 +203,33 @@ export const MODULES: ModuleDef[] = [
         <circle cx="16" cy="46.5" r="3.5" fill="var(--accent)" opacity="0.5" />
         <Line x={24} y={44.5} w={30} strong />
         <Line x={70} y={45} w={12} />
+      </Thumb>
+    ),
+  },
+  {
+    id: "plan",
+    nav: false,
+    /* Not in the nav: Profiel's "Jouw plan" card opens it. The words come from
+     * the shell copy (Profiel and the page title read them from there). */
+    label: shellCopy.nl.nav.moduleLabels.plan,
+    what: shellCopy.nl.modulePicker.modules.plan,
+    icon: (
+      <Icon>
+        <path d="M5 4h14v16H5z" />
+        <path d="M9 9h6M9 13h6M9 17h3" />
+      </Icon>
+    ),
+    preview: (
+      <Thumb>
+        <Tile x={8} y={8} w={80} h={14} />
+        <Line x={12} y={12} w={24} strong />
+        <Line x={12} y={17} w={50} />
+        <Tile x={8} y={26} w={38} h={26} />
+        <Line x={12} y={32} w={16} strong />
+        <Line x={12} y={39} w={26} />
+        <Tile x={50} y={26} w={38} h={26} />
+        <Line x={54} y={32} w={16} strong />
+        <Line x={54} y={39} w={26} />
       </Thumb>
     ),
   },
@@ -175,9 +263,37 @@ export const MODULES: ModuleDef[] = [
     ),
   },
   {
+    id: "bills",
+    label: "Verplichtingen",
+    what: "Wat er af moet, wat betaald is en wat tekort is voor je volgende salaris.",
+    defaultOn: false,
+    icon: (
+      <Icon>
+        <rect x="4" y="5" width="16" height="16" rx="2" />
+        <path d="M8 3v4M16 3v4M4 10h16" />
+        <path d="M8 14h3M8 17h6" />
+      </Icon>
+    ),
+    preview: (
+      <Thumb>
+        <Tile x={8} y={8} w={80} h={13} />
+        <Line x={12} y={11} w={18} strong />
+        <Line x={62} y={11.5} w={18} />
+        <Tile x={8} y={24} w={80} h={13} />
+        <Line x={12} y={27} w={26} strong />
+        <Line x={62} y={27.5} w={18} />
+        <Tile x={8} y={40} w={38} h={14} />
+        <Line x={12} y={44} w={16} strong />
+        <Tile x={50} y={40} w={38} h={14} />
+        <Line x={54} y={44} w={20} strong />
+      </Thumb>
+    ),
+  },
+  {
     id: "forecast",
     label: "Forecast",
     what: "Wat er de komende 30, 60 en 90 dagen binnenkomt en uitgaat.",
+    defaultOn: false,
     icon: (
       <Icon>
         <path d="M4 16l5-6 4 3 7-9" />
@@ -187,31 +303,23 @@ export const MODULES: ModuleDef[] = [
     preview: (
       <Thumb>
         <path d="M8 44h80" stroke="var(--line)" strokeWidth="1.5" />
-        <path d="M8 40 L26 34 L44 38 L62 24 L80 16" fill="none" stroke="var(--accent)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-        <path d="M8 50h80" stroke="var(--warn)" strokeWidth="1.5" strokeDasharray="4 3" opacity="0.7" />
+        <path
+          d="M8 40 L26 34 L44 38 L62 24 L80 16"
+          fill="none"
+          stroke="var(--accent)"
+          strokeWidth="2.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+        <path
+          d="M8 50h80"
+          stroke="var(--warn)"
+          strokeWidth="1.5"
+          strokeDasharray="4 3"
+          opacity="0.7"
+        />
         <circle cx="80" cy="16" r="3" fill="var(--accent)" />
         <Line x={8} y={8} w={24} strong />
-      </Thumb>
-    ),
-  },
-  {
-    id: "optimalisatie",
-    label: "Optimalisatie",
-    what: "Abonnementen die je kunt opzeggen en spaarrentes die meer opleveren.",
-    icon: (
-      <Icon>
-        <path d="M9 18h6" />
-        <path d="M10 21h4" />
-        <path d="M12 3a6 6 0 0 0-4 10.5c.6.6 1 1.3 1 2.5h6c0-1.2.4-1.9 1-2.5A6 6 0 0 0 12 3z" />
-      </Icon>
-    ),
-    preview: (
-      <Thumb>
-        <Line x={8} y={8} w={28} strong />
-        <rect x="8" y="20" width="18" height="28" rx="3" fill="var(--muted)" opacity="0.35" />
-        <rect x="32" y="30" width="18" height="18" rx="3" fill="var(--muted)" opacity="0.35" />
-        <rect x="56" y="14" width="18" height="34" rx="3" fill="var(--pos)" opacity="0.75" />
-        <path d="M78 26 L84 18 L90 26" fill="none" stroke="var(--pos)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
       </Thumb>
     ),
   },
@@ -233,8 +341,22 @@ export const MODULES: ModuleDef[] = [
         <Tile x={58} y={14} w={30} h={32} />
         <Line x={63} y={20} w={14} strong />
         <Line x={63} y={30} w={20} />
-        <path d="M42 25h12M54 25l-4-3.5M54 25l-4 3.5" fill="none" stroke="var(--accent)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-        <path d="M54 36H42M42 36l4-3.5M42 36l4 3.5" fill="none" stroke="var(--muted)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+        <path
+          d="M42 25h12M54 25l-4-3.5M54 25l-4 3.5"
+          fill="none"
+          stroke="var(--accent)"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+        <path
+          d="M54 36H42M42 36l4-3.5M42 36l4 3.5"
+          fill="none"
+          stroke="var(--muted)"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
       </Thumb>
     ),
   },
@@ -246,6 +368,7 @@ export const MODULES: ModuleDef[] = [
      * een moduletekst die iets belooft wat het scherm niet toont, is precies het
      * soort onwaarheid dat hier nergens mag staan. */
     what: "Je spaarpunten en airmiles op één plek, met de regels van elk programma.",
+    defaultOn: false,
     icon: (
       <Icon>
         <circle cx="12" cy="12" r="8" />
@@ -256,7 +379,15 @@ export const MODULES: ModuleDef[] = [
     preview: (
       <Thumb>
         <Line x={8} y={8} w={22} strong />
-        <circle cx="22" cy="34" r="12" fill="none" stroke="var(--accent)" strokeWidth="2.5" opacity="0.8" />
+        <circle
+          cx="22"
+          cy="34"
+          r="12"
+          fill="none"
+          stroke="var(--accent)"
+          strokeWidth="2.5"
+          opacity="0.8"
+        />
         <circle cx="22" cy="34" r="5" fill="var(--accent)" opacity="0.35" />
         <Line x={44} y={26} w={34} strong />
         <Line x={44} y={34} w={26} />
@@ -313,6 +444,11 @@ export const MODULES: ModuleDef[] = [
   },
 ];
 
+/** A module that can sit in the nav: not archived, not `nav: false`. */
+function inNav(m: ModuleDef): boolean {
+  return m.nav !== false && !isArchivedView(m.id);
+}
+
 /** What the nav holds before the owner has picked anything: everything that was
  *  already there.
  *
@@ -327,9 +463,11 @@ export const MODULES: ModuleDef[] = [
  *  betekent hier "de nav blijft zoals hij was", en dat is precies waarom een
  *  module die eerder WEGGEHAALD is er niet vanzelf weer bij komt: dat zou net zo
  *  goed een verandering zijn die niemand vroeg. */
-export const DEFAULT_MODULES: ModuleId[] = MODULES.filter((m) => m.defaultOn !== false).map((m) => m.id);
+export const DEFAULT_MODULES: ModuleId[] = MODULES.filter(
+  (m) => m.defaultOn !== false && inNav(m),
+).map((m) => m.id);
 
-const KNOWN = new Set<string>(MODULES.map((m) => m.id));
+const KNOWN = new Set<string>(MODULES.filter(inNav).map((m) => m.id));
 
 /** Resolve the STORED preference into the modules that belong in the nav.
  *
@@ -339,10 +477,11 @@ const KNOWN = new Set<string>(MODULES.map((m) => m.id));
  *  always added back, and the result is always in registry order so the nav
  *  never reshuffles itself because of the order things were toggled in. */
 export function enabledModules(stored: string[] | null): ModuleId[] {
-  const chosen = stored === null ? DEFAULT_MODULES : stored.filter((id): id is ModuleId => KNOWN.has(id));
+  const chosen =
+    stored === null ? DEFAULT_MODULES : stored.filter((id): id is ModuleId => KNOWN.has(id));
   const set = new Set<ModuleId>(chosen);
   set.add(HOME_MODULE);
-  return MODULES.filter((m) => set.has(m.id)).map((m) => m.id);
+  return MODULES.filter((m) => set.has(m.id) && inNav(m)).map((m) => m.id);
 }
 
 /** Switch one module on or off. The home module is never removable — an app
@@ -358,7 +497,7 @@ export function toggleModule(enabled: ModuleId[], id: ModuleId, on: boolean): Mo
 /** The definitions behind the enabled ids, in registry order — what the nav renders. */
 export function navModules(enabled: ModuleId[]): ModuleDef[] {
   const set = new Set<ModuleId>(enabled);
-  return MODULES.filter((m) => set.has(m.id));
+  return MODULES.filter((m) => set.has(m.id) && inNav(m));
 }
 
 /* ====================================================================== *
@@ -385,7 +524,15 @@ export function navModules(enabled: ModuleId[]): ModuleDef[] {
  *  opleveren in plaats van er stilletjes een aan te zetten. Daarom heten de twee
  *  nieuwe kaarten `facturen-open` en `btw-stand` en niet `facturen` en
  *  `belasting`: die laatste twee zijn routes. Er staat een test op. */
-export type WidgetId = "aandacht" | "positie" | "betaalagenda" | "facturen-open" | "btw-stand";
+export type WidgetId =
+  | "aandacht"
+  | "intake-invite"
+  | "room-card"
+  | "connect-checklist"
+  | "positie"
+  | "betaalagenda"
+  | "facturen-open"
+  | "btw-stand";
 
 export type WidgetDef = {
   id: WidgetId;
@@ -437,6 +584,56 @@ export const WIDGETS: WidgetDef[] = [
     ),
   },
   {
+    id: "intake-invite",
+    label: "Vertel over jezelf",
+    what: "Een uitnodiging om de vragen over je situatie te beantwoorden, of om verder te gaan waar je stopte.",
+    note: "Staat aan zolang de vragen niet af zijn — hier zet je hem uit.",
+    defaultOn: true,
+    preview: (
+      <Thumb>
+        <Tile x={8} y={10} w={80} h={40} />
+        <Line x={14} y={18} w={36} strong />
+        <Line x={14} y={27} w={58} />
+        <rect x="14" y="36" width="22" height="8" rx="4" fill="var(--accent)" opacity="0.8" />
+      </Thumb>
+    ),
+  },
+  {
+    id: "room-card",
+    label: "Je ruimte per maand",
+    what: "Wat er gemiddeld per maand overblijft, met de laagste en hoogste maand als bandbreedte.",
+    note: "Verschijnt zodra je de eerste vragen hebt beantwoord.",
+    defaultOn: true,
+    preview: (
+      <Thumb>
+        <Tile x={8} y={10} w={80} h={40} />
+        <Line x={14} y={17} w={24} />
+        <rect x="14" y="25" width="34" height="7" rx="3.5" fill="var(--pos)" opacity="0.7" />
+        <rect x="14" y="38" width="60" height="3" rx="1.5" fill="var(--line)" />
+        <rect x="30" y="38" width="28" height="3" rx="1.5" fill="var(--accent)" opacity="0.6" />
+      </Thumb>
+    ),
+  },
+  {
+    id: "connect-checklist",
+    label: "Koppel voor het complete beeld",
+    what: "Welke van je banken nog niet gekoppeld zijn, met een link naar Rekeningen.",
+    note: "Verschijnt alleen als je banken hebt opgegeven die nog niet gekoppeld zijn.",
+    defaultOn: true,
+    preview: (
+      <Thumb>
+        <Tile x={8} y={10} w={80} h={40} />
+        <Line x={14} y={17} w={36} strong />
+        <circle cx="16" cy="29" r="2.5" fill="var(--warn)" />
+        <Line x={23} y={28} w={34} />
+        <Line x={68} y={28} w={14} strong />
+        <circle cx="16" cy="40" r="2.5" fill="var(--warn)" />
+        <Line x={23} y={39} w={26} />
+        <Line x={68} y={39} w={14} strong />
+      </Thumb>
+    ),
+  },
+  {
     id: "positie",
     label: "Positie",
     what: "Een kleine kaart met de verdeling van je geld over je bedrijven.",
@@ -462,12 +659,29 @@ export const WIDGETS: WidgetDef[] = [
     defaultOn: true,
     preview: (
       <Thumb>
-        <rect x="8" y="10" width="14" height="14" rx="3" fill="var(--surface)" stroke="var(--line)" />
+        <rect
+          x="8"
+          y="10"
+          width="14"
+          height="14"
+          rx="3"
+          fill="var(--surface)"
+          stroke="var(--line)"
+        />
         <Line x={11} y={14} w={8} strong />
         <Line x={28} y={13} w={34} strong />
         <Line x={28} y={20} w={22} />
         <Line x={74} y={16} w={14} />
-        <rect x="8" y="30" width="14" height="14" rx="3" fill="rgba(176, 120, 30, 0.18)" stroke="var(--warn)" />
+        <rect
+          x="8"
+          y="30"
+          width="14"
+          height="14"
+          rx="3"
+          fill="var(--warn)"
+          fillOpacity="0.18"
+          stroke="var(--warn)"
+        />
         <Line x={11} y={34} w={8} strong />
         <Line x={28} y={33} w={28} strong />
         <Line x={28} y={40} w={18} />
@@ -511,7 +725,15 @@ export const WIDGETS: WidgetDef[] = [
         <rect x="8" y="18" width="34" height="9" rx="2" fill="var(--neg)" opacity="0.55" />
         <Line x={8} y={33} w={44} />
         <Line x={8} y={41} w={30} />
-        <rect x="58" y="16" width="30" height="30" rx="3" fill="var(--surface)" stroke="var(--line)" />
+        <rect
+          x="58"
+          y="16"
+          width="30"
+          height="30"
+          rx="3"
+          fill="var(--surface)"
+          stroke="var(--line)"
+        />
         <Line x={63} y={22} w={12} strong />
         <Line x={63} y={30} w={20} />
         <rect x="63" y="36" width="20" height="5" rx="2.5" fill="var(--warn)" opacity="0.45" />
@@ -529,16 +751,20 @@ export const WIDGETS: WidgetDef[] = [
  *  antwoord dat allebei zijn zinnen respecteert — Aandacht, Positie en Facturen
  *  mogen niet ongevraagd verschijnen, Betaalagenda mag niet ongevraagd
  *  verdwijnen, en BTW moet er staan omdat hij daar met zoveel woorden om vroeg. */
-export const DEFAULT_WIDGETS: WidgetId[] = WIDGETS.filter((w) => w.defaultOn).map((w) => w.id);
+export const DEFAULT_WIDGETS: WidgetId[] = WIDGETS.filter(
+  (w) => w.defaultOn && !isArchivedWidget(w.id),
+).map((w) => w.id);
 
-const KNOWN_WIDGETS = new Set<string>(WIDGETS.map((w) => w.id));
+const KNOWN_WIDGETS = new Set<string>(
+  WIDGETS.filter((w) => !isArchivedWidget(w.id)).map((w) => w.id),
+);
 
 /** ALLE ids, en dat is wat er als "gezien" wordt weggeschreven.
  *
  *  Verantwoord omdat de picker de hele lijst tegelijk toont: wie één schakelaar
  *  omzet, heeft de rest óók voor zich gehad en er (door hem te laten staan) een
  *  antwoord op gegeven. */
-const ALL_WIDGETS: WidgetId[] = WIDGETS.map((w) => w.id);
+const ALL_WIDGETS: WidgetId[] = WIDGETS.filter((w) => !isArchivedWidget(w.id)).map((w) => w.id);
 
 /** De twee die bestonden toen de voorkeur nog een KALE LIJST was.
  *
@@ -576,7 +802,9 @@ export function enabledWidgets(stored: string[] | StoredWidgets | null): WidgetI
   if (pref === null) return [...DEFAULT_WIDGETS];
   const on = new Set(pref.on);
   const seen = new Set(pref.seen);
-  return WIDGETS.filter((w) => (seen.has(w.id) ? on.has(w.id) : w.defaultOn === true)).map((w) => w.id);
+  return WIDGETS.filter(
+    (w) => !isArchivedWidget(w.id) && (seen.has(w.id) ? on.has(w.id) : w.defaultOn === true),
+  ).map((w) => w.id);
 }
 
 /** Een lijst ids opschonen: alleen bestaande widgets, ontdubbeld, in
@@ -586,7 +814,7 @@ export function enabledWidgets(stored: string[] | StoredWidgets | null): WidgetI
  *  terug door de deur van "nooit gevraagd". */
 export function normaliseWidgets(ids: readonly string[]): WidgetId[] {
   const set = new Set(ids.filter((id): id is WidgetId => KNOWN_WIDGETS.has(id)));
-  return WIDGETS.filter((w) => set.has(w.id)).map((w) => w.id);
+  return WIDGETS.filter((w) => set.has(w.id) && !isArchivedWidget(w.id)).map((w) => w.id);
 }
 
 /** Switch one widget on or off. No widget is locked: a homescreen with none of
@@ -654,7 +882,10 @@ let widgetCache: WidgetId[] | null = null;
  *  a stable identity to stop re-rendering. */
 function widgetSnapshot(): WidgetId[] {
   const next = enabledWidgets(getEnabledWidgets());
-  const same = widgetCache !== null && widgetCache.length === next.length && widgetCache.every((id, i) => id === next[i]);
+  const same =
+    widgetCache !== null &&
+    widgetCache.length === next.length &&
+    widgetCache.every((id, i) => id === next[i]);
   if (!same) widgetCache = next;
   return widgetCache as WidgetId[];
 }
@@ -674,12 +905,13 @@ export function setEnabledWidgets(ids: WidgetId[]): void {
   const next = normaliseWidgets(ids);
   try {
     const value: StoredWidgets = { on: next, seen: ALL_WIDGETS };
-    if (typeof localStorage !== "undefined") localStorage.setItem(WIDGETS_KEY, JSON.stringify(value));
+    if (typeof localStorage !== "undefined")
+      localStorage.setItem(WIDGETS_KEY, JSON.stringify(value));
   } catch {
     /* quota/serialization errors are non-fatal for a preference */
   }
   widgetCache = next;
-  for (const listener of [...widgetListeners]) listener();
+  for (const listener of widgetListeners) listener();
 }
 
 /** The widgets that are on, plus the setter. Re-renders when either side

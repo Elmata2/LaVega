@@ -18,18 +18,30 @@ export function splitRows(text: string, delim = ";"): string[][] {
     const ch = text[i];
     if (q) {
       if (ch === '"') {
-        if (text[i + 1] === '"') { cur += '"'; i++; }
-        else q = false;
+        if (text[i + 1] === '"') {
+          cur += '"';
+          i++;
+        } else q = false;
       } else cur += ch;
     } else {
       if (ch === '"') q = true;
-      else if (ch === delim) { row.push(cur); cur = ""; }
-      else if (ch === "\n") { row.push(cur); rows.push(row); row = []; cur = ""; }
-      else if (ch === "\r") { /* skip */ }
-      else cur += ch;
+      else if (ch === delim) {
+        row.push(cur);
+        cur = "";
+      } else if (ch === "\n") {
+        row.push(cur);
+        rows.push(row);
+        row = [];
+        cur = "";
+      } else if (ch === "\r") {
+        /* skip */
+      } else cur += ch;
     }
   }
-  if (cur.length || row.length) { row.push(cur); rows.push(row); }
+  if (cur.length || row.length) {
+    row.push(cur);
+    rows.push(row);
+  }
   return rows.filter((r) => r.some((c) => String(c).trim() !== ""));
 }
 
@@ -45,13 +57,15 @@ export function parseDate(v: unknown, order: "DMY" | "MDY" = "DMY"): string | nu
   if ((m = s.match(/^(\d{4})-(\d{2})-(\d{2})/))) return `${m[1]}-${m[2]}-${m[3]}`;
   if ((m = s.match(/^(\d{4})(\d{2})(\d{2})$/))) return `${m[1]}-${m[2]}-${m[3]}`;
   if ((m = s.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})/))) {
-    const a = Number(m[1]), b = Number(m[2]);
+    const a = Number(m[1]),
+      b = Number(m[2]);
     const day = order === "MDY" ? b : a;
     const month = order === "MDY" ? a : b;
     return `${m[3]}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
   }
   if ((m = s.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{2})(\D|$)/))) {
-    const a = Number(m[1]), b = Number(m[2]);
+    const a = Number(m[1]),
+      b = Number(m[2]);
     const day = order === "MDY" ? b : a;
     const month = order === "MDY" ? a : b;
     return `20${m[3]}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
@@ -92,22 +106,38 @@ export function parseAmount(v: unknown): number | null {
 /* --- maps a normalized header cell -> column index. --- */
 export function headerIndex(header: string[]): Record<string, number> {
   const idx: Record<string, number> = {};
-  header.forEach((h, i) => { idx[norm(h).replace(/^"|"$/g, "")] = i; });
+  header.forEach((h, i) => {
+    idx[norm(h).replace(/^"|"$/g, "")] = i;
+  });
   return idx;
 }
 
 /* --- IBAN uit tekst --- */
 export function findIban(s: unknown): string | null {
-  const m = String(s ?? "").toUpperCase().replace(/\s/g, "").match(/[A-Z]{2}\d{2}[A-Z0-9]{8,26}/);
+  const m = String(s ?? "")
+    .toUpperCase()
+    .replace(/\s/g, "")
+    .match(/[A-Z]{2}\d{2}[A-Z0-9]{8,26}/);
   return m ? m[0] : null;
 }
 
 const BANK_BY_IBAN_PREFIX: Record<string, string> = {
-  INGB: "ING", ABNA: "ABN AMRO", RABO: "Rabobank", KNAB: "Knab", BUNQ: "bunq",
-  TRIO: "Triodos", SNSB: "SNS", ASNB: "ASN", RBRB: "RegioBank", NNBA: "NN", REVO: "Revolut",
+  INGB: "ING",
+  ABNA: "ABN AMRO",
+  RABO: "Rabobank",
+  KNAB: "Knab",
+  BUNQ: "bunq",
+  TRIO: "Triodos",
+  SNSB: "SNS",
+  ASNB: "ASN",
+  RBRB: "RegioBank",
+  NNBA: "NN",
+  REVO: "Revolut",
 };
 export function bankFromIban(iban: unknown): string | null {
-  const c = String(iban ?? "").toUpperCase().slice(4, 8);
+  const c = String(iban ?? "")
+    .toUpperCase()
+    .slice(4, 8);
   return BANK_BY_IBAN_PREFIX[c] || null;
 }
 
@@ -115,6 +145,8 @@ export function bankFromIban(iban: unknown): string | null {
  * reuse the same map. Used for MT940 accounts whose :25: is an old-style account
  * number (no IBAN) — the bank is then derived from the statement header's BIC. */
 export function bankFromBic(bic: unknown): string | null {
-  const c = String(bic ?? "").toUpperCase().slice(0, 4);
+  const c = String(bic ?? "")
+    .toUpperCase()
+    .slice(0, 4);
   return BANK_BY_IBAN_PREFIX[c] || null;
 }

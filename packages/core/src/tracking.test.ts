@@ -1,24 +1,45 @@
 import { expect, test } from "vitest";
 import { makeRewardsBalance, type RewardsBalance } from "./rewards.js";
 import {
-  DEFAULT_TRACKING_INTERVAL_DAYS, TRACKING_OVERDUE_AFTER_DAYS,
-  applyRewardsReply, dueRewards, dueTrackers, parseBalanceReply, rewardsTracked,
-  snoozeTracker, trackingQuestion, trackingStatus, type TrackedBalance,
+  DEFAULT_TRACKING_INTERVAL_DAYS,
+  TRACKING_OVERDUE_AFTER_DAYS,
+  applyRewardsReply,
+  dueRewards,
+  dueTrackers,
+  parseBalanceReply,
+  rewardsTracked,
+  snoozeTracker,
+  trackingStatus,
+  type TrackedBalance,
 } from "./tracking.js";
 
-const amex = makeRewardsBalance({ program: "American Express Membership Rewards", points: 240_000, updatedAt: "2026-01-10" });
-const flyingBlue = makeRewardsBalance({ program: "Flying Blue (KLM/Air France)", points: 12_000, updatedAt: "2026-08-01" });
+const amex = makeRewardsBalance({
+  program: "American Express Membership Rewards",
+  points: 240_000,
+  updatedAt: "2026-01-10",
+});
+const flyingBlue = makeRewardsBalance({
+  program: "Flying Blue (KLM/Air France)",
+  points: 12_000,
+  updatedAt: "2026-08-01",
+});
 
-const tracked = (over: Partial<TrackedBalance> = {}): TrackedBalance =>
-  ({ id: "t1", source: "rewards", label: "American Express Membership Rewards", unit: "punten", updatedAt: "2026-01-10", ...over });
+const tracked = (over: Partial<TrackedBalance> = {}): TrackedBalance => ({
+  id: "t1",
+  source: "rewards",
+  label: "American Express Membership Rewards",
+  unit: "punten",
+  updatedAt: "2026-01-10",
+  ...over,
+});
 
 test("staleness ladder: fresh -> due at the interval -> overdue once far past it", () => {
   expect(DEFAULT_TRACKING_INTERVAL_DAYS).toBe(90);
   const t = tracked();
-  expect(trackingStatus(t, "2026-04-09").state).toBe("fresh");  // day 89
-  expect(trackingStatus(t, "2026-04-10").state).toBe("due");    // day 90 = the due date
+  expect(trackingStatus(t, "2026-04-09").state).toBe("fresh"); // day 89
+  expect(trackingStatus(t, "2026-04-10").state).toBe("due"); // day 90 = the due date
   expect(trackingStatus(t, "2026-04-10").dueDate).toBe("2026-04-10");
-  expect(trackingStatus(t, "2026-05-10").state).toBe("due");    // 30 days past = still just due
+  expect(trackingStatus(t, "2026-05-10").state).toBe("due"); // 30 days past = still just due
   expect(trackingStatus(t, "2026-05-11").state).toBe("overdue"); // 31 days past
   expect(TRACKING_OVERDUE_AFTER_DAYS).toBe(30);
 
@@ -41,25 +62,36 @@ test("a snooze silences a due number until its date, and never invents freshness
   const t = tracked({ snoozedUntil: "2026-06-01" });
   expect(trackingStatus(t, "2026-05-31").state).toBe("snoozed");
   expect(trackingStatus(t, "2026-06-01").state).toBe("overdue"); // asks again ON the date
-  expect(trackingStatus(t, "2026-02-01").state).toBe("fresh");   // a snooze on a fresh row changes nothing
+  expect(trackingStatus(t, "2026-02-01").state).toBe("fresh"); // a snooze on a fresh row changes nothing
   // The age is still reported honestly while snoozed — the number IS old.
   expect(trackingStatus(t, "2026-05-31").ageDays).toBe(141);
   expect(trackingStatus(t, "2026-05-31").snoozedUntil).toBe("2026-06-01");
 });
 
-test("the question names the programme, says 'alleen het getal', and never contains a balance", () => {
-  const q = trackingQuestion({ label: "American Express Membership Rewards", unit: "punten" });
-  expect(q).toBe("Hoeveel punten staan er nu bij American Express Membership Rewards? Stuur alleen het getal.");
-  expect(q).not.toMatch(/\d/); // no number of any kind can leak into the ask
-  expect(trackingQuestion({ label: "bunq cashback", unit: "€" }))
-    .toBe("Wat is het huidige saldo van bunq cashback (€)? Stuur alleen het getal.");
+/* DE VRAAG IS HIER WEG. Hij was Nederlands en werd letterlijk afgedrukt, dus een
+ * Engelse lezer kreeg "Hoeveel punten staan er nu bij ...". Core draagt nu
+ * alleen `label` en `unit`; de zin staat in `copy/money` en wordt daar ook
+ * bewaakt op de eigenschap die hem veilig maakt — er mag geen getal in. Wat
+ * hier overblijft is dat de status die twee feiten draagt en niets meer. */
+test("the status carries what the question needs, and no balance", () => {
+  const t: TrackedBalance = {
+    id: "amex",
+    source: "rewards",
+    label: "American Express Membership Rewards",
+    unit: "points",
+    updatedAt: "2026-01-10",
+  };
+  const st = trackingStatus(t, "2026-08-12");
+  expect(st.label).toBe("American Express Membership Rewards");
+  expect(st.unit).toBe("points");
+  expect(JSON.stringify(st)).not.toMatch(/240|saldo|balance/i);
 });
 
 test("dueTrackers returns only what to ask now, most overdue first", () => {
   const list = [
     tracked({ id: "fresh", label: "Flying Blue", updatedAt: "2026-08-01" }),
-    tracked({ id: "due", label: "Avios", updatedAt: "2026-05-01" }),      // 92 days -> due
-    tracked({ id: "old", label: "Amex", updatedAt: "2026-01-10" }),        // 214 days -> overdue
+    tracked({ id: "due", label: "Avios", updatedAt: "2026-05-01" }), // 92 days -> due
+    tracked({ id: "old", label: "Amex", updatedAt: "2026-01-10" }), // 214 days -> overdue
     tracked({ id: "snoozed", label: "Hyatt", updatedAt: "2026-01-10", snoozedUntil: "2026-09-01" }),
   ];
   const due = dueTrackers(list, "2026-08-12");
@@ -71,23 +103,28 @@ test("dueTrackers returns only what to ask now, most overdue first", () => {
 test("rewards are the first source: the Punten balances map straight onto the detector", () => {
   const list = rewardsTracked([amex, flyingBlue]);
   expect(list[0]).toEqual({
-    id: amex.id, source: "rewards", label: "American Express Membership Rewards",
-    unit: "punten", updatedAt: "2026-01-10",
+    id: amex.id,
+    source: "rewards",
+    label: "American Express Membership Rewards",
+    unit: "points",
+    updatedAt: "2026-01-10",
   });
   const due = dueRewards([amex, flyingBlue], "2026-08-12");
   expect(due.map((d) => d.label)).toEqual(["American Express Membership Rewards"]);
-  expect(due[0].question).toContain("Stuur alleen het getal");
+  // De vraag zelf staat in copy/money; core draagt alleen wat hij nodig heeft.
+  expect(due[0].unit).toBe("points");
+  expect(due[0].label).toBe("American Express Membership Rewards");
 });
 
 test("parseBalanceReply reads what a person actually types", () => {
   expect(parseBalanceReply("245000")).toBe(245_000);
-  expect(parseBalanceReply("245.000")).toBe(245_000);   // NL thousands
-  expect(parseBalanceReply("245,000")).toBe(245_000);   // EN thousands
-  expect(parseBalanceReply("245 000")).toBe(245_000);   // spaced thousands
+  expect(parseBalanceReply("245.000")).toBe(245_000); // NL thousands
+  expect(parseBalanceReply("245,000")).toBe(245_000); // EN thousands
+  expect(parseBalanceReply("245 000")).toBe(245_000); // spaced thousands
   expect(parseBalanceReply("1 234 567")).toBe(1_234_567);
   expect(parseBalanceReply("1.234.567")).toBe(1_234_567);
-  expect(parseBalanceReply("1.234,56")).toBe(1234.56);  // NL decimal
-  expect(parseBalanceReply("1,234.56")).toBe(1234.56);  // EN decimal
+  expect(parseBalanceReply("1.234,56")).toBe(1234.56); // NL decimal
+  expect(parseBalanceReply("1,234.56")).toBe(1234.56); // EN decimal
   expect(parseBalanceReply("12,50")).toBe(12.5);
   expect(parseBalanceReply("245k")).toBe(245_000);
   expect(parseBalanceReply("1,2 mln")).toBe(1_200_000);

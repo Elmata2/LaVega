@@ -6,10 +6,26 @@
      Voor de reparatie las de lezer hier lowPrice als "de prijs van dit
      artikel": {"ok":true,"amountCents":21900,"currency":"EUR"} — met vlag en
      wimpel, terwijl highPrice en offerCount in dezelfde markup staan. -->
-<!doctype html><html lang="nl"><head><title>Artikel bij veertien aanbieders</title>
-<script type="application/ld+json">
-{"@context":"https://schema.org","@type":"Product","name":"F",
- "offers":{"@type":"AggregateOffer","lowPrice":"219.00","highPrice":"549.00",
-           "offerCount":14,"priceCurrency":"EUR"}}
-</script>
-</head><body><h1>Artikel</h1></body></html>
+<!doctype html>
+<html lang="nl">
+  <head>
+    <title>Artikel bij veertien aanbieders</title>
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "Product",
+        "name": "F",
+        "offers": {
+          "@type": "AggregateOffer",
+          "lowPrice": "219.00",
+          "highPrice": "549.00",
+          "offerCount": 14,
+          "priceCurrency": "EUR"
+        }
+      }
+    </script>
+  </head>
+  <body>
+    <h1>Artikel</h1>
+  </body>
+</html>

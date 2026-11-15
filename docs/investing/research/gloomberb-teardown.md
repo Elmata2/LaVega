@@ -6,12 +6,12 @@ This document answers one question: what, if anything, should LaVega's investing
 proposition take from Gloomberb? It records findings. The decisions that followed from
 it live in these tickets:
 
-| Decision | Outcome |
-|---|---|
-| [#34](https://github.com/Elmata2/LaVega/issues/34) Yahoo as default local provider | Yahoo is the default local/self-hosted price source, behind a one-time disclosure |
-| [#35](https://github.com/Elmata2/LaVega/issues/35) Hosted-tier vendor | marketstack Basic, pending written confirmation ([#38](https://github.com/Elmata2/LaVega/issues/38)) |
-| [#36](https://github.com/Elmata2/LaVega/issues/36) Vendoring policy | Vendor verbatim when self-contained, reimplement when entangled |
-| [#37](https://github.com/Elmata2/LaVega/issues/37) EODHD's fate | Open |
+| Decision                                                                           | Outcome                                                                                              |
+| ---------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| [#34](https://github.com/Elmata2/LaVega/issues/34) Yahoo as default local provider | Yahoo is the default local/self-hosted price source, behind a one-time disclosure                    |
+| [#35](https://github.com/Elmata2/LaVega/issues/35) Hosted-tier vendor              | marketstack Basic, pending written confirmation ([#38](https://github.com/Elmata2/LaVega/issues/38)) |
+| [#36](https://github.com/Elmata2/LaVega/issues/36) Vendoring policy                | Vendor verbatim when self-contained, reimplement when entangled                                      |
+| [#37](https://github.com/Elmata2/LaVega/issues/37) EODHD's fate                    | Open                                                                                                 |
 
 Implementation follows in [#39](https://github.com/Elmata2/LaVega/issues/39) (import
 boundaries), [#40](https://github.com/Elmata2/LaVega/issues/40) (IBKR Flex),
@@ -34,16 +34,16 @@ Scale: roughly 270,000 lines of TypeScript across 1,153 non-test source files.
 
 Runtime and stack:
 
-| Concern | Gloomberb | LaVega investing |
-|---|---|---|
-| Runtime | Bun | Node, plus Cloudflare Workers for the hosted tier (#24) |
-| UI | OpenTUI (terminal) and Electrobun (desktop), sharing one component tree | React + Vite + shadcn/ui in the browser (#17) |
-| Charts | Custom renderers per target | shadcn/ui Charts on Recharts (#22) |
-| Local store | SQLite via `bun:sqlite` | IndexedDB now, Postgres later (#23) |
-| Market data | Yahoo Finance, SEC EDGAR, FRED, Gloom Cloud | Yahoo local (#34), marketstack hosted (#35), Frankfurter/ECB FX |
-| Agent | `@earendil-works/pi-agent-core` | Anthropic SDK direct, behind an `AgentRuntime` seam (#26) |
-| Brokers | Interactive Brokers only | DeGiro, IBKR, Trading 212 |
-| Market focus | US-centric — SEC filings, 13F, congressional trades | EU-first |
+| Concern      | Gloomberb                                                               | LaVega investing                                                |
+| ------------ | ----------------------------------------------------------------------- | --------------------------------------------------------------- |
+| Runtime      | Bun                                                                     | Node, plus Cloudflare Workers for the hosted tier (#24)         |
+| UI           | OpenTUI (terminal) and Electrobun (desktop), sharing one component tree | React + Vite + shadcn/ui in the browser (#17)                   |
+| Charts       | Custom renderers per target                                             | shadcn/ui Charts on Recharts (#22)                              |
+| Local store  | SQLite via `bun:sqlite`                                                 | IndexedDB now, Postgres later (#23)                             |
+| Market data  | Yahoo Finance, SEC EDGAR, FRED, Gloom Cloud                             | Yahoo local (#34), marketstack hosted (#35), Frankfurter/ECB FX |
+| Agent        | `@earendil-works/pi-agent-core`                                         | Anthropic SDK direct, behind an `AgentRuntime` seam (#26)       |
+| Brokers      | Interactive Brokers only                                                | DeGiro, IBKR, Trading 212                                       |
+| Market focus | US-centric — SEC filings, 13F, congressional trades                     | EU-first                                                        |
 
 The mismatch is structural, not cosmetic. Nothing about the presentation layer
 transfers, and the two projects disagree on runtime, storage, and data vendor.

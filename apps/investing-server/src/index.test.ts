@@ -1,25 +1,79 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, test, vi } from "vitest";
-import { createInMemoryPriceStore, createMemoryBrokerSyncStateStore } from "@lavega/adapters";
-import { createRuntimeApp, createRuntimeBrokerCredentialSetup, createRuntimeBrokerDataCache, createRuntimeBrokerSync } from "./index.js";
+import {
+  createInMemorySharedPriceStore,
+  createMemoryBrokerSyncStateStore,
+  type BrokerResult,
+  type ScheduledSyncResult,
+} from "@lavega/adapters";
+import {
+  createRuntimeApp,
+  createRuntimeBrokerCredentialSetup,
+  createRuntimeBrokerDataCache,
+  createRuntimeBrokerSync,
+} from "./index.js";
 import { createFileCredentialStore } from "./fileCredentialStore.js";
+import { createMemoryCashFlowStore } from "./cashFlowSuggestions.js";
+import { createInMemorySectorProfileStore } from "./inMemorySectorProfileStore.js";
 
 const servers: ReturnType<typeof createServer>[] = [];
 
+function brokerResult(input: Record<string, unknown>): BrokerResult {
+  const status = (complete: unknown): "complete" | "unavailable" =>
+    complete === false ? "unavailable" : "complete";
+  return {
+    sections: {
+      positions: {
+        status: status(input.positionsComplete),
+        rows: (input.positions ?? []) as never[],
+      },
+      trades: {
+        status: input.tradesComplete === false ? "partial" : "complete",
+        rows: (input.trades ?? []) as never[],
+      },
+      dividends: { status: "complete", rows: (input.dividends ?? []) as never[] },
+      cashBalances: {
+        status: status(input.cashBalancesComplete),
+        rows: (input.cashBalances ?? []) as never[],
+      },
+      cashFlows: { status: "complete", rows: (input.cashFlows ?? []) as never[] },
+    },
+    source: String(input.source ?? "trading-212"),
+    problems: (input.problems ?? []) as string[],
+    ...(input.retryAfter ? { retryAfter: String(input.retryAfter) } : {}),
+    ...(input.resume ? { resume: input.resume as BrokerResult["resume"] } : {}),
+  };
+}
+
+function partialTrades(result: BrokerResult, problems: string[]): BrokerResult {
+  return {
+    ...result,
+    sections: { ...result.sections, trades: { ...result.sections.trades, status: "partial" } },
+    problems,
+  };
+}
+
 afterEach(async () => {
   vi.unstubAllEnvs();
-  await Promise.all(servers.splice(0).map((server) => new Promise<void>((resolve) => server.close(() => resolve()))));
+  await Promise.all(
+    servers
+      .splice(0)
+      .map((server) => new Promise<void>((resolve) => server.close(() => resolve()))),
+  );
 });
 
-async function serve(handler: (request: IncomingMessage, response: ServerResponse) => void): Promise<string> {
+async function serve(
+  handler: (request: IncomingMessage, response: ServerResponse) => void,
+): Promise<string> {
   const server = createServer(handler);
   servers.push(server);
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   const address = server.address();
-  if (!address || typeof address === "string") throw new Error("Loopback server did not open a port");
+  if (!address || typeof address === "string")
+    throw new Error("Loopback server did not open a port");
   return `http://127.0.0.1:${address.port}`;
 }
 
@@ -40,67 +94,141 @@ function fakeVault(status: "empty" | "locked" | "unlocked") {
 
 test("credential setup creates encrypted vault and stores IBKR credentials", async () => {
   const vault = fakeVault("empty");
-  await createRuntimeBrokerCredentialSetup(vault)({ broker: "ibkr", token: "flex-token", queryId: "123456", passphrase: "vault-passphrase" });
+  await createRuntimeBrokerCredentialSetup(vault)({
+    broker: "ibkr",
+    token: "flex-token",
+    queryId: "123456",
+    passphrase: "vault-passphrase",
+  });
 
   expect(vault.setup).toHaveBeenCalledWith("vault-passphrase");
-  expect(vault.putCredentials).toHaveBeenCalledWith({ broker: "ibkr", tenantId: "local", token: "flex-token", queryId: "123456" });
+  expect(vault.putCredentials).toHaveBeenCalledWith({
+    broker: "ibkr",
+    tenantId: "local",
+    token: "flex-token",
+    queryId: "123456",
+  });
 });
 
 test("credential setup rejects wrong passphrase before replacing stored credentials", async () => {
   const vault = fakeVault("unlocked");
   vault.unlock = vi.fn(async () => false);
 
-  await expect(createRuntimeBrokerCredentialSetup(vault)({ broker: "trading212", token: "api-key", secret: "api-secret", passphrase: "wrong" })).rejects.toThrow("Vault passphrase is incorrect");
+  await expect(
+    createRuntimeBrokerCredentialSetup(vault)({
+      broker: "trading212",
+      token: "api-key",
+      secret: "api-secret",
+      passphrase: "wrong",
+    }),
+  ).rejects.toThrow("Vault passphrase is incorrect");
   expect(vault.lock).not.toHaveBeenCalled();
   expect(vault.putCredentials).not.toHaveBeenCalled();
 });
 
-test("runtime broker sync coalesces concurrent runs", async () => {
+test("a second concurrent run waits instead of spending the same rate limit", async () => {
   let orderRequests = 0;
   let positionRequests = 0;
   const baseUrl = await serve(async (request, response) => {
     await new Promise((resolve) => setTimeout(resolve, 10));
     if ((request.url ?? "").startsWith("/api/v0/equity/history/orders")) {
       orderRequests += 1;
-      return json(response, { items: [{ id: 1, ticker: "AAPL", direction: "BUY", filledQuantity: 1, fillPrice: 10, totalCost: 10, currency: "EUR", dateExecuted: "2026-08-18T10:15:00Z" }] });
+      return json(response, {
+        items: [
+          {
+            id: 1,
+            ticker: "AAPL",
+            direction: "BUY",
+            filledQuantity: 1,
+            fillPrice: 10,
+            totalCost: 10,
+            currency: "EUR",
+            dateExecuted: "2026-08-18T10:15:00Z",
+          },
+        ],
+      });
     }
     if (request.url === "/api/v0/equity/positions") {
       positionRequests += 1;
-      return json(response, [{ ticker: "AAPL", quantity: 1, averagePrice: 10, currentPrice: 10, marketValue: 10, currency: "EUR", asOf: "2026-08-18T10:15:00Z" }]);
+      return json(response, [
+        {
+          ticker: "AAPL",
+          quantity: 1,
+          averagePrice: 10,
+          currentPrice: 10,
+          marketValue: 10,
+          currency: "EUR",
+          asOf: "2026-08-18T10:15:00Z",
+        },
+      ]);
     }
-    if (request.url === "/api/v0/equity/account/summary") return json(response, { currency: "EUR", cash: { availableToTrade: 0, inPies: 0, reservedForOrders: 0 } });
+    if (request.url === "/api/v0/equity/account/summary")
+      return json(response, {
+        currency: "EUR",
+        cash: { availableToTrade: 0, inPies: 0, reservedForOrders: 0 },
+      });
     return json(response, { items: [], nextPagePath: null });
   });
   vi.stubEnv("TRADING212_BASE_URL", baseUrl);
   const credentials = {
-    getCredentials: vi.fn(async (_tenantId: string, broker: string) => broker === "trading212" ? { broker: "trading212", tenantId: "local", token: "token", secret: "secret" } : null),
+    getCredentials: vi.fn(async (_tenantId: string, broker: string) =>
+      broker === "trading212"
+        ? { broker: "trading212", tenantId: "local", token: "token", secret: "secret" }
+        : null,
+    ),
   } as unknown as ReturnType<typeof createFileCredentialStore>;
   const sync = createRuntimeBrokerSync(undefined, credentials, createMemoryBrokerSyncStateStore());
 
-  const [first, second] = await Promise.all([sync(true), sync(true)]);
+  const [first, second] = await Promise.all([
+    sync(true, ["holdings", "history"]),
+    sync(true, ["holdings", "history"]),
+  ]);
 
   expect(orderRequests).toBe(1);
   expect(positionRequests).toBe(1);
-  expect(first.problems).toEqual(second.problems);
+  const trading212 = (result: ScheduledSyncResult) =>
+    result.outcomes.find((outcome) => outcome.broker === "trading212");
+  const ran = trading212(first)?.result != null ? first : second;
+  const waited = ran === first ? second : first;
+  expect(trading212(ran)?.result).not.toBeNull();
+  expect(trading212(waited)?.status).toBe("skipped");
+  expect(waited.problems).toContain("trading212: a synchronization is already running");
 });
 
 test("runtime broker sync passes the signed-in tenant to credential-aware adapters", async () => {
   const baseUrl = await serve((request, response) => {
-    if ((request.url ?? "").startsWith("/api/v0/equity/history/orders")) return json(response, { items: [] });
-    if (request.url === "/api/v0/equity/account/summary") return json(response, { currency: "EUR", cash: { availableToTrade: 0, inPies: 0, reservedForOrders: 0 } });
-    if ((request.url ?? "").startsWith("/api/v0/equity/history/transactions") || (request.url ?? "").startsWith("/api/v0/equity/history/dividends")) return json(response, { items: [], nextPagePath: null });
+    if ((request.url ?? "").startsWith("/api/v0/equity/history/orders"))
+      return json(response, { items: [] });
+    if (request.url === "/api/v0/equity/account/summary")
+      return json(response, {
+        currency: "EUR",
+        cash: { availableToTrade: 0, inPies: 0, reservedForOrders: 0 },
+      });
+    if (
+      (request.url ?? "").startsWith("/api/v0/equity/history/transactions") ||
+      (request.url ?? "").startsWith("/api/v0/equity/history/dividends")
+    )
+      return json(response, { items: [], nextPagePath: null });
     return json(response, []);
   });
   vi.stubEnv("TRADING212_BASE_URL", baseUrl);
   const credentials = {
     getCredentials: vi.fn(async (tenantId: string, broker: string) => {
       if (tenantId !== "user-123") throw new Error("Credential vault belongs to another tenant");
-      return broker === "trading212" ? { broker: "trading212", tenantId, token: "token", secret: "secret" } : null;
+      return broker === "trading212"
+        ? { broker: "trading212", tenantId, token: "token", secret: "secret" }
+        : null;
     }),
   } as unknown as ReturnType<typeof createFileCredentialStore>;
-  const sync = createRuntimeBrokerSync(undefined, credentials, createMemoryBrokerSyncStateStore(), undefined, "user-123");
+  const sync = createRuntimeBrokerSync(
+    undefined,
+    credentials,
+    createMemoryBrokerSyncStateStore(),
+    undefined,
+    "user-123",
+  );
 
-  const result = await sync(true);
+  const result = await sync(true, ["holdings", "history"]);
 
   expect(result.problems).not.toContain("trading212: Credential vault belongs to another tenant");
   expect(credentials.getCredentials).toHaveBeenCalledWith("user-123", "trading212");
@@ -109,11 +237,41 @@ test("runtime broker sync passes the signed-in tenant to credential-aware adapte
 test("cached broker skip retains last successful positions", () => {
   const cache = createRuntimeBrokerDataCache();
   cache.apply({
-    outcomes: [{ broker: "trading212", status: "synced", lastSyncedAt: "2026-08-19T14:00:00.000Z", result: { positions: [{ tenantId: "local", symbol: "AAPL", quantity: 1, averagePrice: 10, marketPrice: 10, marketValue: 10, currency: "EUR", entity: "BV", asOf: "2026-08-19" }], trades: [], source: "trading-212", problems: [] } }],
+    outcomes: [
+      {
+        broker: "trading212",
+        status: "synced",
+        lastSyncedAt: "2026-08-19T14:00:00.000Z",
+        result: brokerResult({
+          positions: [
+            {
+              symbol: "AAPL",
+              quantity: 1,
+              averagePrice: 10,
+              marketPrice: 10,
+              marketValue: 10,
+              currency: "EUR",
+              entity: "BV",
+              asOf: "2026-08-19",
+            },
+          ],
+          trades: [],
+          source: "trading-212",
+          problems: [],
+        }),
+      },
+    ],
     problems: [],
   });
   cache.apply({
-    outcomes: [{ broker: "trading212", status: "skipped", lastSyncedAt: "2026-08-19T14:00:00.000Z", result: null }],
+    outcomes: [
+      {
+        broker: "trading212",
+        status: "skipped",
+        lastSyncedAt: "2026-08-19T14:00:00.000Z",
+        result: null,
+      },
+    ],
     problems: [],
   });
 
@@ -121,10 +279,125 @@ test("cached broker skip retains last successful positions", () => {
   expect(cache.read().positions[0]?.symbol).toBe("AAPL");
 });
 
+test("a legacy snapshot gains broker provenance on load without its trade ids changing", () => {
+  const cache = createRuntimeBrokerDataCache({
+    ibkr: {
+      positions: [
+        {
+          symbol: "AAPL",
+          quantity: 1,
+          averagePrice: 10,
+          marketPrice: 10,
+          marketValue: 10,
+          currency: "EUR",
+          entity: "BV",
+          asOf: "2026-09-11",
+        },
+      ],
+      trades: [
+        {
+          id: "ibkr:legacy-1",
+          entity: "BV",
+          date: "2026-09-11",
+          symbol: "AAPL",
+          side: "buy",
+          quantity: 1,
+          price: 10,
+          amount: 10,
+          currency: "EUR",
+          commission: 0,
+        },
+        {
+          id: "ibkr:legacy-sell",
+          entity: "BV",
+          date: "2026-09-11",
+          executionAt: "2026-09-11T15:30:00",
+          symbol: "AAPL",
+          side: "sell",
+          quantity: -0.25,
+          price: 12,
+          amount: 3,
+          currency: "EUR",
+          commission: 0,
+        },
+      ],
+      dividends: [],
+    },
+    trading212: {
+      positions: [
+        {
+          symbol: "AAPL",
+          quantity: 2,
+          averagePrice: 10,
+          marketPrice: 10,
+          marketValue: 20,
+          currency: "EUR",
+          entity: "BV",
+          asOf: "2026-09-14",
+        },
+      ],
+      trades: [],
+      dividends: [],
+    },
+  });
+
+  const { positions, trades } = cache.read();
+
+  // The later trading212 snapshot must not read as an update to the ibkr one.
+  expect(positions.map((position) => [position.broker, position.quantity])).toEqual([
+    ["ibkr", 1],
+    ["trading212", 2],
+  ]);
+  expect(positions.map((position) => position.brokerCost)).toEqual([
+    { status: "unknown", reason: "legacy-denomination" },
+    { status: "unknown", reason: "legacy-denomination" },
+  ]);
+  expect(trades[0]?.id).toBe("ibkr:legacy-1");
+  expect(trades[0]?.broker).toBe("ibkr");
+  expect(trades[1]).toEqual({
+    id: "ibkr:legacy-sell",
+    entity: "BV",
+    broker: "ibkr",
+    date: "2026-09-11",
+    executionAt: "2026-09-11T15:30:00",
+    symbol: "AAPL",
+    side: "sell",
+    quantity: 0.25,
+    price: 12,
+    amount: 3,
+    currency: "EUR",
+    commission: 0,
+  });
+  expect(cache.snapshot().ibkr?.trades[1]).toEqual(trades[1]);
+});
+
 test("runtime broker cache restores encrypted snapshot after restart", () => {
   const first = createRuntimeBrokerDataCache();
   first.apply({
-    outcomes: [{ broker: "trading212", status: "synced", lastSyncedAt: "2026-08-19T14:00:00.000Z", result: { positions: [{ tenantId: "local", symbol: "AAPL", quantity: 1, averagePrice: 10, marketPrice: 10, marketValue: 10, currency: "EUR", entity: "BV", asOf: "2026-08-19" }], trades: [], source: "trading-212", problems: [] } }],
+    outcomes: [
+      {
+        broker: "trading212",
+        status: "synced",
+        lastSyncedAt: "2026-08-19T14:00:00.000Z",
+        result: brokerResult({
+          positions: [
+            {
+              symbol: "AAPL",
+              quantity: 1,
+              averagePrice: 10,
+              marketPrice: 10,
+              marketValue: 10,
+              currency: "EUR",
+              entity: "BV",
+              asOf: "2026-08-19",
+            },
+          ],
+          trades: [],
+          source: "trading-212",
+          problems: [],
+        }),
+      },
+    ],
     problems: [],
   });
 
@@ -138,107 +411,300 @@ test("runtime broker cache persists cash facts and increments data version", () 
   const cache = createRuntimeBrokerDataCache();
   const before = cache.read().dataVersion;
   cache.apply({
-    outcomes: [{
-      broker: "ibkr",
-      status: "synced",
-      lastSyncedAt: "2026-08-19T14:00:00.000Z",
-      result: {
-        positions: [],
-        trades: [],
-        dividends: [],
-        cashBalances: [{ tenantId: "local", entity: "BV", broker: "ibkr", currency: "EUR", amount: 250, asOf: "2026-08-19" }],
-        cashFlows: [{ id: "flow", tenantId: "local", entity: "BV", broker: "ibkr", date: "2026-08-18", currency: "EUR", amount: 250, kind: "deposit" }],
-        source: "ibkr-flex",
-        problems: [],
+    outcomes: [
+      {
+        broker: "ibkr",
+        status: "synced",
+        lastSyncedAt: "2026-08-19T14:00:00.000Z",
+        result: brokerResult({
+          positions: [],
+          trades: [],
+          dividends: [],
+          cashBalances: [
+            { entity: "BV", broker: "ibkr", currency: "EUR", amount: 250, asOf: "2026-08-19" },
+          ],
+          cashFlows: [
+            {
+              id: "flow",
+              entity: "BV",
+              broker: "ibkr",
+              date: "2026-08-18",
+              currency: "EUR",
+              amount: 250,
+              kind: "deposit",
+            },
+          ],
+          source: "ibkr-flex",
+          problems: [],
+        }),
       },
-    }],
+    ],
     problems: [],
   });
 
-  expect(cache.read()).toMatchObject({ dataVersion: before + 1, cashBalances: [{ amount: 250 }], cashFlows: [{ id: "flow" }] });
-  expect(createRuntimeBrokerDataCache(cache.snapshot()).read()).toMatchObject({ cashBalances: [{ amount: 250 }], cashFlows: [{ id: "flow" }] });
+  expect(cache.read()).toMatchObject({
+    dataVersion: before + 1,
+    cashBalances: [{ amount: 250 }],
+    cashFlows: [{ id: "flow" }],
+  });
+  expect(createRuntimeBrokerDataCache(cache.snapshot()).read()).toMatchObject({
+    cashBalances: [{ amount: 250 }],
+    cashFlows: [{ id: "flow" }],
+  });
 });
 
-test("runtime dashboard recomputes only after data version changes", async () => {
+test("without TYPESAFE_API_KEY the sector-infer route is a no-op, not a crash", async () => {
   vi.stubEnv("INVESTING_DEV_FIXTURE", "1");
   vi.stubEnv("LAVEGA_VAULT_FILE", join(tmpdir(), `lavega-missing-${Date.now()}.json`));
-  const store = createInMemoryPriceStore();
-  const getRange = vi.spyOn(store, "getRange");
-  const runtimeApp = await createRuntimeApp({ priceStore: store });
+  vi.stubEnv("TYPESAFE_API_KEY", "");
+  const marketDataConsentStore = {
+    get: vi.fn(async () => ({
+      tenantId: "local",
+      accepted: true,
+      decidedAt: null,
+      disclosureVersion: "yahoo-finance-v1",
+    })),
+    set: vi.fn(async () => undefined),
+  };
+  const sectorInferenceSettingStore = {
+    get: vi.fn(async () => true),
+    set: vi.fn(async () => undefined),
+  };
+  const runtimeApp = await createRuntimeApp({
+    priceStore: createInMemorySharedPriceStore(),
+    marketDataConsentStore,
+    sectorInferenceSettingStore,
+  });
 
-  const first = await runtimeApp.request("/api/investing/dashboard");
-  const callsAfterFirst = getRange.mock.calls.length;
-  const second = await runtimeApp.request("/api/investing/dashboard");
-  expect(first.status).toBe(200);
-  expect(second.status).toBe(200);
-  expect(getRange).toHaveBeenCalledTimes(callsAfterFirst);
+  const response = await runtimeApp.request("/api/investing/sectors/infer", { method: "POST" });
 
-  await runtimeApp.request("/api/prices/cache", { method: "DELETE" });
-  await runtimeApp.request("/api/investing/dashboard");
-  expect(getRange.mock.calls.length).toBeGreaterThan(callsAfterFirst);
+  expect(response.status).toBe(200);
+  expect(await response.json()).toEqual({
+    classified: 0,
+    failed: 0,
+    failedSymbols: [],
+    remaining: 0,
+  });
 });
 
-test("runtime dashboard separates selected symbols and returns unknown detail without failure", async () => {
+test("portfolio chat context resolves a renamed holding's sector through its price-resolved listing", async () => {
   vi.stubEnv("INVESTING_DEV_FIXTURE", "1");
   vi.stubEnv("LAVEGA_VAULT_FILE", join(tmpdir(), `lavega-missing-${Date.now()}.json`));
-  const store = createInMemoryPriceStore();
-  const runtimeApp = await createRuntimeApp({ priceStore: store });
+  const store = createInMemorySharedPriceStore();
+  const sectorStore = createInMemorySectorProfileStore();
+  await sectorStore.set("AAPLX", {
+    kind: "stock",
+    sector: "Real Estate",
+    industry: "Unknown",
+    source: "provider",
+  });
+  const runtimeApp = await createRuntimeApp({ priceStore: store, sectorStore });
+  // The fixture's AAPL position exists before price sync ever resolves a
+  // listing for it, exactly like a real renamed holding: the summary route
+  // already cached its sector profile under the listing prices settled on
+  // (AAPLX), not under the broker symbol still on the position.
+  await store.putCoverage("isin:US0378331005:USD", {
+    from: "2026-01-01",
+    to: "2026-09-01",
+    listing: "AAPLX",
+    currency: "USD",
+    provider: "yahoo",
+  });
 
-  const selected = await runtimeApp.request("/api/investing/dashboard?symbol=aapl");
-  const unknown = await runtimeApp.request("/api/investing/dashboard?symbol=closed-unknown");
-  const selectedData = await selected.json() as { position: { symbol: string; status: string } | null };
-  const unknownData = await unknown.json() as { position: unknown };
+  const context = await runtimeApp.portfolioChatContext();
 
-  expect(selected.status).toBe(200);
-  expect(selectedData.position).toMatchObject({ symbol: "AAPL", status: "open" });
-  expect(unknown.status).toBe(200);
-  expect(unknownData.position).toBeNull();
+  expect(context.sectors?.some((exposure) => exposure.sector === "Real Estate")).toBe(true);
 });
 
 test("a partial result with fresh broker data updates the snapshot, a null result does not", () => {
   const cache = createRuntimeBrokerDataCache();
-  const result = (symbol: string) => ({ positions: [{ tenantId: "local", symbol, quantity: 1, averagePrice: 10, marketPrice: 10, marketValue: 10, currency: "EUR", entity: "BV", asOf: "2026-08-19" }], trades: [], source: "trading-212", problems: [] });
-  cache.apply({ outcomes: [{ broker: "trading212", status: "synced", lastSyncedAt: "2026-08-19T14:00:00.000Z", result: result("AAPL") }], problems: [] });
-  cache.apply({ outcomes: [{ broker: "trading212", status: "problem", lastSyncedAt: "2026-08-19T14:00:00.000Z", result: { ...result("MSFT"), problems: ["partial sync"] } }], problems: ["trading212: partial sync"] });
+  const result = (symbol: string) =>
+    brokerResult({
+      positions: [
+        {
+          tenantId: "local",
+          symbol,
+          quantity: 1,
+          averagePrice: 10,
+          marketPrice: 10,
+          marketValue: 10,
+          currency: "EUR",
+          entity: "BV",
+          asOf: "2026-08-19",
+        },
+      ],
+      trades: [],
+      source: "trading-212",
+      problems: [],
+    });
+  cache.apply({
+    outcomes: [
+      {
+        broker: "trading212",
+        status: "synced",
+        lastSyncedAt: "2026-08-19T14:00:00.000Z",
+        result: result("AAPL"),
+      },
+    ],
+    problems: [],
+  });
+  cache.apply({
+    outcomes: [
+      {
+        broker: "trading212",
+        status: "problem",
+        lastSyncedAt: "2026-08-19T14:00:00.000Z",
+        result: result("MSFT"),
+      },
+    ],
+    problems: ["trading212: partial sync"],
+  });
 
   expect(cache.read().positions[0]?.symbol).toBe("MSFT");
-  cache.apply({ outcomes: [{ broker: "trading212", status: "problem", lastSyncedAt: "2026-08-19T14:05:00.000Z", result: null }], problems: ["trading212: down"] });
+  cache.apply({
+    outcomes: [
+      {
+        broker: "trading212",
+        status: "problem",
+        lastSyncedAt: "2026-08-19T14:05:00.000Z",
+        result: null,
+      },
+    ],
+    problems: ["trading212: down"],
+  });
   expect(cache.read().positions[0]?.symbol).toBe("MSFT");
 });
 
 test("a truncated trade history keeps the stored trades instead of overwriting them", () => {
   const cache = createRuntimeBrokerDataCache();
-  const result = (trades: string[]) => ({ positions: [], trades: trades.map((brokerTradeId) => ({ tenantId: "local", entity: "BV", date: "2026-08-19", symbol: "AAPL", side: "buy" as const, quantity: 1, price: 10, amount: 10, currency: "EUR", commission: 0, brokerTradeId })), source: "trading-212", problems: [] });
-  cache.apply({ outcomes: [{ broker: "trading212", status: "synced", lastSyncedAt: null, result: result(["full-1", "full-2"]) }], problems: [] });
+  const result = (trades: string[]) =>
+    brokerResult({
+      positions: [],
+      trades: trades.map((brokerTradeId) => ({
+        entity: "BV",
+        date: "2026-08-19",
+        symbol: "AAPL",
+        side: "buy" as const,
+        quantity: 1,
+        price: 10,
+        amount: 10,
+        currency: "EUR",
+        commission: 0,
+        brokerTradeId,
+      })),
+      source: "trading-212",
+      problems: [],
+    });
+  cache.apply({
+    outcomes: [
+      {
+        broker: "trading212",
+        status: "synced",
+        lastSyncedAt: null,
+        result: result(["full-1", "full-2"]),
+      },
+    ],
+    problems: [],
+  });
 
-  cache.apply({ outcomes: [{ broker: "trading212", status: "problem", lastSyncedAt: null, result: { ...result(["partial-1"]), problems: ["history failed"], tradesComplete: false } }], problems: ["trading212: history failed"] });
-  expect(cache.read().trades.map((trade) => trade.brokerTradeId)).toEqual(["full-1", "full-2", "partial-1"]);
+  cache.apply({
+    outcomes: [
+      {
+        broker: "trading212",
+        status: "problem",
+        lastSyncedAt: null,
+        result: partialTrades(result(["partial-1"]), ["history failed"]),
+      },
+    ],
+    problems: ["trading212: history failed"],
+  });
+  expect(cache.read().trades.map((trade) => trade.brokerTradeId)).toEqual([
+    "full-1",
+    "full-2",
+    "partial-1",
+  ]);
 
-  cache.apply({ outcomes: [{ broker: "trading212", status: "synced", lastSyncedAt: null, result: result(["fresh-1"]) }], problems: [] });
+  cache.apply({
+    outcomes: [
+      { broker: "trading212", status: "synced", lastSyncedAt: null, result: result(["fresh-1"]) },
+    ],
+    problems: [],
+  });
   expect(cache.read().trades.map((trade) => trade.brokerTradeId)).toEqual(["fresh-1"]);
 });
 
 test("a failed holdings read keeps last-good positions instead of replacing them with empty", () => {
   const cache = createRuntimeBrokerDataCache();
-  const good = { positions: [{ tenantId: "local", symbol: "AAPL", quantity: 3, averagePrice: 10, marketPrice: 10, marketValue: 30, currency: "EUR", entity: "BV", asOf: "2026-08-19" }], trades: [{ tenantId: "local", entity: "BV", date: "2026-08-19", symbol: "AAPL", side: "buy" as const, quantity: 1, price: 10, amount: 10, currency: "EUR", commission: 0, brokerTradeId: "full-1" }], cashBalances: [{ tenantId: "local", entity: "BV", broker: "trading212", currency: "EUR", amount: 250, asOf: "2026-08-19" }], source: "trading-212", problems: [] };
-  cache.apply({ outcomes: [{ broker: "trading212", status: "synced", lastSyncedAt: "2026-08-19T14:00:00.000Z", result: good }], problems: [] });
+  const good = brokerResult({
+    positions: [
+      {
+        tenantId: "local",
+        symbol: "AAPL",
+        quantity: 3,
+        averagePrice: 10,
+        marketPrice: 10,
+        marketValue: 30,
+        currency: "EUR",
+        entity: "BV",
+        asOf: "2026-08-19",
+      },
+    ],
+    trades: [
+      {
+        entity: "BV",
+        date: "2026-08-19",
+        symbol: "AAPL",
+        side: "buy" as const,
+        quantity: 1,
+        price: 10,
+        amount: 10,
+        currency: "EUR",
+        commission: 0,
+        brokerTradeId: "full-1",
+      },
+    ],
+    cashBalances: [
+      {
+        tenantId: "local",
+        entity: "BV",
+        broker: "trading212",
+        currency: "EUR",
+        amount: 250,
+        asOf: "2026-08-19",
+      },
+    ],
+    source: "trading-212",
+    problems: [],
+  });
+  cache.apply({
+    outcomes: [
+      {
+        broker: "trading212",
+        status: "synced",
+        lastSyncedAt: "2026-08-19T14:00:00.000Z",
+        result: good,
+      },
+    ],
+    problems: [],
+  });
 
   cache.apply({
-    outcomes: [{
-      broker: "trading212",
-      status: "problem",
-      lastSyncedAt: null,
-      result: {
-        positions: [],
-        trades: good.trades,
-        cashBalances: [],
-        source: "trading-212",
-        problems: ["Trading 212 holdings request failed with HTTP 503"],
-        tradesComplete: true,
-        positionsComplete: false,
-        cashBalancesComplete: false,
+    outcomes: [
+      {
+        broker: "trading212",
+        status: "problem",
+        lastSyncedAt: null,
+        result: brokerResult({
+          positions: [],
+          trades: good.sections.trades.rows,
+          cashBalances: [],
+          source: "trading-212",
+          problems: ["Trading 212 holdings request failed with HTTP 503"],
+          positionsComplete: false,
+          cashBalancesComplete: false,
+        }),
       },
-    }],
+    ],
     problems: ["trading212: Trading 212 holdings request failed with HTTP 503"],
   });
 
@@ -249,8 +715,35 @@ test("a failed holdings read keeps last-good positions instead of replacing them
 
 test("a first truncated history still keeps the trades it did read", () => {
   const cache = createRuntimeBrokerDataCache();
-  const result = (trades: string[]) => ({ positions: [], trades: trades.map((brokerTradeId) => ({ tenantId: "local", entity: "BV", date: "2026-08-19", symbol: "AAPL", side: "buy" as const, quantity: 1, price: 10, amount: 10, currency: "EUR", commission: 0, brokerTradeId })), source: "trading-212", problems: [] });
-  cache.apply({ outcomes: [{ broker: "trading212", status: "problem", lastSyncedAt: null, result: { ...result(["partial-1"]), problems: ["host time limit"], tradesComplete: false } }], problems: ["trading212: host time limit"] });
+  const result = (trades: string[]) =>
+    brokerResult({
+      positions: [],
+      trades: trades.map((brokerTradeId) => ({
+        entity: "BV",
+        date: "2026-08-19",
+        symbol: "AAPL",
+        side: "buy" as const,
+        quantity: 1,
+        price: 10,
+        amount: 10,
+        currency: "EUR",
+        commission: 0,
+        brokerTradeId,
+      })),
+      source: "trading-212",
+      problems: [],
+    });
+  cache.apply({
+    outcomes: [
+      {
+        broker: "trading212",
+        status: "problem",
+        lastSyncedAt: null,
+        result: partialTrades(result(["partial-1"]), ["host time limit"]),
+      },
+    ],
+    problems: ["trading212: host time limit"],
+  });
   expect(cache.read().trades.map((trade) => trade.brokerTradeId)).toEqual(["partial-1"]);
 });
 
@@ -260,75 +753,365 @@ test("runtime unlocks persisted broker credentials after restart", async () => {
   try {
     const first = createFileCredentialStore(filePath);
     await first.setup("vault-passphrase");
-    await first.putCredentials({ broker: "trading212", tenantId: "local", token: "api-key", secret: "api-secret" });
+    await first.putCredentials({
+      broker: "trading212",
+      tenantId: "local",
+      token: "api-key",
+      secret: "api-secret",
+    });
 
     const baseUrl = await serve((request, response) => {
-      if ((request.url ?? "").startsWith("/api/v0/equity/history/orders")) return json(response, { items: [] });
-      if (request.url === "/api/v0/equity/account/summary") return json(response, { currency: "EUR", cash: { availableToTrade: 0, inPies: 0, reservedForOrders: 0 } });
-      if ((request.url ?? "").startsWith("/api/v0/equity/history/transactions") || (request.url ?? "").startsWith("/api/v0/equity/history/dividends")) return json(response, { items: [], nextPagePath: null });
+      if ((request.url ?? "").startsWith("/api/v0/equity/history/orders"))
+        return json(response, { items: [] });
+      if (request.url === "/api/v0/equity/account/summary")
+        return json(response, {
+          currency: "EUR",
+          cash: { availableToTrade: 0, inPies: 0, reservedForOrders: 0 },
+        });
+      if (
+        (request.url ?? "").startsWith("/api/v0/equity/history/transactions") ||
+        (request.url ?? "").startsWith("/api/v0/equity/history/dividends")
+      )
+        return json(response, { items: [], nextPagePath: null });
       return json(response, []);
     });
     vi.stubEnv("LAVEGA_VAULT_FILE", filePath);
     vi.stubEnv("LAVEGA_VAULT_PASSPHRASE", "vault-passphrase");
     vi.stubEnv("TRADING212_BASE_URL", baseUrl);
 
-    const runtimeApp = await createRuntimeApp({ priceStore: createInMemoryPriceStore() });
+    const runtimeApp = await createRuntimeApp({ priceStore: createInMemorySharedPriceStore() });
     const response = await runtimeApp.request("/api/brokers/sync?force=true", { method: "POST" });
-    const result = await response.json() as { problems: string[] };
-    const progress = await (await runtimeApp.request("/api/brokers/sync/status")).json() as { status: string; pages: number; ordersRead: number; positionsRead: number };
+    const result = (await response.json()) as { problems: string[] };
+    const progress = (await (await runtimeApp.request("/api/brokers/sync/status")).json()) as {
+      status: string;
+      pages: number;
+      ordersRead: number;
+      positionsRead: number;
+    };
 
     expect(result.problems).not.toContain("trading212: credentials are not configured");
-    expect(progress).toMatchObject({ status: "completed", pages: 1, ordersRead: 0, positionsRead: 0 });
+    expect(progress).toMatchObject({
+      status: "completed",
+      pages: 1,
+      ordersRead: 0,
+      positionsRead: 0,
+    });
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test.each(["locked", "empty"] as const)(
+  "cold runtime removes sensitive legacy run while vault is %s",
+  async (vaultStatus) => {
+    const directory = await mkdtemp(join(tmpdir(), "lavega-legacy-run-"));
+    const credentialsFile = join(directory, "credentials.json");
+    const legacyFile = join(directory, "agent-run.json");
+    try {
+      if (vaultStatus === "locked")
+        await createFileCredentialStore(credentialsFile).setup("vault-passphrase");
+      await writeFile(
+        legacyFile,
+        JSON.stringify({
+          id: "legacy",
+          startedAt: "2026-08-19T12:00:00.000Z",
+          status: "done",
+          finishedAt: "2026-08-19T12:01:00.000Z",
+          result: { balance: 12345, positions: 42, reasoning: "private" },
+        }),
+      );
+      vi.stubEnv("LAVEGA_VAULT_FILE", credentialsFile);
+      vi.stubEnv("LAVEGA_AGENT_RUN_FILE", legacyFile);
+      vi.stubEnv("LAVEGA_VAULT_PASSPHRASE", "");
+
+      await expect(
+        createRuntimeApp({ priceStore: createInMemorySharedPriceStore() }),
+      ).resolves.toBeDefined();
+      await expect(readFile(legacyFile, "utf8")).rejects.toMatchObject({ code: "ENOENT" });
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  },
+);
+
+test("runtime forwards the request deadline through broker orchestration", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "lavega-runtime-deadline-"));
+  const credentialsFile = join(directory, "credentials.json");
+  let requests = 0;
+  try {
+    const store = createFileCredentialStore(credentialsFile);
+    await store.setup("vault-passphrase");
+    await store.putCredentials({
+      broker: "trading212",
+      tenantId: "local",
+      token: "api-key",
+      secret: "api-secret",
+    });
+    const baseUrl = await serve((_request, response) => {
+      requests += 1;
+      return json(response, { items: [], nextPagePath: null });
+    });
+    vi.stubEnv("LAVEGA_VAULT_FILE", credentialsFile);
+    vi.stubEnv("LAVEGA_VAULT_PASSPHRASE", "vault-passphrase");
+    vi.stubEnv("LAVEGA_BROKER_SYNC_STATE_FILE", join(directory, "broker-sync-state.json"));
+    vi.stubEnv("TRADING212_BASE_URL", baseUrl);
+    vi.stubEnv("INVESTING_PRICE_SYNC_BUDGET_MS", "1");
+    vi.stubEnv("INVESTING_SYNC_BUDGET_MS", "60000");
+
+    const runtimeApp = await createRuntimeApp({ priceStore: createInMemorySharedPriceStore() });
+    const response = await runtimeApp.request("/api/brokers/sync?force=true", { method: "POST" });
+    const result = (await response.json()) as { problems: string[] };
+
+    expect(response.status).toBe(200);
+    expect(requests).toBe(0);
+    expect(result.problems).toContain(
+      "trading212: Trading 212 sync paused before the host time limit; remaining history resumes on the next run",
+    );
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("sync status reports history completeness from durable state, not the invocation", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "lavega-runtime-history-"));
+  try {
+    const credentialsFile = join(directory, "credentials.json");
+    const store = createFileCredentialStore(credentialsFile);
+    await store.setup("vault-passphrase");
+    await store.putCredentials({
+      broker: "trading212",
+      tenantId: "local",
+      token: "api-key",
+      secret: "api-secret",
+    });
+
+    const baseUrl = await serve((request, response) => {
+      if ((request.url ?? "").startsWith("/api/v0/equity/history/orders"))
+        return json(response, { items: [] });
+      if (request.url === "/api/v0/equity/account/summary")
+        return json(response, {
+          currency: "EUR",
+          cash: { availableToTrade: 0, inPies: 0, reservedForOrders: 0 },
+        });
+      if (
+        (request.url ?? "").startsWith("/api/v0/equity/history/transactions") ||
+        (request.url ?? "").startsWith("/api/v0/equity/history/dividends")
+      )
+        return json(response, { items: [], nextPagePath: null });
+      return json(response, []);
+    });
+    vi.stubEnv("LAVEGA_VAULT_FILE", credentialsFile);
+    vi.stubEnv("LAVEGA_VAULT_PASSPHRASE", "vault-passphrase");
+    vi.stubEnv("LAVEGA_BROKER_SYNC_STATE_FILE", join(directory, "broker-sync-state.json"));
+    vi.stubEnv("TRADING212_BASE_URL", baseUrl);
+
+    const syncing = await createRuntimeApp({ priceStore: createInMemorySharedPriceStore() });
+    await syncing.request("/api/brokers/sync?force=true", { method: "POST" });
+
+    const restarted = await createRuntimeApp({ priceStore: createInMemorySharedPriceStore() });
+    const progress = (await (await restarted.request("/api/brokers/sync/status")).json()) as {
+      status: string;
+      history: { trading212: { ordersComplete: boolean; lastSyncedAt: string | null } } | null;
+    };
+
+    expect(progress.status).toBe("idle");
+    expect(progress.history?.trading212.ordersComplete).toBe(true);
+    expect(progress.history?.trading212.lastSyncedAt).not.toBeNull();
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("a rejected API key stays visible to the next invocation", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "lavega-runtime-rejected-"));
+  try {
+    const credentialsFile = join(directory, "credentials.json");
+    const store = createFileCredentialStore(credentialsFile);
+    await store.setup("vault-passphrase");
+    await store.putCredentials({
+      broker: "trading212",
+      tenantId: "local",
+      token: "revoked-key",
+      secret: "api-secret",
+    });
+    const baseUrl = await serve((_request, response) => {
+      response.writeHead(401, { "content-type": "application/json" });
+      response.end(JSON.stringify({ code: "Unauthorized" }));
+    });
+    vi.stubEnv("LAVEGA_VAULT_FILE", credentialsFile);
+    vi.stubEnv("LAVEGA_VAULT_PASSPHRASE", "vault-passphrase");
+    vi.stubEnv("LAVEGA_BROKER_SYNC_STATE_FILE", join(directory, "broker-sync-state.json"));
+    vi.stubEnv("TRADING212_BASE_URL", baseUrl);
+
+    const syncing = await createRuntimeApp({ priceStore: createInMemorySharedPriceStore() });
+    await syncing.request("/api/brokers/sync?force=true", { method: "POST" });
+
+    const restarted = await createRuntimeApp({ priceStore: createInMemorySharedPriceStore() });
+    const progress = (await (await restarted.request("/api/brokers/sync/status")).json()) as {
+      status: string;
+      message: string | null;
+    };
+
+    expect(progress.status).toBe("problem");
+    expect(progress.message).toContain("Trading 212 rejected the API key (HTTP 401)");
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
 });
 
 test("each tenant gets its own runtime, so no cache is shared between users", async () => {
-  const priceStore = createInMemoryPriceStore();
-  const getRange = vi.spyOn(priceStore, "getRange");
+  const priceStore = createInMemorySharedPriceStore();
+  const getRanges = vi.spyOn(priceStore, "getRanges");
   const benchmarkSymbols = vi.fn(async (tenantId: string) => [`BENCH-${tenantId}`]);
   let tenantId = "user-a";
-  const runtimeApp = await createRuntimeApp({ priceStore, benchmarkSymbols, resolveTenantId: () => tenantId });
+  const runtimeApp = await createRuntimeApp({
+    priceStore,
+    benchmarkSymbols,
+    resolveTenantId: () => tenantId,
+  });
 
   await runtimeApp.request("/api/investing/dashboard");
   tenantId = "user-b";
   await runtimeApp.request("/api/investing/dashboard");
 
   expect(benchmarkSymbols.mock.calls.map(([tenant]) => tenant)).toEqual(["user-a", "user-b"]);
-  // Price bars are read under the requesting tenant, never a shared one.
-  expect(getRange.mock.calls.map(([tenant, symbol]) => `${tenant}:${symbol}`)).toEqual([
-    "user-a:BENCH-user-a",
-    "user-b:BENCH-user-b",
-  ]);
+  // Price bars are read by instrument key, one series for every caller: the
+  // benchmark a tenant selected is the only tenant-specific part (issue #307).
+  expect(getRanges.mock.calls.flatMap(([keys]) => keys.map((key) => key.key))).toEqual(
+    expect.arrayContaining(["sym:BENCH-user-a:EUR", "sym:BENCH-user-b:EUR"]),
+  );
+});
+
+test("an account with no stored benchmark reads MSCI World by default", async () => {
+  const priceStore = createInMemorySharedPriceStore();
+  const getRanges = vi.spyOn(priceStore, "getRanges");
+  const runtimeApp = await createRuntimeApp({ priceStore });
+
+  const dashboard = await runtimeApp.request("/api/investing/dashboard");
+  expect(dashboard.status).toBe(200);
+  expect(getRanges.mock.calls.flatMap(([keys]) => keys.map((key) => key.key))).toContain(
+    "sym:IWDA.AS:EUR",
+  );
 });
 
 test("a tenant's broker sync status is its own, not the last caller's", async () => {
   let tenantId = "user-a";
-  const runtimeApp = await createRuntimeApp({ priceStore: createInMemoryPriceStore(), resolveTenantId: () => tenantId });
+  const runtimeApp = await createRuntimeApp({
+    priceStore: createInMemorySharedPriceStore(),
+    resolveTenantId: () => tenantId,
+  });
 
   await runtimeApp.request("/api/brokers/sync?force=true", { method: "POST" });
-  const started = await (await runtimeApp.request("/api/brokers/sync/status")).json() as { status: string };
+  const started = (await (await runtimeApp.request("/api/brokers/sync/status")).json()) as {
+    status: string;
+  };
   tenantId = "user-b";
-  const untouched = await (await runtimeApp.request("/api/brokers/sync/status")).json() as { status: string };
+  const untouched = (await (await runtimeApp.request("/api/brokers/sync/status")).json()) as {
+    status: string;
+  };
 
   expect(started.status).not.toBe("idle");
   expect(untouched.status).toBe("idle");
 });
 
-test("price history is read with dates Postgres accepts", async () => {
-  const priceStore = createInMemoryPriceStore();
-  const getRange = vi.spyOn(priceStore, "getRange").mockImplementation(async (_tenantId, _symbol, from, to) => {
-    // Postgres has no year zero, so `0000-01-01` fails the query outright
-    // instead of standing for "from the beginning" the way a string compare does.
-    for (const date of [from, to]) if (date?.startsWith("0000-")) throw new Error(`date/time field value out of range: "${date}"`);
-    return [];
+test("IBKR missing plus a paused T212 result still keeps T212 positions", () => {
+  const cache = createRuntimeBrokerDataCache();
+  cache.apply({
+    outcomes: [
+      { broker: "ibkr", status: "problem", lastSyncedAt: null, result: null },
+      {
+        broker: "trading212",
+        status: "problem",
+        lastSyncedAt: null,
+        result: brokerResult({
+          positions: [
+            {
+              symbol: "AAPL",
+              quantity: 1,
+              averagePrice: 10,
+              marketPrice: 10,
+              marketValue: 10,
+              currency: "EUR",
+              entity: "BV",
+              asOf: "2026-08-19",
+            },
+          ],
+          trades: [
+            {
+              entity: "BV",
+              date: "2026-08-19",
+              symbol: "AAPL",
+              side: "buy" as const,
+              quantity: 1,
+              price: 10,
+              amount: 10,
+              currency: "EUR",
+              commission: 0,
+              brokerTradeId: "p1",
+            },
+          ],
+          source: "trading-212",
+          problems: [
+            "Trading 212 sync paused before the host time limit; remaining history resumes on the next run",
+          ],
+          tradesComplete: false,
+          positionsComplete: true,
+          cashBalancesComplete: true,
+          resume: { ordersNextPagePath: "/next" },
+        }),
+      },
+    ],
+    problems: [
+      "ibkr: credentials are not configured",
+      "trading212: Trading 212 sync paused before the host time limit; remaining history resumes on the next run",
+    ],
   });
-  const runtimeApp = await createRuntimeApp({ priceStore, benchmarkSymbols: () => ["^GSPC"], resolveTenantId: () => "user-a" });
 
-  const response = await runtimeApp.request("/api/investing/dashboard");
-  const body = await response.json() as { problems: string[] };
+  expect(cache.read().positions).toMatchObject([{ symbol: "AAPL" }]);
+  expect(cache.snapshot().trading212?.positions).toHaveLength(1);
+  expect(cache.snapshot().ibkr).toBeUndefined();
+});
 
-  expect(getRange).toHaveBeenCalled();
-  expect(body.problems).toEqual([]);
+test("an injected cash-flow store reaches the app on the no-Sentry runtime path", async () => {
+  /* Regression (#137 UI slice): the local runtime builds its app through the
+   * `if (!dsn)` branch, and that branch forgot to pass `cashFlowStore`, so a
+   * standalone/mounted run silently answered from the memory store and the
+   * seeded file rules/suggestions never reached the API. The owner's
+   * confirmation UI reads exactly these routes; without this the panel is
+   * always empty on a real local run. */
+  const previousDsn = process.env.SENTRY_DSN;
+  delete process.env.SENTRY_DSN;
+  try {
+    const cashFlowStore = createMemoryCashFlowStore();
+    await cashFlowStore.setSuggestionsEnabled(true);
+    await cashFlowStore.saveSuggestions([
+      {
+        broker: "trading212",
+        typeKey: "SHARES_IN",
+        rawType: "SHARES_IN",
+        kind: "withdrawal",
+        confidence: 0.72,
+        state: "pending",
+        amount: 250,
+        sign: 1,
+        currency: "EUR",
+        description: "Share purchase settlement",
+        createdAt: "2026-11-11T04:40:00.000Z",
+      },
+    ]);
+    const app = await createRuntimeApp({
+      priceStore: createInMemorySharedPriceStore(),
+      cashFlowStore,
+      resolveTenantId: () => "local",
+    });
+    const body = (await (
+      await app.request("http://localhost/api/investing/cash-flow-suggestions")
+    ).json()) as { enabled: boolean; count: number; pending: unknown[] };
+    expect(body.enabled).toBe(true);
+    expect(body.count).toBe(1);
+    expect(body.pending[0]).toMatchObject({ rawType: "SHARES_IN", signChange: true });
+  } finally {
+    if (previousDsn === undefined) delete process.env.SENTRY_DSN;
+    else process.env.SENTRY_DSN = previousDsn;
+  }
 });

@@ -3,7 +3,10 @@ import {
   APP_BASE,
   isAppPathname,
   normalizeAppLocation,
+  authLinkFailed,
+  resetAuthLinkFailure,
   pathForView,
+  takePendingEbParams,
   viewFromPathname,
 } from "./appRoutes";
 
@@ -18,7 +21,7 @@ test("pathname resolves back to the view", () => {
   expect(viewFromPathname("/app/")).toBe("overview");
   expect(viewFromPathname("/app/overview")).toBe("overview");
   expect(viewFromPathname("/app/transactions")).toBe("transactions");
-  expect(viewFromPathname("/app/facturen")).toBe("facturen");
+  expect(viewFromPathname("/app/forecast")).toBe("forecast");
   expect(viewFromPathname("/")).toBeNull();
   expect(viewFromPathname("/privacy")).toBeNull();
   expect(viewFromPathname("/app/unknown")).toBeNull();
@@ -32,16 +35,98 @@ test("isAppPathname covers /app and unknown /app segments", () => {
   expect(isAppPathname(APP_BASE)).toBe(true);
 });
 
-test("normalizeAppLocation rewrites legacy #app and /?eb= into /app", () => {
+test("normalizeAppLocation rewrites legacy #app into /app", () => {
   const writes: string[] = [];
   normalizeAppLocation({ pathname: "/", search: "", hash: "#app" }, (url) => writes.push(url));
   expect(writes).toEqual(["/app"]);
+});
 
-  writes.length = 0;
-  normalizeAppLocation({ pathname: "/", search: "?eb=sess-1", hash: "" }, (url) => writes.push(url));
-  expect(writes).toEqual(["/app?eb=sess-1"]);
+test("normalizeAppLocation strips eb= off the URL immediately and hands it off in-memory", () => {
+  const writes: string[] = [];
+  normalizeAppLocation({ pathname: "/", search: "?eb=sess-1", hash: "" }, (url) =>
+    writes.push(url),
+  );
+  expect(writes).toEqual(["/app"]);
+  expect(writes.join("")).not.toContain("eb");
+  expect(takePendingEbParams()).toEqual({ session: "sess-1", error: null });
+});
 
-  writes.length = 0;
-  normalizeAppLocation({ pathname: "/app", search: "?eb=sess-1", hash: "" }, (url) => writes.push(url));
+test("normalizeAppLocation strips eb= even when already on /app, keeping unrelated params", () => {
+  const writes: string[] = [];
+  normalizeAppLocation({ pathname: "/app", search: "?eb=sess-1&foo=bar", hash: "" }, (url) =>
+    writes.push(url),
+  );
+  expect(writes).toEqual(["/app?foo=bar"]);
+  expect(takePendingEbParams()).toEqual({ session: "sess-1", error: null });
+});
+
+test("normalizeAppLocation strips eb_error= the same way", () => {
+  const writes: string[] = [];
+  normalizeAppLocation({ pathname: "/", search: "?eb_error=denied", hash: "" }, (url) =>
+    writes.push(url),
+  );
+  expect(writes).toEqual(["/app"]);
+  expect(takePendingEbParams()).toEqual({ session: null, error: "denied" });
+});
+
+test("takePendingEbParams is one-shot and null when nothing is pending", () => {
+  expect(takePendingEbParams()).toBeNull();
+  normalizeAppLocation({ pathname: "/", search: "?eb=sess-2", hash: "" }, () => {});
+  expect(takePendingEbParams()).toEqual({ session: "sess-2", error: null });
+  expect(takePendingEbParams()).toBeNull();
+});
+
+test("normalizeAppLocation is a no-op without #app or eb params", () => {
+  const writes: string[] = [];
+  normalizeAppLocation({ pathname: "/app/transactions", search: "", hash: "" }, (url) =>
+    writes.push(url),
+  );
   expect(writes).toEqual([]);
+});
+
+test("a legacy #app bookmark that also carries eb= is stripped in the same step", () => {
+  const replaced: string[] = [];
+  normalizeAppLocation({ pathname: "/", search: "?eb=sess-1", hash: "#app" }, (url) =>
+    replaced.push(url),
+  );
+  expect(replaced).toEqual(["/app"]);
+  expect(takePendingEbParams()).toEqual({ session: "sess-1", error: null });
+});
+
+test("normalizeAppLocation strips error= off a signed-out /app load and remembers that the link failed", () => {
+  const writes: string[] = [];
+  normalizeAppLocation({ pathname: "/app", search: "?error=invalid_token", hash: "" }, (url) =>
+    writes.push(url),
+  );
+  expect(writes).toEqual(["/app"]);
+  expect(authLinkFailed()).toBe(true);
+});
+
+test("error= outside /app is not treated as a failed link", () => {
+  resetAuthLinkFailure();
+  normalizeAppLocation({ pathname: "/", search: "?error=x", hash: "" }, () => {});
+  expect(authLinkFailed()).toBe(false);
+});
+
+test("deep link to an archived route lands on overview", () => {
+  expect(viewFromPathname("/app/facturen")).toBe("overview");
+  expect(viewFromPathname("/app/valuta/")).toBe("overview");
+  expect(viewFromPathname("/app/belasting")).toBe("overview");
+  expect(viewFromPathname("/app/forecast")).toBe("forecast");
+});
+
+test("the intake has its own route", () => {
+  expect(pathForView("intake")).toBe("/app/intake");
+  expect(viewFromPathname("/app/intake")).toBe("intake");
+});
+
+test("what LaVega knows about you has its own route segment", () => {
+  expect(pathForView("about-you")).toBe("/app/about-you");
+  expect(viewFromPathname("/app/about-you")).toBe("about-you");
+});
+
+test("plan is a routed view at /app/plan", () => {
+  expect(pathForView("plan")).toBe("/app/plan");
+  expect(viewFromPathname("/app/plan")).toBe("plan");
+  expect(viewFromPathname("/app/plan/")).toBe("plan");
 });

@@ -1,12 +1,30 @@
 import { expect, test } from "vitest";
 import type { Tx, Rule } from "./model.js";
+import { ruleCategoryValue, ruleTextValue } from "./rules/parse.js";
 import {
-  CATEGORY_OPTIONS, uncategorizedTxs, applyCategorizations, recategorize, uncategorizedByMonth,
-  redactForAi, aiCategorizeItems, foreignCode, unknownReason, unknownBreakdown,
+  uncategorizedTxs,
+  applyCategorizations,
+  recategorize,
+  uncategorizedByMonth,
+  redactForAi,
+  scrubPersonalValues,
+  scrubPersonalValuesDeep,
+  aiCategorizeItems,
+  foreignCode,
+  unknownReason,
+  unknownBreakdown,
 } from "./categorize.js";
 
 const tx = (id: string, cp: string, amount: number, category = ""): Tx => ({
-  id, accountKey: "A1", date: "2026-08-01", amount, currency: "EUR", counterparty: cp, description: "", category, manual: false,
+  id,
+  accountKey: "A1",
+  date: "2026-08-01",
+  amount,
+  currency: "EUR",
+  counterparty: cp,
+  description: "",
+  category,
+  manual: false,
 });
 const dated = (id: string, cp: string, date: string): Tx => ({ ...tx(id, cp, -10), date });
 
@@ -19,7 +37,11 @@ test("uncategorizedTxs returns only txs that resolve to 'onbekend'", () => {
 });
 
 test("applyCategorizations sets manual category on decided txs + builds deduped rules", () => {
-  const txs = [tx("t1", "Jan Jansen priv", -10), tx("t2", "Jan Jansen priv", -12), tx("t3", "Mystery BV", -5)];
+  const txs = [
+    tx("t1", "Jan Jansen priv", -10),
+    tx("t2", "Jan Jansen priv", -12),
+    tx("t3", "Mystery BV", -5),
+  ];
   const rules: Rule[] = [];
   const out = applyCategorizations(txs, rules, [
     { id: "t1", category: "Overboekingen" },
@@ -30,10 +52,13 @@ test("applyCategorizations sets manual category on decided txs + builds deduped 
   expect(byId.t1).toMatchObject({ category: "Overboekingen", manual: true });
   expect(byId.t2).toMatchObject({ category: "Overboekingen", manual: true });
   expect(byId.t3.category).toBe(""); // invalid category ignored, tx untouched
-  // One deduped rule for "Jan Jansen priv" -> Overboekingen (not two)
-  const janRules = out.rules.filter((r) => r.match.toLowerCase().includes("jan jansen"));
+  // One deduped rule for "Jan Jansen priv" -> Overboekingen (not two). Read the
+  // shape through the helpers: generated rules are v2 (no .match/.category).
+  const janRules = out.rules.filter((r) =>
+    (ruleTextValue(r) ?? "").toLowerCase().includes("jan jansen"),
+  );
   expect(janRules).toHaveLength(1);
-  expect(janRules[0].category).toBe("Overboekingen");
+  expect(ruleCategoryValue(janRules[0]!)).toBe("Overboekingen");
 });
 
 test("applyCategorizations does not duplicate an existing rule and skips empty counterparty", () => {
@@ -43,9 +68,14 @@ test("applyCategorizations does not duplicate an existing rule and skips empty c
     { id: "t1", category: "Boodschappen" },
     { id: "t2", category: "Overboekingen" },
   ]);
-  expect(out.rules.filter((r) => r.match.toLowerCase() === "albert heijn")).toHaveLength(1); // no dup
-  expect(out.rules.some((r) => r.match === "")).toBe(false); // empty counterparty -> no rule
-  expect(out.txs.find((t) => t.id === "t2")).toMatchObject({ category: "Overboekingen", manual: true });
+  expect(
+    out.rules.filter((r) => (ruleTextValue(r) ?? "").toLowerCase() === "albert heijn"),
+  ).toHaveLength(1); // no dup
+  expect(out.rules.some((r) => (ruleTextValue(r) ?? "") === "")).toBe(false); // empty counterparty -> no rule
+  expect(out.txs.find((t) => t.id === "t2")).toMatchObject({
+    category: "Overboekingen",
+    manual: true,
+  });
 });
 
 /* --- recategorize: the pass over transactions that are ALREADY stored ----- */
@@ -95,8 +125,14 @@ test("recategorize picks up a rule the AI review just appended", () => {
   const applied = applyCategorizations(stored, [], [{ id: "t1", category: "Abonnementen" }]);
   // ...and a re-run over storage now also places t2, which was never reviewed.
   const out = recategorize(applied.txs, applied.rules);
-  expect(out.txs.find((t) => t.id === "t2")).toMatchObject({ category: "Abonnementen", manual: false });
-  expect(out.txs.find((t) => t.id === "t1")).toMatchObject({ category: "Abonnementen", manual: true });
+  expect(out.txs.find((t) => t.id === "t2")).toMatchObject({
+    category: "Abonnementen",
+    manual: false,
+  });
+  expect(out.txs.find((t) => t.id === "t1")).toMatchObject({
+    category: "Abonnementen",
+    manual: true,
+  });
 });
 
 /* --- uncategorizedByMonth: point the AI pass at the newest month first ---- */
@@ -120,16 +156,13 @@ test("uncategorizedByMonth groups the remainder newest month first", () => {
 });
 
 test("uncategorizedByMonth shrinks as rules improve", () => {
-  const stored: Tx[] = [dated("a", "Mystery Holding BV", "2026-08-02"), dated("b", "Andere BV", "2026-08-03")];
+  const stored: Tx[] = [
+    dated("a", "Mystery Holding BV", "2026-08-02"),
+    dated("b", "Andere BV", "2026-08-03"),
+  ];
   expect(uncategorizedByMonth(stored, [])[0].txs).toHaveLength(2);
   const rules: Rule[] = [{ id: "r1", match: "Mystery Holding", category: "Abonnementen" }];
   expect(uncategorizedByMonth(stored, rules)[0].txs.map((t) => t.id)).toEqual(["b"]);
-});
-
-test("CATEGORY_OPTIONS is a non-empty set including the common NL buckets", () => {
-  expect(CATEGORY_OPTIONS).toContain("Boodschappen");
-  expect(CATEGORY_OPTIONS).toContain("Overboekingen");
-  expect(CATEGORY_OPTIONS.length).toBeGreaterThan(10);
 });
 
 /* ---------------------------------------------------------------------------
@@ -142,17 +175,28 @@ test("CATEGORY_OPTIONS is a non-empty set including the common NL buckets", () =
  * ------------------------------------------------------------------------ */
 
 const abroad = (id: string, cp: string, desc: string): Tx => ({
-  id, accountKey: "A1", date: "2026-07-14", amount: -24.5, currency: "EUR",
-  counterparty: cp, description: desc, category: "", manual: false,
+  id,
+  accountKey: "A1",
+  date: "2026-07-14",
+  amount: -24.5,
+  currency: "EUR",
+  counterparty: cp,
+  description: desc,
+  category: "",
+  manual: false,
 });
 
 test("redactForAi keeps the merchant name that follows an IBAN", () => {
   // THE BUG this whole block exists for: 747 of 1.394 (53,6%) onbekend rows
   // reached the model as an EMPTY string, because the IBAN pattern was allowed
   // to hop across spaces and ate every word after the IBAN.
-  expect(redactForAi("NL17INGB0539576085 Albert Heijn 1234 Rotterdam")).toBe("Albert Heijn Rotterdam");
+  expect(redactForAi("NL17INGB0539576085 Albert Heijn 1234 Rotterdam")).toBe(
+    "Albert Heijn Rotterdam",
+  );
   expect(redactForAi("DE77100110012424146089 Wise Europe SA")).toBe("Wise Europe SA");
-  expect(redactForAi("PT50002300004565716939794 Continente Lisboa PRT")).toBe("Continente Lisboa PRT");
+  expect(redactForAi("PT50002300004565716939794 Continente Lisboa PRT")).toBe(
+    "Continente Lisboa PRT",
+  );
 });
 
 test("redactForAi still removes IBANs, amounts and dates", () => {
@@ -161,6 +205,69 @@ test("redactForAi still removes IBANs, amounts and dates", () => {
   expect(out).not.toMatch(/2026-07-14/);
   expect(out).not.toMatch(/45,00/);
   expect(out).toMatch(/Netflix/);
+});
+
+test("redactForAi now also catches the space-grouped IBAN form (L7)", () => {
+  // Verbatim from the privacy/security review's L7 finding — this form used
+  // to survive redactForAi untouched.
+  expect(redactForAi("Naar NL91 ABNA 0417 1643 00 voor Jan")).toBe("Naar voor Jan");
+});
+
+/* --- scrubPersonalValues: the server-side value-scrub (M5 + L7) ---------- */
+
+test.each([
+  ["compact IBAN, any country", "Betaling NL91ABNA0417164300 Netflix", "Betaling [IBAN] Netflix"],
+  [
+    "space-grouped IBAN (L7, verbatim)",
+    "Naar NL91 ABNA 0417 1643 00 voor Jan",
+    "Naar [IBAN] voor Jan",
+  ],
+  ["space-grouped IBAN, another country", "DE77 1001 1001 2424 1460 89 SEPA", "[IBAN] SEPA"],
+  ["email address", "Vraag: iets@voorbeeld.nl graag reageren", "Vraag: [EMAIL] graag reageren"],
+  ["NL mobile phone, 06 form", "bel 06 12345678 terug", "bel [TEL] terug"],
+  ["NL phone, +31 form", "bel +31 6 12345678 terug", "bel [TEL] terug"],
+  ["valid BSN (passes elfproef)", "BSN 123456782 bij aanvraag", "BSN [BSN] bij aanvraag"],
+  ["amount with € marker", "betaald € 45,00 aan Netflix", "betaald [BEDRAG] aan Netflix"],
+  ["amount with EUR marker", "betaald EUR 45,00 aan Netflix", "betaald [BEDRAG] aan Netflix"],
+])("scrubPersonalValues replaces %s with a stable token", (_label, input, expected) => {
+  expect(scrubPersonalValues(input)).toBe(expected);
+});
+
+test("scrubPersonalValues does not over-scrub: an 8-digit invoice number and a date stay", () => {
+  expect(scrubPersonalValues("Factuur 12345678 vervalt op 2026-07-14")).toBe(
+    "Factuur 12345678 vervalt op 2026-07-14",
+  );
+});
+
+test("scrubPersonalValues leaves a nine-digit run alone when it fails the elfproef", () => {
+  // A plausible reference/order number, not a real BSN.
+  expect(scrubPersonalValues("Referentie 123456789 ontvangen")).toBe(
+    "Referentie 123456789 ontvangen",
+  );
+});
+
+test("scrubPersonalValues keeps merchant names and free text intact", () => {
+  expect(scrubPersonalValues("Albert Heijn 1234 Rotterdam")).toBe("Albert Heijn 1234 Rotterdam");
+  expect(scrubPersonalValues("Jorien Bastiaans Kaartnr: 5238 53** **** 1748 Term: 11223344")).toBe(
+    "Jorien Bastiaans Kaartnr: 5238 53** **** 1748 Term: 11223344",
+  );
+});
+
+test("scrubPersonalValues preserves whitespace and newlines (a chat message, not a tx description)", () => {
+  expect(scrubPersonalValues("regel1\nmijn iban is NL91 ABNA 0417 1643 00\nregel3")).toBe(
+    "regel1\nmijn iban is [IBAN]\nregel3",
+  );
+});
+
+test("aiCategorizeItems' payload text is scrubbed of a space-grouped IBAN before it would leave the browser (L7)", () => {
+  const items = aiCategorizeItems([
+    abroad("t1", "NL91 ABNA 0417 1643 00", "Albert Heijn Rotterdam"),
+  ]);
+  // aiCategorizeItems builds `text` from counterparty + description, which is
+  // exactly the `text` field categorizeTxs (apps/web/src/api.ts) sends as-is —
+  // so a clean payload here is what actually leaves the browser.
+  expect(items[0].text).not.toContain("NL91");
+  expect(items[0].text).toContain("Albert Heijn Rotterdam");
 });
 
 test("aiCategorizeItems sends only {id,text,sign} and drops rows with no readable text", () => {
@@ -224,4 +331,30 @@ test("unknownBreakdown totals the onbekend rows per reason, with the countries f
   expect(byReason["geen-tekst"]).toBeUndefined();
   // Sorted biggest bucket first so the UI leads with what actually matters.
   expect(b.byReason[0].reason).toBe("buitenland");
+});
+
+test("scrubPersonalValuesDeep reaches a string at any depth and leaves numbers alone", () => {
+  const out = scrubPersonalValuesDeep({
+    summary: {
+      openingCents: 500_000,
+      drivers: [{ label: "NL17INGB0539576085 SPOTIFY AB", sign: -1, perWeekCents: -276 }],
+    },
+  });
+  expect(out.summary.drivers[0].label).toBe("[IBAN] SPOTIFY AB");
+  expect(out.summary.drivers[0].perWeekCents).toBe(-276);
+  expect(out.summary.openingCents).toBe(500_000);
+});
+
+test("scrubPersonalValuesDeep is idempotent, so the browser pass and the server pass compose", () => {
+  const once = scrubPersonalValuesDeep({ a: ["mail a@b.com", { b: "NL91 ABNA 0417 1643 00" }] });
+  expect(scrubPersonalValuesDeep(once)).toEqual(once);
+});
+
+test("scrubPersonalValuesDeep passes null and undefined through untouched", () => {
+  expect(scrubPersonalValuesDeep({ a: null, b: undefined, c: 0, d: false })).toEqual({
+    a: null,
+    b: undefined,
+    c: 0,
+    d: false,
+  });
 });

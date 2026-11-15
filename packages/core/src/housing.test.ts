@@ -4,7 +4,15 @@ import { housingKind, proposeHousingCost, resolveHousingCost } from "./housing.j
 
 let n = 0;
 const tx = (cp: string, date: string, amount: number, description = ""): Tx => ({
-  id: String(n++), accountKey: "A1", date, amount, currency: "EUR", counterparty: cp, description, category: "", manual: false,
+  id: String(n++),
+  accountKey: "A1",
+  date,
+  amount,
+  currency: "EUR",
+  counterparty: cp,
+  description,
+  category: "",
+  manual: false,
 });
 
 const months = ["2026-03", "2026-04", "2026-05", "2026-06", "2026-07", "2026-08"];
@@ -36,7 +44,10 @@ test("proposeHousingCost reads the rent off the recurring payments instead of as
   });
   // Energy is housing-categorised too, so it is offered as an alternative — but
   // the named rent stream is the proposal, not the biggest guess.
-  expect(p.alternatives.map((a) => a.counterparty)).toEqual(["Woningstichting Rochdale", "Vattenfall"]);
+  expect(p.alternatives.map((a) => a.counterparty)).toEqual([
+    "Woningstichting Rochdale",
+    "Vattenfall",
+  ]);
 });
 
 test("proposeHousingCost prefers a NAMED rent stream over a larger unnamed housing one", () => {
@@ -61,13 +72,17 @@ test("a user rule that labels an unknown landlord is enough", () => {
 test("proposeHousingCost returns null rather than a placeholder when nothing recurs", () => {
   expect(proposeHousingCost([], [])).toBeNull();
   // Housing spend, but no rhythm: two payments, wildly different, months apart.
-  expect(proposeHousingCost([tx("Huur", "2026-01-05", -1400), tx("Huur", "2026-05-05", -300)], [])).toBeNull();
+  expect(
+    proposeHousingCost([tx("Huur", "2026-01-05", -1400), tx("Huur", "2026-05-05", -300)], []),
+  ).toBeNull();
   // No housing spend at all.
   expect(proposeHousingCost(monthly("Albert Heijn", -80), [])).toBeNull();
 });
 
 test("a quarterly housing charge is not offered as a MONTHLY housing cost", () => {
-  const quarterly = ["2026-01-05", "2026-04-05", "2026-07-05"].map((d) => tx("Verhuurder Servicekosten", d, -300));
+  const quarterly = ["2026-01-05", "2026-04-05", "2026-07-05"].map((d) =>
+    tx("Verhuurder Servicekosten", d, -300),
+  );
   expect(proposeHousingCost(quarterly, [])).toBeNull();
 });
 

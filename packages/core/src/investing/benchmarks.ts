@@ -1,5 +1,5 @@
 import type { PortfolioValuePoint } from "./portfolio.js";
-import { businessDaysAfter } from "./calendar.js";
+import { isPriceFresh } from "./calendar.js";
 
 export const MAX_BENCHMARKS = 3;
 
@@ -18,6 +18,9 @@ export type BenchmarkInstrument = {
 
 export type BenchmarkSeries = BenchmarkInstrument & {
   points: Array<{ date: string; value: number | null }>;
+  /** True when `points` were converted from the instrument's native currency
+   *  into the presentation currency (see buildInvestingDashboard). */
+  converted?: boolean;
 };
 
 export type ChartMode = "euros" | "indexed";
@@ -36,11 +39,46 @@ export type IndexedSeriesPoint = {
   cashUnknown: string[];
 };
 
+/** The comparison a reader starts with before choosing one, and the benchmark
+ *  beta and alpha are measured against when the account has no selection. It
+ *  is a global equity index quoted in the presentation currency, so no FX
+ *  conversion stands between the benchmark and the portfolio return. */
+export const DEFAULT_BENCHMARK_SYMBOL = "IWDA.AS";
+export const DEFAULT_BENCHMARK: BenchmarkInstrument = {
+  symbol: DEFAULT_BENCHMARK_SYMBOL,
+  name: "MSCI World",
+  exchange: "Amsterdam",
+  currency: "EUR",
+};
+
+/** Yahoo's own names are inconsistent and often truncated ("DAX P", "EURO
+ *  STOXX 50 I"). This is the one place a major index's display name is
+ *  decided; every caller falls back to Yahoo's own name, then the symbol. */
+export const KNOWN_BENCHMARK_NAMES: Readonly<Record<string, string>> = {
+  "^GSPC": "S&P 500",
+  "IWDA.AS": "MSCI World",
+  "^GDAXI": "DAX",
+  "^STOXX50E": "Euro Stoxx 50",
+  "^AEX": "AEX",
+  "^IXIC": "Nasdaq Composite",
+  "^NDX": "Nasdaq 100",
+  "^DJI": "Dow Jones",
+  "^FTSE": "FTSE 100",
+  "^N225": "Nikkei 225",
+  "^FCHI": "CAC 40",
+};
+
+export function benchmarkDisplayName(symbol: string, fallback?: string): string {
+  return KNOWN_BENCHMARK_NAMES[symbol.trim().toUpperCase()] ?? fallback ?? symbol;
+}
+
 export function validateBenchmarkSymbols(symbols: readonly string[]): string[] {
   const normalized = symbols.map((symbol) => symbol.trim().toUpperCase());
   if (normalized.some((symbol) => !symbol)) throw new Error("Benchmark symbol is required");
-  if (normalized.length > MAX_BENCHMARKS) throw new Error(`Select at most ${MAX_BENCHMARKS} benchmarks`);
-  if (new Set(normalized).size !== normalized.length) throw new Error("Benchmark symbols must be unique");
+  if (normalized.length > MAX_BENCHMARKS)
+    throw new Error(`Select at most ${MAX_BENCHMARKS} benchmarks`);
+  if (new Set(normalized).size !== normalized.length)
+    throw new Error("Benchmark symbols must be unique");
   return normalized;
 }
 
@@ -49,7 +87,9 @@ export function deriveChartMode(benchmarkIds: readonly string[]): ChartMode {
 }
 
 /** Rebase on original visible-window start. Unknown start never moves the anchor. */
-export function computeReturnSeries(points: readonly { date: string; value: number | null }[]): ReturnPoint[] {
+export function computeReturnSeries(
+  points: readonly { date: string; value: number | null }[],
+): ReturnPoint[] {
   const anchor = points[0]?.value;
   if (anchor === null || anchor === undefined || anchor === 0) {
     return points.map(({ date }) => ({ date, cumulativeReturn: null }));
@@ -66,6 +106,7 @@ export function computeTimeWeightedReturnSeries(
 ): ReturnPoint[] {
   const flows = aggregateFlows(externalFlows);
   let previous: number | null = null;
+  let previousDate = "";
   let cumulative: number | null = null;
   return points.map((point) => {
     const value = point.value;
@@ -76,27 +117,59 @@ export function computeTimeWeightedReturnSeries(
     }
     if (previous === null || previous <= 0) {
       previous = value;
+      previousDate = point.date;
       cumulative = value > 0 ? 0 : null;
       return { date: point.date, cumulativeReturn: cumulative };
     }
-    const flow = flows.has(point.date) ? flows.get(point.date)! : 0;
+    const flow = sumFlowsBetween(flows, previousDate, point.date);
     if (flow === null) {
       previous = null;
       cumulative = null;
       return { date: point.date, cumulativeReturn: null };
     }
+    /* `previous > 0` is not enough to divide by. A flow bigger than the whole
+     * opening capital means the period is dominated by money moving in or out,
+     * not by performance, so the quotient describes nothing — EUR 6.64 growing
+     * to EUR 11,116.34 against a recorded EUR 150 yielded a 165,007% day that
+     * chained into a headline "+173,621.97%". Restart the chain instead, the
+     * same answer this function already gives a non-positive base. */
+    if (Math.abs(flow) > previous) {
+      previous = value;
+      previousDate = point.date;
+      cumulative = value > 0 ? 0 : null;
+      return { date: point.date, cumulativeReturn: cumulative };
+    }
     const daily = (value - previous - flow) / previous;
     cumulative = cumulative === null ? null : (1 + cumulative) * (1 + daily) - 1;
     previous = value;
+    previousDate = point.date;
     return { date: point.date, cumulativeReturn: cumulative };
   });
+}
+
+/** Flows dated in (after, until] belong to the interval ending at `until`; any unknown amount makes it unknown. */
+function sumFlowsBetween(
+  flows: ReadonlyMap<string, number | null>,
+  after: string,
+  until: string,
+): number | null {
+  let total = 0;
+  for (const [date, amount] of flows) {
+    if (date <= after || date > until) continue;
+    if (amount === null) return null;
+    total += amount;
+  }
+  return total;
 }
 
 function aggregateFlows(flows: readonly ExternalCashFlow[]): Map<string, number | null> {
   const result = new Map<string, number | null>();
   for (const flow of flows) {
     const current = result.get(flow.date);
-    result.set(flow.date, current === null || flow.amount === null ? null : (current ?? 0) + flow.amount);
+    result.set(
+      flow.date,
+      current === null || flow.amount === null ? null : (current ?? 0) + flow.amount,
+    );
   }
   return result;
 }
@@ -107,21 +180,33 @@ type DatedAmount = { date: string; amount: number };
 export function solveXirr(cashFlows: readonly DatedAmount[]): number | null {
   const byDate = new Map<string, number>();
   for (const cashFlow of cashFlows) {
-    if (!Number.isFinite(cashFlow.amount) || !/^\d{4}-\d{2}-\d{2}$/.test(cashFlow.date)) return null;
+    if (!Number.isFinite(cashFlow.amount) || !/^\d{4}-\d{2}-\d{2}$/.test(cashFlow.date))
+      return null;
     byDate.set(cashFlow.date, (byDate.get(cashFlow.date) ?? 0) + cashFlow.amount);
   }
-  const values = [...byDate].sort(([left], [right]) => left.localeCompare(right)).map(([date, amount]) => ({ date, amount }));
-  if (values.length < 2 || !values.some(({ amount }) => amount < 0) || !values.some(({ amount }) => amount > 0)) return null;
+  const values = [...byDate]
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([date, amount]) => ({ date, amount }));
+  if (
+    values.length < 2 ||
+    !values.some(({ amount }) => amount < 0) ||
+    !values.some(({ amount }) => amount > 0)
+  )
+    return null;
   const start = Date.parse(`${values[0]!.date}T00:00:00Z`);
   const end = Date.parse(`${values.at(-1)!.date}T00:00:00Z`);
   if (!Number.isFinite(start) || end <= start) return null;
-  const dated = values.map(({ date, amount }) => ({ years: (Date.parse(`${date}T00:00:00Z`) - start) / 31_536_000_000, amount }));
+  const dated = values.map(({ date, amount }) => ({
+    years: (Date.parse(`${date}T00:00:00Z`) - start) / 31_536_000_000,
+    amount,
+  }));
   if (dated.length === 2) {
     const ratio = dated[1]!.amount / -dated[0]!.amount;
     const rate = ratio > 0 ? Math.pow(ratio, 1 / dated[1]!.years) - 1 : Number.NaN;
     return Number.isFinite(rate) && rate > -1 ? rate : null;
   }
-  const npv = (logGrowth: number) => dated.reduce((sum, item) => sum + item.amount * Math.exp(-item.years * logGrowth), 0);
+  const npv = (logGrowth: number) =>
+    dated.reduce((sum, item) => sum + item.amount * Math.exp(-item.years * logGrowth), 0);
 
   // Search on log(1 + rate). This covers rates near -100% without unstable powers.
   const lower = Math.log(1e-9);
@@ -133,7 +218,11 @@ export function solveXirr(cashFlows: readonly DatedAmount[]): number | null {
   for (let index = 1; index <= samples; index += 1) {
     const x = lower + ((upper - lower) * index) / samples;
     const value = npv(x);
-    if (Number.isFinite(previousValue) && Number.isFinite(value) && (value === 0 || Math.sign(value) !== Math.sign(previousValue))) {
+    if (
+      Number.isFinite(previousValue) &&
+      Number.isFinite(value) &&
+      (value === 0 || Math.sign(value) !== Math.sign(previousValue))
+    ) {
       brackets.push([previousX, x]);
     }
     previousX = x;
@@ -166,11 +255,15 @@ export function computeXirrSeries(
   externalFlows: readonly ExternalCashFlow[],
 ): MwrPoint[] {
   const start = points[0];
-  if (!start || start.value === null || start.value <= 0) return points.map(({ date }) => ({ date, xirr: null }));
+  if (!start || start.value === null || start.value <= 0)
+    return points.map(({ date }) => ({ date, xirr: null }));
   const startValue = start.value;
-  const flows = [...aggregateFlows(externalFlows)].sort(([left], [right]) => left.localeCompare(right));
+  const flows = [...aggregateFlows(externalFlows)].sort(([left], [right]) =>
+    left.localeCompare(right),
+  );
   return points.map((point) => {
-    if (point.value === null || point.value <= 0 || point.date <= start.date) return { date: point.date, xirr: null };
+    if (point.value === null || point.value <= 0 || point.date <= start.date)
+      return { date: point.date, xirr: null };
     const dated: DatedAmount[] = [{ date: start.date, amount: -startValue }];
     for (const [date, amount] of flows) {
       if (date < start.date || date > point.date || amount === 0) continue;
@@ -187,7 +280,9 @@ export function alignBenchmarkValues(
   dates: readonly string[],
   points: readonly { date: string; value: number | null }[],
 ): Array<{ date: string; value: number | null }> {
-  const sorted = [...points].filter((point) => point.value !== null).sort((left, right) => left.date.localeCompare(right.date));
+  const sorted = [...points]
+    .filter((point) => point.value !== null)
+    .sort((left, right) => left.date.localeCompare(right.date));
   let cursor = 0;
   let latest: (typeof sorted)[number] | undefined;
   return [...dates].map((date) => {
@@ -195,7 +290,10 @@ export function alignBenchmarkValues(
       latest = sorted[cursor];
       cursor += 1;
     }
-    return { date, value: !latest || businessDaysAfter(latest.date, date) > 5 ? null : latest.value };
+    return {
+      date,
+      value: !latest || !isPriceFresh(latest.date, date) ? null : latest.value,
+    };
   });
 }
 
@@ -205,30 +303,48 @@ export function computeBenchmarkXirrSeries(
   externalFlows: readonly ExternalCashFlow[],
 ): MwrPoint[] {
   const start = portfolio[0];
-  const requestedDates = [...new Set([
-    ...portfolio.map(({ date }) => date),
-    ...externalFlows.map(({ date }) => date),
-  ])].sort();
-  const prices = new Map(alignBenchmarkValues(requestedDates, benchmark).map((point) => [point.date, point.value]));
+  const requestedDates = [
+    ...new Set([...portfolio.map(({ date }) => date), ...externalFlows.map(({ date }) => date)]),
+  ].sort();
+  const prices = new Map(
+    alignBenchmarkValues(requestedDates, benchmark).map((point) => [point.date, point.value]),
+  );
   const startPrice = start ? prices.get(start.date) : null;
-  if (!start || start.value === null || start.value <= 0 || startPrice === null || startPrice === undefined || startPrice <= 0) {
+  if (
+    !start ||
+    start.value === null ||
+    start.value <= 0 ||
+    startPrice === null ||
+    startPrice === undefined ||
+    startPrice <= 0
+  ) {
     return portfolio.map(({ date }) => ({ date, xirr: null }));
   }
-  const flows = [...aggregateFlows(externalFlows)].sort(([left], [right]) => left.localeCompare(right));
+  const flows = [...aggregateFlows(externalFlows)].sort(([left], [right]) =>
+    left.localeCompare(right),
+  );
   return portfolio.map((point) => {
     const terminalPrice = prices.get(point.date);
-    if (point.date <= start.date || terminalPrice === null || terminalPrice === undefined || terminalPrice <= 0) return { date: point.date, xirr: null };
+    if (
+      point.date <= start.date ||
+      terminalPrice === null ||
+      terminalPrice === undefined ||
+      terminalPrice <= 0
+    )
+      return { date: point.date, xirr: null };
     let units = start.value! / startPrice;
     const dated: DatedAmount[] = [{ date: start.date, amount: -start.value! }];
     for (const [date, amount] of flows) {
       if (date < start.date || date > point.date || amount === 0) continue;
       const flowPrice = prices.get(date);
-      if (amount === null || flowPrice === null || flowPrice === undefined || flowPrice <= 0) return { date: point.date, xirr: null };
+      if (amount === null || flowPrice === null || flowPrice === undefined || flowPrice <= 0)
+        return { date: point.date, xirr: null };
       units += amount / flowPrice;
       dated.push({ date, amount: -amount });
     }
     const terminalValue = units * terminalPrice;
-    if (!Number.isFinite(terminalValue) || terminalValue <= 0) return { date: point.date, xirr: null };
+    if (!Number.isFinite(terminalValue) || terminalValue <= 0)
+      return { date: point.date, xirr: null };
     dated.push({ date: point.date, amount: terminalValue });
     return { date: point.date, xirr: solveXirr(dated) };
   });
@@ -239,23 +355,59 @@ export function buildIndexedSeries(
   benchmarks: readonly BenchmarkSeries[],
   externalFlows: readonly ExternalCashFlow[] = [],
 ): IndexedSeriesPoint[] {
-  const reachablePortfolio = portfolio.map((point) => ({ date: point.date, value: point.cashUnknown.length ? null : point.value }));
+  const reachablePortfolio = portfolio.map((point) => ({
+    date: point.date,
+    value: point.cashUnknown.length ? null : point.value,
+  }));
   const portfolioReturns = computeTimeWeightedReturnSeries(reachablePortfolio, externalFlows);
   const portfolioXirr = computeXirrSeries(reachablePortfolio, externalFlows);
-  const alignedValues = new Map(benchmarks.map((benchmark) => [benchmark.symbol, alignBenchmarkValues(portfolio.map(({ date }) => date), benchmark.points)]));
-  const benchmarkReturns = new Map(benchmarks.map((benchmark) => {
-    const aligned = alignedValues.get(benchmark.symbol) ?? [];
-    return [benchmark.symbol, new Map(computeReturnSeries(aligned).map((point) => [point.date, point.cumulativeReturn]))];
-  }));
-  const benchmarkXirr = new Map(benchmarks.map((benchmark) => [benchmark.symbol, computeBenchmarkXirrSeries(reachablePortfolio, benchmark.points, externalFlows)]));
+  const alignedValues = new Map(
+    benchmarks.map((benchmark) => [
+      benchmark.symbol,
+      alignBenchmarkValues(
+        portfolio.map(({ date }) => date),
+        benchmark.points,
+      ),
+    ]),
+  );
+  const benchmarkReturns = new Map(
+    benchmarks.map((benchmark) => {
+      const aligned = alignedValues.get(benchmark.symbol) ?? [];
+      return [
+        benchmark.symbol,
+        new Map(computeReturnSeries(aligned).map((point) => [point.date, point.cumulativeReturn])),
+      ];
+    }),
+  );
+  const benchmarkXirr = new Map(
+    benchmarks.map((benchmark) => [
+      benchmark.symbol,
+      computeBenchmarkXirrSeries(reachablePortfolio, benchmark.points, externalFlows),
+    ]),
+  );
   return portfolio.map((point, index) => ({
     date: point.date,
     portfolioReturn: portfolioReturns[index]?.cumulativeReturn ?? null,
-    benchmarkReturns: Object.fromEntries(benchmarks.map((benchmark) => [benchmark.symbol, benchmarkReturns.get(benchmark.symbol)?.get(point.date) ?? null])),
+    benchmarkReturns: Object.fromEntries(
+      benchmarks.map((benchmark) => [
+        benchmark.symbol,
+        benchmarkReturns.get(benchmark.symbol)?.get(point.date) ?? null,
+      ]),
+    ),
     portfolioValue: point.value,
-    benchmarkValues: Object.fromEntries(benchmarks.map((benchmark) => [benchmark.symbol, alignedValues.get(benchmark.symbol)?.[index]?.value ?? null])),
+    benchmarkValues: Object.fromEntries(
+      benchmarks.map((benchmark) => [
+        benchmark.symbol,
+        alignedValues.get(benchmark.symbol)?.[index]?.value ?? null,
+      ]),
+    ),
     portfolioXirr: portfolioXirr[index]?.xirr ?? null,
-    benchmarkXirr: Object.fromEntries(benchmarks.map((benchmark) => [benchmark.symbol, benchmarkXirr.get(benchmark.symbol)?.[index]?.xirr ?? null])),
+    benchmarkXirr: Object.fromEntries(
+      benchmarks.map((benchmark) => [
+        benchmark.symbol,
+        benchmarkXirr.get(benchmark.symbol)?.[index]?.xirr ?? null,
+      ]),
+    ),
     unpriced: point.unpriced,
     cashUnknown: point.cashUnknown,
   }));

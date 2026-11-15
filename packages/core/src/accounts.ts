@@ -8,7 +8,9 @@ import { norm, txBase, txId } from "./hash.js";
  *  which means that suffix silently turns one real card into two accounts. It
  *  is never part of a real account identity, so it goes before any matching. */
 export function stripDownloadSuffix(key: string): string {
-  return String(key ?? "").replace(/\s*\(\d+\)\s*$/, "").trim();
+  return String(key ?? "")
+    .replace(/\s*\(\d+\)\s*$/, "")
+    .trim();
 }
 
 /** The domestic account number used to spot the SAME real account imported two
@@ -33,13 +35,20 @@ export type DuplicateGroup = { canonicalId: string; accounts: Account[]; survivo
 /** Higher = better survivor: a full IBAN dominates, then a known balance, then a
  *  set type, then a real name (not just the key echoed back). */
 function survivorScore(a: Account): number {
-  return (findIban(a.iban) ? 8 : 0) + (a.balance != null ? 4 : 0) + (a.type ? 2 : 0) + (a.name && a.name !== a.key ? 1 : 0);
+  return (
+    (findIban(a.iban) ? 8 : 0) +
+    (a.balance != null ? 4 : 0) +
+    (a.type ? 2 : 0) +
+    (a.name && a.name !== a.key ? 1 : 0)
+  );
 }
 
 /** Auto-pick the account to keep when merging a duplicate group. Deterministic:
  *  best score wins, ties broken by key string order. */
 export function pickSurvivor(accs: Account[]): Account {
-  return [...accs].sort((a, b) => survivorScore(b) - survivorScore(a) || a.key.localeCompare(b.key))[0];
+  return [...accs].sort(
+    (a, b) => survivorScore(b) - survivorScore(a) || a.key.localeCompare(b.key),
+  )[0];
 }
 
 function addTo(map: Map<string, Account[]>, key: string, a: Account): void {
@@ -86,7 +95,9 @@ export function findDuplicateAccounts(accounts: Account[]): DuplicateGroup[] {
       if (name) addTo(byName, name, a);
     }
   }
-  return [...toGroups(byNumber), ...toGroups(byName)].sort((a, b) => a.canonicalId.localeCompare(b.canonicalId));
+  return [...toGroups(byNumber), ...toGroups(byName)].sort((a, b) =>
+    a.canonicalId.localeCompare(b.canonicalId),
+  );
 }
 
 /** Merge `duplicateKey` into `survivorKey`: reassign the duplicate's txs to the
@@ -96,25 +107,39 @@ export function findDuplicateAccounts(accounts: Account[]): DuplicateGroup[] {
  *  survivor's occurrence count (matches `assignTxIds`). The duplicate account is
  *  dropped; the survivor inherits the duplicate's IBAN only if it had none (all
  *  other survivor fields — entity/type/balance — are kept). Pure; returns fresh
- *  arrays. No-op if the keys are equal or either account is missing. */
+ *  arrays. No-op if the keys are equal or either account is missing.
+ *
+ *  `txIdRemap` is the SAME merge stated for records that point at txs — transfer
+ *  pairs (WS1.1) and, later, bill and document links. Each old id of the
+ *  duplicate account maps to the id it has after the merge, or to null when the
+ *  row was absorbed as an overlap. Without it a persisted pair keeps pointing at
+ *  an id that no longer exists and is silently orphaned (plan §2.2). The
+ *  survivor's own rows keep their ids and are deliberately absent from the map:
+ *  absence means "untouched", so a caller never has to remap what it did not
+ *  change. */
 export function mergeAccounts(
   accounts: Account[],
   txs: Tx[],
   survivorKey: string,
   duplicateKey: string,
-): { accounts: Account[]; txs: Tx[] } {
+): { accounts: Account[]; txs: Tx[]; txIdRemap: Map<string, string | null> } {
   const survivor = accounts.find((a) => a.key === survivorKey);
   const duplicate = accounts.find((a) => a.key === duplicateKey);
-  if (survivorKey === duplicateKey || !survivor || !duplicate) return { accounts, txs };
+  if (survivorKey === duplicateKey || !survivor || !duplicate) {
+    return { accounts, txs, txIdRemap: new Map() };
+  }
 
   const survivorTxs = txs.filter((t) => t.accountKey === survivorKey);
   const dupTxs = txs.filter((t) => t.accountKey === duplicateKey);
-  const untouched = txs.filter((t) => t.accountKey !== survivorKey && t.accountKey !== duplicateKey);
+  const untouched = txs.filter(
+    (t) => t.accountKey !== survivorKey && t.accountKey !== duplicateKey,
+  );
 
   // How many the survivor already holds per identity base. Its base already uses
   // survivorKey, and (from assignTxIds) its occurrences are exactly 1..count.
   const survivorCount = new Map<string, number>();
-  for (const t of survivorTxs) survivorCount.set(txBase(t), (survivorCount.get(txBase(t)) ?? 0) + 1);
+  for (const t of survivorTxs)
+    survivorCount.set(txBase(t), (survivorCount.get(txBase(t)) ?? 0) + 1);
 
   // Re-key the duplicate's txs to the survivor and group by base.
   const dupByBase = new Map<string, Tx[]>();
@@ -131,9 +156,18 @@ export function mergeAccounts(
   // Surplus copies get occurrences have+1..dupCount → ids that can't collide
   // with the survivor's existing 1..have.
   const added: Tx[] = [];
+  const txIdRemap = new Map<string, string | null>();
   for (const [base, group] of dupByBase) {
     const have = survivorCount.get(base) ?? 0;
-    for (let k = have; k < group.length; k++) added.push({ ...group[k], id: txId(base, k + 1) });
+    for (let k = 0; k < group.length; k++) {
+      if (k < have) {
+        txIdRemap.set(group[k].id, null); // absorbed: the survivor already has this movement
+      } else {
+        const id = txId(base, k + 1);
+        txIdRemap.set(group[k].id, id);
+        added.push({ ...group[k], id });
+      }
+    }
   }
 
   const nextTxs = [...untouched, ...survivorTxs, ...added];
@@ -141,5 +175,36 @@ export function mergeAccounts(
   const nextAccounts = accounts
     .filter((a) => a.key !== duplicateKey)
     .map((a) => (a.key === survivorKey ? mergedSurvivor : a));
-  return { accounts: nextAccounts, txs: nextTxs };
+  return { accounts: nextAccounts, txs: nextTxs, txIdRemap };
+}
+
+/** What an account still has not told us, and that a screen may ask for.
+ *
+ *  `iban` and `type` only. A missing BALANCE is already reported by the totals
+ *  card, which has to mention it anyway — it is the reason the total is
+ *  partial — and saying it twice on one screen is nagging, not helping.
+ *
+ *  Both gaps cost something concrete, which is why they are worth asking about
+ *  at all and why the view can say why:
+ *    · no IBAN — an invoice cannot be matched to the account that paid it, so
+ *      LaVega cannot tell a sales invoice from a purchase invoice for it;
+ *    · no type — a payment account and a savings account are not compared on
+ *      the same things, so costs and interest are left out rather than guessed.
+ */
+export type AccountGap = "iban" | "type";
+
+export type AccountGaps = { key: string; name: string; gaps: AccountGap[] };
+
+/** One entry per account that is missing something, worst first. Accounts that
+ *  have told us everything are simply absent — an empty array is the honest
+ *  representation of "nothing to ask". */
+export function accountGaps(accounts: readonly Account[]): AccountGaps[] {
+  const out: AccountGaps[] = [];
+  for (const a of accounts) {
+    const gaps: AccountGap[] = [];
+    if (!findIban(a.iban)) gaps.push("iban");
+    if (!a.type || a.type.length === 0) gaps.push("type");
+    if (gaps.length > 0) out.push({ key: a.key, name: a.bank || a.name || a.key, gaps });
+  }
+  return out.sort((x, y) => y.gaps.length - x.gaps.length || x.key.localeCompare(y.key));
 }

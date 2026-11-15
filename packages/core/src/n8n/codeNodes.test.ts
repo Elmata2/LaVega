@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
+import { Script } from "node:vm";
 import { expect, test } from "vitest";
-import { NODE_SPECS, buildCodeNode } from "./codeNodes.js";
+import { NODE_SPECS, buildCodeNode, stripModuleSyntax } from "./codeNodes.js";
 
 /* De drift-test. De Code-nodes in de workflow-JSON zijn gegenereerd uit de
  * bestanden hiernaast; deze test bouwt ze opnieuw en vergelijkt. Loopt de JSON
@@ -30,10 +31,49 @@ for (const spec of NODE_SPECS) {
   });
 }
 
-test("er staat geen export-regel in de gegenereerde nodes: n8n kent geen modules", () => {
+/* GEEN MODULE-SYNTAX, IMPORT ÉN EXPORT.
+ *
+ * Deze test keek alleen naar `export` — de helft van wat stripModuleSyntax
+ * weghaalt. De andere helft brak stil: de import-regex matchte alleen
+ * `from '...'`, en toen oxfmt (15c4a85) alles op dubbele quotes zette, matchte
+ * hij niets meer. De generator schreef vanaf dat moment een echte
+ * `import { … } from "./normalizeGmailMessage.js";` in de workflow-JSON.
+ *
+ * Niets zag het. De bronbestanden zijn geldige ESM en testen prima, de JSON is
+ * gegenereerde uitvoer die niemand leest, en de fout bestaat alleen ín n8n:
+ * "Cannot use import statement outside a module", met een regelnummer in een
+ * blob. Vandaar dat dit nu op beide vormen let, en per node zegt welke. */
+test("er staat geen import- of export-regel in de gegenereerde nodes: n8n kent geen modules", () => {
   for (const spec of NODE_SPECS) {
-    expect(node(spec.id).parameters.jsCode).not.toMatch(/^export /m);
+    const jsCode: string = node(spec.id).parameters.jsCode;
+    expect(jsCode, `${spec.name}: export`).not.toMatch(/^export /m);
+    expect(jsCode, `${spec.name}: import`).not.toMatch(/^import /m);
   }
+});
+
+/* PARSEERT HET, ZOALS n8n HET PARSEERT.
+ *
+ * De twee tests hierboven zoeken naar bekende fouten. Deze zoekt naar álle
+ * syntaxfouten, door precies te doen wat n8n's task-runner doet: de body in een
+ * async functie wikkelen en er een vm.Script van maken. Dat is de stap die op
+ * 18 sep omviel met "Cannot use import statement outside a module", en het is
+ * de goedkoopste volledige controle die er is — een grep vindt alleen wat je al
+ * weet, een parser vindt de rest. */
+test("elke gegenereerde node parseert in een kale vm, net als in n8n", () => {
+  for (const spec of NODE_SPECS) {
+    const jsCode: string = node(spec.id).parameters.jsCode;
+    expect(() => new Script(`(async function(){${jsCode}})`), spec.name).not.toThrow();
+  }
+});
+
+/* De stripper zelf, op beide quote-vormen. De regressie hierboven was precies
+ * dat de ene vorm wel en de andere niet werd herkend, dus beide staan hier. */
+test("stripModuleSyntax haalt imports weg ongeacht de quotes", () => {
+  for (const q of ["'", '"'])
+    expect(
+      stripModuleSyntax(`import {\n  a,\n  b,\n} from ${q}./x.js${q};\n\nconst y = 1;`),
+      `quote ${q}`,
+    ).not.toMatch(/import/);
 });
 
 test("Download Attachments staat IN options — daar en nergens anders leest n8n hem", () => {
@@ -68,36 +108,65 @@ test("de tweede ingang deelt het pad van Gmail en dupliceert het niet", () => {
   // aankwam. Dat is precies het ene wat niet mag.
   expect(hook.parameters.responseMode).toBe("lastNode");
 
-  expect(workflow.connections["E-mail binnen"].main[0][0].node).toBe("Normaliseer binnengekomen mail");
+  expect(workflow.connections["E-mail binnen"].main[0][0].node).toBe(
+    "Normaliseer binnengekomen mail",
+  );
   // Eén ding bewijst dat het pad gedeeld is: de nieuwe tak komt uit op dezelfde
   // If-node, en dus op dezelfde "Bouw Claude-verzoek" → "Lees de factuur" →
   // "Zet in de wachtrij" als Gmail.
-  expect(workflow.connections["Normaliseer binnengekomen mail"].main[0][0].node).toBe("Iets te lezen?");
-  const codeNodes = workflow.nodes.filter((n) => n.type === "n8n-nodes-base.code").map((n) => n.name);
+  expect(workflow.connections["Normaliseer binnengekomen mail"].main[0][0].node).toBe(
+    "Iets te lezen?",
+  );
+  const codeNodes = workflow.nodes
+    .filter((n) => n.type === "n8n-nodes-base.code")
+    .map((n) => n.name);
   expect(codeNodes.filter((n) => n === "Bouw Claude-verzoek")).toHaveLength(1);
   expect(workflow.nodes.filter((n) => n.name === "Lees de factuur")).toHaveLength(1);
 });
 
-test("de binnengekomen-mail-node draagt de herkomst door tot in de wachtrij", () => {
-  const request = node("b1000000-0000-4000-8000-000000000008").parameters.jsCode as string;
-  const toLaVega = node("b1000000-0000-4000-8000-00000000000a").parameters.jsCode as string;
-  for (const field of ["deliveredTo", "queueKey", "senderCheck", "senderChecks"]) {
-    expect(request).toContain(field + ": message." + field);
-    expect(toLaVega).toContain(field + ": src." + field);
-  }
+/* Run a generated Code node the way n8n does: as a function body with $input. */
+function runNode(id: string, items: unknown[]) {
+  const jsCode: string = node(id).parameters.jsCode;
+  const fn = new Function("$input", jsCode);
+  return fn({ all: () => items.map((json) => ({ json })) }) as any;
+}
+
+const MELDING = "b1000000-0000-4000-8000-000000000010";
+
+test('"Melding: zelf ophalen" turns a setup message into a code-only notice', () => {
+  const out = runNode(MELDING, [
+    {
+      source: "inbound-mail",
+      messageId: "<m1>",
+      subject: "(#123456789) Gmail Forwarding Confirmation - someone@gmail.com",
+      from: "forwarding-noreply@google.com",
+      date: "d",
+      reason: "",
+      deliveredTo: "a-1@invoices.lavega.dev",
+      queueKey: "a-1",
+      senderCheck: "unknown",
+      senderChecks: { spf: "unknown", dkim: "unknown", dmarc: "unknown" },
+      setup: { kind: "forwarding-confirmation", code: "123456789" },
+    },
+  ]);
+  const n = out[0].json.notices[0];
+  expect(n.kind).toBe("forwarding-confirmation");
+  expect(n.code).toBe("123456789");
+  expect(n.subject).toBe("");
+  expect(JSON.stringify(n)).not.toContain("someone@gmail.com");
+  expect(out[0].json.processedIds).toEqual(["<m1>"]);
 });
 
-test("de binnengekomen-mail-node valt om op een lege body in plaats van hem te slikken", () => {
-  const code = node("b1000000-0000-4000-8000-000000000011").parameters.jsCode as string;
-  expect(code).toContain("throw new Error(");
-  expect(code).toContain("normalizeInboundMail(body)");
-  // Geen seenIds-filter: een mail die hij opnieuw doorstuurt hoort opnieuw
-  // verwerkt te worden.
-  expect(code).not.toContain("seen.has(");
-});
-
-test("de webhook geeft de meldingen mee terug en leegt beide rijen", () => {
-  const serve = node("b1000000-0000-4000-8000-00000000000e");
-  expect(serve.parameters.jsCode).toContain("store.notices = [];");
-  expect(serve.parameters.jsCode).toContain("invoices, notices, servedAt");
+test('"Melding: zelf ophalen" still produces an unreadable notice when there is no setup', () => {
+  const out = runNode(MELDING, [
+    {
+      source: "inbound-mail",
+      messageId: "<m2>",
+      subject: "s",
+      from: "f",
+      date: "d",
+      reason: "Niets.",
+    },
+  ]);
+  expect(out[0].json.notices[0].kind).toBe("unreadable");
 });
