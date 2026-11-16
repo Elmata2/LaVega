@@ -3314,11 +3314,11 @@ export type TravelCopy = {
      *  identity ("ING betaalpas") — that string stays Dutch, it's a business
      *  key, but `SpendOption.productKind` carries the same fact for display. */
     productKindWord: Record<"betaalpas" | "creditcard", string>;
-    /** "Daar betaal je in euro's — omwisselen is niet nodig." One string for
+    /** "Daar betaal je in euro's: niets te wisselen." One string for
      *  THREE kinds' "eur" variant (`PayHeadline`, `JourneyHeadline`,
      *  `ConvertStepNote`) — see the comment at `JourneyHeadline` in travel.ts.
      *  `WithdrawalHeadline`'s "eur" is about PINNEN, not betalen, and is its
-     *  own separate sentence (`withdrawHeadline.eur`). */
+     *  own separate sentence (`answer.pin.eur`). */
     euroNoExchangeNeeded: string;
     /** `FeePeriod` ("maand"/"jaar") said as "per maand"/"per jaar". */
     periodWord: (period: "maand" | "jaar") => string;
@@ -3343,41 +3343,58 @@ export type TravelCopy = {
     viaUnknownConvert: string;
     viaUnknownTransfer: string;
   };
-  /** Renders `PayHeadline`'s "catalogue-card" variant — the one sentence the
-   *  block leads with when the recommendation is a card he does not hold. */
-  payHeadline: {
-    /** " dat kost je niets op € 1.000" — note the exact original had no space
-     *  before "€1.000" is a DIFFERENT sentence (`journeyHeadline.costFree`);
-     *  this one keeps the space, byte-for-byte as `payHeadline` wrote it. */
-    costFree: string;
-    /** " {amount} op € 1.000" */
-    costAmount: (amount: string) => string;
-    /** ", {amount} minder dan met je eigen {ownProduct}" */
-    versusOwn: (amount: string, ownProduct: string) => string;
-    /** "Betaal met {product}:{cost}{versus}. Die heb je nog niet — die moet je
-     *  eerst openen.{holdingCostTail}" */
-    catalogueCard: (
+  /** The block's visible answers. Each is ONE short line (the move and the
+   *  number) and, where there is reasoning behind it, 1-2 sentences that sit
+   *  behind the "i" (`ToonMeer` variant "info"). Built from core's structs in
+   *  TravelBlock.tsx (`payAnswer`, `withdrawAnswer`); no LLM text. */
+  answer: {
+    /** Accessible name of the "i" behind an answer. */
+    whySummary: string;
+    /** "{amount} op € 1.000" */
+    perReference: (amount: string) => string;
+    /** "geen wisselkosten" */
+    free: string;
+    /** "Betaal met {provider}: {cost}." (cost null: no figure known) */
+    payDirect: (provider: string, cost: string | null) => string;
+    /** "Zet geld naar {via}, betaal daar: {cost}." */
+    payVia: (via: string, cost: string | null) => string;
+    /** "Open {product}: {saving} minder dan met je {own} op € 1.000." A saving is
+     *  never shown without the card it is measured against; with no own card to
+     *  compare with, the card's own cost stands alone. */
+    payOpen: (
       product: string,
-      cost: string,
-      versus: string,
-      holdingCostTail: string,
+      cost: string | null,
+      versus: { saving: string; own: string } | null,
     ) => string;
-  };
-  /** Renders `JourneyHeadline` — the answer's fallback when it is one of his
-   *  own routes rather than a catalogue card. */
-  journeyHeadline: {
-    /** "Betaal direct met {provider}." */
-    direct: (provider: string) => string;
-    /** "Zet je reisbudget van {fundedFrom} naar {via}{via method suffix} en
-     *  betaal daar." */
-    via: (fundedFrom: string, viaProduct: string, method: string | null) => string;
-    /** " Dat kost je niets op €1.000." — NO space before "€1.000", exactly as
-     *  `journeyHeadline` originally wrote it; a different string from
-     *  `payHeadline.costFree`, which does have the space. */
-    costFree: string;
-    /** " Dat kost {amount} op € 1.000." */
-    costAmount: (amount: string) => string;
-    noRoute: string;
+    /** "Deze kaart: {cost}." — the card's own exchange cost, behind the "i". */
+    cardCost: (cost: string) => string;
+    cheapestOwn: string;
+    /** "Overzetten van {from} via {method} is gratis." from may be null. */
+    transferFree: (from: string | null, method: string) => string;
+    transferPlain: (from: string) => string;
+    movesNothing: string;
+    notHeldYet: string;
+    noTariffs: string;
+    noCard: string;
+    addCard: string;
+    pin: {
+      eur: string;
+      eurWhy: string;
+      noAccounts: string;
+      unknown: string;
+      unknownWhy: string;
+      /** "{amount} per {reference}{pctSuffix}" */
+      price: (amount: string, reference: string, pctSuffix: string) => string;
+      /** "Pin met {product}: {price}." */
+      line: (product: string, price: string) => string;
+      /** The visible warning under the line (after the "Let op:" label). */
+      flatFee: (provider: string, amount: string, pct: string) => string;
+      missingOne: (names: string) => string;
+      missingMany: (names: string) => string;
+      ownUnknown: string;
+      ownKnown: (ownProduct: string, amount: string, extra: string) => string;
+      ownExtra: (amount: string) => string;
+    };
   };
   /** Renders `VersusNote`, the runner-up clause `journeyHeadline` appends. */
   versusNote: {
@@ -3456,40 +3473,6 @@ export type TravelCopy = {
     moveFundsFree: (from: string, to: string, method: string) => string;
     /** "Zet je reisbudget van {from} naar {to} en betaal daar." */
     moveFundsPlain: (from: string, to: string) => string;
-  };
-  /** Renders `WithdrawalHeadline` — the "Pinnen:" line's own answer, and the
-   *  nested `MissingCashNote`/`SmallWithdrawalPenalty`/`OwnWithdrawalComparison`
-   *  it carries. A DIFFERENT "eur" sentence from `common.euroNoExchangeNeeded`:
-   *  this screen is about withdrawing, not paying. */
-  withdrawHeadline: {
-    eur: string;
-    noAccounts: string;
-    /** "Van geen enkele kaart weten we wat geld pinnen in het buitenland kost
-     *  — dat is een aparte prijs, meestal hoger dan betalen.{missing}" */
-    noKnownPrice: (missing: string) => string;
-    /** "{amount} voor {reference}{pctSuffix}" */
-    priceLine: (amount: string, reference: string, pctSuffix: string) => string;
-    /** "Het voordeligst pin je met {product}: {price}.{small}{missing}" */
-    held: (product: string, price: string, small: string, missing: string) => string;
-    /** "Het voordeligst pin je met {product}: {price}. Die heb je nog niet.{own}{holdingTail}{small}{missing}" */
-    notHeld: (
-      product: string,
-      price: string,
-      own: string,
-      holdingTail: string,
-      small: string,
-      missing: string,
-    ) => string;
-    ownUnknown: string;
-    /** " Van jouw kaarten is {ownProduct} de goedkoopste die we kunnen aantonen: {amount}{extra}." */
-    ownKnown: (ownProduct: string, amount: string, extra: string) => string;
-    /** ", dus {amount} duurder" */
-    ownExtraCost: (amount: string) => string;
-    /** " Er zit bij {provider} een vast bedrag per opname bij, dus {amount}
-     *  pinnen kost je {pct} — neem in één keer meer op." */
-    smallPenalty: (provider: string, amount: string, pct: string) => string;
-    missingCashSingular: (names: string) => string;
-    missingCashPlural: (names: string) => string;
   };
   /** Renders `WithdrawalFeeUnknownReason` — why one of his cards' withdrawal
    *  price is unknown, used both by `CashSection`'s per-row reason and (via
@@ -3739,7 +3722,7 @@ const travelCopy_nl: TravelCopy = {
     homeAssumedNote: "Nog geen thuisland gekozen: deze uitkomsten gaan uit van Nederland.",
     homeAssumedChange: "Kies je eigen land",
   },
-  empty: "Kies een land en LaVega zegt waar je je geld het best bewaart, wisselt en uitgeeft.",
+  empty: "Kies een land voor je beste kaart.",
   badge: {
     notYours: "nog niet van jou",
   },
@@ -3749,7 +3732,7 @@ const travelCopy_nl: TravelCopy = {
     caveatLabel: "Let op:",
     noAccountsKnown: "Nog geen kaarten of betaalrekeningen bekend.",
     productKindWord: { betaalpas: "betaalpas", creditcard: "creditcard" },
-    euroNoExchangeNeeded: "Daar betaal je in euro's — omwisselen is niet nodig.",
+    euroNoExchangeNeeded: "Daar betaal je in euro's: niets te wisselen.",
     periodWord: (period) => (period === "maand" ? "per maand" : "per jaar"),
     overHorizon: (words) => ` over ${words}`,
     horizonWords: (n, costPeriod) =>
@@ -3768,20 +3751,50 @@ const travelCopy_nl: TravelCopy = {
     viaUnknownConvert: "wisselkosten nog onbekend",
     viaUnknownTransfer: "overboekkosten nog onbekend",
   },
-  payHeadline: {
-    costFree: " dat kost je niets op € 1.000",
-    costAmount: (amount) => ` ${amount} op € 1.000`,
-    versusOwn: (amount, ownProduct) => `, ${amount} minder dan met je eigen ${ownProduct}`,
-    catalogueCard: (product, cost, versus, holdingCostTail) =>
-      `Betaal met ${product}:${cost}${versus}. Die heb je nog niet — die moet je eerst openen.${holdingCostTail}`,
-  },
-  journeyHeadline: {
-    direct: (provider) => `Betaal direct met ${provider}.`,
-    via: (fundedFrom, viaProduct, method) =>
-      `Zet je reisbudget van ${fundedFrom} naar ${viaProduct}${method ? ` via ${method} (gratis)` : ""} en betaal daar.`,
-    costFree: " Dat kost je niets op €1.000.",
-    costAmount: (amount) => ` Dat kost ${amount} op € 1.000.`,
-    noRoute: "Nog geen route met bekende voorwaarden — ververs eerst de voorwaarden.",
+  answer: {
+    whySummary: "Uitleg bij dit antwoord",
+    perReference: (amount) => `${amount} op € 1.000`,
+    free: "geen wisselkosten",
+    payDirect: (provider, cost) =>
+      cost ? `Betaal met ${provider}: ${cost}.` : `Betaal met ${provider}.`,
+    payVia: (via, cost) =>
+      cost
+        ? `Zet geld over naar ${via}, betaal daar: ${cost}.`
+        : `Zet geld over naar ${via} en betaal daar.`,
+    payOpen: (product, cost, versus) =>
+      versus
+        ? `Open ${product}: ${versus.saving} minder dan met je ${versus.own} op € 1.000.`
+        : `Open ${product}${cost ? `: ${cost}` : ""}.`,
+    cardCost: (cost) => `Deze kaart: ${cost}.`,
+    cheapestOwn: "Dit is de goedkoopste kaart die je al hebt.",
+    transferFree: (from, method) =>
+      from
+        ? `Overzetten van ${from} via ${method} is gratis.`
+        : `Overzetten via ${method} is gratis.`,
+    transferPlain: (from) => `Je zet het geld over van ${from}.`,
+    movesNothing: "LaVega verplaatst zelf niets.",
+    notHeldYet: "Je hebt deze kaart nog niet.",
+    noTariffs: "Nog geen tarieven van je kaarten bekend.",
+    noCard: "Nog geen kaart bekend.",
+    addCard: "Voeg een betaalpas of creditcard toe, met de bank erbij.",
+    pin: {
+      eur: "Daar pin je in euro's: geen opslag voor vreemde valuta.",
+      eurWhy: "Wat je bank voor een opname rekent, staat niet in onze bronnen.",
+      noAccounts: "Nog geen kaart om mee te pinnen.",
+      unknown: "Pinprijs van je kaarten onbekend.",
+      unknownWhy: "Pinnen is een aparte prijs, meestal hoger dan betalen.",
+      price: (amount, reference, pctSuffix) => `${amount} op ${reference}${pctSuffix}`,
+      line: (product, price) => `Pin met ${product}: ${price}.`,
+      flatFee: (provider, amount, pct) =>
+        `Vast bedrag per opname bij ${provider}: ${amount} pinnen kost ${pct}. Neem in één keer meer op.`,
+      missingOne: (names) => `Onbekend is niet gratis: onze bron noemt geen pinprijs van ${names}.`,
+      missingMany: (names) =>
+        `Onbekend is niet gratis: onze bronnen noemen geen pinprijs van ${names}.`,
+      ownUnknown: "Van je eigen kaarten kennen we geen opnametarief.",
+      ownKnown: (ownProduct, amount, extra) =>
+        `Van je eigen kaarten pin je het goedkoopst met ${ownProduct}: ${amount}${extra}.`,
+      ownExtra: (amount) => `, dus ${amount} duurder`,
+    },
   },
   versusNote: {
     cheaperDirect: (amount, provider) => ` Dat is ${amount} goedkoper dan direct met ${provider}.`,
@@ -3832,27 +3845,6 @@ const travelCopy_nl: TravelCopy = {
     moveFundsFree: (from, to, method) =>
       `Zet je reisbudget van ${from} naar ${to} via ${method} — dat is gratis — en betaal daar.`,
     moveFundsPlain: (from, to) => `Zet je reisbudget van ${from} naar ${to} en betaal daar.`,
-  },
-  withdrawHeadline: {
-    eur: "Daar pin je in euro's, dus de opslagen voor vreemde valuta gelden niet. Wat je eigen bank in euroland voor een opname rekent, staat niet in onze bronnen.",
-    noAccounts: "Nog geen kaart of betaalrekening om mee te pinnen.",
-    noKnownPrice: (missing) =>
-      `Van geen enkele kaart weten we wat geld pinnen in het buitenland kost — dat is een aparte prijs, meestal hoger dan betalen.${missing}`,
-    priceLine: (amount, reference, pctSuffix) => `${amount} voor ${reference}${pctSuffix}`,
-    held: (product, price, small, missing) =>
-      `Het voordeligst pin je met ${product}: ${price}.${small}${missing}`,
-    notHeld: (product, price, own, holdingTail, small, missing) =>
-      `Het voordeligst pin je met ${product}: ${price}. Die heb je nog niet.${own}${holdingTail}${small}${missing}`,
-    ownUnknown: " Van je eigen kaarten kennen we geen opnametarief.",
-    ownKnown: (ownProduct, amount, extra) =>
-      ` Van jouw kaarten is ${ownProduct} de goedkoopste die we kunnen aantonen: ${amount}${extra}.`,
-    ownExtraCost: (amount) => `, dus ${amount} duurder`,
-    smallPenalty: (provider, amount, pct) =>
-      ` Er zit bij ${provider} een vast bedrag per opname bij, dus ${amount} pinnen kost je ${pct} — neem in één keer meer op.`,
-    missingCashSingular: (names) =>
-      ` Van ${names} zegt onze bron niets over opnemen — dat is geen nul, dat is een gat.`,
-    missingCashPlural: (names) =>
-      ` Van ${names} zeggen onze bronnen niets over opnemen — dat is geen nul, dat is een gat.`,
   },
   withdrawalFeeUnknownReason: {
     silent: "De bron zegt niets over geld opnemen.",
@@ -4059,7 +4051,7 @@ const travelCopy_en: TravelCopy = {
     homeAssumedNote: "No home country chosen yet: these results assume the Netherlands.",
     homeAssumedChange: "Choose your own country",
   },
-  empty: "Pick a country and LaVega will say where to keep, exchange and spend your money.",
+  empty: "Pick a country for your best card.",
   badge: {
     notYours: "not yours yet",
   },
@@ -4069,7 +4061,7 @@ const travelCopy_en: TravelCopy = {
     caveatLabel: "Note:",
     noAccountsKnown: "No cards or payment accounts known yet.",
     productKindWord: { betaalpas: "debit card", creditcard: "credit card" },
-    euroNoExchangeNeeded: "You pay in euros there — no exchange needed.",
+    euroNoExchangeNeeded: "You pay in euros there: nothing to exchange.",
     periodWord: (period) => (period === "maand" ? "per month" : "per year"),
     overHorizon: (words) => ` over ${words}`,
     horizonWords: (n, costPeriod) =>
@@ -4090,20 +4082,47 @@ const travelCopy_en: TravelCopy = {
     viaUnknownConvert: "exchange fee still unknown",
     viaUnknownTransfer: "transfer fee still unknown",
   },
-  payHeadline: {
-    costFree: " that costs you nothing on €1,000",
-    costAmount: (amount) => ` ${amount} on €1,000`,
-    versusOwn: (amount, ownProduct) => `, ${amount} less than with your own ${ownProduct}`,
-    catalogueCard: (product, cost, versus, holdingCostTail) =>
-      `Pay with ${product}:${cost}${versus}. You don't have that yet — you'd need to open it first.${holdingCostTail}`,
-  },
-  journeyHeadline: {
-    direct: (provider) => `Pay directly with ${provider}.`,
-    via: (fundedFrom, viaProduct, method) =>
-      `Move your travel budget from ${fundedFrom} to ${viaProduct}${method ? ` via ${method} (free)` : ""} and pay there.`,
-    costFree: " That costs you nothing on €1,000.",
-    costAmount: (amount) => ` That costs ${amount} on €1,000.`,
-    noRoute: "No route with known terms yet — refresh the terms first.",
+  answer: {
+    whySummary: "Explanation for this answer",
+    perReference: (amount) => `${amount} per €1,000`,
+    free: "no exchange fee",
+    payDirect: (provider, cost) =>
+      cost ? `Pay with ${provider}: ${cost}.` : `Pay with ${provider}.`,
+    payVia: (via, cost) =>
+      cost ? `Move money to ${via}, pay there: ${cost}.` : `Move money to ${via} and pay there.`,
+    payOpen: (product, cost, versus) =>
+      versus
+        ? `Open ${product}: ${versus.saving} less than with your ${versus.own} per €1,000.`
+        : `Open ${product}${cost ? `: ${cost}` : ""}.`,
+    cardCost: (cost) => `This card: ${cost}.`,
+    cheapestOwn: "Cheapest card you already hold.",
+    transferFree: (from, method) =>
+      from ? `Transfer from ${from} via ${method} is free.` : `Transfer via ${method} is free.`,
+    transferPlain: (from) => `You move the money from ${from}.`,
+    movesNothing: "LaVega moves nothing itself.",
+    notHeldYet: "You don't hold this card yet.",
+    noTariffs: "No fees known for your cards yet.",
+    noCard: "No card known yet.",
+    addCard: "Add a debit or credit card, with its bank.",
+    pin: {
+      eur: "You withdraw in euros there: no foreign-currency surcharge.",
+      eurWhy: "What your bank charges for a withdrawal isn't in our sources.",
+      noAccounts: "No card to withdraw with yet.",
+      unknown: "Withdrawal price of your cards unknown.",
+      unknownWhy: "Withdrawing is priced separately, usually higher than paying.",
+      price: (amount, reference, pctSuffix) => `${amount} per ${reference}${pctSuffix}`,
+      line: (product, price) => `Withdraw with ${product}: ${price}.`,
+      flatFee: (provider, amount, pct) =>
+        `${provider} charges a flat fee per withdrawal: taking out ${amount} costs ${pct}. Take out more at once.`,
+      missingOne: (names) =>
+        `Unknown is not free: our source gives no withdrawal price for ${names}.`,
+      missingMany: (names) =>
+        `Unknown is not free: our sources give no withdrawal price for ${names}.`,
+      ownUnknown: "We know no withdrawal rate for your own cards.",
+      ownKnown: (ownProduct, amount, extra) =>
+        `Of your own cards, ${ownProduct} is cheapest to withdraw with: ${amount}${extra}.`,
+      ownExtra: (amount) => `, so ${amount} more`,
+    },
   },
   versusNote: {
     cheaperDirect: (amount, provider) =>
@@ -4155,27 +4174,6 @@ const travelCopy_en: TravelCopy = {
     moveFundsFree: (from, to, method) =>
       `Move your travel budget from ${from} to ${to} via ${method} — that's free — and pay there.`,
     moveFundsPlain: (from, to) => `Move your travel budget from ${from} to ${to} and pay there.`,
-  },
-  withdrawHeadline: {
-    eur: "You withdraw in euros there, so foreign-currency surcharges don't apply. What your own bank charges for a withdrawal in the eurozone isn't in our sources.",
-    noAccounts: "No card or payment account to withdraw with yet.",
-    noKnownPrice: (missing) =>
-      `We don't know what withdrawing cash abroad costs for any of your cards — that's a separate price, almost always higher than paying.${missing}`,
-    priceLine: (amount, reference, pctSuffix) => `${amount} for ${reference}${pctSuffix}`,
-    held: (product, price, small, missing) =>
-      `The cheapest way to withdraw is with ${product}: ${price}.${small}${missing}`,
-    notHeld: (product, price, own, holdingTail, small, missing) =>
-      `The cheapest way to withdraw is with ${product}: ${price}. You don't have that yet.${own}${holdingTail}${small}${missing}`,
-    ownUnknown: " We don't know a withdrawal rate for any of your own cards.",
-    ownKnown: (ownProduct, amount, extra) =>
-      ` Of your own cards, ${ownProduct} is the cheapest we can prove: ${amount}${extra}.`,
-    ownExtraCost: (amount) => `, so ${amount} more`,
-    smallPenalty: (provider, amount, pct) =>
-      ` ${provider} charges a flat fee per withdrawal, so taking out ${amount} costs you ${pct} — withdraw more at once.`,
-    missingCashSingular: (names) =>
-      ` Our source says nothing about withdrawing for ${names} — that isn't zero, that's a gap.`,
-    missingCashPlural: (names) =>
-      ` Our sources say nothing about withdrawing for ${names} — that isn't zero, that's a gap.`,
   },
   withdrawalFeeUnknownReason: {
     silent: "Our source says nothing about withdrawing cash.",

@@ -55,6 +55,7 @@ import {
   EMPTY_BILL_DECISIONS,
   reconcileInvoices,
   applyCategorizations,
+  applyCategoryChoice,
   findDuplicateAccounts,
   mergeAccounts,
   upsertFacts,
@@ -161,6 +162,7 @@ import { TopBarActions } from "./components/TopBar";
 import CardLink from "./components/ui/CardLink.js";
 import Button from "./components/ui/Button.js";
 import StatusLine from "./components/ui/StatusLine.js";
+import { createCategorizeSaver, diffPatch } from "./categorize-persist";
 import {
   enabledModules as resolveModules,
   navModules,
@@ -299,6 +301,28 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
   const [entity, setEntity] = useState(() => getDefaultEntity(shellCopy[locale].scope.personal));
   const [problems, setProblems] = useState<ShellNotice[]>([]);
   const [rules, setRules] = useState<Rule[]>([]);
+  // The newest txs/rules, for the categorise saver (it must build and write its
+  // patch against the CURRENT lists, not a render closure). Assigned on every
+  // render; the saver also advances them itself after each commit.
+  const txsRef = useRef(txs);
+  txsRef.current = txs;
+  const rulesRef = useRef(rules);
+  rulesRef.current = rules;
+  const categorizeSaver = useRef<ReturnType<typeof createCategorizeSaver> | null>(null);
+  categorizeSaver.current ??= createCategorizeSaver({
+    getTxs: () => txsRef.current,
+    getRules: () => rulesRef.current,
+    updateTxs: (fn) => {
+      txsRef.current = fn(txsRef.current);
+      setTxs(fn);
+    },
+    updateRules: (fn) => {
+      rulesRef.current = fn(rulesRef.current);
+      setRules(fn);
+    },
+    putTxs: (t) => storage.putTxs(t),
+    putRules: (r) => storage.putRules(r),
+  });
   // Stored transfer decisions only (confirmed pairs + rejection memory); a
   // suggestion is derived from the ledger on read, never kept here.
   const [transfers, setTransfers] = useState<TransferPair[]>([]);
@@ -1173,9 +1197,14 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
 
   // Rules are UI-owned as a whole list (replace-all persistence), so every
   // add/remove goes through this single helper to keep state and storage in sync.
+  // It joins the categorise queue so a rule edit and a categorise save can
+  // never interleave their replace-all writes.
   async function saveRules(next: Rule[]) {
-    setRules(next);
-    await storage.putRules(next);
+    await categorizeSaver.current!.enqueue(async () => {
+      setRules(next);
+      rulesRef.current = next;
+      await storage.putRules(next);
+    });
   }
 
   /* Transfer decisions are UI-owned as a whole list too (replace-all), and the
@@ -1251,24 +1280,38 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
     setProfileRead({ kind: "ok", store: next });
   }
 
-  // Persist the full tx list after an in-memory edit. `putTxs` is upsert-by-id
-  // (not replace-all like putRules), which is correct here because the AI-
-  // categorize flow passes the COMPLETE list back from `applyCategorizations`,
-  // so upserting every id is equivalent to a replace. Used to persist the
-  // `manual` category stamped on decided txs.
-  async function saveTxs(next: Tx[]) {
-    setTxs(next);
-    await storage.putTxs(next);
-  }
-
   // Apply confirmed AI-category decisions against the FULL tx + rules lists
   // (not just the scoped view Transacties shows), then persist. Adding one
   // deduped rule per (counterparty, category) means future imports of the same
   // merchant auto-categorize without another AI call.
-  async function handleApplyCategories(decisions: CategoryDecision[]) {
-    const next = applyCategorizations(txs, rules, decisions);
-    await saveTxs(next.txs);
-    if (next.rules.length !== rules.length) await saveRules(next.rules);
+  async function handleApplyCategories(
+    decisions: CategoryDecision[],
+  ): Promise<{ rememberFailed?: boolean }> {
+    const out = await categorizeSaver.current!.run((cur) => ({
+      patch: diffPatch(cur, applyCategorizations(cur.txs, cur.rules, decisions)),
+      result: null,
+    }));
+    return out.rulesError ? { rememberFailed: true } : {};
+  }
+
+  // The per-row picker: ONE decision through applyCategorizations (via
+  // applyCategoryChoice), on the same queue and write path as the AI apply flow
+  // (see categorize-persist.ts: patch-based, serialised, never overwrites newer
+  // state). Returns what really happened so the screen only states computed numbers.
+  async function handleChooseCategory(
+    txId: string,
+    category: string,
+  ): Promise<{ followers: number; rulesAdded: number; rememberFailed?: boolean }> {
+    const out = await categorizeSaver.current!.run((cur) => {
+      const next = applyCategoryChoice(cur.txs, cur.rules, txId, category, own);
+      return { patch: diffPatch(cur, next), result: next };
+    });
+    const { followers, rulesAdded } = out.result;
+    return {
+      followers: out.rulesError ? 0 : followers,
+      rulesAdded: out.rulesError ? 0 : rulesAdded,
+      ...(out.rulesError ? { rememberFailed: true } : {}),
+    };
   }
 
   // After storage.restore() swaps in a different vault's data (Task 5), reload
@@ -2505,6 +2548,7 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
             onFCategoryChange={setFCategory}
             configured={llmConfigured}
             onApplyCategories={handleApplyCategories}
+            onChooseCategory={handleChooseCategory}
           />
         )}
 
