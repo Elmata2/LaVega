@@ -533,7 +533,11 @@ overlapping account files). A re-import must not append duplicates.
   positions, cash balances or coverage) adds history only: it never overwrites
   the stored cash balances. Coverage is one union while windows touch or
   overlap; across a gap the stored span cannot vouch for the days between, so a
-  forward import replaces it.
+  forward import replaces it. An **unknown** stored coverage proves nothing, so
+  a complete import replaces it even when its window ends before the stored
+  latest date. That is the normal case when a user imports a portfolio first and
+  adds the account statement later: the statement ends before the portfolio's
+  export date, and its proven window must not be discarded as a backfill.
 - Portfolio `asOf` rule. A portfolio import replaces positions and its cash row
   only when its `asOf` is not older than the stored positions' latest `asOf`.
   An older portfolio is a holdings backfill: positions, cash row and stored

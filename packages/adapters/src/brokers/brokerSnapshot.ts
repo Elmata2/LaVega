@@ -166,8 +166,12 @@ function mergedCoverage(
   incoming: CashHistoryCoverage,
   backfill: boolean,
 ): CashHistoryCoverage | undefined {
-  if (stored?.status !== "complete" || incoming.status !== "complete")
-    return backfill ? stored : incoming;
+  /* Unknown proves nothing, so a complete incoming window always replaces it.
+   * A backfill rule must not keep a stored unknown coverage over an older but
+   * proven window: the DeGiro account statement often ends before the portfolio
+   * export's date, which would otherwise discard the only proof the import has. */
+  if (stored?.status !== "complete") return incoming;
+  if (incoming.status !== "complete") return backfill ? stored : incoming;
   const touches = incoming.from <= addDays(stored.to, 1) && incoming.to >= addDays(stored.from, -1);
   if (!touches) return backfill ? stored : incoming;
   const from = incoming.from < stored.from ? incoming.from : stored.from;
