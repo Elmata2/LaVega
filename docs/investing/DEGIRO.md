@@ -31,9 +31,9 @@ ID`, semicolon). No real DeGiro export has that shape; D1 deleted them and
   cash row (#319, D7). `parseBrokerFiles` is the multi-file seam; neither export
   proves cash history on its own. The upload route (#323) calls the seam and the
   DeGiro tab (#324) drives it from Broker settings.
-- `Transactions.csv` and `Portfolio.csv` shapes were **unverified** until D1.
-  They are now verified from real exports of 2026-11-12 (see the two sections
-  below), and their headers are the ones D2 matches.
+- `Transactions.csv` and `Portfolio.csv` shapes were verified in D1 from real
+  exports of 2026-11-12 (see the two sections below), and their headers are the
+  ones D2 matches.
 
 ## Verified: the account statement (`Account.csv`)
 
@@ -359,7 +359,9 @@ its currency; `Lokale waarde`/`Local value` is the same pair.
 
 - **Side from the cash sign.** The export has no verb. A negative local value is
   a buy and a positive one a sell; zero is not a trade. The verified sample holds
-  buys only, so a real sell row is still unverified.
+  buys only. **Still open:** no real sell row has been observed in this export.
+  The account statement is the verified sell path; the positive-local-value rule
+  is exercised from a hand-built row in tests.
 - **Amount and currency** are the signed local value and its own currency, never
   the EUR value. `price` is the magnitude of `Koers`.
 - **Venue and FX rate** are provenance only: `venue` is `Uitvoeringsplaats` when

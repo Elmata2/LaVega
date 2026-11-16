@@ -37,7 +37,7 @@ lavega/
 │   └── adapters/
 │       ├── storage/   # StorageAdapter → Local (IndexedDB) now · Postgres later
 │       ├── banking/   # BankAccess → FileImport · EnableBanking · finAPI
-│       └── brokers/   # BrokerAccess → DeGiro · IBKR · Trading 212
+│       └── brokers/   # BrokerAccess/FileImport → DeGiro · IBKR · Trading 212
 ├── apps/
 │   ├── web/           # Vite + React dashboard (personal); `/` landing, `/app/<view>` vault
 │   ├── server/        # Hono API: local sync now → hosted backend later (same code)
@@ -93,7 +93,7 @@ tx = {
 
 ## Broker access (investing)
 
-Specified in **`docs/investing/CONNECTORS.md`** — `BrokerAccessAdapter` contract, per-broker auth/sync/risk for DeGiro, Interactive Brokers and Trading 212, and the credential-persistence rules. Read it before touching `packages/adapters/src/brokers/`.
+Specified in **`docs/investing/CONNECTORS.md`** — `BrokerAccessAdapter` contract, per-broker auth/sync/risk for DeGiro, Interactive Brokers and Trading 212, and the credential-persistence rules. DeGiro is import-only: it uses the `FileImport` seam (manual CSV exports, no `sync()`), so it has no credentials and no scheduled sync. Read it before touching `packages/adapters/src/brokers/`.
 
 ## Portfolio agents (investing)
 

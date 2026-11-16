@@ -79,7 +79,7 @@ The credential status API reports `brokers.ibkr` and `brokers.trading212` as `em
 
 | Broker              | Persisted?   | Why                                                                                                                                                                                                                      |
 | ------------------- | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| DeGiro              | N/A          | No login. v1 is manual CSV import — the user exports their own portfolio/transaction file from DeGiro's web app and uploads it. No credentials touch LaVega at all ([#25](https://github.com/Elmata2/LaVega/issues/25)). |
+| DeGiro              | N/A          | No login. Manual CSV import (D1–D14): the user exports the account statement, transactions and portfolio files from DeGiro's web app and uploads them. No credentials touch LaVega at all ([#25](https://github.com/Elmata2/LaVega/issues/25)). |
 | Interactive Brokers | Yes, locally | Flex token + Query ID only fetch a pre-defined report. There is no login they can trigger, so DeGiro's reasoning doesn't transfer ([#11](https://github.com/Elmata2/LaVega/issues/11)).                                  |
 | Trading 212         | Yes, locally | API key, no lockout mechanism. Same reasoning as IBKR ([#12](https://github.com/Elmata2/LaVega/issues/12)).                                                                                                              |
 
@@ -95,19 +95,19 @@ One of the three adapters ships behind a **one-time consent checkbox** shown bef
 
 ## DeGiro
 
-**Status: manual CSV import. No login, no API, no automation in v1** ([#25](https://github.com/Elmata2/LaVega/issues/25)).
+**Status: manual CSV import, implemented (D1–D14). No login, no API, no automation in v1** ([#25](https://github.com/Elmata2/LaVega/issues/25)).
 
-DeGiro has **no official API** — its own helpdesk states third-party scripts and API wrappers violate its terms ([#7](https://github.com/Elmata2/LaVega/issues/7)), and driving DeGiro's UI (local Playwright or otherwise) has its own account-lockout and credential-custody problems ([#19](https://github.com/Elmata2/LaVega/issues/19)). v1 sidesteps all of that: the user exports their own portfolio/transaction data from DeGiro's web app and uploads it, the same way bank statements reach `BankAccessAdapter` today.
+DeGiro has **no official API** — its own helpdesk states third-party scripts and API wrappers violate its terms ([#7](https://github.com/Elmata2/LaVega/issues/7)), and driving DeGiro's UI (local Playwright or otherwise) has its own account-lockout and credential-custody problems ([#19](https://github.com/Elmata2/LaVega/issues/19)). v1 sidesteps all of that: the user exports their own data from DeGiro's web app and uploads it.
 
-**Approach:** reuse the `FileImport` seam, not `BrokerAccessAdapter.sync()`. A DeGiro import profile parses the exported file into `{positions, trades}`, mirroring how `BankAccessAdapter` already has MT940/CAMT/CSV bank profiles behind the same `{filename, text}` shape. No credentials, no session, nothing to store or re-enter.
+**Approach:** the `FileImport` seam, not `BrokerAccessAdapter.sync()`. `packages/core/src/parsers/degiro/` reads three exports and detects each by exact header signature and language (NL, EN); the filename is never trusted. The account statement (`Rekeningoverzicht`) is primary and alone proves cash history: trades, cash flows, dividends, cash balances and coverage. `Transactions.csv` enriches executions with venue, FX rate and price; `Portfolio.csv` supplies dated positions and its cash row. `mergeDeGiroFiles` is the multi-file seam. The tenant-bound route `POST /api/investing/brokers/degiro/import` previews (`?mode=preview`) or merges under the broker lease (`?mode=commit`), and `GET` returns the stored import status. Positions key on ISIN, and prices resolve through the OpenFIGI ISIN path. Re-imports replace only their own window. The dashboard publishes the import dates and warns when the holdings or cash pass 30 days. Quantity and same-day cash disagreements between files are report-only problems; portfolio quantities win.
 
 **Auth:** none. There is no login step in this adapter at all.
 
-**Sync model: manual, user-triggered file upload.** No scheduling, no polling — there's no session to keep alive or lock out.
+**Sync model: manual, user-triggered file upload.** No scheduling, no polling — there's no session to keep alive or lock out. An import older than 30 days raises a dashboard problem.
 
-**Data:** both positions and full transaction/order history, from DeGiro's own account/portfolio export.
+**Data:** positions, trades, dividends, cash balances, cash flows and cash coverage, from the user's own DeGiro exports.
 
-> **Correction (2026-11-12):** the earlier "Verified for #47/#49" note was wrong. The #47/#49 fixtures use invented, semicolon-delimited headers. A real DeGiro account statement is comma-delimited, dates `DD-MM-YYYY`, with the currency in the column labelled `Mutatie`/`Saldo` and the amount in the next unnamed column; the current parser rejects it. The parser is not wired into any app. The full verified format, mapping rules and the issue plan are in [`DEGIRO.md`](./DEGIRO.md).
+The verified headers, mapping rules, fixtures and issue graph are in [`DEGIRO.md`](./DEGIRO.md).
 
 **Hosted/cloud tier:** DeGiro's CSV import works there too — file upload has no custody problem the way credentials would, so this isn't local-only ([#25](https://github.com/Elmata2/LaVega/issues/25)).
 
