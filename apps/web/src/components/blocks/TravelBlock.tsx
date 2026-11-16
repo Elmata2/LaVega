@@ -668,8 +668,9 @@ function withdrawalPriceLine(
   effectivePct: number | null,
   c: TravelCopy,
   locale: Locale,
+  open = false,
 ): string {
-  return c.answer.pin.line(
+  return (open ? c.answer.pin.lineOpen : c.answer.pin.line)(
     product,
     c.answer.pin.price(
       travelEuro(locale, costOnReference),
@@ -688,6 +689,11 @@ export function withdrawAnswer(
   c: TravelCopy,
   locale: Locale,
   showHoldingTail: boolean,
+  /** The not-held product the PAY line already names ("Open X"), or null. When
+   *  the pin card is that same product the line just says "Pin met X": the card
+   *  is already marked one line up. Otherwise the verb "Open … om te pinnen"
+   *  marks it. Passed in: the copy never reads render state. */
+  payNotHeldProduct: string | null = null,
 ): TravelAnswer {
   switch (h.kind) {
     case "eur":
@@ -722,6 +728,7 @@ export function withdrawAnswer(
           h.effectivePct,
           c,
           locale,
+          h.product !== payNotHeldProduct,
         ),
         why: nonEmpty([
           ownWithdrawalComparisonSentence(h.own, c, locale),
@@ -734,9 +741,8 @@ export function withdrawAnswer(
 }
 
 /** A line with its reasoning behind the "i" (`ToonMeer` variant "info"), or the
- *  bare line when there is no reasoning. `lead` (status icon, label, the
- *  "nog niet van jou" chip) rides along inside the heading, so the chip is read
- *  before the line either way. The "i" itself is a native <summary>: Tab, Enter,
+ *  bare line when there is no reasoning. `lead` (status icon, the "Pinnen:"
+ *  label) rides along inside the heading. The "i" itself is a native <summary>: Tab, Enter,
  *  Space and the spoken state come from the browser, and its accessible name is
  *  `c.answer.whySummary`. */
 function AnswerLine({
@@ -764,14 +770,21 @@ function AnswerLine({
   );
 }
 
-/** THE ONE MARK THAT KEEPS THE TWO QUESTIONS APART.
+/** THE MARK FOR LISTS, NOT FOR THE ANSWER.
  *
- *  Since the recommendation may now be a card from the catalogue rather than one
- *  of his (review 3, item 2), every place a product is named has to say which of
- *  the two it is — otherwise the block advises a payment he cannot make until he
- *  has opened an account, which is the exact mistake this review is about. A
- *  word alone is not enough: it has to be visibly different, so it is the app's
- *  existing `.badge` chip and not another sentence. */
+ *  The recommendation may be a card from the catalogue rather than one of his
+ *  (review 3, item 2), so every place a product is named has to say which of the
+ *  two it is, or the block advises a payment he cannot make until he has opened
+ *  an account. How it says so depends on where:
+ *
+ *   - IN THE FOREGROUND (`.travel-winner`) a not-held card is marked ONCE, by the
+ *     verb: "Open X: …" on the pay line, "Open X om te pinnen: …" on the pin
+ *     line, and a plain "Pin met X" when the pay line already named that same
+ *     card. Never a chip next to those, because the chip says the same thing a
+ *     second time.
+ *   - IN LISTS (the offers, the detail rows in the fold) products are compared
+ *     side by side and the chip is the only signal, so it stays there. It is the
+ *     app's existing `.badge` chip, visibly different from a sentence. */
 function NotYours() {
   const [locale] = useAppLocale();
   return <Badge>{optimiseCopy[locale].travel.badge.notYours}</Badge>;
@@ -1771,6 +1784,25 @@ export default function TravelBlock({
           rail,
           !(plan.pay && !plan.pay.held && hasVisibleHoldingCost(plan.pay.holdingCost)),
         );
+  /* Pay and pin kunnen dezelfde kaart aanraden. De kaart wordt dan één keer
+   * gemarkeerd (door "Open X" op de betaalregel) en de pinregel zegt alleen "Pin
+   * met X". */
+  const payNotHeld = plan?.pay && !plan.pay.held ? plan.pay : null;
+  const payNotHeldProduct = payNotHeld ? payNotHeld.product : null;
+  /* De tweede `Kaartkosten` wordt alleen weggelaten als hij NIETS toevoegt: zelfde
+   * product, zelfde kaartprijs, en zijn nettoberekening is leeg of gelijk aan die
+   * van de betaalregel. De prijs van een product is voor beide vragen dezelfde,
+   * maar `benefit` is per vraag anders (het voordeel bij betalen is niet het
+   * voordeel bij pinnen). Heeft de pinregel een EIGEN netto, dan blijft de tweede
+   * rij staan, want die getallen staan nergens anders. */
+  const sameKaartkosten =
+    payNotHeld !== null &&
+    plan?.withdrawAdvice != null &&
+    !plan.withdrawAdvice.held &&
+    plan.withdrawAdvice.product === payNotHeld.product &&
+    JSON.stringify(plan.withdrawAdvice.holdingCost) === JSON.stringify(payNotHeld.holdingCost) &&
+    (plan.withdrawAdvice.benefit === null ||
+      JSON.stringify(plan.withdrawAdvice.benefit) === JSON.stringify(payNotHeld.benefit));
   const pinAnswer: TravelAnswer | null =
     plan === null
       ? null
@@ -1783,6 +1815,7 @@ export default function TravelBlock({
             !plan.withdrawAdvice.held &&
             hasVisibleHoldingCost(plan.withdrawAdvice.holdingCost)
           ),
+          payNotHeldProduct,
         );
 
   /* DE AANBEVELING WINT VAN DE OORZAAK, en dat is een omkering van hoe het stond.
@@ -1870,15 +1903,11 @@ export default function TravelBlock({
                   lead={
                     <>
                       {bestJourney && <StatusIcon tone="success" />}
-                      {/* HET MERKTEKEN BLIJFT VOORAAN. De aanbeveling mag een kaart
-                          uit de catalogus zijn en dan moet zichtbaar anders zijn dat
-                          je hem morgenochtend niet kunt pinnen. Vóór de zin, zodat
-                          je het antwoord niet kunt lezen zonder het merkteken. */}
-                      {plan.pay && !plan.pay.held && (
-                        <>
-                          <NotYours />{" "}
-                        </>
-                      )}
+                      {/* GEEN CHIP VOORAAN: EEN KAART DIE HIJ NIET HEEFT WORDT
+                          ÉÉN KEER MARKEERD, en wel door het werkwoord. "Open X: …"
+                          zegt zelf dat hij hem nog moet openen; een chip ernaast
+                          zegt hetzelfde twee keer. De chip is voor lijsten, zie
+                          `NotYours`. */}
                     </>
                   }
                   lineClass="travel-winner-headline"
@@ -1929,11 +1958,6 @@ export default function TravelBlock({
                   lead={
                     <>
                       <strong>{c.winner.pinnenLabel}</strong>{" "}
-                      {plan.withdrawAdvice && !plan.withdrawAdvice.held && (
-                        <>
-                          <NotYours />{" "}
-                        </>
-                      )}
                     </>
                   }
                   lineClass="travel-winner-pin"
@@ -1951,7 +1975,7 @@ export default function TravelBlock({
             )}
             {/* Pinnen is een aparte kaart en dus een aparte prijs. Dezelfde drie
                 toestanden; bij zijn eigen kaart staat er niets. */}
-            {plan.withdrawAdvice && !plan.withdrawAdvice.held && (
+            {plan.withdrawAdvice && !plan.withdrawAdvice.held && !sameKaartkosten && (
               <Kaartkosten
                 product={displayProduct(plan.withdrawAdvice.product, c)}
                 cost={plan.withdrawAdvice.holdingCost}

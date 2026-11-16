@@ -3387,6 +3387,9 @@ export type TravelCopy = {
       price: (amount: string, reference: string, pctSuffix: string) => string;
       /** "Pin met {product}: {price}." */
       line: (product: string, price: string) => string;
+      /** A card he does not hold and the pay line does not already name: the
+       *  verb marks it ("Open {product} om te pinnen: {price}."). */
+      lineOpen: (product: string, price: string) => string;
       /** The visible warning under the line (after the "Let op:" label). */
       flatFee: (provider: string, amount: string, pct: string) => string;
       missingOne: (names: string) => string;
@@ -3785,6 +3788,7 @@ const travelCopy_nl: TravelCopy = {
       unknownWhy: "Pinnen is een aparte prijs, meestal hoger dan betalen.",
       price: (amount, reference, pctSuffix) => `${amount} op ${reference}${pctSuffix}`,
       line: (product, price) => `Pin met ${product}: ${price}.`,
+      lineOpen: (product, price) => `Open ${product} om te pinnen: ${price}.`,
       flatFee: (provider, amount, pct) =>
         `Vast bedrag per opname bij ${provider}: ${amount} pinnen kost ${pct}. Neem in één keer meer op.`,
       missingOne: (names) => `Onbekend is niet gratis: onze bron noemt geen pinprijs van ${names}.`,
@@ -4112,6 +4116,7 @@ const travelCopy_en: TravelCopy = {
       unknownWhy: "Withdrawing is priced separately, usually higher than paying.",
       price: (amount, reference, pctSuffix) => `${amount} per ${reference}${pctSuffix}`,
       line: (product, price) => `Withdraw with ${product}: ${price}.`,
+      lineOpen: (product, price) => `Open ${product} to withdraw: ${price}.`,
       flatFee: (provider, amount, pct) =>
         `${provider} charges a flat fee per withdrawal: taking out ${amount} costs ${pct}. Take out more at once.`,
       missingOne: (names) =>
