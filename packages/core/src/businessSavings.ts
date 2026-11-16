@@ -55,20 +55,15 @@ export const BUSINESS_SAVINGS_OFFERS: readonly BusinessSavingsOffer[] = [
       { plan: "Scale", ratePct: 2.0 },
       { plan: "Enterprise", ratePct: 2.5 },
     ],
-    promo: {
-      ratePct: 5.25,
-      newCustomersOnly: true,
-      signupFrom: "2026-09-15",
-      signupUntil: "2026-11-15",
-      durationMonths: 3,
-      capAmount: 100_000,
-    },
+    // The 5,25% new-customer window (2026-09-15..2026-11-15) closed on
+    // 2026-11-15. The savings page still shows that closed footnote, so the
+    // offer carries plan rates only: no action a user cannot join.
     depositScheme: "lt-revolut-bank-uab-nl-branch",
     sourceUrls: [
       "https://www.revolut.com/en-NL/business/savings/",
       "https://www.revolut.com/en-NL/legal/business-deposit-information-sheet/",
     ],
-    checkedOn: "2026-11-11",
+    checkedOn: "2026-11-16",
   },
 ];
 

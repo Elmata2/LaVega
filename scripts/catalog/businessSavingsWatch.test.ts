@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { BUSINESS_SAVINGS_OFFERS } from "@lavega/core";
+import { BUSINESS_SAVINGS_OFFERS, type BusinessSavingsOffer } from "@lavega/core";
 import {
   compareOffer,
   decideIssueAction,
@@ -19,6 +19,20 @@ const SHEET = fixture("revolut-business-deposit-sheet.txt");
 const offer = BUSINESS_SAVINGS_OFFERS.find((o) => o.id === "revolut-business-savings")!;
 const matching = (): FoundFigures => parsePages([SAVINGS, SHEET]);
 const FAR = "2026-10-16";
+
+/** The offer as it stood while the 5,25% window was open. The bundled offer
+ *  dropped that closed promo on 2026-11-16, so promo comparisons need this. */
+const promoOffer: BusinessSavingsOffer = {
+  ...offer,
+  promo: {
+    ratePct: 5.25,
+    newCustomersOnly: true,
+    signupFrom: "2026-09-15",
+    signupUntil: "2026-11-15",
+    durationMonths: 3,
+    capAmount: 100_000,
+  },
+};
 
 describe("parseNumber", () => {
   it("reads comma and dot decimals and thousands groups", () => {
@@ -54,26 +68,26 @@ describe("parsePages on the saved fixtures", () => {
 
 describe("compareOffer", () => {
   it("has no findings when values match and the promo is far off", () => {
-    expect(compareOffer(offer, matching(), [], FAR)).toEqual([]);
+    expect(compareOffer(promoOffer, matching(), [], FAR)).toEqual([]);
   });
 
   it("flags a changed plan rate", () => {
     const found = { ...matching(), planRates: { ...matching().planRates, Grow: 1.45 } };
-    expect(compareOffer(offer, found, [], FAR)).toEqual([
+    expect(compareOffer(promoOffer, found, [], FAR)).toEqual([
       { kind: "changed", field: "Plan Grow (% p.a.)", stored: "1.55", found: "1.45" },
     ]);
   });
 
   it("flags a changed promo rate", () => {
     const found = { ...matching(), promoRatePct: 4.5 };
-    expect(compareOffer(offer, found, [], FAR)).toEqual([
+    expect(compareOffer(promoOffer, found, [], FAR)).toEqual([
       { kind: "changed", field: "Promo rate (% p.a.)", stored: "5.25", found: "4.5" },
     ]);
   });
 
   it("flags a missing figure", () => {
     const found = { ...matching(), capAmount: null };
-    expect(compareOffer(offer, found, [], FAR)).toEqual([
+    expect(compareOffer(promoOffer, found, [], FAR)).toEqual([
       { kind: "missing", field: "Promo cap (EUR)", stored: "100000" },
     ]);
   });
@@ -81,26 +95,26 @@ describe("compareOffer", () => {
   it("reports a failed fetch without also listing every figure as missing", () => {
     const empty = parsePages([]);
     const failures = [{ url: offer.sourceUrls[0], error: "HTTP 403" }];
-    expect(compareOffer(offer, empty, failures, FAR)).toEqual([
+    expect(compareOffer(promoOffer, empty, failures, FAR)).toEqual([
       { kind: "fetch-failed", url: offer.sourceUrls[0], error: "HTTP 403" },
     ]);
   });
 
   it("flags a promo ending within 14 days", () => {
-    expect(compareOffer(offer, matching(), [], "2026-11-02")).toEqual([
+    expect(compareOffer(promoOffer, matching(), [], "2026-11-02")).toEqual([
       { kind: "promo-ending-soon", signupUntil: "2026-11-15", daysLeft: 13 },
     ]);
-    expect(compareOffer(offer, matching(), [], "2026-11-01")).toEqual([
+    expect(compareOffer(promoOffer, matching(), [], "2026-11-01")).toEqual([
       { kind: "promo-ending-soon", signupUntil: "2026-11-15", daysLeft: 14 },
     ]);
-    expect(compareOffer(offer, matching(), [], "2026-10-31")).toEqual([]);
+    expect(compareOffer(promoOffer, matching(), [], "2026-10-31")).toEqual([]);
   });
 
   it("flags an ended promo, but not on the last sign-up day", () => {
-    expect(compareOffer(offer, matching(), [], "2026-11-16")).toEqual([
+    expect(compareOffer(promoOffer, matching(), [], "2026-11-16")).toEqual([
       { kind: "promo-ended", signupUntil: "2026-11-15" },
     ]);
-    expect(compareOffer(offer, matching(), [], "2026-11-15")).toEqual([
+    expect(compareOffer(promoOffer, matching(), [], "2026-11-15")).toEqual([
       { kind: "promo-ending-soon", signupUntil: "2026-11-15", daysLeft: 0 },
     ]);
   });
@@ -108,8 +122,8 @@ describe("compareOffer", () => {
 
 describe("renderIssueBody", () => {
   it("lists a field | stored | found table, sources and the date", () => {
-    const findings = compareOffer(offer, { ...matching(), promoRatePct: 4.5 }, [], FAR);
-    const body = renderIssueBody([{ offer, findings }], FAR);
+    const findings = compareOffer(promoOffer, { ...matching(), promoRatePct: 4.5 }, [], FAR);
+    const body = renderIssueBody([{ offer: promoOffer, findings }], FAR);
     expect(body).toContain("| Promo rate (% p.a.) | 5.25 | 4.5 |");
     expect(body).toContain(offer.sourceUrls[1]);
     expect(body).toContain(`Datum controle: ${FAR}`);
@@ -119,14 +133,13 @@ describe("renderIssueBody", () => {
 describe("two-way detection", () => {
   it("flags a plan on the page that the offer does not have", () => {
     const found = { ...matching(), planRates: { ...matching().planRates, Ultra: 3 } };
-    expect(compareOffer(offer, found, [], FAR)).toEqual([
+    expect(compareOffer(promoOffer, found, [], FAR)).toEqual([
       { kind: "changed", field: "Plan Ultra (% p.a.)", stored: "niet opgeslagen", found: "3" },
     ]);
   });
 
   it("flags a promo on the page when the offer stores none", () => {
-    const { promo: _promo, ...bare } = offer;
-    const findings = compareOffer(bare, matching(), [], FAR);
+    const findings = compareOffer(offer, matching(), [], FAR);
     expect(findings).toEqual([
       {
         kind: "changed",
@@ -139,13 +152,34 @@ describe("two-way detection", () => {
 
   it("flags a different promo end date", () => {
     const found = { ...matching(), signupUntil: "2026-12-15" };
-    expect(compareOffer(offer, found, [], FAR)).toEqual([
+    expect(compareOffer(promoOffer, found, [], FAR)).toEqual([
       {
         kind: "changed",
         field: "Promo sign-up until",
         stored: "2026-11-15",
         found: "2026-12-15",
       },
+    ]);
+  });
+
+  it("reads a page's closed sign-up window as history, not as a new action", () => {
+    // Revolut keeps the 5,25% footnote online after 2026-11-15. Once the offer
+    // drops the closed promo, that footnote must not reopen the watch issue:
+    // this is the state that resolves #341.
+    expect(compareOffer(offer, matching(), [], "2026-11-16")).toEqual([]);
+    expect(compareOffer(offer, matching(), [], "2026-11-20")).toEqual([]);
+  });
+
+  it("still reports the last sign-up day as a new action when the offer stores none", () => {
+    const findings = compareOffer(offer, matching(), [], "2026-11-15");
+    expect(findings).toHaveLength(1);
+    expect(findings[0]!.kind).toBe("changed");
+  });
+
+  it("still flags a changed plan rate when the page's promo window is closed", () => {
+    const found = { ...matching(), planRates: { ...matching().planRates, Grow: 1.45 } };
+    expect(compareOffer(offer, found, [], "2026-11-16")).toEqual([
+      { kind: "changed", field: "Plan Grow (% p.a.)", stored: "1.55", found: "1.45" },
     ]);
   });
 });
