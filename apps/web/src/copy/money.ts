@@ -220,6 +220,14 @@ type TransactiesCopy = {
   slaOver: string;
   toepassen: string;
   categorieVoor: (tegenpartij: string) => string;
+  /** Per-row category picker. */
+  wijzig: string;
+  categorieWijzigenVoor: (tegenpartij: string) => string;
+  kiesCategorie: string;
+  categorieGezetPlain: string;
+  categorieGezetNietOnthouden: string;
+  categorieGezetOnthouden: (tegenpartij: string) => string;
+  categorieGezetVolgen: (n: number, tegenpartij: string) => string;
   gecategoriseerdNote: (n: number) => string;
   nietsToegepast: string;
   categorisatieMislukt: string;
@@ -848,6 +856,16 @@ const nl: MoneyCopy = {
     slaOver: "Sla over",
     toepassen: "Toepassen",
     categorieVoor: (tegenpartij) => `Categorie voor ${tegenpartij}`,
+    wijzig: "Wijzig",
+    categorieWijzigenVoor: (tegenpartij) => `Categorie wijzigen voor ${tegenpartij}`,
+    kiesCategorie: "Kies een categorie",
+    categorieGezetPlain: "Categorie gezet.",
+    categorieGezetNietOnthouden:
+      "Categorie gezet, maar niet onthouden: opslaan van de regel mislukte. Andere transacties volgen niet mee.",
+    categorieGezetOnthouden: (tegenpartij) =>
+      `Categorie gezet. Volgende transacties van ${tegenpartij} volgen mee.`,
+    categorieGezetVolgen: (n, tegenpartij) =>
+      `Categorie gezet. ${n} andere ${n === 1 ? "transactie" : "transacties"} van ${tegenpartij} ${n === 1 ? "volgt" : "volgen"} mee.`,
     gecategoriseerdNote: (n) => `${n} ${n === 1 ? "transactie" : "transacties"} gecategoriseerd.`,
     nietsToegepast: "Niets toegepast.",
     categorisatieMislukt: "categorisatie mislukt",
@@ -1558,6 +1576,16 @@ const en: MoneyCopy = {
     slaOver: "Skip",
     toepassen: "Apply",
     categorieVoor: (tegenpartij) => `Category for ${tegenpartij}`,
+    wijzig: "Change",
+    categorieWijzigenVoor: (tegenpartij) => `Change category for ${tegenpartij}`,
+    kiesCategorie: "Choose a category",
+    categorieGezetPlain: "Category set.",
+    categorieGezetNietOnthouden:
+      "Category set, but not remembered: saving the rule failed. Other transactions will not follow.",
+    categorieGezetOnthouden: (tegenpartij) =>
+      `Category set. Future transactions from ${tegenpartij} will follow.`,
+    categorieGezetVolgen: (n, tegenpartij) =>
+      `Category set. ${n} other transaction${n === 1 ? "" : "s"} from ${tegenpartij} follow${n === 1 ? "s" : ""}.`,
     gecategoriseerdNote: (n) => `${n} transaction${n === 1 ? "" : "s"} categorised.`,
     nietsToegepast: "Nothing applied.",
     categorisatieMislukt: "categorisation failed",

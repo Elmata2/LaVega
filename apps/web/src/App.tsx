@@ -54,6 +54,7 @@ import {
   EMPTY_BILL_DECISIONS,
   reconcileInvoices,
   applyCategorizations,
+  applyCategoryChoice,
   findDuplicateAccounts,
   mergeAccounts,
   upsertFacts,
@@ -160,6 +161,7 @@ import { TopBarActions } from "./components/TopBar";
 import CardLink from "./components/ui/CardLink.js";
 import Button from "./components/ui/Button.js";
 import StatusLine from "./components/ui/StatusLine.js";
+import { persistCategorized as persistCategorizedIo } from "./categorize-persist";
 import {
   enabledModules as resolveModules,
   navModules,
@@ -1233,24 +1235,44 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
     setProfileRead({ kind: "ok", store: next });
   }
 
-  // Persist the full tx list after an in-memory edit. `putTxs` is upsert-by-id
-  // (not replace-all like putRules), which is correct here because the AI-
-  // categorize flow passes the COMPLETE list back from `applyCategorizations`,
-  // so upserting every id is equivalent to a replace. Used to persist the
-  // `manual` category stamped on decided txs.
-  async function saveTxs(next: Tx[]) {
-    setTxs(next);
-    await storage.putTxs(next);
-  }
-
   // Apply confirmed AI-category decisions against the FULL tx + rules lists
   // (not just the scoped view Transacties shows), then persist. Adding one
   // deduped rule per (counterparty, category) means future imports of the same
   // merchant auto-categorize without another AI call.
   async function handleApplyCategories(decisions: CategoryDecision[]) {
-    const next = applyCategorizations(txs, rules, decisions);
-    await saveTxs(next.txs);
-    if (next.rules.length !== rules.length) await saveRules(next.rules);
+    const { rulesError } = await persistCategorizedNext(applyCategorizations(txs, rules, decisions));
+    if (rulesError) throw rulesError;
+  }
+
+  // ONE persistence path for both callers (the AI review and the per-row
+  // picker). Storage is written first and state committed after each write, so
+  // a rejected write never leaves the screen ahead of the vault — see
+  // categorize-persist.ts. (`saveTxs` had no other caller and was replaced.)
+  async function persistCategorizedNext(next: { txs: Tx[]; rules: Rule[] }) {
+    return persistCategorizedIo({
+      prevRules: rules,
+      next,
+      putTxs: (t) => storage.putTxs(t),
+      putRules: (r) => storage.putRules(r),
+      commitTxs: setTxs,
+      commitRules: setRules,
+    });
+  }
+
+  // The per-row picker: ONE decision through applyCategorizations (via
+  // applyCategoryChoice), persisted by the same path as the AI apply flow.
+  // Returns what really happened so the screen only states computed numbers.
+  async function handleChooseCategory(
+    txId: string,
+    category: string,
+  ): Promise<{ followers: number; rulesAdded: number; rememberFailed?: boolean }> {
+    const next = applyCategoryChoice(txs, rules, txId, category, own);
+    const { rulesError } = await persistCategorizedNext(next);
+    return {
+      followers: rulesError ? 0 : next.followers,
+      rulesAdded: rulesError ? 0 : next.rulesAdded,
+      ...(rulesError ? { rememberFailed: true } : {}),
+    };
   }
 
   // After storage.restore() swaps in a different vault's data (Task 5), reload
@@ -2487,6 +2509,7 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
             onFCategoryChange={setFCategory}
             configured={llmConfigured}
             onApplyCategories={handleApplyCategories}
+            onChooseCategory={handleChooseCategory}
           />
         )}
 

@@ -24,6 +24,54 @@ export const matchNorm = (s: unknown): string =>
     .replace(/\s+/g, " ")
     .trim();
 
+/* PAYMENT-PROCESSOR NOISE. A card terminal's processor glues its own name in
+ * front of the merchant: "CCV*ALBERT HEIJN", "SumUp *Kapper", "Zettle_*Cafe",
+ * and iDEAL rows end in "via iDEAL". The merchant behind it is what a rule must
+ * read. Only the MARKER forms count (the `*` / `_` is required for the prefixes),
+ * so brand text like "SumUp Payments Limited" and words like "Accvision" are
+ * left alone, and a string with none of these forms is returned unchanged.
+ * Mollie, Stripe and Adyen are NOT here on purpose: see the processor note in
+ * the rule list. */
+const PROCESSOR_PREFIX = /\b(?:ccv|sum\s?up|i?zettle) *[*_][*_ ]*/gi;
+const VIA_IDEAL_LEADING = /^\s*via\s+ideal\b[\s:.-]*/i;
+
+/** Drops a trailing "via iDEAL" (and the separators before it). A hand-written
+ *  backwards scan: the regex form is quadratic on long whitespace/dot runs. */
+function stripTrailingViaIdeal(s: string): string {
+  const isWs = (ch: string | undefined) => ch !== undefined && /\s/.test(ch);
+  let end = s.length;
+  while (end > 0 && isWs(s[end - 1])) end--;
+  if (s.slice(Math.max(0, end - 5), end).toLowerCase() !== "ideal") return s;
+  let i = end - 5;
+  if (!isWs(s[i - 1])) return s;
+  while (i > 0 && isWs(s[i - 1])) i--;
+  if (s.slice(Math.max(0, i - 3), i).toLowerCase() !== "via") return s;
+  i -= 3;
+  if (i > 0 && /[A-Za-z0-9_]/.test(s[i - 1]!)) return s; // \b before "via"
+  while (i > 0 && /[\s.-]/.test(s[i - 1]!)) i--;
+  return s.slice(0, i);
+}
+
+export const stripProcessorNoise = (s: string): string =>
+  stripTrailingViaIdeal(s.replace(PROCESSOR_PREFIX, "").replace(VIA_IDEAL_LEADING, ""));
+
+/** True when a field carries a processor marker: the row was paid at a terminal
+ *  run by a processor, so whatever name follows is a MERCHANT, never a person. */
+export const hasProcessorMarker = (s: string): boolean => {
+  PROCESSOR_PREFIX.lastIndex = 0;
+  const hit = PROCESSOR_PREFIX.test(s);
+  PROCESSOR_PREFIX.lastIndex = 0;
+  return hit;
+};
+
+/** The text the BUILT-IN rules match against: `matchNorm` of counterparty and
+ *  description after each field's processor noise is stripped. Identical to
+ *  `matchNorm(counterparty + " " + description)` for text without that noise. */
+export const categoryHaystack = (tx: { counterparty: string; description: string }): string =>
+  matchNorm(
+    stripProcessorNoise(tx.counterparty ?? "") + " " + stripProcessorNoise(tx.description ?? ""),
+  );
+
 /* Built-in Dutch category defaults. These apply automatically in categorize()
  * AFTER a user's own rules (and a manual tx.category), so they give sensible
  * categories out of the box for the average Dutch household while any
@@ -1481,7 +1529,64 @@ export function isGermanMechanismRow(text: string): boolean {
  *  shape test on its own. NLD counts here, unlike everywhere else — at this one
  *  spot a domestic card descriptor is exactly as disqualifying as a foreign one. */
 export function isMerchantRow(text: string): boolean {
-  return isCardPayment(text) || foreignCodeIn(text) !== null || /\bNLD\b/.test(text);
+  return (
+    isCardPayment(text) ||
+    foreignCodeIn(text) !== null ||
+    /\bNLD\b/.test(text) ||
+    hasProcessorMarker(text)
+  );
+}
+
+/* ── Revolut's own bookkeeping moves ─────────────────────────────────────────
+ *
+ * "Top-up by *1234", "Exchanged to EUR", "To EUR Pocket": the owner's money
+ * moving between his own card, currencies and pockets — not spending, not
+ * income. The categoriser has no account/bank on a row, so the condition is the
+ * TEXT, and only the COUNTERPARTY (a description can say anything):
+ *   - "Top-up by *1234", "Top-up via/by Apple Pay|Google Pay", "Top-up by card"
+ *     (a bare "Top-up", "TOP UP" or "Top-up by <merchant>" is NOT matched);
+ *   - "Exchange(d) to|from" + a 3-letter currency code;
+ *   - "To|From|Naar|Van" + a known currency code, optionally + "Pocket"/"Vault",
+ *     and nothing else (so "To Bob" or "To the Moon BV" never match).
+ * Lives in the same bucket as the other own-money moves (spend views exclude it). */
+export const OWN_TRANSFER_CATEGORY = "Eigen overboeking";
+
+const REVOLUT_CURRENCIES =
+  "EUR|USD|GBP|CHF|SEK|NOK|DKK|PLN|CZK|HUF|RON|BGN|CAD|AUD|NZD|JPY|CNY|HKD|SGD|AED|TRY|ZAR|MXN|BRL|INR|ILS|THB";
+const REVOLUT_INTERNAL_RE = new RegExp(
+  "^(?:" +
+    // Top-up only in the forms that carry a card/funding marker.
+    "top[ -]?up (?:by \\*\\s?\\d+|(?:via|by) (?:apple pay|google pay)|by card)" +
+    "|exchange[d]? (?:to|from) (?:" +
+    REVOLUT_CURRENCIES +
+    ")\\b.*" +
+    "|(?:to|from|naar|van) (?:" +
+    REVOLUT_CURRENCIES +
+    ")(?: (?:pocket|vault))?" +
+    ")$",
+  "i",
+);
+
+/** True for a Revolut internal movement, judged on the counterparty text only. */
+export function isRevolutInternalMove(counterparty: string): boolean {
+  const cp = deaccent(stripProcessorNoise(counterparty ?? ""))
+    .replace(/\s+/g, " ")
+    .trim();
+  return cp.length > 0 && REVOLUT_INTERNAL_RE.test(cp);
+}
+
+/* ── Bare "NS" ───────────────────────────────────────────────────────────────
+ *
+ * The railway prints just "NS" often, but the substring engine cannot hold a
+ * two-letter needle ("insurance", "transfer", "Jansen"). So this is a TOKEN
+ * rule: upper-case NS, as its own word, read on the RAW text (case matters: it
+ * keeps "ns" and the initials "N.S." out), outgoing only (an NS salary or
+ * refund coming IN is not a train ticket). */
+const NS_TOKEN = /(?<![A-Za-z0-9.])NS(?![A-Za-z0-9.])/;
+export function nsTokenCategory(tx: TxText, sign: "in" | "out"): string | null {
+  if (sign !== "out") return null;
+  // The COUNTERPARTY only: a description is free text ("Treinkaartje NS ...").
+  return NS_TOKEN.test(stripProcessorNoise(tx.counterparty ?? "")) ? "Transport" : null;
 }
 
 /* ── An incasso, read off the row's own code ─────────────────────────────── */
