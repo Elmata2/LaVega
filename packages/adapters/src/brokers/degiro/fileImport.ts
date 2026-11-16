@@ -84,7 +84,9 @@ export function createDeGiroFileImport(): DeGiroFileImport {
         ...(cashHistory ? { cashHistory } : {}),
         ...(parsed.period ? { period: parsed.period } : {}),
         source: parsed.source,
-        problems: parsed.problems,
+        /* Reconciliation is report-only: it must reach the user without
+         * downgrading a section the files did read in full (#326). */
+        problems: [...parsed.problems, ...(parsed.reconciliationProblems ?? [])],
       };
     },
   };

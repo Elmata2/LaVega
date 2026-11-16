@@ -26,6 +26,10 @@ export type ParsedBrokerFile = {
   trades: Omit<Trade, "entity" | "id">[];
   source: string;
   problems: string[];
+  /** Report-only disagreements between the files of one import (#326). They
+   *  are user-facing problems, but they do not make a section partial: each
+   *  file still read its own rows in full. */
+  reconciliationProblems?: string[];
   /** Which export the header matched; absent when the header is unknown. */
   profile?: DeGiroProfile;
   dividends?: Omit<Dividend, "entity">[];

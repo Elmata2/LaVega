@@ -81,6 +81,12 @@ node $C cleanup
   one is quiet.
 - Overview and Positions show `[data-degiro-age]` with `imported <date>`,
   `quantities from <date>` and `Prices update daily; quantities are not live.`
+- Cross-file reconciliation is report-only. Account + `portfolio-reconciled.csv` gives no
+  reconciliation problem; account + `portfolio-split.csv` gives one problem naming
+  `IE0VORB00033`, `portfolio zegt 10` and `transacties geven 5`, while the positions
+  section stays complete; account + `portfolio-cash-mismatch.csv` gives one problem with
+  both amounts (`201.76` and `1467.64`). Fixtures:
+  `packages/core/src/parsers/__fixtures__/degiro/nl/portfolio-*.csv`.
 - Committing the same files twice leaves the stored snapshot deep-equal. An unknown
   CSV answers 200 with `committed: false` and writes nothing. A 5 MB upload answers 413.
 - Never import fixtures into a real tenant. A live prod commit writes the signed-in

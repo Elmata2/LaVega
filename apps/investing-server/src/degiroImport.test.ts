@@ -193,6 +193,47 @@ test("a status read reports the committed import, its files and the holdings dat
   expect(vault.putBrokerSnapshot).toHaveBeenCalledTimes(1);
 });
 
+test("a committed split reports the disagreement, keeps the portfolio quantity and still writes", async () => {
+  const { handler, writes } = makeSources();
+  const response = await handler(
+    upload(
+      [
+        csv("Account.csv", fixture("nl/account.csv")),
+        csv("Portfolio.csv", fixture("nl/portfolio-split.csv")),
+      ],
+      { mode: "commit", asOf: "2026-03-06" },
+    ),
+  );
+  expect(response.status).toBe(200);
+  const body = (await response.json()) as CommitBody;
+
+  expect(body.committed).toBe(true);
+  expect(body.problems).toHaveLength(1);
+  expect(body.problems[0]).toContain("IE0VORB00033");
+  expect(body.problems[0]).toContain("portfolio zegt 10");
+  expect(body.problems[0]).toContain("transacties geven 5");
+  // Portfolio quantities win the holdings; the trades keep their own quantity.
+  expect(writes[0]?.positions[0]?.quantity).toBe(10);
+  expect(writes[0]?.trades.every((trade) => trade.quantity !== 10)).toBe(true);
+});
+
+test("a committed consistent import reports no reconciliation problem", async () => {
+  const { handler } = makeSources();
+  const response = await handler(
+    upload(
+      [
+        csv("Account.csv", fixture("nl/account.csv")),
+        csv("Portfolio.csv", fixture("nl/portfolio-reconciled.csv")),
+      ],
+      { mode: "commit", asOf: "2026-03-06" },
+    ),
+  );
+  expect(response.status).toBe(200);
+  const body = (await response.json()) as CommitBody;
+  expect(body.committed).toBe(true);
+  expect(body.problems).toEqual([]);
+});
+
 test("committing the same file twice leaves the stored snapshot deep-equal", async () => {
   const { handler, writes } = makeSources();
   const request = () => upload([csv("Account.csv", fixture("nl/account.csv"))], { mode: "commit" });
