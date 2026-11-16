@@ -90,11 +90,21 @@ function enqueue<T>(run: () => Promise<T>): Promise<T> {
  *  exists. */
 let lastSent: { date: string; totalCents: number } | null = null;
 
+/** True while this tab runs the personal-data reset (or another tab told us it
+ *  is). A PUT re-created in that window would bring back the row the reset just
+ *  deleted, so `putNetWorthTotal` checks it at send time, inside its queue. */
+let suspended = false;
+
+export function setNetWorthShareSuspended(on: boolean): void {
+  suspended = on;
+}
+
 /** Test-only: the queue and last-sent cache are module state, shared across
  *  every test in a file unless reset between them. */
 export function resetNetWorthShareStateForTests(): void {
   queue = Promise.resolve();
   lastSent = null;
+  suspended = false;
 }
 
 /** PUTs exactly `{ date, totalCents, currency: "EUR" }` — no other field ever
@@ -125,7 +135,8 @@ export async function putNetWorthTotal(
   totalCents: number,
 ): Promise<NetWorthShareOutcome> {
   return enqueue(async () => {
-    if (!getShareNetWorthEnabled() || getShareNetWorthPendingDelete()) return "skipped";
+    if (suspended || !getShareNetWorthEnabled() || getShareNetWorthPendingDelete())
+      return "skipped";
     if (lastSent && lastSent.date === date && lastSent.totalCents === totalCents) return "skipped";
     try {
       const response = await fetch("/api/personal/net-worth-total", {

@@ -91,6 +91,19 @@ vi.mock("./vaultKey.js", async (importOriginal) => {
 
 let App: typeof import("./App.js").default;
 
+const ACCOUNT = { kind: "account", id: "u1" } as const;
+const SEED_ACCOUNT = {
+  key: "A",
+  iban: "A",
+  name: "",
+  bank: "",
+  entity: "BV1",
+  currency: "EUR",
+  balance: 1234.56,
+};
+const puts = () =>
+  shareTotalCalls().filter((c) => (c[1] as RequestInit | undefined)?.method === "PUT");
+
 let container: HTMLElement | null = null;
 let root: ReactRoot | null = null;
 let fetchMock: ReturnType<typeof vi.fn>;
@@ -119,12 +132,12 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-async function renderApp() {
+async function renderApp(owner: { kind: "account"; id: string } | { kind: "device" } = ACCOUNT) {
   container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);
   await act(async () => {
-    root!.render(<App />);
+    root!.render(<App owner={owner} />);
   });
   // The "load persisted data" and agent-status effects each resolve a
   // promise before their state lands; a couple of flushes clear both.
@@ -150,15 +163,57 @@ function openProfiel(el: HTMLElement) {
   });
 }
 
-test("the switch is off at start, and no accounts means nothing to share even if it were on — no request is ever sent to the share route", async () => {
+test("fresh state: the switch is ON, and no accounts means nothing to share — no request is sent to the share route", async () => {
   const el = await renderApp();
   openProfiel(el);
   const toggle = el.querySelector<HTMLInputElement>(
     '[aria-label="Deel mijn Totale positie met LaVega Investing"]',
   );
   expect(toggle).not.toBeNull();
-  expect(toggle!.checked).toBe(false);
+  expect(toggle!.checked).toBe(true);
   expect(shareTotalCalls()).toHaveLength(0);
+});
+
+test("fresh state with a known balance: one PUT with only { date, totalCents, currency }", async () => {
+  mockAccounts = [SEED_ACCOUNT];
+  await renderApp();
+  await act(async () => {});
+  expect(puts()).toHaveLength(1);
+  const body = JSON.parse((puts()[0]![1] as RequestInit).body as string);
+  expect(Object.keys(body).sort()).toEqual(["currency", "date", "totalCents"]);
+  expect(body.totalCents).toBe(123456);
+});
+
+test("an explicit off in storage stays off: no PUT, switch unchecked", async () => {
+  mockAccounts = [SEED_ACCOUNT];
+  localStorage.setItem("lavega.shareNetWorth", "0");
+  const el = await renderApp();
+  await act(async () => {});
+  expect(shareTotalCalls()).toHaveLength(0);
+  openProfiel(el);
+  const toggle = el.querySelector<HTMLInputElement>(
+    '[aria-label="Deel mijn Totale positie met LaVega Investing"]',
+  )!;
+  expect(toggle.checked).toBe(false);
+});
+
+test("an explicit on in storage still shares", async () => {
+  mockAccounts = [SEED_ACCOUNT];
+  localStorage.setItem("lavega.shareNetWorth", "1");
+  await renderApp();
+  await act(async () => {});
+  expect(puts()).toHaveLength(1);
+});
+
+test("browser-only use (device owner, no account): default on, yet nothing is ever sent", async () => {
+  mockAccounts = [SEED_ACCOUNT];
+  const el = await renderApp({ kind: "device" });
+  await act(async () => {});
+  expect(shareTotalCalls()).toHaveLength(0);
+  openProfiel(el);
+  expect(
+    el.querySelector('[aria-label="Deel mijn Totale positie met LaVega Investing"]'),
+  ).toBeNull();
 });
 
 test("switching the share off sends exactly one DELETE, never a PUT after it", async () => {
@@ -191,8 +246,6 @@ test("a tab left open past midnight shares under the new day, not the day it mou
   const el = await renderApp();
   await act(async () => {});
 
-  const puts = () =>
-    shareTotalCalls().filter((c) => (c[1] as RequestInit | undefined)?.method === "PUT");
   const bodyOf = (call: unknown[]) => JSON.parse((call[1] as RequestInit).body as string);
 
   expect(puts()).toHaveLength(1);
@@ -228,8 +281,6 @@ test("another tab switching sharing off is picked up via the storage event — n
   const el = await renderApp();
   await act(async () => {});
 
-  const puts = () =>
-    shareTotalCalls().filter((c) => (c[1] as RequestInit | undefined)?.method === "PUT");
   expect(puts()).toHaveLength(1); // the initial mount PUT
 
   // Tab B writes storage directly and its own DELETE succeeds — this tab
@@ -278,4 +329,45 @@ test("the module grid renders inside the content container that the grid's conta
   const grid = el.querySelector(".module-grid");
   expect(grid, "no .module-grid rendered").not.toBeNull();
   expect(grid!.closest(".content-container")).toBe(wrapper);
+});
+
+test("an unset key switched off while the DELETE fails is an explicit off at once: it survives the reset's key removal and no PUT follows", async () => {
+  mockAccounts = [SEED_ACCOUNT];
+  fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = typeof input === "string" ? input : input.toString();
+    if (url.includes("/api/personal/net-worth-total")) {
+      return init?.method === "DELETE"
+        ? new Response(null, { status: 500 })
+        : new Response(null, { status: 200 });
+    }
+    if (url.includes("/api/agent/status"))
+      return new Response(JSON.stringify({ configured: false }), { status: 200 });
+    return new Response(null, { status: 404 });
+  });
+  const el = await renderApp();
+  await act(async () => {});
+  expect(localStorage.getItem("lavega.shareNetWorth")).toBeNull();
+  openProfiel(el);
+  const toggle = el.querySelector<HTMLInputElement>(
+    '[aria-label="Deel mijn Totale positie met LaVega Investing"]',
+  )!;
+  await act(async () => {
+    toggle.click();
+  });
+  await act(async () => {});
+  expect(toggle.checked).toBe(false);
+  expect(localStorage.getItem("lavega.shareNetWorth")).toBe("0");
+
+  // The personal-data reset removes the pending marker.
+  const { PERSONAL_LOCAL_KEYS } = await import("./vaultSync.js");
+  for (const key of PERSONAL_LOCAL_KEYS) localStorage.removeItem(key);
+  const { getShareNetWorthEnabled } = await import("./settings.js");
+  expect(getShareNetWorthEnabled()).toBe(false);
+});
+
+test("device owner with a stale pending delete: no network call to the share route at all", async () => {
+  localStorage.setItem("lavega.shareNetWorthPendingDelete", "1");
+  await renderApp({ kind: "device" });
+  await act(async () => {});
+  expect(shareTotalCalls()).toHaveLength(0);
 });

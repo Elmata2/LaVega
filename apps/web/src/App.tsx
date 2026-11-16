@@ -135,6 +135,7 @@ import {
 import {
   computeShareableTotalCents,
   deleteNetWorthTotal,
+  setNetWorthShareSuspended,
   putNetWorthTotal,
   todayIso,
 } from "./netWorthShare.js";
@@ -429,25 +430,28 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
     setFxConversionMode(mode);
     setFxConversionModeState(mode);
   }
-  /* Opt-in share of Totale positie into LaVega Investing's net worth. Off is
-   * the default. Two flags, not one, because turning it off must not leave
-   * data behind: `shareNetWorthEnabledStored` is the underlying preference
-   * and stays "on" until the DELETE it triggers actually succeeds;
-   * `shareNetWorthPendingDelete` is set the instant the owner switches off
-   * and is the sole trigger for the retry effect below, which is also what
+  /* Share of Totale positie into LaVega Investing's net worth. On is the
+   * default (an unset key reads as on). Two flags, not one, because turning it
+   * off must not leave data behind: `shareNetWorthEnabledStored` is the
+   * preference and is written "0" the instant the owner switches off (an
+   * explicit off must survive a failed DELETE or a reset);
+   * `shareNetWorthPendingDelete` is set at the same moment and stays until the
+   * DELETE it triggers succeeds. It is the sole trigger for the retry effect below, which is also what
    * runs the very first attempt — so "toggle off" and "retry on next
    * unlock/app start" are the same code path, never two.
    *
    * The EFFECTIVE state everything else reads is `shareNetWorthEnabled`
-   * (derived): pending delete always means "not sharing", even while the
-   * stored preference technically remains on as the retry's memory. */
+   * (derived): pending delete always means "not sharing". */
   const [shareNetWorthEnabledStored, setShareNetWorthEnabledStoredState] = useState<boolean>(() =>
     getShareNetWorthEnabled(),
   );
   const [shareNetWorthPendingDelete, setShareNetWorthPendingDeleteState] = useState<boolean>(() =>
     getShareNetWorthPendingDelete(),
   );
-  const shareNetWorthEnabled = shareNetWorthEnabledStored && !shareNetWorthPendingDelete;
+  // Sharing needs a signed-in account: a device-only vault has no Investing
+  // side to send to, so nothing leaves the browser whatever the default is.
+  const shareNetWorthEnabled =
+    owner.kind === "account" && shareNetWorthEnabledStored && !shareNetWorthPendingDelete;
   function handleShareNetWorthEnabledChange(on: boolean) {
     if (on) {
       setShareNetWorthEnabled(true);
@@ -456,6 +460,12 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
       setShareNetWorthPendingDeleteState(false);
       return;
     }
+    // The explicit off is written NOW, not after the DELETE lands: an unset key
+    // reads as ON, so a failed or interrupted DELETE (offline, tab closed, then
+    // a personal-data reset that removes the pending marker) must never leave
+    // "unset" behind. `pendingDelete` stays only as the retry marker.
+    setShareNetWorthEnabled(false);
+    setShareNetWorthEnabledStoredState(false);
     setShareNetWorthPendingDelete(true);
     setShareNetWorthPendingDeleteState(true);
   }
@@ -465,7 +475,7 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
   // failed) — until it succeeds, at which point the stored preference is
   // finally allowed to flip off too.
   useEffect(() => {
-    if (gate !== "ready" || !shareNetWorthPendingDelete) return;
+    if (gate !== "ready" || !shareNetWorthPendingDelete || owner.kind !== "account") return;
     let cancelled = false;
     void deleteNetWorthTotal().then((outcome) => {
       if (cancelled || outcome !== "deleted") return;
@@ -477,7 +487,7 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
     return () => {
       cancelled = true;
     };
-  }, [gate, shareNetWorthPendingDelete]);
+  }, [gate, shareNetWorthPendingDelete, owner.kind]);
   // Cross-tab sync. Another tab can switch sharing off — and have its DELETE
   // succeed — while THIS tab's React state still holds the old value; without
   // this, this tab's own next sync/import/FX-mode change would read a stale
@@ -715,7 +725,12 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
     () =>
       storage.onVaultDestroyed((phase) => {
         if (phase === "destroyed") window.location.assign("/app");
-        else setTabReset(phase);
+        else {
+          // Another tab is clearing the personal data: this one must not PUT a
+          // total back while it does. Reuses this lock signal, no second one.
+          setNetWorthShareSuspended(true);
+          setTabReset(phase);
+        }
       }),
     [],
   );
