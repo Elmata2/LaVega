@@ -85,6 +85,7 @@ function fakeStorage(accounts: Account[] = [], facts: LearnedFact[] = []) {
 }
 
 const storage = fakeStorage().storage;
+const ACCOUNT = { kind: "account", id: "u1" } as const;
 
 async function render(overrides: Partial<Parameters<typeof Profiel>[0]> = {}) {
   const props: Parameters<typeof Profiel>[0] = {
@@ -594,9 +595,35 @@ test("de aanname is uit te zetten, en dan staat er weer onbekend", async () => {
   expect(localStorage.getItem("lavega.cashbackAssumption")).toBe("0");
 });
 
-test("de net-worth-share schakelaar staat standaard uit en meldt de verandering naar boven", async () => {
+test("zonder account (alleen dit apparaat) is er geen deel-kaart: er gaat niets weg", async () => {
+  await render({ owner: { kind: "device" }, shareNetWorthEnabled: false });
+  expect(container!.textContent).not.toContain("Delen met LaVega Investing");
+});
+
+test("de uitleg zegt dat het het totaal van al je bankrekeningen is, zakelijke rekeningen inbegrepen", async () => {
+  await render({ owner: ACCOUNT, shareNetWorthEnabled: true });
+  const text = container!.textContent ?? "";
+  expect(text).toContain("alle bankrekeningen");
+  expect(text).toContain("zakelijke");
+});
+
+test("de uitleg bij de schakelaar zegt dat hij standaard aan staat, wat er gaat en dat uitzetten kan", async () => {
+  await render({ owner: ACCOUNT, shareNetWorthEnabled: true });
+  const text = container!.textContent ?? "";
+  expect(text).toContain("Staat standaard aan");
+  expect(text).toContain("alleen je dagtotaal");
+  expect(text).toContain("geen rekeningen of transacties");
+  expect(text).toContain("jouw account");
+  expect(text).toContain("uitzetten");
+});
+
+test("de net-worth-share schakelaar meldt de verandering naar boven", async () => {
   const onChange = vi.fn();
-  await render({ shareNetWorthEnabled: false, onShareNetWorthEnabledChange: onChange });
+  await render({
+    owner: ACCOUNT,
+    shareNetWorthEnabled: false,
+    onShareNetWorthEnabledChange: onChange,
+  });
   const toggle = container!.querySelector(
     '[aria-label="Deel mijn Totale positie met LaVega Investing"]',
   ) as HTMLInputElement;
@@ -606,7 +633,7 @@ test("de net-worth-share schakelaar staat standaard uit en meldt de verandering 
 });
 
 test("de net-worth-share schakelaar volgt de prop als hij al aan staat", async () => {
-  await render({ shareNetWorthEnabled: true });
+  await render({ owner: ACCOUNT, shareNetWorthEnabled: true });
   const toggle = container!.querySelector(
     '[aria-label="Deel mijn Totale positie met LaVega Investing"]',
   ) as HTMLInputElement;
@@ -614,12 +641,12 @@ test("de net-worth-share schakelaar volgt de prop als hij al aan staat", async (
 });
 
 test("een mislukte verwijdering na het uitzetten toont de terugval-melding", async () => {
-  await render({ shareNetWorthEnabled: false, shareNetWorthPendingDelete: true });
+  await render({ owner: ACCOUNT, shareNetWorthEnabled: false, shareNetWorthPendingDelete: true });
   expect(container!.textContent).toContain("Kon je gedeelde bedragen niet verwijderen");
 });
 
 test("geen terugval-melding zolang er niets mislukt is", async () => {
-  await render({ shareNetWorthEnabled: false, shareNetWorthPendingDelete: false });
+  await render({ owner: ACCOUNT, shareNetWorthEnabled: false, shareNetWorthPendingDelete: false });
   expect(container!.textContent).not.toContain("Kon je gedeelde bedragen niet verwijderen");
 });
 

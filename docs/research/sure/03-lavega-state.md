@@ -111,7 +111,7 @@ Routes declared in `apps/server/src` (all under a session guard unless on the pu
 | `/api/n8n/status`, `/api/n8n/queue`, `/api/n8n/forward-address` (GET/POST) | invoice queue proxy + per-user forwarding local-part | `n8n-routes.ts:46,55,130,144`; ADR `0006-invoice-queue-server-proxy.md` |
 | `/api/agent/status`, `/api/agent/budget`, `/api/agent/extract-invoice`, `/api/agent/chat`, `/api/agent/categorize`, `/api/agent/travel-facts`, `/api/card-terms/ingest` | LLM-backed invoice extraction, chat SSE, bulk categorization, card terms | `agent-routes.ts:219,225,247,311,410,475,536` |
 | `/api/vault/key`, `/api/vault/backup` (GET/PUT) | account-held vault key; sealed vault backup | `vault-routes.ts:70,84,101` |
-| `/api/personal/net-worth-total` (PUT/DELETE) | opt-in shared personal total for investing net worth | `net-worth-routes.ts:73,96` |
+| `/api/personal/net-worth-total` (PUT/DELETE) | shared personal total (on by default, account only) for investing net worth | `net-worth-routes.ts:73,96` |
 | `DELETE /api/account/data` | erase all data | `account-routes.ts:36` |
 | `/api/investing/*`, `/investing/api/*`, `/investing/*` | investing API alias + SPA mount | `index.ts:398-446`; `apps/server/src/investing-mount.ts:1-90` |
 | `GET /api/cron/investing-sync` | daily tenant sync (bearer `CRON_SECRET`) | `index.ts:401` |

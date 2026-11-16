@@ -140,6 +140,9 @@ const KEPT_KEYS = [
   "lavega.ownerName",
   "lavega.country",
   "lavega.sidebarWidth",
+  // The explicit net-worth share choice survives a reset: sharing is on by
+  // default, so wiping an explicit "off" would silently switch it back on.
+  "lavega.shareNetWorth",
 ];
 
 const resetSetup = () => {
@@ -180,7 +183,6 @@ test("the personal key lists are exactly the specified ones", () => {
       "lavega.bufferCents",
       "lavega.ebLastRefreshAt",
       "lavega.ebEverConnected",
-      "lavega.shareNetWorth",
       "lavega.shareNetWorthPendingDelete",
       "lavega.n8nHandledMessageIds",
       "lavega.n8n.autoBooked.v1",
@@ -294,4 +296,26 @@ test("any other vault failure is local-failed", async () => {
   stub(new Response(JSON.stringify({ erased: [] })));
   await expect(run(setup)).rejects.toMatchObject({ code: "local-failed" });
   expect(setup.navigate).not.toHaveBeenCalled();
+});
+
+test("while a reset runs no net-worth total is sent, and a failed reset lets sharing resume", async () => {
+  const { putNetWorthTotal, resetNetWorthShareStateForTests } = await import("./netWorthShare.js");
+  resetNetWorthShareStateForTests();
+  const setup = resetSetup();
+  const fetchMock = stub(new Response(JSON.stringify({ erased: [] })));
+  let during: string | null = null;
+  setup.storage.destroyVault.mockImplementation(async () => {
+    // The page is still mounted with accounts in memory; a share effect that
+    // re-runs now must not re-create the row the reset just deleted.
+    during = await putNetWorthTotal("2026-11-16", 100);
+    throw new Error("boom");
+  });
+  await expect(run(setup)).rejects.toMatchObject({ code: "local-failed" });
+  expect(during).toBe("skipped");
+  expect(
+    fetchMock.mock.calls.some((c) => (c as unknown as [string, RequestInit?])[1]?.method === "PUT"),
+  ).toBe(false);
+  // Failed reset: the marker is cleared again.
+  fetchMock.mockClear();
+  expect(await putNetWorthTotal("2026-11-16", 100)).toBe("stored");
 });

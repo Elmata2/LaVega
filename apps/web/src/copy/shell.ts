@@ -701,11 +701,11 @@ const nl: ShellCopy = {
       ariaLabel: "Delen met LaVega Investing",
       heading: "Delen met LaVega Investing",
       description:
-        "Deelt elke dag je Totale positie (het bedrag bovenaan Home) met LaVega Investing, zodat je nettowaarde daar je bankgeld meetelt naast je beleggingen.",
+        "Staat standaard aan. Deelt elke dag je Totale positie (het bedrag bovenaan Home) met LaVega Investing: het totaal van alle bankrekeningen, zakelijke rekeningen inbegrepen en beleggingsrekeningen niet, zodat je nettowaarde daar je bankgeld meetelt naast je beleggingen.",
       privacyNote:
-        "Er gaat nooit een transactie, rekening of bedrijfsnaam mee — alleen dit ene bedrag, per dag, en alleen op een dag dat minstens één saldo bekend is.",
+        "Er gaat alleen je dagtotaal mee, geen rekeningen of transacties en geen bedrijfsnaam: één bedrag per dag, en alleen op een dag dat minstens één saldo bekend is. Het gaat alleen naar de Investing-kant van jouw account. Je kunt het altijd uitzetten; dan verwijdert LaVega de eerder gedeelde bedragen (en probeert het opnieuw als de server niet bereikbaar is).",
       perDeviceNote:
-        "Deze schakelaar geldt per apparaat. Zet je hem hier aan, dan delen alleen je bezoeken vanaf DIT apparaat een bedrag. Eerder gedeelde bedragen blijven bij LaVega Investing staan totdat je de schakelaar uitzet op een apparaat waar hij aanstaat.",
+        "Deze schakelaar geldt per apparaat: alleen bezoeken vanaf DIT apparaat delen een bedrag. Eerder gedeelde bedragen blijven bij LaVega Investing staan totdat je de schakelaar uitzet op een apparaat waar hij aanstaat.",
       toggleLabel: "Deel mijn Totale positie met LaVega Investing",
       onStatus:
         "Staat aan. Elke dag dat je kluis open is en er minstens één saldo bekend is, gaat het bedrag naar Investing.",
@@ -1102,11 +1102,11 @@ const en: ShellCopy = {
       ariaLabel: "Share with LaVega Investing",
       heading: "Share with LaVega Investing",
       description:
-        "Shares your Totale positie (the figure at the top of Home) with LaVega Investing every day, so its net worth counts your bank money alongside your investments.",
+        "On by default. Shares your Totale positie (the figure at the top of Home) with LaVega Investing every day: the total of all your bank accounts, business accounts included and investment accounts left out, so its net worth counts your bank money alongside your investments.",
       privacyNote:
-        "No transaction, account or company name ever goes with it — only this one figure, per day, and only on a day at least one balance is known.",
+        "Only your daily total goes, no accounts or transactions and no company name: one figure per day, and only on a day at least one balance is known. It goes only to the Investing side of your own account. You can switch it off at any time; LaVega then removes the totals shared before (and retries if it cannot reach the server).",
       perDeviceNote:
-        "This switch is per device. Turning it on here shares a figure only from visits on THIS device. Totals already shared stay with LaVega Investing until you turn the switch off on a device where it's on.",
+        "This switch is per device: only visits from THIS device share a figure. Totals already shared stay with LaVega Investing until you turn the switch off on a device where it's on.",
       toggleLabel: "Share my Totale positie with LaVega Investing",
       onStatus:
         "On. Every day your vault is open and at least one balance is known, the figure goes to Investing.",

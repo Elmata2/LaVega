@@ -140,7 +140,7 @@ their existing content (sign-in form or note) inside Algemeen.
   window width of about 1800px.
 - **Statistieken header** wraps to two rows (title and period, then tabs) so that nothing leaves
   the card.
-- **4.3 Net-worth share card** stays visible for a user who already has sharing on or a pending
+- **4.3 Net-worth share card** (visible again since 16 Nov 2026: sharing is on by default) stays visible for a user who already has sharing on or a pending
   delete, so that consent can be withdrawn.
 - **4.6 Sign-out** always locks the vault, also when the account sign-out call fails.
 - **"Widget toevoegen"** is hidden when every widget is already on Home.
