@@ -3,19 +3,20 @@ import type { Account, Invoice, Tx, VatPosition, VatSettings } from "@lavega/cor
 import { resolveVatSettings, txsForEntity, vatPosition } from "@lavega/core";
 import type { View } from "../../App";
 import type { ModuleSpan } from "../../module-grid.js";
-import { formatEuroIn } from "../../format.js";
+import { formatSignedEuroIn } from "../../format.js";
 import Module from "../Module.js";
 import CardLink from "../ui/CardLink.js";
 import { useWidgetEnabled } from "../moduleRegistry";
+import WidgetHideButton from "../WidgetHideButton";
 import type { Locale } from "../../locale.js";
 import { useAppLocale } from "../../appLocale.js";
 import { moneyCopy } from "../../copy/money.js";
 
-/* BTW op de startpagina — "doe default wel btw".
+/* BTW op de startpagina.
  *
- * Die zin is de reden dat deze kaart als enige NIEUWE widget standaard AAN staat
- * (moduleRegistry, `defaultOn`); de reden staat daar ook, want zonder die reden
- * leest het als een inconsequentie naast de facturenkaart ernaast.
+ * De kaart is een widget die je zelf aanzet (moduleRegistry, zonder `defaultOn`,
+ * zoals alle widgets op Home). `homeSpans` bepaalt de breedte, zodat de rij
+ * waarin hij staat geen gat heeft.
  *
  * ── HET CIJFER KOMT NIET UIT DEZE KAART ───────────────────────────────────
  *
@@ -219,9 +220,15 @@ export function BtwBlock({
   return (
     <Module
       title={c.title}
+      widgetId="btw-stand"
       span={span}
       height="short"
-      menu={<CardLink onClick={() => onNavigate("belasting")}>{c.belastingArrow}</CardLink>}
+      menu={
+        <>
+          <CardLink onClick={() => onNavigate("belasting")}>{c.belastingArrow}</CardLink>
+          <WidgetHideButton id="btw-stand" />
+        </>
+      }
       footer={
         <>
           {row.amountShown && c.bronPrefix(c.shortBasis[p.basis])}
@@ -236,7 +243,10 @@ export function BtwBlock({
           className={`module-figure-value ${!row.amountShown ? "" : p.direction === "terugvragen" ? "text-pos" : "text-neg"}`}
         >
           {row.amountShown
-            ? formatEuroIn(locale, Math.abs(p.netCents as number) / 100)
+            ? formatSignedEuroIn(
+                locale,
+                (p.direction === "terugvragen" ? 1 : -1) * (Math.abs(p.netCents as number) / 100),
+              )
             : c.geenBedrag}
         </span>
         {row.amountShown && (

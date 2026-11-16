@@ -19,6 +19,7 @@ import { formatEuroIn } from "../../format.js";
 import Button from "../ui/Button.js";
 import Card from "../ui/Card.js";
 import CardLink from "../ui/CardLink.js";
+import StatusLine from "../ui/StatusLine.js";
 import { tableFromRows, xlsxToRows } from "../../xlsx.js";
 
 export type GenericImportRequest = {
@@ -198,9 +199,14 @@ export default function GenericImportCard({
         />
       </div>
       {error && (
-        <p role="alert" className="text-warn" data-testid="generic-import-error">
+        <StatusLine
+          tone="problem"
+          role="alert"
+          
+          data-testid="generic-import-error"
+        >
           {c.unsupported}
-        </p>
+        </StatusLine>
       )}
       {filename == null && !error && <p className="m-0 text-muted">{c.noFile}</p>}
 
@@ -255,9 +261,9 @@ export default function GenericImportCard({
 
           {plan != null && plan.warnings.length > 0 && (
             <div className="mt-3" data-testid="generic-import-cross-format">
-              <p className="m-0 text-warn">
+              <StatusLine tone="warning" className="m-0">
                 {c.crossFormat(plan.warnings[0]!.formats.map((f) => c.formatLabels[f]).join(", "))}
-              </p>
+              </StatusLine>
               <label className="flex items-center gap-2">
                 <input
                   type="checkbox"

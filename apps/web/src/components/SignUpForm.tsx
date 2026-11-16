@@ -13,6 +13,7 @@ import posthog from "../posthog.js";
 import Button from "./ui/Button.js";
 import { Field } from "./ui/Field.js";
 import PasswordInput from "./ui/PasswordInput.js";
+import StatusLine from "./ui/StatusLine.js";
 
 /** Seconds before the confirmation mail may be sent again. */
 export const RESEND_COOLDOWN = 60;
@@ -135,9 +136,9 @@ export default function SignUpForm({
           </span>
         </label>
         {failure !== null && (
-          <p role="alert" className="text-warn">
+          <StatusLine tone="problem" role="alert">
             {c.signUp.error[failure]}
-          </p>
+          </StatusLine>
         )}
         <Button type="submit" variant="primary" disabled={busy || !complete}>
           {busy ? c.signUp.busy : c.signUp.submit}
@@ -197,9 +198,9 @@ function CheckEmail({
       <p className={introClassName}>{c.signUp.doneBody(email)}</p>
       {resent && <p className={introClassName}>{c.signUp.resent}</p>}
       {failure !== null && (
-        <p role="alert" className="text-warn">
+        <StatusLine tone="problem" role="alert">
           {c.mailError[failure]}
-        </p>
+        </StatusLine>
       )}
       <Button
         type="button"

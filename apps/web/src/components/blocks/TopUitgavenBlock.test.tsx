@@ -4,7 +4,7 @@ import { expect, test } from "vitest";
 import type { Account, CategoryComparison, Tx } from "@lavega/core";
 import { categoryComparison, ownAccounts } from "@lavega/core";
 import { formatEuro } from "../../format.js";
-import TopUitgavenBlock, { TopUitgavenView } from "./TopUitgavenBlock";
+import { TopUitgavenBlock, TopUitgavenView } from "./TopUitgavenBlock";
 import { own, rules, txs } from "./fixtures";
 
 /* The block renders core's verdict on whether two months may be compared at
@@ -143,4 +143,9 @@ test("TopUitgavenBlock renders an empty state with no transactions at all", () =
   expect(html).toContain("Nog geen uitgaven deze maand.");
   expect(html).not.toContain("cat-bar");
   expect(html).not.toContain("cat-nocompare");
+});
+
+test("the category delta carries a real minus next to its arrow", () => {
+  const html = block(txs).replace(/<!-- -->/g, "");
+  expect(html).toMatch(/cat-delta down">▼ \u2212\d+%/);
 });

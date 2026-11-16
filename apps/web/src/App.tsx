@@ -20,8 +20,8 @@ import type {
   VaultDocument,
   ImportSession,
 } from "@lavega/core";
-import { capacityFor, computeRoom, emptyProfile, planProfileOf, resolveRoom } from "@lavega/core";
 import type { PlanResult } from "@lavega/core";
+import { capacityFor, computeRoom, emptyProfile, planProfileOf, resolveRoom } from "@lavega/core";
 import { fxNeedSignature, syncFxHistory } from "./fxHistory.js";
 import {
   ingest,
@@ -94,7 +94,11 @@ import {
 } from "@lavega/adapters";
 import { CATALOGUE_ENTRIES, CATALOGUE_RATES } from "./catalogue-rates";
 import { API_BASE } from "./api.js";
-import { SHOW_INVOICE_FORWARDING, initialScope, isArchivedView } from "./archive";
+import { CONTENT_CONTAINER_CLASS } from "./module-grid.js";
+import { Shell } from "./components/Shell.js";
+import { HomePopups } from "./components/HomePopups.js";
+import { AccountSidebar } from "./components/AccountSidebar.js";
+import { SHOW_INVOICE_FORWARDING, initialScope, isArchivedView, isArchivedWidget } from "./archive";
 import { pathForView, takePendingEbParams, viewFromPathname, type View } from "./appRoutes";
 import { gateState } from "./vault-gate.js";
 import type { GateState } from "./vault-gate.js";
@@ -115,7 +119,6 @@ import {
   setOwnerName,
   ownerDisplayName,
   getEnabledModules,
-  setEnabledModules,
   getFxConversionMode,
   setFxConversionMode,
   getShareNetWorthEnabled,
@@ -154,14 +157,15 @@ import {
   markBankConnected,
   markEbRefreshAttempted,
 } from "./ebAutoRefresh.js";
-import NavBar from "./components/NavBar";
-import TopBar from "./components/TopBar";
+import { TopBarActions } from "./components/TopBar";
 import CardLink from "./components/ui/CardLink.js";
 import Button from "./components/ui/Button.js";
+import StatusLine from "./components/ui/StatusLine.js";
 import {
   enabledModules as resolveModules,
   navModules,
-  withoutLockedModules,
+  useOverviewWidgets,
+  WIDGETS,
   type ModuleId,
 } from "./components/moduleRegistry";
 import IntakeWizard from "./views/IntakeWizard";
@@ -169,6 +173,7 @@ import AboutYou from "./views/AboutYou";
 import PlanRoute from "./plan/PlanRoute";
 import { intakeCopy } from "./copy/intake.js";
 import Overzicht from "./views/Overzicht";
+import { AssistantPanel } from "./assistant/AssistantPanel";
 import Transacties from "./views/Transacties";
 import Regels from "./views/Regels";
 import Rekeningen from "./views/Rekeningen";
@@ -186,6 +191,7 @@ import Backup from "./views/Backup";
 import Profiel from "./views/Profiel";
 import AgentFeed from "./views/AgentFeed";
 import type { N8nNotice, PendingInvoice } from "./n8n.js";
+import { adminCopy } from "./copy/admin.js";
 import { useAppLocale } from "./appLocale.js";
 import { useAgentMirror } from "./agent/useAgentMirror.js";
 import { shellCopy } from "./copy/shell.js";
@@ -207,7 +213,7 @@ const RATES_URL: string | undefined =
 
 /* "rules" has NO nav entry: Regels is a setting, so it renders inline in
  * Profiel and nothing calls setView("rules"). Its branch below is gone. The
- * union still lists it only because components/TopBar.tsx types its page-title
+ * union still lists it only because copy/shell.ts types its page-title
  * table as Record<View, string> and still has a "Regels" entry — dropping the
  * member there is one line in a file this change does not own, and that title
  * map is a label lookup, not a way to reach the view. Path `/app/rules` still
@@ -239,6 +245,15 @@ function isN8nNoticeLike(v: unknown): v is N8nNotice {
     (v as { messageId: string }).messageId.length > 0 &&
     typeof (v as { kind?: unknown }).kind === "string"
   );
+}
+
+/** The stated card ids from the read profile; none while it is not readable. */
+function statedOf(
+  read: ProfileRead | "loading" | "error",
+  key: "statedCards" | "statedDebitCards",
+): readonly string[] | undefined {
+  if (read === "loading" || read === "error" || read.kind !== "ok") return undefined;
+  return read.store.current[key]?.value;
 }
 
 /** Replace-or-append one transfer decision by its content id. Confirming and
@@ -463,6 +478,9 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
   // Whether the server has a MISTRAL_API_KEY (drives the AI features'
   // "not configured" state). Fetched once; defaults false on any error.
   const [llmConfigured, setLlmConfigured] = useState(false);
+  /** Bank linking (Enable Banking) is set up on the server. Null until known, false when the
+   *  request fails: the intake's last step then leads with the file upload. */
+  const [ebConfigured, setEbConfigured] = useState<boolean | null>(null);
   // A question raised elsewhere in the UI (e.g. the per-category "vs.
   // gemiddelde" button). The floating chat widget that consumed it is
   // deliberately not rendered for now (his UI review: "remove it, decide later
@@ -481,18 +499,22 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
   // The owner's own module selection: which modules sit in the top nav. A local
   // preference (settings.ts); the registry resolves an unset/stale stored list
   // and guarantees Overzicht is in it.
-  const [modules, setModules] = useState<ModuleId[]>(() => resolveModules(getEnabledModules()));
-  function handleModulesChange(next: ModuleId[]) {
-    const resolved = resolveModules(next);
-    setModules(resolved);
-    setEnabledModules(resolved);
-  }
-  // Bumped by "Widget toevoegen" in the header so the profile scrolls to the
-  // picker instead of the top of a long settings page.
-  const [addWidget, setAddWidget] = useState(0);
+  // Profiel no longer has a picker, so a stored choice is read and honoured, not written here.
+  const [modules] = useState<ModuleId[]>(() => resolveModules(getEnabledModules()));
+  // "Widget toevoegen" only shows while the add area has a box to show.
+  const [widgetsOn] = useOverviewWidgets();
+  const canAddWidget = WIDGETS.some((w) => !isArchivedWidget(w.id) && !widgetsOn.includes(w.id));
+  // The phone drawer (and later the assistant sheet) covers the page: no pop-up opens under it.
+  const [overlayOpen, setOverlayOpen] = useState(false);
+  // "Widget toevoegen" in the header: bring Home's add area into view. The add
+  // boxes are the only place a widget is switched on.
   function handleAddWidget() {
-    setView("profiel");
-    setAddWidget((n) => n + 1);
+    setView("overview");
+    requestAnimationFrame(() => {
+      const area = document.querySelector<HTMLElement>("[data-add-area]");
+      area?.scrollIntoView?.({ block: "center" });
+      area?.querySelector<HTMLElement>("[data-add-heading]")?.focus();
+    });
   }
 
   const [view, setViewState] = useState<View>(
@@ -542,7 +564,7 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
   /* Een verse kluis opent de intake-wizard op de eerste vraag, niet
    * de oude instelstap. `showOnboarding` blijft de poort: alleen een verse kluis
    * die dit apparaat nog niet zag, dus een bestaande gebruiker krijgt hier niets
-   * en ziet de uitnodiging op Overzicht. De vlag gaat meteen om; de intake
+   * en ziet de uitnodiging als pop-up op Home. De vlag gaat meteen om; de intake
    * onthoudt zelf waar hij was en hervat via die uitnodiging. */
   useEffect(() => {
     if (gate !== "ready" || !showOnboarding(freshVault, onboarded)) return;
@@ -626,6 +648,41 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
       cancelled = true;
     };
   }, []);
+
+  // Same for bank linking: a public { configured } status GET, no account data.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`${API_BASE}/api/eb/status`);
+        if (!res.ok) {
+          if (!cancelled) setEbConfigured(false);
+          return;
+        }
+        const data = (await res.json()) as { configured?: boolean };
+        if (!cancelled) setEbConfigured(data.configured === true);
+      } catch {
+        if (!cancelled) setEbConfigured(false); // the wizard offers the upload only
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Another tab cleared the personal data (Back-up > Clear personal data). The
+  // storage already dropped its copy and refuses writes; reload into the empty vault.
+  // Two phases: "locked" shows a neutral wait state (reloading now could re-open the
+  // vault before the other tab deletes it); "destroyed" reloads; "stalled" says so.
+  const [tabReset, setTabReset] = useState<"locked" | "stalled" | null>(null);
+  useEffect(
+    () =>
+      storage.onVaultDestroyed((phase) => {
+        if (phase === "destroyed") window.location.assign("/app");
+        else setTabReset(phase);
+      }),
+    [],
+  );
 
   // Open the vault with the owner's key (docs/adr/0009-account-held-vault-key.md).
   // Nothing to ask in the normal case; the gate only shows for a one-time
@@ -1098,11 +1155,7 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
     setPendingNotices([]);
     setProfileRead("loading");
     setGate("loading");
-    if (owner.kind === "account")
-      void signOut().then(
-        () => window.location.assign("/"),
-        () => setGate({ error: "unreachable" }),
-      );
+    if (owner.kind === "account") void signOut().finally(() => window.location.assign("/"));
     else setOpenAttempt((n) => n + 1);
   }
 
@@ -1319,43 +1372,34 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
     () => ({ ...own, names: ownNamesForMatching }),
     [own, ownNamesForMatching],
   );
-  // The plan joins the nav once the intake has produced something to plan with.
+  const okProfileStore =
+    profileRead !== "loading" && profileRead !== "error" && profileRead.kind === "ok"
+      ? profileRead.store
+      : null;
+  // Profiel's "Jouw plan" card opens the plan once the intake has produced something to plan with.
   const planUnlocked =
     profileRead !== "loading" &&
     profileRead !== "error" &&
     profileRead.kind === "ok" &&
     planProfileOf(profileRead.store).intakeBlocksDone >= 1;
+
+  // Show just this account's transactions: clear the other filters so the list
+  // isn't silently narrowed by a stale one. Rekeningen and the account sidebar
+  // share this one handler.
+  const openAccountTransactions = useCallback(
+    (key: string) => {
+      setFAccount(key);
+      setFEntity("");
+      setFSearch("");
+      setFCategory("");
+      setFFrom("");
+      setFTo("");
+      setView("transactions");
+    },
+    [setView],
+  );
   // Capacity for "what LaVega knows about you": the same room and the same
   // profile inputs the intake uses, worked out here and never stored.
-  // The home screen's room card: computed once per data change, and only while
-  // the overview is showing.
-  const homeRoom = useMemo(() => {
-    if (view !== "overview" || profileRead === "loading" || profileRead === "error") return null;
-    const profile = profileRead.kind === "ok" ? profileRead.store.current : emptyProfile();
-    const computed = computeRoom({
-      txs: ledgerTxs,
-      accounts,
-      profiles: entityProfiles,
-      rules,
-      own: ownWithNames,
-      asOf,
-      mode: fxConversionMode,
-      fxHistory,
-    });
-    return resolveRoom(computed, profile);
-  }, [
-    view,
-    profileRead,
-    ledgerTxs,
-    accounts,
-    entityProfiles,
-    rules,
-    ownWithNames,
-    asOf,
-    fxConversionMode,
-    fxHistory,
-  ]);
-
   const aboutYouCapacity = useMemo(() => {
     const profile =
       profileRead !== "loading" && profileRead !== "error" && profileRead.kind === "ok"
@@ -2225,6 +2269,22 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
     }
   }
 
+  if (tabReset) {
+    const t = adminCopy[locale].backup.resetPersonal.otherTab;
+    return (
+      <main className="mx-auto max-w-xl p-6" data-testid="reset-elsewhere">
+        <p role={tabReset === "stalled" ? "alert" : "status"}>
+          {tabReset === "stalled" ? t.stalled : t.busy}
+        </p>
+        {tabReset === "stalled" && (
+          <Button variant="primary" onClick={() => window.location.assign("/app")}>
+            {t.reload}
+          </Button>
+        )}
+      </main>
+    );
+  }
+
   // Until the vault is unlocked/set up/migrated, render only the gate — never
   // the app shell (whose data-reads would throw against a locked/empty vault).
   if (gate !== "ready") {
@@ -2249,7 +2309,7 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
           <p role="status">{intakeCopy[locale].loading}</p>
         ) : profileRead === "error" ? (
           <div role="alert">
-            <p className="text-warn">{intakeCopy[locale].loadError}</p>
+            <StatusLine tone="problem">{intakeCopy[locale].loadError}</StatusLine>
             <Button onClick={() => void retryProfileRead()}>{intakeCopy[locale].retry}</Button>
           </div>
         ) : (
@@ -2258,7 +2318,14 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
             corrupt={profileRead.kind === "corrupt"}
             asOf={asOf}
             onSave={saveProfile}
+            rewards={rewards}
+            onSaveRewards={saveRewards}
             onImport={importFile}
+            {...(ebConfigured === null
+              ? { bankLink: "pending" as const }
+              : ebConfigured
+                ? { bankLink: { onRefresh: () => void handleRefreshBank() } }
+                : {})}
             round={intakeRound}
             onFinish={() => {
               setIntakeRound(1);
@@ -2275,423 +2342,435 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
   }
 
   return (
-    <div className="shell">
-      <NavBar
-        view={view}
-        modules={navModules(withoutLockedModules(modules, planUnlocked))}
-        onNavigate={setView}
-        onOpenProfile={() => setView("profiel")}
-      />
-
-      <div className="shell-body">
-        <TopBar
-          view={view}
+    <Shell
+      title={shell.topBar.viewTitles[view]}
+      onOverlayChange={setOverlayOpen}
+      assistant={<AssistantPanel storage={storage} asOf={asOf} />}
+      nav={{
+        view,
+        modules: navModules(modules),
+        onNavigate: setView,
+        onOpenProfile: () => setView("profiel"),
+      }}
+      sidebar={(onNavigate) => (
+        <AccountSidebar
+          onNavigate={onNavigate}
+          accounts={scopedAccounts}
+          activeAccountKey={view === "transactions" ? fAccount : ""}
+          onSelectAccount={openAccountTransactions}
+          // Import lives in Profiel; Rekeningen's empty state points there too.
+          onAddAccount={() => setView("profiel")}
+        />
+      )}
+      actions={
+        <TopBarActions
           scope={scope}
           onScopeChange={handleScopeChange}
           onAddWidget={handleAddWidget}
+          showAddWidget={view === "overview" && canAddWidget}
         />
+      }
+    >
+      <HomePopups
+        view={view}
+        blocked={
+          problems.length > 0 || (scopedAccounts.length === 0 && accounts.length > 0) || overlayOpen
+        }
+        store={okProfileStore}
+        profileReady={profileRead !== "loading" && profileRead !== "error"}
+        asOf={asOf}
+        hasTransactions={txs.length > 0}
+        accounts={currentScopedAccounts}
+        onSave={saveProfile}
+        onOpenIntake={() => setView("intake")}
+        onOpenRound2={() => {
+          setIntakeRound(2);
+          setView("intake");
+        }}
+        onOpenAccounts={() => setView("accounts")}
+      />
+      <div className={CONTENT_CONTAINER_CLASS}>
+        {/* Import moved into the profile, so import/bank-link messages would
+          otherwise only be visible on that page. They are the outcome of
+          something the user just did (a file import, a bank return), so
+          they follow him: the profile's own Import block shows them there,
+          this banner shows them anywhere else. */}
+        {problems.length > 0 && view !== "profiel" && (
+          <StatusLine tone="warning" role="alert" className="shell-problems">
+            {problems.map((n) => shell.notice(n)).join(" ")}
+          </StatusLine>
+        )}
 
-        <main className="content">
-          {/* Import moved into the profile, so import/bank-link messages would
-              otherwise only be visible on that page. They are the outcome of
-              something the user just did (a file import, a bank return), so
-              they follow him: the profile's own Import block shows them there,
-              this banner shows them anywhere else. */}
-          {problems.length > 0 && view !== "profiel" && (
-            <p role="alert" className="text-warn shell-problems">
-              {problems.map((n) => shell.notice(n)).join(" ")}
-            </p>
-          )}
+        {/* An entity with no classification counts as Persoonlijk, so on a
+          vault where nothing has been classified yet, Zakelijk is empty.
+          Empty is a legitimate answer, but an empty app reads as a broken
+          one — say which it is, and where to fix it. */}
+        {scopedAccounts.length === 0 && accounts.length > 0 && view !== "profiel" && (
+          <p className="text-muted shell-problems">
+            {shell.emptyScope.before}
+            <strong>{shell.scope[scope]}</strong>
+            {shell.emptyScope.after}
+            <CardLink onClick={() => setView("accounts")}>{shell.emptyScope.linkLabel}</CardLink>.
+          </p>
+        )}
 
-          {/* An entity with no classification counts as Persoonlijk, so on a
-              vault where nothing has been classified yet, Zakelijk is empty.
-              Empty is a legitimate answer, but an empty app reads as a broken
-              one — say which it is, and where to fix it. */}
-          {scopedAccounts.length === 0 && accounts.length > 0 && view !== "profiel" && (
-            <p className="text-muted shell-problems">
-              {shell.emptyScope.before}
-              <strong>{shell.scope[scope]}</strong>
-              {shell.emptyScope.after}
-              <CardLink onClick={() => setView("accounts")}>{shell.emptyScope.linkLabel}</CardLink>.
-            </p>
-          )}
+        {view === "overview" && (
+          <Overzicht
+            accounts={currentScopedAccounts}
+            txs={scopedTxs}
+            rules={rules}
+            own={own}
+            asOf={asOf}
+            bufferCents={bufferCents}
+            scheduledFlows={scopedScheduledFlows}
+            bills={bills}
+            billOccurrences={billOccurrences}
+            billDecisions={billDecisions}
+            /* LETTERLIJK DEZELFDE UITDRUKKING als bij <Belasting> hieronder,
+             en dat is de bedoeling: de btw-kaart op het overzicht en het
+             scherm Belasting moeten over dezelfde ondernemingen gaan. Wie
+             hier iets anders neerzet, laat de twee schermen op dezelfde dag
+             een ander bedrag noemen. */
+            entities={entityScope ? [entityScope] : entityOptions}
+            vatSettings={vatSettings}
+            invoices={invoices}
+            country={homeCountry}
+            fxHistory={fxHistory}
+            mode={fxConversionMode}
+            onBufferChange={handleBufferChange}
+            onNavigate={setView}
+            agentEnabled={agent.enabled}
+            {...(profileRead !== "loading" && profileRead !== "error"
+              ? { intake: { store: profileRead.kind === "ok" ? profileRead.store : null } }
+              : {})}
+            travel={{
+              accounts: scopedAccounts,
+              txs: scopedTxs,
+              rates: rates.rates,
+              facts,
+              asOf,
+              homeCountry,
+              homeCountryChosen,
+              onNavigate: setView,
+              busy,
+              aiAvailable: llmConfigured,
+              onRefreshTerms: handleRefreshTravelTerms,
+              pendingTerms,
+              termsAsked,
+              termsGaveUp,
+              onRecheckAi: () => void recheckLlm(),
+              onCorrectFact: (fact) => void saveFacts([fact]),
+            }}
+            onSelectCategory={(c) => {
+              // Match exactly what the Per-categorie totals showed: only the
+              // category filter (plus any active top-bar entity scope); clear
+              // the per-view filters so the list isn't silently over-narrowed.
+              setFCategory(c);
+              setFEntity("");
+              setFAccount("");
+              setFSearch("");
+              setFFrom("");
+              setFTo("");
+              setView("transactions");
+            }}
+          />
+        )}
 
-          {view === "overview" && (
-            <Overzicht
-              storage={storage}
-              accounts={currentScopedAccounts}
-              txs={scopedTxs}
-              rules={rules}
-              own={own}
+        {view === "transactions" && (
+          <Transacties
+            accounts={scopedAccounts}
+            scopedTxs={scopedTxs}
+            rules={rules}
+            own={own}
+            transfers={transfers}
+            suggestions={scopedTransferSuggestions}
+            onConfirmTransfer={handleConfirmTransfer}
+            onRejectTransfer={handleRejectTransfer}
+            fxHistory={fxHistory}
+            mode={fxConversionMode}
+            entityOptions={entityOptions}
+            entityScope={entityScope}
+            fEntity={fEntity}
+            onFEntityChange={setFEntity}
+            fAccount={fAccount}
+            onFAccountChange={setFAccount}
+            fSearch={fSearch}
+            onFSearchChange={setFSearch}
+            fFrom={fFrom}
+            onFFromChange={setFFrom}
+            fTo={fTo}
+            onFToChange={setFTo}
+            fCategory={fCategory}
+            onFCategoryChange={setFCategory}
+            configured={llmConfigured}
+            onApplyCategories={handleApplyCategories}
+          />
+        )}
+
+        {/* DE REGELS STAAN BIJ DE TRANSACTIES, niet in de instellingenkaart.
+          Zijn verzoek, en de reden staat in het scherm zelf: een regel is
+          een antwoord op een transactie die verkeerd is ingedeeld, dus hij
+          hoort op de plek waar je dat ziet gebeuren. In Profiel stond hij
+          twee klikken verderop, losgekoppeld van het ding waar hij over
+          gaat. */}
+        {view === "transactions" && (
+          <Regels
+            rules={rules}
+            txs={txs}
+            accounts={accounts}
+            own={own}
+            busy={busy}
+            onSaveRules={saveRules}
+          />
+        )}
+
+        {view === "accounts" && (
+          <Rekeningen
+            accounts={scopedAccounts}
+            txs={scopedTxs}
+            busy={busy}
+            transferLinksDropped={transferLinksDropped ?? undefined}
+            onEntityChange={handleEntityChange}
+            onAccountCommit={handleAccountCommit}
+            onAccountFieldChange={handleAccountFieldChange}
+            onSaldoCommit={handleSaldoCommit}
+            onTypeCommit={handleTypeCommit}
+            onDeleteAccount={handleDeleteAccount}
+            duplicateGroups={duplicateGroups}
+            onMergeDuplicates={handleMergeDuplicates}
+            statedCredit={statedOf(profileRead, "statedCards")}
+            statedDebit={statedOf(profileRead, "statedDebitCards")}
+            onRefreshBank={() => void handleRefreshBank()}
+            valuations={scopedValuations}
+            asOf={asOf}
+            onOpeningCommit={handleOpeningCommit}
+            onValuationCommit={handleValuationCommit}
+            onValuationRemove={handleValuationRemove}
+            onSelectAccount={openAccountTransactions}
+            fxConversionMode={fxConversionMode}
+            onFxConversionModeChange={handleFxConversionModeChange}
+          />
+        )}
+
+        {view === "forecast" && (
+          <Forecast
+            txs={scopedTxs}
+            accounts={currentScopedAccounts}
+            entityScope={entityScope}
+            asOf={asOf}
+            bufferCents={bufferCents}
+            scheduledFlows={scopedScheduledFlows}
+            fxHistory={fxHistory}
+            mode={fxConversionMode}
+            bills={bills}
+            billOccurrences={billOccurrences}
+            billDecisions={billDecisions}
+          />
+        )}
+
+        {view === "optimalisatie" && (
+          <Optimalisatie
+            txs={scopedTxs}
+            entityScope={scope}
+            accounts={currentScopedAccounts}
+            rules={rules}
+            own={own}
+            asOf={asOf}
+            busy={busy}
+            facts={facts}
+            onRateCommit={handleRateCommit}
+          />
+        )}
+
+        {/* Scoped like every other view: standing in Zakelijk and being offered a
+          conversion out of a personal account is a leak across the very line
+          the switch exists to draw. */}
+        {view === "bills" && !isArchivedView("bills") && (
+          <Bills
+            bills={bills}
+            occurrences={billOccurrences}
+            accounts={scopedAccounts}
+            txs={scopedTxs}
+            decisions={billDecisions}
+            asOf={asOf}
+            busy={busy}
+            onSavePlan={saveBillPlan}
+          />
+        )}
+
+        {view === "valuta" && !isArchivedView("valuta") && <Valuta accounts={scopedAccounts} />}
+
+        {view === "belasting" && !isArchivedView("belasting") && (
+          <Belasting
+            entities={entityScope ? [entityScope] : entityOptions}
+            txs={scopedTxs}
+            accounts={scopedAccounts}
+            asOf={asOf}
+            vatSettings={vatSettings}
+            scheduledFlows={scopedScheduledFlows}
+            invoices={invoices}
+            /* DE VOLLEDIGE LIJSTEN, met opzet en precies hier. De btw-module
+             blijft op `scopedTxs`/`scopedAccounts` rekenen; de grensmodule
+             kan dat per definitie niet, want die meet wat er TUSSEN de twee
+             helften bewoog en zou vanuit één helft de tegenboeking nooit
+             zien. Dit is de ene plek in de app waar de
+             persoonlijk/zakelijk-schakelaar bewust niet doorwerkt, en de
+             reden staat uitgeschreven bij `crossScopeTransfers` in core en
+             bij `allAccounts` in Belasting.tsx. */
+            allAccounts={accounts}
+            allTxs={txs}
+            entityProfiles={entityProfiles}
+            ownNames={ownNamesForMatching}
+            busy={busy}
+            onSaveVatSettings={saveVatSettings}
+            onSaveScheduledFlows={saveScheduledFlows}
+          />
+        )}
+
+        {view === "facturen" && !isArchivedView("facturen") && (
+          <Facturen
+            storage={storage}
+            entities={entityOptions}
+            ownIbans={ownIbans}
+            invoices={invoices}
+            txs={txs}
+            asOf={asOf}
+            busy={busy}
+            defaultEntity={entity}
+            onSaveInvoices={saveInvoices}
+            pending={pendingInvoices}
+            onPendingChange={setPendingInvoices}
+            notices={pendingNotices}
+            onNoticesChange={setPendingNotices}
+            onNavigate={setView}
+          />
+        )}
+
+        {view === "punten" && (
+          <Punten
+            balances={rewards}
+            asOf={asOf}
+            busy={busy}
+            onSave={saveRewards}
+            statedPrograms={
+              profileRead !== "loading" && profileRead !== "error" && profileRead.kind === "ok"
+                ? profileRead.store.current.statedPrograms?.value
+                : undefined
+            }
+          />
+        )}
+
+        {view === "koppelingen" && SHOW_INVOICE_FORWARDING && <Koppelingen onNavigate={setView} />}
+
+        {view === "backup" && (
+          <Backup
+            storage={storage}
+            asOf={asOf}
+            documentCount={documents.length}
+            owner={owner}
+            onRestored={handleRestored}
+          />
+        )}
+
+        {view === "meldingen" && <AgentFeed locale={locale} onNavigate={setView} />}
+
+        {view === "plan" && (
+          <PlanRoute
+            onComputed={setAgentPlan}
+            profileRead={profileRead}
+            onRetry={() => void retryProfileRead()}
+            store={
+              profileRead === "loading" || profileRead === "error" || profileRead.kind !== "ok"
+                ? null
+                : profileRead.store
+            }
+            storage={storage}
+            accounts={accounts}
+            txs={ledgerTxs}
+            entityProfiles={entityProfiles}
+            rules={rules}
+            own={ownWithNames}
+            rewards={rewards}
+            facts={facts}
+            catalogue={CATALOGUE_ENTRIES}
+            rates={rates.rates}
+            mode={fxConversionMode}
+            fxHistory={fxHistory}
+            vatSettings={vatSettings}
+            valuations={valuations}
+            asOf={asOf}
+            onSaveProfile={saveProfile}
+            onSaveRewards={saveRewards}
+            onNavigate={setView}
+          />
+        )}
+
+        {view === "about-you" &&
+          (profileRead === "loading" ? (
+            <p role="status">{intakeCopy[locale].loading}</p>
+          ) : profileRead === "error" ? (
+            <div role="alert">
+              <StatusLine tone="problem">{intakeCopy[locale].loadError}</StatusLine>
+              <Button onClick={() => void retryProfileRead()}>{intakeCopy[locale].retry}</Button>
+            </div>
+          ) : (
+            <AboutYou
+              store={profileRead.kind === "ok" ? profileRead.store : null}
+              corrupt={profileRead.kind === "corrupt"}
+              capacity={aboutYouCapacity}
               asOf={asOf}
-              bufferCents={bufferCents}
-              scheduledFlows={scopedScheduledFlows}
-              bills={bills}
-              billOccurrences={billOccurrences}
-              billDecisions={billDecisions}
-              /* LETTERLIJK DEZELFDE UITDRUKKING als bij <Belasting> hieronder,
-                 en dat is de bedoeling: de btw-kaart op het overzicht en het
-                 scherm Belasting moeten over dezelfde ondernemingen gaan. Wie
-                 hier iets anders neerzet, laat de twee schermen op dezelfde dag
-                 een ander bedrag noemen. */
-              entities={entityScope ? [entityScope] : entityOptions}
-              vatSettings={vatSettings}
-              invoices={invoices}
-              country={homeCountry}
-              fxHistory={fxHistory}
-              mode={fxConversionMode}
-              onBufferChange={handleBufferChange}
+              onSave={saveProfile}
               onNavigate={setView}
-              agentEnabled={agent.enabled}
-              {...(homeRoom && profileRead !== "loading" && profileRead !== "error"
-                ? {
-                    intake: {
-                      store: profileRead.kind === "ok" ? profileRead.store : null,
-                      room: homeRoom.room,
-                      ...(homeRoom.statedInputs ? { statedInputs: homeRoom.statedInputs } : {}),
-                      onSave: saveProfile,
-                      onOpenRound2: () => {
-                        setIntakeRound(2);
-                        setView("intake");
-                      },
-                    },
-                  }
-                : {})}
-              travel={{
-                accounts: scopedAccounts,
-                txs: scopedTxs,
-                rates: rates.rates,
-                facts,
-                asOf,
-                homeCountry,
-                homeCountryChosen,
-                onNavigate: setView,
-                busy,
-                aiAvailable: llmConfigured,
-                onRefreshTerms: handleRefreshTravelTerms,
-                pendingTerms,
-                termsAsked,
-                termsGaveUp,
-                onRecheckAi: () => void recheckLlm(),
-                onCorrectFact: (fact) => void saveFacts([fact]),
-              }}
-              onSelectCategory={(c) => {
-                // Match exactly what the Per-categorie totals showed: only the
-                // category filter (plus any active top-bar entity scope); clear
-                // the per-view filters so the list isn't silently over-narrowed.
-                setFCategory(c);
-                setFEntity("");
-                setFAccount("");
-                setFSearch("");
-                setFFrom("");
-                setFTo("");
-                setView("transactions");
-              }}
             />
-          )}
+          ))}
 
-          {view === "transactions" && (
-            <Transacties
-              accounts={scopedAccounts}
-              scopedTxs={scopedTxs}
-              rules={rules}
-              own={own}
-              transfers={transfers}
-              suggestions={scopedTransferSuggestions}
-              onConfirmTransfer={handleConfirmTransfer}
-              onRejectTransfer={handleRejectTransfer}
-              fxHistory={fxHistory}
-              mode={fxConversionMode}
-              entityOptions={entityOptions}
-              entityScope={entityScope}
-              fEntity={fEntity}
-              onFEntityChange={setFEntity}
-              fAccount={fAccount}
-              onFAccountChange={setFAccount}
-              fSearch={fSearch}
-              onFSearchChange={setFSearch}
-              fFrom={fFrom}
-              onFFromChange={setFFrom}
-              fTo={fTo}
-              onFToChange={setFTo}
-              fCategory={fCategory}
-              onFCategoryChange={setFCategory}
-              configured={llmConfigured}
-              onApplyCategories={handleApplyCategories}
-            />
-          )}
-
-          {/* DE REGELS STAAN BIJ DE TRANSACTIES, niet in de instellingenkaart.
-              Zijn verzoek, en de reden staat in het scherm zelf: een regel is
-              een antwoord op een transactie die verkeerd is ingedeeld, dus hij
-              hoort op de plek waar je dat ziet gebeuren. In Profiel stond hij
-              twee klikken verderop, losgekoppeld van het ding waar hij over
-              gaat. */}
-          {view === "transactions" && (
-            <Regels
-              rules={rules}
-              txs={txs}
-              accounts={accounts}
-              own={own}
-              busy={busy}
-              onSaveRules={saveRules}
-            />
-          )}
-
-          {view === "accounts" && (
-            <Rekeningen
-              accounts={scopedAccounts}
-              txs={scopedTxs}
-              busy={busy}
-              transferLinksDropped={transferLinksDropped ?? undefined}
-              onEntityChange={handleEntityChange}
-              onAccountCommit={handleAccountCommit}
-              onAccountFieldChange={handleAccountFieldChange}
-              onSaldoCommit={handleSaldoCommit}
-              onTypeCommit={handleTypeCommit}
-              onDeleteAccount={handleDeleteAccount}
-              duplicateGroups={duplicateGroups}
-              onMergeDuplicates={handleMergeDuplicates}
-              valuations={scopedValuations}
-              asOf={asOf}
-              onOpeningCommit={handleOpeningCommit}
-              onValuationCommit={handleValuationCommit}
-              onValuationRemove={handleValuationRemove}
-              onSelectAccount={(key) => {
-                // Show just this account's transactions — clear the other
-                // filters so the list isn't silently narrowed by a stale one.
-                setFAccount(key);
-                setFEntity("");
-                setFSearch("");
-                setFCategory("");
-                setFFrom("");
-                setFTo("");
-                setView("transactions");
-              }}
-            />
-          )}
-
-          {view === "forecast" && (
-            <Forecast
-              txs={scopedTxs}
-              accounts={currentScopedAccounts}
-              entityScope={entityScope}
-              asOf={asOf}
-              bufferCents={bufferCents}
-              scheduledFlows={scopedScheduledFlows}
-              fxHistory={fxHistory}
-              mode={fxConversionMode}
-              bills={bills}
-              billOccurrences={billOccurrences}
-              billDecisions={billDecisions}
-            />
-          )}
-
-          {view === "optimalisatie" && (
-            <Optimalisatie
-              txs={scopedTxs}
-              entityScope={scope}
-              accounts={currentScopedAccounts}
-              rules={rules}
-              own={own}
-              asOf={asOf}
-              busy={busy}
-              facts={facts}
-              onRateCommit={handleRateCommit}
-            />
-          )}
-
-          {/* Scoped like every other view: standing in Zakelijk and being offered a
-              conversion out of a personal account is a leak across the very line
-              the switch exists to draw. */}
-          {view === "bills" && !isArchivedView("bills") && (
-            <Bills
-              bills={bills}
-              occurrences={billOccurrences}
-              accounts={scopedAccounts}
-              txs={scopedTxs}
-              decisions={billDecisions}
-              asOf={asOf}
-              busy={busy}
-              onSavePlan={saveBillPlan}
-            />
-          )}
-
-          {view === "valuta" && !isArchivedView("valuta") && <Valuta accounts={scopedAccounts} />}
-
-          {view === "belasting" && !isArchivedView("belasting") && (
-            <Belasting
-              entities={entityScope ? [entityScope] : entityOptions}
-              txs={scopedTxs}
-              accounts={scopedAccounts}
-              asOf={asOf}
-              vatSettings={vatSettings}
-              scheduledFlows={scopedScheduledFlows}
-              invoices={invoices}
-              /* DE VOLLEDIGE LIJSTEN, met opzet en precies hier. De btw-module
-                 blijft op `scopedTxs`/`scopedAccounts` rekenen; de grensmodule
-                 kan dat per definitie niet, want die meet wat er TUSSEN de twee
-                 helften bewoog en zou vanuit één helft de tegenboeking nooit
-                 zien. Dit is de ene plek in de app waar de
-                 persoonlijk/zakelijk-schakelaar bewust niet doorwerkt, en de
-                 reden staat uitgeschreven bij `crossScopeTransfers` in core en
-                 bij `allAccounts` in Belasting.tsx. */
-              allAccounts={accounts}
-              allTxs={txs}
-              entityProfiles={entityProfiles}
-              ownNames={ownNamesForMatching}
-              busy={busy}
-              onSaveVatSettings={saveVatSettings}
-              onSaveScheduledFlows={saveScheduledFlows}
-            />
-          )}
-
-          {view === "facturen" && !isArchivedView("facturen") && (
-            <Facturen
-              storage={storage}
-              entities={entityOptions}
-              ownIbans={ownIbans}
-              invoices={invoices}
-              txs={txs}
-              asOf={asOf}
-              busy={busy}
-              defaultEntity={entity}
-              onSaveInvoices={saveInvoices}
-              pending={pendingInvoices}
-              onPendingChange={setPendingInvoices}
-              notices={pendingNotices}
-              onNoticesChange={setPendingNotices}
-              onNavigate={setView}
-            />
-          )}
-
-          {view === "punten" && (
-            <Punten
-              balances={rewards}
-              asOf={asOf}
-              busy={busy}
-              onSave={saveRewards}
-              statedPrograms={
-                profileRead !== "loading" && profileRead !== "error" && profileRead.kind === "ok"
-                  ? profileRead.store.current.statedPrograms?.value
-                  : undefined
-              }
-            />
-          )}
-
-          {view === "koppelingen" && SHOW_INVOICE_FORWARDING && (
-            <Koppelingen onNavigate={setView} />
-          )}
-
-          {view === "backup" && (
-            <Backup
-              storage={storage}
-              asOf={asOf}
-              documentCount={documents.length}
-              onRestored={handleRestored}
-            />
-          )}
-
-          {view === "meldingen" && <AgentFeed locale={locale} onNavigate={setView} />}
-
-          {view === "plan" && (
-            <PlanRoute
-              onComputed={setAgentPlan}
-              profileRead={profileRead}
-              onRetry={() => void retryProfileRead()}
-              store={
-                profileRead === "loading" || profileRead === "error" || profileRead.kind !== "ok"
-                  ? null
-                  : profileRead.store
-              }
-              storage={storage}
-              accounts={accounts}
-              txs={ledgerTxs}
-              entityProfiles={entityProfiles}
-              rules={rules}
-              own={ownWithNames}
-              rewards={rewards}
-              facts={facts}
-              catalogue={CATALOGUE_ENTRIES}
-              rates={rates.rates}
-              mode={fxConversionMode}
-              fxHistory={fxHistory}
-              vatSettings={vatSettings}
-              valuations={valuations}
-              asOf={asOf}
-              onSaveProfile={saveProfile}
-              onNavigate={setView}
-            />
-          )}
-
-          {view === "about-you" &&
-            (profileRead === "loading" ? (
-              <p role="status">{intakeCopy[locale].loading}</p>
-            ) : profileRead === "error" ? (
-              <div role="alert">
-                <p className="text-warn">{intakeCopy[locale].loadError}</p>
-                <Button onClick={() => void retryProfileRead()}>{intakeCopy[locale].retry}</Button>
-              </div>
-            ) : (
-              <AboutYou
-                store={profileRead.kind === "ok" ? profileRead.store : null}
-                corrupt={profileRead.kind === "corrupt"}
-                capacity={aboutYouCapacity}
-                asOf={asOf}
-                onSave={saveProfile}
-                onNavigate={setView}
-              />
-            ))}
-
-          {view === "profiel" && (
-            <Profiel
-              onNavigate={setView}
-              enabledModules={modules}
-              onModulesChange={handleModulesChange}
-              focusModules={addWidget}
-              entities={entitySummaryRows}
-              onClassifyEntity={handleClassifyEntity}
-              homeCountry={homeCountry}
-              onHomeCountryChange={handleHomeCountryChange}
-              homeRegion={homeRegion}
-              onHomeRegionChange={handleHomeRegionChange}
-              fxConversionMode={fxConversionMode}
-              onFxConversionModeChange={handleFxConversionModeChange}
-              shareNetWorthEnabled={shareNetWorthEnabled}
-              onShareNetWorthEnabledChange={handleShareNetWorthEnabledChange}
-              shareNetWorthPendingDelete={shareNetWorthPendingDelete}
-              ownerName={ownerName}
-              onOwnerNameChange={handleOwnerNameChange}
-              onLock={handleLock}
-              onAgentEnabledChange={agent.setEnabled}
-              entity={entity}
-              onEntityChange={setEntity}
-              busy={busy}
-              problems={problems}
-              onImport={handleImport}
-              onRefreshBank={() => void handleRefreshBank()}
-              storage={storage}
-              asOf={asOf}
-              onRestored={handleRestored}
-              documents={documents}
-              documentNotice={documentNotice}
-              documentErased={documentErased}
-              accounts={accounts}
-              txs={txs}
-              valuations={valuations}
-              onDocumentUpload={(file) => void handleDocumentUpload(file)}
-              onDocumentLink={(id, key) => void handleDocumentLink(id, key)}
-              onDocumentReject={(id) => void handleDocumentReject(id)}
-              onDocumentRemove={(id) => void handleDocumentRemove(id)}
-              onDocumentEraseAll={() => void handleDocumentEraseAll()}
-              importSessions={importSessions}
-              importNotice={importNotice}
-              onGenericImport={(request) => void handleGenericImport(request)}
-              onGenericRevert={(id) => void handleRevertImport(id)}
-            />
-          )}
-        </main>
+        {view === "profiel" && (
+          <Profiel
+            owner={owner}
+            onNavigate={setView}
+            planUnlocked={planUnlocked}
+            intakeStore={okProfileStore}
+            hasTransactions={txs.length > 0}
+            entities={entitySummaryRows}
+            onClassifyEntity={handleClassifyEntity}
+            homeCountry={homeCountry}
+            onHomeCountryChange={handleHomeCountryChange}
+            homeRegion={homeRegion}
+            onHomeRegionChange={handleHomeRegionChange}
+            shareNetWorthEnabled={shareNetWorthEnabled}
+            onShareNetWorthEnabledChange={handleShareNetWorthEnabledChange}
+            shareNetWorthPendingDelete={shareNetWorthPendingDelete}
+            ownerName={ownerName}
+            onOwnerNameChange={handleOwnerNameChange}
+            onLock={handleLock}
+            onAgentEnabledChange={agent.setEnabled}
+            entity={entity}
+            onEntityChange={setEntity}
+            busy={busy}
+            problems={problems}
+            onImport={handleImport}
+            onRefreshBank={() => void handleRefreshBank()}
+            storage={storage}
+            asOf={asOf}
+            onRestored={handleRestored}
+            documents={documents}
+            documentNotice={documentNotice}
+            documentErased={documentErased}
+            accounts={accounts}
+            txs={txs}
+            valuations={valuations}
+            onDocumentUpload={(file) => void handleDocumentUpload(file)}
+            onDocumentLink={(id, key) => void handleDocumentLink(id, key)}
+            onDocumentReject={(id) => void handleDocumentReject(id)}
+            onDocumentRemove={(id) => void handleDocumentRemove(id)}
+            onDocumentEraseAll={() => void handleDocumentEraseAll()}
+            importSessions={importSessions}
+            importNotice={importNotice}
+            onGenericImport={(request) => void handleGenericImport(request)}
+            onGenericRevert={(id) => void handleRevertImport(id)}
+          />
+        )}
       </div>
-    </div>
+    </Shell>
   );
 }

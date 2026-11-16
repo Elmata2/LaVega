@@ -6,6 +6,7 @@ import type {
 } from "@lavega/core";
 import type { ReactNode } from "react";
 import { shortDate } from "../lib/dates.js";
+import { isIsinSymbol } from "../lib/holdingIdentity.js";
 import { BenchmarkPicker } from "./BenchmarkPicker";
 import { Button } from "./ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
@@ -318,7 +319,7 @@ export function PortfolioSummaryCard({
                     <span className="block truncate">
                       {position.description ?? position.symbol}
                     </span>
-                    {position.description && (
+                    {position.description && !isIsinSymbol(position.symbol) && (
                       <span className="block truncate text-xs text-muted-foreground">
                         {position.symbol}
                       </span>

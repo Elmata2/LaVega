@@ -2,10 +2,11 @@ import { useMemo } from "react";
 import type { Account, ConversionMode } from "@lavega/core";
 import { isEurCurrency, toEur } from "@lavega/core";
 import type { View } from "../../App";
-import { formatEuroIn } from "../../format.js";
+import { formatSignedEuroIn } from "../../format.js";
 import Module from "../Module.js";
 import CardLink from "../ui/CardLink.js";
 import { useWidgetEnabled } from "../moduleRegistry";
+import WidgetHideButton from "../WidgetHideButton";
 import { useAppLocale } from "../../appLocale.js";
 import { moneyCopy } from "../../copy/money.js";
 
@@ -121,8 +122,14 @@ export default function PositieBlock({
   return (
     <Module
       title="Positie"
+      widgetId="positie"
       height="short"
-      menu={<CardLink onClick={() => onNavigate("accounts")}>{c.rekeningenArrow}</CardLink>}
+      menu={
+        <>
+          <CardLink onClick={() => onNavigate("accounts")}>{c.rekeningenArrow}</CardLink>
+          <WidgetHideButton id="positie" />
+        </>
+      }
       footer={
         rows.length > 0 ? (
           <>
@@ -175,7 +182,7 @@ export default function PositieBlock({
                 <span
                   className={`flex-none font-semibold text-[0.9rem] tabular-nums ${r.balance === null ? "" : r.balance >= 0 ? "text-pos" : "text-neg"}`}
                 >
-                  {r.balance === null ? c.onbekend : formatEuroIn(locale, r.balance)}
+                  {r.balance === null ? c.onbekend : formatSignedEuroIn(locale, r.balance)}
                 </span>
               </div>
             ))}

@@ -20,7 +20,7 @@ Phases 1 and 2 are implemented and staged, not deployed. The task text below is 
 - **When the bank is read.** At the user's send hour (default 08:00 Europe/Amsterdam) and the 2 hours after it (`RETRY_HOURS`, counted round the clock; the window can pass midnight; the listing's "message day" only decides who is due, and the claim, dedupe keys, day words and fetch counter use the real Amsterdam date. The claim only moves forward, so a user gets at most one message per real Amsterdam date: after a wrapped retry delivers past midnight, that date's regular send is not made), and when a WhatsApp question needs data. The consent sentence still says "elke nacht"; the owner decides whether to reword it (ADR 0014). Rewording means bumping `CONSENT_VERSION`.
 - **Event types.** The database CHECK keeps six types. The code writes `message`, `approval_response` and `error`. `approval_request`, `action` and `action_result` are reserved for phase 3. Retention is 90 days; per-event and per-conversation delete exist.
 - **Consent validity.** `consentDaysFor` asks for the bank's `maximum_consent_validity` in days, capped at 180, else 89. The callback stores the echoed `valid_until` if it lies within 180 days, else 89 days.
-- **Cross-tenant functions.** `list_agent_due_users(local_hour, retry_hours, local_date)` returning `(tenant_id, message_day)` (0039), `agent_user_for_phone` and `agent_consume_link_code` (0040). `agent_link_attempts` holds failed link attempts (5 per phone HMAC per 15 minutes; no global cap) with no user id and no runtime grant.
+- **Cross-tenant functions.** `list_agent_due_users(local_hour, retry_hours, local_date)` returning `(tenant_id, message_day)` (0040), `agent_user_for_phone` and `agent_consume_link_code` (0041). `agent_link_attempts` holds failed link attempts (5 per phone HMAC per 15 minutes; no global cap) with no user id and no runtime grant.
 - **Webhook.** Signature on raw bytes. 401 when the secret is unset or the signature is bad; 413 over 256 KiB; 500 on database errors (Meta retries; the dedupe key `wa:<wamid>` makes that safe); 200 otherwise. Outbound dedupe key `wa-out:<wamid>`.
 - **Template.** Exactly one body variable: the short figures line, created in both `nl` and `en` under the same name.
 - **Mirror.** Rules, due dates and the card offer (name and yearly gain). Subscription corrections are not mirrored. Tips key on transaction data only (`answers` is `{}`) and are never sent while their `reviewedAt` is null. All five were reviewed by the owner on 2026-11-11; a new tip starts unreviewed. The idle-balance tip is relative: lowest balance over 60 days on EUR current accounts at least EUR 250 and at least 0.45 of monthly income (spending if no income), with at least 30 days of history.
@@ -28,7 +28,7 @@ Phases 1 and 2 are implemented and staged, not deployed. The task text below is 
 - **Link codes and links.** Codes are `LV-` plus 8 characters. A WhatsApp link goes stale after 90 days without activity (later of link time and last inbound message): no send, link removed, one feed notice; other channels are unaffected. Mirror, push subscription and link code writes are conditional on an enabled settings row, and the answer path does nothing when the agent is off. The cron purges link attempts first, so the purge runs even when the listing fails.
 - **No-bank path.** No tip fires on it and it does not reset the "paused" notice flag. `createLinkCode` has no DELETE: the upsert replaces the user's earlier code, expired or not.
 - **Tip test.** `instinct.e2e.test.ts` has a case where the idle-balance tip is the daily message, sent once through the cron.
-- **Housekeeping.** `personal.agent_purge_link_attempts()` (0040) runs once per cron run. Writes after turn-off are conditional on an enabled settings row. The cron skips users with an old consent version. `unlink()` deletes pending link codes. `feed` is always in `channels`.
+- **Housekeeping.** `personal.agent_purge_link_attempts()` (0041) runs once per cron run. Writes after turn-off are conditional on an enabled settings row. The cron skips users with an old consent version. `unlink()` deletes pending link codes. `feed` is always in `channels`.
 - **Config check.** `assertAgentConfig()` runs on every agent route and every cron run, not at boot. A missing key answers 503 `agent-not-configured` and never stops the server.
 
 ## Global Constraints
@@ -73,7 +73,7 @@ Phases 1 and 2 are implemented and staged, not deployed. The task text below is 
 
 The complete, ordered checklist is "Owner actions for the Instinct agent" in `DEPLOY.md`. The list below is the plan-time version and misses `AGENT_DEDUPE_HMAC_KEY`. The tip review and the consent wording decision are done (11 Nov 2026).
 
-1. Apply migrations 0038, 0039 (phase 1) and 0040 (phase 2) on prod Neon AND the preview branch, as schema owner with BYPASSRLS (0039 and 0040 refuse otherwise); `ROLLBACK;` first in the SQL editor if it says "Failed transaction".
+1. Apply migrations 0039, 0040 (phase 1) and 0041 (phase 2) on prod Neon AND the preview branch, as schema owner with BYPASSRLS (0040 and 0041 refuse otherwise); `ROLLBACK;` first in the SQL editor if it says "Failed transaction".
 2. Generate VAPID keys (`npx web-push generate-vapid-keys`), add the three VAPID vars on Vercel (prod and preview).
 3. Add `AGENT_PHONE_HMAC_KEY` and the Resend sender for agent mail on Vercel.
 4. Set repository variable `INSTINCT_CRON_URL` and secret `CRON_SECRET` for `.github/workflows/instinct-cron.yml` (the Vercel plan allows daily crons only, so Task 11's Vercel entry was removed).
@@ -94,14 +94,14 @@ The complete, ordered checklist is "Owner actions for the Instinct agent" in `DE
 **Interfaces:** none (docs).
 
 - [ ] Write the ADR: Status Accepted 2026-11-10; Decision (opted-in users only, 90 days fetched nightly and on WhatsApp replies, held in memory, discarded; stored = message events, settings, minimal state, mirrored rules); Why (the agent must come to the user); Consequences (vault closed to the server no longer holds for opted-in users, ADR 0009 already says the server can decrypt; privacy statement and erasure cover new stores; EB consent length raised to bank maximum; refused fetch skips the day).
-- [ ] Amend ADR 0004: add "Amended by 0014" line and a section "Second cross-tenant read": `personal.list_agent_due_users(hour)` (0039) is `SECURITY DEFINER`, returns user ids only, granted to `lavega_runtime`; the cron then reads each listed user's `eb_sessions` with `withTenant(userId)`. Explain why this replaces the "dedicated role" in the spec (same blast radius, already audited pattern, no second credential).
+- [ ] Amend ADR 0004: add "Amended by 0014" line and a section "Second cross-tenant read": `personal.list_agent_due_users(hour)` (0040) is `SECURITY DEFINER`, returns user ids only, granted to `lavega_runtime`; the cron then reads each listed user's `eb_sessions` with `withTenant(userId)`. Explain why this replaces the "dedicated role" in the spec (same blast radius, already audited pattern, no second credential).
 - [ ] Verify: `grep -n "0014" docs/adr/0004-neon-data-boundaries.md` shows the amendment; `grep -c "list_agent_due_users" docs/adr/0014-*.md` is 1 or more.
 - [ ] Stage (no commit): `git add docs/adr`.
 
-### Task 2: Migration 0038, agent tables with forced RLS
+### Task 2: Migration 0039, agent tables with forced RLS
 
 **Files:**
-- Create: `db/migrations/0038_instinct_agent.sql`
+- Create: `db/migrations/0039_instinct_agent.sql`
 - Test: `packages/database/src/agentTables.test.ts`
 
 **Interfaces:** Produces tables (all `personal`, `user_id TEXT NOT NULL`, composite keys leading with `user_id`, `ENABLE`+`FORCE` RLS, policy `FOR ALL TO PUBLIC USING/WITH CHECK (user_id = NULLIF(current_setting('app.user_id', true), ''))`, grants SELECT/INSERT/UPDATE/DELETE to `lavega_runtime`, owner check block copied from 0024):
@@ -153,7 +153,7 @@ export async function listAgentDueUsers(db: Database, hour: number, retryHours: 
 - [ ] Failing test: round-trip settings (blob not plaintext: raw column does not contain the email string); `claimDay("2026-11-11")` twice via two parallel calls returns exactly one `true`; `releaseDay` makes the next claim true; `takeFetchBudget(today, 3)` true x3 then false, resets next day; `deleteAll()` leaves zero rows in all five tables for that user and does not touch user B.
 - [ ] Run `pnpm --filter @lavega/database test -- agent.test` expect FAIL (module missing).
 - [ ] Implement with `withTenantStatement` for single statements and `withTenant` where two statements are needed; `encryptBlob/decryptBlob` for blob columns; `endpoint_hash = sha256(endpoint)`.
-- [ ] Run expect PASS (note `listAgentDueUsers` is tested in Task 10 after migration 0039 exists).
+- [ ] Run expect PASS (note `listAgentDueUsers` is tested in Task 10 after migration 0040 exists).
 - [ ] Stage (no commit).
 
 ### Task 4: Event repository and erasure coverage
@@ -284,10 +284,10 @@ Maps raw items through `mapEbTransaction`/`mapEbAccount` from `@lavega/adapters`
 - [ ] Run `pnpm --filter @lavega/server test -- unattendedFetch` expect FAIL; implement; expect PASS (also re-run eb-routes tests).
 - [ ] Stage (no commit).
 
-### Task 10: Migration 0039 and the due-user listing; per-user orchestrator
+### Task 10: Migration 0040 and the due-user listing; per-user orchestrator
 
 **Files:**
-- Create: `db/migrations/0039_agent_due_users.sql`, `apps/server/src/agent/instinct.ts`
+- Create: `db/migrations/0040_agent_due_users.sql`, `apps/server/src/agent/instinct.ts`
 - Test: `packages/database/src/agentTables.test.ts` (function), `apps/server/src/agent/instinct.test.ts`
 
 **Interfaces:**
@@ -402,10 +402,10 @@ export function createMirrorSync(api: { put(m: AgentMirror): Promise<void> }, en
 
 ## Phase 2
 
-### Task 17: Migration 0040 and repository for WhatsApp links and codes
+### Task 17: Migration 0041 and repository for WhatsApp links and codes
 
 **Files:**
-- Create: `db/migrations/0040_whatsapp_links.sql`
+- Create: `db/migrations/0041_whatsapp_links.sql`
 - Modify: `packages/database/src/agent.ts`, `packages/database/src/index.ts` (`USER_DATA_TABLES`)
 - Test: `packages/database/src/agentTables.test.ts`, `packages/database/src/erasure.test.ts`
 

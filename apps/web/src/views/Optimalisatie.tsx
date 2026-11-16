@@ -58,7 +58,7 @@ import {
 import { createRatesProvider, type RatesResult } from "@lavega/adapters";
 import { CATALOGUE_RATES, CATALOGUE_ENTRIES } from "../catalogue-rates";
 import { getCashbackAssumptionEnabled } from "../settings";
-import { formatEuroIn, monthLabel } from "../format.js";
+import { formatEuroIn, formatSignedEuroIn, monthLabel } from "../format.js";
 import { useAppLocale } from "../appLocale.js";
 import {
   optimiseCopy,
@@ -149,6 +149,7 @@ type OptimalisatieProps = {
 };
 
 const euro = (locale: Locale, cents: number) => formatEuroIn(locale, cents / 100);
+const signedEuro = (locale: Locale, cents: number) => formatSignedEuroIn(locale, cents / 100);
 const pct = (locale: Locale, p: number) => formatPercentIn(locale, p);
 
 const renderSegments = (segments: Segment[]) =>
@@ -594,9 +595,9 @@ function Productkosten({
           </span>
           <span className="text-pos">
             {alsoMonthly
-              ? pc.netLine.alsoMonthlyPrefix(euro(locale, Math.round(net.netCents / 12)))
+              ? pc.netLine.alsoMonthlyPrefix(signedEuro(locale, Math.round(net.netCents / 12)))
               : ""}
-            {euro(locale, net.netCents)} {per}
+            {signedEuro(locale, net.netCents)} {per}
           </span>
         </div>
       ) : (
@@ -1230,7 +1231,7 @@ export default function Optimalisatie({
       </div>
 
       <ModuleGrid
-        className="grid-2 grid-cols-2 [@media(max-width:900px)]:grid-cols-1"
+        className="grid-2 grid-cols-2 [@container(max-width:900px)]:grid-cols-1"
         label={c.header.gridLabel}
       >
         {/* ── Abonnementen: de grote helft ──────────────────────────────── */}
@@ -2505,7 +2506,7 @@ export default function Optimalisatie({
                         <strong>{pct(locale, o.cashbackPct)}</strong> —{" "}
                         {o.bank ? `${o.bank} · ` : ""}
                         {o.product}{" "}
-                        <span style={{ opacity: 0.7 }}>
+                        <span style={{ opacity: "var(--aside-opacity)" }}>
                           {c.cashback.otherOffers.itemMeta(o.asOf)}
                         </span>
                       </li>
@@ -2833,7 +2834,7 @@ export default function Optimalisatie({
                                       {row.candidates.map((f) => (
                                         <li key={f.productId}>
                                           {f.product} — {feeLabel(locale, f.amount)}{" "}
-                                          <span style={{ opacity: 0.7 }}>
+                                          <span style={{ opacity: "var(--aside-opacity)" }}>
                                             ({sourceHost(f.sourceUrl)}, peildatum {f.asOf})
                                           </span>
                                         </li>

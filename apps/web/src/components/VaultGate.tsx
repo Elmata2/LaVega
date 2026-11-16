@@ -9,6 +9,7 @@ import Button from "./ui/Button.js";
 import Card from "./ui/Card.js";
 import { Field } from "./ui/Field.js";
 import PasswordInput from "./ui/PasswordInput.js";
+import StatusLine from "./ui/StatusLine.js";
 
 type VaultGateProps = {
   gate: GateState;
@@ -140,9 +141,9 @@ function AdoptScreen({
           />
         </Field>
         {error && (
-          <p role="alert" className="text-warn">
+          <StatusLine tone="problem" role="alert">
             {error}
-          </p>
+          </StatusLine>
         )}
         <Button type="submit" variant="primary" disabled={busy || pass.length === 0}>
           {busy ? g.adopt.busy : g.adopt.submit}

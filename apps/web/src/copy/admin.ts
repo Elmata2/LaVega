@@ -736,6 +736,9 @@ type BackupCopy = {
     backupNowButton: string;
     conflict: {
       message: (date: string) => string;
+      /** The server no longer holds the copy this device was based on (it was
+       *  cleared from another device). */
+      missing: string;
       overwriteButton: string;
     };
     success: string;
@@ -759,6 +762,42 @@ type BackupCopy = {
       success: (rows: number, tables: number) => string;
       errorGeneric: string;
     };
+  };
+  /** Reset the personal side only; the login and Investing stay. Shown in the
+   *  same "More options" block, with or without a server session. */
+  resetPersonal: {
+    button: string;
+    goes: string;
+    goesLocalOnly: string;
+    stays: string;
+    /** A device owner has no login: only what applies to it. */
+    staysLocalOnly: string;
+    closeTabs: string;
+    cannotUndo: string;
+    otherDevices: string;
+    bankConsent: string;
+    confirmButton: string;
+    cancelButton: string;
+    /** Account state not known yet; the confirm button waits. */
+    checking: string;
+    /** Prefix for a local failure when the server side had already been cleared. */
+    serverCleared: string;
+    /** Shown in a tab whose vault another tab is clearing. */
+    otherTab: { busy: string; stalled: string; reload: string };
+    errors: {
+      network: string;
+      unauthorized: string;
+      ownerChanged: string;
+      localBlocked: string;
+      localFailed: string;
+      generic: string;
+    };
+  };
+  /** The simple card: two visible actions, the rest behind "more options". */
+  simple: {
+    makeButton: string;
+    restoreButton: string;
+    moreOptions: string;
   };
   restore: {
     title: string;
@@ -884,7 +923,7 @@ const nlFacturen: FacturenCopy = {
     manual: {
       moduleTitle: "3 · Handmatig",
       footer:
-        "Een verwachte factuur verschijnt op de vervaldatum in Overzicht en Forecast en gaat zelf op “betaald” zodra een passende banktransactie binnenkomt.",
+        "Een verwachte factuur verschijnt op de vervaldatum in Home en Forecast en gaat zelf op “betaald” zodra een passende banktransactie binnenkomt.",
       entityLabel: "Entiteit",
       entityAriaLabel: "Entiteit",
       directionLabel: "Richting",
@@ -1580,6 +1619,8 @@ const nlBackup: BackupCopy = {
     conflict: {
       message: (date) =>
         `Een ander apparaat heeft op ${date} een nieuwere back-up opgeslagen. Overschrijven verwijdert die.`,
+      missing:
+        "De back-up waar dit apparaat op gebaseerd is, staat niet meer op de server (die is gewist, bijvoorbeeld vanaf een ander apparaat). Toch overschrijven zet de gegevens van dit apparaat weer op de server.",
       overwriteButton: "Toch overschrijven",
     },
     success: "Back-up opgeslagen.",
@@ -1602,6 +1643,50 @@ const nlBackup: BackupCopy = {
       success: (rows, tables) => `Verwijderd: ${rows} rijen over ${tables} tabellen.`,
       errorGeneric: "Verwijderen mislukt.",
     },
+  },
+  resetPersonal: {
+    button: "Persoonlijke gegevens wissen",
+    goes: "Weg gaat: je rekeningen, transacties, intakeantwoorden en documenten in deze browser, de kopie van je kluis op de server, je bankkoppelingen, je doorstuuradres voor facturen en het dagelijkse totaal dat je deelt met de nettowaardepagina van LaVega Investing.",
+    goesLocalOnly:
+      "Weg gaat: je rekeningen, transacties, intakeantwoorden en documenten in deze browser. Dit apparaat is zonder account; een kopie op een server, als die er is, blijft ongemoeid.",
+    stays:
+      "Blijft: je login en je beleggingsgegevens in LaVega Investing (rekeningen bij brokers, doelen, thesissen en gesprekken met de agents).",
+    staysLocalOnly: "Blijft: je instellingen in deze browser, zoals thema en taal.",
+    closeTabs: "Sluit eerst andere LaVega-tabbladen.",
+    cannotUndo:
+      "Dit kun je niet terugdraaien. Maak eerst een back-upbestand als je een weg terug wilt hebben.",
+    otherDevices:
+      "Een andere browser of een ander apparaat houdt zijn eigen kopie tot je het daar ook wist.",
+    bankConsent:
+      "De toestemming bij je bank loopt zelf af (uiterlijk na 90 dagen). LaVega gebruikt hem vanaf nu niet meer.",
+    confirmButton: "Ja, wis mijn persoonlijke gegevens",
+    cancelButton: "Annuleer",
+    checking: "Je account wordt gecontroleerd; even geduld.",
+    otherTab: {
+      busy: "Je persoonlijke gegevens worden in een ander LaVega-tabblad gewist. Even geduld; deze pagina herlaadt daarna vanzelf.",
+      stalled:
+        "Het wissen van je persoonlijke gegevens in een ander LaVega-tabblad is niet bevestigd. Wat al gewist is, blijft gewist, maar de kopie in deze browser kan nog aanwezig zijn. Sluit andere LaVega-tabbladen en herlaad de pagina.",
+      reload: "Herlaad de pagina",
+    },
+    serverCleared: "De serverkant is gewist. ",
+    errors: {
+      network:
+        "Geen verbinding met de server. Wat er op de server staat is niet bekend; in deze browser is niets gewijzigd. Probeer het opnieuw: dat is veilig.",
+      unauthorized:
+        "Je sessie is verlopen. Log opnieuw in en probeer het nog eens. Er is niets gewijzigd.",
+      ownerChanged:
+        "Je bent in een ander tabblad van account gewisseld. Herlaad de pagina. Er is niets gewijzigd.",
+      localBlocked:
+        "Deze browser kon nog niet worden leeggemaakt, omdat een ander LaVega-tabblad open staat. Sluit die tabbladen en herlaad de pagina. De kopie in deze browser wordt verwijderd zodra ze sluiten, of bij een nieuwe poging.",
+      localFailed:
+        "Deze browser kon niet worden leeggemaakt. Herlaad de pagina en probeer het opnieuw.",
+      generic: "Wissen mislukt. Er is niets gewijzigd.",
+    },
+  },
+  simple: {
+    makeButton: "Back-up maken",
+    restoreButton: "Terugzetten",
+    moreOptions: "Meer opties",
   },
   restore: {
     title: "Herstel uit back-up",
@@ -1696,7 +1781,7 @@ const enFacturen: FacturenCopy = {
     manual: {
       moduleTitle: "3 · Manual",
       footer:
-        "An expected invoice shows up on its due date in Overview and Forecast, and switches itself to “paid” as soon as a matching bank transaction comes in.",
+        "An expected invoice shows up on its due date in Home and Forecast, and switches itself to “paid” as soon as a matching bank transaction comes in.",
       entityLabel: "Entity",
       entityAriaLabel: "Entity",
       directionLabel: "Direction",
@@ -2393,6 +2478,8 @@ const enBackup: BackupCopy = {
     conflict: {
       message: (date) =>
         `Another device saved a newer backup on ${date}. Overwriting will delete it.`,
+      missing:
+        "The backup this device was based on is no longer on the server (it was cleared, for example from another device). Saving puts this device's data back on the server.",
       overwriteButton: "Overwrite anyway",
     },
     success: "Backup saved.",
@@ -2415,6 +2502,46 @@ const enBackup: BackupCopy = {
       success: (rows, tables) => `Deleted: ${rows} rows across ${tables} tables.`,
       errorGeneric: "Failed to delete.",
     },
+  },
+  resetPersonal: {
+    button: "Clear personal data",
+    goes: "Goes: your accounts, transactions, intake answers and documents in this browser, the copy of your vault on the server, your bank links, your invoice forwarding address and the daily total you share with LaVega Investing's net-worth page.",
+    goesLocalOnly:
+      "Goes: your accounts, transactions, intake answers and documents in this browser. This device is without an account; a copy on a server, if there is one, is not touched.",
+    stays:
+      "Stays: your login and your investing data in LaVega Investing (accounts at brokers, goals, theses and agent history).",
+    staysLocalOnly: "Stays: your settings in this browser, such as theme and language.",
+    closeTabs: "Close other LaVega tabs first.",
+    cannotUndo: "This cannot be undone. Make a backup file first if you want a way back.",
+    otherDevices: "Another browser or device keeps its own copy until you clear it there too.",
+    bankConsent:
+      "Your bank's own consent ends by itself (after 90 days at most). LaVega stops using it now.",
+    confirmButton: "Yes, clear my personal data",
+    cancelButton: "Cancel",
+    checking: "Checking your account; one moment.",
+    otherTab: {
+      busy: "Your personal data is being cleared in another LaVega tab. One moment; this page reloads by itself afterwards.",
+      stalled:
+        "Clearing your personal data in another LaVega tab was not confirmed. What was already cleared stays cleared, but the copy in this browser may still be present. Close other LaVega tabs and reload the page.",
+      reload: "Reload the page",
+    },
+    serverCleared: "The server side is cleared. ",
+    errors: {
+      network:
+        "No connection to the server. What the server holds is unknown; nothing in this browser was changed. Try again: that is safe.",
+      unauthorized:
+        "Your session has expired. Log in again and try once more. Nothing was changed.",
+      ownerChanged: "You switched account in another tab. Reload the page. Nothing was changed.",
+      localBlocked:
+        "This browser could not be emptied yet, because another LaVega tab is open. Close those tabs and reload the page. The copy in this browser is removed as soon as they close, or on a new attempt.",
+      localFailed: "This browser could not be emptied. Reload the page and try again.",
+      generic: "Clearing failed. Nothing was changed.",
+    },
+  },
+  simple: {
+    makeButton: "Make backup",
+    restoreButton: "Restore",
+    moreOptions: "More options",
   },
   restore: {
     title: "Restore from backup",

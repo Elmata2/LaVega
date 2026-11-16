@@ -1,12 +1,47 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import {
+  BROKERS,
+  CREDENTIAL_BROKERS,
+  isCredentialBroker,
+  type CredentialBroker,
+} from "@lavega/core";
 import { Button } from "./ui/button.js";
+import { DeGiroImportTab } from "./DeGiroImportTab.js";
 import { filterVisibleSyncProblems, requestRefresh, useSyncSession } from "../lib/syncSession.js";
 
 const SYNC_BACKGROUND_MESSAGE = "Sync continues in the background; progress is shown above.";
 
-function otherBrokerUnconfigured(problem: string, broker: "ibkr" | "trading212"): boolean {
-  const other = broker === "ibkr" ? /trading\s*212/i : /ibkr/i;
-  return other.test(problem) && /credentials are not configured/i.test(problem);
+type BrokerSettingsTab = "api" | "degiro";
+
+/* Two connection methods, not two products. The rail names both every time
+ * the page opens, so a DeGiro user sees file import before touching a control. */
+const BROKER_SETTINGS_TABS: {
+  id: BrokerSettingsTab;
+  label: string;
+  description: string;
+}[] = [
+  {
+    id: "api",
+    label: "Broker APIs",
+    description: "Interactive Brokers and Trading 212",
+  },
+  {
+    id: "degiro",
+    label: "DeGiro import",
+    description: "CSV export files, no API",
+  },
+];
+
+function otherBrokerUnconfigured(problem: string, broker: CredentialBroker): boolean {
+  /* A missing credential for another broker is expected on the first save: the
+   * sync reports every broker it cannot read. Only those problems do not block
+   * this form. The wording is the adapters' own ("<short label>: credentials
+   * are not configured"), derived from the broker table. */
+  return CREDENTIAL_BROKERS.some(
+    (id) =>
+      id !== broker &&
+      problem.startsWith(`${BROKERS[id].shortLabel}: credentials are not configured`),
+  );
 }
 
 function BrokerSetupCard({
@@ -298,8 +333,8 @@ function BrokerVaultUnlock() {
   );
 }
 
-function BrokerCredentialForm({ onSaved }: { onSaved?: (broker: "ibkr" | "trading212") => void }) {
-  const [broker, setBroker] = useState<"ibkr" | "trading212">("ibkr");
+function BrokerCredentialForm({ onSaved }: { onSaved?: (broker: CredentialBroker) => void }) {
+  const [broker, setBroker] = useState<CredentialBroker>("ibkr");
   const [token, setToken] = useState("");
   const [queryId, setQueryId] = useState("");
   const [secret, setSecret] = useState("");
@@ -308,7 +343,7 @@ function BrokerCredentialForm({ onSaved }: { onSaved?: (broker: "ibkr" | "tradin
   const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
   const [message, setMessage] = useState<string | null>(null);
 
-  function resetBroker(next: "ibkr" | "trading212") {
+  function resetBroker(next: CredentialBroker) {
     setBroker(next);
     setToken("");
     setQueryId("");
@@ -380,11 +415,16 @@ function BrokerCredentialForm({ onSaved }: { onSaved?: (broker: "ibkr" | "tradin
           <select
             aria-label="Broker"
             value={broker}
-            onChange={(event) => resetBroker(event.target.value as "ibkr" | "trading212")}
+            onChange={(event) => {
+              if (isCredentialBroker(event.target.value)) resetBroker(event.target.value);
+            }}
             className="mt-2 block rounded-pill border border-input bg-background px-3 py-2 text-sm font-normal"
           >
-            <option value="ibkr">Interactive Brokers</option>
-            <option value="trading212">Trading 212</option>
+            {CREDENTIAL_BROKERS.map((id) => (
+              <option key={id} value={id}>
+                {BROKERS[id].label}
+              </option>
+            ))}
           </select>
         </label>
       </div>
@@ -466,19 +506,21 @@ function BrokerCredentialForm({ onSaved }: { onSaved?: (broker: "ibkr" | "tradin
 }
 
 export function BrokerSettings() {
-  const [unreadableBrokers, setUnreadableBrokers] = useState<Array<"ibkr" | "trading212">>([]);
+  const [unreadableBrokers, setUnreadableBrokers] = useState<CredentialBroker[]>([]);
   const [storageProblem, setStorageProblem] = useState<string | null>(null);
+  const [tab, setTab] = useState<BrokerSettingsTab>("api");
+  const tabRefs = useRef<(HTMLButtonElement | null)[]>([]);
   useEffect(() => {
     void fetch("/api/brokers/credentials/status")
       .then(async (response) => {
         if (!response.ok)
           throw new Error("Broker credential storage is unavailable. Try again later.");
         return (await response.json()) as {
-          brokers?: Record<"ibkr" | "trading212", string>;
+          brokers?: Partial<Record<CredentialBroker, string>>;
         };
       })
       .then(({ brokers }) => {
-        const unreadable = (["ibkr", "trading212"] as const).filter(
+        const unreadable = CREDENTIAL_BROKERS.filter(
           (broker) => brokers?.[broker] === "unreadable",
         );
         setUnreadableBrokers(unreadable);
@@ -492,8 +534,28 @@ export function BrokerSettings() {
   const credentialProblem =
     storageProblem ??
     (unreadableBrokers.length
-      ? `${unreadableBrokers.map((broker) => (broker === "ibkr" ? "IBKR" : "Trading 212")).join(" and ")} credentials cannot be read. Save new credentials below to reconnect.`
+      ? `${unreadableBrokers.map((broker) => BROKERS[broker].shortLabel).join(" and ")} credentials cannot be read. Save new credentials below to reconnect.`
       : null);
+
+  function selectTab(next: BrokerSettingsTab) {
+    setTab(next);
+    tabRefs.current[BROKER_SETTINGS_TABS.findIndex((entry) => entry.id === next)]?.focus();
+  }
+
+  function onTabKeyDown(event: React.KeyboardEvent<HTMLButtonElement>, index: number) {
+    const last = BROKER_SETTINGS_TABS.length - 1;
+    let next: number;
+    if (event.key === "ArrowDown" || event.key === "ArrowRight")
+      next = index === last ? 0 : index + 1;
+    else if (event.key === "ArrowUp" || event.key === "ArrowLeft")
+      next = index === 0 ? last : index - 1;
+    else if (event.key === "Home") next = 0;
+    else if (event.key === "End") next = last;
+    else return;
+    event.preventDefault();
+    selectTab(BROKER_SETTINGS_TABS[next]!.id);
+  }
+
   return (
     <div className="space-y-8">
       <BrokerVaultUnlock />
@@ -505,48 +567,108 @@ export function BrokerSettings() {
           {credentialProblem}
         </p>
       )}
-      <BrokerSyncProgressCard />
-      <div className="grid gap-5 lg:grid-cols-2">
-        <BrokerSetupCard
-          name="Interactive Brokers"
-          description="Use IBKR Flex Web Service. This works with daily updated reports, without a local gateway or browser login."
-          fields={[
-            "Flex-token",
-            "Numeric Query ID",
-            "Flex Query with Open Positions, Trades, Cash Report and Statement of Funds",
-          ]}
-          steps={[
-            "Open the Interactive Brokers Client Portal.",
-            "Go to Performance & Reports → Flex Queries.",
-            "Create one query with Open Positions, Trades, Cash Report and Statement of Funds.",
-            "Save the query and note the numeric Query ID.",
-            "Go to Flex Web Service and generate a token. Note the token immediately; IBKR only shows it briefly.",
-          ]}
-        />
-        <BrokerSetupCard
-          name="Trading 212"
-          description="Use the official Trading 212 API. LaVega reads positions, orders, transactions and dividends through your own credentials, and never writes."
-          fields={["API key", "API secret"]}
-          steps={[
-            "Open the Trading 212 app and go to Menu → Settings → API (Beta).",
-            "Create the key on an Invest or Stocks ISA account. The API does not work on any other account type.",
-            "Enable exactly five permissions: Account data, History – Dividends, History – Orders, History – Transactions, Portfolio.",
-            "Leave Orders – Execute and Pies – Write off. LaVega has no code that trades.",
-            "Copy both the API key and the API secret. The secret is shown once — without it nothing authenticates.",
-          ]}
-          warning="Those five are one per endpoint LaVega reads. A missing one does not fail at setup: it surfaces later as HTTP 403 on the first sync."
-        />
+      <div className="grid items-start gap-5 lg:grid-cols-[15rem_minmax(0,1fr)]">
+        <div
+          role="tablist"
+          aria-label="Broker setup"
+          aria-orientation="vertical"
+          className="grid gap-2 sm:grid-cols-2 lg:grid-cols-1"
+        >
+          {BROKER_SETTINGS_TABS.map((entry, index) => {
+            const selected = tab === entry.id;
+            return (
+              <button
+                key={entry.id}
+                ref={(element) => {
+                  tabRefs.current[index] = element;
+                }}
+                type="button"
+                role="tab"
+                id={`broker-tab-${entry.id}`}
+                aria-selected={selected}
+                aria-controls={`broker-panel-${entry.id}`}
+                aria-label={entry.label}
+                aria-describedby={`broker-tab-${entry.id}-description`}
+                tabIndex={selected ? 0 : -1}
+                className={`min-h-11 rounded-tile border p-3 text-left transition-colors duration-150 ease-out motion-reduce:transition-none ${
+                  selected
+                    ? "border-accent/40 bg-secondary text-foreground"
+                    : "border-border bg-card text-muted-foreground hover:bg-secondary/60 hover:text-foreground"
+                }`}
+                onClick={() => setTab(entry.id)}
+                onKeyDown={(event) => onTabKeyDown(event, index)}
+              >
+                <span className="block text-sm font-semibold">{entry.label}</span>
+                <span
+                  id={`broker-tab-${entry.id}-description`}
+                  className="mt-0.5 block text-xs leading-5 text-muted-foreground"
+                >
+                  {entry.description}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+        <div
+          role="tabpanel"
+          id="broker-panel-api"
+          aria-labelledby="broker-tab-api"
+          className="space-y-8"
+          hidden={tab !== "api"}
+        >
+          <BrokerSyncProgressCard />
+          <div className="grid gap-5 lg:grid-cols-2">
+            <BrokerSetupCard
+              name="Interactive Brokers"
+              description="Use IBKR Flex Web Service. This works with daily updated reports, without a local gateway or browser login."
+              fields={[
+                "Flex-token",
+                "Numeric Query ID",
+                "Flex Query with Open Positions, Trades, Cash Report and Statement of Funds",
+              ]}
+              steps={[
+                "Open the Interactive Brokers Client Portal.",
+                "Go to Performance & Reports → Flex Queries.",
+                "Create one query with Open Positions, Trades, Cash Report and Statement of Funds.",
+                "Save the query and note the numeric Query ID.",
+                "Go to Flex Web Service and generate a token. Note the token immediately; IBKR only shows it briefly.",
+              ]}
+            />
+            <BrokerSetupCard
+              name="Trading 212"
+              description="Use the official Trading 212 API. LaVega reads positions, orders, transactions and dividends through your own credentials, and never writes."
+              fields={["API key", "API secret"]}
+              steps={[
+                "Open the Trading 212 app and go to Menu → Settings → API (Beta).",
+                "Create the key on an Invest or Stocks ISA account. The API does not work on any other account type.",
+                "Enable exactly five permissions: Account data, History – Dividends, History – Orders, History – Transactions, Portfolio.",
+                "Leave Orders – Execute and Pies – Write off. LaVega has no code that trades.",
+                "Copy both the API key and the API secret. The secret is shown once — without it nothing authenticates.",
+              ]}
+              warning="Those five are one per endpoint LaVega reads. A missing one does not fail at setup: it surfaces later as HTTP 403 on the first sync."
+            />
+          </div>
+          <BrokerCredentialForm
+            onSaved={(broker) =>
+              setUnreadableBrokers((current) => current.filter((item) => item !== broker))
+            }
+          />
+          <BrokerSyncAction />
+          <p className="rounded-card border border-border bg-secondary/40 p-4 text-sm leading-6 text-muted-foreground">
+            Credentials stay on your machine. Never share Flex tokens, API keys or API secrets in
+            chat, screenshots, issues or git.
+          </p>
+        </div>
+        <div
+          role="tabpanel"
+          id="broker-panel-degiro"
+          aria-labelledby="broker-tab-degiro"
+          className="space-y-8"
+          hidden={tab !== "degiro"}
+        >
+          <DeGiroImportTab />
+        </div>
       </div>
-      <BrokerCredentialForm
-        onSaved={(broker) =>
-          setUnreadableBrokers((current) => current.filter((item) => item !== broker))
-        }
-      />
-      <BrokerSyncAction />
-      <p className="rounded-card border border-border bg-secondary/40 p-4 text-sm leading-6 text-muted-foreground">
-        Credentials stay on your machine. Never share Flex tokens, API keys or API secrets in chat,
-        screenshots, issues or git.
-      </p>
     </div>
   );
 }

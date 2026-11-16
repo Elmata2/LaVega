@@ -3,6 +3,7 @@ import type { Account, AccountSummary, Tx, DuplicateGroup, Valuation } from "@la
 import {
   accountSummaries,
   accountIsLiability,
+  isEurCurrency,
   accountType,
   accountTypeKind,
   accountTypeKindOf,
@@ -11,9 +12,12 @@ import {
   valuationsForAccount,
   type AccountTypeKind,
 } from "@lavega/core";
-import { formatEuroIn } from "../format";
+import { formatEuroIn, formatSignedEuroIn } from "../format";
 import { useAppLocale } from "../appLocale";
 import { moneyCopy } from "../copy/money";
+import { shellCopy } from "../copy/shell";
+import type { ConversionMode } from "../settings";
+import Dialog from "../components/ui/Dialog.js";
 import type { MoneyCopy } from "../copy/money";
 import type { Locale } from "../locale";
 import Badge from "../components/ui/Badge.js";
@@ -22,7 +26,12 @@ import CardLink from "../components/ui/CardLink.js";
 import Button from "../components/ui/Button.js";
 import Pill from "../components/ui/Pill.js";
 import SaldoInput from "../components/ui/SaldoInput.js";
+import BankLink from "../components/BankLink";
+import { CATALOGUE_ENTRIES } from "../catalogue-rates";
+import { wizardCopy } from "../copy/wizard";
+import { statedCardPlaceholders } from "../plan/statedPlaceholders";
 import { Table, TableWrap, Th, Td } from "../components/ui/Table.js";
+import StatusLine, { StatusIcon } from "../components/ui/StatusLine.js";
 import "../styles/views.css";
 
 type RekeningenProps = {
@@ -45,6 +54,12 @@ type RekeningenProps = {
    *  the FULL list in App; only groups touching the current scope are shown. */
   duplicateGroups: DuplicateGroup[];
   onMergeDuplicates: (survivorKey: string, duplicateKey: string) => void;
+  /** Cards the person named in the wizard (catalogue ids or "other"); the ones
+   *  no bank data stands in for yet are listed as not connected. */
+  statedCredit?: readonly string[];
+  statedDebit?: readonly string[];
+  /** Re-read every connected bank, passed on to the bank-linking flow. */
+  onRefreshBank?: () => void;
   /** How many stored transfer pairs the last merge/delete had to drop because
    *  one of their legs no longer exists. A count, not a sentence: the wording
    *  lives in the copy module with the rest of this screen's copy. */
@@ -62,7 +77,14 @@ type RekeningenProps = {
   /** Add or replace the valuation on one date (identity is account + date). */
   onValuationCommit: (accountKey: string, date: string, amountCents: number) => void;
   onValuationRemove: (id: string) => void;
+  /** Whether a non-EUR balance/transaction counts toward the euro totals. Owned
+   *  by App; the control (a small pop-up) shows only when both are given. */
+  fxConversionMode?: ConversionMode;
+  onFxConversionModeChange?: (mode: ConversionMode) => void;
 };
+
+const NO_IDS: readonly string[] = [];
+const NO_REFRESH = () => {};
 
 /* ---------------------------------------------------------------------------
  * Grouping accounts under their bank — pure, so it is tested without a DOM.
@@ -81,8 +103,9 @@ export type BankGroup = {
   /** False for the "Zonder bank" group. */
   named: boolean;
   rows: AccountSummary[];
-  /** Sum of the balances we actually hold, in euros. **Null when not one
-   *  account in the group has a balance** — an unknown saldo is never summed as
+  /** Sum of the EUR balances we actually hold, in euros; a balance in another
+   *  currency is not summed and counts as unknown. **Null when not one
+   *  account in the group has a EUR balance** — an unknown saldo is never summed as
    *  a zero, so a bank with nothing known shows no figure at all. */
   total: number | null;
   knownCount: number;
@@ -127,7 +150,9 @@ export function groupAccountsByBank(
     let txCount = 0;
     for (const r of sorted) {
       txCount += r.txCount;
-      if (r.account.balance !== null) {
+      // A non-EUR balance is not euros: it never enters the euro total and counts
+      // as unknown for it (same rule as totalePositie / core ingest).
+      if (r.account.balance !== null && isEurCurrency(r.account.currency)) {
         cents += Math.round(r.account.balance * 100);
         knownCount += 1;
         if (!r.account.balanceDate) undatedCount += 1;
@@ -552,9 +577,9 @@ function ValuationsEditor({
         </Button>
       </div>
       {invalid && (
-        <p className="m-0 mt-1 text-neg" role="alert">
+        <StatusLine tone="problem" className="m-0 mt-1" role="alert">
           {c.waarderingOngeldig}
-        </p>
+        </StatusLine>
       )}
     </div>
   );
@@ -1082,7 +1107,7 @@ function GroupSaldo({ group, locale }: { group: BankGroup; locale: Locale }) {
       data-testid="bank-group-saldo"
     >
       <span className={group.total >= 0 ? "text-pos" : "text-neg"}>
-        {formatEuroIn(locale, group.total)}
+        {formatSignedEuroIn(locale, group.total)}
       </span>
       {group.unknownCount > 0 && (
         <Badge>{c.vanKnownVanTotal(group.knownCount, group.rows.length)}</Badge>
@@ -1108,15 +1133,22 @@ export default function Rekeningen({
   onDeleteAccount,
   duplicateGroups,
   onMergeDuplicates,
+  statedCredit = NO_IDS,
+  statedDebit = NO_IDS,
+  onRefreshBank = NO_REFRESH,
   transferLinksDropped,
   valuations,
   asOf,
   onOpeningCommit,
   onValuationCommit,
   onValuationRemove,
+  fxConversionMode,
+  onFxConversionModeChange,
 }: RekeningenProps) {
   const [locale] = useAppLocale();
   const c = moneyCopy[locale].rekeningen;
+  const fx = shellCopy[locale].profiel.fx;
+  const [fxOpen, setFxOpen] = useState(false);
   // Only flag duplicates you can actually see here — a group whose accounts all
   // sit outside the active entity scope would be a banner about nothing.
   const visibleKeys = new Set(accounts.map((a) => a.key));
@@ -1129,6 +1161,15 @@ export default function Rekeningen({
   const [selected, setSelected] = useState<Record<string, string>>({});
   // The bank a half-typed rename belongs to — see groupAccountsByBank.
   const [rename, setRename] = useState<{ key: string; bank: string } | null>(null);
+  const [linking, setLinking] = useState(false);
+  const wc = wizardCopy[locale];
+  const placeholders = statedCardPlaceholders({
+    credit: statedCredit,
+    debit: statedDebit,
+    accounts,
+    entries: CATALOGUE_ENTRIES,
+    otherLabels: { credit: wc.otherCard, debit: wc.otherDebitCard },
+  });
 
   const rows = accountSummaries(accounts, txs);
   const groups = groupAccountsByBank(rows, (a) =>
@@ -1142,6 +1183,11 @@ export default function Rekeningen({
     <Card as="section" aria-label={c.heading}>
       <CardHeader>
         <h2>{c.heading}</h2>
+        {fxConversionMode !== undefined && onFxConversionModeChange !== undefined && (
+          <CardLink onClick={() => setFxOpen(true)} data-testid="fx-settings-open">
+            {fx.settingsButton}
+          </CardLink>
+        )}
         {accounts.length > 0 && (
           <div
             className="flex gap-2"
@@ -1167,12 +1213,33 @@ export default function Rekeningen({
         )}
       </CardHeader>
 
+      {fxConversionMode !== undefined && onFxConversionModeChange !== undefined && (
+        <Dialog
+          open={fxOpen}
+          onClose={() => setFxOpen(false)}
+          title={fx.heading}
+          closeLabel={fx.closeLabel}
+        >
+          <label>
+            <input
+              type="checkbox"
+              checked={fxConversionMode === "convert"}
+              aria-label={fx.convertLabel}
+              onChange={(e) => onFxConversionModeChange(e.target.checked ? "convert" : "separate")}
+            />{" "}
+            {fx.convertLabel}
+          </label>
+          <p className="cell-sub">{fx.description}</p>
+        </Dialog>
+      )}
+
       {shownGroups.map((group) => {
         const others = group.accounts.filter((a) => a.key !== group.survivor.key);
         return (
           <div className="dup-banner" key={group.canonicalId}>
             <div>
               <p className="dup-banner-title">
+                <StatusIcon tone="warning" />
                 {c.dupBannerTitle(group.accounts.map(accountLabel).join(", "))}
               </p>
               <p className="dup-banner-sub">
@@ -1196,6 +1263,35 @@ export default function Rekeningen({
           </div>
         );
       })}
+
+      {placeholders.length > 0 && (
+        <div
+          className="border border-dashed border-line rounded p-4 mb-4"
+          data-testid="not-connected"
+        >
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <h3 className="m-0">{c.nietGekoppeldHeading}</h3>
+            <Button
+              className="px-3 py-1 font-semibold bg-transparent"
+              aria-expanded={linking}
+              onClick={() => setLinking(!linking)}
+            >
+              {c.nietGekoppeldKoppelen}
+            </Button>
+          </div>
+          <ul className="m-0 mt-2 pl-5">
+            {placeholders.map((p) => (
+              <li key={`${p.kind}:${p.id}`}>
+                {p.name}{" "}
+                <span className="text-muted">
+                  ({p.kind === "credit" ? c.nietGekoppeldCredit : c.nietGekoppeldDebit})
+                </span>
+              </li>
+            ))}
+          </ul>
+          {linking && <BankLink busy={busy} onRefresh={onRefreshBank} />}
+        </div>
+      )}
 
       {transferLinksDropped != null && transferLinksDropped > 0 && (
         <p className="dup-banner-sub" role="status" data-testid="transfer-links-dropped">

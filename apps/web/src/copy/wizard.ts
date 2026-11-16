@@ -54,8 +54,10 @@ export type WizardCopy = {
     vat: string;
     hasCards: (together: boolean) => string;
     cards: (together: boolean) => string;
+    cardDetails: (together: boolean) => string;
     debitCards: (together: boolean) => string;
     upload: string;
+    connectBank: string;
     moneySharing: string;
     birthYear: string;
     incomeRegularity: string;
@@ -100,9 +102,29 @@ export type WizardCopy = {
   debitBrands: Record<Exclude<DebitBrand, "other-brand">, string>;
   /** Group name for brands the list does not know. */
   otherBrand: string;
+  /** Link under the card tiles: lift the filter to the banks answer. */
+  showAllBanks: string;
+  showMyBanks: string;
   /** Badge on a brand tile: how many of its cards are picked. */
   cardsPicked: (n: number) => string;
+  /** The balance, paid-in-full, rate and points row per credit card. */
+  cardDetails: {
+    balance: string;
+    paysInFull: string;
+    payYes: string;
+    payNo: string;
+    rate: string;
+    rateHint: string;
+    points: (program: string) => string;
+    pointsHint: string;
+    skipHint: string;
+    skip: string;
+    unknownCard: string;
+    errors: { balance: string; paysInFull: string; rate: string; points: string };
+  };
   upload: {
+    /** One line under "Connect your bank": read-only, and a file works too. */
+    connectBody: string;
     button: string;
     later: string;
     toPlan: string;
@@ -153,7 +175,7 @@ const bankNames = (other: string, crypto: string): Record<string, string> => ({
 
 export const wizardCopy: Record<Locale, WizardCopy> = {
   nl: {
-    sections: { about: "Over jou", goals: "Doelen", risk: "Risico" },
+    sections: { about: "Over jou", goals: "Doelen", risk: "Risico", finish: "Afronden" },
     next: "Verder",
     back: "Terug",
     close: "Sluiten",
@@ -195,9 +217,12 @@ export const wizardCopy: Record<Locale, WizardCopy> = {
       vat: "Reken je btw aan je klanten?",
       hasCards: (t) => (t ? "Hebben jullie een creditcard?" : "Heb je een creditcard?"),
       cards: (t) => (t ? "Welke creditcards hebben jullie?" : "Welke creditcards heb je?"),
+      cardDetails: (t) =>
+        t ? "Wat staat er nu op jullie creditcards?" : "Wat staat er nu op je creditcards?",
       debitCards: (t) =>
         t ? "Welke betaalpassen hebben jullie?" : "Welke betaalpassen heb je?",
       upload: "Wil je je bankafschrift toevoegen?",
+      connectBank: "Koppel je bank",
       moneySharing: "Delen jullie je geld?",
       birthYear: "In welk jaar ben je geboren?",
       incomeRegularity: "Is je inkomen elke maand gelijk?",
@@ -299,8 +324,31 @@ export const wizardCopy: Record<Locale, WizardCopy> = {
     otherDebitCard: "Een andere pas",
     debitBrands: DEBIT_BRANDS,
     otherBrand: "Overige",
+    showAllBanks: "Toon alle banken",
+    showMyBanks: "Toon alleen mijn banken",
     cardsPicked: (n) => `${n} gekozen`,
+    cardDetails: {
+      balance: "Openstaand saldo",
+      paysInFull: "Betaal je het saldo elke maand helemaal af?",
+      payYes: "Ja, elke maand",
+      payNo: "Nee, een deel blijft staan",
+      rate: "Rente op het openstaande saldo (% per jaar)",
+      rateHint: "Weet je de rente niet? Laat dit leeg. Er wordt dan niets geschat.",
+      points: (program) => `Puntensaldo ${program}`,
+      pointsHint: "Het saldo uit je Amex-app of online account.",
+      skipHint: "Laat een kaart leeg om die over te slaan.",
+      skip: "Overslaan",
+      unknownCard: "Onbekende kaart",
+      errors: {
+        balance: "Vul een bedrag in, bijvoorbeeld 1500.",
+        paysInFull: "Kies of je het saldo elke maand helemaal afbetaalt.",
+        rate: "Vul een percentage in, bijvoorbeeld 14,9.",
+        points: "Vul een aantal punten in, bijvoorbeeld 12500.",
+      },
+    },
     upload: {
+      connectBody:
+        "De koppeling is alleen-lezen: LaVega kan niets betalen of verplaatsen. Een bestand uploaden kan ook.",
       button: "Bankafschrift uploaden",
       later: "Later",
       toPlan: "Naar je plan",
@@ -324,7 +372,7 @@ export const wizardCopy: Record<Locale, WizardCopy> = {
     dateFuture: "Kies een datum in de toekomst.",
   },
   en: {
-    sections: { about: "About you", goals: "Goals", risk: "Risk" },
+    sections: { about: "About you", goals: "Goals", risk: "Risk", finish: "Finish" },
     next: "Next",
     back: "Back",
     close: "Close",
@@ -366,8 +414,11 @@ export const wizardCopy: Record<Locale, WizardCopy> = {
       vat: "Do you charge your clients VAT?",
       hasCards: (t) => (t ? "Do you have a credit card?" : "Do you have a credit card?"),
       cards: (t) => (t ? "Which credit cards do you have?" : "Which credit cards do you have?"),
+      cardDetails: (t) =>
+        t ? "What is on your credit cards right now?" : "What is on your credit cards right now?",
       debitCards: (t) => (t ? "Which debit cards do you have?" : "Which debit cards do you have?"),
       upload: "Do you want to add your bank statement?",
+      connectBank: "Connect your bank",
       moneySharing: "Do you share your money?",
       birthYear: "What year were you born?",
       incomeRegularity: "Is your income the same every month?",
@@ -469,8 +520,31 @@ export const wizardCopy: Record<Locale, WizardCopy> = {
     otherDebitCard: "Another card",
     debitBrands: DEBIT_BRANDS,
     otherBrand: "Other",
+    showAllBanks: "Show all banks",
+    showMyBanks: "Show only my banks",
     cardsPicked: (n) => `${n} selected`,
+    cardDetails: {
+      balance: "Outstanding balance",
+      paysInFull: "Do you pay the balance in full every month?",
+      payYes: "Yes, every month",
+      payNo: "No, part of it stays",
+      rate: "Interest on the outstanding balance (% a year)",
+      rateHint: "Do not know the rate? Leave it empty. Nothing will be estimated.",
+      points: (program) => `Points balance ${program}`,
+      pointsHint: "The balance from your Amex app or online account.",
+      skipHint: "Leave a card empty to skip it.",
+      skip: "Skip",
+      unknownCard: "Unknown card",
+      errors: {
+        balance: "Enter an amount, for example 1500.",
+        paysInFull: "Choose whether you pay the balance in full every month.",
+        rate: "Enter a percentage, for example 14.9.",
+        points: "Enter a number of points, for example 12500.",
+      },
+    },
     upload: {
+      connectBody:
+        "The link is read-only: LaVega cannot pay or move anything. Uploading a file works too.",
       button: "Upload bank statement",
       later: "Later",
       toPlan: "Go to your plan",

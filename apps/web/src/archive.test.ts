@@ -11,12 +11,17 @@ import {
 import {
   ARCHIVED_VIEWS,
   ARCHIVED_WIDGETS,
+  SHOW_CASHBACK_CORRECTION,
+  SHOW_DOCUMENTS_CARD,
   SHOW_INVOICE_FORWARDING,
+  SHOW_NET_WORTH_SHARE,
+  SHOW_OWN_COLUMNS_IMPORT,
   SHOW_SCOPE_SWITCH,
   initialScope,
   isArchivedView,
   isArchivedWidget,
 } from "./archive";
+import { getEnabledModules } from "./settings";
 
 test("switch on archives facturen, belasting, valuta", () => {
   expect(ARCHIVED_VIEWS).toEqual(["facturen", "belasting", "valuta"]);
@@ -35,6 +40,13 @@ test("switch on hides the scope switch and invoice forwarding", () => {
   expect(SHOW_INVOICE_FORWARDING).toBe(false);
 });
 
+test("the Profiel cards hidden for now are off, and their code is kept", () => {
+  expect(SHOW_OWN_COLUMNS_IMPORT).toBe(false);
+  expect(SHOW_DOCUMENTS_CARD).toBe(false);
+  expect(SHOW_CASHBACK_CORRECTION).toBe(false);
+  expect(SHOW_NET_WORTH_SHARE).toBe(false);
+});
+
 test("stored prefs naming archived ids are ignored, not an error", () => {
   expect(enabledModules(["overview", "facturen", "belasting", "forecast"])).toEqual([
     "overview",
@@ -42,11 +54,20 @@ test("stored prefs naming archived ids are ignored, not an error", () => {
   ]);
   expect(
     enabledWidgets({ on: ["btw-stand", "aandacht"], seen: ["btw-stand", "aandacht"] }),
-  ).toEqual(["aandacht", "intake-invite", "room-card", "connect-checklist", "betaalagenda"]);
+  ).toEqual(["aandacht"]);
   expect(normaliseWidgets(["positie", "facturen-open", "btw-stand", "aandacht"])).toEqual([
     "aandacht",
   ]);
   expect(navModules(["overview", "valuta"] as never).map((m) => m.id)).toEqual(["overview"]);
+});
+
+test("a stored widget list naming the removed cards (pop-ups, room card) still resolves", () => {
+  expect(
+    enabledWidgets({
+      on: ["intake-invite", "betaalagenda"],
+      seen: ["intake-invite", "betaalagenda", "room-card"],
+    }),
+  ).toEqual(["betaalagenda"]);
 });
 
 test("default modules and widgets exclude archived ids", () => {
@@ -61,4 +82,24 @@ test("stored default business + switch hidden opens personal and leaves storage 
   // Flipping the switch on restores the stored default.
   expect(initialScope(true)).toBe("business");
   localStorage.clear();
+});
+
+test("never chosen (or garbage stored) gives the three-item default in registry order", () => {
+  const four = ["overview", "optimalisatie", "accounts"];
+  expect(DEFAULT_MODULES).toEqual(four);
+  expect(enabledModules(null)).toEqual(four);
+  for (const raw of ["{not json", '{"a":1}', "42"]) {
+    localStorage.setItem("lavega.navModules", raw);
+    expect(enabledModules(getEnabledModules())).toEqual(four);
+  }
+  localStorage.clear();
+});
+
+test("a legacy stored list naming plan keeps working: plan is ignored, the rest resolves in order", () => {
+  expect(enabledModules(["plan", "overview", "accounts", "optimalisatie", "forecast"])).toEqual([
+    "overview",
+    "optimalisatie",
+    "accounts",
+    "forecast",
+  ]);
 });

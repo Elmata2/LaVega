@@ -6,6 +6,7 @@ import {
   computePortfolioValueSeries,
   type FxRate,
   type PriceBar,
+  type ScheduledBroker,
 } from "@lavega/core";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { allSections, type BrokerResult } from "./BrokerAccessAdapter.js";
@@ -54,7 +55,7 @@ function ibkrResult(xml = statement): BrokerResult {
   return { ...parseFlexStatement(xml, "personal"), source: "ibkr-flex" };
 }
 
-function outcome(broker: "ibkr" | "trading212", result: BrokerResult) {
+function outcome(broker: ScheduledBroker, result: BrokerResult) {
   return {
     outcomes: [{ broker, status: "synced" as const, lastSyncedAt: null, result }],
     problems: [],

@@ -126,3 +126,54 @@ test("credit aliases do not leak into the debit picker, and pinpas stays debit-o
   expect(matchCards("pinpas")).toEqual([]);
   expect(matchCards("pinpas", "debit").length).toBe(31);
 });
+
+import { bankFilter, cardVisible, filterGroups } from "./cardOptions";
+
+test("bankFilter: no answer, empty or only other means no filter", () => {
+  expect(bankFilter(undefined)).toBeNull();
+  expect(bankFilter([])).toBeNull();
+  expect(bankFilter(["other"])).toBeNull();
+});
+
+test("bankFilter ignores ids that are not bank brands", () => {
+  expect(bankFilter(["foo"])).toBeNull();
+  expect([...bankFilter(["foo", "ing"])!]).toEqual(["ing"]);
+});
+
+test("bankFilter keeps the chosen brands; other adds the other-brand group", () => {
+  expect([...bankFilter(["ing", "revolut"])!]).toEqual(["ing", "revolut"]);
+  expect([...bankFilter(["ing", "other"])!].sort()).toEqual(["ing", "other-brand"]);
+});
+
+const brandsOf = (kind: "debit" | "credit", banks: string[], picked: string[] = []) =>
+  filterGroups(cardGroups("Other", [], kind, undefined), bankFilter(banks), picked).map(
+    (g) => g.brand,
+  );
+
+test("debit groups follow the banks; amex has no debit card and is not shown; other adds the other group", () => {
+  expect(brandsOf("debit", ["ing", "revolut", "amex", "other"])).toEqual(["ing", "revolut", "other-brand"]);
+});
+
+test("credit groups follow the banks", () => {
+  const b = brandsOf("credit", ["ing", "revolut", "amex"]);
+  expect(b).toContain("ing");
+  expect(b).toContain("amex");
+  expect(b).not.toContain("abn");
+  expect(b).not.toContain("revolut");
+});
+
+test("a group with a picked card stays under the filter; no filter lists all", () => {
+  expect(brandsOf("debit", ["ing"], ["abn-amro-betaalpas"])).toEqual(
+    expect.arrayContaining(["ing", "abn"]),
+  );
+  const all = cardGroups("Other", [], "debit", undefined);
+  expect(filterGroups(all, null, [])).toEqual(all);
+});
+
+test("cardVisible: filter, picked and no filter", () => {
+  const f = bankFilter(["ing"]);
+  expect(cardVisible("ing-betaalpas", "debit", f, [])).toBe(true);
+  expect(cardVisible("abn-amro-betaalpas", "debit", f, [])).toBe(false);
+  expect(cardVisible("abn-amro-betaalpas", "debit", f, ["abn-amro-betaalpas"])).toBe(true);
+  expect(cardVisible("abn-amro-betaalpas", "debit", null, [])).toBe(true);
+});

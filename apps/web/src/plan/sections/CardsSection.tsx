@@ -9,6 +9,7 @@ import {
 import Button from "../../components/ui/Button.js";
 import CardLink from "../../components/ui/CardLink.js";
 import { Table, TableWrap, Td, Th } from "../../components/ui/Table.js";
+import StatusLine from "../../components/ui/StatusLine.js";
 import { cardsCopy, factLine } from "../../copy/plan/index.js";
 import { CATALOGUE_ENTRIES } from "../../catalogue-rates.js";
 import { heldCatalogueIds } from "../heldCards.js";
@@ -20,6 +21,8 @@ import {
   type StatedCardRow,
 } from "../statedCards.js";
 import SectionCard from "../SectionCard.js";
+import CardAdviceBlock from "./CardAdvice.js";
+import CardBalancesEditor from "./CardBalancesEditor.js";
 import {
   CalcList,
   Group,
@@ -205,6 +208,7 @@ export default function CardsSection({ result, ctx }: SectionProps<CardsFigures>
                 heldNames={heldNames}
               />
             ) : null}
+            <CardAdviceBlock advice={f.advice} />
             <StatusBody
               section="cards"
               result={result}
@@ -287,10 +291,10 @@ export default function CardsSection({ result, ctx }: SectionProps<CardsFigures>
             />
           </div>
         ),
-        assumptions:
-          programs.length === 0 ? null : (
+        assumptions: (
             <Group title={a.groups.yourFigures}>
-              <Redemption programs={programs} ctx={ctx} />
+              <CardBalancesEditor ctx={ctx} />
+              {programs.length > 0 && <Redemption programs={programs} ctx={ctx} />}
               {f.balances.map((b) => (
                 <ValueInput
                   key={b.programId}
@@ -315,7 +319,7 @@ export default function CardsSection({ result, ctx }: SectionProps<CardsFigures>
                 />
               ))}
             </Group>
-          ),
+        ),
         howCalculated: <CalcList section="cards" result={result} />,
         sources: <Sources lines={[terms]} />,
       }}
@@ -448,13 +452,14 @@ function Redemption({
           {a.add}
         </Button>
       </form>
-      <p
+      <StatusLine
+        tone="problem"
         role={error === null ? undefined : "alert"}
         data-testid="plan-error-redeem"
-        className="m-0 text-warn text-[0.85rem]"
+        className="m-0 text-[0.85rem]"
       >
         {error}
-      </p>
+      </StatusLine>
     </div>
   );
 }

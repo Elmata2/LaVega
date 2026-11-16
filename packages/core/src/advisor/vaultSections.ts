@@ -112,6 +112,7 @@ export function profileUpdatedAt(p: AdvisorProfile): string {
   addField(p.chargesVat);
   addField(p.statedCards);
   addField(p.statedDebitCards);
+  addField(p.cardBalances);
   addField(p.birthYear);
   addField(p.incomeRegularity);
   addField(p.statedBanks);

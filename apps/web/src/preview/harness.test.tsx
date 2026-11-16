@@ -42,7 +42,7 @@ async function show(id: string, dataset: "fixture" | "empty", path = "/app") {
     let i = 0;
     i < 600 &&
     (el.querySelector(".pv-loading") ||
-      (mode.kind === "app" && !el.querySelector(".shell")) ||
+      (mode.kind === "app" && !el.querySelector(".shell2")) ||
       i < 40);
     i++
   )
@@ -57,14 +57,14 @@ test(
   { timeout: 60_000 },
   async () => {
     const c = await show("accounts", "fixture", "/app/accounts");
-    expect(c.querySelector(".shell")).not.toBeNull();
+    expect(c.querySelector(".shell2")).not.toBeNull();
     expect(c.textContent).toContain("American Express");
   },
 );
 
 test("the empty vault still renders the shell", { timeout: 60_000 }, async () => {
   const c = await show("overview", "empty");
-  expect(c.querySelector(".shell")).not.toBeNull();
+  expect(c.querySelector(".shell2")).not.toBeNull();
 });
 
 test("every non-app mode renders something", { timeout: 120_000 }, async () => {

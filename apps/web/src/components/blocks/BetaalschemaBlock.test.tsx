@@ -4,7 +4,7 @@ import { fileURLToPath, URL as NodeURL } from "node:url";
 import { renderToStaticMarkup } from "react-dom/server";
 import { expect, test } from "vitest";
 import type { PaycheckPreview, Tx } from "@lavega/core";
-import { formatEuro } from "../../format.js";
+import { formatEuro, formatSignedEuroIn } from "../../format.js";
 import { BetaalschemaBlock, agendaRows, cadenceLabel, nextOccurrence } from "./BetaalschemaBlock";
 import { ASOF, scheduledFlows } from "./fixtures";
 
@@ -36,7 +36,7 @@ test("BetaalschemaBlock lists the upcoming planned flows by due date, past dates
   expect(html).toContain(">28<");
   expect(html).toContain(">aug<");
   // sign drives the amount's direction: -1 out, +1 in.
-  expect(html).toContain(formatEuro(1_200));
+  expect(html).toContain(formatSignedEuroIn("nl", 1_200));
   // A paid flow is not part of the agenda any more.
   expect(html).not.toContain("Al betaald");
   // No caption under the rows any more (removed on request, 21 Oct 2026).
@@ -66,7 +66,7 @@ test("BetaalschemaBlock adds detected recurring payments and marks them as predi
   expect(html).toContain("Spotify");
   expect(html).toContain("voorspeld");
   expect(html).toContain("maandelijks · 3× gezien");
-  expect(html).toContain(formatEuro(-14.99));
+  expect(html).toContain(formatSignedEuroIn("nl", -14.99));
 });
 
 test("BetaalschemaBlock renders an empty state when nothing is scheduled or detected", () => {
@@ -204,7 +204,7 @@ test("de agenda ziet Simyo, ook met een schuivende tenaamstelling en een gemiste
   );
   expect(html).toContain("SIMYO B.V.");
   expect(html).toContain("maandelijks · 5× gezien");
-  expect(html).toContain(formatEuro(-11.89));
+  expect(html).toContain(formatSignedEuroIn("nl", -11.89));
   expect(html).toContain("voorspeld");
 });
 
@@ -213,7 +213,7 @@ test("een inkomende maandstroom (DUO) staat net zo goed in de agenda", () => {
     <BetaalschemaBlock scheduledFlows={[]} txs={duo} asOf={ASOF} />,
   );
   expect(html).toContain("DUO");
-  expect(html).toContain(formatEuro(512.1));
+  expect(html).toContain(formatSignedEuroIn("nl", 512.1));
   expect(html).toContain("text-pos");
 });
 

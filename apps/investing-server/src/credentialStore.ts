@@ -2,7 +2,8 @@ import { createDatabase, createBrokerRepository, type Database } from "@lavega/d
 import { AsyncLocalStorage } from "node:async_hooks";
 import { createFileCredentialStore, type ServerVaultStatus } from "./fileCredentialStore.js";
 import { createNeonCredentialStore, type BrokerReadability } from "./neonCredentialStore.js";
-import type { CredentialStore } from "@lavega/core";
+import type { BrokerId, CredentialStore } from "@lavega/core";
+import type { BrokerAccountSnapshot } from "@lavega/adapters";
 import type { RuntimeBrokerDataSnapshot } from "./runtimeBrokerData.js";
 
 export type RuntimeCredentialStore = CredentialStore & {
@@ -13,6 +14,9 @@ export type RuntimeCredentialStore = CredentialStore & {
   /** Null when the vault holds nothing it can read: empty, or still locked. */
   getBrokerData(): Promise<RuntimeBrokerDataSnapshot | null>;
   putBrokerData(snapshot: RuntimeBrokerDataSnapshot): Promise<void>;
+  /** Write one broker's snapshot, leaving every other broker untouched. A file
+   *  import owns its broker's row; a sync is not running for it. */
+  putBrokerSnapshot(broker: BrokerId, snapshot: BrokerAccountSnapshot): Promise<void>;
   brokerReadability?(): Promise<BrokerReadability>;
 };
 

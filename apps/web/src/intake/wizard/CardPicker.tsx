@@ -3,7 +3,10 @@ import type { WizardCopy } from "../../copy/wizard.js";
 import MultiTiles from "./MultiTiles.js";
 import {
   OTHER_CARD,
+  bankFilter,
   cardGroups,
+  cardVisible,
+  filterGroups,
   cardLabel,
   matchCards,
   type CardBrand,
@@ -20,11 +23,15 @@ export type CardPickerProps = {
     | "otherBrand"
     | "cardsPicked"
     | "debitBrands"
+    | "showAllBanks"
+    | "showMyBanks"
   >;
   /** Credit cards by default; "debit" lists the betaalpassen. */
   kind?: CardKind;
   label: string;
   picked: readonly string[];
+  /** The banks answer; limits the brands shown. Missing or empty: all brands. */
+  banks?: readonly string[];
   onChange: (ids: string[]) => void;
   disabled?: boolean;
 };
@@ -37,7 +44,13 @@ export default function CardPicker(p: CardPickerProps) {
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState<ReadonlySet<CardBrand>>(new Set());
   const searching = query.trim() !== "";
-  const found = matchCards(query, kind);
+  const [showAll, setShowAll] = useState(false);
+  /** Cards picked when the screen opened stay listed even after an untick. */
+  const [opened] = useState(p.picked);
+  const keep = [...opened, ...p.picked];
+  const own = bankFilter(p.banks);
+  const filter = showAll ? null : own;
+  const found = matchCards(query, kind).filter((c) => cardVisible(c.id, kind, filter, keep));
   const toggle = (c: string) =>
     p.onChange(p.picked.includes(c) ? p.picked.filter((x) => x !== c) : [...p.picked, c]);
   const other = { value: OTHER_CARD, label: kind === "debit" ? p.copy.otherDebitCard : p.copy.otherCard };
@@ -79,7 +92,11 @@ export default function CardPicker(p: CardPickerProps) {
         />
       ) : (
         <div className="wz-brands">
-          {cardGroups(p.copy.otherBrand, stray, kind, p.copy.debitBrands).map((g) => {
+          {filterGroups(
+            cardGroups(p.copy.otherBrand, stray, kind, p.copy.debitBrands),
+            filter,
+            keep,
+          ).map((g) => {
             const isOpen = open.has(g.brand);
             const n = g.cards.filter((c) => p.picked.includes(c.id)).length;
             const panel = `${id}-${g.brand}`;
@@ -136,6 +153,16 @@ export default function CardPicker(p: CardPickerProps) {
             options={[other]}
           />
         </div>
+      )}
+      {own !== null && (
+        <button
+          type="button"
+          className="wz-link wz-link-block"
+          disabled={p.disabled}
+          onClick={() => setShowAll((v) => !v)}
+        >
+          {showAll ? p.copy.showMyBanks : p.copy.showAllBanks}
+        </button>
       )}
       {found.length === 0 && searching && (
         <p role="status" className="wz-hint">

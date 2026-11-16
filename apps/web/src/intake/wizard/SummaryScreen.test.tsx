@@ -7,7 +7,14 @@ import SummaryScreen from "./SummaryScreen";
 import { summaryRows } from "./summaryRows";
 import { wizardCopy } from "../../copy/wizard";
 import { intakeCopy } from "../../copy/intake";
-import { applyHousehold, applySpendMix, applyStatedRange, applyWork } from "../state";
+import {
+  applyCardBalances,
+  applyHousehold,
+  applySpendMix,
+  applyStatedCards,
+  applyStatedRange,
+  applyWork,
+} from "../state";
 import { WIZARD_DEBT, WIZARD_GOAL } from "./screens";
 import { screensFor } from "./screens";
 
@@ -95,6 +102,23 @@ test("goal and debt lines come from the wizard goal and wizard debt only", () =>
   expect(rows.map((r) => r.screen)).toEqual(["goal", "debts"]);
   expect(rows[0]!.label).toBe("Holiday");
   expect(rows[1]!.label).toBe("Wizard bank");
+});
+
+test("an answered card-balances screen shows a line; a pending one does not", () => {
+  const stated = applyStatedCards(profile(), ["american-express-gold-card"], AS_OF);
+  expect(summaryRows(stated, screensFor(stated), ctx).map((r) => r.screen)).not.toContain("card-balances");
+  const p = applyCardBalances(
+    stated,
+    [{ cardId: "american-express-gold-card", balanceCents: 250_000, paysInFull: false, ratePct: 9.5 }],
+    AS_OF,
+  );
+  const line = summaryRows(p, screensFor(p), ctx).find((r) => r.screen === "card-balances");
+  expect(line!.value).toContain("2,500");
+  expect(line!.value).toContain("9,5%");
+  const nl = summaryRows(p, screensFor(p), { ...ctx, c: intakeCopy.nl.aboutYou, locale: "nl" }).find(
+    (r) => r.screen === "card-balances",
+  );
+  expect(nl!.value).toContain("2.500");
 });
 
 test("a new personalisation field shows a summary line", () => {

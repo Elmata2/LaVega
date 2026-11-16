@@ -82,10 +82,10 @@ test("lavega_runtime is granted select, insert, update, delete on every table in
 
   for (const key of found) {
     const privileges = [...(grantedByTable.get(key) ?? [])].sort();
-    // Written once, deleted, never edited (0038).
+    // Written once, deleted, never edited (0039).
     const writeOnce =
       key === "personal.agent_events" || key === "personal.agent_push_subscriptions";
-    // Only agent_consume_link_code (SECURITY DEFINER) touches it; runtime has no grant (0040).
+    // Only agent_consume_link_code (SECURITY DEFINER) touches it; runtime has no grant (0041).
     if (key === "personal.agent_link_attempts") {
       expect(privileges).toEqual([]);
       continue;

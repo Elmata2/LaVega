@@ -233,6 +233,8 @@ const CostBasisSummarySchema = Schema.Struct({
 const CurrentPositionSchema = Schema.Struct({
   symbol: Schema.String,
   entity: Schema.String,
+  brokers: Schema.optional(Schema.Array(Schema.String)),
+  broker: Schema.optional(Schema.String),
   isin: Schema.optional(Schema.String),
   /** ISIN-first canonical identity (WS4.5, #297). Optional so a row shaped
    *  before the security master still decodes. */
@@ -397,6 +399,8 @@ export const InvestingDashboardDataSchema = Schema.Struct({
   allocation: Schema.Struct({
     instrument: AllocationSchema,
     entity: AllocationSchema,
+    /** Newer dashboards only. Older stored payloads have no platform split. */
+    broker: Schema.optional(AllocationSchema),
     /** Cash-aware ladder with the documented denominator (WS4.6, #297).
      *  Optional so a dashboard stored before it still decodes. */
     ladder: Schema.optional(
@@ -488,6 +492,7 @@ export function emptyInvestingDashboard(presentationCurrency = "EUR"): Investing
     allocation: {
       instrument: { buckets: [], unpriced: [] },
       entity: { buckets: [], unpriced: [] },
+      broker: { buckets: [], unpriced: [] },
     },
     positions: [],
     position: null,
@@ -713,6 +718,7 @@ export function buildInvestingDashboard(reported: InvestingDashboardInput): Inve
     allocation: {
       instrument: bucketPricedAllocation(positions, "instrument"),
       entity: bucketPricedAllocation(positions, "entity"),
+      broker: bucketPricedAllocation(positions, "broker"),
       ladder,
     },
     positions,

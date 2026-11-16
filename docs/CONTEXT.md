@@ -126,6 +126,15 @@ Specified in **`docs/investing/STACK.md`** — the investing side's own stack, d
 
 - **Instinct agent / daily message** — the opt-in agent (`docs/adr/0014-server-reads-transactions-at-night.md`). An hourly cron sends a user at most one short money message a day, at the user's send time (default 08:00 Europe/Amsterdam), by feed, web push, email or a WhatsApp template. The server reads the bank into memory for that run only. On WhatsApp the user can also ask read-only questions. It cannot cancel anything; cancelling is phase 3 and waits for a lawyer.
 
+### Personal app glossary
+
+- **Clear personal data** — the reset on Back-up > More options. Removes the server copy of the vault, bank links, the forwarding address and the net-worth totals (`DELETE /api/account/personal-data`, confirm `RESET-PERSONAL`), then the vault database of this browser and the personal browser keys, then reloads at `/app`. Keeps the login, the vault key, the AI spend ledger and everything in Investing. Other browsers keep their own copy until cleared there. Not the same as **Erase all data** (GDPR, `DELETE /api/account/data`), which removes the login too. Design: `docs/superpowers/specs/2026-11-14-personal-data-reset-design.md`.
+- **Home** — the first page of the personal app (view id `overview`, route `/app`). Four fixed blocks: the chart slot (Totale positie or Cashflow), Statistieken, Je kaarten, Travel; then the add area.
+- **Widget** — an optional Home card the user switches on (Aandacht, Recente transacties, Betaalagenda, BTW, Facturen, Top uitgaven, Positie per bedrijf). None is on by default. The choice is per browser; "Standaard herstellen" clears it.
+- **Add area** — the dashed boxes at the bottom of Home, one per widget that is off (at most four). A click switches the widget on. There is no picker; the boxes and hide buttons are the only widget control.
+- **Assistant panel** — the right-hand column of the app frame, on every view at >= 1024px (a sheet from the bottom bar below that). It runs in the browser, reads the vault before every turn and makes no network call.
+- **Pop-up** — a modal dialog on Home that asks the user to answer the intake questions or to connect banks. At most one per browser session; a dismissal hides it for 7 days.
+
 ## Conventions
 
 - Dutch in the UI, English in code identifiers.

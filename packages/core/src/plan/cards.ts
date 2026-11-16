@@ -3,7 +3,7 @@ import { daysBetween, isIsoDate } from "../advisor/months.js";
 import { personalView } from "../advisor/scopePersonal.js";
 import type { ProductFee } from "../accountCosts.js";
 import { cashbackPctOf, type HeldCashback } from "../assumedCashback.js";
-import { hash, norm } from "../hash.js";
+import { hash } from "../hash.js";
 import {
   holdingCostOfProduct,
   netBenefit,
@@ -11,10 +11,12 @@ import {
   type NetBenefit,
 } from "../netBenefit.js";
 import { isStale } from "../rewards.js";
+import { carriesCardDebt, computeCardAdvice, type BufferInput, type CardAdvice } from "./cardAdvice.js";
 import type { Tx } from "../model.js";
 import type { ForeignSpend, SpendArea } from "../advisor/profile.js";
 import { fig } from "./internal.js";
 import { spendHistory } from "./spending.js";
+import { pointsValueRange, type PointsValueRange } from "./pointsValue.js";
 import { PLAN_THRESHOLDS } from "./thresholds.js";
 import type {
   CalcStep,
@@ -110,13 +112,6 @@ export type CardCriteriaRow = {
   insurance: "unknown";
 };
 
-export type PointsValueRange = {
-  lowCentsPerPoint: number;
-  medianCentsPerPoint: number;
-  highCentsPerPoint: number;
-  examples: number;
-} | null;
-
 /** Account key prefix of a card the person stated but the bank data lacks. */
 export const STATED_CARD_PREFIX = "stated:";
 const isStatedCard = (c: HeldCardInput): boolean => c.accountKey.startsWith(STATED_CARD_PREFIX);
@@ -195,6 +190,8 @@ export type CardsFigures = {
   }[];
   /** Foreign-currency card spend left out (no conversion). */
   excludedForeignCount: number;
+  /** Recommendations over the whole catalogue, the stated balances and points. */
+  advice: CardAdvice;
   /** Only when the person said they do not always pay the card off. Cards are
    *  listed lowest interest first, unknown last; `nets` follow the same order. */
   interest?: { monthlySpendCents: number | null; cards: CardInterest[] };
@@ -203,32 +200,6 @@ export type CardsFigures = {
 
 const tierOf = (k: HeldCashback): CardTier =>
   k.tier === "gemeten" ? "measured" : k.tier === "aangenomen" ? "assumed" : "unknown";
-
-type Example = {
-  programId: string;
-  pointsSpent: number;
-  cashPriceSavedCents: number;
-};
-
-/** Lowest, median, highest cents per point over the user's own examples. */
-export function pointsValueRange(
-  examples: readonly Example[],
-  programId: string,
-): PointsValueRange {
-  const rates = examples
-    .filter((e) => norm(e.programId) === norm(programId) && e.pointsSpent > 0)
-    .map((e) => e.cashPriceSavedCents / e.pointsSpent)
-    .sort((a, b) => a - b);
-  if (rates.length === 0) return null;
-  const mid = rates.length >> 1;
-  const median = rates.length % 2 === 1 ? rates[mid]! : (rates[mid - 1]! + rates[mid]!) / 2;
-  return {
-    lowCentsPerPoint: rates[0]!,
-    medianCentsPerPoint: median,
-    highCentsPerPoint: rates[rates.length - 1]!,
-    examples: rates.length,
-  };
-}
 
 const FULL_YEAR_MONTHS = 12;
 
@@ -322,7 +293,10 @@ const byName =
   (a: T, b: T): number =>
     a.name.localeCompare(b.name) || key(a).localeCompare(key(b));
 
-export function computeCards(i: PlanInput): SectionResult<CardsFigures> {
+export function computeCards(
+  i: PlanInput,
+  buffer: BufferInput = null,
+): SectionResult<CardsFigures> {
   const view = personalView(i.accounts, i.txs, i.entityProfiles);
   const personalKeys = new Set(view.accounts.map((a) => a.key));
   const seen = new Set<string>();
@@ -340,7 +314,7 @@ export function computeCards(i: PlanInput): SectionResult<CardsFigures> {
   const stated = dedupe(i.heldCards, isStatedCard);
   const candidates = [...held, ...stated].sort(byLabel);
 
-  const history = (keys: ReadonlySet<string>) =>
+  const history = (keys?: ReadonlySet<string>) =>
     spendHistory({
       txs: i.txs,
       accounts: i.accounts,
@@ -453,7 +427,7 @@ export function computeCards(i: PlanInput): SectionResult<CardsFigures> {
   // Someone who does not always pay in full: interest outweighs cashback, so
   // the cards are ranked by interest, and one month of spend carried for a year
   // is priced at each card's catalogue rate.
-  const revolver = i.profile.cardRepayment === "sometimes" || i.profile.cardRepayment === "rarely";
+  const revolver = carriesCardDebt(i.profile);
   const interestMonthlyCents = statedBasis
     ? statedMonthlyCents
     : months > 0
@@ -552,6 +526,34 @@ export function computeCards(i: PlanInput): SectionResult<CardsFigures> {
     }))
     .sort((a, b) => a.programId.localeCompare(b.programId));
 
+  // Advice looks at everything a card could pay on every personal account, not
+  // only at the cards the user holds: the user may have stated a card that no
+  // bank data shows.
+  const adviceSpend = history();
+  const advice = computeCardAdvice({
+    spend: {
+      windowCents: totalOf(adviceSpend),
+      months: adviceSpend.months.length,
+      foreignCents: adviceSpend.foreignCents,
+      excludedForeignCount: adviceSpend.excludedForeignCount,
+    },
+    catalogue: i.catalogue,
+    heldIds: [
+      ...new Set([
+        ...i.profile.statedCardIds.filter((id) => id !== "other"),
+        ...held.flatMap((c) => (c.catalogueId ? [c.catalogueId] : [])),
+      ]),
+    ],
+    hasOtherCard: i.profile.statedCardIds.includes("other"),
+    cardBalances: i.profile.cardBalances,
+    cardRepayment: i.profile.cardRepayment,
+    rewards: i.rewards,
+    preferences: i.preferences,
+    rates: i.rates,
+    buffer,
+    asOf: i.asOf,
+  });
+
   const figures: CardsFigures = {
     criteria,
     nets,
@@ -562,6 +564,7 @@ export function computeCards(i: PlanInput): SectionResult<CardsFigures> {
     breakEven,
     balances,
     excludedForeignCount,
+    advice,
     ...(revolver
       ? {
           interest: {
@@ -610,6 +613,15 @@ export function computeCards(i: PlanInput): SectionResult<CardsFigures> {
     statusReason = {
       key: better.length > 0 ? "other-card-nets-more" : "no-better-card",
     };
+  }
+
+  // The advice rests on all of the user's spending, so a user whose card
+  // accounts alone cannot be judged still has a section with a verdict. One
+  // story: the status follows the advice, and no "import a card" request stays.
+  if (status === "not-enough-data" && advice.state === "ok" && advice.options.length > 0) {
+    status = "on-track";
+    statusReason = { key: "card-advice" };
+    missing.length = 0;
   }
 
   const calc: CalcStep[] = [];
@@ -755,3 +767,5 @@ export function computeCards(i: PlanInput): SectionResult<CardsFigures> {
     facts,
   };
 }
+
+export { pointsValueRange, type PointsValueRange } from "./pointsValue.js";

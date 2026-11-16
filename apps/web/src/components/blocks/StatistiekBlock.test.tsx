@@ -11,7 +11,14 @@ const SEPARATE = { fxHistory: {}, mode: "separate" as const };
 
 const render = (t = txs) =>
   renderToStaticMarkup(
-    <StatistiekBlock txs={t} rules={rules} own={own} onSelectCategory={() => {}} {...SEPARATE} />,
+    <StatistiekBlock
+      txs={t}
+      rules={rules}
+      own={own}
+      onSelectCategory={() => {}}
+      initialView="categorie"
+      {...SEPARATE}
+    />,
   );
 
 test("customWindow refuses to turn half a range into a window", () => {
@@ -196,4 +203,23 @@ test("the category chart prints one legend, and it is the clickable one", () => 
   const html = render();
   expect(html).toContain("stat-legend-button");
   expect(html).not.toContain("lv-chart-legend");
+});
+
+test("the category legend prints a figure beside every name (4 series)", () => {
+  const html = render();
+  const buttons = [
+    ...html.matchAll(/<button[^>]*class="stat-legend-button"[^>]*>(.*?)<\/button>/g),
+  ].map((m) => m[1]);
+  expect(buttons.length).toBeGreaterThan(0);
+  for (const b of buttons) {
+    expect(b).toContain("stat-legend-figure");
+    expect(b).toMatch(/€/);
+  }
+  // Figures are the window's per-category sums from the fixture, not just any euro.
+  const text = buttons.map((b) => b.replace(/<[^>]+>/g, " "));
+  const has = (name: string, euros: number) =>
+    text.some((t) => t.includes(name) && t.includes(formatEuro(euros)));
+  expect(has("Inkoop", 1_880 + 1_100)).toBe(true);
+  expect(has("Boodschappen", 420.5)).toBe(true);
+  expect(has("Energie", 250)).toBe(true);
 });

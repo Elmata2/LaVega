@@ -11,7 +11,7 @@
 
 ## How to get to it (user POV)
 
-- Nav rail `Weergaven` → Prognose, or URL `/app/forecast`.
+- Prognose is an optional module (off by default; enable it in Profiel). Then rail `nav.shell2-rail` (`aria-label="Weergaven"`, >= 1024px) or the drawer `.shell2-drawer` via the bottom bar "Meer" (< 1024px). Or URL `/app/forecast`.
 
 ## Driving it with control-lavega + browser
 

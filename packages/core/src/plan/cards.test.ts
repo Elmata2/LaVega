@@ -9,6 +9,7 @@ import { CARDS_CALC_IDS, computeCards, netForCard } from "./cards.js";
 import { buildFactSheet } from "./factsheet.js";
 import { emptyPlanPreferences } from "./preferences.js";
 import { AS_OF, planInput } from "./testkit.js";
+import type { PlanProfile } from "./profileView.js";
 import type { HeldCardInput, PlanInput } from "./types.js";
 
 const MONTHS = [
@@ -896,7 +897,7 @@ describe("computeCards", () => {
       expect(r.figures.interest).toBeUndefined();
       expect(Object.keys(r.figures).sort()).toEqual(
         [
-          "balances", "breakEven", "cardInUseKey", "cardableSpendCents", "criteria",
+          "advice", "balances", "breakEven", "cardInUseKey", "cardableSpendCents", "criteria",
           "excludedForeignCount", "months", "nets", "notCardableSpendCents", "sharedCases",
         ].sort(),
       );
@@ -907,5 +908,149 @@ describe("computeCards", () => {
         netCents: 0, pointsEarned: null, pointsValueRange: null,
       });
     });
+  });
+});
+
+describe("computeCards: advice", () => {
+  const cv = (value: number, extra: Record<string, unknown> = {}) => ({
+    value,
+    route: "provider-page" as const,
+    sourceUrl: "https://example.test/src",
+    checkedAt: "2026-08-20",
+    conditions: null,
+    conditionsKnown: true,
+    ...extra,
+  });
+  const CAT = [
+    {
+      id: "gold",
+      product: "Gold",
+      kind: "creditcard",
+      fields: { accountFee: cv(20, { period: "maand" }), fxFeePct: cv(2.5), pointsPerEuro: cv(0) },
+    },
+    {
+      id: "free",
+      product: "Free",
+      kind: "creditcard",
+      fields: { accountFee: cv(0, { period: "jaar" }), fxFeePct: cv(2), pointsPerEuro: cv(0) },
+    },
+  ] as never;
+  const cur = acct("CUR");
+  const adviceRun = (
+    over: Omit<Partial<PlanInput>, "profile"> & { profile?: Partial<PlanProfile> } = {},
+  ) =>
+    computeCards(
+      planInput({
+        accounts: [cur],
+        txs: spendOn("CUR", 100_000),
+        catalogue: CAT,
+        ...over,
+        profile: {
+          statedCardIds: ["gold"],
+          cardBalances: [{ cardId: "gold", balanceCents: 200_000, paysInFull: false, ratePct: 15 }],
+          ...over.profile,
+        },
+      }),
+      {
+        liquidSavingsCents: 1_000_000,
+        fixedCostsMonthlyCents: 100_000,
+        targetMonths: 3,
+      },
+    ).figures.advice;
+
+  test("a user who only stated a card gets advice from the spend of all personal accounts", () => {
+    const a = adviceRun();
+    expect(a.state).toBe("ok");
+    expect(a.spend.months).toBe(12);
+    expect(a.spend.annualCents).toBe(1_200_000);
+    expect(a.baseline).toMatchObject({ kind: "best-held", cardId: "gold", netCents: -24_000 });
+    expect(a.verdict).toMatchObject({ kind: "switch", gainCents: 24_000 });
+  });
+
+  test("the interest block uses the stated balance and the buffer surplus", () => {
+    const [x] = adviceRun().interest;
+    expect(x).toMatchObject({
+      yearlyInterestCents: 30_000,
+      surplusCents: 700_000,
+      payoffCents: 200_000,
+      recommendation: "payoff-all",
+    });
+  });
+
+  describe("one debt signal for the warning and the advice", () => {
+    const run = (profile: Partial<PlanProfile>) =>
+      computeCards(
+        planInput({
+          accounts: [cur],
+          txs: spendOn("CUR", 100_000),
+          catalogue: CAT,
+          profile: { statedCardIds: ["gold"], ...profile },
+        }),
+        { liquidSavingsCents: 1_000_000, fixedCostsMonthlyCents: 100_000, targetMonths: 3 },
+      ).figures;
+    const paid = { cardId: "gold", balanceCents: 0, paysInFull: true };
+    const debt = { cardId: "gold", balanceCents: 200_000, paysInFull: false, ratePct: 14 };
+
+    test("A: rarely pays in full but the only card is marked paid in full: warning and caveat, no pay-off block", () => {
+      const f = run({ cardRepayment: "rarely", cardBalances: [paid] });
+      expect(f.interest).toBeDefined();
+      expect(f.advice.ignoresInterest).toBe(true);
+      expect(f.advice.interest).toEqual([]);
+    });
+
+    test("B: always pays in full but one card carries a balance: warning, caveat and pay-off block", () => {
+      const f = run({ cardRepayment: "full", cardBalances: [debt] });
+      expect(f.interest).toBeDefined();
+      expect(f.advice.ignoresInterest).toBe(true);
+      expect(f.advice.interest).toHaveLength(1);
+    });
+
+    test("C: always pays in full and every card is paid in full: neither", () => {
+      const f = run({ cardRepayment: "full", cardBalances: [paid] });
+      expect(f.interest).toBeUndefined();
+      expect(f.advice.ignoresInterest).toBe(false);
+      expect(f.advice.interest).toEqual([]);
+    });
+
+    test("D: sometimes pays in full and no per-card balances: warning and caveat, no invented balance", () => {
+      const f = run({ cardRepayment: "sometimes", cardBalances: [] });
+      expect(f.interest).toBeDefined();
+      expect(f.advice.ignoresInterest).toBe(true);
+      expect(f.advice.interest).toEqual([]);
+    });
+  });
+
+  test("a bank-data card with a catalogue match counts as held", () => {
+    const a = adviceRun({
+      heldCards: [card("CUR", { catalogueId: "free" })],
+      profile: { statedCardIds: [], cardBalances: [] },
+    });
+    expect(a.baseline).toMatchObject({ kind: "best-held", cardId: "free" });
+  });
+
+  test("rent and other non-cardable spend stay out of the advice base", () => {
+    const rent = spendOn("CUR", 50_000, { category: "Wonen & energie" });
+    const a = adviceRun({ txs: [...spendOn("CUR", 100_000), ...rent] });
+    expect(a.spend.annualCents).toBe(1_200_000);
+  });
+
+  test("the status follows the advice when the card accounts alone cannot be judged", () => {
+    const r = computeCards(
+      planInput({
+        accounts: [cur],
+        txs: spendOn("CUR", 100_000),
+        catalogue: CAT,
+        profile: { statedCardIds: ["gold"] },
+      }),
+    );
+    expect(r.status).toBe("on-track");
+    expect(r.statusReason.key).toBe("card-advice");
+    expect(r.missing).toEqual([]);
+  });
+
+  test("no data: advice is present and says so; the section statuses are unchanged", () => {
+    const r = computeCards(planInput({ catalogue: CAT }));
+    expect(r.status).toBe("not-enough-data");
+    expect(r.figures.advice.state).toBe("short-history");
   });
 });

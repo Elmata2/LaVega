@@ -19,7 +19,7 @@ import { TOONMEER_CLASS } from "../ToonMeer";
 import { moduleClass } from "../../module-grid.js";
 import { optimiseCopy } from "../../copy/optimise.js";
 import type { CatalogueEntryLike } from "@lavega/core";
-import { formatEuro } from "../../format";
+import { formatEuro, formatSignedEuroIn } from "../../format";
 import { accounts, ASOF, txs } from "./fixtures";
 
 /* The travel plan itself is covered by @lavega/core's travel tests; this pins
@@ -959,7 +959,8 @@ test("de aanbevolen kaart toont zijn eigen prijs, de periode en wat er netto ove
   // € 10,00 opslagverschil min € 1,00 kaartkosten = € 9,00 netto, en de aftrek
   // staat erbij zodat hij hem kan navolgen.
   const netto = el.querySelector('[data-testid="travel-pay-kosten-netto"]')!;
-  expect(netto.textContent).toContain(formatEuro(9));
+  expect(netto.textContent).toContain(formatSignedEuroIn("nl", 9));
+  expect(netto.textContent).toMatch(/Netto: \+€\s9,00/);
   expect(netto.textContent).toContain(formatEuro(10));
   expect(netto.textContent).toContain(formatEuro(1));
 });
@@ -1118,7 +1119,7 @@ test("de kaartprijs en het nettobedrag staan één keer in de aanbeveling, in de
   // kaartkosten" — dat is geen tweede bewering maar de aftrek erbij, en zonder
   // die regel kan hij ons niet nakijken.)
   expect(times(winner, `${formatEuro(1)} per maand`)).toBe(1);
-  expect(times(winner, formatEuro(9))).toBe(1);
+  expect(times(winner, formatSignedEuroIn("nl", 9))).toBe(1);
   expect(winner).not.toContain("kost zelf");
 
   // En het is de KOP die loslaat, niet het veld: de kop zegt wat je moet doen,
@@ -1130,7 +1131,7 @@ test("de kaartprijs en het nettobedrag staan één keer in de aanbeveling, in de
     `${formatEuro(1)} per maand`,
   );
   expect(el.querySelector('[data-testid="travel-pay-kosten-netto"]')!.textContent).toContain(
-    formatEuro(9),
+    formatSignedEuroIn("nl", 9),
   );
 });
 

@@ -1,13 +1,11 @@
 // @vitest-environment jsdom
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, expect, test } from "vitest";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import type { Account, LearnedFact } from "@lavega/core";
 import { entitySummaries } from "@lavega/core";
 import type { VaultStorage } from "@lavega/adapters";
 import Profiel from "./views/Profiel";
-import { WIDGETS, enabledModules } from "./components/moduleRegistry";
-import { ARCHIVED_WIDGETS } from "./archive";
 
 /* Switch ON (no archive mock): the profile hides the business-only cards. */
 
@@ -49,9 +47,8 @@ const storage = fakeStorage().storage;
 
 async function render(overrides: Partial<Parameters<typeof Profiel>[0]> = {}) {
   const props: Parameters<typeof Profiel>[0] = {
-    enabledModules: enabledModules(null),
-    onModulesChange: () => {},
-    focusModules: 0,
+    owner: { kind: "device" },
+    planUnlocked: false,
     entities: entitySummaries(
       [
         { key: "prive", entity: "Privé" } as Account,
@@ -64,8 +61,6 @@ async function render(overrides: Partial<Parameters<typeof Profiel>[0]> = {}) {
     onHomeCountryChange: () => {},
     homeRegion: "",
     onHomeRegionChange: () => {},
-    fxConversionMode: "convert",
-    onFxConversionModeChange: () => {},
     shareNetWorthEnabled: false,
     onShareNetWorthEnabledChange: () => {},
     shareNetWorthPendingDelete: false,
@@ -96,12 +91,47 @@ async function render(overrides: Partial<Parameters<typeof Profiel>[0]> = {}) {
   return container;
 }
 
-test("profile hides the entity classifier and the forwarding card, and counts only live widgets", async () => {
+test("profile hides the entity classifier and the forwarding card", async () => {
   await render();
   expect(container!.querySelector('[aria-label="Persoonlijk of zakelijk"]')).toBeNull();
   expect(container!.querySelector('[aria-label="Koppelingen"]')).toBeNull();
   expect(container!.textContent).not.toContain("factuuradres");
-  const live = WIDGETS.filter((w) => !ARCHIVED_WIDGETS.includes(w.id)).length;
-  expect(WIDGETS.length).toBeGreaterThan(live);
-  expect(container!.textContent).toMatch(new RegExp(`van ${live} aan`));
+});
+
+test("the cards hidden for now are not rendered, even when their data and handlers are passed", async () => {
+  await render({
+    onGenericImport: () => {},
+    onDocumentUpload: () => {},
+  });
+  const text = container!.textContent ?? "";
+  // own-columns import, documents, cashback correction, net-worth sharing
+  expect(text).not.toContain("Bestand met eigen kolommen");
+  expect(container!.querySelector('[data-testid="documents-card"]')).toBeNull();
+  expect(container!.querySelector('[aria-label="Cashback corrigeren"]')).toBeNull();
+  expect(container!.querySelector('[data-testid^="cashback-fix-"]')).toBeNull();
+});
+
+const SHARE = '[aria-label="Delen met LaVega Investing"]';
+
+test("net-worth share card: not opted in -> absent", async () => {
+  await render();
+  expect(container!.querySelector(SHARE)).toBeNull();
+});
+
+test("net-worth share card: opted in -> present, after Back-up, and the toggle turns it off", async () => {
+  const onChange = vi.fn();
+  await render({ shareNetWorthEnabled: true, onShareNetWorthEnabledChange: onChange });
+  const card = container!.querySelector(SHARE)!;
+  expect(card).not.toBeNull();
+  const backup = container!.querySelector('[aria-label="Back-up"]')!;
+  expect(backup.compareDocumentPosition(card) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  act(() => card.querySelector<HTMLInputElement>('input[type="checkbox"]')!.click());
+  expect(onChange).toHaveBeenCalledWith(false);
+});
+
+test("net-worth share card: pending delete -> card and warning shown", async () => {
+  await render({ shareNetWorthEnabled: false, shareNetWorthPendingDelete: true });
+  const card = container!.querySelector(SHARE)!;
+  expect(card).not.toBeNull();
+  expect(card.querySelector('[role="alert"]')).not.toBeNull();
 });

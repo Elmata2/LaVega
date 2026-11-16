@@ -36,6 +36,11 @@ export type PositionReturn = {
 export type CurrentPosition = {
   symbol: string;
   entity: string;
+  /** Every broker that reports this holding. One row can span broker
+   *  snapshots, so this is a list, not a single owner. */
+  brokers?: string[];
+  /** The single broker when the row has one; absent when several do. */
+  broker?: string;
   isin?: string;
   /** ISIN-first canonical identity (WS4.5, #297), when the snapshot names one. */
   instrumentKey?: string;
@@ -386,9 +391,14 @@ export function buildCurrentPositions(input: {
         ? { ...calculatedReturns, status: "missing-fx" as const }
         : calculatedReturns;
     const canonicalKey = instrumentKey({ isin: sample.isin, ticker: sample.symbol });
+    const brokers = [
+      ...new Set(anchors.flatMap((anchor) => (anchor.broker ? [anchor.broker] : []))),
+    ];
     const row = {
       symbol: sample.symbol,
       entity: sample.entity,
+      ...(brokers.length > 0 ? { brokers } : {}),
+      ...(brokers.length === 1 ? { broker: brokers[0]! } : {}),
       ...(sample.isin ? { isin: sample.isin } : {}),
       ...(canonicalKey ? { instrumentKey: canonicalKey } : {}),
       ...(sample.description ? { description: sample.description } : {}),

@@ -173,6 +173,22 @@ export interface VaultStorage extends StorageAdapter, CredentialStore {
   adoptPasswordVault(passphrase: string): Promise<boolean>;
   /** Leave the password vault where it is and start this owner with an empty one. */
   startFresh(): Promise<void>;
+  /** Delete THIS owner's whole browser database (sealed vault and documents)
+   *  and lock. First tells every other tab/instance holding the same database to
+   *  drop its in-memory vault and stop writing (otherwise its next save would
+   *  re-create the database with the old data), waits `settleMs` for that, and
+   *  waits for queued writes. Rejects with `VaultDestroyError` ("blocked" when
+   *  another connection keeps the database open past `timeoutMs`; the browser
+   *  then keeps the delete pending and finishes it when that connection
+   *  closes). Never touches the legacy password vault (`dbName`) or another
+   *  owner's database. */
+  destroyVault(options?: { timeoutMs?: number; settleMs?: number }): Promise<void>;
+  /** Called when ANOTHER tab/instance destroys the vault this one has open.
+   *  "locked": the delete is starting; this instance dropped its copy and refuses
+   *  writes, and the page must NOT reload yet. "destroyed": the delete succeeded,
+   *  reload now. "stalled": no success came in time (or the delete failed), so
+   *  tell the user and offer a reload. Returns an unsubscribe. */
+  onVaultDestroyed(listener: (phase: VaultDestroyPhase) => void): () => void;
   lock(): void;
   export(): CipherBlob | null; // the current sealed blob (Back-up downloads it); null before open
   /** Adopt a back-up file as THE vault, re-sealed under the owner's key. A file
@@ -295,6 +311,109 @@ function readProfile(raw: unknown): ProfileRead {
   );
 }
 
+export type VaultDestroyPhase = "locked" | "destroyed" | "stalled";
+
+/** Messages between tabs of this origin. `db` is the owner database name. */
+type DestroyMessage = { type: "destroying" | "destroyed" | "failed"; db: string };
+
+/** A short-lived localStorage marker, written before the delete and removed after,
+ *  so a tab that (re)opens during the window waits instead of reading the old
+ *  blob. It also doubles as the signal where BroadcastChannel is absent. */
+const MARKER_KEY = "lavega.vaultDestroying";
+const DESTROYED_KEY = "lavega.vaultDestroyed";
+/** A marker older than this is a crashed delete, not a running one. */
+const MARKER_STALE_MS = 20_000;
+/** The longest `open` waits for a live marker to clear. */
+const MARKER_WAIT_MS = 10_000;
+/** A locked tab waits this long for "destroyed" before it says so. */
+const STALL_MS = 12_000;
+
+function marker(): Storage | null {
+  try {
+    return typeof localStorage === "undefined" ? null : localStorage;
+  } catch {
+    return null;
+  }
+}
+
+/** "live": a reset of `name` is running. "stale": a marker older than
+ *  MARKER_STALE_MS, or one stamped in the future (a clock set backwards): it
+ *  cannot be a running delete. */
+function markerState(name: string): "none" | "live" | "stale" {
+  try {
+    const raw = marker()?.getItem(MARKER_KEY);
+    if (!raw) return "none";
+    const parsed = JSON.parse(raw) as { db?: unknown; at?: unknown };
+    if (typeof parsed.at !== "number") return "stale";
+    const age = Date.now() - parsed.at;
+    if (age < 0 || age >= MARKER_STALE_MS) return "stale";
+    return parsed.db === name ? "live" : "none";
+  } catch {
+    return "none";
+  }
+}
+
+function removeMarker(): void {
+  try {
+    marker()?.removeItem(MARKER_KEY);
+  } catch {
+    /* best effort */
+  }
+}
+
+/** The cap is above the sender's own worst case (250 ms settle + 5 s delete
+ *  timeout + queue), so a live marker normally clears before it is reached. */
+async function waitForResetWindow(name: string, maxMs: number): Promise<void> {
+  if (markerState(name) === "stale") return removeMarker();
+  const deadline = Date.now() + maxMs;
+  let waited = false;
+  while (markerState(name) === "live" && Date.now() < deadline) {
+    waited = true;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  // Waited out the whole cap (the sender died or is stuck): do not cost the next open a wait.
+  if (waited && markerState(name) !== "none") removeMarker();
+}
+
+const DESTROY_TIMEOUT_MS = 5000;
+const DESTROY_SETTLE_MS = 250;
+const RESET_CHANNEL = "lavega-vault-destroyed";
+
+/** Why a vault could not be destroyed; the UI maps it to copy in its own language. */
+export class VaultDestroyError extends Error {
+  constructor(
+    readonly reason: "blocked" | "locked" | "failed",
+    message: string,
+  ) {
+    super(message);
+    this.name = "VaultDestroyError";
+  }
+}
+
+/** `indexedDB.deleteDatabase` never fails on a blocker: it waits, silently, until
+ *  every other connection closes. Waiting forever is not an answer for a reset,
+ *  so a block that lasts `timeoutMs` is a failure the caller can report. */
+function deleteDatabase(name: string, timeoutMs: number): Promise<void> {
+  return new Promise((resolve, reject) => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const request = indexedDB.deleteDatabase(name);
+    request.onsuccess = () => {
+      clearTimeout(timer);
+      resolve();
+    };
+    request.onerror = () => {
+      clearTimeout(timer);
+      reject(new VaultDestroyError("failed", request.error?.message ?? "delete failed"));
+    };
+    request.onblocked = () => {
+      timer ??= setTimeout(
+        () => reject(new VaultDestroyError("blocked", "delete blocked by another connection")),
+        timeoutMs,
+      );
+    };
+  });
+}
+
 export function createEncryptedStorage(dbName: string = DEFAULT_DB_NAME): VaultStorage {
   // In-memory-only state. Never persisted. Dropped entirely on lock().
   let key: CryptoKey | null = null;
@@ -303,6 +422,66 @@ export function createEncryptedStorage(dbName: string = DEFAULT_DB_NAME): VaultS
   // The open owner's database. `dbName` itself holds only a password vault
   // from before accounts held the key.
   let ownerDb: string | null = null;
+  const destroyedListeners = new Set<(phase: VaultDestroyPhase) => void>();
+  const tell = (phase: VaultDestroyPhase) => {
+    for (const listener of destroyedListeners) listener(phase);
+  };
+  /* Other tabs/instances of this origin, in two phases. "destroying": an
+   * instance holding that database locks AT ONCE and synchronously (key, data,
+   * blob and name dropped, so no later save can re-create it) but does not
+   * reload: a reload could re-open the old vault before the delete runs.
+   * "destroyed" (after the delete succeeded) is what makes it reload; if that
+   * never comes the listener hears "stalled". `unref` keeps a Node test process
+   * from waiting on the channel or the timer. Where BroadcastChannel is absent
+   * the same messages travel as `storage` events on the marker keys. */
+  let lockedDb: string | null = null;
+  let stallTimer: ReturnType<typeof setTimeout> | undefined;
+  function onDestroyMessage(message: DestroyMessage) {
+    if (message.type === "destroying") {
+      if (ownerDb == null || message.db !== ownerDb) return;
+      lockedDb = ownerDb;
+      key = null;
+      data = null;
+      blob = null;
+      ownerDb = null;
+      clearTimeout(stallTimer);
+      stallTimer = setTimeout(() => tell("stalled"), STALL_MS);
+      (stallTimer as unknown as { unref?: () => void }).unref?.();
+      tell("locked");
+      return;
+    }
+    if (lockedDb == null || message.db !== lockedDb) return;
+    clearTimeout(stallTimer);
+    lockedDb = null;
+    tell(message.type === "destroyed" ? "destroyed" : "stalled");
+  }
+  /* A constructor that throws (blocked, sandboxed, unsupported) must never stop
+   * the vault from opening: no channel, and the `storage`-event fallback below. */
+  let channel: BroadcastChannel | null = null;
+  try {
+    channel = typeof BroadcastChannel === "undefined" ? null : new BroadcastChannel(RESET_CHANNEL);
+    (channel as unknown as { unref?: () => void } | null)?.unref?.();
+  } catch {
+    channel = null;
+  }
+  if (channel) {
+    channel.onmessage = (event: MessageEvent) => onDestroyMessage(event.data as DestroyMessage);
+  } else if (typeof window !== "undefined" && typeof window.addEventListener === "function") {
+    window.addEventListener("storage", (event: StorageEvent) => {
+      try {
+        if (event.key === MARKER_KEY && event.newValue) {
+          const parsed = JSON.parse(event.newValue) as { db?: string };
+          if (parsed.db) onDestroyMessage({ type: "destroying", db: parsed.db });
+        } else if (event.key === DESTROYED_KEY && event.newValue) {
+          const parsed = JSON.parse(event.newValue) as { db?: string; ok?: boolean };
+          if (parsed.db)
+            onDestroyMessage({ type: parsed.ok === false ? "failed" : "destroyed", db: parsed.db });
+        }
+      } catch {
+        /* a foreign or garbled value is not ours */
+      }
+    });
+  }
 
   function openVaultDb(name: string): Promise<IDBPDatabase> {
     return openDB(name, DB_VERSION, {
@@ -380,8 +559,13 @@ export function createEncryptedStorage(dbName: string = DEFAULT_DB_NAME): VaultS
   // the single on-disk blob record. Ciphertext only ever leaves memory.
   async function persist(): Promise<void> {
     if (key == null || data == null || ownerDb == null) throw new Error(LOCKED_ERROR);
+    const name = ownerDb;
     const fresh = await sealJSON(key, data);
-    await writeBlobToDisk(ownerDb, fresh);
+    // Another tab may have locked this instance while it sealed; never write to
+    // a database named from an absent owner, and never to one being destroyed.
+    if (ownerDb !== name) throw new Error(LOCKED_ERROR);
+    await writeBlobToDisk(name, fresh);
+    if (ownerDb !== name) throw new Error(LOCKED_ERROR);
     blob = fresh;
   }
 
@@ -458,6 +642,9 @@ export function createEncryptedStorage(dbName: string = DEFAULT_DB_NAME): VaultS
     async open(ownerKey, owner): Promise<VaultOpenResult> {
       if (!owner.trim()) throw new Error("vault owner is required");
       const name = `${dbName}:${owner}`;
+      // A reset of this very vault may be mid-flight in another tab: do not read
+      // the old blob it is about to delete (bounded; a stale marker is ignored).
+      await waitForResetWindow(name, MARKER_WAIT_MS);
       const onDisk = await readBlobFromDisk(name);
       key = ownerKey;
       ownerDb = name;
@@ -502,6 +689,64 @@ export function createEncryptedStorage(dbName: string = DEFAULT_DB_NAME): VaultS
         await withDocumentStore("readwrite", (store) => store.clear());
         await adopt({ accounts: [], txs: [], rules: [] });
       });
+    },
+
+    async destroyVault(options = {}): Promise<void> {
+      const { timeoutMs = DESTROY_TIMEOUT_MS, settleMs = DESTROY_SETTLE_MS } = options;
+      const name = ownerDb;
+      if (name == null) throw new VaultDestroyError("locked", LOCKED_ERROR);
+      const store = marker();
+      const announce = (type: DestroyMessage["type"]) => {
+        try {
+          channel?.postMessage({ type, db: name });
+        } catch {
+          /* the marker and the storage event still reach the other tabs */
+        }
+      };
+      const lockSelf = () => {
+        key = null;
+        data = null;
+        blob = null;
+        ownerDb = null;
+      };
+      try {
+        store?.setItem(MARKER_KEY, JSON.stringify({ db: name, at: Date.now() }));
+      } catch {
+        /* no marker: the channel still tells the other tabs */
+      }
+      announce("destroying");
+      if (settleMs > 0) await new Promise((resolve) => setTimeout(resolve, settleMs));
+      try {
+        // Behind the write queue, so a save in flight cannot recreate the database.
+        await enqueueWrite(async () => {
+          if (ownerDb == null) throw new VaultDestroyError("locked", LOCKED_ERROR);
+          // From here this instance never writes again, success or not: after a
+          // blocked delete the browser still finishes it later.
+          lockSelf();
+          await deleteDatabase(name, timeoutMs);
+        });
+      } catch (error) {
+        try {
+          store?.removeItem(MARKER_KEY);
+          store?.setItem(DESTROYED_KEY, JSON.stringify({ db: name, ok: false, at: Date.now() }));
+        } catch {
+          /* best effort */
+        }
+        announce("failed");
+        throw error;
+      }
+      try {
+        store?.removeItem(MARKER_KEY);
+        store?.setItem(DESTROYED_KEY, JSON.stringify({ db: name, ok: true, at: Date.now() }));
+      } catch {
+        /* best effort */
+      }
+      announce("destroyed");
+    },
+
+    onVaultDestroyed(listener: (phase: VaultDestroyPhase) => void): () => void {
+      destroyedListeners.add(listener);
+      return () => destroyedListeners.delete(listener);
     },
 
     lock(): void {

@@ -20,11 +20,12 @@ vi.mock("./archive", () => ({
     localStorage.getItem("lavega.defaultScope") === "business" ? "business" : "personal",
 }));
 import type { Account, EntityProfile, Tx } from "@lavega/core";
+import { setEnabledWidgets } from "./components/moduleRegistry";
 
 /* DE NAVIGATIE IS EEN <a href> GEWORDEN, geen <button> meer (commit edea871,
  * path-based personal views). Dat is een verbetering - er zijn nu echte URL's,
  * dus middenklik, "link kopiëren" en de terugknop werken - maar de selector hier
- * stond nog op button.nav-item en die vond niets meer. De test zei toen "geen
+ * stond nog op een button-selector en die vond niets meer. De test zei toen "geen
  * knop Rekeningen", wat klonk als een verdwenen knop terwijl hij er gewoon staat
  * als link.
  */
@@ -74,6 +75,7 @@ vi.mock("@lavega/adapters", async (importOriginal) => {
     ...actual,
     createEncryptedStorage: () => ({
       open: async () => "opened",
+      onVaultDestroyed: () => () => {},
       lock: () => {},
       export: () => null,
       restore: async () => false,
@@ -242,10 +244,13 @@ async function click(el: HTMLElement) {
   });
 }
 
-const title = () => container!.querySelector(".topbar-title")?.textContent ?? "";
-const screen = () => container!.querySelector("main.content")!.textContent ?? "";
+const title = () => container!.querySelector(".shell2-title")?.textContent ?? "";
+const screen = () => container!.querySelector("main#main")!.textContent ?? "";
 
 test("Persoonlijk → Zakelijk → Persoonlijk puts the same screen back", async () => {
+  // Home shows no transactions until the widget is switched on, and this test
+  // reads the screen through them.
+  setEnabledWidgets(["recente-transacties"]);
   await mount();
 
   const before = screen();
@@ -269,7 +274,7 @@ test("you come back to the module you left the half on, not the one the other ha
   vault.profiles = [];
   await mount();
 
-  expect(title()).toBe("Overzicht");
+  expect(title()).toBe("Home");
   const overzicht = screen();
 
   await click(scopeButton("Zakelijk"));
@@ -277,18 +282,18 @@ test("you come back to the module you left the half on, not the one the other ha
   expect(title()).toBe("Rekeningen");
 
   await click(scopeButton("Persoonlijk"));
-  expect(title()).toBe("Overzicht");
+  expect(title()).toBe("Home");
   expect(screen()).toBe(overzicht);
 });
 
 test("each half keeps its own module, so switching back and forth is a round trip", async () => {
   await mount();
 
-  await click(button("a.nav-item", "Rekeningen")); // Persoonlijk left on Rekeningen
+  await click(button("a.shell2-rail-item", "Rekeningen")); // Persoonlijk left on Rekeningen
   const personal = screen();
 
   await click(scopeButton("Zakelijk"));
-  await click(button("a.nav-item", "Forecast")); // Zakelijk left on Forecast
+  await click(button("a.shell2-rail-item", "Optimalisatie")); // Zakelijk left on Optimalisatie
   const business = screen();
 
   await click(scopeButton("Persoonlijk"));
@@ -296,7 +301,7 @@ test("each half keeps its own module, so switching back and forth is a round tri
   expect(screen()).toBe(personal);
 
   await click(scopeButton("Zakelijk"));
-  expect(title()).toBe("Forecast");
+  expect(title()).toBe("Optimalisatie");
   expect(screen()).toBe(business);
 });
 
@@ -305,7 +310,7 @@ test("a filter naming an account of one half never narrows the other half", asyn
 
   // Rekeningen → click the personal account's transaction count → Transacties,
   // filtered to that account.
-  await click(button("a.nav-item", "Rekeningen"));
+  await click(button("a.shell2-rail-item", "Rekeningen"));
   // Rekeningen groups per bank (B4): open the bank, then its account's count.
   await click(buttonLike("button[data-testid=bank-group-head]", "TEST"));
   await click(buttonLike('[data-testid="card-link"]', "4 transacties bekijken"));
@@ -323,4 +328,17 @@ test("a filter naming an account of one half never narrows the other half", asyn
   expect(title()).toBe("Transacties");
   expect(screen()).toContain("Albert Heijn");
   expect(screen()).not.toContain("Kantoorhuur");
+});
+
+test("an optional view that is not in the nav still opens by direct URL", async () => {
+  window.history.pushState({}, "", "/app/forecast");
+  try {
+    await mount();
+    expect(title()).toBe("Forecast");
+    expect(
+      [...container!.querySelectorAll("a.shell2-rail-item")].map((a) => a.textContent),
+    ).not.toContain("Forecast");
+  } finally {
+    window.history.pushState({}, "", "/");
+  }
 });

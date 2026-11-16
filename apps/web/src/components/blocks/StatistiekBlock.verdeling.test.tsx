@@ -200,3 +200,10 @@ test("the grown-most sentence is in euros too", () => {
   expect(insight.textContent).toContain("nieuw");
   expect(insight.textContent).not.toContain(formatEuro(25_000));
 });
+
+test("Home opens Statistieken on the outflows donut, without a click", () => {
+  const el = mount();
+  expect(el.querySelector(".spend-pie-hole")).not.toBeNull();
+  const active = el.querySelector("button.module-tab-on");
+  expect(active?.textContent).toBe("Verdeling");
+});

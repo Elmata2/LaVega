@@ -12,6 +12,7 @@ import {
   type PartnerBudgetClient,
 } from "../../partnerBudget/PartnerBudget.js";
 import { partnerKey } from "../../partnerBudget/limits.js";
+import { openFigiExchangeForMic } from "./exchanges.js";
 type OpenFigiClient = { postJson(url: string, body: unknown): Promise<unknown> };
 
 /* The unauthenticated OpenFIGI budget is 25 requests/min, shared by every user
@@ -97,6 +98,19 @@ export function selectedCandidate(
         (selection.exchange === undefined || candidate.exchange === selection.exchange),
     ) ?? null
   );
+}
+
+/** The single candidate the broker's own venue names, or null when the hint is
+ *  unknown, matches no candidate, or matches more than one. Only an exact
+ *  exchange code counts: a hint never matches a listing by resemblance. */
+function venueCandidate(
+  candidates: readonly IdentifierCandidate[],
+  venue: string | undefined,
+): IdentifierCandidate | null {
+  const exchange = openFigiExchangeForMic(venue);
+  if (exchange === null) return null;
+  const matches = candidates.filter((candidate) => candidate.exchange === exchange);
+  return matches.length === 1 ? matches[0]! : null;
 }
 
 export function createOpenFigiIdentifierProvider(
@@ -237,6 +251,19 @@ export function createOpenFigiIdentifierProvider(
         if (candidates.length === 1) {
           const result: IdentifierProviderResult = {
             match: matchOf(isin, candidates[0]!),
+            problems: [],
+            resolution: { tier: "provider", confidence: null, candidates },
+          };
+          cache.set(isin, result);
+          return result;
+        }
+        /* The broker prints the execution venue on its own row, so the venue
+         * outranks a model guess. It decides only when exactly one candidate
+         * sits on that exchange; otherwise the ambiguity below still stands. */
+        const venue = venueCandidate(candidates, request.instrument?.venue);
+        if (venue !== null) {
+          const result: IdentifierProviderResult = {
+            match: matchOf(isin, venue),
             problems: [],
             resolution: { tier: "provider", confidence: null, candidates },
           };

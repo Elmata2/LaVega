@@ -62,7 +62,9 @@ const SHEET = css()
   .replace(/\/\*[\s\S]*?\*\//g, "")
   .replace(/@layer[^{;]*;/g, "");
 
-/** The stylesheet outside any media block, plus each max-width block by width.
+/** The stylesheet outside any media or container block, plus each max-width
+ *  block by width — `media` for `@media (max-width: N)` (viewport), `container`
+ *  for `@container (max-width: N)` (the nearest container ancestor).
  *
  * `@keyframes` is extracted and discarded alongside the non-max-width `@media`
  * blocks. Not because a keyframes block was observed to break the parse — it
@@ -73,20 +75,29 @@ const SHEET = css()
  * sitting in `base` for no reason. Hardening, not a fix. The failure that
  * prompted this pass was the `@layer` one above.
  */
-function scopes(source: string): { base: string; media: Map<number, string> } {
+function scopes(source: string): {
+  base: string;
+  media: Map<number, string>;
+  container: Map<number, string>;
+  /** Every container block in source order, for the cascade-accurate lookup. */
+  containerOrdered: { width: number; body: string }[];
+} {
   const media = new Map<number, string>();
+  const container = new Map<number, string>();
+  const containerOrdered: { width: number; body: string }[] = [];
   let base = "";
   let i = 0;
   while (i < source.length) {
-    const mediaAt = source.indexOf("@media", i);
-    const framesAt = source.indexOf("@keyframes", i);
-    const at = mediaAt === -1 ? framesAt : framesAt === -1 ? mediaAt : Math.min(mediaAt, framesAt);
+    const found = ["@media", "@container", "@keyframes"]
+      .map((kw) => ({ kw, at: source.indexOf(kw, i) }))
+      .filter((f) => f.at !== -1)
+      .sort((a, b) => a.at - b.at)[0];
+    const at = found?.at ?? -1;
     if (at === -1) {
       base += source.slice(i);
       break;
     }
     base += source.slice(i, at);
-    const isMedia = at === mediaAt;
     const open = source.indexOf("{", at);
     let depth = 1;
     let j = open + 1;
@@ -95,14 +106,18 @@ function scopes(source: string): { base: string; media: Map<number, string> } {
       else if (source[j] === "}") depth -= 1;
       j += 1;
     }
-    if (isMedia) {
+    if (found.kw !== "@keyframes") {
+      const target = found.kw === "@media" ? media : container;
       const width = Number(/max-width:\s*(\d+)px/.exec(source.slice(at, open))?.[1] ?? NaN);
       const body = source.slice(open + 1, j - 1);
-      if (Number.isFinite(width)) media.set(width, (media.get(width) ?? "") + body);
+      if (Number.isFinite(width)) {
+        target.set(width, (target.get(width) ?? "") + body);
+        if (found.kw === "@container") containerOrdered.push({ width, body });
+      }
     }
     i = j;
   }
-  return { base, media };
+  return { base, media, container, containerOrdered };
 }
 
 const SCOPES = scopes(SHEET);
@@ -182,12 +197,67 @@ export function resolved(
 ): string | undefined {
   const scope =
     atWidth === undefined ? SCOPES.base : SCOPES.base + "\n" + (SCOPES.media.get(atWidth) ?? "");
+  return resolveIn(scope, classes, property, state);
+}
+
+/** Like `resolved`, for `@container (max-width: N)` blocks: the value an
+ *  element ends up with when its container is `atWidth` px wide or narrower.
+ *  Same throw-on-no-match rule. */
+export function resolvedInContainer(
+  classes: readonly string[],
+  property: string,
+  atWidth: number,
+  state = "",
+): string | undefined {
+  return resolveIn(
+    SCOPES.base + "\n" + (SCOPES.container.get(atWidth) ?? ""),
+    classes,
+    property,
+    state,
+  );
+}
+
+/** Like `resolvedInContainer`, but cascade-accurate: every `@container
+ *  (max-width: N)` block with N >= `atWidth` applies, in SOURCE order, so the
+ *  later of two blocks that both match wins, as in a browser. This is what
+ *  catches a narrower rule emitted before a wider one. Layers are not modelled.
+ *
+ *  `parentClasses` makes a `.parent > .child` selector match: the rule applies
+ *  when the element with `classes` is a direct child of an element carrying
+ *  `parentClasses`. Without it, combinator selectors are refused as before. */
+export function resolvedAtContainerWidth(
+  classes: readonly string[],
+  property: string,
+  atWidth: number,
+  options: { parentClasses?: readonly string[] } = {},
+): string | undefined {
+  const blocks = SCOPES.containerOrdered
+    .filter((b) => b.width >= atWidth)
+    .map((b) => b.body)
+    .join("\n");
+  return resolveIn(SCOPES.base + "\n" + blocks, classes, property, "", options.parentClasses);
+}
+
+function resolveIn(
+  scope: string,
+  classes: readonly string[],
+  property: string,
+  state: string,
+  parentClasses?: readonly string[],
+): string | undefined {
   let found: string | undefined;
   let matchedAnyRule = false;
   const rule = /([^{}]+)\{([^{}]*)\}/g;
   for (let m = rule.exec(scope); m !== null; m = rule.exec(scope)) {
     const [, selectors, body] = m;
-    if (!splitSelectors(selectors).some((s) => targets(s, classes, state))) continue;
+    const hit = splitSelectors(selectors).some((s) => {
+      const child = /^\s*(\S+?)\s*>\s*(\S+)\s*$/.exec(s);
+      if (child && parentClasses) {
+        return targets(child[1]!, parentClasses, "") && targets(child[2]!, classes, state);
+      }
+      return targets(s, classes, state);
+    });
+    if (!hit) continue;
     matchedAnyRule = true;
     const decl = new RegExp(`(?:^|;)\\s*${property}\\s*:\\s*([^;]+)`).exec(body);
     /* Normalised, because the source sheets are readable and the built one is

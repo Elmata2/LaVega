@@ -14,7 +14,7 @@ import { LOCALE_COOKIE } from "./locale.js";
  * A test with English assertions passes for the wrong reason and you don't.
  * Any test rendering a component that calls `useAppLocale()` therefore needs
  * `// @vitest-environment jsdom` as its first line, or its own cookie stub the
- * way `NavBar.test.tsx` does. Stubbing `document` globally here would be the
+ * way `Rail.test.tsx` does. Stubbing `document` globally here would be the
  * tidier fix but a bare stub breaks `applyDocumentLocale`, which reaches for
  * `documentElement` and `querySelector`. */
 beforeEach(() => {

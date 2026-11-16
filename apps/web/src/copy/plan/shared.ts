@@ -140,6 +140,7 @@ export type CardsReasonKey = Extract<
   | "other-card-nets-more"
   | "no-card-data"
   | "no-cardable-spend"
+  | "card-advice"
 >;
 export type GoalsReasonKey = Extract<
   StatusReasonKey,

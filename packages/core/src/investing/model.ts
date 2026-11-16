@@ -247,4 +247,12 @@ export type Trade = {
    *  as amount plus commission. */
   settlement?: { currency: string; amount: number };
   brokerTradeId?: string;
+  /** The execution venue as printed by the broker, e.g. DeGiro's
+   *  `Uitvoeringsplaats` MIC such as `XLON`. Provenance only: it does not
+   *  change how the trade is valued. */
+  venue?: string;
+  /** Units of the trade currency per 1 EUR, as printed by the broker, e.g.
+   *  DeGiro's `Wisselkoers`. Provenance only; nothing in the portfolio
+   *  calculation reads it. */
+  fxRate?: number;
 };

@@ -161,9 +161,10 @@ test("grid tracks that hold money use minmax(0,...) so a long amount cannot wide
   expect(resolved(["kpi"], "min-width", 900)).toBe("0");
 });
 
-test("the pinned phone app bar leaves room for anything scrolled under it", () => {
-  expect(resolved(["appbar"], "position", 900)).toBe("sticky");
-  expect(resolved(["module"], "scroll-margin-top", 900)).toBe("7rem");
+test("anything scrolled into view clears the sticky bar at every width", () => {
+  // 56px sticky top bar at >= 1024, 48px sticky phone bar below it; 7rem covers both.
+  expect(resolved(["module"], "scroll-margin-top")).toBe("7rem");
+  expect(resolved(["card"], "scroll-margin-top")).toBe("7rem");
 });
 
 test("a crowded bar axis thins its labels instead of ellipsising every one", () => {

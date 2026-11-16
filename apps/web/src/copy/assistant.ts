@@ -16,6 +16,13 @@ export type AssistantCopy = {
   intro: string;
   placeholder: string;
   ask: string;
+  close: string;
+  /** Sample questions shown while the log is empty. Each routes to a tool. */
+  chips: readonly [string, string, string];
+  chipsLabel: string;
+  history: string;
+  readError: string;
+  saveError: string;
   unknown: string;
   privacy: string;
   spending: {
@@ -85,6 +92,16 @@ export const assistantCopy: Record<Locale, AssistantCopy> = {
       "Vraag naar je eigen cijfers. De assistent werkt alleen in je browser, op je ontgrendelde kluis.",
     placeholder: "Bijvoorbeeld: wat heb ik deze maand uitgegeven?",
     ask: "Vraag",
+    close: "Assistent sluiten",
+    chips: [
+      "Wat heb ik deze maand uitgegeven?",
+      "Wat zijn mijn saldo's?",
+      "Onthoud dat ik korte antwoorden wil",
+    ],
+    chipsLabel: "Probeer een vraag",
+    history: "Beslissingen en geheugen",
+    readError: "Ik kon je kluis nu niet lezen. Probeer het nog eens.",
+    saveError: "Je beslissing kon niet worden opgeslagen. Probeer het nog eens.",
     unknown:
       "Dat kan ik in deze versie niet beantwoorden. Ik ken drie dingen: je uitgaven van deze maand, je saldo's, en een voorkeur onthouden.",
     privacy:
@@ -127,6 +144,16 @@ export const assistantCopy: Record<Locale, AssistantCopy> = {
       "Ask about your own figures. The assistant runs only in your browser, on your unlocked vault.",
     placeholder: "For example: what did I spend this month?",
     ask: "Ask",
+    close: "Close assistant",
+    chips: [
+      "What did I spend this month?",
+      "What are my balances?",
+      "Remember that I prefer short answers",
+    ],
+    chipsLabel: "Try a question",
+    history: "Decisions and memory",
+    readError: "I could not read your vault just now. Try again.",
+    saveError: "Your decision could not be saved. Try again.",
     unknown:
       "I cannot answer that in this version. I know three things: this month's spending, your balances, and remembering one preference.",
     privacy:

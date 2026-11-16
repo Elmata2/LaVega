@@ -1,3 +1,5 @@
+import { BROKERS, isBrokerId } from "@lavega/core";
+
 /* WANNEER EEN HALF GELADEN PORTEFEUILLE NIET GETOOND MAG WORDEN.
  *
  * Een geschiedenis komt in pagina's binnen, en een run die tegen de tijdslimiet
@@ -25,7 +27,6 @@ export type BrokerHistory = {
   transactionsComplete: boolean;
   dividendsComplete: boolean;
 };
-
 export type HistoryProgress = Record<string, BrokerHistory>;
 
 export type HistoryGate =
@@ -52,11 +53,9 @@ export function historyGate(history: HistoryProgress | null | undefined): Histor
   return { kind: "ready", updating };
 }
 
-/** How the broker is written on screen. */
+/** How the broker is written on screen. The label comes from the one broker
+ *  table, so a broker added there needs no second name here. An id the table
+ *  does not know still renders as itself rather than as "undefined". */
 export function brokerLabel(broker: string): string {
-  return broker === "trading212"
-    ? "Trading 212"
-    : broker === "ibkr"
-      ? "Interactive Brokers"
-      : broker;
+  return isBrokerId(broker) ? BROKERS[broker].label : broker;
 }

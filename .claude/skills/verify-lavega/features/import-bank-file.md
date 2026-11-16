@@ -1,6 +1,6 @@
 # Bank file import
 
-The home card `Importeren` takes a bank export (CSV or MT940, sniffed from the contents, not the extension), assigns it to an entity, parses it into accounts and transactions, and reports problems as text instead of failing.
+The Profiel card `Importeren` takes a bank export (CSV or MT940, sniffed from the contents, not the extension), assigns it to an entity, parses it into accounts and transactions, and reports problems as text instead of failing.
 
 ## Sub-features
 
@@ -12,7 +12,7 @@ The home card `Importeren` takes a bank export (CSV or MT940, sniffed from the c
 
 ## How to get to it (user POV)
 
-- `/app` (Overzicht) → card `Importeren` (section `#import`, `aria-label="Importeren"`).
+- `/app/profiel` (Profiel) → card `Importeren` (section `#import`, `aria-label="Importeren"`).
 
 ## Driving it with control-lavega + browser
 

@@ -1,5 +1,5 @@
 import type { Position, Trade } from "@lavega/core";
-import { priceInstrumentKey } from "@lavega/core";
+import { isValidIsin, priceInstrumentKey } from "@lavega/core";
 import {
   isPartnerBudgetUnavailable,
   isPartnerWait,
@@ -18,6 +18,14 @@ export type PriceSyncTarget = PriceSyncInput & {
   /** A problem line to report once for this sync (a symbol whose rows disagree
    *  about its ISIN). Already formatted as `"<symbol>: <reason>"`. */
   problem?: string;
+  /** The execution venue the broker printed for this instrument, as a MIC
+   *  (DeGiro's `Uitvoeringsplaats`, e.g. `XLON`). A listing hint for ISIN
+   *  resolution: it picks among OpenFIGI's candidates and never invents one. */
+  venue?: string;
+  /** The broker reports no ticker for this holding, so the symbol is the ISIN
+   *  itself. OpenFIGI ambiguity then cannot be settled by the broker symbol,
+   *  so the run reports it instead of pretending the first listing was meant. */
+  noTicker?: boolean;
 };
 
 /** The key pair for one instrument: the identity key plus the `sym:` alias an
@@ -152,6 +160,7 @@ function instrument(
   kind: PriceSyncTarget["kind"],
   backfillFrom: string,
   isin?: string,
+  venue?: string,
 ): PriceSyncTarget {
   const keys = instrumentKeys({
     symbol: target.symbol,
@@ -168,6 +177,9 @@ function instrument(
     instrumentKey: keys.key,
     ...(keys.alias ? { instrumentAlias: keys.alias } : {}),
     ...(isin ? { isin } : {}),
+    ...(venue ? { venue } : {}),
+    /* An ISIN-shaped symbol is the only identity this broker gave us. */
+    ...(isValidIsin(target.symbol) ? { noTicker: true } : {}),
   };
 }
 
@@ -284,6 +296,20 @@ export function discoverPriceSyncTargets(input: {
     if (!earliestTrade.has(key)) earliestTrade.set(key, trade);
   }
 
+  /* The venue hint comes from the execution the broker printed for this
+   * instrument. The most recent one wins: a listing the user still trades on is
+   * the listing the next import will quote, and a stale venue would resolve to
+   * the exchange they left. */
+  const venueBySymbol = new Map<string, string>();
+  for (const trade of [...input.trades].sort((left, right) =>
+    right.date.localeCompare(left.date),
+  )) {
+    const venue = trade.venue?.trim().toUpperCase();
+    if (!venue) continue;
+    const key = trade.symbol.toUpperCase();
+    if (!venueBySymbol.has(key)) venueBySymbol.set(key, venue);
+  }
+
   const targets: PriceSyncTarget[] = [];
   const seen = new Set<string>();
   for (const position of input.positions.filter((value) => value.quantity !== 0)) {
@@ -299,6 +325,7 @@ export function discoverPriceSyncTargets(input: {
         "current",
         firstTrade?.date ?? "2000-01-01",
         identity(position.symbol).isin,
+        venueBySymbol.get(key),
       ),
       ...(identity(position.symbol).problem ? { problem: identity(position.symbol).problem } : {}),
     });
@@ -307,7 +334,13 @@ export function discoverPriceSyncTargets(input: {
     if (seen.has(key)) continue;
     seen.add(key);
     targets.push({
-      ...instrument(trade, "closed", trade.date, identity(trade.symbol).isin),
+      ...instrument(
+        trade,
+        "closed",
+        trade.date,
+        identity(trade.symbol).isin,
+        venueBySymbol.get(key),
+      ),
       ...(identity(trade.symbol).problem ? { problem: identity(trade.symbol).problem } : {}),
     });
   }

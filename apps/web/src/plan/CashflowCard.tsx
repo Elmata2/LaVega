@@ -3,6 +3,7 @@ import { PLAN_THRESHOLDS, type CashflowResult } from "@lavega/core";
 import Card from "../components/ui/Card.js";
 import Button from "../components/ui/Button.js";
 import CardLink from "../components/ui/CardLink.js";
+import StatusLine from "../components/ui/StatusLine.js";
 import { cashflowCopy } from "../copy/plan/index.js";
 import { applyChargesVat } from "../intake/state.js";
 import { parseNumber } from "./sections/parse.js";
@@ -136,14 +137,15 @@ export default function CashflowCard({ cashflow, ctx }: { cashflow: CashflowResu
             )}
             {fw !== null &&
               cashflow.warnings.map((w) => (
-                <p
+                <StatusLine
+                  tone="warning"
                   key={w.kind}
                   role="alert"
-                  className="m-0 mb-1 text-warn text-[0.9rem]"
+                  className="m-0 mb-1 text-[0.9rem]"
                   data-testid={`plan-cashflow-warning-${w.kind}`}
                 >
                   {copy.warning(w, fmt, fw.quietMonths)}
-                </p>
+                </StatusLine>
               ))}
           </div>,
           "figures",
@@ -274,9 +276,9 @@ function VatChoice({ ctx }: { ctx: PlanCtx }) {
         </Button>
       </div>
       {failed && (
-        <p role="alert" className="m-0 text-warn text-[0.85rem]">
+        <StatusLine tone="problem" role="alert" className="m-0 text-[0.85rem]">
           {copy.inputs.vatSaveFailed}
-        </p>
+        </StatusLine>
       )}
     </div>
   );

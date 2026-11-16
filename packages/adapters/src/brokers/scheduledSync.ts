@@ -1,8 +1,9 @@
 import type {
   BrokerCredentials,
+  BrokerId,
   CashFlowRule,
-  CredentialBroker,
   CredentialStore,
+  ScheduledBroker,
 } from "@lavega/core";
 import { applyCashFlowKindRules } from "@lavega/core";
 import {
@@ -22,13 +23,11 @@ import {
 import { TAIL_READ_STREAMS } from "./trading212/adapter.js";
 import { isBrokerLeaseStale } from "./brokerSyncLease.js";
 
-/** The brokers a scheduled sync knows how to drive. The type is derived from
- *  this list so a broker can only be added in one place. */
-export const SCHEDULED_BROKERS = [
-  "ibkr",
-  "trading212",
-] as const satisfies readonly CredentialBroker[];
-export type ScheduledBroker = (typeof SCHEDULED_BROKERS)[number];
+/** The brokers a scheduled sync knows how to drive. Both the list and its type
+ *  come from the one broker table (`BROKERS` in `@lavega/core`), so a broker
+ *  that is not declared `scheduled` there cannot be added to a sync by hand. */
+export { SCHEDULED_BROKERS } from "@lavega/core";
+export type { ScheduledBroker } from "@lavega/core";
 export type BrokerSyncState = {
   /** Kept: the last complete history run. Read by existing callers. */
   lastSyncedAt: string | null;
@@ -90,24 +89,16 @@ export type BrokerSyncCommit = {
  * request answered anywhere reports the run that is actually happening.
  */
 export interface BrokerSyncOperationStore {
-  get(broker: ScheduledBroker): Promise<BrokerSyncState>;
+  get(broker: BrokerId): Promise<BrokerSyncState>;
   claim(
-    broker: ScheduledBroker,
+    broker: BrokerId,
     input: { leaseId: string; staleBefore: string; progress: BrokerSyncProgressRecord },
   ): Promise<BrokerSyncClaim>;
   /** Heartbeat and status in one write. False once the lease is gone. */
-  publish(
-    broker: ScheduledBroker,
-    leaseId: string,
-    progress: BrokerSyncProgressRecord,
-  ): Promise<boolean>;
-  progress(broker: ScheduledBroker): Promise<BrokerSyncProgressRecord | null>;
-  commit(broker: ScheduledBroker, input: BrokerSyncCommit): Promise<boolean>;
-  release(
-    broker: ScheduledBroker,
-    leaseId: string,
-    progress: BrokerSyncProgressRecord,
-  ): Promise<void>;
+  publish(broker: BrokerId, leaseId: string, progress: BrokerSyncProgressRecord): Promise<boolean>;
+  progress(broker: BrokerId): Promise<BrokerSyncProgressRecord | null>;
+  commit(broker: BrokerId, input: BrokerSyncCommit): Promise<boolean>;
+  release(broker: BrokerId, leaseId: string, progress: BrokerSyncProgressRecord): Promise<void>;
 }
 
 /** A lease this old belonged to a worker that is not coming back. */
@@ -120,10 +111,10 @@ export const BROKER_SYNC_HEARTBEAT_MS = 10_000;
 
 /** The whole store for a single process that keeps its state in memory. */
 export function createMemoryBrokerSyncStateStore(): BrokerSyncOperationStore {
-  const states = new Map<ScheduledBroker, BrokerSyncState>();
-  const data = new Map<ScheduledBroker, BrokerAccountSnapshot | null>();
-  const leases = new Map<ScheduledBroker, { id: string; heartbeatAt: string }>();
-  const reports = new Map<ScheduledBroker, BrokerSyncProgressRecord>();
+  const states = new Map<BrokerId, BrokerSyncState>();
+  const data = new Map<BrokerId, BrokerAccountSnapshot | null>();
+  const leases = new Map<BrokerId, { id: string; heartbeatAt: string }>();
+  const reports = new Map<BrokerId, BrokerSyncProgressRecord>();
   return {
     async get(broker) {
       return states.get(broker) ?? { lastSyncedAt: null, retryAfter: null };

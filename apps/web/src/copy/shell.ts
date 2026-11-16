@@ -13,7 +13,7 @@ import type { ImportProblem } from "@lavega/core";
 import type { ShellNotice } from "../shellNotice.js";
 
 /**
- * Every word the vault app's chrome shows, in both languages: TopBar, NavBar,
+ * Every word the vault app's chrome shows, in both languages: the rail, the top bar,
  * VaultGate, Overzicht, Import, Profiel and ModulePicker — the files this
  * copy module belongs to.
  *
@@ -23,7 +23,7 @@ import type { ShellNotice } from "../shellNotice.js";
  * while keeping the Dutch/legal terms (BTW, zzp, DGA, IBAN, SEPA, iDEAL) that
  * do not translate.
  *
- * `nav.moduleLabels` exists so NavBar's own tab text can switch language
+ * `nav.moduleLabels` exists so the rail's own label text can switch language
  * without touching `moduleRegistry.tsx`'s `MODULES`/`WIDGETS`; `modulePicker`
  * does the same for `ModulePicker.tsx`'s Add-widget panel, which no longer
  * reads `label`/`what`/`note` off `MODULES`/`WIDGETS` directly. Those two
@@ -53,6 +53,40 @@ export type ShellCopy = {
     investing: string;
     profile: string;
     moduleLabels: Record<ModuleId, string>;
+  };
+  /** The full-width frame (components/Shell.tsx). */
+  frame: {
+    sidebarLabel: string;
+    sidebarOpen: string;
+    sidebarClose: string;
+    assistantLabel: string;
+    assistantOpen: string;
+    assistantClose: string;
+    assistantResizeLabel: string;
+    skipLink: string;
+    openMenu: string;
+    more: string;
+    /** Bottom-bar item and title of the phone assistant sheet. */
+    assistant: string;
+  };
+  /** The phone drawer (components/ShellDrawer.tsx). */
+  drawer: {
+    menuTitle: string;
+    moreTitle: string;
+    close: string;
+    modulesLabel: string;
+  };
+  /** The account sidebar (components/AccountSidebar.tsx). */
+  accountSidebar: {
+    tabsLabel: string;
+    tabAll: string;
+    tabAssets: string;
+    tabDebts: string;
+    add: string;
+    empty: string;
+    emptyAssets: string;
+    emptyDebts: string;
+    resizeLabel: string;
   };
   modulePicker: {
     homeNote: string;
@@ -84,7 +118,16 @@ export type ShellCopy = {
       signOutError: string;
     };
   };
-  overzicht: { gridLabel: string };
+  overzicht: {
+    gridLabel: string;
+    chart: { groupLabel: string; position: string; cashflow: string };
+  };
+  /** The add area at the bottom of Home and the hide button on a widget card. */
+  home: {
+    addHeading: string;
+    added: (label: string) => string;
+    hide: (label: string) => string;
+  };
   import: {
     ariaLabel: string;
     heading: string;
@@ -98,7 +141,18 @@ export type ShellCopy = {
   /** De meldingsbalk bovenin, uit `shellNotice.ts`. */
   notice: (n: ShellNotice) => string;
   profiel: {
+    /** The card at the top of Profiel: the only way into the plan view. The
+     *  title is `nav.moduleLabels.plan`; locked, the card reuses the intake
+     *  invitation's own copy. */
+    plan: { line: string; open: string };
     languageSwitch: { cardLabel: string; nl: string; en: string; ariaLabel: string };
+    appearance: {
+      ariaLabel: string;
+      heading: string;
+      groupLabel: string;
+      midnight: string;
+      light: string;
+    };
     account: {
       ariaLabel: string;
       heading: string;
@@ -145,6 +199,10 @@ export type ShellCopy = {
         error: Record<SignUpFailure, string>;
       };
     };
+    general: {
+      ariaLabel: string;
+      heading: string;
+    };
     head: {
       ariaLabel: string;
       noName: string;
@@ -163,6 +221,7 @@ export type ShellCopy = {
       heading: string;
       of: string;
       on: string;
+      reset: string;
       description: string;
     };
     scopeSection: {
@@ -196,6 +255,9 @@ export type ShellCopy = {
       heading: string;
       convertLabel: string;
       description: string;
+      /** The quiet control on Rekeningen that opens the pop-up. */
+      settingsButton: string;
+      closeLabel: string;
     };
     lock: {
       ariaLabel: string;
@@ -259,7 +321,7 @@ const nl: ShellCopy = {
   },
   topBar: {
     viewTitles: {
-      overview: "Overzicht",
+      overview: "Home",
       transactions: "Transacties",
       accounts: "Rekeningen",
       rules: "Regels",
@@ -281,12 +343,42 @@ const nl: ShellCopy = {
     scopeGroupLabel: "Persoonlijk of zakelijk",
     addWidget: "Widget toevoegen",
   },
+  frame: {
+    sidebarLabel: "Rekeningen",
+    sidebarOpen: "Zijbalk openen",
+    sidebarClose: "Zijbalk sluiten",
+    assistantLabel: "Assistent",
+    assistantOpen: "Assistent openen",
+    assistantClose: "Assistent sluiten",
+    assistantResizeLabel: "Breedte assistent",
+    skipLink: "Naar inhoud",
+    openMenu: "Menu openen",
+    more: "Meer",
+    assistant: "Assistent",
+  },
+  drawer: {
+    menuTitle: "Menu",
+    moreTitle: "Meer",
+    close: "Menu sluiten",
+    modulesLabel: "Modules",
+  },
+  accountSidebar: {
+    tabsLabel: "Filter rekeningen",
+    tabAll: "Alle",
+    tabAssets: "Activa",
+    tabDebts: "Schulden",
+    add: "+ Rekening toevoegen",
+    empty: "Nog geen rekeningen.",
+    emptyAssets: "Geen activa.",
+    emptyDebts: "Geen schulden.",
+    resizeLabel: "Breedte zijbalk",
+  },
   nav: {
     ariaLabel: "Weergaven",
     investing: "Investing",
     profile: "Profiel",
     moduleLabels: {
-      overview: "Overzicht",
+      overview: "Home",
       accounts: "Rekeningen",
       transactions: "Transacties",
       forecast: "Forecast",
@@ -300,11 +392,11 @@ const nl: ShellCopy = {
     },
   },
   modulePicker: {
-    homeNote: "Je startpagina — staat altijd in de navigatie.",
+    homeNote: "Home — staat altijd in de navigatie.",
     moduleSwitchLabel: (label) => `${label} in de navigatie`,
-    widgetSwitchLabel: (label) => `${label} op je overzicht`,
+    widgetSwitchLabel: (label) => `${label} op Home`,
     modules: {
-      overview: "Je startpagina: totaalpositie, cashflow, aandachtspunten en statistieken.",
+      overview: "Home: totaalpositie of cashflow, statistieken, je kaarten en je reizen.",
       accounts: "Al je rekeningen en kaarten, per bank, met hun saldo.",
       transactions:
         "Al je transacties in één lijst, met filters op periode, rekening en categorie.",
@@ -318,21 +410,6 @@ const nl: ShellCopy = {
       plan: "Je maand, buffer, schulden, uitgaven, abonnementen, kaarten en doelen, met de uitleg erbij.",
     },
     widgets: {
-      "intake-invite": {
-        label: "Vertel over jezelf",
-        what: "Een uitnodiging om de vragen over je situatie te beantwoorden, of om verder te gaan waar je stopte.",
-        note: "Staat aan zolang de vragen niet af zijn — hier zet je hem uit.",
-      },
-      "room-card": {
-        label: "Je ruimte per maand",
-        what: "Wat er gemiddeld per maand overblijft, met de laagste en hoogste maand als bandbreedte.",
-        note: "Verschijnt zodra je de eerste vragen hebt beantwoord.",
-      },
-      "connect-checklist": {
-        label: "Koppel voor het complete beeld",
-        what: "Welke van je banken nog niet gekoppeld zijn, met een link naar Rekeningen.",
-        note: "Verschijnt alleen als je banken hebt opgegeven die nog niet gekoppeld zijn.",
-      },
       aandacht: {
         label: "Aandacht",
         what: "Een brede balk bovenaan met wat er misgaat: tekorten, gemiste betalingen, deadlines.",
@@ -341,20 +418,25 @@ const nl: ShellCopy = {
         label: "Positie",
         what: "Een kleine kaart met de verdeling van je geld over je bedrijven.",
       },
+      "recente-transacties": {
+        label: "Recente transacties",
+        what: "De laatste zeven transacties, met zoeken en een link naar de volledige lijst.",
+      },
       betaalagenda: {
         label: "Betaalagenda",
         what: "Wat er als eerste af moet: geplande bedragen en herkende vaste lasten, met hun datum.",
-        note: "Deze stond al op je overzicht — hier zet je hem uit.",
-      },
-      "facturen-open": {
-        label: "Facturen",
-        what: "Hoeveel facturen er open staan, voor welk bedrag, en wat er over de vervaldatum heen is.",
-        note: "Staat standaard uit — zet hem aan als je hem op je overzicht wilt.",
       },
       "btw-stand": {
         label: "BTW",
         what: "Wat je deze aangifteperiode te betalen of terug te vragen hebt, en tot wanneer je hebt.",
-        note: "Deze kaart staat standaard op je overzicht — hier zet je hem uit.",
+      },
+      "facturen-open": {
+        label: "Facturen",
+        what: "Hoeveel facturen er open staan, voor welk bedrag, en wat er over de vervaldatum heen is.",
+      },
+      "top-uitgaven": {
+        label: "Top uitgaven",
+        what: "Waar je geld deze maand heen ging, per categorie, met de verandering ten opzichte van vorige maand.",
       },
     },
   },
@@ -383,7 +465,15 @@ const nl: ShellCopy = {
       signOutError: "Uitloggen lukte niet. Probeer het later opnieuw.",
     },
   },
-  overzicht: { gridLabel: "Overzicht" },
+  overzicht: {
+    gridLabel: "Home",
+    chart: { groupLabel: "Grafiek", position: "Totale positie", cashflow: "Cashflow" },
+  },
+  home: {
+    addHeading: "Voeg toe aan Home",
+    added: (label) => `${label} toegevoegd`,
+    hide: (label) => `Verberg ${label}`,
+  },
   import: {
     ariaLabel: "Importeren",
     heading: "Importeren",
@@ -421,11 +511,22 @@ const nl: ShellCopy = {
     }
   },
   profiel: {
+    plan: {
+      line: "Je maand, buffer, schulden en doelen, met de uitleg erbij.",
+      open: "Open je plan",
+    },
     languageSwitch: {
       cardLabel: "Taal / Language",
       nl: "Nederlands",
       en: "English",
       ariaLabel: "Taal / Language",
+    },
+    appearance: {
+      ariaLabel: "Weergave",
+      heading: "Weergave",
+      groupLabel: "Thema",
+      midnight: "Donker",
+      light: "Licht",
     },
     account: {
       ariaLabel: "Account",
@@ -493,6 +594,10 @@ const nl: ShellCopy = {
         },
       },
     },
+    general: {
+      ariaLabel: "Algemeen",
+      heading: "Algemeen",
+    },
     head: {
       ariaLabel: "Profiel",
       noName: "Nog geen naam ingevuld",
@@ -509,11 +614,12 @@ const nl: ShellCopy = {
     },
     widgets: {
       ariaLabel: "Widgets",
-      heading: "Widgets op je overzicht",
+      heading: "Widgets op Home",
       of: "van",
       on: "aan",
+      reset: "Standaard herstellen",
       description:
-        "Deze twee kaarten staan uit tot je ze hier aanzet. Wat uit staat verschijnt niet op je startpagina — je gegevens blijven staan en je kunt het hier altijd weer aanzetten.",
+        "Deze kaarten staan uit tot je ze hier aanzet. Wat uit staat verschijnt niet op Home — je gegevens blijven staan en je kunt het hier altijd weer aanzetten.",
     },
     scopeSection: {
       ariaLabel: "Persoonlijk of zakelijk",
@@ -532,7 +638,8 @@ const nl: ShellCopy = {
     countryRegion: {
       ariaLabel: "Land en regio",
       heading: "Land en regio",
-      purpose: "Bepaalt in welke markt LaVega de voorwaarden van je kaarten opzoekt.",
+      purpose:
+        "Bepaalt in welke markt LaVega kaartvoorwaarden opzoekt. Je vult dit zelf in; LaVega leidt nooit af waar je bent.",
       neverInferred:
         "Je vult dit zelf in. LaVega leidt nooit af waar je bent — geen locatie, geen IP, geen tijdzone.",
       countryLabel: "Land",
@@ -550,6 +657,8 @@ const nl: ShellCopy = {
       convertLabel: "Vreemde valuta omrekenen naar euro",
       description:
         "Rekeningen en transacties in een andere valuta dan euro tellen mee in de totalen, omgerekend via de ECB-koers van de dag. Zet dit uit om ze zoals voorheen apart te houden.",
+      settingsButton: "Valuta-instellingen",
+      closeLabel: "Sluiten",
     },
     lock: {
       ariaLabel: "Uitloggen",
@@ -597,7 +706,7 @@ const nl: ShellCopy = {
       ariaLabel: "Delen met LaVega Investing",
       heading: "Delen met LaVega Investing",
       description:
-        "Deelt elke dag je Totale positie (het bedrag bovenaan Overzicht) met LaVega Investing, zodat je nettowaarde daar je bankgeld meetelt naast je beleggingen.",
+        "Deelt elke dag je Totale positie (het bedrag bovenaan Home) met LaVega Investing, zodat je nettowaarde daar je bankgeld meetelt naast je beleggingen.",
       privacyNote:
         "Er gaat nooit een transactie, rekening of bedrijfsnaam mee — alleen dit ene bedrag, per dag, en alleen op een dag dat minstens één saldo bekend is.",
       perDeviceNote:
@@ -620,7 +729,7 @@ const en: ShellCopy = {
   },
   topBar: {
     viewTitles: {
-      overview: "Overview",
+      overview: "Home",
       transactions: "Transactions",
       accounts: "Accounts",
       rules: "Rules",
@@ -642,12 +751,42 @@ const en: ShellCopy = {
     scopeGroupLabel: "Personal or business",
     addWidget: "Add widget",
   },
+  frame: {
+    sidebarLabel: "Accounts",
+    sidebarOpen: "Show sidebar",
+    sidebarClose: "Hide sidebar",
+    assistantLabel: "Assistant",
+    assistantOpen: "Open assistant",
+    assistantClose: "Close assistant",
+    assistantResizeLabel: "Assistant width",
+    skipLink: "Skip to content",
+    openMenu: "Open menu",
+    more: "More",
+    assistant: "Assistant",
+  },
+  drawer: {
+    menuTitle: "Menu",
+    moreTitle: "More",
+    close: "Close menu",
+    modulesLabel: "Modules",
+  },
+  accountSidebar: {
+    tabsLabel: "Filter accounts",
+    tabAll: "All",
+    tabAssets: "Assets",
+    tabDebts: "Debts",
+    add: "+ Add account",
+    empty: "No accounts yet.",
+    emptyAssets: "No assets.",
+    emptyDebts: "No debts.",
+    resizeLabel: "Sidebar width",
+  },
   nav: {
     ariaLabel: "Views",
     investing: "Investing",
     profile: "Profile",
     moduleLabels: {
-      overview: "Overview",
+      overview: "Home",
       accounts: "Accounts",
       transactions: "Transactions",
       forecast: "Forecast",
@@ -661,11 +800,11 @@ const en: ShellCopy = {
     },
   },
   modulePicker: {
-    homeNote: "Your homepage — always in the navigation.",
+    homeNote: "Home — always in the navigation.",
     moduleSwitchLabel: (label) => `${label} in the navigation`,
-    widgetSwitchLabel: (label) => `${label} on your overview`,
+    widgetSwitchLabel: (label) => `${label} on Home`,
     modules: {
-      overview: "Your homepage: total position, cash flow, things to watch, and statistics.",
+      overview: "Home: total position or cash flow, statistics, your cards and your trips.",
       accounts: "All your accounts and cards, by bank and by company, with their balance.",
       transactions:
         "All your transactions in one list, with filters for period, account and category.",
@@ -679,21 +818,6 @@ const en: ShellCopy = {
       plan: "Your month, buffer, debts, spending, subscriptions, cards and goals, with the explanation next to each.",
     },
     widgets: {
-      "intake-invite": {
-        label: "Tell us about you",
-        what: "An invitation to answer the questions about your situation, or to carry on where you stopped.",
-        note: "On while the questions are unfinished — switch it off here.",
-      },
-      "room-card": {
-        label: "Your room each month",
-        what: "What is left on average each month, with the lowest and highest month as the range.",
-        note: "Appears once you have answered the first questions.",
-      },
-      "connect-checklist": {
-        label: "Connect for the full picture",
-        what: "Which of your banks are not connected yet, with a link to Accounts.",
-        note: "Appears only when you named banks that are not connected yet.",
-      },
       aandacht: {
         label: "Attention",
         what: "A wide bar at the top with what needs attention: shortfalls, missed payments, deadlines.",
@@ -702,20 +826,25 @@ const en: ShellCopy = {
         label: "Position",
         what: "A small card with how your money is split across your companies.",
       },
+      "recente-transacties": {
+        label: "Recent transactions",
+        what: "Your last seven transactions, with search and a link to the full list.",
+      },
       betaalagenda: {
         label: "Payment schedule",
         what: "What's due first: planned amounts and recognised fixed costs, with their date.",
-        note: "This was already on your overview — here you switch it off.",
-      },
-      "facturen-open": {
-        label: "Invoices",
-        what: "How many invoices are outstanding, for what amount, and what's overdue.",
-        note: "Off by default — switch it on if you want it on your overview.",
       },
       "btw-stand": {
         label: "VAT",
         what: "What you owe or can reclaim this filing period, and by when.",
-        note: "This card is on your overview by default — here you switch it off.",
+      },
+      "facturen-open": {
+        label: "Invoices",
+        what: "How many invoices are outstanding, for what amount, and what's overdue.",
+      },
+      "top-uitgaven": {
+        label: "Top spending",
+        what: "Where your money went this month, by category, with the change from last month.",
       },
     },
   },
@@ -743,7 +872,15 @@ const en: ShellCopy = {
       signOutError: "Signing out didn't work. Please try again later.",
     },
   },
-  overzicht: { gridLabel: "Overview" },
+  overzicht: {
+    gridLabel: "Home",
+    chart: { groupLabel: "Chart", position: "Total position", cashflow: "Cashflow" },
+  },
+  home: {
+    addHeading: "Add to Home",
+    added: (label) => `${label} added`,
+    hide: (label) => `Hide ${label}`,
+  },
   import: {
     ariaLabel: "Import",
     heading: "Import",
@@ -781,11 +918,22 @@ const en: ShellCopy = {
     }
   },
   profiel: {
+    plan: {
+      line: "Your month, buffer, debts and goals, with the explanation next to each.",
+      open: "Open your plan",
+    },
     languageSwitch: {
       cardLabel: "Taal / Language",
       nl: "Nederlands",
       en: "English",
       ariaLabel: "Taal / Language",
+    },
+    appearance: {
+      ariaLabel: "Appearance",
+      heading: "Appearance",
+      groupLabel: "Theme",
+      midnight: "Dark",
+      light: "Light",
     },
     account: {
       ariaLabel: "Account",
@@ -852,6 +1000,10 @@ const en: ShellCopy = {
         },
       },
     },
+    general: {
+      ariaLabel: "General",
+      heading: "General",
+    },
     head: {
       ariaLabel: "Profile",
       noName: "No name entered yet",
@@ -868,11 +1020,12 @@ const en: ShellCopy = {
     },
     widgets: {
       ariaLabel: "Widgets",
-      heading: "Widgets on your overview",
+      heading: "Widgets on Home",
       of: "of",
       on: "on",
+      reset: "Reset to default",
       description:
-        "These two cards stay off until you switch them on here. What's off doesn't appear on your homepage — your data stays put, and you can always switch it back on here.",
+        "These cards stay off until you switch them on here. What's off doesn't appear on Home — your data stays put, and you can always switch it back on here.",
     },
     scopeSection: {
       ariaLabel: "Personal or business",
@@ -891,7 +1044,8 @@ const en: ShellCopy = {
     countryRegion: {
       ariaLabel: "Country and region",
       heading: "Country and region",
-      purpose: "Determines which market LaVega looks up your card terms in.",
+      purpose:
+        "Determines which market LaVega looks up card terms in. You fill this in yourself; LaVega never infers where you are.",
       neverInferred:
         "You fill this in yourself. LaVega never infers where you are — no location, no IP, no time zone.",
       countryLabel: "Country",
@@ -908,6 +1062,8 @@ const en: ShellCopy = {
       convertLabel: "Convert foreign currency to euros",
       description:
         "Accounts and transactions in a currency other than euros count toward the totals, converted at the day's ECB rate. Turn this off to keep them separate, as before.",
+      settingsButton: "Currency settings",
+      closeLabel: "Close",
     },
     lock: {
       ariaLabel: "Sign out",
@@ -954,7 +1110,7 @@ const en: ShellCopy = {
       ariaLabel: "Share with LaVega Investing",
       heading: "Share with LaVega Investing",
       description:
-        "Shares your Totale positie (the figure at the top of Overzicht) with LaVega Investing every day, so its net worth counts your bank money alongside your investments.",
+        "Shares your Totale positie (the figure at the top of Home) with LaVega Investing every day, so its net worth counts your bank money alongside your investments.",
       privacyNote:
         "No transaction, account or company name ever goes with it — only this one figure, per day, and only on a day at least one balance is known.",
       perDeviceNote:

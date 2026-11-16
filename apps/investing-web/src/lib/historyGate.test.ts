@@ -85,4 +85,6 @@ test("no history at all is not a reason to block", () => {
 test("brokers are named the way people write them", () => {
   expect(brokerLabel("trading212")).toBe("Trading 212");
   expect(brokerLabel("ibkr")).toBe("Interactive Brokers");
+  expect(brokerLabel("degiro")).toBe("DeGiro");
+  expect(brokerLabel("someone-new")).toBe("someone-new");
 });

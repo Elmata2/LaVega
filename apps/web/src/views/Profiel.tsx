@@ -1,6 +1,7 @@
-import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import type {
   Account,
+  AdvisorProfileStore,
   EntityScope,
   EntitySummary,
   ImportSession,
@@ -9,7 +10,6 @@ import type {
   Valuation,
   VaultDocument,
 } from "@lavega/core";
-import type { ConversionMode } from "../settings.js";
 import {
   accountType,
   assumptionDueForReview,
@@ -27,24 +27,31 @@ import {
   TRAVEL_AGENT,
 } from "@lavega/core";
 import type { VaultStorage } from "@lavega/adapters";
-import ModulePicker, { WidgetPicker } from "../components/ModulePicker";
-import { WIDGETS, useOverviewWidgets, type ModuleId } from "../components/moduleRegistry";
 import { CATALOGUE_ENTRIES } from "../catalogue-rates";
 import { countryListIn, countryNameIn, regionLabelIn, regionsFor } from "../countries.js";
 import {
   getCashbackAssumptionEnabled,
-  ownerDisplayName,
   setCashbackAssumptionEnabled,
   type OwnerName,
 } from "../settings.js";
-import { SHOW_ENTITY_CLASSIFIER, SHOW_INVOICE_FORWARDING, isArchivedWidget } from "../archive";
+import {
+  SHOW_CASHBACK_CORRECTION,
+  SHOW_DOCUMENTS_CARD,
+  SHOW_ENTITY_CLASSIFIER,
+  SHOW_INVOICE_FORWARDING,
+  SHOW_NET_WORTH_SHARE,
+  SHOW_OWN_COLUMNS_IMPORT,
+} from "../archive";
 import { SCOPE_ORDER } from "../scope.js";
-import { signOut, useAuthState } from "../authClient.js";
+import { signOut, useAuthState, type AuthState } from "../authClient.js";
 import posthog from "../posthog.js";
 import type { ShellNotice } from "../shellNotice.js";
 import { useAppLocale } from "../appLocale.js";
+import { useTheme } from "../hooks/useTheme.js";
+import { THEME_OPTIONS } from "../lib/theme.js";
 import { shellCopy } from "../copy/shell.js";
 import { intakeCopy } from "../copy/intake.js";
+import { inviteState } from "../intake/inviteState.js";
 import type { View } from "../appRoutes.js";
 import { heldCashbackSentence } from "../copy/optimise.js";
 import DocumentsCard, { type DocumentNotice } from "../components/documents/DocumentsCard.js";
@@ -54,32 +61,36 @@ import GenericImportCard, {
 import Import from "./Import";
 import Koppelingen from "./Koppelingen";
 import Backup from "./Backup";
+import type { VaultOwner } from "../vaultKey.js";
 import Button from "../components/ui/Button.js";
 import Card, { CardHeader } from "../components/ui/Card.js";
+import CardLink from "../components/ui/CardLink.js";
 import SaldoInput from "../components/ui/SaldoInput.js";
+import StatusLine from "../components/ui/StatusLine.js";
 import SignInForm from "../components/SignInForm.js";
 import AgentSettings from "./AgentSettings";
 
-/* Profiel — everything that is a setting rather than a place you work.
+/* Profiel — five things, in this order: Algemeen (account e-mail, name, country and
+ * region, language, appearance), Jouw plan (with the "what LaVega knows" link),
+ * Importeren, Back-up and one Uitloggen. Cards that are hidden for now (own-columns
+ * import, documents, cashback correction, net-worth sharing) sit behind flags in
+ * archive.ts; the code stays so they can come back.
  *
- * The nav was overcrowded because it showed the whole catalogue. So the nav now
- * shows only the modules the owner picked, and this page holds the picker plus
- * the four things that were never workspaces at all: Regels, Koppelingen,
- * Back-up and Import. Those are rendered here as the EXISTING components — the
- * same code, the same behaviour, a different place — so there is one
- * implementation of each, not two.
- *
- * Also here: the country that drives the tax rules and where LaVega looks up
- * card terms, and Vergrendelen. */
+ * Importeren and Back-up are the EXISTING components — the same code, a different
+ * place — so there is one implementation of each. */
 
 type ProfielProps = {
+  /** Whose vault is open: decides whether the Back-up card's reset has a server to clear. */
+  owner: VaultOwner;
   /** Opens "what LaVega knows about you". Absent: the card is not shown. */
   onNavigate?: (view: View) => void;
-  /** Module picker. */
-  enabledModules: ModuleId[];
-  onModulesChange: (next: ModuleId[]) => void;
-  /** Bumped by "Widget toevoegen" in the header, which opens this same picker. */
-  focusModules: number;
+  /** The intake has produced something to plan with (App's rule, unchanged).
+   *  Unlocked, the top card opens the plan; locked, it starts the intake. */
+  planUnlocked: boolean;
+  /** The stored profile and whether the vault holds a transaction: locked, the
+   *  plan card says "Ga verder" for a half-done intake. */
+  intakeStore?: AdvisorProfileStore | null;
+  hasTransactions?: boolean;
   /** One row per entity, with the classification the Persoonlijk | Zakelijk
    *  switch in the header reads. */
   entities: EntitySummary[];
@@ -90,11 +101,8 @@ type ProfielProps = {
   /** The level under the country. "" means he has not said — never a default. */
   homeRegion: string;
   onHomeRegionChange: (region: string) => void;
-  /** Whether a non-EUR balance/transaction counts toward the euro totals. Owned
-   *  by App (see homeCountry above) so every view sees the same flip. */
-  fxConversionMode: ConversionMode;
-  onFxConversionModeChange: (mode: ConversionMode) => void;
-  /** Opt-in share of Totale positie into LaVega Investing's net worth. Owned by
+  /** Opt-in share of Totale positie into LaVega Investing's net worth. The card is
+   *  hidden behind SHOW_NET_WORTH_SHARE; the props stay so it can come back. Owned by
    *  App: turning it off must fire the DELETE exactly once, from the same
    *  place the preference itself changes. `shareNetWorthEnabled` is the
    *  EFFECTIVE state the checkbox shows (App keeps the underlying preference
@@ -142,39 +150,19 @@ type ProfielProps = {
   onGenericRevert?: (sessionId: string) => void;
 };
 
-/* Account — sign in against the configured LaVega server so the owner can test
- * the Enable Banking flow. Sign-up lives in the landing page's auth dialog, not
- * here, and the server still requires a verified email. Nothing renders while the state is
- * `loading`: a signed-out default would flash the login form at someone who
- * is already signed in, for the one render before the real check lands. */
-function AccountBlock() {
+/* Account, inside Algemeen — sign in against the configured LaVega server so the
+ * owner can test the Enable Banking flow. Sign-up lives in the landing page's auth
+ * dialog, not here, and the server still requires a verified email. Signed in, this
+ * is one e-mail line; the one sign-out control sits at the bottom of the page.
+ * Nothing renders while the state is `loading`: a signed-out default would flash the
+ * login form at someone who is already signed in, for the one render before the
+ * real check lands. */
+function AccountPart({ state, refresh }: { state: AuthState; refresh: () => void }) {
   const [locale] = useAppLocale();
   const c = shellCopy[locale];
-  const { state, refresh } = useAuthState();
-
-  const [signOutFailed, setSignOutFailed] = useState(false);
-  const [signingOut, setSigningOut] = useState(false);
-
-  async function handleSignOut() {
-    setSigningOut(true);
-    setSignOutFailed(false);
-    try {
-      await signOut();
-    } catch {
-      setSignOutFailed(true);
-      setSigningOut(false);
-      return;
-    }
-    setSigningOut(false);
-    posthog.reset();
-    refresh();
-  }
-
   if (state.kind === "loading") return null;
-
   return (
-    <Card as="section" aria-label={c.profiel.account.ariaLabel}>
-      <h2>{c.profiel.account.heading}</h2>
+    <div data-testid="general-account">
       {state.kind === "unconfigured" && (
         <p className="cell-sub">{c.profiel.account.unconfigured}</p>
       )}
@@ -182,19 +170,12 @@ function AccountBlock() {
         <SignInForm locale={locale} intro={c.profiel.account.signedOutIntro} onSuccess={refresh} />
       )}
       {state.kind === "signed-in" && (
-        <>
-          <p className="cell-sub">{state.email}</p>
-          <Button disabled={signingOut} onClick={() => void handleSignOut()}>
-            {c.profiel.account.signOut}
-          </Button>
-          {signOutFailed && (
-            <p role="alert" className="text-warn">
-              {c.profiel.account.signOutError}
-            </p>
-          )}
-        </>
+        <p>
+          <span className="text-muted">{c.profiel.account.emailLabel}</span>{" "}
+          <span data-testid="general-email">{state.email}</span>
+        </p>
       )}
-    </Card>
+    </div>
   );
 }
 
@@ -395,11 +376,11 @@ function CashbackCorrigeren({
       </p>
 
       {loadProblem !== null ? (
-        <p role="alert" className="text-warn">
+        <StatusLine tone="problem" role="alert">
           {c.profiel.cashback.loadProblemPrefix}
           {loadProblem}
           {c.profiel.cashback.loadProblemSuffix}
-        </p>
+        </StatusLine>
       ) : cards === null ? (
         <p className="text-muted">{c.profiel.cashback.loading}</p>
       ) : rows.length === 0 ? (
@@ -471,9 +452,9 @@ function CashbackCorrigeren({
       )}
 
       {problem !== null && (
-        <p role="alert" className="text-warn">
+        <StatusLine tone="problem" role="alert">
           {problem}
-        </p>
+        </StatusLine>
       )}
       {saved !== null && (
         <p data-testid="cashback-opgeslagen">
@@ -486,8 +467,8 @@ function CashbackCorrigeren({
 }
 
 /* The daily message: only for a signed-in account, because the server keeps
- * its settings per account. Nothing renders while the session is loading, same
- * as AccountBlock, so a signed-out card never flashes. */
+ * its settings per account. Nothing renders while the session is loading, so a
+ * signed-out card never flashes. */
 function AgentBlock({
   onEnabledChange,
   onNavigate,
@@ -509,17 +490,16 @@ function AgentBlock({
 }
 
 export default function Profiel({
-  enabledModules,
-  onModulesChange,
-  focusModules,
+  owner,
+  planUnlocked,
+  intakeStore = null,
+  hasTransactions = false,
   entities,
   onClassifyEntity,
   homeCountry,
   onHomeCountryChange,
   homeRegion,
   onHomeRegionChange,
-  fxConversionMode,
-  onFxConversionModeChange,
   shareNetWorthEnabled,
   onShareNetWorthEnabledChange,
   shareNetWorthPendingDelete,
@@ -554,35 +534,113 @@ export default function Profiel({
   onNavigate,
 }: ProfielProps) {
   const [locale, setLocale] = useAppLocale();
+  const [theme, setTheme] = useTheme();
   const c = shellCopy[locale];
-  const modulesRef = useRef<HTMLElement>(null);
-  // The widget preference is read here rather than passed in: the switch lives
-  // on this page and the cards live on the homescreen, two branches of the tree
-  // that share nothing above them but App itself. See moduleRegistry.
-  const [widgets, setWidgets] = useOverviewWidgets();
+  const { state: authState, refresh: refreshAuth } = useAuthState();
   // 249 countries; built once rather than on every keystroke elsewhere on the page.
   const countries = useMemo(() => countryListIn(locale), [locale]);
   const regions = regionsFor(homeCountry);
-  const fullName = ownerDisplayName(ownerName);
-  // The initials are drawn, not fetched: a remote avatar would tell that server
-  // who is using LaVega. No name, no initials — an empty circle, not a guess.
-  const initials = [ownerName.first, ownerName.last]
-    .map((s) => s.trim().charAt(0).toUpperCase())
-    .filter(Boolean)
-    .join("");
 
-  // "Widget toevoegen" lands on this page; bring the picker into view rather
-  // than dropping the user at the top of a long settings page. Guarded: jsdom
-  // has no scrollIntoView.
-  useEffect(() => {
-    if (focusModules === 0) return;
-    modulesRef.current?.scrollIntoView?.({ block: "start" });
-  }, [focusModules]);
+  /* The one sign-out. With an account session it signs out of the account and
+   * then locks the vault; without one it only locks. */
+  async function handleSignOut() {
+    // Still "loading" counts as a possible session: try the account sign-out.
+    // The vault locks whatever happens to the request.
+    try {
+      if (authState.kind === "signed-in" || authState.kind === "loading") {
+        await signOut();
+        posthog.reset();
+      }
+    } catch {
+      // The server could not be reached: the vault still locks.
+    } finally {
+      refreshAuth();
+      onLock();
+    }
+  }
 
+  const invite = intakeCopy[locale].home.invite;
+  const resuming = (() => {
+    const state = inviteState(intakeStore, asOf, hasTransactions);
+    return state?.kind === "intake" && state.resumeAt !== null;
+  })();
   return (
     <>
-      <Card as="section" aria-label={c.profiel.languageSwitch.ariaLabel}>
-        <h2>{c.profiel.languageSwitch.cardLabel}</h2>
+      {/* Algemeen: who you are and how this screen looks. The name is a local
+          preference like the buffer and the country: this browser only, never in
+          the vault, never in a back-up, and deliberately never in anything a
+          model is given. */}
+      <Card as="section" aria-label={c.profiel.general.ariaLabel} data-testid="profiel-general">
+        <h2>{c.profiel.general.heading}</h2>
+        <AccountPart state={authState} refresh={refreshAuth} />
+
+        <div className="mt-3">
+          <label>
+            {c.profiel.head.firstName}{" "}
+            <input
+              value={ownerName.first}
+              aria-label={c.profiel.head.firstName}
+              autoComplete="off"
+              onChange={(e) => onOwnerNameChange({ ...ownerName, first: e.target.value })}
+            />
+          </label>{" "}
+          <label>
+            {c.profiel.head.lastName}{" "}
+            <input
+              value={ownerName.last}
+              aria-label={c.profiel.head.lastName}
+              autoComplete="off"
+              onChange={(e) => onOwnerNameChange({ ...ownerName, last: e.target.value })}
+            />
+          </label>
+        </div>
+        <p className="cell-sub">{c.profiel.head.note}</p>
+
+        <div className="facturen-form mt-3">
+          <label>
+            {c.profiel.countryRegion.countryLabel}{" "}
+            <select
+              value={homeCountry}
+              onChange={(e) => onHomeCountryChange(e.target.value)}
+              aria-label={c.profiel.countryRegion.countryLabel}
+            >
+              {countries.map((country) => (
+                <option key={country.code} value={country.code}>
+                  {country.name}
+                </option>
+              ))}
+            </select>
+          </label>{" "}
+          <label>
+            {regionLabelIn(locale, homeCountry)}{" "}
+            {/* A list where we have a verified one, free text everywhere else:
+                belasting in Texas is niet belasting in New York, maar een
+                verzonnen keuzelijst voor de andere 247 landen zou een gok voor
+                een feit laten doorgaan. */}
+            <input
+              value={homeRegion}
+              list={regions.length > 0 ? "home-regions" : undefined}
+              aria-label={`${regionLabelIn(locale, homeCountry)} in ${countryNameIn(locale, homeCountry)}`}
+              placeholder={
+                regions.length > 0
+                  ? c.profiel.countryRegion.chooseOrType
+                  : c.profiel.countryRegion.optional
+              }
+              autoComplete="off"
+              onChange={(e) => onHomeRegionChange(e.target.value)}
+            />
+            {regions.length > 0 && (
+              <datalist id="home-regions">
+                {regions.map((r) => (
+                  <option key={r} value={r} />
+                ))}
+              </datalist>
+            )}
+          </label>
+        </div>
+        <p className="cell-sub">{c.profiel.countryRegion.purpose}</p>
+
+        <h3 className="mt-3">{c.profiel.languageSwitch.cardLabel}</h3>
         <div className="scope-switch" role="group" aria-label={c.profiel.languageSwitch.ariaLabel}>
           <button
             type="button"
@@ -602,95 +660,128 @@ export default function Profiel({
             {c.profiel.languageSwitch.en}
           </button>
         </div>
-      </Card>
 
-      <AccountBlock />
-
-      <AgentBlock onEnabledChange={onAgentEnabledChange} onNavigate={onNavigate} />
-
-      {onNavigate && (
-        <Card as="section" aria-label={intakeCopy[locale].aboutYou.profielCard.title}>
-          <h2>{intakeCopy[locale].aboutYou.profielCard.title}</h2>
-          <p className="text-muted text-[0.85rem]">
-            {intakeCopy[locale].aboutYou.profielCard.body}
-          </p>
-          <Button onClick={() => onNavigate("about-you")}>
-            {intakeCopy[locale].aboutYou.profielCard.open}
-          </Button>
-        </Card>
-      )}
-
-      {/* The owner, at the very top, so the page reads as his own screen and not
-          as a settings menu. The name is a local preference like the buffer and
-          the country: this browser only, never in the vault, never in a
-          back-up, and deliberately never in anything a model is given. */}
-      <Card
-        as="section"
-        className="flex items-start gap-4 [@media(max-width:640px)]:flex-col"
-        aria-label={c.profiel.head.ariaLabel}
-      >
-        <span
-          className="inline-flex items-center justify-center flex-none w-[56px] h-[56px] rounded-pill border border-line bg-surface-2 text-ink font-body text-[1.15rem] font-semibold tracking-[0.02em]"
-          aria-hidden="true"
-          data-testid="profile-head-avatar"
+        <h3 className="mt-3">{c.profiel.appearance.heading}</h3>
+        <div
+          className="module-tabs theme-switch"
+          role="radiogroup"
+          aria-label={c.profiel.appearance.groupLabel}
         >
-          {initials}
-        </span>
-        <div className="min-w-0 flex-1">
-          <h2 className="mb-1" data-testid="profile-head-name">
-            {fullName || c.profiel.head.noName}
-          </h2>
-          <p className="cell-sub">{c.profiel.head.note}</p>
-          <div className="mt-3">
-            <label>
-              {c.profiel.head.firstName}{" "}
+          {THEME_OPTIONS.map((option) => (
+            <label
+              key={option}
+              className={`module-tab theme-option${theme === option ? " module-tab-on" : ""}`}
+            >
               <input
-                value={ownerName.first}
-                aria-label={c.profiel.head.firstName}
-                autoComplete="off"
-                onChange={(e) => onOwnerNameChange({ ...ownerName, first: e.target.value })}
+                type="radio"
+                name="lavega-theme"
+                value={option}
+                checked={theme === option}
+                onChange={() => setTheme(option)}
               />
-            </label>{" "}
-            <label>
-              {c.profiel.head.lastName}{" "}
-              <input
-                value={ownerName.last}
-                aria-label={c.profiel.head.lastName}
-                autoComplete="off"
-                onChange={(e) => onOwnerNameChange({ ...ownerName, last: e.target.value })}
-              />
+              <span className={`theme-swatch theme-swatch-${option}`} aria-hidden="true" />
+              {c.profiel.appearance[option]}
             </label>
-          </div>
+          ))}
         </div>
       </Card>
 
-      <Card as="section" aria-label={c.profiel.modules.ariaLabel} ref={modulesRef}>
-        <CardHeader>
-          <h2>{c.profiel.modules.heading}</h2>
-          <span className="eyebrow">
-            {enabledModules.length} {c.profiel.modules.countSuffix}
-          </span>
-        </CardHeader>
-        <p className="cell-sub">{c.profiel.modules.description}</p>
-        <ModulePicker enabled={enabledModules} onChange={onModulesChange} />
+      <AgentBlock onEnabledChange={onAgentEnabledChange} onNavigate={onNavigate} />
+
+      <Card as="section" aria-label={c.nav.moduleLabels.plan} className="profiel-plan">
+        <h2>{c.nav.moduleLabels.plan}</h2>
+        <p>{planUnlocked ? c.profiel.plan.line : invite.intro}</p>
+        <Button variant="primary" onClick={() => onNavigate?.(planUnlocked ? "plan" : "intake")}>
+          {planUnlocked ? c.profiel.plan.open : resuming ? invite.resume : invite.start}
+        </Button>
+        {onNavigate && (
+          <p className="mt-3 mb-0">
+            <CardLink onClick={() => onNavigate("about-you")}>
+              {intakeCopy[locale].aboutYou.profielCard.open}
+            </CardLink>
+          </p>
+        )}
       </Card>
 
-      {/* The homescreen cards that are a choice rather than a fixture. Same
-          switch as the modules above, one screen lower, because "welke tab" and
-          "welke kaart" are the same question asked about a different surface.
-          Both start off: he asked for a widget he can click on "instead of it
-          always being default there". */}
-      <Card as="section" aria-label={c.profiel.widgets.ariaLabel}>
-        <CardHeader>
-          <h2>{c.profiel.widgets.heading}</h2>
-          <span className="eyebrow">
-            {widgets.length} {c.profiel.widgets.of}{" "}
-            {WIDGETS.filter((w) => !isArchivedWidget(w.id)).length} {c.profiel.widgets.on}
-          </span>
-        </CardHeader>
-        <p className="cell-sub">{c.profiel.widgets.description}</p>
-        <WidgetPicker enabled={widgets} onChange={setWidgets} />
-      </Card>
+      <Import
+        entity={entity}
+        onEntityChange={onEntityChange}
+        busy={busy}
+        problems={problems}
+        onImport={onImport}
+        onRefreshBank={onRefreshBank}
+      />
+
+      <Backup storage={storage} asOf={asOf} owner={owner} onRestored={onRestored} />
+
+      {/* Hidden unless the owner already opted in (or a delete is pending): then it stays
+          visible so the choice can be seen and revoked. */}
+      {(SHOW_NET_WORTH_SHARE || shareNetWorthEnabled || shareNetWorthPendingDelete) && (
+        <Card as="section" aria-label={c.profiel.netWorthShare.ariaLabel}>
+          <CardHeader>
+            <h2>{c.profiel.netWorthShare.heading}</h2>
+          </CardHeader>
+          <p className="cell-sub">{c.profiel.netWorthShare.description}</p>
+          <p className="cell-sub">{c.profiel.netWorthShare.privacyNote}</p>
+          <p className="cell-sub">{c.profiel.netWorthShare.perDeviceNote}</p>
+          <label>
+            <input
+              type="checkbox"
+              checked={shareNetWorthEnabled}
+              aria-label={c.profiel.netWorthShare.toggleLabel}
+              onChange={(e) => onShareNetWorthEnabledChange(e.target.checked)}
+            />{" "}
+            {c.profiel.netWorthShare.toggleLabel}
+          </label>
+          <p className="cell-sub">
+            {shareNetWorthEnabled
+              ? c.profiel.netWorthShare.onStatus
+              : c.profiel.netWorthShare.offStatus}
+          </p>
+          {shareNetWorthPendingDelete && (
+            <StatusLine tone="warning" role="alert">
+              {c.profiel.netWorthShare.pendingDeleteStatus}
+            </StatusLine>
+          )}
+        </Card>
+      )}
+
+      {/* Hidden for now (archive.ts flags). The cards stay in the code. */}
+      {SHOW_OWN_COLUMNS_IMPORT && onGenericImport != null && (
+        <GenericImportCard
+          accounts={[...accounts]}
+          existingTxs={[...txs]}
+          sessions={importSessions}
+          busy={busy}
+          notice={importNotice}
+          onImport={onGenericImport}
+          onRevert={onGenericRevert ?? (() => {})}
+        />
+      )}
+
+      {SHOW_DOCUMENTS_CARD && onDocumentUpload != null && (
+        <DocumentsCard
+          documents={documents}
+          accounts={[...accounts]}
+          txs={[...txs]}
+          valuations={valuations}
+          asOf={asOf}
+          busy={busy}
+          notice={documentNotice}
+          erased={documentErased}
+          onUpload={onDocumentUpload}
+          onLink={onDocumentLink ?? (() => {})}
+          onReject={onDocumentReject ?? (() => {})}
+          onRemove={onDocumentRemove ?? (() => {})}
+          onEraseAll={onDocumentEraseAll ?? (() => {})}
+        />
+      )}
+
+      {SHOW_INVOICE_FORWARDING && <Koppelingen />}
+
+      {SHOW_CASHBACK_CORRECTION && (
+        <CashbackCorrigeren storage={storage} asOf={asOf} onRestored={onRestored} />
+      )}
 
       {SHOW_ENTITY_CLASSIFIER && (
         <Card as="section" aria-label={c.profiel.scopeSection.ariaLabel}>
@@ -753,152 +844,10 @@ export default function Profiel({
         </Card>
       )}
 
-      <Card as="section" aria-label={c.profiel.countryRegion.ariaLabel}>
-        <h2>{c.profiel.countryRegion.heading}</h2>
-        <p className="cell-sub">{c.profiel.countryRegion.purpose}</p>
-        <p className="cell-sub">{c.profiel.countryRegion.neverInferred}</p>
-        <div className="facturen-form">
-          <label>
-            {c.profiel.countryRegion.countryLabel}{" "}
-            <select
-              value={homeCountry}
-              onChange={(e) => onHomeCountryChange(e.target.value)}
-              aria-label={c.profiel.countryRegion.countryLabel}
-            >
-              {countries.map((country) => (
-                <option key={country.code} value={country.code}>
-                  {country.name}
-                </option>
-              ))}
-            </select>
-          </label>{" "}
-          <label>
-            {regionLabelIn(locale, homeCountry)}{" "}
-            {/* A list where we have a verified one, free text everywhere else:
-                belasting in Texas is niet belasting in New York, maar een
-                verzonnen keuzelijst voor de andere 247 landen zou een gok voor
-                een feit laten doorgaan. */}
-            <input
-              value={homeRegion}
-              list={regions.length > 0 ? "home-regions" : undefined}
-              aria-label={`${regionLabelIn(locale, homeCountry)} in ${countryNameIn(locale, homeCountry)}`}
-              placeholder={
-                regions.length > 0
-                  ? c.profiel.countryRegion.chooseOrType
-                  : c.profiel.countryRegion.optional
-              }
-              autoComplete="off"
-              onChange={(e) => onHomeRegionChange(e.target.value)}
-            />
-            {regions.length > 0 && (
-              <datalist id="home-regions">
-                {regions.map((r) => (
-                  <option key={r} value={r} />
-                ))}
-              </datalist>
-            )}
-          </label>
-        </div>
-        <p className="cell-sub">
-          {regions.length > 0
-            ? `${c.profiel.countryRegion.knownListNotePrefix}${countryNameIn(locale, homeCountry)}${c.profiel.countryRegion.knownListNoteSuffix}`
-            : `${c.profiel.countryRegion.noListNotePrefix}${countryNameIn(locale, homeCountry)}${c.profiel.countryRegion.noListNoteSuffix}`}
-        </p>
-      </Card>
-
-      <Card as="section" aria-label={c.profiel.fx.ariaLabel}>
-        <CardHeader>
-          <h2>{c.profiel.fx.heading}</h2>
-        </CardHeader>
-        <label>
-          <input
-            type="checkbox"
-            checked={fxConversionMode === "convert"}
-            aria-label={c.profiel.fx.convertLabel}
-            onChange={(e) => onFxConversionModeChange(e.target.checked ? "convert" : "separate")}
-          />{" "}
-          {c.profiel.fx.convertLabel}
-        </label>
-        <p className="cell-sub">{c.profiel.fx.description}</p>
-      </Card>
-
-      <Card as="section" aria-label={c.profiel.netWorthShare.ariaLabel}>
-        <CardHeader>
-          <h2>{c.profiel.netWorthShare.heading}</h2>
-        </CardHeader>
-        <p className="cell-sub">{c.profiel.netWorthShare.description}</p>
-        <p className="cell-sub">{c.profiel.netWorthShare.privacyNote}</p>
-        <p className="cell-sub">{c.profiel.netWorthShare.perDeviceNote}</p>
-        <label>
-          <input
-            type="checkbox"
-            checked={shareNetWorthEnabled}
-            aria-label={c.profiel.netWorthShare.toggleLabel}
-            onChange={(e) => onShareNetWorthEnabledChange(e.target.checked)}
-          />{" "}
-          {c.profiel.netWorthShare.toggleLabel}
-        </label>
-        <p className="cell-sub">
-          {shareNetWorthEnabled
-            ? c.profiel.netWorthShare.onStatus
-            : c.profiel.netWorthShare.offStatus}
-        </p>
-        {shareNetWorthPendingDelete && (
-          <p role="alert" className="text-warn">
-            {c.profiel.netWorthShare.pendingDeleteStatus}
-          </p>
-        )}
-      </Card>
-
-      <Import
-        entity={entity}
-        onEntityChange={onEntityChange}
-        busy={busy}
-        problems={problems}
-        onImport={onImport}
-        onRefreshBank={onRefreshBank}
-      />
-
-      {onGenericImport != null && (
-        <GenericImportCard
-          accounts={[...accounts]}
-          existingTxs={[...txs]}
-          sessions={importSessions}
-          busy={busy}
-          notice={importNotice}
-          onImport={onGenericImport}
-          onRevert={onGenericRevert ?? (() => {})}
-        />
-      )}
-
-      {onDocumentUpload != null && (
-        <DocumentsCard
-          documents={documents}
-          accounts={[...accounts]}
-          txs={[...txs]}
-          valuations={valuations}
-          asOf={asOf}
-          busy={busy}
-          notice={documentNotice}
-          erased={documentErased}
-          onUpload={onDocumentUpload}
-          onLink={onDocumentLink ?? (() => {})}
-          onReject={onDocumentReject ?? (() => {})}
-          onRemove={onDocumentRemove ?? (() => {})}
-          onEraseAll={onDocumentEraseAll ?? (() => {})}
-        />
-      )}
-
-      {SHOW_INVOICE_FORWARDING && <Koppelingen />}
-
-      <CashbackCorrigeren storage={storage} asOf={asOf} onRestored={onRestored} />
-
-      <Backup storage={storage} asOf={asOf} onRestored={onRestored} />
-
       <Card as="section" aria-label={c.profiel.lock.ariaLabel}>
         <h2>{c.profiel.lock.heading}</h2>
         <p className="cell-sub">{c.profiel.lock.description}</p>
-        <Button onClick={onLock}>{c.profiel.lock.button}</Button>
+        <Button onClick={() => void handleSignOut()}>{c.profiel.lock.button}</Button>
       </Card>
       <p className="cell-sub" data-testid="build-stamp">
         LaVega build {__LAVEGA_BUILD__}

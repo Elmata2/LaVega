@@ -1,6 +1,6 @@
 ---
 name: LaVega App
-description: The product surface at app.lavega.dev. The lavega.dev "Midnight" world as a working dashboard: near-black ground, a display serif over Geist, honest tabular figures, cantaloupe for the one primary action.
+description: The product surface at app.lavega.dev. The lavega.dev "Midnight" world as a working dashboard: near-black ground, Geist throughout (the landing keeps a display serif), honest tabular figures, cantaloupe for the one primary action.
 colors:
   midnight: "#02070a"
   surface: "#0d171d"
@@ -18,11 +18,11 @@ colors:
   chart-teal: "#4fd1c0"
 typography:
   display:
-    fontFamily: "Instrument Serif, Georgia, Times New Roman, serif"
-    fontSize: "2.6rem"
-    fontWeight: 400
-    lineHeight: 1.08
-    letterSpacing: "0"
+    fontFamily: "Geist, system-ui, sans-serif"
+    fontSize: "1.5rem"
+    fontWeight: 600
+    lineHeight: 1.2
+    letterSpacing: "-0.01em"
   headline:
     fontFamily: "Geist, system-ui, sans-serif"
     fontSize: "1.25rem"
@@ -51,7 +51,7 @@ typography:
     fontWeight: 400
     letterSpacing: "0.02em"
 rounded:
-  frame: "32px"
+  frame: "0px"
   card: "28px"
   panel: "20px"
   control: "14px"
@@ -94,17 +94,17 @@ The working product behind app.lavega.dev, and the reference the content site an
 
 **Key characteristics**
 
-- Two faces, each with one job: Instrument Serif for display (28px and up, 400 only), Geist for everything else. Self-hosted from `src/assets/fonts/` with the OFL licenses.
-- Dark by default with an opt-in light theme; radius, type, spacing and motion are shared between the two.
-- The app is a single floating frame on the gutter, not a full-bleed page. Only the content inside scrolls.
+- One face in the app: Geist, page titles included. Only the landing page keeps Instrument Serif (its own `--serif` under `.lp`). Self-hosted from `src/assets/fonts/` with the OFL licenses.
+- Two themes: midnight (dark, default) and light, both with colour, chosen in Profiel. Radius, type, spacing and motion are shared. See "Light theme".
+- The app is a full-viewport frame (`100dvh`): icon rail, account sidebar, main. No margin, radius or shadow. Only main scrolls.
 - Depth is tone plus a 12% hairline. Only floating layers (dialogs, menus) cast a shadow.
 - Cantaloupe is the one filled call to action; signal blue carries links, active state and focus.
 
 ## Colors
 
-`color-scheme: dark` on `:root`. The light theme is `:root[data-theme="light"]` and changes colour only.
+`color-scheme: dark` on `:root`. The light theme is `:root[data-theme="light"]` and changes colour only (see "Light theme").
 
-- **Midnight `#02070a`** — gutter and app surface. The app frame and its ground are the same value, so the frame reads as a cut-out, not a card.
+- **Midnight `#02070a`** — app surface. The frame fills the viewport, so there is no separate gutter ground.
 - **Surface `#0d171d` / Surface-2 `#16222a`** — raised panels, then nested rows and inputs.
 - **Ink `#ffffff`, Ink-soft `#e3e9ec`, Muted `#a9b4bb`** — primary text, the hover state of the active nav pill, secondary text.
 - **Hairline `rgba(255,255,255,0.12)`** — every border. Never a second grey.
@@ -117,19 +117,17 @@ Delta pills use `--pos-tint` / `--neg-tint`, built with `color-mix` in srgb. Do 
 
 ## Typography
 
-**Two families, one job each** (2026-11-11, replacing Libron). `--font-display` is Instrument Serif; `--font-body` and `--font-mono` are Geist.
+**One family in the app** (2026-11-13; was two families, 2026-11-11). `--font-body` and `--font-mono` are Geist, and every app heading is Geist too. `--font-display` is gone. Instrument Serif is declared in `tokens.css` only for the landing page, which sets it through its own `--serif` under `.lp`; nothing in the app references it.
 
-**The size floor.** Instrument Serif is a condensed face with thin strokes and ONE drawn weight. It reads at 28px and up and nowhere else: the page title (`.topbar-title`, 2.6rem), base `h1` (1.75rem), the `.brand` wordmark, and on the landing page `h1`/`h2`, the scroll-lit sentence, the chat question and the quote. Every heading under that (base `h2`/`h3`, module titles, dialog and chat titles, the `font-body` section titles in the views) is Geist 600. The last time this serif ran the whole app it was faux-bolded and set at label sizes, and headings were hard to read; the floor is what prevents that.
+**Page title.** `.shell2-title` and base `h1`: Geist 600, 1.5rem, line-height 1.2, `-0.01em`. One line, truncates. A sans at the old 1.75rem / 400 serif size reads too loud.
 
-**No faux bold.** The serif is declared at 400 only and every display role sets `font-synthesis: none` and `font-weight: 400`. Tracking stays at 0 or above, never negative: the face is already condensed.
-
-**Figures are Geist.** Instrument Serif has no `tnum`. Geist does, and the app sets `font-variant-numeric: tabular-nums` on numeric cells and big figures (`Valuta`, `Punten`, `Belasting` amounts carry `tabular-nums` on the element).
+**Figures are Geist.** Geist has real `tnum`, and the app sets `font-variant-numeric: tabular-nums` on numeric cells and big figures (`Valuta`, `Punten`, `Belasting` amounts carry `tabular-nums` on the element).
 
 **Missing glyphs.** Neither latin subset has arrows or checks (`→ ← ✓`). The stacks end in a system face, so those glyphs fall back per glyph.
 
-**Loading.** `* Fallback` `@font-face` rules scale Times New Roman / Arial to the webfont metrics, so the swap does not reflow (CLS 0 measured on throttled 3G). `vite.config.ts` preloads the three hero faces (serif upright + italic, Geist upright) and fails the build if their hashed names are not found.
+**Loading.** `* Fallback` `@font-face` rules scale Times New Roman / Arial to the webfont metrics, so the swap does not reflow (CLS 0 measured on throttled 3G). `vite.config.ts` preloads the three hero faces (serif upright + italic for the landing, Geist upright) and fails the build if their hashed names are not found.
 
-**Scale.** `html` is 17px. The page title is 2.6rem serif at 400, line-height 1.08. Base `h1` 1.75rem serif; `h2` 1.25rem and `h3` 1rem are Geist 600 (`h3` in mist). Body is Geist 1rem at 1.5. A module figure is Geist 2.1rem at 700, `-0.02em`, tabular. Eyebrows are 0.75rem at 400 with `0.02em` tracking.
+**Scale.** `html` is 17px. The page title and base `h1` are 1.5rem Geist 600; `h2` 1.25rem and `h3` 1rem are Geist 600 (`h3` in mist). Body is Geist 1rem at 1.5. A module figure is Geist 2.1rem at 700, `-0.02em`, tabular. Eyebrows are 0.75rem at 400 with `0.02em` tracking.
 
 **Landing page.** Body is Geist 18px / 1.55. Headlines are Instrument Serif: `h1` clamp(3.3rem, 8.4vw, 6.8rem) at line-height 1.02 and `-0.005em`, `h2` at 1.06 and 0. `h3`, the quote's `cite` and the small `.acts h2` are Geist.
 
@@ -141,11 +139,109 @@ Delta pills use `--pos-tint` / `--neg-tint`, built with `color-mix` in srgb. Do 
 
 ## Layout
 
-- **Frame.** `.shell` is `calc(100vh - 2 * 20px)` tall, max 1680px, 32px radius, `--shadow-float`. The app bar, greeting and content stack inside it; only `.content` scrolls.
-- **App bar.** Brand, then the owner's chosen modules as text tabs, then lock/actions. Tabs scroll horizontally instead of wrapping, because a selection can be long.
+- **Frame.** `.shell2` is `100dvh`, full width, no margin, radius or shadow. Rail (84px), account sidebar (296px, 240-440, collapsible), main, then the assistant column (380px, 320-520, collapsible); only main scrolls, with a sticky 56px top bar. Below 1024px the rail and sidebar give way to a phone top bar, bottom bar and drawer.
+- **Navigation.** The 84px rail (>= 1024px) or the phone bottom bar carries the owner's chosen modules; the rail and bar are described in the Personal app shell section below. The sticky 56px main top bar holds the sidebar toggle, title and actions.
 - **Module grid.** `--grid-gap: 24px`, modules 200px (short) or 360px (tall), placed by `span` (1/2/3 columns). Adding a module is one `<Module span=…>` line, never a layout rewrite.
-- **Spacing** is a 4px scale (`--sp-1` … `--sp-6`). Panels use 24px padding; the frame uses 20px gutter.
-- **Breakpoints.** The grid collapses 3 → 2 → 1 columns; the nav rail keeps scrolling rather than wrapping at any width.
+- **Spacing** is a 4px scale (`--sp-1` … `--sp-6`). Panels use 24px padding; main uses 32 / 24 / 16px side gutters at >= 1280 / 1024-1279 / < 1024.
+- **Breakpoints.** The grid collapses 3 → 2 → 1 columns. At 1024px the rail and sidebar give way to the phone top bar, bottom bar and drawer.
+
+## Personal app shell
+
+Scope: the personal app (`apps/web`, `/app`). Code: `components/Shell.tsx`, `Rail.tsx`, `BottomBar.tsx`, `ShellDrawer.tsx`, `AccountSidebar.tsx`, `AssistantSheet.tsx`, `styles/shell.css`, `lib/sidebar.ts`, `lib/assistantPanel.ts`, `lib/panelPrefs.ts`. The class prefix is `shell2-*`. It stayed from the migration; the old shell is deleted, so there is no clash.
+
+| Part                       | Value                                                                                   | Rule                                                                                                                                                                                                                                                                                                                                                                     |
+| -------------------------- | --------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Frame                      | `100dvh`, flex, no margin, radius or shadow, `--bg`                                     | Only main scrolls                                                                                                                                                                                                                                                                                                                                                        |
+| Rail (>= 1024)             | 84px, `--surface`, 1px `--line` right                                                   | Icon over a 12px label, 56px tall, 44px min hit area. Active: `--surface-2` fill, 3x20 `--ink` bar on the left edge, `aria-current="page"`. 84px (not 72) so no label truncates                                                                                                                                                                                          |
+| Account sidebar (>= 1024)  | 296px default, 240-440, collapsible to 0                                                | Drag handle on the right edge. Double-click or Enter resets. Main keeps >= 480px, so the width clamps to `viewport - 84 - 480`. One 200ms width transition (`--ease-emphasized`)                                                                                                                                                                                         |
+| Assistant column (>= 1024) | 380px default, 320-520, collapsible to 0, same surface as the sidebar, left hairline    | Last region in source order. Drag handle on the left edge (same keys as the sidebar handle, mirrored). Toggle at the right end of the top bar on every view. `fitPanels` shrinks both panels toward their minimums so main keeps >= 480px; if they still do not fit (viewport < 1124), only the one opened last shows, and the stored `open` of the other is not changed |
+| First visit                | Sidebar open from 1280px, closed at 1024-1279. Assistant open from 1440px, closed below | A stored choice wins                                                                                                                                                                                                                                                                                                                                                     |
+| Main                       | Fluid, no max-width. Sticky 56px top bar: toggle, title, actions                        | Gutters 32 / 24 / 16px at >= 1280 / 1024-1279 / < 1024. Vertical padding 24px                                                                                                                                                                                                                                                                                            |
+| Module grid                | Container queries on `.content-container`, 1200 and 900px                               | Measured on main, not the viewport, so the rail and sidebar do not make 3 columns appear too early                                                                                                                                                                                                                                                                       |
+| Phone (< 1024)             | 48px top bar (menu, brand, Profiel), fixed bottom bar 56px + safe-area inset, drawer    | No rail, no inline sidebar. The 48px bar is the only sticky bar                                                                                                                                                                                                                                                                                                          |
+| Bottom bar                 | Home, Optimalisatie, Rekeningen, Assistent, then "Meer" when other modules are on       | "Assistent" is a button, not a route: it opens the assistant sheet. "Meer" opens the drawer for the remaining modules                                                                                                                                                                                                                                                    |
+| Drawer                     | `min(88vw, 360px)`, left sheet, scrim `--scrim`                                         | Lists all modules, then the account sidebar body. Closes on scrim, Escape and navigation                                                                                                                                                                                                                                                                                 |
+| Assistant sheet (< 1024)   | `min(94vw, 440px)`, right sheet, scrim `--scrim`                                        | Same mechanics as the drawer (`components/focusTrap.ts`): modal, focus trap, Escape and scrim close, page behind `inert`, focus back to the bar item                                                                                                                                                                                                                     |
+
+**Brand and Jouw plan.** The rail brand is a text "LV" monogram (`.shell2-rail-brand`, Geist 600, 15px, `--ink`, `aria-label="LaVega"`); the phone bar keeps the "LaVega" wordmark (`.shell2-phonebar-brand`, same Geist 600). No brand mark in the signed-in shell uses a serif. Jouw plan is in no nav list (registry `nav: false`: rail, bottom bar, drawer, module picker): it is reached from the "Jouw plan" card in Profiel (second card, after Algemeen), and Profiel is the current item while `/app/plan` is open. "Widget toevoegen" shows on Home only and scrolls to the add area. The user-facing name of the first page is Home (view id `overview`, route `/app`).
+
+Storage: `localStorage["lavega.sidebar"]` = `{"open": boolean, "width": number}`. Read in try/catch, width clamped, defaults on anything invalid. Written on pointer-up, not while dragging. `localStorage["lavega.assistantPanel"]` has the same shape and fallbacks; both stores come from `lib/panelPrefs.ts`.
+
+**Assistant column.** `<aside id="shell2-assistant" aria-label="Assistent">`, always mounted so the conversation survives a close; closed means width 0 and `inert`. The panel is not modal at >= 1024 and Escape does not close it. Opening it with the toggle moves focus to the input; closing returns focus to the toggle. The panel remounts when the viewport crosses 1024px, so the conversation resets there (known limit). It reads the vault again before every turn and makes no network call. An empty log shows the intro and three sample chips; "Beslissingen en geheugen" is a closed `<details>` under the log.
+
+**Accessibility.** One `<nav>` in the DOM at a time (`useMediaQuery("(min-width: 1024px)")`, not CSS `display`): rail `nav.shell2-rail` or bottom bar `nav.shell2-bottombar`. Phone handles: `.shell2-phonebar-menu`, `.shell2-drawer`. Skip link "Naar inhoud" is first and moves focus to `#main`. Sidebar is `<aside aria-label>`; the collapsed sidebar is `inert` and `visibility: hidden`. Resize handle is `role="separator"` with ArrowLeft/Right 16px, Shift 64px, Home/End to min/max. Drawer is a modal dialog: focus moves in and returns to the opener, Escape closes, the page behind is `inert`.
+
+**Motion budget.** Everything else is static.
+
+| Element                                           | Motion                                                                     |
+| ------------------------------------------------- | -------------------------------------------------------------------------- |
+| Rail, bar, drawer and sidebar row hover or active | 120ms ease-out, background and colour                                      |
+| Sidebar open or close                             | 200ms width, `--ease-emphasized`. None while dragging                      |
+| Assistant column open or close                    | 200ms width, `--ease-emphasized`, same as the sidebar. None while dragging |
+| Drawer and assistant sheet                        | `transform` 220ms in, 180ms out, `--ease-emphasized`                       |
+| Scrim and `Dialog`                                | `opacity` 150ms                                                            |
+| Card added from the add area                      | `opacity` 150ms                                                            |
+| `prefers-reduced-motion: reduce`                  | All of the above are instant                                               |
+
+## Home
+
+Scope: the first page of the personal app (`views/Overzicht.tsx`, view id `overview`, label Home). Four fixed blocks in a 2 x 2 group (`.home-fixed` in `styles/modules.css`; one column at a container width of 600px or less), then the optional widgets, then the add area:
+
+| Block              | Code                                    | Rule                                                                                                                                                                             |
+| ------------------ | --------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Chart slot         | `components/blocks/ChartSlot.tsx`       | One module (span 1 in the group) with a two-option radio group in its header: Totale positie (default) or Cashflow. Choice in `localStorage["lavega.homeChart"]`. Swapping the body has no motion |
+| Statistieken       | `components/blocks/StatistiekBlock.tsx` | Opens on the outflows donut (`initialView` defaults to `"verdeling"`)                                                                                                            |
+| Je kaarten, Travel | `components/blocks/`                    | Always shown                                                                                                                                                                     |
+| Add area           | `components/HomeAddArea.tsx`            | "Voeg toe aan Home" and up to four dashed boxes, one per widget that is off. The boxes and the hide buttons are the only widget control; "Widget toevoegen" in the top bar scrolls here                                                           |
+
+The group is compact on purpose: at a 1440 x 900 window each block should stay near 340px. What decides the height: the `--home-block-min` and `--home-block-pad` overrides and the tighter `.module-head` in the trailing `@layer utilities` block of `styles/modules.css` (they replace the 200px / 360px module minimums for these four blocks), and the chart heights (`height` prop: Saldo 96, Cashflow 112, Statistieken 132). A lone added widget keeps the old rule: full row at a container of 1200px or less.
+
+A widget is an optional card chosen by the user (registry in `components/moduleRegistry.tsx`): Aandacht, Recente transacties, Betaalagenda, BTW, Facturen, Top uitgaven, Positie per bedrijf. None is on by default. Each carries a hide button in its header (`WidgetHideButton.tsx`): visible on hover and focus, always on touch, no confirm step. After an add, focus goes to the new card's heading; after a hide, to the add area heading. `lib/homeLayout.ts` (`homeSpans`) gives every optional card its span so a row always sums to 3. Profiel has no widget or module picker; a stored module or widget choice is still honoured. Dashed outline plus a "+" mark carry meaning, not colour.
+
+## Profiel
+
+Scope: `views/Profiel.tsx`. Five cards, in this order: Algemeen (account e-mail or sign-in form, first and last name, country and region, language, appearance), Jouw plan (with a secondary "Bekijk wat LaVega weet" link), Importeren, Back-up, Uitloggen; the build stamp is the last line. Back-up shows one line, "Back-up maken" and "Terugzetten"; the restore form opens inline and the portable export and server back-up sit in a closed "Meer opties" `<details>`. Uitloggen is the one sign-out: with an account session it signs out of the account and then locks the vault, otherwise it only locks. Hidden behind flags in `archive.ts` (code kept): own-columns import, Documenten, Cashback corrigeren, net-worth sharing. Vreemde valuta moved to a pop-up on Rekeningen ("Valuta-instellingen", shared `Dialog`).
+
+## Pop-ups
+
+`components/ui/Dialog.tsx` is the one dialog primitive: native `<dialog>` with `showModal()`, always mounted, `min(92vw, 480px)`, title as accessible name, visible close button. Escape, backdrop click and the close button all close it; focus returns to the opener. `components/HomePopups.tsx` shows the intake invitation or the connect list. Rules (`lib/popups.ts`, `nextPopup`):
+
+- Home only, vault open, and nothing blocking: no problem banner, no empty-scope line, no open drawer or sheet. Another dialog is not checked.
+- At most one pop-up per browser session; the mark is written when the dialog opens. Intake wins over connect.
+- A dismissal (Later, Escape, backdrop, close) hides that pop-up for 7 days, stored in `localStorage["lavega.popups"]` per id; the intake id includes the invite kind. The primary action writes no dismissal.
+- It opens one frame after the page paints, never over the vault gate or the wizard.
+
+## Light theme
+
+Scope: the personal app. Selector `:root[data-theme="light"]` in `styles/tokens.css`, right after `:root`. White ground, dark ink, `color-scheme: light`. The brand colour stays: cantaloupe for the one primary action, blue for links and focus, coloured money figures and charts. Every `#rrggbb` token in `:root` is also set in the light block (card faces, swatches and wizard inks repeat their midnight value); `scripts/check-midnight-contrast.mjs` fails otherwise, and `src/contrast-script.test.ts` runs it. Midnight is the default and has no `data-theme` attribute.
+
+| Token                                | Light                                        | Use                                                       |
+| ------------------------------------ | -------------------------------------------- | --------------------------------------------------------- |
+| `--bg` / `--surface` / `--surface-2` | #ffffff / #f3f6f8 / #e8edf0                  | Ground, cards and rail, inset fills and active nav        |
+| `--ink` / `--ink-soft` / `--on-ink`  | #02070a / #1c2830 / #ffffff                  | Text, hover, text on ink. The selected pill is ink on ink |
+| `--muted`                            | #4f5d66                                      | Secondary text, 4.5:1 or better on all three grounds      |
+| `--line`                             | rgba(2,7,10,.1)                              | Hairline                                                  |
+| `--accent` / `--accent-soft`         | #016da3 / rgba(2,151,222,.12)                | Links, active, focus ring                                 |
+| `--cta` / `--on-cta`                 | #fc734d / #02070a                            | The one filled action: cantaloupe pill                    |
+| `--pos` / `--neg` / `--warn`         | #17703f / #b42f25 / #7d5200                  | Darkened for text on white; never the only signal         |
+| `--chart-blue` / `-purple` / `-teal` | #016da3 / #5a45c4 / #0a6f64                  | 3:1 on bg, surface and surface-2                          |
+| `--slice-1..8`, `--slice-rest`       | #3d5ce0 to #6b7983, rest #9aa5ad             | Informational in the script; labels carry meaning         |
+| `--card-face-1..4`, `--card-text`    | same as midnight                             | Bank card faces keep their fixed colours                  |
+| `--scrim` / `--shadow-float`         | rgba(2,7,10,.4) / 0 24px 80px rgba(2,7,10,.16) | Floating layers only                                    |
+
+Behaviour rules (they hold in both themes, because they help colour-blind users):
+
+| Rule                                                                                                                                                                  | Where                                                                                  |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| Signed amounts: sign first, real minus U+2212, zero unsigned ("−€ 5,00", "+€5,00")                                                                                    | `formatSignedEuroIn`, `formatSignedCurrencyIn`, `formatSignedPercentIn` in `format.ts` |
+| Status never by tint alone: warning is a dashed border plus triangle, problem a solid border plus cross, success a solid border plus check                            | `components/ui/StatusLine.tsx`; `Badge` takes `tone`                                   |
+| Dot shapes: positive filled circle, warning hollow ring, negative diamond                                                                                             | `.dot-pos`, `.dot-warn`, `.dot-neg` in `base.css`                                      |
+| Charts with more than 3 series carry a legend with figures or direct labels. Adjacent segments are parted by a 2px `--bg` line                                        | `SpendPie` legend and arc gap, `.proportion-bar span + span` in `base.css`             |
+| Focus ring 2px `--accent`. Shell controls draw it inset (offset -2px); the resize handle uses a grip colour change and a `forced-colors` outline; on the selected pill the ring is `currentColor` | `base.css`; `styles/shell.css`; `blocks.css`                                           |
+| Selected segmented option and active nav item: `--ink` ground, `--on-ink` label (white pill in midnight, dark pill in light)                                           | `.module-tab-on`, `.scope-on`, nav items                                               |
+| The landing page stays midnight in both themes                                                                                                                        | `MidnightScope` in `Root.tsx`; `theme-init.js` applies light on `/app` paths only      |
+
+Persistence: `localStorage["lavega.theme"]` is `"midnight"` or `"light"`. The retired value `"mono"` reads as light and is rewritten on the next save; anything else is midnight. `public/theme-init.js` runs before first paint (the CSP blocks inline script) and sets `data-theme` and `color-scheme`. A `storage` event keeps tabs in step. The switch (Donker / Licht, with a swatch of each ground plus a spot of cantaloupe) is the Weergave part of the Algemeen card in Profiel and is instant, with no colour transition. There is no "follow the system" option. Known gap: input borders at the 12% line are below 3:1 in both themes. Rule for new CSS: no hard-coded colour outside `tokens.css`; add a token in `:root` and in the light block.
 
 ## Components
 
@@ -153,8 +249,8 @@ Delta pills use `--pos-tint` / `--neg-tint`, built with `color-mix` in srgb. Do 
 - **Pill (`components/ui/Pill.tsx`).** Toggle chip, 0.85rem, transparent with a hairline. Active is accent-soft fill, ink text, blue border.
 - **Card.** Surface, 14px radius (`--r-sm`), hairline, no shadow, 24px padding (16px on phones). Modules on the homescreen grid add the height tokens (200px short, 360px tall).
 - **Input.** Surface-2 fill, hairline, 14px radius, 6px 10px padding, 0.9rem. Focus is the blue ring, never a colour change of the border.
-- **Nav item.** Text tab, muted; active is the white pill with midnight text — the same treatment as the marketing site.
-- **Dialog.** Scrim `rgba(2,7,10,0.72)`, surface panel, `--shadow-float`. The only place a shadow is allowed.
+- **Nav item.** Text tab, muted; active is the `--ink` pill with `--on-ink` text (white with midnight text in midnight, dark with white text in light) — the same treatment as the marketing site.
+- **Dialog (`components/ui/Dialog.tsx`).** Native `<dialog>`, `--scrim` backdrop, surface panel, `--shadow-float`, 24px padding. The only place a shadow is allowed. See Pop-ups.
 
 ## Motion
 
@@ -170,7 +266,7 @@ Reduced motion removes all three and shows the end state. Unlit words in the scr
 
 ## Rules
 
-- **Do** keep the two faces to their jobs: serif only at 28px and up at 400, Geist for everything else. A third face is a design change, not a component decision.
+- **Do** keep the app on Geist. The serif belongs to the landing page. A second face in the app is a design change, not a component decision.
 - **Do** put every number in tabular figures, and keep the `tnum` feature on.
 - **Do** separate panels with tone and the hairline.
 - **Do** keep cantaloupe for the one primary action per screen.
@@ -178,5 +274,5 @@ Reduced motion removes all three and shows the end state. Unlit words in the scr
 - **Don't** use green or rose outside gain, loss and problem.
 - **Don't** add a shadow to a resting panel.
 - **Don't** introduce a grey outside the token list; use the hairline or a surface step.
-- **Don't** hard-code a font stack; use `--font-display` / `--font-body`, which carry the metric fallbacks and the system tail for `→` and `✓`.
-- **Don't** put the serif on a number, a label, or anything under 28px.
+- **Don't** hard-code a font stack; use `--font-body`, which carry the metric fallbacks and the system tail for `→` and `✓`.
+- **Don't** put the serif anywhere in the app.

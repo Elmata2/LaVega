@@ -23,6 +23,7 @@ import {
 } from "../forecast-view";
 import TrendChart, { type TrendPoint } from "../components/TrendChart";
 import Card, { CardHeader } from "../components/ui/Card.js";
+import { StatusIcon } from "../components/ui/StatusLine.js";
 
 type ForecastProps = {
   txs: Tx[];
@@ -126,6 +127,8 @@ function ForecastBanner({
     >
       <div>
         <p className={`forecast-banner-title ${titleClass}`}>
+          {state === "shortfall" && <StatusIcon tone="problem" />}
+          {state === "none" && <StatusIcon tone="success" />}
           {state === "shortfall" &&
             f.shortfall &&
             c.shortfallSentence(

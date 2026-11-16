@@ -202,7 +202,7 @@ My calls:
   says so once. A refused fetch skips that run silently; the cron tries again in
   the next hour while the 2-hour retry window lasts, then waits for the next day. "Agent on" requires at least one connected bank.
 - **Server access to sessions**: the cron lists due users through a
-  `SECURITY DEFINER` function (`personal.list_agent_due_users`, migration 0039)
+  `SECURITY DEFINER` function (`personal.list_agent_due_users`, migration 0040)
   and then reads each user's `eb_sessions` inside `withTenant(userId)`. No
   dedicated server role was added; see the ADR 0004 amendment.
 - **Categories and due dates**: for opted-in users the browser mirrors the

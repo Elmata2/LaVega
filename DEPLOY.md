@@ -119,6 +119,10 @@ ledger disagreeing with the directory; removing them is a manual `DELETE` from
   or the request has a verified session. Everything else answers
   `401`, including the routes that spend the Mistral key (`/api/agent/*`), the
   bank flow (`/api/eb/*`) and the encrypted vault backup (`/api/vault/backup`).
+  The two account deletes are guarded the same way: `DELETE /api/account/data` (full
+  GDPR erase, confirm `ERASE`) and `DELETE /api/account/personal-data` (personal reset,
+  confirm `RESET-PERSONAL` plus `expectedOwner` (409 when it is not the session's account); clears bank links, forwarding address, server vault copy and
+  net-worth totals; keeps the login, the vault key, the AI spend ledger and all of Investing).
   Investing keeps a second, later check on top: `investingTenantId` decides
   _which tenant_ the request is served under, and `forwardInvesting` requires that
   tenant explicitly — there is no `LOCAL_TENANT_ID` default for a future call site
@@ -208,7 +212,7 @@ or down. Use this endpoint to diagnose an empty Trading 212 portfolio.
 
 6. Verify:
    - `https://lavega.dev/` → landing
-   - `https://lavega.dev/app` → personal vault (Overzicht)
+   - `https://lavega.dev/app` → personal vault (Home)
    - `https://lavega.dev/app/transactions` → Transacties (same for other modules)
    - `https://lavega.dev/health` → `{"ok":true}`
    - Signed in: `https://lavega.dev/api/investing/health/detail` → real tenant health
@@ -221,7 +225,7 @@ Personal app paths (SPA; server already serves `index.html` for unknown paths):
 | ------------------------- | --------------------------- |
 | `/`                       | Landing (Dutch — canonical) |
 | `/en`                     | Landing (English)           |
-| `/app` or `/app/overview` | Overzicht                   |
+| `/app` or `/app/overview` | Home                        |
 | `/app/transactions`       | Transacties                 |
 | `/app/accounts`           | Rekeningen                  |
 | `/app/forecast`           | Forecast                    |
@@ -428,13 +432,13 @@ cron and WhatsApp answers skip them until they do).
 
 Still open for the owner, in this order:
 
-1. **Preview database.** Migrations 0038 to 0040 (named 0027 to 0029 until the merge with master; the runner will apply them again under the new names, all statements are rerunnable) were applied on 11 Nov 2026 to
+1. **Preview database.** Migrations 0039 to 0041 (named 0027 to 0029 until the merge with master, then 0038 to 0040 on the branch; the runner will apply them again under the new names, all statements are rerunnable) were applied on 11 Nov 2026 to
    a throwaway Neon branch `instinct-preview` (created from `preview`) for
    local preview. Delete that branch after the preview.
-2. **Apply the migrations** `0038_instinct_agent.sql`, `0039_agent_due_users.sql`
-   and `0040_whatsapp_links.sql` on `preview` AND `main` (neither is migrated
+2. **Apply the migrations** `0039_instinct_agent.sql`, `0040_agent_due_users.sql`
+   and `0041_whatsapp_links.sql` on `preview` AND `main` (neither is migrated
    yet). Connect as the schema owner, using a role with `BYPASSRLS` (or
-   superuser): 0039 and 0040 refuse to apply otherwise, because their lookup
+   superuser): 0040 and 0041 refuse to apply otherwise, because their lookup
    functions run as the owner and must see past forced row-level security. If
    the SQL editor says "Failed transaction", run `ROLLBACK;` first. Then
    `pnpm db:migrate:check`.

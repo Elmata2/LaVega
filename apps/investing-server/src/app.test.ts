@@ -953,6 +953,20 @@ test("broker credentials route stores validated IBKR credentials without returni
   });
 });
 
+test("degiro is not a credential broker and cannot reach the credentials route", async () => {
+  const configureBroker = vi.fn(async () => undefined);
+  const investingApp = createApp({ configureBroker });
+  const response = await investingApp.request("/api/brokers/credentials", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ broker: "degiro", token: "someone-elses-token" }),
+  });
+
+  expect(response.status).toBe(400);
+  expect(await response.json()).toEqual({ problems: ["broker must be ibkr or trading212"] });
+  expect(configureBroker).not.toHaveBeenCalled();
+});
+
 test("broker vault routes report status and unlock without returning passphrase", async () => {
   const credentialStatus = vi.fn(async () => "locked" as const);
   const unlockCredentials = vi.fn(async () => true);
@@ -969,6 +983,36 @@ test("broker vault routes report status and unlock without returning passphrase"
   expect(unlockResponse.status).toBe(204);
   expect(await unlockResponse.text()).toBe("");
   expect(unlockCredentials).toHaveBeenCalledWith("vault-passphrase");
+});
+
+test("DeGiro import route is 503 when the server has no import handler", async () => {
+  const response = await createApp().request("/api/investing/brokers/degiro/import", {
+    method: "POST",
+  });
+  expect(response.status).toBe(503);
+  expect(await response.json()).toEqual({
+    problems: ["DeGiro import is not available in this server mode"],
+  });
+});
+
+test("DeGiro import route forwards the raw request", async () => {
+  const deGiroImportRequest = vi.fn(
+    async (_request: Request) =>
+      new Response(JSON.stringify({ mode: "preview", files: [] }), { status: 200 }),
+  );
+  const investingApp = createApp({ deGiroImportRequest });
+
+  const response = await investingApp.request("/api/investing/brokers/degiro/import?mode=preview", {
+    method: "POST",
+    body: "not-multipart",
+  });
+
+  expect(response.status).toBe(200);
+  expect(deGiroImportRequest).toHaveBeenCalledOnce();
+  const forwarded = deGiroImportRequest.mock.calls[0]![0];
+  expect(forwarded).toBeInstanceOf(Request);
+  expect(new URL(forwarded.url).pathname).toBe("/api/investing/brokers/degiro/import");
+  expect(new URL(forwarded.url).search).toBe("?mode=preview");
 });
 
 test("broker vault unlock rejects wrong passphrase without leaking details", async () => {
@@ -2497,6 +2541,207 @@ test.each([
     expect(coverage?.listingMissingSince).toBeUndefined();
   },
 );
+
+test("a DeGiro ISIN-only holding resolves through OpenFIGI and keeps the ISIN as its price symbol", async () => {
+  const urls: string[] = [];
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      urls.push(url);
+      if (url.includes("openfigi"))
+        return new Response(JSON.stringify([{ data: [{ ticker: "VUSA", exchCode: "NA" }] }]));
+      if (url === "https://fc.yahoo.com/")
+        return new Response("", { headers: { "set-cookie": "A=B; Path=/" } });
+      if (url.includes("getcrumb")) return new Response("crumb");
+      if (url.includes("/search")) return new Response(JSON.stringify({ quotes: [] }));
+      return new Response(
+        JSON.stringify({
+          chart: {
+            result: [
+              {
+                meta: { currency: "EUR" },
+                timestamp: [1_700_000_000],
+                indicators: { quote: [{ close: [100] }] },
+              },
+            ],
+          },
+        }),
+      );
+    }),
+  );
+  const store = createInMemorySharedPriceStore();
+  const isin = "XS00PF000003";
+  const key = priceInstrumentKey({ symbol: isin, isin, currency: "EUR" });
+  const investingApp = createApp({
+    store,
+    priceSyncDeadline: () => Date.now() + 3_600_000,
+    priceSyncTargets: () => [
+      {
+        instrumentKey: key,
+        kind: "current",
+        symbol: isin,
+        ticker: isin,
+        exchange: "UNKNOWN",
+        currency: "EUR",
+        isin,
+        /* DeGiro's execution venue is the only listing hint it prints. */
+        venue: "XAMS",
+        noTicker: true,
+        backfillFrom: "2026-01-01",
+      },
+    ],
+    marketDataConsentStore: acceptedConsentStore(),
+  });
+  try {
+    const response = await investingApp.request("/api/prices/sync", { method: "POST" });
+    const progress = (await response.json()) as { status: string; problems: string[] };
+    expect(progress.status).toBe("completed");
+    expect(progress.problems).toEqual([]);
+  } finally {
+    vi.unstubAllGlobals();
+  }
+
+  /* The listing OpenFIGI resolved is what Yahoo was asked for; the broker's
+   * identity (the ISIN) stays the series symbol. */
+  expect(urls.some((url) => url.includes("/chart/") && url.includes("VUSA"))).toBe(true);
+  const bars = await store.getRange({ key });
+  expect(bars.length).toBeGreaterThan(0);
+  await expect(store.getCoverage({ key })).resolves.toMatchObject({ listing: "VUSA" });
+});
+
+test("an ISIN-only holding with several listings and no venue hint names the one it used", async () => {
+  const isin = "XS00PF000003";
+  const provider = {
+    sourceKey: "yahoo",
+    priority: 10,
+    get: vi.fn().mockResolvedValue({
+      bars: [{ symbol: "VUSA", date: "2026-01-02", close: 100, currency: "EUR", split: 1 }],
+      problems: [],
+      listing: "VUSA",
+    }),
+  };
+  const identifierProvider = {
+    sourceKey: "openfigi",
+    priority: 10,
+    get: vi.fn().mockResolvedValue({
+      match: { isin, ticker: "VUSA", exchange: "NA" },
+      problems: [],
+      resolution: {
+        tier: "provider",
+        confidence: null,
+        candidates: [
+          { ticker: "VUSA", exchange: "NA" },
+          { ticker: "VUSA", exchange: "GY" },
+        ],
+      },
+    }),
+  };
+  const investingApp = createApp({
+    provider: provider as never,
+    identifierProvider: identifierProvider as never,
+    priceSyncTargets: () => [
+      {
+        instrumentKey: priceInstrumentKey({ symbol: isin, isin, currency: "EUR" }),
+        kind: "current",
+        symbol: isin,
+        ticker: isin,
+        exchange: "UNKNOWN",
+        currency: "EUR",
+        isin,
+        noTicker: true,
+        backfillFrom: "2026-01-01",
+      },
+    ],
+    marketDataConsentStore: acceptedConsentStore(),
+  });
+  const response = await investingApp.request("/api/prices/sync", { method: "POST" });
+  const progress = (await response.json()) as { status: string; problems: string[] };
+
+  expect(progress.status).toBe("problem");
+  expect(progress.problems).toEqual([
+    `${isin}: 2 listings for this ISIN and no venue hint — used VUSA (NA)`,
+  ]);
+  expect(provider.get).toHaveBeenCalledWith(
+    expect.objectContaining({ symbol: isin, ticker: "VUSA", exchange: "NA" }),
+  );
+});
+
+test("an OpenFIGI rate limit is retried on the next price run, not stored as a permanent miss", async () => {
+  const isin = "US0378331005";
+  let openFigiLimited = true;
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("openfigi")) {
+        if (openFigiLimited) return new Response("", { status: 429 });
+        return new Response(JSON.stringify([{ data: [{ ticker: "AAPL", exchCode: "UW" }] }]));
+      }
+      if (url === "https://fc.yahoo.com/")
+        return new Response("", { headers: { "set-cookie": "A=B; Path=/" } });
+      if (url.includes("getcrumb")) return new Response("crumb");
+      if (url.includes("/search")) return new Response(JSON.stringify({ quotes: [] }));
+      if (openFigiLimited)
+        return new Response(
+          JSON.stringify({ chart: { result: null, error: { code: "Not Found" } } }),
+          { status: 404 },
+        );
+      return new Response(
+        JSON.stringify({
+          chart: {
+            result: [
+              {
+                meta: { currency: "USD" },
+                timestamp: [1_700_000_000],
+                indicators: { quote: [{ close: [190] }] },
+              },
+            ],
+          },
+        }),
+      );
+    }),
+  );
+  const store = createInMemorySharedPriceStore();
+  const isinOnly = {
+    kind: "closed" as const,
+    symbol: isin,
+    ticker: isin,
+    exchange: "UNKNOWN",
+    currency: "USD",
+    isin,
+    noTicker: true,
+    backfillFrom: "2026-01-01",
+  };
+  const investingApp = createApp({
+    store,
+    priceSyncDeadline: () => Date.now() + 3_600_000,
+    priceSyncTargets: () => [
+      { ...isinOnly, instrumentKey: priceInstrumentKey({ symbol: isin, isin, currency: "USD" }) },
+    ],
+    marketDataConsentStore: acceptedConsentStore(),
+  });
+  const key = priceInstrumentKey({ symbol: isin, isin, currency: "USD" });
+  try {
+    const first = (await (
+      await investingApp.request("/api/prices/sync", { method: "POST" })
+    ).json()) as { status: string; problems: string[] };
+    expect(first.status).toBe("problem");
+    /* A rate-limited resolver says nothing final about the listing. */
+    await expect(store.getCoverage({ key })).resolves.toBeNull();
+
+    openFigiLimited = false;
+    const second = (await (
+      await investingApp.request("/api/prices/sync", { method: "POST" })
+    ).json()) as { status: string; problems: string[] };
+    expect(second.status).toBe("completed");
+  } finally {
+    vi.unstubAllGlobals();
+  }
+
+  const bars = await store.getRange({ key });
+  expect(bars.length).toBeGreaterThan(0);
+});
 
 test("the identifier route answers 503 with problems when the budget has no slot", async () => {
   const identifierProvider = {

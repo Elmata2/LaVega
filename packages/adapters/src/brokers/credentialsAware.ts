@@ -1,4 +1,4 @@
-import { LOCAL_TENANT_ID, type CredentialStore } from "@lavega/core";
+import { LOCAL_TENANT_ID, type CredentialStore, type ScheduledBroker } from "@lavega/core";
 import { allSections, type BrokerAccessAdapter } from "./BrokerAccessAdapter.js";
 import { createIbkrFlexAdapter } from "./ibkr/flexAdapter.js";
 import { createTrading212Adapter, type Trading212DiagnosticEvent } from "./trading212/index.js";
@@ -6,8 +6,6 @@ import {
   createMemoryPartnerBudgetClient,
   type PartnerBudgetClient,
 } from "../partnerBudget/PartnerBudget.js";
-
-export type ScheduledBrokerName = "ibkr" | "trading212";
 
 export type CredentialsAwareBrokerAdaptersOptions = {
   credentials: CredentialStore;
@@ -32,7 +30,7 @@ function defaultEnvironment(name: string): string | undefined {
  *  credentials, so these are the wording of record for direct callers. */
 export function createCredentialsAwareBrokerAdapters(
   options: CredentialsAwareBrokerAdaptersOptions,
-): { broker: ScheduledBrokerName; adapter: BrokerAccessAdapter }[] {
+): { broker: ScheduledBroker; adapter: BrokerAccessAdapter }[] {
   const tenantId = options.tenantId ?? LOCAL_TENANT_ID;
   const environment = options.environment ?? defaultEnvironment;
   const partnerBudget = options.partnerBudget ?? createMemoryPartnerBudgetClient();

@@ -1,5 +1,6 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { once } from "node:events";
+import { Readable } from "node:stream";
 import { serverFetch } from "../apps/server/src/index.js";
 import { withRuntimeDatabase } from "../apps/investing-server/src/credentialStore.js";
 
@@ -44,6 +45,22 @@ async function writeBody(
   }
 }
 
+/* Vercel's Node launcher parses JSON and URL-encoded bodies into `req.body`.
+ * It does not parse multipart, so that stream is still intact and must be
+ * forwarded as bytes. Rebuilding it from `req.body` sent an empty body with a
+ * multipart content type, and `request.formData()` then refused it. */
+function isMultipart(contentType: string | undefined): boolean {
+  return (contentType ?? "").split(";")[0]?.trim().toLowerCase() === "multipart/form-data";
+}
+
+/* A launcher that did buffer the upload exposes the raw bytes; one that left
+ * the stream alone hands over the request itself. Both are forwarded untouched. */
+function multipartBody(req: VercelRequest): BodyInit {
+  const raw =
+    Buffer.isBuffer(req.body) || req.body instanceof Uint8Array ? req.body : Readable.toWeb(req);
+  return raw as unknown as BodyInit;
+}
+
 export default async function handler(req: VercelRequest, res: ServerResponse) {
   const abort = new AbortController();
   const onClose = () => {
@@ -52,19 +69,26 @@ export default async function handler(req: VercelRequest, res: ServerResponse) {
   res.on("close", onClose);
   try {
     await withRuntimeDatabase(async () => {
-      const response = await serverFetch(
-        new Request(requestUrl(req), {
-          method: req.method,
-          headers: new Headers(
-            Object.entries(req.headers).flatMap<[string, string]>(([key, value]) =>
-              value == null ? [] : [[key, Array.isArray(value) ? value.join(",") : value]],
-            ),
+      const method = req.method ?? "GET";
+      const multipart = isMultipart(req.headers["content-type"]);
+      const body =
+        method === "GET" || method === "HEAD"
+          ? undefined
+          : multipart
+            ? multipartBody(req)
+            : JSON.stringify(req.body);
+      const init: RequestInit & { duplex?: "half" } = {
+        method,
+        headers: new Headers(
+          Object.entries(req.headers).flatMap<[string, string]>(([key, value]) =>
+            value == null ? [] : [[key, Array.isArray(value) ? value.join(",") : value]],
           ),
-          body:
-            req.method === "GET" || req.method === "HEAD" ? undefined : JSON.stringify(req.body),
-          signal: abort.signal,
-        }),
-      );
+        ),
+        ...(body === undefined ? {} : { body }),
+        ...(multipart ? { duplex: "half" as const } : {}),
+        signal: abort.signal,
+      };
+      const response = await serverFetch(new Request(requestUrl(req), init));
 
       res.statusCode = response.status;
       response.headers.forEach((value, key) => res.setHeader(key, value));

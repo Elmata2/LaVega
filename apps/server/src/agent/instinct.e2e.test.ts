@@ -4,6 +4,7 @@ import {
   createAgentRepository,
   decryptBlob,
   eraseUserData,
+  erasePersonalData,
   userForPhone,
   phoneHash,
   listAgentDueUsers,
@@ -302,7 +303,11 @@ function app(): Hono {
     now: () => new Date(NOW),
     assertConfig: () => undefined,
   });
-  registerAccountRoutes(hono, { tenantId: tenant, erase: (t) => eraseUserData(db, t) });
+  registerAccountRoutes(hono, {
+    tenantId: tenant,
+    erase: (t) => eraseUserData(db, t),
+    resetPersonal: (t) => erasePersonalData(db, t),
+  });
   const hooks = whatsappWebhookDependencies(() => db);
   hooks.unlinked = (inbound) =>
     handleUnlinked(db, inbound, { client: waClient(), limiter: createRateLimiter(50, 60_000) });

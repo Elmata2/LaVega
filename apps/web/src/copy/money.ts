@@ -110,6 +110,10 @@ type RekeningenCopy = {
   nogGeenTransactiesGeimporteerd: string;
   verwijder: string;
   geenRekeningen: string;
+  nietGekoppeldHeading: string;
+  nietGekoppeldCredit: string;
+  nietGekoppeldDebit: string;
+  nietGekoppeldKoppelen: string;
   verbergen: string;
   rekeningTonen: string;
   rekeningenTonen: string;
@@ -492,6 +496,9 @@ type KaartenCopy = {
   saldoLabel: string;
   onbekend: string;
   cardAria: (bank: string, type: string) => string;
+  nietGekoppeld: string;
+  koppelen: string;
+  placeholderAria: (name: string) => string;
 };
 
 type FacturenCopy = {
@@ -545,6 +552,8 @@ type BankLinkCopy = {
   ververshHint: string;
   laden: string;
   koppelBankEnableBanking: string;
+  /** The intake's neutral label for the same action (no vendor name). */
+  koppelJeBank: string;
   geenBankenBeschikbaar: string;
   doorsturen: string;
   autoriseer: string;
@@ -677,6 +686,10 @@ const nl: MoneyCopy = {
     nogGeenTransactiesGeimporteerd: "Nog geen transacties geïmporteerd",
     verwijder: "Verwijder",
     geenRekeningen: "Nog geen rekeningen — importeer eerst een bestand.",
+    nietGekoppeldHeading: "Nog niet gekoppeld",
+    nietGekoppeldCredit: "Creditcard",
+    nietGekoppeldDebit: "Betaalpas",
+    nietGekoppeldKoppelen: "Koppelen",
     verbergen: "Verbergen",
     rekeningTonen: "Rekening tonen",
     rekeningenTonen: "Rekeningen tonen",
@@ -699,7 +712,7 @@ const nl: MoneyCopy = {
     transactieWoord: (n) => (n === 1 ? "transactie" : "transacties"),
     rekeningenBijBankAria: (bankLabel) => `Rekeningen bij ${bankLabel}`,
     zonderBank: "Zonder bank",
-    vanKnownVanTotal: (known, total) => `van ${known} van ${total}`,
+    vanKnownVanTotal: (known, total) => `${known} van ${total} bekend`,
     transactiesBekijken: (n) => `${n} ${n === 1 ? "transactie" : "transacties"} bekijken`,
     deleteQuestion: (naam, txCount) =>
       txCount === 0
@@ -1205,6 +1218,9 @@ const nl: MoneyCopy = {
     saldoLabel: "Saldo",
     onbekend: "onbekend",
     cardAria: (bank, type) => `${bank} · ${type}`,
+    nietGekoppeld: "Nog niet gekoppeld",
+    koppelen: "Koppelen",
+    placeholderAria: (name) => `${name}, nog niet gekoppeld`,
   },
   facturen: {
     facturenArrow: "Facturen →",
@@ -1278,6 +1294,7 @@ const nl: MoneyCopy = {
     ververshHint: "Haalt saldo en transacties opnieuw op bij elke gekoppelde bank.",
     laden: "Laden…",
     koppelBankEnableBanking: "Koppel bank (Enable Banking)",
+    koppelJeBank: "Koppel je bank",
     geenBankenBeschikbaar: "Geen banken beschikbaar.",
     doorsturen: "Doorsturen…",
     autoriseer: "Autoriseer",
@@ -1381,6 +1398,10 @@ const en: MoneyCopy = {
     nogGeenTransactiesGeimporteerd: "No transactions imported yet",
     verwijder: "Delete",
     geenRekeningen: "No accounts yet — import a file first.",
+    nietGekoppeldHeading: "Not connected yet",
+    nietGekoppeldCredit: "Credit card",
+    nietGekoppeldDebit: "Debit card",
+    nietGekoppeldKoppelen: "Connect",
     verbergen: "Hide",
     rekeningTonen: "Show account",
     rekeningenTonen: "Show accounts",
@@ -1906,6 +1927,9 @@ const en: MoneyCopy = {
     saldoLabel: "Balance",
     onbekend: "unknown",
     cardAria: (bank, type) => `${bank} · ${type}`,
+    nietGekoppeld: "Not connected yet",
+    koppelen: "Connect",
+    placeholderAria: (name) => `${name}, not connected yet`,
   },
   facturen: {
     facturenArrow: "Invoices →",
@@ -1974,6 +1998,7 @@ const en: MoneyCopy = {
     ververshHint: "Fetches balances and transactions again from every connected bank.",
     laden: "Loading…",
     koppelBankEnableBanking: "Link bank (Enable Banking)",
+    koppelJeBank: "Connect your bank",
     geenBankenBeschikbaar: "No banks available.",
     doorsturen: "Redirecting…",
     autoriseer: "Authorise",

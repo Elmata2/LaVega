@@ -17,6 +17,7 @@ export type ScreenId =
   | "banks"
   | "debit-cards"
   | "cards"
+  | "card-balances"
   | "card-repayment"
   | "spend-mix"
   | "foreign-spend"
@@ -36,7 +37,7 @@ export type ScreenId =
   | "summary"
   | "upload";
 
-export type Section = "about" | "goals" | "risk";
+export type Section = "about" | "goals" | "risk" | "finish";
 
 /** The wizard owns the goal and the debt with these ids. */
 export const WIZARD_GOAL = "wizard-goal";
@@ -59,6 +60,7 @@ const ABOUT: readonly ScreenId[] = [
   "debit-cards",
   "cards",
   "card-repayment",
+  "card-balances",
   "spend-mix",
   "foreign-spend",
 ];
@@ -106,7 +108,11 @@ export function screensFor(p: AdvisorProfile): ScreenId[] {
       !(id === "card-repayment" && (!hasStatedCard || p.intake.noCards === true)) &&
       !(id === "vat" && !isSelfEmployed(p)) &&
       !(id === "child-years" && noChildren) &&
-      !(id === "debt-details" && p.intake.noUserDebts === true),
+      !(id === "debt-details" && p.intake.noUserDebts === true) &&
+      !(
+        id === "card-balances" &&
+        (p.intake.noCards === true || (p.statedCards?.value.length ?? 0) === 0)
+      ),
   );
 }
 
@@ -146,6 +152,10 @@ export function isAnswered(p: AdvisorProfile, id: ScreenId): boolean {
       return p.statedCards !== undefined || p.intake.noCards === true;
     case "card-repayment":
       return p.cardRepayment !== undefined;
+    case "card-balances": {
+      const ids = p.intake.noCards === true ? [] : (p.statedCards?.value ?? []);
+      return ids.every((id) => p.cardBalances?.value.some((b) => b.cardId === id) === true);
+    }
     case "spend-mix":
       return p.spendMix !== undefined;
     case "foreign-spend":
@@ -185,6 +195,7 @@ export function isAnswered(p: AdvisorProfile, id: ScreenId): boolean {
 export function sectionOf(id: ScreenId): Section {
   if (ABOUT.includes(id) || ROUND2.includes(id)) return "about";
   if (GOALS.includes(id)) return "goals";
+  if (id === "upload") return "finish";
   return "risk";
 }
 
@@ -272,7 +283,7 @@ export function answerDebts(p: AdvisorProfile, has: boolean): AdvisorProfile {
  *  skips the cards screen. Ja clears both an empty list and the Nee flag. */
 export function answerCards(p: AdvisorProfile, has: boolean, asOf: string): AdvisorProfile {
   if (!has) {
-    const { cardRepayment: _dropped, ...kept } = p;
+    const { cardBalances: _balances, cardRepayment: _dropped, ...kept } = p;
     return new AdvisorProfile({
       ...kept,
       statedCards: { value: [], source: "stated", at: asOf },

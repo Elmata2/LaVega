@@ -54,6 +54,10 @@ memory-propose call, advice guard, explainer links). Those stay carried.
 7. **Mounting.** The panel is one card at the top of Overzicht. `Overzicht` is
    not owned by the concurrent document-vault issue; App passes the existing
    storage instance through one additive prop line.
+   Amendment 14 Nov 2026: the panel no longer sits on Overzicht (now Home). It lives in the
+   shell frame as a right-hand column (a sheet below 1024px), on every view, and reads the
+   vault again before every turn. Still no network call. See
+   `2026-11-13-home-assistant-popups-design.md`.
 
 ## Approval lifecycle
 

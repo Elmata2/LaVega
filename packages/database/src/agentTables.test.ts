@@ -105,10 +105,10 @@ test.each(AGENT_TABLES)("%s has forced RLS and a runtime grant", async (table) =
   );
 });
 
-test("applying 0038 twice changes nothing and keeps the UPDATE revoke", async () => {
+test("applying 0039 twice changes nothing and keeps the UPDATE revoke", async () => {
   await pglite.exec("RESET ROLE;");
   const sql = readFileSync(
-    new URL("../../../db/migrations/0038_instinct_agent.sql", import.meta.url),
+    new URL("../../../db/migrations/0039_instinct_agent.sql", import.meta.url),
     "utf8",
   );
   await pglite.exec(sql);
@@ -216,7 +216,7 @@ test("list_agent_due_users is SECURITY DEFINER with a pinned search_path and no 
   expect(runtime.rows[0]!.ok).toBe(true);
 });
 
-/* WhatsApp links (0040). `RESET ROLE` is the superuser, used for what a test must
+/* WhatsApp links (0041). `RESET ROLE` is the superuser, used for what a test must
  * see past FORCE RLS or to age a code. */
 const PHONE_A = "+31612345678";
 const PHONE_B = "+31687654321";
@@ -419,7 +419,7 @@ test("phoneHash and linkCodeHash fail closed without a valid AGENT_PHONE_HMAC_KE
   }
 });
 
-/* Durable brute-force throttle on link codes (0040): the attempts table lives in
+/* Durable brute-force throttle on link codes (0041): the attempts table lives in
  * Postgres, so a cold start or a second instance cannot reset it. */
 const attempts = () =>
   asSuperuser<{ phone_hash: string }>("SELECT phone_hash FROM personal.agent_link_attempts");
@@ -554,9 +554,9 @@ test("a code whose user has no settings row at all does not link (W1)", async ()
 });
 
 const migration0040 = () =>
-  readFileSync(new URL("../../../db/migrations/0040_whatsapp_links.sql", import.meta.url), "utf8");
+  readFileSync(new URL("../../../db/migrations/0041_whatsapp_links.sql", import.meta.url), "utf8");
 
-test("0040 over an early-draft shape adds ai_consent_at to both tables and the functions work (W3)", async () => {
+test("0041 over an early-draft shape adds ai_consent_at to both tables and the functions work (W3)", async () => {
   await pglite.exec("RESET ROLE;");
   await pglite.exec(`
     DELETE FROM personal.agent_link_codes;

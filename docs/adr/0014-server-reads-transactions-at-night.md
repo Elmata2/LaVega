@@ -20,7 +20,7 @@ is not an agent.
 Choice A. Only for users who opted in:
 
 1. Once an hour, a cron (triggered at minute 7 by the GitHub workflow `.github/workflows/instinct-cron.yml`, because the Vercel plan allows daily crons only) lists the users whose send time has come (`personal.list_agent_due_users`,
-   migration 0039). A user is due when the Amsterdam hour is the user's send hour (default 08:00)
+   migration 0040). A user is due when the Amsterdam hour is the user's send hour (default 08:00)
    or up to `RETRY_HOURS` (2) later, counted round the clock so the window can pass midnight, and
    the user's day claim is empty or earlier than the "message day". The message day (the Amsterdam
    date on which the send hour fell) only decides who is due. The run itself uses the real
@@ -82,7 +82,7 @@ Choice A. Only for users who opted in:
      inbound message): no send, the link and any pending code are deleted, and one feed notice is
      written. Other channels are unaffected;
    - the user's email address for the email channel, sealed.
-6. `personal.agent_link_attempts` (migration 0040) records failed link-code attempts (5 per phone HMAC per 15 minutes; there is no global cap). It has no
+6. `personal.agent_link_attempts` (migration 0041) records failed link-code attempts (5 per phone HMAC per 15 minutes; there is no global cap). It has no
    user id (the sender is unknown), holds the phone HMAC and a timestamp, and has no grant for the
    runtime role. It is not part of account erasure because it holds no user id. Rows older than
    15 minutes are purged by `agent_consume_link_code` on every call and by
@@ -117,8 +117,8 @@ the user can see and delete in the feed.
   opt in are unchanged.
 - The privacy statement must describe the nightly read, and account erasure must cover every new
   store: the seven agent tables with a user id (`agent_settings`, `agent_state`, `agent_mirror`,
-  `agent_push_subscriptions`, `agent_events` from migration 0038; `agent_whatsapp`,
-  `agent_link_codes` from 0040). `agent_link_attempts` holds no user id and is purged after 15
+  `agent_push_subscriptions`, `agent_events` from migration 0039; `agent_whatsapp`,
+  `agent_link_codes` from 0041). `agent_link_attempts` holds no user id and is purged after 15
   minutes. `ai_consent_at` on two of them is a plain timestamp.
 - Turning the agent off deletes all server-side agent state in one step.
 - Consent to the bank is requested at the bank's maximum validity, so the nightly read lasts as

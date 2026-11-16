@@ -954,3 +954,10 @@ test("switches to English copy when the locale cookie says en, including a VAT n
     ),
   ).toBe(en.vat.notes["stelsel-onbekend"]({ total: 3, missing: 2 }));
 });
+
+test("the VAT figure is signed by direction: a refund is + and an amount owed is a real minus", () => {
+  const refund = render([tx("t1", "2026-08-01", -5_000)]);
+  expect(refund).toMatch(/text-pos[^>]*>\+€\s/);
+  const owed = render([tx("t2", "2026-08-01", 5_000)]);
+  expect(owed).toMatch(/text-neg[^>]*>\u2212€\s/);
+});

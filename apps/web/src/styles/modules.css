@@ -43,6 +43,27 @@
  * declarations below are gone because a Tailwind class carries its own
  * declaration, not because the layout changed. */
 
+  /* ---------- Home: the four fixed blocks, two per row ----------
+ * Chart slot, Statistieken, Kaarten and Travel sit in this wrapper (Overzicht),
+ * which is ONE item of .home-grid and takes its full row. Inside it the blocks
+ * pair up in a 2 x 2 grid down to a container of 784px (columns of at least 380px),
+ * one column at <= 783px.
+ * Their own span/height classes are overridden in the utilities layer at the end
+ * of this file; that block also holds the height rules to tune. */
+  .home-fixed {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--grid-gap);
+    align-items: stretch;
+    min-width: 0;
+  }
+  @container (max-width: 783px) {
+    .home-fixed {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+
   /* ---------- Module card ---------- */
 
   /* Flatter than it was: the reference announces a block with a title and a rule
@@ -170,23 +191,150 @@
     font-size: 0.85rem;
   }
 
-  /* ---------- Breakpoints: the grid collapses, spans clamp to full width ---------- */
+  /* ---------- Home add area and the widget hide button ----------
+ * Dashed hairline boxes: the dashed outline and the "+" mark carry "this is not
+ * here yet", so it reads without colour too. Motion budget: the boxes
+ * ease background and border colour in 120ms; a newly added card fades in over
+ * 150ms; nothing else moves. Reduced motion: instant. The inner grid columns
+ * (4 / 2 at a container <= 900px / 1 at <= 520px) are the .home-add-grid rules
+ * below. Plain CSS, in this order on purpose: both container rules match a
+ * narrow container, and the later one (520) must win. Tailwind arbitrary
+ * container variants are emitted narrowest first and got this wrong. */
+  .home-add {
+    grid-column: 1 / -1;
+    min-width: 0;
+  }
+  .home-add-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--sp-3);
+    margin-bottom: var(--sp-3);
+  }
+  .home-add-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: var(--sp-3);
+  }
+  @container (max-width: 900px) {
+    .home-add-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+  @container (max-width: 520px) {
+    .home-add-grid {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+  .home-add-box {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--sp-1);
+    min-height: 44px;
+    min-width: 0;
+    padding: var(--sp-4);
+    text-align: left;
+    font: inherit;
+    color: var(--ink);
+    background: transparent;
+    border: 1px dashed var(--line);
+    border-radius: var(--r-sm);
+    cursor: pointer;
+    transition:
+      background-color 120ms ease-out,
+      border-color 120ms ease-out;
+  }
+  .home-add-box:hover,
+  .home-add-box:focus-visible {
+    background: var(--surface-2);
+    border-color: var(--muted);
+  }
+  .home-add-plus {
+    font-family: var(--font-mono);
+    font-size: 1.2rem;
+    line-height: 1;
+    color: var(--muted);
+  }
+  .home-add-label {
+    font-weight: 500;
+  }
+  .home-add-what {
+    font-size: 0.8rem;
+    color: var(--muted);
+  }
 
-  @media (max-width: 1200px) {
+  /* The hide button sits in the card header. 44px hit area, pulled back with
+ * negative margin so the header keeps its height. Hidden until the card is
+ * hovered or holds focus, but always shown on a device that cannot hover. */
+  .widget-hide {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    margin: -6px;
+    padding: 0;
+    background: none;
+    border: 0;
+    border-radius: 50%;
+    color: var(--muted);
+    cursor: pointer;
+  }
+  .widget-hide:hover {
+    color: var(--ink);
+  }
+  @media (hover: hover) {
+    .widget-hide {
+      opacity: 0;
+    }
+    .module:hover .widget-hide,
+    .module:focus-within .widget-hide {
+      opacity: 1;
+    }
+  }
+
+  @keyframes module-added {
+    from {
+      opacity: 0;
+    }
+  }
+  .module[data-just-added] {
+    animation: module-added 150ms ease-out;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .home-add-box {
+      transition: none;
+    }
+    .module[data-just-added] {
+      animation: none;
+    }
+  }
+
+  /* ---------- Breakpoints: the grid collapses, spans clamp to full width ----------
+ * Container queries on .content-container, the wrapper inside the scrolling
+ * main, so they follow what is left beside the rail and the sidebar rather than
+ * the viewport. module-grid.ts explains the numbers (1200 / 900). */
+
+  .content-container {
+    container-type: inline-size;
+  }
+
+  @container (max-width: 1200px) {
     .module-grid {
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }
     /* span-2/span-3 clamping to the full row at this width is now the
-   * `[@media(max-width:1200px)]:col-span-full` variant on module-span-2 in
+   * `[@container(max-width:1200px)]:col-span-full` variant on module-span-2 in
    * module-grid.ts (span-3 is always the full row and carries no variant). */
   }
 
-  @media (max-width: 900px) {
+  @container (max-width: 900px) {
     .module-grid {
       grid-template-columns: minmax(0, 1fr);
     }
     /* span-1/2/3 clamping to the full row, and module-tall collapsing to the
-   * short height, at this width are now the `[@media(max-width:900px)]:…`
+   * short height, at this width are now the `[@container(max-width:900px)]:…`
    * variants in module-grid.ts's SPAN_CLASS / HEIGHT_CLASS. */
     .module {
       padding: var(--sp-4);
@@ -206,6 +354,7 @@
      * with it; at `flex: none` a full-width search plus a link ran past the card. */
     .module-controls {
       flex: 1 1 auto;
+      flex-wrap: wrap;
       min-width: 0;
       justify-content: flex-end;
     }
@@ -217,9 +366,10 @@
  * opmaak uit. Twee verschijningsvormen op één element: `.toonmeer-regel` is de
  * volle regel onder een blok, `.toonmeer-info` het kleine ⓘ naast een kop.
  *
- * GEEN @media-blok in deze sectie, en dat is geen luiheid. module-grid.test.ts
- * leest dit stylesheet en zet elk @media-blok in een Map met de breedte als
- * sleutel; een tweede `@media (max-width: 900px)` overschrijft daar het
+ * GEEN @media- of @container-blok in deze sectie, en dat is geen luiheid.
+ * test-support/resolveStyle.ts (gebruikt door module-grid.test.tsx) leest dit
+ * stylesheet en zet elk @media- en @container-blok in een Map met de breedte als
+ * sleutel; een tweede `@container (max-width: 900px)` overschrijft daar het
  * bestaande blok en laat de gridtests slagen op de verkeerde regels. Het
  * onderdeel is vloeiend, dus het heeft er ook geen nodig — heb je er tóch een
  * nodig, kies dan een breedte die hierboven nog niet voorkomt (nu: 1200, 900).
@@ -417,6 +567,90 @@
       opacity: 0;
     }
   }
+  .ui-dialog {
+    position: relative;
+    padding: 0;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--r);
+    box-shadow: var(--shadow-float);
+    width: min(92vw, 480px);
+    max-height: calc(100vh - 32px);
+    overflow-y: auto;
+    font-family: var(--font-body);
+    color: var(--ink);
+    opacity: 0;
+    transition:
+      opacity 150ms var(--ease-emphasized),
+      overlay 150ms allow-discrete,
+      display 150ms allow-discrete;
+  }
+  /* Content is unmounted on close, so an exit fade would show an empty dialog. */
+  .ui-dialog:not([open]) {
+    transition: none;
+  }
+  .ui-dialog[open] {
+    opacity: 1;
+  }
+  @starting-style {
+    .ui-dialog[open] {
+      opacity: 0;
+    }
+  }
+  .ui-dialog::backdrop {
+    background: var(--scrim);
+    opacity: 0;
+    transition: opacity 150ms var(--ease-emphasized);
+  }
+  .ui-dialog[open]::backdrop {
+    opacity: 1;
+  }
+  @starting-style {
+    .ui-dialog[open]::backdrop {
+      opacity: 0;
+    }
+  }
+  .ui-dialog-body {
+    padding: 24px;
+  }
+  .ui-dialog-title {
+    margin: 0 32px 12px 0;
+    font-size: 1.15rem;
+  }
+  .ui-dialog-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 20px;
+  }
+  .ui-dialog-close {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    width: 44px;
+    height: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: none;
+    border: none;
+    border-radius: var(--pill);
+    font-size: 1.3rem;
+    line-height: 1;
+    color: var(--muted);
+    cursor: pointer;
+  }
+  .ui-dialog-close:hover {
+    background: var(--surface-2);
+    color: var(--ink);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .ui-dialog,
+    .ui-dialog::backdrop {
+      transition: none;
+    }
+  }
   .guide-dialog-close {
     position: absolute;
     top: 14px;
@@ -454,5 +688,83 @@
         opacity: 0;
       }
     }
+  }
+}
+
+/* Home only: a span-1 card takes the full row at a container <= 1200px.
+ *
+ * homeSpans (lib/homeLayout.ts) packs rows for three columns, a span-2 card
+ * beside a span-1 card. Between 901px and 1200px the grid has two columns, the
+ * span-2 card clamps to the full row, and its span-1 partner would sit alone in
+ * a half-width row. Here the partner takes the full row too. Other pages that
+ * use .module-grid keep the shared behaviour.
+ *
+ * Outside @layer components on purpose: a card's own span is a Tailwind
+ * utility (layer utilities), which beats anything in components. This rule is
+ * in the utilities layer too and wins on specificity (two classes). */
+@layer utilities {
+  @container (max-width: 1200px) {
+    .home-grid > .module {
+      grid-column: 1 / -1;
+    }
+  }
+}
+
+/* Home fixed blocks (see .home-fixed above). In the utilities layer on purpose,
+ * like the rule above: a block's span and height are Tailwind utilities
+ * (SPAN_CLASS / HEIGHT_CLASS in module-grid.ts), and only a utilities rule with
+ * two classes beats them, including their @container variants.
+ *
+ * WHAT DECIDES THE HEIGHT of a fixed block (tune these first):
+ *   --home-block-min  min-height of the card, replaces --module-h-tall (360px) and
+ *                     --module-h-short (200px). Cards otherwise size to content.
+ *   --home-block-pad  card padding, replaces --module-pad (24px).
+ *   chart heights     the `height` prop of TrendChart / CategoryBars in
+ *                     SaldoBlock (HOME_CHART_H), CashflowBlock and StatistiekBlock.
+ *   .module-head      the 32px header row plus its bottom padding and margin
+ *                     (tightened below).
+ * Target at a 1440 x 900 window: about 340px per block. */
+@layer utilities {
+  .home-fixed > .module {
+    --home-block-min: 0px;
+    --home-block-pad: var(--sp-3);
+    grid-column: auto;
+    min-height: var(--home-block-min);
+    padding: var(--home-block-pad);
+  }
+  .home-fixed > .module .module-head {
+    padding-bottom: var(--sp-2);
+    margin-bottom: var(--sp-2);
+  }
+  /* Statistieken header: title and period pill on row 1, the tab bar on row 2.
+   * Tabs + pill + title never fit one line in a half-width card, so the header
+   * wraps on purpose instead of pushing the pill out of the card. */
+  .home-fixed .module-head:has(> .module-controls > .module-period) {
+    flex-wrap: wrap;
+    row-gap: var(--sp-2);
+  }
+  .home-fixed .module-head:has(> .module-controls > .module-period) > .module-controls {
+    display: contents;
+  }
+  .home-fixed .module-head:has(> .module-controls > .module-period) .module-period {
+    order: 2;
+    margin-left: auto;
+  }
+  .home-fixed .module-head:has(> .module-controls > .module-period) .module-tabs {
+    order: 3;
+    flex: 1 0 100%;
+    box-sizing: border-box;
+    max-width: 100%;
+  }
+  /* Statistieken is the tallest block; tighten its stacked rows. */
+  .home-fixed .toonmeer-regel {
+    margin-top: var(--sp-2);
+  }
+  .home-fixed .toonmeer-regel > .toonmeer-summary {
+    padding: var(--sp-2) 0;
+  }
+  .home-fixed .stat-figures {
+    margin-top: var(--sp-2);
+    padding-top: var(--sp-2);
   }
 }

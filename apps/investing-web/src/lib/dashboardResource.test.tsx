@@ -485,3 +485,21 @@ test("the cash-aware allocation ladder survives the dashboard decode", async () 
   expect(ready.status).toBe("ready");
   expect(ready.status === "ready" ? ready.data.allocation.ladder?.instrument.cash : null).toBe(300);
 });
+
+test("the platform allocation survives the dashboard decode", async () => {
+  const data = dashboardWithVersion(1);
+  data.allocation = {
+    ...data.allocation,
+    broker: {
+      buckets: [{ key: "degiro", label: "DeGiro", value: null, unpriced: true }],
+      unpriced: ["XS00PF000003"],
+    },
+  };
+
+  const states = await showOnce(undefined, data);
+  const ready = states.at(-1)!;
+  expect(ready.status).toBe("ready");
+  expect(ready.status === "ready" ? ready.data.allocation.broker?.buckets[0]?.label : null).toBe(
+    "DeGiro",
+  );
+});

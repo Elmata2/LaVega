@@ -311,3 +311,14 @@ test("release hands the broker back without losing the cursor", async () => {
   expect(next.claimed).toBe(true);
   expect(next.state.resume).toEqual({ ordersNextPagePath: "page-3" });
 });
+
+test("a snapshot-only row exists without credentials and refuses a credentialed broker's write", async () => {
+  const repository = createBrokerRepository(db, "tenant-a");
+  const snapshot = { positions: [], trades: [], dividends: [] };
+  expect(await repository.putSnapshotOnly("degiro", snapshot)).toBe(true);
+  expect(await repository.snapshots()).toEqual({ degiro: snapshot });
+
+  await connectBroker("tenant-a");
+  expect(await repository.putSnapshotOnly("trading212", snapshot)).toBe(false);
+  expect(await repository.snapshots()).toEqual({ degiro: snapshot });
+});

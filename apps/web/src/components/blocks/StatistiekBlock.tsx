@@ -398,6 +398,9 @@ type StatistiekBlockProps = {
   onSelectCategory: (category: string) => void;
   fxHistory: Record<string, Record<string, number>>;
   mode: ConversionMode;
+  /** The view the block opens on. Home leaves it out and gets the outflows
+   *  donut; a test that needs another view names it. */
+  initialView?: StatView;
 };
 
 export default function StatistiekBlock({
@@ -407,6 +410,7 @@ export default function StatistiekBlock({
   onSelectCategory,
   fxHistory,
   mode,
+  initialView = "verdeling",
 }: StatistiekBlockProps) {
   const [locale] = useAppLocale();
   const c = moneyCopy[locale].statistiek;
@@ -420,7 +424,7 @@ export default function StatistiekBlock({
     label: c.views[i].label,
   }));
   const [period, setPeriod] = useState<StatPeriod>("12m");
-  const [view, setView] = useState<StatView>("categorie");
+  const [view, setView] = useState<StatView>(initialView);
   const [custom, setCustom] = useState<{ start: string; end: string }>({ start: "", end: "" });
   const conversion = useMemo(() => ({ fxHistory, mode }), [fxHistory, mode]);
 
@@ -737,6 +741,12 @@ export default function StatistiekBlock({
                         aria-hidden="true"
                       />
                       {categoryLabel(locale, cat)}
+                      <span className="stat-legend-figure tabular-nums">
+                        {formatEuroIn(
+                          locale,
+                          perCategory.values.reduce((sum, row) => sum + (row[i] ?? 0), 0),
+                        )}
+                      </span>
                     </button>
                   ))}
                 </div>
@@ -755,7 +765,7 @@ export default function StatistiekBlock({
                     format={(v) => formatEuroAxisIn(locale, v)}
                     ariaLabel={c.uitgavenPerCategoriePer(unitWordIn(locale, perCategory.unit))}
                     showAxis
-                    height={196}
+                    height={104}
                   />
                 </div>
                 {/* Drie notities die alle drie hetzelfde zeggen — "dit zie je
@@ -848,6 +858,7 @@ export default function StatistiekBlock({
                   groups={growthGroups}
                   format={(v) => formatEuroIn(locale, v)}
                   ariaLabel={c.verschilAria(windowDays)}
+                  height={96}
                 />
                 {/* De zin boven de staven zegt WAT er gestegen is en met
                     hoeveel; dit zegt welke dagen dat "ervoor" precies zijn en
@@ -900,7 +911,7 @@ export default function StatistiekBlock({
                 peakIndex={peak?.index ?? -1}
                 averageValue={weekdays?.dayAverage ?? null}
                 averageLabel={c.gewoneDagLabel}
-                height={196}
+                height={104}
               />
               {/* Wat "gemiddeld" hier betekent: per VOORKOMEN van die weekdag,
                   zodat de dag die het vaakst langskwam niet wint door langs te

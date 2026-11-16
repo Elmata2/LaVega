@@ -24,6 +24,11 @@ Sure, the community fork of Maybe Finance:
 - Attribution: Sure is a fork of Maybe Finance. LaVega is not affiliated with or endorsed by
   Maybe Finance Inc. or the Sure maintainers. "Maybe" and "Sure" identify the upstream source
   only.
+- Layout inspiration: the app shell layout (rail, account sidebar, full-width main) is an
+  independent reimplementation inspired by the layout of Sure's web interface. No Sure
+  template, stylesheet, component code or class strings are copied, and no Sure assets are
+  used. LaVega is not affiliated with or endorsed by Maybe Finance Inc. or the Sure
+  maintainers.
 - Source offer: LaVega is public at https://github.com/Elmata2/LaVega, which provides the
   corresponding source. A distributor that provides binaries without repository access must
   satisfy AGPL-3.0 section 6 for the combined work.

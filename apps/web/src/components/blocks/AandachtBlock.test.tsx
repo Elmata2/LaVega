@@ -186,3 +186,39 @@ test("one or two info alerts are never folded — the toggle would cost the spac
   expect(c.querySelectorAll('[data-testid="alert-row"]')).toHaveLength(3);
   expect(c.querySelector('[data-testid="alert-tier"] button')).toBeNull(); // no fold toggle
 });
+
+/* Severity is carried by SHAPE: the tier chips used to be the coloured emoji
+ * circles, which stay coloured (and near-identical) in the black-and-white
+ * theme. Now: critical = solid border + cross, warning = dashed border +
+ * triangle, info = plain word + "i" circle. */
+test("each severity tier renders its own icon shape and border style", () => {
+  const all: Alert[] = [
+    ...testAlerts,
+    { id: "al3", severity: "warning", body: { kind: "no-balance", count: 2 } },
+  ];
+  const html = renderToStaticMarkup(
+    <AandachtBlock alerts={all} bufferCents={250_000} onBufferChange={() => {}} />,
+  );
+  const tier = (word: string) => {
+    const heading = html.match(/<h3[\s\S]*?<\/h3>/g)?.find((h) => h.includes(word));
+    expect(heading).toBeDefined();
+    return heading ?? "";
+  };
+  expect(html).not.toMatch(/🔴|🟠|🟡/u);
+  const critical = tier("Kritiek");
+  expect(critical).toContain('data-status-icon="problem"');
+  expect(critical).toContain("border-solid");
+  const warning = tier("Let op");
+  expect(warning).toContain('data-status-icon="warning"');
+  expect(warning).toContain("border-dashed");
+  const info = tier("Ter info");
+  expect(info).toContain('data-status-icon="info"');
+  expect(info).not.toContain("border-dashed");
+});
+
+test("the nothing-found line carries a check icon", () => {
+  const html = renderToStaticMarkup(
+    <AandachtBlock alerts={[]} bufferCents={250_000} onBufferChange={() => {}} />,
+  );
+  expect(html).toContain('data-status-icon="success"');
+});

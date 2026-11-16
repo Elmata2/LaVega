@@ -1,6 +1,7 @@
 import { expect, test } from "vitest";
 import {
   ALLOCATION_DENOMINATOR_RULE,
+  bucketAllocation,
   bucketAllocationByEntity,
   bucketAllocationByInstrument,
   bucketPricedAllocation,
@@ -195,4 +196,19 @@ test("the instrument ladder drills down inside one parent entity", () => {
     { key: "BTC", label: "Bitcoin", value: 100, parentKey: "crypto" },
   ];
   expect(ladderDrillDown(holdings, "personal").map((row) => row.key)).toEqual(["AAPL", "ASML"]);
+});
+
+test("buckets platforms by broker label and keeps a priced part beside an unpriced holding", () => {
+  const withBrokers: Position[] = [
+    { ...positions[0]!, broker: "degiro" },
+    { ...positions[1]!, broker: "ibkr" },
+    { ...positions[3]!, broker: "degiro" },
+  ];
+  expect(bucketAllocation(withBrokers, "broker", "EUR", fx)).toEqual({
+    buckets: [
+      { key: "degiro", label: "DeGiro", value: 110, unpriced: false },
+      { key: "ibkr", label: "Interactive Brokers", value: 200, unpriced: false },
+    ],
+    unpriced: ["MISSING"],
+  });
 });

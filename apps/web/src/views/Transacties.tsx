@@ -23,7 +23,13 @@ import {
   isEurCurrency,
   toEur,
 } from "@lavega/core";
-import { formatEuroIn, formatCurrencyIn, formatDate } from "../format";
+import {
+  formatEuroIn,
+  formatCurrencyIn,
+  formatSignedCurrencyIn,
+  formatSignedEuroIn,
+  formatDate,
+} from "../format";
 import { categorizeTxs } from "../api";
 import { useAppLocale, pick } from "../appLocale";
 import { moneyCopy, categoryLabel } from "../copy/money";
@@ -359,8 +365,8 @@ export default function Transacties({
               <div className="cell-sub">{pick(locale, "Onbekend", "Uncategorised")}</div>
               <strong style={{ fontVariantNumeric: "tabular-nums" }}>
                 {unknown.count} {c.rekeningen.transactieWoord(unknown.count)} ·{" "}
-                <span className={unknown.amount >= 0 ? "text-pos" : "text-neg"}>
-                  {formatEuroIn(locale, unknown.amount)}
+                <span className={`whitespace-nowrap ${unknown.amount >= 0 ? "text-pos" : "text-neg"}`}>
+                  {formatSignedEuroIn(locale, unknown.amount)}
                 </span>
               </strong>
             </div>
@@ -456,8 +462,8 @@ export default function Transacties({
                     <Td data-label={c.transacties.tegenpartij}>{p.tx.counterparty}</Td>
                     <Td data-label={c.transacties.omschrijving}>{p.tx.description}</Td>
                     <Td data-label={c.transacties.bedrag}>
-                      <span className={p.tx.amount >= 0 ? "text-pos" : "text-neg"}>
-                        {formatEuroIn(locale, p.tx.amount)}
+                      <span className={`whitespace-nowrap ${p.tx.amount >= 0 ? "text-pos" : "text-neg"}`}>
+                        {formatSignedEuroIn(locale, p.tx.amount)}
                       </span>
                     </Td>
                     <Td data-label={c.transacties.categorie}>
@@ -546,9 +552,7 @@ export default function Transacties({
                     </span>
                     <Badge>{c.transacties.transferKinds[pair.kind]}</Badge>
                     {ambiguous && (
-                      <Badge className="border-warn text-warn">
-                        {c.transacties.possibleTransferAmbiguous}
-                      </Badge>
+                      <Badge tone="warning">{c.transacties.possibleTransferAmbiguous}</Badge>
                     )}
                   </div>
                   <div style={{ display: "flex", gap: "var(--sp-2)", marginTop: "var(--sp-2)" }}>
@@ -672,10 +676,10 @@ export default function Transacties({
                     {t.bank} · {t.accountKey}
                   </Td>
                   <Td data-label={c.transacties.tableBedrag}>
-                    <span className={t.amount >= 0 ? "text-pos" : "text-neg"}>
+                    <span className={`whitespace-nowrap ${t.amount >= 0 ? "text-pos" : "text-neg"}`}>
                       {isEurCurrency(t.currency)
-                        ? formatEuroIn(locale, t.amount)
-                        : formatCurrencyIn(locale, t.amount, t.currency)}
+                        ? formatSignedEuroIn(locale, t.amount)
+                        : formatSignedCurrencyIn(locale, t.amount, t.currency)}
                     </span>
                     {!isEurCurrency(t.currency) &&
                       mode === "convert" &&

@@ -49,7 +49,14 @@ function mount(rows: Tx[] = txs, r = rules): HTMLDivElement {
   act(() => {
     root = createRoot(el);
     root.render(
-      <StatistiekBlock txs={rows} rules={r} own={own} onSelectCategory={() => {}} {...SEPARATE} />,
+      <StatistiekBlock
+        txs={rows}
+        rules={r}
+        own={own}
+        onSelectCategory={() => {}}
+        initialView="categorie"
+        {...SEPARATE}
+      />,
     );
   });
   return el;

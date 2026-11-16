@@ -14,6 +14,12 @@ vi.mock("../archive", () => ({
   SHOW_SCOPE_SWITCH: true,
   SHOW_INVOICE_FORWARDING: true,
   SHOW_ENTITY_CLASSIFIER: true,
+  // The hidden-for-now cards: shown here so their own behaviour stays pinned.
+  // archive-profiel.test.tsx covers the real (hidden) values.
+  SHOW_OWN_COLUMNS_IMPORT: true,
+  SHOW_DOCUMENTS_CARD: true,
+  SHOW_CASHBACK_CORRECTION: true,
+  SHOW_NET_WORTH_SHARE: true,
   isArchivedView: () => false,
   isArchivedWidget: () => false,
   initialScope: () =>
@@ -23,7 +29,8 @@ import type { Account, LearnedFact } from "@lavega/core";
 import { entitySummaries, factId, TRAVEL_AGENT } from "@lavega/core";
 import type { VaultStorage } from "@lavega/adapters";
 import Profiel from "./Profiel";
-import { WIDGETS, enabledModules } from "../components/moduleRegistry";
+import { forgetMemoryTheme } from "../hooks/useTheme";
+import { intakeCopy } from "../copy/intake.js";
 import { COUNTRY_CODES } from "../countries";
 import { getHomeCountry } from "../settings";
 
@@ -38,6 +45,7 @@ let root: Root | null = null;
 let container: HTMLElement | null = null;
 
 beforeEach(() => {
+  forgetMemoryTheme();
   localStorage.clear();
   document.cookie = "lavega_locale=nl";
 });
@@ -45,9 +53,13 @@ beforeEach(() => {
 afterEach(() => {
   if (root) act(() => root!.unmount());
   container?.remove();
+  // Some tests render twice and orphan the first container; its radios would
+  // share a name with the next test's and uncheck them.
+  document.body.replaceChildren();
   root = null;
   container = null;
   vi.unstubAllGlobals();
+  vi.restoreAllMocks();
   document.cookie = "lavega_locale=; Max-Age=0; Path=/";
 });
 
@@ -76,9 +88,7 @@ const storage = fakeStorage().storage;
 
 async function render(overrides: Partial<Parameters<typeof Profiel>[0]> = {}) {
   const props: Parameters<typeof Profiel>[0] = {
-    enabledModules: enabledModules(null),
-    onModulesChange: () => {},
-    focusModules: 0,
+    owner: { kind: "device" },
     entities: entitySummaries(
       [
         { key: "prive", entity: "Privé" } as Account,
@@ -91,8 +101,6 @@ async function render(overrides: Partial<Parameters<typeof Profiel>[0]> = {}) {
     onHomeCountryChange: () => {},
     homeRegion: "",
     onHomeRegionChange: () => {},
-    fxConversionMode: "convert",
-    onFxConversionModeChange: () => {},
     shareNetWorthEnabled: false,
     onShareNetWorthEnabledChange: () => {},
     shareNetWorthPendingDelete: false,
@@ -108,6 +116,7 @@ async function render(overrides: Partial<Parameters<typeof Profiel>[0]> = {}) {
     storage,
     asOf: "2026-08-16",
     onRestored: () => {},
+    planUnlocked: false,
     ...overrides,
   };
   container = document.createElement("div");
@@ -154,7 +163,7 @@ test("Account: zonder serveraccount staat er alleen de ene zin, geen formulier",
     vi.fn(async () => new Response(null, { status: 503 })),
   );
   await render();
-  const account = section("Account");
+  const account = section("Algemeen").querySelector('[data-testid="general-account"]')!;
   expect(account.textContent).toContain("geen serveraccount ingesteld");
   expect(account.querySelector("form")).toBeNull();
   expect(account.querySelector("input")).toBeNull();
@@ -166,7 +175,7 @@ test("Account: zonder sessie staat het inlogformulier klaar", async () => {
     vi.fn(async () => new Response(JSON.stringify({ user: null }))),
   );
   await render();
-  const account = section("Account");
+  const account = section("Algemeen");
   expect(account.querySelector('input[type="email"]')).not.toBeNull();
   expect(account.querySelector('input[type="password"]')).not.toBeNull();
   expect([...account.querySelectorAll("button")].some((b) => b.textContent === "Inloggen")).toBe(
@@ -185,7 +194,7 @@ test("Account: een mislukte inlogpoging toont de Nederlandse boodschap, niet de 
     }),
   );
   await render();
-  const account = section("Account");
+  const account = section("Algemeen");
   act(() =>
     setNativeValue(
       account.querySelector('input[type="email"]') as HTMLInputElement,
@@ -201,7 +210,7 @@ test("Account: een mislukte inlogpoging toont de Nederlandse boodschap, niet de 
   );
 });
 
-test("Account: een geslaagde inlog toont het e-mailadres en een Uitloggen-knop", async () => {
+test("Account: een geslaagde inlog toont het e-mailadres in Algemeen, zonder eigen Uitloggen-knop", async () => {
   let loggedIn = false;
   vi.stubGlobal(
     "fetch",
@@ -219,7 +228,7 @@ test("Account: een geslaagde inlog toont het e-mailadres en een Uitloggen-knop",
     }),
   );
   await render();
-  const account = section("Account");
+  const account = section("Algemeen");
   act(() =>
     setNativeValue(
       account.querySelector('input[type="email"]') as HTMLInputElement,
@@ -233,18 +242,28 @@ test("Account: een geslaagde inlog toont het e-mailadres en een Uitloggen-knop",
     ),
   );
   await act(async () => submit(account.querySelector("form") as HTMLFormElement));
-  expect(section("Account").textContent).toContain("owner@example.com");
+  expect(section("Algemeen").textContent).toContain("owner@example.com");
   expect(
-    [...section("Account").querySelectorAll("button")].some((b) => b.textContent === "Uitloggen"),
-  ).toBe(true);
+    [...section("Algemeen").querySelectorAll("button")].some((b) => b.textContent === "Uitloggen"),
+  ).toBe(false);
 });
 
-test("Account: Uitloggen roept de sign-out endpoint aan en komt terug bij het formulier", async () => {
+/* ONE sign-out control on the page. With an account session it signs out of the
+ * account and then locks the vault; without a session it only locks. */
+function signOutButtons(): HTMLButtonElement[] {
+  return [...container!.querySelectorAll("button")].filter(
+    (b) => b.textContent === "Uitloggen",
+  ) as HTMLButtonElement[];
+}
+
+test("Uitloggen: met accountsessie eerst uitloggen bij het account, dan de kluis vergrendelen", async () => {
   let loggedIn = true;
+  const order: string[] = [];
   const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
     const path = String(url);
     if (path.includes("/sign-out") && init?.method === "POST") {
       loggedIn = false;
+      order.push("signOut");
       return new Response(null);
     }
     return new Response(
@@ -254,44 +273,32 @@ test("Account: Uitloggen roept de sign-out endpoint aan en komt terug bij het fo
     );
   });
   vi.stubGlobal("fetch", fetchMock);
-  await render();
-  const uitloggen = [...section("Account").querySelectorAll("button")].find(
-    (b) => b.textContent === "Uitloggen",
-  ) as HTMLButtonElement;
-  await act(async () => uitloggen.dispatchEvent(new MouseEvent("click", { bubbles: true })));
-  expect(
-    fetchMock.mock.calls.some(
-      ([u, i]) =>
-        String(u).includes("/sign-out") && (i as RequestInit | undefined)?.method === "POST",
-    ),
-  ).toBe(true);
-  expect(section("Account").querySelector('input[type="email"]')).not.toBeNull();
+  const onLock = vi.fn(() => {
+    order.push("lock");
+  });
+  await render({ onLock });
+  expect(signOutButtons()).toHaveLength(1);
+  await act(async () =>
+    signOutButtons()[0]!.dispatchEvent(new MouseEvent("click", { bubbles: true })),
+  );
+  expect(order).toEqual(["signOut", "lock"]);
+  expect(onLock).toHaveBeenCalledTimes(1);
 });
 
-test("Account: een mislukte Uitloggen toont een fout en blijft ingelogd", async () => {
-  const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
-    if (String(url).includes("/sign-out") && init?.method === "POST")
-      return new Response(null, { status: 500 });
-    return new Response(JSON.stringify({ user: { id: "u1", email: "owner@example.com" } }));
-  });
+test("Uitloggen: zonder sessie alleen vergrendelen, geen sign-out-verzoek", async () => {
+  const fetchMock = vi.fn(async () => new Response(JSON.stringify({ user: null })));
   vi.stubGlobal("fetch", fetchMock);
-  await render();
-  const uitloggen = [...section("Account").querySelectorAll("button")].find(
-    (b) => b.textContent === "Uitloggen",
-  ) as HTMLButtonElement;
-  await act(async () => uitloggen.dispatchEvent(new MouseEvent("click", { bubbles: true })));
-  const account = section("Account");
-  expect(account.querySelector('[role="alert"]')?.textContent).toBe(
-    "Uitloggen lukte niet. Probeer het later opnieuw.",
+  const onLock = vi.fn();
+  await render({ onLock });
+  expect(signOutButtons()).toHaveLength(1);
+  await act(async () =>
+    signOutButtons()[0]!.dispatchEvent(new MouseEvent("click", { bubbles: true })),
   );
-  expect(account.textContent).toContain("owner@example.com");
-  expect(account.querySelector('input[type="email"]')).toBeNull();
+  expect(onLock).toHaveBeenCalledTimes(1);
   expect(
-    (
-      [...account.querySelectorAll("button")].find(
-        (b) => b.textContent === "Uitloggen",
-      ) as HTMLButtonElement
-    ).disabled,
+    (fetchMock.mock.calls as unknown as [string, RequestInit?][]).some(([u]) =>
+      String(u).includes("/sign-out"),
+    ),
   ).toBe(false);
 });
 
@@ -299,7 +306,7 @@ test("Koppelingen, Back-up and Import render inside the profile", async () => {
   await render();
   expect(container!.querySelector('[aria-label="Koppelingen"]')).not.toBeNull();
   expect(section("Importeren").querySelector('input[type="file"]')).not.toBeNull();
-  expect(container!.textContent).toContain("Back-up");
+  expect(section("Back-up")).toBeTruthy();
 });
 
 /* REGELS STAAT HIER NIET MEER. Zijn verzoek bij de UI-ronde van 21 september:
@@ -312,23 +319,13 @@ test("the rules are no longer buried in the settings card", async () => {
   expect(container!.textContent).not.toContain("albert heijn");
 });
 
-test("the module picker is on the profile, with Overzicht locked on", async () => {
-  await render();
-  const picker = section("Modules");
-  expect(picker.querySelectorAll(".mp-item").length).toBeGreaterThan(1);
-  const home = picker.querySelector(
-    '[aria-label="Overzicht in de navigatie"]',
-  ) as HTMLButtonElement;
-  expect(home.disabled).toBe(true);
-});
-
 test("the country that sets the card-terms market is set here, and says what it covers", async () => {
   const onHomeCountryChange = vi.fn();
   await render({ onHomeCountryChange });
-  const select = section("Land en regio").querySelector("select") as HTMLSelectElement;
+  const select = section("Algemeen").querySelector("select") as HTMLSelectElement;
   expect(select.value).toBe("NL");
   expect(getHomeCountry()).toBe("NL"); // the same preference App reads
-  expect(section("Land en regio").textContent).toContain("voorwaarden van je kaarten");
+  expect(section("Algemeen").textContent).toContain("kaartvoorwaarden opzoekt");
 
   act(() => {
     select.value = "BE";
@@ -339,7 +336,7 @@ test("the country that sets the card-terms market is set here, and says what it 
 
 test("the country list is EVERY country, in Dutch, sorted", async () => {
   await render();
-  const options = [...section("Land en regio").querySelectorAll("select option")];
+  const options = [...section("Algemeen").querySelectorAll("select option")];
   expect(options.length).toBe(COUNTRY_CODES.length);
   expect(options.length).toBeGreaterThan(200); // a list, not a shortlist
 
@@ -352,54 +349,44 @@ test("the country list is EVERY country, in Dutch, sorted", async () => {
 test("a region sits under the country, and is only a LIST where we have one", async () => {
   // His example: Texas is not New York. The US gets a real list…
   await render({ homeCountry: "US" });
-  const us = section("Land en regio");
+  const us = section("Algemeen");
   expect(us.querySelector('input[list="home-regions"]')).not.toBeNull();
   const states = [...us.querySelectorAll("datalist option")].map((o) => o.getAttribute("value"));
   expect(states).toContain("Texas");
   expect(states).toContain("New York");
 
-  // …and a country whose subdivisions LaVega cannot vouch for gets free text
-  // plus a sentence saying so, rather than a dropdown of guesses.
+  // …and a country whose subdivisions LaVega cannot vouch for gets free text,
+  // rather than a dropdown of guesses.
   await render({ homeCountry: "NL" });
-  const nl = section("Land en regio");
+  const nl = section("Algemeen");
   expect(nl.querySelector("datalist")).toBeNull();
-  expect(nl.textContent).toContain("geen geverifieerde regiolijst");
 });
 
 test("the region is typed by hand, and the app never infers where he is", async () => {
   const onHomeRegionChange = vi.fn();
   await render({ homeCountry: "US", onHomeRegionChange });
-  const input = section("Land en regio").querySelector(
-    'input[list="home-regions"]',
-  ) as HTMLInputElement;
+  const input = section("Algemeen").querySelector('input[list="home-regions"]') as HTMLInputElement;
   act(() => setNativeValue(input, "Texas"));
   expect(onHomeRegionChange).toHaveBeenCalledWith("Texas");
-  expect(section("Land en regio").textContent).toContain("LaVega leidt nooit af waar je bent");
+  expect(section("Algemeen").textContent).toContain("LaVega leidt nooit af waar je bent");
 });
 
-test("the profile opens with his own name, and says the name stays here", async () => {
+test("Algemeen holds the name fields, and says the name stays here", async () => {
   await render({ ownerName: { first: "Alexander", last: "Steunenberg" } });
-  const head = section("Profiel");
-  expect(head.querySelector('[data-testid="profile-head-name"]')?.textContent).toBe(
-    "Alexander Steunenberg",
+  const general = section("Algemeen");
+  expect((general.querySelector('input[aria-label="Voornaam"]') as HTMLInputElement).value).toBe(
+    "Alexander",
   );
-  expect(head.querySelector('[data-testid="profile-head-avatar"]')?.textContent).toBe("AS"); // drawn, never fetched
-  expect(head.textContent).toContain("nooit meegestuurd naar een model");
-});
-
-test("no name is 'no name', not a blank greeting", async () => {
-  await render();
-  const head = section("Profiel");
-  expect(head.querySelector('[data-testid="profile-head-name"]')?.textContent).toBe(
-    "Nog geen naam ingevuld",
+  expect((general.querySelector('input[aria-label="Achternaam"]') as HTMLInputElement).value).toBe(
+    "Steunenberg",
   );
-  expect(head.querySelector('[data-testid="profile-head-avatar"]')?.textContent).toBe("");
+  expect(general.textContent).toContain("nooit meegestuurd naar een model");
 });
 
 test("typing a name reports both halves back, unmangled", async () => {
   const onOwnerNameChange = vi.fn();
   await render({ ownerName: { first: "Alexander", last: "" }, onOwnerNameChange });
-  const last = section("Profiel").querySelector(
+  const last = section("Algemeen").querySelector(
     'input[aria-label="Achternaam"]',
   ) as HTMLInputElement;
   act(() => setNativeValue(last, "Steunenberg"));
@@ -459,112 +446,8 @@ test("Uitloggen (formerly Vergrendelen) lives here and still locks", async () =>
   expect(onLock).toHaveBeenCalledTimes(1);
 });
 
-/* The two homescreen widgets he wants to be able to switch: "Positie per
- * onderneming […] I just want it to be a widget we can click on and off, so in
- * the profile I should be able to click it on and off instead of it always
- * being default there. Same applies to Aandacht." */
-
-test("the overview widgets are switched here, and they start off", async () => {
-  await render();
-  const widgets = section("Widgets");
-  /* GEEN VAST AANTAL MEER. Dit stond op 2 en viel om zodra Betaalagenda en
-   * Transacties er als widget bij kwamen — een terechte uitbreiding die een test
-   * liet omvallen, en dat leert de volgende alleen om het getal op te hogen. Wat
-   * hier bewaakt hoort te worden is dat elke widget in het register OOK een
-   * schakelaar krijgt: een widget die je niet kunt uitzetten is geen widget. */
-  const items = widgets.querySelectorAll(".mp-item");
-  expect(items.length).toBeGreaterThanOrEqual(2);
-  expect(items.length).toBe(WIDGETS.length);
-  expect(widgets.textContent).toContain("Aandacht");
-  expect(widgets.textContent).toContain("Positie");
-
-  for (const label of ["Aandacht", "Positie"]) {
-    const toggle = widgets.querySelector(
-      `[aria-label="${label} op je overzicht"]`,
-    ) as HTMLButtonElement;
-    expect(toggle, `no switch for ${label}`).not.toBeNull();
-    expect(toggle.getAttribute("aria-checked")).toBe("false");
-    expect(toggle.disabled).toBe(false); // neither is locked on, unlike Overzicht in the nav
-  }
-});
-
-test("Facturen en BTW zijn hier allebei te schakelen, met hun eigen beginstand", async () => {
-  /* Uit één zin: "dan moet de factuur ook in het overzicht komen, als de
-   * gebruiker dat wilt, doe default wel btw." Twee kaarten, twee standen. De
-   * standen zelf staan in het register; wat hier bewezen wordt is dat ze in het
-   * profiel te bereiken zijn — een kaart die standaard aan staat en die je niet
-   * kunt uitzetten, is geen widget maar een besluit. */
-  await render();
-  const widgets = section("Widgets");
-  const facturen = widgets.querySelector(
-    '[aria-label="Facturen op je overzicht"]',
-  ) as HTMLButtonElement;
-  const btw = widgets.querySelector('[aria-label="BTW op je overzicht"]') as HTMLButtonElement;
-
-  expect(facturen, "geen schakelaar voor Facturen").not.toBeNull();
-  expect(btw, "geen schakelaar voor BTW").not.toBeNull();
-  expect(facturen.getAttribute("aria-checked")).toBe("false");
-  expect(btw.getAttribute("aria-checked")).toBe("true");
-  expect(facturen.disabled).toBe(false);
-  expect(btw.disabled).toBe(false);
-
-  act(() => btw.dispatchEvent(new MouseEvent("click", { bubbles: true })));
-  expect(btw.getAttribute("aria-checked")).toBe("false");
-  const stored = JSON.parse(localStorage.getItem("lavega.overviewWidgets") ?? "null");
-  expect(stored.on).not.toContain("btw-stand");
-  expect(stored.seen).toEqual(expect.arrayContaining(["btw-stand", "facturen-open"]));
-
-  act(() => facturen.dispatchEvent(new MouseEvent("click", { bubbles: true })));
-  expect(facturen.getAttribute("aria-checked")).toBe("true");
-  expect(JSON.parse(localStorage.getItem("lavega.overviewWidgets") ?? "null").on).toContain(
-    "facturen-open",
-  );
-});
-
-test("switching a widget on is remembered, and does not touch the nav preference", async () => {
-  await render();
-  const toggle = section("Widgets").querySelector(
-    '[aria-label="Aandacht op je overzicht"]',
-  ) as HTMLButtonElement;
-  act(() => toggle.dispatchEvent(new MouseEvent("click", { bubbles: true })));
-  expect(toggle.getAttribute("aria-checked")).toBe("true");
-  /* DE VORM IS {on, seen} GEWORDEN, en dat is opzet. Een kale lijst kon niet
-   * uitdrukken of een widget UIT staat of NOG NIET BESTOND toen hij koos — en dat
-   * verschil bepaalt of een nieuwe widget bij hem vanzelf verschijnt of stil weg
-   * blijft. `seen` legt vast welke hij gezien heeft; ontbreken uit `on` betekent
-   * pas "uit" voor de widgets die daarin staan. */
-  const stored = JSON.parse(localStorage.getItem("lavega.overviewWidgets") ?? "null");
-  /* WAT ER ONTHOUDEN IS, niet dat er verder niets aan staat. Een schakelaar
-   * omzetten schrijft de HELE huidige keuze weg, en daar zit ook alles in wat al
-   * standaard aan stond (Betaalagenda). Eisen dat `on` precies ["aandacht"] is,
-   * zou dus eisen dat een andere widget stilletjes uitgaat. */
-  expect(stored.on).toContain("aandacht");
-  expect(stored.seen).toEqual(expect.arrayContaining(["aandacht"]));
-  expect(localStorage.getItem("lavega.navModules")).toBeNull();
-});
-
 /* "Keep the manual linkage rules and their explanation." Nailed down, because
  * this round removes several blocks and this one must survive the cull. */
-/* DE MIGRATIE, en dit is de test die er het meest toe doet.
- *
- * De voorkeur stond als KALE LIJST opgeslagen en is nu {on, seen}. Iedereen die
- * de app al gebruikte heeft die oude lijst nog in zijn browser staan. Wordt die
- * naief als de nieuwe vorm gelezen, dan betekent "staat er niet in" opeens
- * "uitgezet" — en dan verdwijnt een widget die er destijds nog niet eens WAS,
- * zonder dat iemand iets heeft uitgezet. Precies het soort stille regressie dat
- * niemand meldt omdat het eruitziet alsof het altijd zo was. */
-test("een oude, kale widget-lijst blijft betekenen wat hij toen betekende", async () => {
-  localStorage.setItem("lavega.overviewWidgets", JSON.stringify(["aandacht"]));
-  await render();
-  const widgets = section("Widgets");
-  const aan = widgets.querySelector('[aria-label="Aandacht op je overzicht"]');
-  expect(aan?.getAttribute("aria-checked")).toBe("true");
-  // Betaalagenda bestond nog niet toen die lijst werd opgeslagen, dus zijn
-  // afwezigheid daarin is geen keuze en mag hem niet uitzetten.
-  const agenda = widgets.querySelector('[aria-label^="Betaalagenda"]');
-  if (agenda) expect(agenda.getAttribute("aria-checked")).not.toBe("false");
-});
-
 /* ══════ CASHBACK CORRIGEREN — de feedbackmodule ═════════════════════════════
  *
  * App review 4, punt 22. Hij vroeg om de aanname "een gewone kaart heeft geen
@@ -711,27 +594,6 @@ test("de aanname is uit te zetten, en dan staat er weer onbekend", async () => {
   expect(localStorage.getItem("lavega.cashbackAssumption")).toBe("0");
 });
 
-test("vreemde valuta omrekenen staat standaard aan en meldt de wijziging aan de ouder", async () => {
-  const onFxConversionModeChange = vi.fn();
-  await render({ fxConversionMode: "convert", onFxConversionModeChange });
-  const toggle = container!.querySelector(
-    '[aria-label="Vreemde valuta omrekenen naar euro"]',
-  ) as HTMLInputElement;
-  expect(toggle.checked).toBe(true); // omrekenen is het gestelde standaardgedrag
-
-  // App owns the state (see App.tsx); Profiel only reports the click.
-  act(() => toggle.dispatchEvent(new MouseEvent("click", { bubbles: true })));
-  expect(onFxConversionModeChange).toHaveBeenCalledWith("separate");
-});
-
-test("de omreken-checkbox volgt de fxConversionMode prop", async () => {
-  await render({ fxConversionMode: "separate" });
-  const toggle = container!.querySelector(
-    '[aria-label="Vreemde valuta omrekenen naar euro"]',
-  ) as HTMLInputElement;
-  expect(toggle.checked).toBe(false);
-});
-
 test("de net-worth-share schakelaar staat standaard uit en meldt de verandering naar boven", async () => {
   const onChange = vi.fn();
   await render({ shareNetWorthEnabled: false, onShareNetWorthEnabledChange: onChange });
@@ -864,13 +726,192 @@ test("the language switch flips the page's copy live, without a remount", async 
   expect(container!.querySelector('[aria-label="Uitloggen"]')).toBeNull();
 });
 
-test("a link card opens what LaVega knows about you", async () => {
+test("the secondary link in Jouw plan opens what LaVega knows about you", async () => {
   const onNavigate = vi.fn();
   await render({ onNavigate });
-  const card = section("Wat LaVega over je weet");
+  const card = section("Jouw plan");
   const open = [...card.querySelectorAll("button")].find(
     (b) => b.textContent === "Bekijk wat LaVega weet",
   )!;
   act(() => open.click());
   expect(onNavigate).toHaveBeenCalledWith("about-you");
+});
+
+/* ══════ WEERGAVE — thema-keuze (Midnight / Zwart-wit) ═════════════════════ */
+
+/** Een radio aanklikken. Onder jsdom staat de `checked`-eigenschap van een
+ *  gecontroleerde radio pas goed na een tweede flush; de state en het attribuut
+ *  op <html> zijn al meteen goed. */
+async function pick(radio: HTMLInputElement) {
+  act(() => radio.click());
+  await act(async () => {});
+}
+
+test("Weergave: twee gelabelde radio's in een radiogroup, in Algemeen", async () => {
+  await render();
+  const card = section("Algemeen");
+  const group = card.querySelector('[role="radiogroup"]');
+  expect(group).not.toBeNull();
+  expect(group!.getAttribute("aria-label")).toBe("Thema");
+  const radios = [...card.querySelectorAll<HTMLInputElement>('input[type="radio"]')];
+  expect(radios.map((r) => r.value)).toEqual(["midnight", "light"]);
+  expect(radios).toHaveLength(2);
+  expect(card.textContent).toContain("Donker");
+  expect(card.textContent).toContain("Licht");
+  expect(card.textContent).not.toContain("Zwart-wit");
+  for (const r of radios) expect(r.labels?.length).toBe(1);
+});
+
+test("Weergave: Engels gebruikt 'Dark' en 'Light'", async () => {
+  document.cookie = "lavega_locale=en";
+  await render();
+  expect(container!.textContent).toContain("Dark");
+  expect(container!.textContent).toContain("Light");
+  expect(container!.textContent).not.toContain("Black and white");
+});
+
+test("Weergave: een opgeslagen 'mono' staat als Licht aan", async () => {
+  localStorage.setItem("lavega.theme", "mono");
+  await render();
+  const radios = [...section("Algemeen").querySelectorAll<HTMLInputElement>("input[type=radio]")];
+  expect(radios.find((r) => r.checked)?.value).toBe("light");
+});
+
+test("Weergave: de gekozen radio volgt het opgeslagen thema bij het laden", async () => {
+  localStorage.setItem("lavega.theme", "light");
+  await render();
+  const radios = [...section("Algemeen").querySelectorAll<HTMLInputElement>("input[type=radio]")];
+  expect(radios.find((r) => r.checked)?.value).toBe("light");
+});
+
+test("Weergave: kiezen bewaart en past direct toe", async () => {
+  delete document.documentElement.dataset.theme;
+  await render();
+  const light = section("Algemeen").querySelector<HTMLInputElement>('input[value="light"]')!;
+  await pick(light);
+  expect(localStorage.getItem("lavega.theme")).toBe("light");
+  expect(document.documentElement.dataset.theme).toBe("light");
+  expect(light.checked).toBe(true);
+  const mid = section("Algemeen").querySelector<HTMLInputElement>('input[value="midnight"]')!;
+  await pick(mid);
+  expect(document.documentElement.hasAttribute("data-theme")).toBe(false);
+  expect(localStorage.getItem("lavega.theme")).toBe("midnight");
+});
+
+test("Weergave: geblokkeerde opslag wisselt toch, zonder foutmelding", async () => {
+  vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+    throw new Error("blocked");
+  });
+  await render();
+  const card = section("Algemeen");
+  const before = card.textContent;
+  await pick(card.querySelector<HTMLInputElement>('input[value="light"]')!);
+  expect(document.documentElement.dataset.theme).toBe("light");
+  expect(card.querySelector<HTMLInputElement>('input[value="light"]')!.checked).toBe(true);
+  expect(card.textContent).toBe(before);
+  expect(card.querySelector('[role="alert"]')).toBeNull();
+  vi.restoreAllMocks();
+  delete document.documentElement.dataset.theme;
+});
+
+test("Weergave: een storage-event van een ander tabblad werkt de keuze bij", async () => {
+  delete document.documentElement.dataset.theme;
+  await render();
+  localStorage.setItem("lavega.theme", "light");
+  act(() => {
+    window.dispatchEvent(new StorageEvent("storage", { key: "lavega.theme", newValue: "light" }));
+  });
+  expect(document.documentElement.dataset.theme).toBe("light");
+  expect(section("Algemeen").querySelector<HTMLInputElement>('input[value="light"]')!.checked).toBe(
+    true,
+  );
+  delete document.documentElement.dataset.theme;
+});
+
+/* ══════ JOUW PLAN — the only way in now that the nav no longer lists it ═══════ */
+
+test("Jouw plan card; unlocked it opens the plan view", async () => {
+  const onNavigate = vi.fn();
+  await render({ planUnlocked: true, onNavigate });
+  const first = section("Jouw plan");
+  expect(first.getAttribute("aria-label")).toBe("Jouw plan");
+  expect(first.textContent).toContain("Jouw plan");
+  const open = [...first.querySelectorAll("button, a")].find(
+    (b) => b.textContent === "Open je plan",
+  ) as HTMLElement;
+  expect(open).toBeTruthy();
+  act(() => open.click());
+  expect(onNavigate).toHaveBeenCalledWith("plan");
+});
+
+test("Jouw plan card, locked: the intake prompt and a Begin button that opens the intake", async () => {
+  const onNavigate = vi.fn();
+  await render({ planUnlocked: false, onNavigate });
+  const first = section("Jouw plan");
+  expect(first.getAttribute("aria-label")).toBe("Jouw plan");
+  expect(first.textContent).toContain(intakeCopy.nl.home.invite.intro);
+  expect(first.textContent).not.toContain("Open je plan");
+  const begin = [...first.querySelectorAll("button")].find((b) => b.textContent === "Begin")!;
+  act(() => begin.click());
+  expect(onNavigate).toHaveBeenCalledWith("intake");
+});
+
+test("Profiel shows five cards in order: Algemeen, Jouw plan, Importeren, Back-up, Uitloggen", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => new Response(JSON.stringify({ user: null }))),
+  );
+  await render({ onNavigate: () => {} });
+  const wanted = ["Algemeen", "Jouw plan", "Importeren", "Back-up", "Uitloggen"];
+  const labels = [...container!.querySelectorAll("section[aria-label]")]
+    .map((el) => el.getAttribute("aria-label")!)
+    .filter((l) => wanted.includes(l));
+  expect(labels).toEqual(wanted);
+  // The removed cards are gone for good, not just moved.
+  for (const gone of ["Modules", "Widgets", "Vreemde valuta"]) {
+    expect(container!.querySelector(`section[aria-label="${gone}"]`)).toBeNull();
+  }
+  expect(container!.querySelector('[data-testid="build-stamp"]')).not.toBeNull();
+});
+
+test("Uitloggen: een mislukte sign-out-aanvraag vergrendelt de kluis toch", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (url: string, init?: RequestInit) => {
+      if (String(url).includes("/sign-out") && init?.method === "POST") throw new Error("offline");
+      return new Response(JSON.stringify({ user: { id: "u1", email: "owner@example.com" } }));
+    }),
+  );
+  const onLock = vi.fn();
+  await render({ onLock });
+  await act(async () =>
+    signOutButtons()[0]!.dispatchEvent(new MouseEvent("click", { bubbles: true })),
+  );
+  expect(onLock).toHaveBeenCalledTimes(1);
+});
+
+test("Uitloggen: nog tijdens 'loading' wordt de account-sign-out geprobeerd en daarna vergrendeld", async () => {
+  let release: (r: Response) => void = () => {};
+  const fetchMock = vi.fn((url: string, init?: RequestInit) => {
+    if (String(url).includes("/sign-out") && init?.method === "POST") {
+      return Promise.resolve(new Response(null));
+    }
+    return new Promise<Response>((resolve) => {
+      release = resolve;
+    });
+  });
+  vi.stubGlobal("fetch", fetchMock);
+  const onLock = vi.fn();
+  await render({ onLock });
+  await act(async () =>
+    signOutButtons()[0]!.dispatchEvent(new MouseEvent("click", { bubbles: true })),
+  );
+  expect(
+    fetchMock.mock.calls.some(
+      ([u, i]) =>
+        String(u).includes("/sign-out") && (i as RequestInit | undefined)?.method === "POST",
+    ),
+  ).toBe(true);
+  expect(onLock).toHaveBeenCalledTimes(1);
+  release(new Response(JSON.stringify({ user: null })));
 });

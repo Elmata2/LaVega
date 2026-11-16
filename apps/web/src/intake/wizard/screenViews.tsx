@@ -7,6 +7,7 @@ import CardPicker, { orderedCardIds } from "./CardPicker.js";
 import type { CardKind } from "./cardOptions.js";
 import { WORK_ORDER } from "./screens.js";
 import MultiTiles from "./MultiTiles.js";
+import StatusLine from "../../components/ui/StatusLine.js";
 
 type Busy = { busy: boolean };
 
@@ -500,6 +501,8 @@ export function CardsScreen(
     label: string;
     initial: readonly string[];
     kind?: CardKind;
+    /** The banks answer: the picker shows only these brands. */
+    banks?: readonly string[];
     /** Credit cards only: a tile for "I have none". Picking it clears the cards. */
     noneLabel?: string;
     initialNone?: boolean;
@@ -522,6 +525,7 @@ export function CardsScreen(
       <CardPicker
         copy={p.copy}
         kind={p.kind}
+        banks={p.banks}
         label={p.label}
         disabled={p.busy}
         picked={picked}
@@ -547,20 +551,26 @@ export function CardsScreen(
   );
 }
 
-/** Optional last screen: hand a statement to the app's import. The wizard is
- *  full-screen, so a failure is shown here, not in the page banner. */
+/** Last screen: connect a bank (when linking is available) or hand a statement
+ *  to the app's import. The wizard is full-screen, so a failure is shown here,
+ *  not in the page banner. */
 export function UploadScreen(
   p: Busy & {
     copy: WizardCopy;
     onImport: (file: File) => Promise<{ ok: true; count: number } | { ok: false }>;
     onFinish: () => void;
+    /** The bank link, when linking is available. Without it the upload leads. */
+    bankLink?: ReactNode;
+    /** Linking availability is still unknown: hold the action area. */
+    pending?: boolean;
   },
 ) {
   const [state, setState] = useState<
     { kind: "idle" } | { kind: "working" } | { kind: "ok"; count: number } | { kind: "failed" }
   >({ kind: "idle" });
   const u = p.copy.upload;
-  const working = state.kind === "working";
+  const working = state.kind === "working" || p.pending === true;
+  const linked = p.bankLink !== undefined || p.pending === true;
 
   async function pick(file: File) {
     setState({ kind: "working" });
@@ -571,6 +581,23 @@ export function UploadScreen(
       setState({ kind: "failed" });
     }
   }
+
+  /** No `accept`: the format is sniffed from the contents, as in Import. */
+  const fileLabel = (cls: string) => (
+    <label className={cls} aria-disabled={working || p.busy}>
+      {u.button}
+      <input
+        type="file"
+        className="wz-sr"
+        disabled={working || p.busy}
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          e.target.value = "";
+          if (file) void pick(file);
+        }}
+      />
+    </label>
+  );
 
   return (
     <div className="wz-form">
@@ -587,27 +614,22 @@ export function UploadScreen(
         </>
       ) : (
         <>
+          {linked ? (
+            <>
+              <p className="wz-hint">{u.connectBody}</p>
+              {p.pending === true ? (
+                <div aria-busy="true" style={{ minHeight: 96 }} />
+              ) : (
+                p.bankLink
+              )}
+            </>
+          ) : null}
           <div className="wz-footer">
-            {/* No `accept`: the format is sniffed from the contents, as in Import. */}
-            <div>
-              <label className="wz-next wz-upload" aria-disabled={working || p.busy}>
-                {u.button}
-                <input
-                  type="file"
-                  className="wz-sr"
-                  disabled={working || p.busy}
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    e.target.value = "";
-                    if (file) void pick(file);
-                  }}
-                />
-              </label>
-            </div>
+            <div>{fileLabel(linked ? "wz-link wz-upload" : "wz-next wz-upload")}</div>
             {state.kind === "failed" ? (
-              <p role="alert" className="wz-error">
+              <StatusLine tone="problem" role="alert" className="wz-error">
                 {u.failed}
-              </p>
+              </StatusLine>
             ) : null}
             <div>
               <button

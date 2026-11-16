@@ -44,7 +44,7 @@ import {
   splitProductName,
 } from "@lavega/core";
 import catalogueFile from "../../../../../docs/catalog/catalog.json";
-import { formatEuroIn, formatDate } from "../../format.js";
+import { formatEuroIn, formatSignedEuroIn, formatDate } from "../../format.js";
 import { useAppLocale, pick, readAppLocale } from "../../appLocale.js";
 import { optimiseCopy, formatPercentIn, type TravelCopy } from "../../copy/optimise.js";
 import type { Locale } from "../../locale.js";
@@ -54,6 +54,7 @@ import Badge from "../ui/Badge.js";
 import Button from "../ui/Button.js";
 import CardLink from "../ui/CardLink.js";
 import SaldoInput from "../ui/SaldoInput.js";
+import StatusLine, { StatusIcon } from "../ui/StatusLine.js";
 
 /* A self-contained block: everything it needs arrives as props and it owns only
  * its own draft state. That made it the first MODULAR block, and it is now one
@@ -869,7 +870,7 @@ export function Kaartkosten({
       {benefit.kind === "net" ? (
         <p className="cell-sub travel-note" data-testid={`${testId}-netto`}>
           <strong>{c.cardCost.netLabel}</strong>{" "}
-          <span className="text-pos">{formatEuroIn(locale, benefit.netCents / 100)}</span> —{" "}
+          <span className="text-pos">{formatSignedEuroIn(locale, benefit.netCents / 100)}</span> —{" "}
           {fill(c.cardCost.netBreakdown, {
             gross: formatEuroIn(locale, benefit.grossCents / 100),
             cost: formatEuroIn(locale, benefit.costCents / 100),
@@ -879,7 +880,7 @@ export function Kaartkosten({
         /* GEEN AANBEVELING, en het bedrag staat er zodat hij het niet zelf hoeft
            uit te rekenen. Zijn woorden: een kaart die € 5 per maand kost en € 3
            oplevert is achteruit, en dat moet hij kunnen zien staan. */
-        <p className="cell-sub travel-note text-warn" data-testid={`${testId}-geen`}>
+        <StatusLine tone="warning" className="cell-sub travel-note" data-testid={`${testId}-geen`}>
           <strong>{c.cardCost.noRecommendationLabel}</strong>{" "}
           {fill(c.cardCost.noRecommendationBody, {
             gross: formatEuroIn(locale, benefit.grossCents / 100),
@@ -888,7 +889,7 @@ export function Kaartkosten({
           {benefit.netCents === 0
             ? c.cardCost.noGain
             : fill(c.cardCost.worseOff, { amount: formatEuroIn(locale, -benefit.netCents / 100) })}
-        </p>
+        </StatusLine>
       )}
     </>
   );
@@ -1244,8 +1245,9 @@ export function TermsNotice({
 
   if (state.kind === "no-key") {
     return (
-      <div className="travel-terms border-l-4 border-l-warn" role="status">
+      <div className="travel-terms border-l-4 border-l-warn border-dashed" role="status">
         <p className="cell-sub">
+          <StatusIcon tone="warning" />
           {fill(c.terms.unknownList, { names: nameList(state.unknown, c) })}
         </p>
         {noKeyLine}
@@ -1273,7 +1275,9 @@ export function TermsNotice({
           </span>
         </p>
         {termsGaveUp && (
-          <p className="cell-sub text-warn">{fill(c.terms.gaveUp, { hint: zelfInvullen })}</p>
+          <StatusLine tone="warning" className="cell-sub">
+            {fill(c.terms.gaveUp, { hint: zelfInvullen })}
+          </StatusLine>
         )}
         {searchButton(false, c.terms.searchAgain)}
       </div>
@@ -1292,8 +1296,9 @@ export function TermsNotice({
   }
 
   return (
-    <div className="travel-terms border-l-4 border-l-warn" role="status">
+    <div className="travel-terms border-l-4 border-l-warn border-dashed" role="status">
       <p className="cell-sub">
+        <StatusIcon tone="warning" />
         {fill(c.terms.searchedEmptyBody, { names: nameList(state.unknown, c), hint: zelfInvullen })}
       </p>
       {searchButton(false, c.terms.searchAgainPlain)}
@@ -1768,6 +1773,7 @@ export default function TravelBlock({
             data-priced={bestJourney ? "true" : "false"}
           >
             <div className="travel-winner-name">
+              {bestJourney && <StatusIcon tone="success" />}
               {/* HET MERKTEKEN BLIJFT VOORAAN, de uitleg erachter niet. De kop
                   zegt zelf al "die heb je nog niet", maar een woord alleen is niet
                   genoeg gebleken: de aanbeveling mag een kaart uit de catalogus
@@ -1963,6 +1969,7 @@ export default function TravelBlock({
                     >
                       <div className="flex items-baseline justify-between gap-3 flex-wrap">
                         <span className="font-semibold" data-testid="travel-journey-name">
+                          {j === bestJourney && <StatusIcon tone="success" />}
                           {journeyTitle(j, c)}
                         </span>
                         <span

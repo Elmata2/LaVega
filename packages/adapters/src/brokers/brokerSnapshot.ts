@@ -1,5 +1,6 @@
 import { carryForwardCostBasis } from "@lavega/core";
 import type {
+  BrokerId,
   CashBalance,
   CashFlow,
   CashHistoryCoverage,
@@ -7,8 +8,8 @@ import type {
   Position,
   Trade,
 } from "@lavega/core";
+import { isBrokerId } from "@lavega/core";
 import type { BrokerResult } from "./BrokerAccessAdapter.js";
-import type { ScheduledSyncResult } from "./scheduledSync.js";
 
 /* What a broker knows about an account, as this runtime keeps it.
  *
@@ -32,8 +33,24 @@ export type BrokerAccountSnapshot = {
   cashBalances?: CashBalance[];
   cashFlows?: CashFlow[];
   cashHistory?: CashHistoryCoverage;
+  /** Which files produced this snapshot, and when. The raw file is never
+   *  stored; a later read compares an import's age and provenance from this. */
+  lastImport?: {
+    importedAt: string;
+    files: { filename: string; sha256: string }[];
+  };
 };
-export type BrokerDataSnapshot = Partial<Record<"ibkr" | "trading212", BrokerAccountSnapshot>>;
+export type BrokerDataSnapshot = Partial<Record<BrokerId, BrokerAccountSnapshot>>;
+
+/** One broker's result as the cache applies it. A file import applies its
+ *  result here too, so the broker is any id the table declares, not only a
+ *  scheduled one. */
+type AppliedOutcome = {
+  broker: BrokerId;
+  status: "synced" | "skipped" | "problem";
+  lastSyncedAt: string | null;
+  result: BrokerResult | null;
+};
 
 function mergeById<T extends { id: string }>(existing: T[], incoming: T[]): T[] {
   const byId = new Map(existing.map((item) => [item.id, item]));
@@ -64,17 +81,18 @@ function inPeriod(row: { date: string }, period: Period): boolean {
   return day >= period.from && day <= period.to;
 }
 
-/* IBKR Flex statements each cover a fixed period. A complete section replaces
- * the stored rows inside that period and keeps the rest, so an older window
- * adds history and a re-read drops what the broker no longer reports. Cash
- * flow and dividend ids are content hashes, so distinct identical lines must
- * never be merged by id. */
+/* IBKR Flex statements each cover a fixed period, and a DeGiro account or
+ * transaction export covers the span of its own rows. A complete section
+ * replaces the stored rows inside that period and keeps the rest, so an older
+ * window adds history and a re-read drops what the broker no longer reports.
+ * Cash flow and dividend ids are content hashes, so distinct identical lines
+ * must never be merged by id. */
 function windowPeriod(
   broker: string,
   status: string,
   period: Period | undefined,
 ): Period | undefined {
-  return broker === "ibkr" && status === "complete" ? period : undefined;
+  return (broker === "ibkr" || broker === "degiro") && status === "complete" ? period : undefined;
 }
 
 /* Drops the stored rows a window re-reads: those dated inside it for the
@@ -123,12 +141,26 @@ function latestStoredDate(
   return dates.reduce<string | undefined>((a, b) => (a !== undefined && a >= b ? a : b), undefined);
 }
 
+/* The newest date the rows state. A DeGiro portfolio export carries its date on
+ * every position and cash row instead of naming a period, so comparing it with
+ * the stored rows keeps an older export from moving holdings and cash
+ * backwards. */
+function latestDay(rows: readonly { asOf: string }[] | undefined): string | undefined {
+  let latest: string | undefined;
+  for (const row of rows ?? []) {
+    const day = row.asOf.slice(0, 10);
+    if (latest === undefined || day > latest) latest = day;
+  }
+  return latest;
+}
+
 /* Coverage only ever grows by union with what the stored proof already
- * spans. A backfill keeps the stored end; a forward sync takes the incoming
- * end. Anything that touches or overlaps the stored span is joined to it, so
- * a normal sync after a backfill cannot shrink the coverage; across a gap the
- * stored span cannot vouch for the days between, so a forward sync replaces
- * it and a backfill leaves it alone. */
+ * spans. A backfill, or a stale portfolio that proves no coverage, keeps the
+ * stored end; a forward sync takes the incoming end. Anything that touches or
+ * overlaps the stored span is joined to it, so a normal sync after a backfill
+ * cannot shrink the coverage; across a gap the stored span cannot vouch for
+ * the days between, so a forward sync replaces it and a backfill leaves it
+ * alone. */
 function mergedCoverage(
   stored: CashHistoryCoverage | undefined,
   incoming: CashHistoryCoverage,
@@ -230,6 +262,26 @@ export function stableTradeId(trade: Omit<Trade, "id">): string {
   return `anonymous-${value >>> 0}`;
 }
 
+/**
+ * Snapshot ids for one broker's incoming trades. A broker trade id is unique
+ * per order, not per execution: DeGiro gives every partial fill of one order
+ * the same Order Id. Returning that id as the row id would collapse the fills
+ * on a merge and lose executions. The first row keeps the bare id, so existing
+ * stored trades keep their id; later rows with the same base id get an
+ * occurrence suffix. Incoming order is the file order, and an appended older
+ * window only adds rows after the ones already seen, so the suffix is stable
+ * across overlapping re-imports.
+ */
+export function brokerTradeRowIds(broker: string, trades: readonly Omit<Trade, "id">[]): string[] {
+  const seen = new Map<string, number>();
+  return trades.map((trade) => {
+    const base = `${broker}:${stableTradeId(trade)}`;
+    const occurrence = (seen.get(base) ?? 0) + 1;
+    seen.set(base, occurrence);
+    return occurrence === 1 ? base : `${base}#${occurrence}`;
+  });
+}
+
 export function createBrokerDataCache(initial: BrokerDataSnapshot = {}) {
   const positionsByBroker = new Map<string, Position[]>();
   const tradesByBroker = new Map<string, Trade[]>();
@@ -237,6 +289,7 @@ export function createBrokerDataCache(initial: BrokerDataSnapshot = {}) {
   const cashBalancesByBroker = new Map<string, CashBalance[]>();
   const cashFlowsByBroker = new Map<string, CashFlow[]>();
   const cashHistoryByBroker = new Map<string, CashHistoryCoverage>();
+  const lastImportByBroker = new Map<string, NonNullable<BrokerAccountSnapshot["lastImport"]>>();
   let problems: string[] = [];
   let dataVersion = 0;
 
@@ -247,6 +300,7 @@ export function createBrokerDataCache(initial: BrokerDataSnapshot = {}) {
     cashBalancesByBroker.clear();
     cashFlowsByBroker.clear();
     cashHistoryByBroker.clear();
+    lastImportByBroker.clear();
     for (const [broker, data] of Object.entries(snapshot)) {
       if (!data) continue;
       positionsByBroker.set(broker, structuredClone(restorePositions(broker, data.positions)));
@@ -258,13 +312,14 @@ export function createBrokerDataCache(initial: BrokerDataSnapshot = {}) {
       );
       cashFlowsByBroker.set(broker, structuredClone(withBroker(broker, data.cashFlows ?? [])));
       if (data.cashHistory) cashHistoryByBroker.set(broker, structuredClone(data.cashHistory));
+      if (data.lastImport) lastImportByBroker.set(broker, structuredClone(data.lastImport));
     }
     dataVersion += 1;
   };
   restore(initial);
 
   return {
-    apply(result: Pick<ScheduledSyncResult, "outcomes" | "problems">) {
+    apply(result: { outcomes: readonly AppliedOutcome[]; problems: string[] }) {
       for (const outcome of result.outcomes) {
         // Partial results with problems still carry fresh broker data; discarding
         // them left the vault stale while the UI showed only the problem.
@@ -278,11 +333,23 @@ export function createBrokerDataCache(initial: BrokerDataSnapshot = {}) {
         );
         const statementEnd = incoming.statementTo ?? incoming.period?.to;
         const backfill =
-          outcome.broker === "ibkr" &&
+          (outcome.broker === "ibkr" || outcome.broker === "degiro") &&
           statementEnd !== undefined &&
           storedLatest !== undefined &&
           statementEnd < storedLatest;
-        if (sections.positions.status === "complete" && !backfill) {
+        /* DeGiro dates a portfolio export on its rows rather than naming a
+         * period. Older holdings are a backfill: they must not move the
+         * positions, the cash row or the stored coverage backwards. */
+        const today = new Date().toISOString().slice(0, 10);
+        const storedPositionDay = latestDay(positionsByBroker.get(outcome.broker));
+        const incomingPositionDay = latestDay(sections.positions.rows);
+        const stalePortfolio =
+          outcome.broker === "degiro" &&
+          incomingPositionDay !== undefined &&
+          storedPositionDay !== undefined &&
+          storedPositionDay <= today &&
+          incomingPositionDay < storedPositionDay;
+        if (sections.positions.status === "complete" && !backfill && !stalePortfolio) {
           // A provider sync has no authority over a user-entered basis and its
           // lock, and an unchanged row may carry a basis forward (WS4.2).
           const stored = positionsByBroker.get(outcome.broker) ?? [];
@@ -294,9 +361,10 @@ export function createBrokerDataCache(initial: BrokerDataSnapshot = {}) {
             ),
           );
         }
-        const mappedTrades = sections.trades.rows.map((trade) => ({
+        const tradeIds = brokerTradeRowIds(outcome.broker, sections.trades.rows);
+        const mappedTrades = sections.trades.rows.map((trade, index) => ({
           ...withBroker(outcome.broker, [trade])[0],
-          id: `${outcome.broker}:${stableTradeId(trade)}`,
+          id: tradeIds[index]!,
         }));
         const tradeWindow = windowPeriod(outcome.broker, sections.trades.status, incoming.period);
         if (tradeWindow)
@@ -347,7 +415,7 @@ export function createBrokerDataCache(initial: BrokerDataSnapshot = {}) {
             outcome.broker,
             mergeById(dividendsByBroker.get(outcome.broker) ?? [], incomingDividends),
           );
-        if (sections.cashBalances.status === "complete" && !backfill)
+        if (sections.cashBalances.status === "complete" && !backfill && !stalePortfolio)
           cashBalancesByBroker.set(
             outcome.broker,
             withBroker(outcome.broker, sections.cashBalances.rows),
@@ -380,7 +448,7 @@ export function createBrokerDataCache(initial: BrokerDataSnapshot = {}) {
           const merged = mergedCoverage(
             cashHistoryByBroker.get(outcome.broker),
             incoming.cashHistory,
-            backfill,
+            backfill || stalePortfolio,
           );
           if (merged) cashHistoryByBroker.set(outcome.broker, merged);
         } else if (!backfill && readCash) cashHistoryByBroker.delete(outcome.broker);
@@ -409,8 +477,9 @@ export function createBrokerDataCache(initial: BrokerDataSnapshot = {}) {
         ...dividendsByBroker.keys(),
         ...cashBalancesByBroker.keys(),
         ...cashFlowsByBroker.keys(),
+        ...lastImportByBroker.keys(),
       ])) {
-        if (broker !== "ibkr" && broker !== "trading212") continue;
+        if (!isBrokerId(broker)) continue;
         snapshot[broker] = {
           positions: structuredClone(positionsByBroker.get(broker) ?? []),
           trades: structuredClone(tradesByBroker.get(broker) ?? []),
@@ -419,6 +488,9 @@ export function createBrokerDataCache(initial: BrokerDataSnapshot = {}) {
           cashFlows: structuredClone(cashFlowsByBroker.get(broker) ?? []),
           ...(cashHistoryByBroker.has(broker)
             ? { cashHistory: structuredClone(cashHistoryByBroker.get(broker)!) }
+            : {}),
+          ...(lastImportByBroker.has(broker)
+            ? { lastImport: structuredClone(lastImportByBroker.get(broker)!) }
             : {}),
         };
       }

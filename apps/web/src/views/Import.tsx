@@ -4,6 +4,7 @@ import { shellCopy } from "../copy/shell.js";
 import { buttonVariants } from "../components/ui/Button.js";
 import Card from "../components/ui/Card.js";
 import { cn } from "../components/ui/utils.js";
+import StatusLine from "../components/ui/StatusLine.js";
 import type { ShellNotice } from "../shellNotice.js";
 
 type ImportProps = {
@@ -57,9 +58,9 @@ export default function Import({
         />
       </div>
       {problems.length > 0 && (
-        <p role="alert" className="text-warn">
+        <StatusLine tone="problem" role="alert">
           {problems.map((n) => c.notice(n)).join(" ")}
-        </p>
+        </StatusLine>
       )}
       <BankLink
         busy={busy}

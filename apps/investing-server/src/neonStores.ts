@@ -38,11 +38,11 @@ import type { AgentRunRecord, AgentRunStore } from "./fileAgentRunStore.js";
 import type {
   BrokerAccountSnapshot,
   BrokerSyncOperationStore,
-  ScheduledBroker,
   SharedPriceBar,
   SharedPriceCoverage,
   SharedPriceStore,
 } from "@lavega/adapters";
+import type { BrokerId } from "@lavega/core";
 import type { PriceSyncProgress, PriceSyncProgressStore } from "./priceOrchestrator.js";
 
 /**
@@ -253,7 +253,7 @@ export function createNeonBrokerSyncStateStore(
   const state = createSyncStateRepository(db, tenantId);
   const operations = createBrokerSyncOperationRepository(db, tenantId);
   return {
-    get: (broker: ScheduledBroker) => state.get(broker),
+    get: (broker: BrokerId) => state.get(broker),
     async claim(broker, input) {
       const claim = await operations.claim(broker, input);
       return { ...claim, data: (claim.snapshot as BrokerAccountSnapshot | null) ?? null };

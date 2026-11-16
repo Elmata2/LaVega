@@ -1,9 +1,12 @@
 import { Hono } from "hono";
 import { Schema, type Layer } from "effect";
 import {
+  brokerShortLabel,
   confirmCashFlowSuggestion,
+  CREDENTIAL_BROKERS,
   emptyInvestingDashboard,
   GICS_SECTOR_LABELS,
+  isCredentialBroker,
   InvestingDashboardDataSchema,
   InvestingLayoutSchema,
   LOCAL_TENANT_ID,
@@ -14,6 +17,7 @@ import {
   RealizedIncomeReportSchema,
   suggestionSignChange,
   type CashFlowSuggestion,
+  type CredentialBroker,
   emptyRealizedReport,
   type BenchmarkInstrument,
   type BenchmarkSelectionStore,
@@ -126,7 +130,7 @@ export type InvestingDashboardReader = (input: {
   timing?: ServerTiming;
 }) => Promise<InvestingDashboardData>;
 export type BrokerCredentialInput = {
-  broker: "ibkr" | "trading212";
+  broker: CredentialBroker;
   token: string;
   queryId?: string;
   secret?: string;
@@ -177,7 +181,7 @@ export type InvestingHealth = {
   trading212: { lastSyncedAt: string | null; positions: number };
 };
 type BrokerVaultStatus = "empty" | "locked" | "unlocked";
-type BrokerReadability = Record<"ibkr" | "trading212", "empty" | "readable" | "unreadable">;
+type BrokerReadability = Record<CredentialBroker, "empty" | "readable" | "unreadable">;
 type PriceDependencies = {
   /** The shared, instrument-keyed price store (issue #307). One series per
    *  instrument for the whole installation. */
@@ -231,6 +235,8 @@ type PriceDependencies = {
   credentialStatus: () => Promise<BrokerVaultStatus>;
   brokerReadability: () => Promise<BrokerReadability | undefined>;
   unlockCredentials: (passphrase: string) => Promise<boolean>;
+  /** One tenant's DeGiro file import. Absent when the server has no vault. */
+  deGiroImportRequest?: (request: Request) => Promise<Response>;
   problemReporter: ProblemReporter;
   dashboardReader: InvestingDashboardReader;
   onPriceDataChanged: () => void;
@@ -410,9 +416,14 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
         backfillFrom?: string;
       } = target;
       let identifierProblems: string[] = [];
+      /* An unresolved identity is not evidence about the listing. The run may
+       * report the problem, but it must not freeze the series as delisted: a
+       * rate-limited OpenFIGI lookup has to be retried on a later run. */
+      let identityResolved = true;
       // Yahoo decodes Trading 212 tickers and uses their ISIN itself. An
       // arbitrary OpenFIGI listing would discard the broker's venue hint.
       if (target.isin && !target.ticker.endsWith("_EQ")) {
+        identityResolved = false;
         const identifier = await mapIdentifier(
           {
             isin: target.isin,
@@ -420,6 +431,9 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
             instrument: {
               name: target.symbol,
               ...(target.currency ? { currency: target.currency } : {}),
+              /* DeGiro prints the venue it executed on. It chooses among
+               * OpenFIGI's listings; it never invents a ticker. */
+              ...(target.venue ? { venue: target.venue } : {}),
             },
           },
           tenantId,
@@ -435,6 +449,15 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
             ticker: identifier.value.match.ticker,
             exchange: identifier.value.match.exchange,
           };
+          identityResolved = true;
+          /* A broker with no ticker cannot settle which listing it meant. Say
+           * which one was used, so a wrong-price holding can be recognised. */
+          const listings = identifier.value.resolution?.candidates.length ?? 0;
+          if (target.noTicker && !target.venue && listings > 1) {
+            identifierProblems = [
+              `${listings} listings for this ISIN and no venue hint — used ${identifier.value.match.ticker} (${identifier.value.match.exchange})`,
+            ];
+          }
         } else {
           identifierProblems = identifier?.value.problems ?? ["Could not resolve ISIN"];
         }
@@ -446,9 +469,10 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
         owner: leaseId,
         priceProviders,
         request,
+        allowDelist: identityResolved,
       });
       if (result.fetched) dependencies.onPriceDataChanged?.();
-      return result.problems.length === 0
+      return result.problems.length === 0 && identifierProblems.length === 0
         ? result
         : { ...result, problems: [...identifierProblems, ...result.problems] };
     },
@@ -890,7 +914,7 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
       if (!dependencies.brokerReadability) return c.json(encodeDashboard(dashboard));
       try {
         const readability = await dependencies.brokerReadability();
-        const unreadable = (["ibkr", "trading212"] as const).filter(
+        const unreadable = CREDENTIAL_BROKERS.filter(
           (broker) => readability?.[broker] === "unreadable",
         );
         return c.json(
@@ -900,7 +924,7 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
               ...dashboard.problems,
               ...unreadable.map(
                 (broker) =>
-                  `${broker === "ibkr" ? "IBKR" : "Trading 212"} credentials cannot be read. Reconnect broker to restore data.`,
+                  `${brokerShortLabel(broker)} credentials cannot be read. Reconnect broker to restore data.`,
               ),
             ],
           }),
@@ -1317,8 +1341,10 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
       .json<Partial<BrokerCredentialInput>>()
       .catch(() => ({}) as Partial<BrokerCredentialInput>);
     const broker = body.broker;
-    if (broker !== "ibkr" && broker !== "trading212")
-      return c.json({ problems: ["broker must be ibkr or trading212"] }, 400);
+    /* Only a broker with credentials has an API to connect. DeGiro is imported
+     * from files (#320), so it must never reach this route. */
+    if (!isCredentialBroker(broker))
+      return c.json({ problems: [`broker must be ${CREDENTIAL_BROKERS.join(" or ")}`] }, 400);
     if (!body.token?.trim()) return c.json({ problems: ["token is required"] }, 400);
     if (passphraseMode() === "required" && !body.passphrase?.trim())
       return c.json({ problems: ["passphrase is required"] }, 400);
@@ -1380,6 +1406,21 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
     } catch {
       return c.json({ problems: ["Vault could not be unlocked"] }, 500);
     }
+  });
+  /* DeGiro is imported from the user's own export files (issue #323): preview
+   * parses and returns counts, commit merges under the broker lease. The
+   * runtime handler is bound to one tenant, so the path carries no tenant. */
+  investingApp.post("/api/investing/brokers/degiro/import", async (c) => {
+    if (!dependencies.deGiroImportRequest)
+      return c.json({ problems: ["DeGiro import is not available in this server mode"] }, 503);
+    return dependencies.deGiroImportRequest(c.req.raw);
+  });
+  /* The same path reads the stored import status (#324): what was imported,
+   * when, and which files. It writes nothing. */
+  investingApp.get("/api/investing/brokers/degiro/import", async (c) => {
+    if (!dependencies.deGiroImportRequest)
+      return c.json({ problems: ["DeGiro import is not available in this server mode"] }, 503);
+    return dependencies.deGiroImportRequest(c.req.raw);
   });
   investingApp.delete("/api/prices/cache", async (c) => {
     /* Prices are public reference data now (issue #307): with a database one

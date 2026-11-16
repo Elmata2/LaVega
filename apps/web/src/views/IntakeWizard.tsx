@@ -5,6 +5,7 @@ import {
   RISK_SCALE,
   type AdvisorProfileStore,
   type Goal,
+  type RewardsBalance,
 } from "@lavega/core";
 import { useAppLocale } from "../appLocale.js";
 import { intakeCopy } from "../copy/intake.js";
@@ -13,6 +14,7 @@ import { formatWholeEuroIn } from "../format.js";
 import {
   applyBirthYear,
   applyBuffer,
+  applyCardBalances,
   applyCardRepayment,
   applyCheckInCadence,
   applyChildren,
@@ -39,6 +41,8 @@ import {
   applyChargesVat,
 } from "../intake/state.js";
 import { useProfileCommit } from "../intake/useProfileCommit.js";
+import { applyPoints, cardName, detailRows } from "../intake/wizard/cardDetails.js";
+import CardDetailsForm from "../intake/wizard/CardDetailsForm.js";
 import { bankBrandIds } from "../intake/wizard/cardOptions.js";
 import SummaryScreen from "../intake/wizard/SummaryScreen.js";
 import { summaryRows } from "../intake/wizard/summaryRows.js";
@@ -63,6 +67,7 @@ import {
   WIZARD_GOAL,
   type ScreenId,
 } from "../intake/wizard/screens.js";
+import { upsertBalance } from "./Punten.js";
 import {
   AmountScreen,
   BirthYearScreen,
@@ -77,6 +82,8 @@ import {
   UploadScreen,
   WorkScreen,
 } from "../intake/wizard/screenViews.js";
+import StatusLine from "../components/ui/StatusLine.js";
+import BankLink from "../components/BankLink.js";
 
 export type IntakeWizardProps = {
   store: AdvisorProfileStore | null;
@@ -90,6 +97,13 @@ export type IntakeWizardProps = {
    *  bookkeeping alone. Defaults to 1. */
   round?: 1 | 2;
   now?: () => string;
+  /** The manual points balances and how to store them (the Punten tab's store).
+   *  Without the saver the points are not asked. */
+  rewards?: RewardsBalance[];
+  onSaveRewards?: (next: RewardsBalance[]) => Promise<void>;
+  /** Present when bank linking is available (the server has Enable Banking
+   *  configured): the last step then offers the bank link first. */
+  bankLink?: { onRefresh: () => void } | "pending";
 };
 
 /** A copy record as tile options, in the record's own order. */
@@ -209,7 +223,12 @@ export default function IntakeWizard(props: IntakeWizardProps) {
     if (returnTo !== null) {
       const changed = change(profile);
       const fresh = after.filter((x) => !fullList.includes(x) && !isAnswered(changed, x));
-      const queue = [...pending.filter((x) => after.includes(x) && !isAnswered(changed, x)), ...fresh];
+      const lost = after.filter(
+        (x) => x !== id && isAnswered(profile, x) && !isAnswered(changed, x),
+      );
+      const queue = [
+        ...new Set([...pending.filter((x) => after.includes(x) && !isAnswered(changed, x)), ...fresh, ...lost]),
+      ];
       const [head, ...rest] = queue;
       setPending(rest);
       if (head !== undefined) {
@@ -629,6 +648,7 @@ export default function IntakeWizard(props: IntakeWizardProps) {
         copy={w}
         busy={busy}
         kind="debit"
+        banks={profile.statedBanks?.value}
         label={question}
         initial={profile.statedDebitCards?.value ?? []}
         onSubmit={(ids) => void save((p) => applyStatedDebitCards(p, ids, asOf))}
@@ -641,6 +661,7 @@ export default function IntakeWizard(props: IntakeWizardProps) {
         key={screen}
         copy={w}
         busy={busy}
+        banks={profile.statedBanks?.value}
         label={question}
         initial={profile.statedCards?.value ?? []}
         noneLabel={w.noneCard}
@@ -649,6 +670,40 @@ export default function IntakeWizard(props: IntakeWizardProps) {
         onSubmit={(ids) =>
           void save((p) => applyStatedCards(answerCards(p, true, asOf), ids, asOf))
         }
+      />
+    );
+  } else if (screen === "card-balances") {
+    question = q.cardDetails(together);
+    const rewards = props.rewards ?? [];
+    body = (
+      <CardDetailsForm
+        key="card-balances"
+        copy={w}
+        busy={busy}
+        submitLabel={w.next}
+        rows={detailRows({
+          cardIds: profile.statedCards?.value ?? [],
+          balances: profile.cardBalances?.value ?? [],
+          rewards,
+          nameOf: (id) => cardName(id, w.otherCard, w.cardDetails.unknownCard),
+          askPoints: props.onSaveRewards !== undefined,
+          repayment: profile.cardRepayment?.value ?? null,
+        })}
+        onSkip={() => void save((p) => p)}
+        onSubmit={(result) => {
+          void (async () => {
+            try {
+              if (props.onSaveRewards !== undefined) {
+                const next = applyPoints(rewards, result.points, asOf, upsertBalance);
+                if (next !== null) await props.onSaveRewards(next);
+              }
+            } catch {
+              setSaveFailed(true);
+              return;
+            }
+            await save((p) => applyCardBalances(p, result.balances, asOf));
+          })();
+        }}
       />
     );
   } else if (screen === "buffer") {
@@ -685,11 +740,38 @@ export default function IntakeWizard(props: IntakeWizardProps) {
         ),
     );
   } else if (screen === "upload") {
-    question = q.upload;
+    const link = props.bankLink === "pending" ? undefined : props.bankLink;
+    const pending = props.bankLink === "pending";
+    question = link || pending ? q.connectBank : q.upload;
     body = (
       <UploadScreen
         copy={w}
         busy={busy}
+        pending={pending}
+        {...(link
+          ? {
+              bankLink: (
+                <BankLink
+                  compact
+                  busy={busy}
+                  defaultPsuType="personal"
+                  onRefresh={link.onRefresh}
+                  onBeforeRedirect={async () => {
+                    // Done and stored before the browser leaves, so the return
+                    // trip lands in the finished app, not back in the wizard.
+                    // Busy meanwhile, so Later and the upload cannot race it.
+                    setBusy(true);
+                    try {
+                      const ok = await update((p) => markDone(p, "upload"));
+                      if (!ok) throw new Error(w.saveFailed);
+                    } finally {
+                      setBusy(false);
+                    }
+                  }}
+                />
+              ),
+            }
+          : {})}
         onImport={props.onImport}
         onFinish={() => void save((p) => p)}
       />
@@ -741,9 +823,9 @@ export default function IntakeWizard(props: IntakeWizardProps) {
       ) : null}
       {body}
       {saveFailed ? (
-        <p role="alert" className="wz-error">
+        <StatusLine tone="problem" role="alert" className="wz-error">
           {w.saveFailed}
-        </p>
+        </StatusLine>
       ) : null}
     </WizardFrame>
   );

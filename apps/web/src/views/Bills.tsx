@@ -24,7 +24,13 @@ import {
   toCents,
   withCurrentBalances,
 } from "@lavega/core";
-import { formatDate, formatEuroIn, monthLabel, weekdayLabel } from "../format.js";
+import {
+  formatDate,
+  formatEuroIn,
+  formatSignedEuroIn,
+  monthLabel,
+  weekdayLabel,
+} from "../format.js";
 import { useAppLocale } from "../appLocale.js";
 import { billsCopy, type BillsCopy } from "../copy/bills.js";
 import type { Locale } from "../locale.js";
@@ -32,6 +38,7 @@ import Badge from "../components/ui/Badge.js";
 import Button from "../components/ui/Button.js";
 import Card from "../components/ui/Card.js";
 import CardLink from "../components/ui/CardLink.js";
+import StatusLine, { type StatusTone } from "../components/ui/StatusLine.js";
 import "../styles/views.css";
 import {
   calendarWeeks,
@@ -206,12 +213,14 @@ function billFromDraft(draft: Draft): Bill {
   };
 }
 
-function statusTone(status: string): string {
-  if (status === "overdue" || status === "missed") return "border-neg text-neg";
-  if (status === "due") return "border-warn text-warn";
-  if (status === "paid") return "border-pos text-pos";
-  if (status === "paused" || status === "ended") return "opacity-60";
-  return "";
+/* Overdue and missed are problems (solid border), due is a warning (dashed),
+ * paid is a success (check): the shape carries it, the tint only adds to it. */
+function statusBadge(status: string): { tone?: StatusTone; className?: string } {
+  if (status === "overdue" || status === "missed") return { tone: "problem" };
+  if (status === "due") return { tone: "warning" };
+  if (status === "paid") return { tone: "success" };
+  if (status === "paused" || status === "ended") return { className: "opacity-60" };
+  return {};
 }
 
 export default function Bills({
@@ -335,6 +344,7 @@ export default function Bills({
   }
 
   const money = (cents: number) => formatEuroIn(locale, cents / 100);
+  const signedMoney = (cents: number) => formatSignedEuroIn(locale, cents / 100);
   const shortfallTone =
     preview.shortfallCents == null
       ? "text-muted"
@@ -527,9 +537,9 @@ export default function Bills({
             )}
           </form>
           {problems.length > 0 && (
-            <p className="text-neg" role="alert">
+            <StatusLine tone="problem" role="alert">
               {c.form.problems[problems[0]]}
-            </p>
+            </StatusLine>
           )}
           <div className="mt-[var(--sp-3)] flex gap-3">
             <Button variant="primary" data-testid="bills-save" disabled={busy} onClick={submit}>
@@ -571,7 +581,7 @@ export default function Bills({
           <div data-testid="bills-shortfall">
             <p className="m-0 text-muted">{c.summary.shortfall}</p>
             <p className={`m-0 text-2xl ${shortfallTone}`} data-testid="bills-shortfall-value">
-              {preview.shortfallCents != null ? money(preview.shortfallCents) : "—"}
+              {preview.shortfallCents != null ? signedMoney(-preview.shortfallCents) : "—"}
             </p>
             <p className="m-0 text-muted">{shortfallNote}</p>
           </div>
@@ -632,7 +642,7 @@ export default function Bills({
                             negative remainder there is arithmetic, not a gap.
                             Only a short window is alarming (measured against
                             cash on hand). */}
-                        {c.paycheck.remaining}: {money(period.remainingCents)}
+                        {c.paycheck.remaining}: {signedMoney(period.remainingCents)}
                       </span>
                     </span>
                   </div>
@@ -695,9 +705,11 @@ export default function Bills({
                         {cadenceText(row.bill, locale, c)}
                       </span>
                     </span>
-                    <Badge className={statusTone(row.status)}>{c.rowStatus[row.status]}</Badge>
+                    <Badge {...statusBadge(row.status)}>{c.rowStatus[row.status]}</Badge>
                     <span className={row.direction === "in" ? "text-pos" : ""}>
-                      {money(row.amountCents)}
+                      {row.direction === "in"
+                        ? signedMoney(row.amountCents)
+                        : money(row.amountCents)}
                     </span>
                   </div>
                   {settlement?.state === "partial" && (
@@ -727,11 +739,9 @@ export default function Bills({
                         {c.match.score(`${Math.round(suggestion.confidence * 100)}%`)}
                       </span>
                       {suggestion.evidence.pending && (
-                        <Badge className="border-neg text-neg">{c.match.pending}</Badge>
+                        <Badge tone="problem">{c.match.pending}</Badge>
                       )}
-                      {suggestion.ambiguous && (
-                        <Badge className="border-neg text-neg">{c.match.ambiguous}</Badge>
-                      )}
+                      {suggestion.ambiguous && <Badge tone="problem">{c.match.ambiguous}</Badge>}
                       <Button
                         data-testid={`bills-confirm-${row.occurrence.id}`}
                         variant="primary"
@@ -835,8 +845,7 @@ export default function Bills({
               >
                 <span className="flex min-w-[14rem] flex-col">
                   <span className="font-medium">
-                    {bill.name}{" "}
-                    <Badge className={statusTone(bill.status)}>{c.status[bill.status]}</Badge>
+                    {bill.name} <Badge {...statusBadge(bill.status)}>{c.status[bill.status]}</Badge>
                   </span>
                   <span className="text-muted">
                     {formatEuroIn(locale, resolveBillAmountCents(bill) / 100)} ·{" "}
@@ -923,7 +932,7 @@ export default function Bills({
                     {source !== "" && <span className="block text-muted">{source}</span>}
                   </span>
                   <span className="flex gap-3">
-                    <Badge className={statusTone(occurrence.status)}>
+                    <Badge {...statusBadge(occurrence.status)}>
                       {c.rowStatus[occurrence.status as keyof BillsCopy["rowStatus"]]}
                     </Badge>
                     <span>{formatEuroIn(locale, amountCents / 100)}</span>
