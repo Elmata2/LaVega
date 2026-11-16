@@ -33,7 +33,9 @@ ask-sonner — Your guide to working with Sonner, my toast library. Contains set
 
 Issues live as GitHub issues in `Elmata2/lavega`, driven through the `gh` CLI.
 
-When you finish a Github Issue, commit and push it to main, with a summary of the changes.
+When you finish a GitHub Issue, commit and push it to `master`, with a summary of the changes.
+`master` is the GitHub default and the Vercel production branch; a merge to `main` does not deploy.
+Open every PR against `master`.
 You can use the /caveman-commit skill for that, to create a dense but thoughtful summary
 
 When issues are solved in github, we will provide a short summary of what our changes are doing inside the repo
