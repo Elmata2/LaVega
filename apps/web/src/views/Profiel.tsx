@@ -121,7 +121,6 @@ type ProfielProps = {
   onEntityChange: (entity: string) => void;
   busy: boolean;
   problems: ShellNotice[];
-  onImport: (file: File) => void;
   onRefreshBank: () => void;
   /** Back-up (unchanged component). */
   storage: VaultStorage;
@@ -484,7 +483,6 @@ export default function Profiel({
   onEntityChange,
   busy,
   problems,
-  onImport,
   onRefreshBank,
   storage,
   asOf,
@@ -679,7 +677,6 @@ export default function Profiel({
         onEntityChange={onEntityChange}
         busy={busy}
         problems={problems}
-        onImport={onImport}
         onRefreshBank={onRefreshBank}
       />
 

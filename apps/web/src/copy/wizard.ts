@@ -162,6 +162,7 @@ const DEBIT_BRANDS: WizardCopy["debitBrands"] = {
   wise: "Wise",
   openbank: "Openbank",
   "trade-republic": "Trade Republic",
+  "trading-212": "Trading 212",
   crypto: "Crypto (Bybit, Kraken, Plutus)",
 };
 

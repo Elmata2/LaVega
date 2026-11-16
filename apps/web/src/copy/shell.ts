@@ -481,6 +481,10 @@ const nl: ShellCopy = {
           return "CAMT.053 wordt nog niet ondersteund.";
         case "spreadsheet-not-supported":
           return `Dit is een Excel-bestand (.${p.format}). LaVega leest CSV, MT940 en .STA — sla het in Excel op via Bestand → Opslaan als → CSV, of download het afschrift bij je bank als CSV.`;
+        case "spreadsheet-unrecognised":
+          return `Dit Excel-bestand (.${p.format}) heeft kolommen die we niet kennen. Probeer CSV, of een bestand rechtstreeks van je bank.`;
+        case "pdf-not-supported":
+          return "Dit is een PDF. Kies CSV of Excel.";
         case "recognised-but-empty":
           return `Formaat herkend (${p.source}), maar er stonden geen transacties in.`;
         case "unrecognised":
@@ -885,6 +889,10 @@ const en: ShellCopy = {
           return "CAMT.053 isn't supported yet.";
         case "spreadsheet-not-supported":
           return `This is an Excel file (.${p.format}). LaVega reads CSV, MT940 and .STA — save it from Excel with File → Save As → CSV, or download the statement from your bank as CSV.`;
+        case "spreadsheet-unrecognised":
+          return `This Excel file (.${p.format}) has columns we do not know. Try CSV, or a file straight from your bank.`;
+        case "pdf-not-supported":
+          return "This is a PDF. Choose CSV or Excel.";
         case "recognised-but-empty":
           return `Format recognised (${p.source}), but it held no transactions.`;
         case "unrecognised":

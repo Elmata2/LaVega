@@ -111,7 +111,6 @@ async function render(overrides: Partial<Parameters<typeof Profiel>[0]> = {}) {
     onEntityChange: () => {},
     busy: false,
     problems: [],
-    onImport: () => {},
     onRefreshBank: () => {},
     storage,
     asOf: "2026-08-16",
@@ -305,7 +304,7 @@ test("Uitloggen: zonder sessie alleen vergrendelen, geen sign-out-verzoek", asyn
 test("Koppelingen, Back-up and Import render inside the profile", async () => {
   await render();
   expect(container!.querySelector('[aria-label="Koppelingen"]')).not.toBeNull();
-  expect(section("Importeren").querySelector('input[type="file"]')).not.toBeNull();
+  expect(section("Importeren")).toBeTruthy();
   expect(section("Back-up")).toBeTruthy();
 });
 

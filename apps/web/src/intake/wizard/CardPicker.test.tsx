@@ -125,7 +125,7 @@ test("debit picker: brands closed, Revolut shows Standard, Plus, Premium, Metal,
   const names = [...el.querySelectorAll("button[aria-expanded]")].map((b) => b.textContent);
   expect(names[0]).toContain("ING");
   expect(names.some((n) => n?.includes("Crypto (Bybit, Kraken, Plutus)"))).toBe(true);
-  expect(names.at(-1)).toContain("Overige");
+  expect(names.at(-1)).toContain("Crypto");
   click(brand(/Revolut/));
   expect(boxes()).toEqual([
     "Revolut Metal betaalpas",

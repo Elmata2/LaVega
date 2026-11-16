@@ -65,6 +65,13 @@ export type Account = {
    *  import zet hem niet, want daar is "opgehaald" geen gebeurtenis die los
    *  staat van het afschrift zelf. */
   balanceFetchedAt?: string;
+  /** Where the account's data comes from when it is NOT a bank link: "file" =
+   *  fed from an uploaded export (Amex, Trading 212 card ...). Absent = unknown
+   *  or a bank link. Optional and additive: older vaults decrypt unchanged. */
+  source?: "file";
+  /** The catalogue id of the card the owner stated in the wizard that this
+   *  file-fed account stands in for. It clears that "not connected" card. */
+  statedCardId?: string;
 };
 
 /** Het KOPPELMOMENT stempelen, en alleen daar waar dat te bewijzen valt.

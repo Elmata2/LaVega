@@ -84,13 +84,13 @@ import {
 } from "../intake/wizard/screenViews.js";
 import StatusLine from "../components/ui/StatusLine.js";
 import BankLink from "../components/BankLink.js";
+import { useOpenCardFile } from "../components/import/CardFileContext.js";
 
 export type IntakeWizardProps = {
   store: AdvisorProfileStore | null;
   corrupt?: boolean;
   asOf: string;
   onSave: (next: AdvisorProfileStore) => Promise<void>;
-  onImport: (file: File) => Promise<{ ok: true; count: number } | { ok: false }>;
   onFinish: () => void;
   onExit: () => void;
   /** 2 runs only the coaching questions (no summary) and leaves round 1's
@@ -142,6 +142,7 @@ function saveWizardDebt(
 
 export default function IntakeWizard(props: IntakeWizardProps) {
   const [locale] = useAppLocale();
+  const openCardFile = useOpenCardFile();
   const w = wizardCopy[locale];
   const ic = intakeCopy[locale];
   const now = props.now ?? (() => new Date().toISOString());
@@ -772,7 +773,9 @@ export default function IntakeWizard(props: IntakeWizardProps) {
               ),
             }
           : {})}
-        onImport={props.onImport}
+        onOpenFile={
+          openCardFile ? (onDone) => openCardFile(null, { fileOnly: true, onDone }) : undefined
+        }
         onFinish={() => void save((p) => p)}
       />
     );

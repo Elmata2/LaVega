@@ -7,7 +7,6 @@ import CardPicker, { orderedCardIds } from "./CardPicker.js";
 import type { CardKind } from "./cardOptions.js";
 import { WORK_ORDER } from "./screens.js";
 import MultiTiles from "./MultiTiles.js";
-import StatusLine from "../../components/ui/StatusLine.js";
 
 type Busy = { busy: boolean };
 
@@ -557,7 +556,9 @@ export function CardsScreen(
 export function UploadScreen(
   p: Busy & {
     copy: WizardCopy;
-    onImport: (file: File) => Promise<{ ok: true; count: number } | { ok: false }>;
+    /** Opens the "add a card by file" dialog; `onDone` gets the added count.
+     *  Absent where the dialog is not provided: the upload option is then hidden. */
+    onOpenFile?: (onDone: (count: number) => void) => void;
     onFinish: () => void;
     /** The bank link, when linking is available. Without it the upload leads. */
     bankLink?: ReactNode;
@@ -565,39 +566,25 @@ export function UploadScreen(
     pending?: boolean;
   },
 ) {
-  const [state, setState] = useState<
-    { kind: "idle" } | { kind: "working" } | { kind: "ok"; count: number } | { kind: "failed" }
-  >({ kind: "idle" });
+  const [state, setState] = useState<{ kind: "idle" } | { kind: "ok"; count: number }>({
+    kind: "idle",
+  });
   const u = p.copy.upload;
-  const working = state.kind === "working" || p.pending === true;
+  const working = p.pending === true;
   const linked = p.bankLink !== undefined || p.pending === true;
 
-  async function pick(file: File) {
-    setState({ kind: "working" });
-    try {
-      const r = await p.onImport(file);
-      setState(r.ok ? { kind: "ok", count: r.count } : { kind: "failed" });
-    } catch {
-      setState({ kind: "failed" });
-    }
-  }
-
-  /** No `accept`: the format is sniffed from the contents, as in Import. */
-  const fileLabel = (cls: string) => (
-    <label className={cls} aria-disabled={working || p.busy}>
-      {u.button}
-      <input
-        type="file"
-        className="wz-sr"
+  /** The dialog picks, previews and saves; the wizard only hears the count. */
+  const fileButton = (cls: string) =>
+    p.onOpenFile ? (
+      <button
+        type="button"
+        className={cls}
         disabled={working || p.busy}
-        onChange={(e) => {
-          const file = e.target.files?.[0];
-          e.target.value = "";
-          if (file) void pick(file);
-        }}
-      />
-    </label>
-  );
+        onClick={() => p.onOpenFile?.((count) => setState({ kind: "ok", count }))}
+      >
+        {u.button}
+      </button>
+    ) : null;
 
   return (
     <div className="wz-form">
@@ -625,12 +612,7 @@ export function UploadScreen(
             </>
           ) : null}
           <div className="wz-footer">
-            <div>{fileLabel(linked ? "wz-link wz-upload" : "wz-next wz-upload")}</div>
-            {state.kind === "failed" ? (
-              <StatusLine tone="problem" role="alert" className="wz-error">
-                {u.failed}
-              </StatusLine>
-            ) : null}
+            <div>{fileButton(linked ? "wz-link wz-upload" : "wz-next wz-upload")}</div>
             <div>
               <button
                 type="button"

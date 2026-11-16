@@ -47,7 +47,7 @@ test("one line per unconnected brand; the link opens accounts", () => {
     />,
   );
   expect(container!.textContent).toContain("ABN AMRO is not connected yet");
-  expect(container!.textContent).toContain("American Express is not connected yet");
+  expect(container!.textContent).toContain("American Express: add a file");
   expect(container!.querySelectorAll("li")).toHaveLength(2);
   act(() =>
     container!.querySelector<HTMLButtonElement>("[data-testid=connect-checklist-link]")!.click(),

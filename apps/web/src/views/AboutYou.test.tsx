@@ -327,7 +327,6 @@ test("Redo on risk reopens block 3 with the answers kept and opens the intake", 
         asOf={AS_OF}
         store={lastSaved(props)}
         onSave={async () => {}}
-        onImport={async () => ({ ok: false })}
         onFinish={() => {}}
         onExit={() => {}}
         now={() => NOW}

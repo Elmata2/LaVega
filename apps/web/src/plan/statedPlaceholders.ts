@@ -1,4 +1,10 @@
-import { bankMatchesBrand, type Account, type CatalogueEntryLike } from "@lavega/core";
+import {
+  FILE_ROUTE_BRANDS,
+  bankMatchesBrand,
+  countsAsLinked,
+  type Account,
+  type CatalogueEntryLike,
+} from "@lavega/core";
 import { OTHER_CARD, brandOfCardId, cardLabel, type CardBrand } from "../intake/wizard/cardOptions";
 import { heldCatalogueIds } from "./heldCards";
 
@@ -7,6 +13,8 @@ export type StatedPlaceholder = {
   kind: "credit" | "debit";
   name: string;
   brand: CardBrand | null;
+  /** True when only a file can feed it (no bank link exists for the brand). */
+  fileOnly: boolean;
 };
 
 type PlaceholderInput = {
@@ -25,18 +33,27 @@ export function statedCardPlaceholders(i: PlaceholderInput): StatedPlaceholder[]
   const other = i.otherLabels;
   const held = heldCatalogueIds(i.accounts, i.entries);
   const byId = new Map(i.entries.map((e) => [e.id, e]));
-  const linked = i.accounts.filter((a) => a.linkedAt !== undefined);
+  const linked = i.accounts.filter(countsAsLinked);
   const out: StatedPlaceholder[] = [];
   for (const kind of ["credit", "debit"] as const) {
     for (const id of new Set(kind === "credit" ? i.credit : i.debit)) {
       const brand = id === OTHER_CARD ? null : brandOfCardId(id, kind);
       if (kind === "credit" && held.has(id)) continue;
-      if (kind === "debit" && brand !== null && linked.some((a) => bankMatchesBrand(a.bank, brand)))
+      // A card only a file can feed clears when a file was imported FOR it, not on
+      // a bank-name match: a Trading 212 cash account is not the Trading 212 card.
+      if (i.accounts.some((a) => a.statedCardId === id)) continue;
+      const fileOnly = brand !== null && FILE_ROUTE_BRANDS.includes(brand);
+      if (
+        kind === "debit" &&
+        brand !== null &&
+        !fileOnly &&
+        linked.some((a) => bankMatchesBrand(a.bank, brand))
+      )
         continue;
       const picked = cardLabel(id, other[kind], kind);
       const name =
         id === OTHER_CARD ? other[kind] : picked === id ? (byId.get(id)?.product ?? id) : picked;
-      out.push({ id, kind, name, brand });
+      out.push({ id, kind, name, brand, fileOnly });
     }
   }
   return out;

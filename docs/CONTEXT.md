@@ -89,7 +89,7 @@ tx = {
 
 - **Enable Banking** first, against the **sandbox** we have access to. JWT RS256 (`node:crypto`), routes for aspsps/auth/callback/sync/forget, pagination via `continuation_key`, prefer `CLBD` balance. Re-implement cleanly in TS from the Kasoverzicht `server.mjs` logic (clean-room, permitted).
 - **finAPI** second (client-credentials → user token; webform response varies by version).
-- **File import** always available offline: MT940/.STA, CAMT.053, CSV with per-bank profiles (ING, Rabobank, ABN tab-no-header, Knab, Revolut, Amex, Trading 212). Amex expenses may be positive → "invert amounts" option. Trading 212's **CSV export** = cashflows only (deposits/withdrawals/dividends), not securities trades — its **API** does expose trades, see `docs/investing/CONNECTORS.md`.
+- **File import** always available offline: MT940/.STA, CAMT.053, CSV with per-bank profiles (ING, Rabobank, ABN tab-no-header, Knab, Revolut, Amex, Trading 212). Amex expenses may be positive → "invert amounts" option. Trading 212's **CSV export** = cashflows plus (unverified) card rows ("Card debit" etc.), not securities trades — its **API** does expose trades, see `docs/investing/CONNECTORS.md`.
 
 ## Broker access (investing)
 
@@ -130,6 +130,7 @@ Specified in **`docs/investing/STACK.md`** — the investing side's own stack, d
 - **Add area** — the dashed boxes at the bottom of Home, one per widget that is off (at most four). A click switches the widget on. There is no picker; the boxes and hide buttons are the only widget control.
 - **Assistant panel** — the right-hand column of the app frame, on every view at >= 1024px (a sheet from the bottom bar below that). It runs in the browser, reads the vault before every turn and makes no network call.
 - **Pop-up** — a modal dialog on Home that asks the user to answer the intake questions or to connect banks. At most one per browser session; a dismissal hides it for 7 days.
+- **File-fed card** — a card no bank link reaches (American Express, the Trading 212 card; `FILE_ROUTE_BRANDS` in core) that gets its transactions from an uploaded export. Added through ONE dialog, "Kaart toevoegen via bestand" (`components/import/CardFileDialog.tsx`): choose the card, see the steps, choose files, **preview** (format, period, new vs. already-there rows, unrecognised rows; nothing written), then "Toevoegen". Reachable from each not-connected card (Rekeningen, Home cards block), the wizard's last step, Profiel > Importeren and the Home connect pop-up. The resulting account carries `source: "file"` (shown as "via bestand") and `statedCardId` (the stated card it stands in for; this clears the "not connected" card, credit and debit). Account keys: Amex = `AMEX-<last 5 digits of the Account # column>`, else the picked card (`FILE-<card id>`), else the filename; Trading 212 card rows = `TRADING212-CARD` (own account), its cash rows keep the filename key. A later real bank link for the same brand is not merged automatically (duplicates are merged by hand in Rekeningen). Issuer steps live in `apps/web/src/copy/importGuides.ts`, all marked `verified: false`; the Trading 212 action list (`T212_*` in `parsers/bankCsv.ts`) is unverified against a real export. Both stay unverified until the owner supplies real exports.
 
 ## Conventions
 

@@ -25,6 +25,7 @@ export type DebitBrand =
   | "wise"
   | "openbank"
   | "trade-republic"
+  | "trading-212"
   | "crypto"
   | "other-brand";
 
@@ -70,6 +71,8 @@ const DEBIT_PREFIXES: readonly (readonly [DebitBrand, readonly string[]])[] = [
   ["wise", ["wise-"]],
   ["openbank", ["openbank-"]],
   ["trade-republic", ["trade-republic-"]],
+  // The Trading 212 card (catalogue id "212-card"); its investing account stays out of card lists by kind.
+  ["trading-212", ["212-", "trading-212-"]],
   ["crypto", ["bybit-", "krak-", "plutus-"]],
 ];
 
