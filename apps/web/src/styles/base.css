@@ -1117,18 +1117,19 @@
     font-weight: 400;
     line-height: 1.5;
   }
-  /* The "i" follows the last word of the line instead of being a flex item of
-     its own: with a long product name the line wraps and the "i" stays attached
-     to the final word (U+2060 forbids a break between them). */
+  /* The "i" stays attached to the end of the line. The line reserves room for it
+     as padding and the mark sits in that padding (negative margin), so the mark
+     adds no width of its own to the line box: it can never wrap to a row by
+     itself, however long the product name is. */
   .travel-winner .toonmeer-summary {
     display: block;
   }
-  .travel-winner .toonmeer-summary > .travel-winner-headline::after,
-  .travel-winner .toonmeer-summary > .travel-winner-pin::after {
-    content: "\2060";
+  .travel-winner .toonmeer-summary > .travel-winner-headline,
+  .travel-winner .toonmeer-summary > .travel-winner-pin {
+    padding-right: calc(22px + var(--sp-2));
   }
   .travel-winner .toonmeer-summary > .toonmeer-mark {
-    margin-left: var(--sp-2);
+    margin-left: calc(-1 * (22px + var(--sp-2)) + var(--sp-2));
     vertical-align: middle;
   }
   .travel-winner .travel-why {
