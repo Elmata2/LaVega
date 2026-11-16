@@ -25,6 +25,9 @@ test("every third party the code sends data to is named in the policy", () => {
     "Sentry",
     "Frankfurter",
     "Meta",
+    "OpenRouter",
+    "TypeSafe",
+    "PostHog",
   ]) {
     expect(privacyHtml, `policy does not name ${processor}`).toContain(processor);
   }
@@ -160,6 +163,44 @@ test("the policy says the messages themselves are stored and can name a payee, a
   expect(text).toContain("openingszin en een slotzin");
   // The Mistral facts are stated once in the WhatsApp bullet.
   expect(text.split("gaan naar Mistral (EU) om te bepalen welke berekening past")).toHaveLength(2);
+});
+
+test("the policy names the investing AI path and what it sends (OpenRouter, TypeSafe)", () => {
+  expect(privacyHtml).toContain("Beleggingskant — AI");
+  expect(privacyHtml).toContain("OpenRouter");
+  expect(privacyHtml).toContain("TypeSafe System One");
+  // The portfolio summary really does carry these fields (renderPortfolioBrief).
+  expect(privacyHtml).toContain("de kostprijs");
+  expect(privacyHtml).toContain("de eerste aankoopdatum");
+  expect(privacyHtml).toContain("je vraag of opdracht");
+  expect(privacyHtml).toContain("weekbrief");
+  // Both providers have a table row, not only a sentence in the prose.
+  expect(privacyHtml).toMatch(/<strong>OpenRouter<\/strong>[\s\S]*?<\/tr>/);
+  expect(privacyHtml).toMatch(/<strong>TypeSafe<\/strong>[\s\S]*?<\/tr>/);
+});
+
+test("the policy discloses PostHog and drops the absolute no-analytics claim", () => {
+  // PostHog runs in the browser (events, exceptions) and on the server (AI
+  // generation metadata and purpose-written logs). "Geen tracking of analytics"
+  // was false the moment it shipped.
+  expect(privacyHtml).not.toContain("geen tracking of analytics");
+  expect(privacyHtml).toContain("geen tracking voor advertenties");
+  expect(privacyHtml).toContain("PostHog");
+  expect(privacyHtml).toContain("geen sessieopnamen");
+});
+
+test("the retention list covers the investing conversations, letters and AI usage metadata", () => {
+  const text = privacyHtml.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
+  expect(text).toContain(
+    "Gesprekken met de beleggingsagent, je doelen, these en observaties, en de weekbrieven",
+  );
+  expect(text).toContain(
+    "Technische AI-gebruiksgegevens (model, tokens, kosten, uitkomst) zonder inhoud",
+  );
+});
+
+test("erase-all also removes the portfolio letters", () => {
+  expect(privacyHtml).toContain("je agent-geschiedenis en je beleggingsbrieven");
 });
 
 test("the AI opt-in promise stays true: WhatsApp questions need their own consent, not a hidden default", () => {

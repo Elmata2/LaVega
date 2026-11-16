@@ -421,8 +421,9 @@ locally, create your own Neon branch and put its connection string, a
 
 ## Owner actions for the Instinct agent
 
-Nothing below is done by code. Do the steps in this order. Phases 1 and 2 are
-staged on branch `docs/instinct-agent-design` and not deployed.
+Nothing below is done by code. Do the steps in this order. The code is on
+`master` since the 2026-11-16 merge; the agent stays off until these steps are
+done and its environment variables are set.
 
 Done (11 Nov 2026): the five tips are reviewed (`packages/core/src/instinct/tips.ts`;
 a NEW tip starts with `reviewedAt: null` and is never sent until reviewed), and
@@ -467,16 +468,19 @@ Still open for the owner, in this order:
    the verify token, and subscribe to `messages`. Check Meta's rate card for NL
    before launch.
 5. **Legal review.** `apps/server/src/legal.ts` carries one marker, `DRAFT:
-owner legal review pending`, at the draft text (section "Dagelijkse
-   melding"). Review together: the privacy paragraph, the consent sentence
-   (`apps/server/src/instinctConsent.ts`), and the labels in the web app (the
-   WhatsApp link-panel checkbox, which is the separate consent for sending
+owner legal review pending`, above the privacy policy. Review together: the
+   whole policy (controller identity, legal bases, retention, transfers and the
+   processor table, including PostHog, OpenRouter and TypeSafe), the consent
+   sentence (`apps/server/src/instinctConsent.ts`), and the labels in the web app
+   (the WhatsApp link-panel checkbox, which is the separate consent for sending
    WhatsApp questions to Mistral, and the AI-toggle consent copy in
-   `apps/web/src/copy/money.ts`). The draft text covers what both scrubbing
-   filters remove and leave, that link codes expire after 15 minutes, that
-   unlinking keeps conversations until the user deletes them or 90 days pass,
-   and that copies already delivered by e-mail, push or WhatsApp are outside
-   LaVega's control. Remove the marker when the review is done.
+   `apps/web/src/copy/money.ts`). The text covers what both scrubbing filters
+   remove and leave, that link codes expire after 15 minutes, that unlinking
+   keeps conversations until the user deletes them or 90 days pass, that copies
+   already delivered by e-mail, push or WhatsApp are outside LaVega's control,
+   and that the investing chat, letter, judgment and cash-flow suggestions send
+   the portfolio summary to OpenRouter and TypeSafe. Remove the marker when the
+   review is done.
 6. **Review the phrase lists** in `apps/server/src/whatsapp/copy.ts`
    (`FRAMING_PHRASES`, NL and EN): the fixed greetings and closings that
    WhatsApp answers can use.
