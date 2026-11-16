@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { StatedAnswers } from "./plan/optimalisatieStated";
 import type {
   Account,
   Rule,
@@ -253,6 +254,23 @@ function statedOf(
 ): readonly string[] | undefined {
   if (read === "loading" || read === "error" || read.kind !== "ok") return undefined;
   return read.store.current[key]?.value;
+}
+
+/** The card answers from the intake wizard, for Optimalisatie. Undefined while
+ *  the profile is not readable, or when it holds no card answer at all. */
+function cardAnswersOf(read: ProfileRead | "loading" | "error"): StatedAnswers | undefined {
+  if (read === "loading" || read === "error" || read.kind !== "ok") return undefined;
+  const p = read.store.current;
+  if (p.statedCards === undefined && p.statedDebitCards === undefined && p.intake.noCards !== true)
+    return undefined;
+  return {
+    credit: p.statedCards?.value ?? [],
+    debit: p.statedDebitCards?.value ?? [],
+    repayment: p.cardRepayment?.value ?? null,
+    balances: p.cardBalances?.value ?? [],
+    noCards: p.intake.noCards === true,
+    statedAt: p.statedCards?.at ?? p.statedDebitCards?.at ?? null,
+  };
 }
 
 /** Replace-or-append one transfer decision by its content id. Confirming and
@@ -2605,6 +2623,8 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
             asOf={asOf}
             busy={busy}
             facts={facts}
+            stated={cardAnswersOf(profileRead)}
+            onOpenAccounts={() => setView("accounts")}
             onRateCommit={handleRateCommit}
           />
         )}
