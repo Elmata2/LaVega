@@ -11,11 +11,18 @@ import {
   type NetBenefit,
 } from "../netBenefit.js";
 import { isStale } from "../rewards.js";
-import { carriesCardDebt, computeCardAdvice, type BufferInput, type CardAdvice } from "./cardAdvice.js";
+import {
+  carriesCardDebt,
+  computeCardAdvice,
+  type BufferInput,
+  type CardAdvice,
+} from "./cardAdvice.js";
 import type { Tx } from "../model.js";
 import type { ForeignSpend, SpendArea } from "../advisor/profile.js";
 import { fig } from "./internal.js";
-import { spendHistory } from "./spending.js";
+import { spendHistory, type SpendHistory, type SpendHistoryInput } from "./spending.js";
+import type { PlanPreferences } from "./preferences.js";
+import type { CatalogueEntryLike } from "../catalogRates.js";
 import { pointsValueRange, type PointsValueRange } from "./pointsValue.js";
 import { PLAN_THRESHOLDS } from "./thresholds.js";
 import type {
@@ -293,6 +300,53 @@ const byName =
   (a: T, b: T): number =>
     a.name.localeCompare(b.name) || key(a).localeCompare(key(b));
 
+/** The spend history a card can pay on, over the cards window: what the plan
+ *  prices cards against. */
+function cardableHistory(
+  i: Omit<SpendHistoryInput, "skip" | "windowMonths" | "includeCurrentMonth">,
+): SpendHistory {
+  return spendHistory({
+    ...i,
+    windowMonths: PLAN_THRESHOLDS.cards.horizonMonths,
+    skip: notCardable,
+  });
+}
+
+export type NoCardAdviceInput = Omit<
+  SpendHistoryInput,
+  "skip" | "windowMonths" | "includeCurrentMonth" | "accountKeys"
+> & {
+  catalogue: readonly CatalogueEntryLike[];
+  preferences: PlanPreferences;
+};
+
+/** The plan's own answer to "would a first credit card pay off": the same spend
+ *  history and the same `computeCardAdvice` the cards section uses, with no card
+ *  held. Fewer than `CARD_ADVICE_MIN_MONTHS` full months gives no figure. */
+export function noCardAdvice(i: NoCardAdviceInput): CardAdvice {
+  const h = cardableHistory(i);
+  let windowCents = 0;
+  for (const per of h.byCategory.values()) for (const c of per.values()) windowCents += c;
+  return computeCardAdvice({
+    spend: {
+      windowCents,
+      months: h.months.length,
+      foreignCents: h.foreignCents,
+      excludedForeignCount: h.excludedForeignCount,
+    },
+    catalogue: i.catalogue,
+    heldIds: [],
+    hasOtherCard: false,
+    cardBalances: [],
+    cardRepayment: null,
+    rewards: [],
+    preferences: i.preferences,
+    rates: [],
+    buffer: null,
+    asOf: i.asOf,
+  });
+}
+
 export function computeCards(
   i: PlanInput,
   buffer: BufferInput = null,
@@ -315,7 +369,7 @@ export function computeCards(
   const candidates = [...held, ...stated].sort(byLabel);
 
   const history = (keys?: ReadonlySet<string>) =>
-    spendHistory({
+    cardableHistory({
       txs: i.txs,
       accounts: i.accounts,
       entityProfiles: i.entityProfiles,
@@ -326,8 +380,6 @@ export function computeCards(
       fxHistory: i.fxHistory,
       movedCategories: i.movedCategories,
       accountKeys: keys,
-      windowMonths: PLAN_THRESHOLDS.cards.horizonMonths,
-      skip: notCardable,
     });
   const totalOf = (h: ReturnType<typeof history>, only?: ReadonlySet<string>): number => {
     let n = 0;
@@ -373,9 +425,7 @@ export function computeCards(
 
   // Bank cardable spend already leaves out foreign-currency lines, so the
   // stated share only applies to a stated spend.
-  const foreignShare = statedBasis
-    ? foreignShareOf(i.profile.foreignSpend, i.profile.spendMix)
-    : 0;
+  const foreignShare = statedBasis ? foreignShareOf(i.profile.foreignSpend, i.profile.spendMix) : 0;
   const cashbackGoal = i.profile.pointsGoal === "cashback";
   const examples = i.preferences.redemptionExamples;
   const nets: CardNet[] = candidates.map((c) => {
