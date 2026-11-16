@@ -6,7 +6,8 @@ are stored.
 
 ## Reach
 
-- `/profile#brokers` → rail tab `DeGiro import`. The rail labels are `Broker APIs`
+- `/profile#brokers` → rail tab `DeGiro import`; `/profile#degiro-import` opens that
+  tab directly (the stale-data problem links here). The rail labels are `Broker APIs`
   (subtitle `Interactive Brokers and Trading 212`) and `DeGiro import` (subtitle
   `CSV export files, no API`).
 - The DeGiro panel lists three exports: `Inbox → Rekeningoverzicht (Account statement)`,
@@ -74,6 +75,12 @@ node $C cleanup
 - Status route: `GET /api/investing/brokers/degiro/import` answers 200 with
   `{ mode: "status", importedAt, files, coverage, positionsAsOf }` and writes nothing.
   An empty vault gives `null`/`[]`; a locked vault gives 409.
+- A DeGiro import older than 30 days (by `positionsAsOf` or `coversTo`) puts
+  `DeGiro-gegevens zijn <n> dagen oud. Importeer een nieuw rekeningoverzicht.` in the
+  dashboard problems, with an action link to `/profile#degiro-import`. A 29-day-old
+  one is quiet.
+- Overview and Positions show `[data-degiro-age]` with `imported <date>`,
+  `quantities from <date>` and `Prices update daily; quantities are not live.`
 - Committing the same files twice leaves the stored snapshot deep-equal. An unknown
   CSV answers 200 with `committed: false` and writes nothing. A 5 MB upload answers 413.
 - Never import fixtures into a real tenant. A live prod commit writes the signed-in

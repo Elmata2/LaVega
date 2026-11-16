@@ -1,4 +1,4 @@
-import { Context, Effect, Layer, Schema } from "effect";
+import { Context, DateTime, Effect, Layer, Schema } from "effect";
 import {
   benchmarkDisplayName,
   buildCompositionProjection,
@@ -21,6 +21,7 @@ import { priceReadKeys } from "./priceOrchestrator.js";
 import { untimed, type ServerTiming } from "./serverTiming.js";
 import type { createBrokerSnapshotReader } from "./brokerSnapshotReader.js";
 import type { createBrokerDataCache } from "@lavega/adapters";
+import { deGiroDataState, withDeGiroFreshness } from "./degiroFreshness.js";
 
 type BrokerDataCache = ReturnType<typeof createBrokerDataCache>;
 type BrokerSnapshotReader = ReturnType<typeof createBrokerSnapshotReader>;
@@ -206,11 +207,10 @@ export class PortfolioRead extends Context.Service<
           return Date.parse(latest) <= Date.parse(stored.updatedAt);
         };
 
-        const executeRead = async ({
-          tenantId,
-          symbol,
-          timing = untimed,
-        }: PortfolioReadInput): Promise<InvestingDashboardData> => {
+        const executeRead = async (
+          { tenantId, symbol, timing = untimed }: PortfolioReadInput,
+          today: string,
+        ): Promise<InvestingDashboardData> => {
           const storedKey = symbol?.trim().toUpperCase() ?? "";
           const stored = await timing.measure("stored", () =>
             dashboardSnapshots?.get(storedKey).catch(() => null),
@@ -220,7 +220,11 @@ export class PortfolioRead extends Context.Service<
             hasRiskBasis(stored.dashboard as InvestingDashboardData) &&
             (await storedPriceDataIsCurrent(stored))
           )
-            return withComposition(stored.dashboard as InvestingDashboardData);
+            return withDeGiroFreshness(
+              withComposition(stored.dashboard as InvestingDashboardData),
+              null,
+              today,
+            );
           const refreshProblems: string[] = [];
           try {
             await timing.measure("broker", async () => {
@@ -249,9 +253,23 @@ export class PortfolioRead extends Context.Service<
             cashBalances,
             cashFlows,
             cashCoverage,
+            lastImports,
             problems,
             dataVersion,
           } = brokerData.read();
+          const deGiroPositions = positions.filter((position) => position.broker === "degiro");
+          const deGiroCoverage = cashCoverage.find((entry) => entry.broker === "degiro");
+          const deGiroLastImport = lastImports.degiro;
+          const deGiro =
+            deGiroPositions.length > 0 ||
+            deGiroCoverage !== undefined ||
+            deGiroLastImport !== undefined
+              ? deGiroDataState({
+                  positions: deGiroPositions,
+                  ...(deGiroCoverage ? { cashHistory: deGiroCoverage } : {}),
+                  ...(deGiroLastImport ? { lastImport: deGiroLastImport } : {}),
+                })
+              : null;
           // `problems` above lives only in this invocation's in-memory cache: a sync's
           // row-level problem (an unclassifiable transaction, say) never reaches a
           // later invocation that did not run that sync. The sync's own durable
@@ -270,9 +288,11 @@ export class PortfolioRead extends Context.Service<
           const cacheKey = `${symbol?.trim().toUpperCase() ?? ""}\u0000${selectedBenchmarks.join("\u0000")}\u0000${JSON.stringify(wrappers)}`;
           const cached = dashboardCache.get({ tenantId, key: cacheKey });
           if (cached) {
-            if (refreshProblems.length > 0)
-              return { ...cached, problems: [...cached.problems, ...refreshProblems] };
-            return cached;
+            const served =
+              refreshProblems.length > 0
+                ? { ...cached, problems: [...cached.problems, ...refreshProblems] }
+                : cached;
+            return withDeGiroFreshness(served, deGiro, today);
           }
           const buildDashboard = async () => {
             /* One key per instrument for this read (issue #307): the shared
@@ -313,7 +333,6 @@ export class PortfolioRead extends Context.Service<
             const keysRead = [...new Set(allKeys.map((key) => key.key))];
             const priceProblems =
               prices.failed + benches.failed > 0 ? ["Price data could not be fully loaded"] : [];
-            const today = new Date().toISOString().slice(0, 10);
             const historyDates = [
               ...positions.map((position) => position.asOf),
               ...trades.map((trade) => trade.date),
@@ -411,6 +430,7 @@ export class PortfolioRead extends Context.Service<
                   ...historicalFx.problems,
                 ],
                 dataVersion: version,
+                ...(deGiro ? { degiro: deGiro } : {}),
               }),
             );
             /* A failed price or FX read is a problem of this moment, not of the
@@ -428,14 +448,20 @@ export class PortfolioRead extends Context.Service<
               );
             return dashboard;
           };
-          return refreshProblems.length > 0
-            ? buildDashboard()
-            : dashboardCache.load({ tenantId, key: cacheKey }, buildDashboard);
+          const served =
+            refreshProblems.length > 0
+              ? await buildDashboard()
+              : await dashboardCache.load({ tenantId, key: cacheKey }, buildDashboard);
+          return withDeGiroFreshness(served, deGiro, today);
         };
 
         const read = Effect.fn("PortfolioRead.read")(function* (input: PortfolioReadInput) {
+          /* The read's day comes from Effect's clock, not from `Date.now` at
+           * the call site: the stale DeGiro rule is red on a TestClock, so the
+           * acceptance boundary (29 vs 31 days) is a test, not a wait. */
+          const today = DateTime.formatIso(yield* DateTime.now).slice(0, 10);
           return yield* Effect.tryPromise({
-            try: () => executeRead(input),
+            try: () => executeRead(input, today),
             catch: (cause) =>
               new PortfolioReadError({
                 message:

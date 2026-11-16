@@ -13,6 +13,7 @@ export * from "./calendar.js";
 export * from "./dividend.js";
 export * from "./markers.js";
 export * from "./dashboard.js";
+export * from "./degiroFreshness.js";
 export * from "./costBasis.js";
 export * from "./realized.js";
 export * from "./positions.js";

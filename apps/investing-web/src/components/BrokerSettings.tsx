@@ -505,10 +505,18 @@ function BrokerCredentialForm({ onSaved }: { onSaved?: (broker: CredentialBroker
   );
 }
 
+/** The stale-data problem links to `/profile#degiro-import`; the hash picks
+ *  the import tab before the reader has to. */
+function initialTab(): BrokerSettingsTab {
+  return typeof window !== "undefined" && window.location.hash === "#degiro-import"
+    ? "degiro"
+    : "api";
+}
+
 export function BrokerSettings() {
   const [unreadableBrokers, setUnreadableBrokers] = useState<CredentialBroker[]>([]);
   const [storageProblem, setStorageProblem] = useState<string | null>(null);
-  const [tab, setTab] = useState<BrokerSettingsTab>("api");
+  const [tab, setTab] = useState<BrokerSettingsTab>(initialTab);
   const tabRefs = useRef<(HTMLButtonElement | null)[]>([]);
   useEffect(() => {
     void fetch("/api/brokers/credentials/status")
@@ -557,7 +565,7 @@ export function BrokerSettings() {
   }
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-8" id="degiro-import">
       <BrokerVaultUnlock />
       {credentialProblem && (
         <p

@@ -109,3 +109,46 @@ test("a DeGiro holding shows its product name without the ISIN, and a ticker sta
   expect(text).toContain("AAPL · Trading 212 · 1 shares");
   act(() => root.unmount());
 });
+
+test("Overview shows the DeGiro import age and links the stale problem to the import tab", async () => {
+  const day = new Date(Date.now() - 31 * 86_400_000).toISOString().slice(0, 10);
+  const stale = {
+    ...dashboard,
+    degiro: {
+      importedAt: `${day}T09:00:00.000Z`,
+      coversFrom: day,
+      coversTo: day,
+      positionsAsOf: day,
+    },
+    problems: ["DeGiro-gegevens zijn 31 dagen oud. Importeer een nieuw rekeningoverzicht."],
+  };
+  vi.stubGlobal(
+    "fetch",
+    vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input).startsWith("/api/investing/dashboard"))
+        return Promise.resolve(new Response(JSON.stringify(stale)));
+      return Promise.resolve(emptyResponseFor(input, init));
+    }),
+  );
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  await act(async () => {
+    root.render(
+      <MemoryRouter initialEntries={["/"]}>
+        <App />
+      </MemoryRouter>,
+    );
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+
+  const note = container.querySelector("[data-degiro-age]");
+  expect(note?.textContent).toMatch(/\d+ days old/);
+  expect(Number(note?.getAttribute("data-degiro-age"))).toBeGreaterThanOrEqual(31);
+  expect(note?.textContent).toContain("quantities are not live");
+  const link = [...container.querySelectorAll("a")].find(
+    (candidate) => candidate.getAttribute("href") === "/profile#degiro-import",
+  );
+  expect(link?.textContent).toBe("Importeer een nieuw rekeningoverzicht");
+  act(() => root.unmount());
+});

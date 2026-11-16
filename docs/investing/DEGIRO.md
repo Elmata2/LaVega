@@ -587,6 +587,32 @@ overlapping account files). A re-import must not append duplicates.
   375 px: [preview](assets/degiro-import-preview.png) and
   [success](assets/degiro-import-success.png).
 
+### Import age and stale-data problem (D13, #325)
+
+`packages/core/src/investing/degiroFreshness.ts` and
+`apps/investing-server/src/degiroFreshness.ts`.
+
+- **Dashboard shape.** A read carries
+  `degiro: { importedAt, coversFrom, coversTo, positionsAsOf }`. `importedAt`
+  comes from the stored `lastImport`, `coversFrom`/`coversTo` from a complete
+  stored `cashHistory` (an `unknown` window reports both as `null`), and
+  `positionsAsOf` is the latest stored position date. The field is absent when
+  no DeGiro snapshot exists; every present field is `null` or a real date,
+  never invented.
+- **The rule.** The problem names the older of `positionsAsOf` and `coversTo`.
+  When that date is more than 30 days before the read's day, `problems` gets
+  `DeGiro-gegevens zijn <n> dagen oud. Importeer een nieuw rekeningoverzicht.`
+  A 31-day age warns, 30 does not. `importedAt` alone never triggers it: an old
+  import can still hold fresh rows.
+- **Read-time, not build-time.** The read takes its day from `DateTime.now`, so
+  a `TestClock` pins the boundary. The problem is added after the cached or
+  stored dashboard is read and is never stored: a dashboard built on day 10
+  must warn on day 31 without a rebuild.
+- **Web.** Overview and Positions show the import age beside the DeGiro
+  holdings, and the line says that prices update daily while quantities do not.
+  The problem's action opens `/profile#degiro-import`, which selects the DeGiro
+  import tab before the reader scrolls.
+
 ### Out of scope
 
 - DeGiro login, session reuse, scheduled sync, browser automation (#25, #33).
@@ -640,4 +666,6 @@ records `lastImport` inside the encrypted snapshot), D12 (#324, the DeGiro tab
 in Broker settings: export steps, per-file previews, the portfolio export date
 asked for and defaulting to today, commit totals and the `Last imported …`
 status line; the same route answers `GET` with the stored import status and
-writes nothing).
+writes nothing), D13 (#325, the dashboard carries the import's dates, a
+31-day-old DeGiro import warns on every read with the TestClock-pinned rule, and
+Overview and Positions show that age without implying live quantities).
