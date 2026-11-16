@@ -225,6 +225,7 @@ type TransactiesCopy = {
   categorieWijzigenVoor: (tegenpartij: string) => string;
   kiesCategorie: string;
   categorieGezetPlain: string;
+  aiRegelsNietOnthouden: string;
   categorieGezetNietOnthouden: string;
   categorieGezetOnthouden: (tegenpartij: string) => string;
   categorieGezetVolgen: (n: number, tegenpartij: string) => string;
@@ -860,6 +861,8 @@ const nl: MoneyCopy = {
     categorieWijzigenVoor: (tegenpartij) => `Categorie wijzigen voor ${tegenpartij}`,
     kiesCategorie: "Kies een categorie",
     categorieGezetPlain: "Categorie gezet.",
+    aiRegelsNietOnthouden:
+      "Categorieën gezet, maar de regels zijn niet onthouden. Zet de categorie opnieuw via Wijzig om de regel te bewaren.",
     categorieGezetNietOnthouden:
       "Categorie gezet, maar niet onthouden: opslaan van de regel mislukte. Andere transacties volgen niet mee.",
     categorieGezetOnthouden: (tegenpartij) =>
@@ -1580,6 +1583,8 @@ const en: MoneyCopy = {
     categorieWijzigenVoor: (tegenpartij) => `Change category for ${tegenpartij}`,
     kiesCategorie: "Choose a category",
     categorieGezetPlain: "Category set.",
+    aiRegelsNietOnthouden:
+      "Categories set, but the rules were not remembered. Set the category again with Change to keep the rule.",
     categorieGezetNietOnthouden:
       "Category set, but not remembered: saving the rule failed. Other transactions will not follow.",
     categorieGezetOnthouden: (tegenpartij) =>

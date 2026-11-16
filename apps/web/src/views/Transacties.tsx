@@ -92,7 +92,9 @@ type TransactiesProps = {
   configured: boolean;
   /** Apply confirmed AI-category decisions against the full tx + rules lists
    *  (App owns that + persistence). */
-  onApplyCategories: (decisions: CategoryDecision[]) => Promise<void>;
+  onApplyCategories: (
+    decisions: CategoryDecision[],
+  ) => Promise<void | { rememberFailed?: boolean }>;
   /** The per-row picker: ONE decision, persisted by App through the same path
    *  as `onApplyCategories`. Resolves with what really happened (how many OTHER
    *  rows now follow, whether a rule was added) so the notice states only
@@ -241,9 +243,11 @@ export default function Transacties({
   const [aiPhase, setAiPhase] = useState<"idle" | "consent" | "loading" | "review">("idle");
   const [proposals, setProposals] = useState<{ tx: Tx; category: string }[]>([]);
   const [aiNote, setAiNote] = useState<string | null>(null);
+  const [aiWarn, setAiWarn] = useState<string | null>(null);
 
   async function runAiCategorize() {
     setAiNote(null);
+    setAiWarn(null);
     setAiPhase("loading");
     try {
       const results = await categorizeTxs(batch.items);
@@ -278,17 +282,31 @@ export default function Transacties({
 
   async function applyReview() {
     const decisions = toDecisions(proposals.map((p) => ({ id: p.tx.id, category: p.category })));
+    if (saving) return;
+    // One flag for the picker AND this apply: neither can start while the other
+    // is saving (App also serialises them on one queue).
+    setSaving(true);
     try {
-      await onApplyCategories(decisions);
+      const res = await onApplyCategories(decisions);
       setProposals([]);
       setAiPhase("idle");
-      setAiNote(
-        decisions.length > 0
-          ? c.transacties.gecategoriseerdNote(decisions.length)
-          : c.transacties.nietsToegepast,
-      );
+      if (res && res.rememberFailed) {
+        // The txs ARE saved; only the remembered rules were not. Leave review
+        // (so the same decisions cannot be applied twice) and say so.
+        setAiNote(null);
+        setAiWarn(c.transacties.aiRegelsNietOnthouden);
+      } else {
+        setAiWarn(null);
+        setAiNote(
+          decisions.length > 0
+            ? c.transacties.gecategoriseerdNote(decisions.length)
+            : c.transacties.nietsToegepast,
+        );
+      }
     } catch (e) {
       setAiNote(e instanceof Error ? e.message : c.transacties.opslaanMislukt);
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -510,6 +528,11 @@ export default function Transacties({
       <h2 style={{ margin: 0 }}>{c.transacties.heading}</h2>
 
       {aiNote && aiPhase === "idle" && <p className="cell-sub">{aiNote}</p>}
+      {aiWarn && aiPhase === "idle" && (
+        <StatusLine tone="warning" role="alert">
+          {aiWarn}
+        </StatusLine>
+      )}
 
       {/* A live region that is always mounted, so a screen reader hears the
           notice when it fills. A failed save is announced as an alert. */}
@@ -670,7 +693,7 @@ export default function Transacties({
               {aiNote}
             </p>
           )}
-          <Button variant="primary" onClick={() => void applyReview()}>
+          <Button variant="primary" disabled={saving} onClick={() => void applyReview()}>
             {c.transacties.toepassen}
           </Button>{" "}
           <Button onClick={cancelReview}>{c.transacties.annuleer}</Button>
