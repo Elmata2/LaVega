@@ -12,7 +12,7 @@ import {
 
 /* Issue #314, part 2: profile detection by exact header signature.
  *
- * The five signatures were verified from real exports and are recorded in
+ * The six signatures were verified from real exports and are recorded in
  * `docs/investing/DEGIRO.md`. The fixtures under `__fixtures__/degiro/` carry
  * the byte-exact header line, so detection is tested against the real bytes
  * and not against a copy of the spec.
@@ -22,6 +22,7 @@ const fixture = (path: string): string =>
   readFileSync(new URL(`../__fixtures__/degiro/${path}`, import.meta.url), "utf8");
 
 const ACCOUNT_NL = "Datum,Tijd,Valutadatum,Product,ISIN,Omschrijving,FX,Mutatie,,Saldo,,Order Id";
+const ACCOUNT_EN = "Date,Time,Value date,Product,ISIN,Description,FX,Change,,Balance,,Order Id";
 const TRANSACTIONS_NL =
   "Datum,Tijd,Product,ISIN,Beurs,Uitvoeringsplaats,Aantal,Koers,,Lokale waarde,,Waarde EUR,Wisselkoers,AutoFX Kosten,Transactiekosten en/of kosten van derden EUR,Totaal EUR,Order ID";
 const TRANSACTIONS_EN =
@@ -31,6 +32,7 @@ const PORTFOLIO_EN = "Product,Symbol/ISIN,Amount,Closing,Local value,,Value in E
 
 const FIXTURES = [
   { file: "nl/account.csv", profile: "account", language: "nl", header: ACCOUNT_NL },
+  { file: "en/account.csv", profile: "account", language: "en", header: ACCOUNT_EN },
   { file: "nl/transactions.csv", profile: "transactions", language: "nl", header: TRANSACTIONS_NL },
   { file: "en/transactions.csv", profile: "transactions", language: "en", header: TRANSACTIONS_EN },
   { file: "nl/portfolio.csv", profile: "portfolio", language: "nl", header: PORTFOLIO_NL },
@@ -51,8 +53,8 @@ for (const { file, profile, language, header } of FIXTURES) {
   });
 }
 
-test("DEGIRO_HEADERS holds the five verified signatures and each round-trips", () => {
-  expect(DEGIRO_HEADERS).toHaveLength(5);
+test("DEGIRO_HEADERS holds the six verified signatures and each round-trips", () => {
+  expect(DEGIRO_HEADERS).toHaveLength(6);
   for (const entry of DEGIRO_HEADERS) {
     expect(detectProfile(entry.header)).toEqual({
       known: true,

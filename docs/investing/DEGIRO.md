@@ -37,11 +37,14 @@ ID`, semicolon). No real DeGiro export has that shape; D1 deleted them and
 
 ## Verified: the account statement (`Account.csv`)
 
-Observed in three real NL exports (109, 21 and 9 rows). Headers and
-description vocabulary only; no amounts are recorded here.
+Observed in three real NL exports (109, 21 and 9 rows) and one real EN-header
+export of 2026-11-16 (747 rows). The EN export localises the header only; its
+`Description` cells stayed Dutch. Headers and description vocabulary only; no
+amounts are recorded here.
 
 ```
 Datum,Tijd,Valutadatum,Product,ISIN,Omschrijving,FX,Mutatie,,Saldo,,Order Id
+Date,Time,Value date,Product,ISIN,Description,FX,Change,,Balance,,Order Id
 ```
 
 - Comma delimiter, quoted fields, optional UTF-8 BOM.
@@ -122,6 +125,7 @@ Product,Symbol/ISIN,Amount,Closing,Local value,,Value in EUR
 | File                          | Source                                 | Rows | Notes                                                                                                                |
 | ----------------------------- | -------------------------------------- | ---- | -------------------------------------------------------------------------------------------------------------------- |
 | `nl/account.csv`              | real 109-row NL account statement      | 29   | header byte-identical; sell, partial fill, split, transfer-in and a full AutoFX group added by hand                  |
+| `en/account.csv`              | real EN-header account statement       | 2    | header byte-identical; EN header with Dutch descriptions; synthetic rows keep the walk and the trade parse covered   |
 | `nl/transactions.csv`         | real 25-row NL transaction export      | 25   | header byte-identical; partial-fill Order Id kept                                                                    |
 | `en/transactions.csv`         | real 25-row EN transaction export      | 25   | same rows; EN header                                                                                                 |
 | `nl/transactions-overlap.csv` | hand-built against the account fixture | 4    | header byte-identical to `nl/transactions.csv`; every execution overlaps `nl/account.csv` by Order Id + Datum + Tijd |
@@ -165,9 +169,9 @@ asserts the headers, the walk, the row kinds and the internal arithmetic.
   - portfolio: `Lokale waarde` holds the currency, the unnamed column holds the
     amount.
 - `detectProfile(header)` — exact header signature per profile and language.
-  Five signatures are verified: account NL, transactions NL, transactions EN,
-  portfolio NL, portfolio EN. An account statement has been observed in NL only,
-  so there is deliberately no EN account signature. Unknown header gives
+  Six signatures are verified: account NL, account EN, transactions NL,
+  transactions EN, portfolio NL, portfolio EN. The EN account header has the
+  same column layout as the NL one. Unknown header gives
   `{ known: false, problem: "onbekend DeGiro-formaat: <header>" }`. It never
   throws, never guesses, and takes no filename.
 - `readDeGiroCsv(text)` — sync, never throws, at most one problem: empty file
@@ -485,8 +489,11 @@ section would tell the snapshot the broker reported nothing and wipe stored rows
   For the rest, per currency: `Saldo[n] = Saldo[n-1] + Mutatie[n]`. Verified on
   the three real exports (109, 21 and 9 rows): no break, except one row in two
   of the files that differs by €0.01 because the file rounds quantity × price
-  to cents. The naive rule, which includes sweeps and information lines, breaks
-  on every sweep and information row.
+  to cents. The walk tolerates exactly that one-cent rounding on a trade row; a
+  larger break is a real gap. The 747-row EN-header export of 2026-11-16 has two
+  such trade rows and proves complete with the same tolerance. The naive rule,
+  which includes sweeps and information lines, breaks on every sweep and
+  information row.
 
 - **Cash flow kinds.** External money only is `deposit`/`withdrawal`. FX legs
   and flatex transfer lines are `other` with the description. The cash sweep is

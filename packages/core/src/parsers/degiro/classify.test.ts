@@ -318,10 +318,10 @@ test("NL vocabulary outside the fixture: terugstorting, an orphan commission, ca
   expect(classify("Sell 1 @ 10,00 EUR")).toEqual(trade());
 });
 
-/* EN smoke test. The account statement has been observed in NL only, so these
- * names are forward-looking and prove nothing about a real English export; they
- * only keep the rows wired for the day one appears. */
-test("EN smoke (unverified): deposit, withdrawal, currency legs and sweep", () => {
+/* EN smoke test. The EN-header account export of 2026-11-16 kept Dutch row
+ * descriptions, so these English names are still forward-looking; they only
+ * keep the rows wired for the day one appears. */
+test("EN smoke: deposit, withdrawal, currency legs and sweep", () => {
   const classify = (description: string): AccountClassification =>
     classifyAccountRow({ description, orderId: "", hasAmount: true });
 
@@ -330,6 +330,11 @@ test("EN smoke (unverified): deposit, withdrawal, currency legs and sweep", () =
   expect(classify("Withdrawal")).toEqual(cashFlow("withdrawal"));
   expect(classify("Currency Credit")).toEqual(cashFlow("other"));
   expect(classify("Currency Debit")).toEqual(cashFlow("other"));
+  // The real EN-header export kept the Dutch description text; these are the
+  // two reservation/fee spellings it used.
+  expect(classify("Reservation iDEAL")).toEqual(cashFlow("other"));
+  expect(classify("SEPA Instant Terugstorting")).toEqual(cashFlow("withdrawal"));
+  expect(classify("Flatex Interest")).toEqual(cashFlow("interest"));
   // The sweep is a skip: the Saldo column reports the flatex-bank leg, so the
   // row is not cash of the imported account and emits nothing.
   expect(classify("Cash Sweep Transfer")).toEqual(informationLine());

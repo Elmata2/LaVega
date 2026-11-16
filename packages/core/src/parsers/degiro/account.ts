@@ -16,13 +16,11 @@ import { type SaldoRow, type SaldoWalk, walkSaldo } from "./saldo.js";
  */
 
 /**
- * Column layout of the verified NL account statement, from
- * `docs/investing/DEGIRO.md`. Only the NL header passes profile detection today,
- * so these positions are guaranteed; a future EN export has to add its own
- * signature and then these names can be resolved by label instead.
+ * Column layout of the verified account statement, from
+ * `docs/investing/DEGIRO.md`. The NL and EN headers have the same column order
+ * (observed 2026-11-16), so one table serves both.
  *
- * Exported because the dividend mapper (#316) reads the same verified layout;
- * keeping one table means a future EN header has one place to change.
+ * Exported because the dividend mapper (#316) reads the same verified layout.
  */
 export const ACCOUNT_COLUMNS = {
   date: 0,

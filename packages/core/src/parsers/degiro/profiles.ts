@@ -13,8 +13,8 @@ export type DeGiroLanguage = "nl" | "en";
  *
  * The empty cells are deliberate: DeGiro labels the currency in the column
  * before the amount and leaves the amount's own cell unnamed (`Mutatie,,EUR`).
- * The account statement has no observed EN export, so it appears in NL only;
- * inventing an EN signature would make a guess look like detection.
+ * The account statement has been observed with both the NL and the EN header;
+ * the rows' free-text descriptions stayed Dutch in the EN export.
  */
 export const DEGIRO_HEADERS: readonly {
   profile: DeGiroProfile;
@@ -35,6 +35,24 @@ export const DEGIRO_HEADERS: readonly {
       "Mutatie",
       "",
       "Saldo",
+      "",
+      "Order Id",
+    ],
+  },
+  {
+    profile: "account",
+    language: "en",
+    header: [
+      "Date",
+      "Time",
+      "Value date",
+      "Product",
+      "ISIN",
+      "Description",
+      "FX",
+      "Change",
+      "",
+      "Balance",
       "",
       "Order Id",
     ],

@@ -33,8 +33,10 @@ export type SaldoWalk = {
   closing: Map<string, number>;
 };
 
-/** Inclusive cents rounding: the files report two decimals, so a step may be off by half a cent. */
-export const SALDO_TOLERANCE = 0.005;
+/** Inclusive one-cent rounding: the files report two decimals and round a
+ *  trade's quantity × price to cents, so a trade row may be off by one cent. A
+ *  larger break is a real gap, not rounding. */
+export const SALDO_TOLERANCE = 0.01 + 1e-9;
 
 /** Trim floating noise for problem text; the files report at most two decimals. */
 const round2 = (value: number): number => Math.round(value * 100) / 100;

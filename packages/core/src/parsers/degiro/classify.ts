@@ -86,12 +86,14 @@ const CLASSIFICATION_TABLE: readonly ClassificationRule[] = [
   // External money leaving the account.
   { description: /^processed flatex withdrawal\b/i, bucket: "cash-flow", kind: "withdrawal" },
   { description: /^flatex terugstorting\b/i, bucket: "cash-flow", kind: "withdrawal" },
+  { description: /^sepa instant terugstorting\b/i, bucket: "cash-flow", kind: "withdrawal" },
 
   // Interest before the flatex deposit names: "Flatex Interest Income" shares
   // the `flatex` word, and a broader flatex prefix would call it a deposit. The
   // sign comes from `Mutatie`; classification never flips it, so a negative
   // interest row stays kind "interest" and the caller reads it as a charge.
   { description: /^flatex interest income\b/i, bucket: "cash-flow", kind: "interest" },
+  { description: /^flatex interest\b/i, bucket: "cash-flow", kind: "interest" },
   { description: /^rente\b/i, bucket: "cash-flow", kind: "interest" },
 
   // Exchange connection fee. A prefix match, because the text carries a year and
@@ -130,15 +132,14 @@ const CLASSIFICATION_TABLE: readonly ClassificationRule[] = [
   // kind "other", and it must never be `deposit`, or a reservation plus its
   // later deposit would double-count the deposit.
   {
-    description: /^reservation ideal \/ sofort deposit\b/i,
+    description: /^reservation ideal(?: \/ sofort deposit)?\b/i,
     bucket: "cash-flow",
     kind: "other",
   },
 
-  /* EN descriptions are forward-looking. The account statement has been
-   * observed in NL only (DEGIRO.md: "An account statement has been observed in
-   * NL only"), so no EN account export exists and none of these names carries
-   * test pressure beyond a smoke test. Add only names the issue names. */
+  /* EN descriptions are observed in the EN-header account export. Its row
+   * descriptions stayed Dutch in the sample, so the EN names below remain a
+   * small forward-looking set; add only names a real export shows. */
   { description: /^flatex deposit\b/i, bucket: "cash-flow", kind: "deposit" },
   { description: /^deposit\b/i, bucket: "cash-flow", kind: "deposit" },
   { description: /^withdrawal\b/i, bucket: "cash-flow", kind: "withdrawal" },

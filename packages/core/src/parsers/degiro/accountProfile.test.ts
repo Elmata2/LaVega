@@ -195,3 +195,16 @@ test("cash flow ids are assigned once across the whole ledger and stay unique", 
   expect(account.cashFlows.every((flow) => flow.broker === "degiro")).toBe(true);
   expect(account.cashFlows.every((flow) => !("entity" in flow))).toBe(true);
 });
+
+test("an EN-header account statement parses with the same column layout", () => {
+  const text = readFileSync(
+    new URL("../__fixtures__/degiro/en/account.csv", import.meta.url),
+    "utf8",
+  );
+  const account = readDeGiroAccount(text);
+  expect(account.problems).toEqual([]);
+  expect(account.period).toEqual({ from: "2026-03-05", to: "2026-03-06" });
+  expect(account.trades).toHaveLength(1);
+  expect(account.trades[0]?.symbol).toBe("IE0VORB00033");
+  expect(account.coverage.status).toBe("complete");
+});
