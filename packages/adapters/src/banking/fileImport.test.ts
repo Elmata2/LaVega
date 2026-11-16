@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { describe, expect, it, test } from "vitest";
 import { createFileImport } from "./fileImport.js";
 
 const ING = `"Datum";"Naam / Omschrijving";"Rekening";"Tegenrekening";"Code";"Af Bij";"Bedrag (EUR)";"Mutatiesoort";"Mededelingen"
@@ -81,4 +81,41 @@ test("FileImport: routes an MT940/.STA statement, carrying balance and entity", 
   expect(result.txs).toHaveLength(2);
   expect(result.accounts[0].balance).toBe(3424.5);
   expect(result.accounts[0].entity).toBe("BV1");
+});
+
+describe("card files", () => {
+  const AMEX = `Date,Description,Card Member,Amount,Appears on Your Statement As,Extended Details
+03/05/2026,SHOP ONE,A TESTER,10.00,SHOP ONE,x`;
+  it("passes the picked card's key through when the file names none", async () => {
+    const r = await createFileImport().load({
+      filename: "export.csv",
+      text: AMEX,
+      entity: "Prive",
+      accountHint: "FILE-amex-1",
+    });
+    expect(r.accounts[0]!.key).toBe("FILE-amex-1");
+    expect(r.unrecognised).toEqual([]);
+  });
+  it("reads a spreadsheet from rows", async () => {
+    const rows = [
+      [
+        "Date",
+        "Description",
+        "Card Member",
+        "Account #",
+        "Amount",
+        "Appears on Your Statement As",
+        "Extended Details",
+      ],
+      ["03/05/2026", "SHOP ONE", "A", "-11111", "10.00", "SHOP ONE", "x"],
+    ];
+    const r = await createFileImport().load({
+      filename: "a.xlsx",
+      text: "",
+      entity: "Prive",
+      sheet: { format: "xlsx", rows },
+    });
+    expect(r.accounts[0]!.key).toBe("AMEX-11111");
+    expect(r.txs).toHaveLength(1);
+  });
 });

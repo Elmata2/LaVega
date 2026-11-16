@@ -723,6 +723,16 @@ export function mergeImportedAccounts(existing: Account[], imported: Account[]):
       // ever came from a parser does not, so an improved parser can still fix a
       // stale row (his old ING savings accounts came in as their own number).
       ...(prev.renamed ? { bank: prev.bank, name: prev.name, renamed: true } : {}),
+      // A file-fed card stays one: a later plain import of the same key (no card
+      // picked) must not drop the marker, the link to the stated card, or its name.
+      // An account that comes from a live bank link (it carries `balanceFetchedAt`,
+      // which a file never sets) is no longer file-fed: neither marker survives.
+      ...(imp.balanceFetchedAt === undefined && imp.statedCardId === undefined && prev.statedCardId !== undefined
+        ? { statedCardId: prev.statedCardId, ...(prev.renamed ? {} : { name: prev.name }) }
+        : {}),
+      ...(imp.balanceFetchedAt === undefined && imp.source === undefined && prev.source !== undefined
+        ? { source: prev.source }
+        : {}),
     };
   });
 }

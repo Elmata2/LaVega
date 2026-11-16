@@ -21,7 +21,16 @@ test("brandOf maps every catalogue card to a known brand, none to other-brand", 
 test("cardGroups lists brands in the fixed order, cards sorted, no empty group", () => {
   const g = cardGroups("Overige");
   expect(g.map((x) => x.brand)).toEqual([
-    "amex", "ics", "ing", "abn", "rabo", "anwb", "bunq", "knab", "sns-asn-regio", "nexo",
+    "amex",
+    "ics",
+    "ing",
+    "abn",
+    "rabo",
+    "anwb",
+    "bunq",
+    "knab",
+    "sns-asn-regio",
+    "nexo",
   ]);
   for (const x of g) {
     const names = x.cards.map((c) => c.label);
@@ -83,13 +92,14 @@ test("an empty query lists every card; nonsense lists none", () => {
   expect(matchCards("zzzzqq")).toEqual([]);
 });
 
-test("debit brandOf maps every catalogue betaalpas to a known brand, 212-card to other", () => {
+test("debit brandOf maps every catalogue betaalpas to a known brand, 212-card to trading-212", () => {
   const all = matchCards("", "debit");
   expect(all.length).toBe(31);
   for (const c of all) {
-    if (c.id === "212-card") expect(brandOf(c.id, "debit")).toBe("other-brand");
-    else expect(brandOf(c.id, "debit"), c.id).not.toBe("other-brand");
+    expect(brandOf(c.id, "debit"), c.id).not.toBe("other-brand");
   }
+  expect(brandOf("212-card", "debit")).toBe("trading-212");
+  {}
   expect(brandOf("regiobank-betaalpas", "debit")).toBe("sns-asn-regio");
   expect(brandOf("krak-card-kraken", "debit")).toBe("crypto");
   expect(brandOf("bybit-card", "debit")).toBe("crypto");
@@ -103,16 +113,43 @@ test("debit and credit lists do not mix", () => {
   expect(cardLabel("ing-betaalpas", "x", "debit")).toBe("ING betaalpas");
 });
 
-test("debit cardGroups follow the fixed brand order, 212 Card in other", () => {
+test("debit cardGroups follow the fixed brand order, 212 Card under Trading 212", () => {
   const labels = Object.fromEntries(
-    ["ing","abn","rabo","sns-asn-regio","triodos","knab","bunq","revolut","n26","wise","openbank","trade-republic","crypto"].map((b) => [b, b]),
+    [
+      "ing",
+      "abn",
+      "rabo",
+      "sns-asn-regio",
+      "triodos",
+      "knab",
+      "bunq",
+      "revolut",
+      "n26",
+      "wise",
+      "openbank",
+      "trade-republic",
+      "trading-212",
+      "crypto",
+    ].map((b) => [b, b]),
   ) as never;
   const g = cardGroups("Overige", [], "debit", labels);
   expect(g.map((x) => x.brand)).toEqual([
-    "ing", "abn", "rabo", "sns-asn-regio", "triodos", "knab", "bunq", "revolut", "n26", "wise",
-    "openbank", "trade-republic", "crypto", "other-brand",
+    "ing",
+    "abn",
+    "rabo",
+    "sns-asn-regio",
+    "triodos",
+    "knab",
+    "bunq",
+    "revolut",
+    "n26",
+    "wise",
+    "openbank",
+    "trade-republic",
+    "trading-212",
+    "crypto",
   ]);
-  expect(g.at(-1)!.cards.map((c) => c.id)).toEqual(["212-card"]);
+  expect(g.find((x) => x.brand === "trading-212")!.cards.map((c) => c.id)).toEqual(["212-card"]);
   expect(g.flatMap((x) => x.cards).length).toBe(31);
 });
 
@@ -151,7 +188,7 @@ const brandsOf = (kind: "debit" | "credit", banks: string[], picked: string[] = 
   );
 
 test("debit groups follow the banks; amex has no debit card and is not shown; other adds the other group", () => {
-  expect(brandsOf("debit", ["ing", "revolut", "amex", "other"])).toEqual(["ing", "revolut", "other-brand"]);
+  expect(brandsOf("debit", ["ing", "revolut", "amex", "other"])).toEqual(["ing", "revolut"]);
 });
 
 test("credit groups follow the banks", () => {

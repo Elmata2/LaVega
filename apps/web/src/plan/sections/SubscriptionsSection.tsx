@@ -1,3 +1,4 @@
+import { localId } from "../../lib/localId";
 import { useState } from "react";
 import {
   hash,
@@ -18,10 +19,7 @@ import type { PlanCtx, SectionProps } from "./types.js";
 
 const DECISIONS = ["keep", "review", "cancel"] as const;
 
-const unique = (): string =>
-  typeof crypto !== "undefined" && "randomUUID" in crypto
-    ? crypto.randomUUID()
-    : `${Date.now()}-${Math.random()}`;
+const unique = localId;
 
 /** One recognised subscription. The three notes start unselected and show only
  *  what the event log says; "used this month" adds at most one entry a month. */

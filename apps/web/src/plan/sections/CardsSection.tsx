@@ -1,3 +1,4 @@
+import { localId } from "../../lib/localId";
 import { useMemo, useState, type FormEvent } from "react";
 import {
   STATED_CARD_PREFIX,
@@ -327,10 +328,7 @@ export default function CardsSection({ result, ctx }: SectionProps<CardsFigures>
   );
 }
 
-const unique = (): string =>
-  typeof crypto !== "undefined" && "randomUUID" in crypto
-    ? crypto.randomUUID()
-    : `${Date.now()}-${Math.random()}`;
+const unique = localId;
 
 /** The person's own redemption examples: a program, points spent, and the
  *  price they did not pay. Nothing is suggested and nothing is pre-filled. */

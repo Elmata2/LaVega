@@ -40,6 +40,8 @@ type Profile = {
   map: ColumnMap;
   flip?: boolean;
   cashOnly?: boolean;
+  /** Turns the raw account cell into the account key ("" = unusable, fall back). */
+  accKey?: (raw: string) => string;
   dateFormat?: "DMY" | "MDY";
 };
 
@@ -173,6 +175,12 @@ const PROFILES: Profile[] = [
       cp: ["description", "omschrijving"],
       desc: ["appears on your statement as", "vermeld op uw rekeningoverzicht als"],
       amount: ["amount", "bedrag"],
+      // "Account #" (en) / "Rekeningnummer", "Kaartnummer" (nl): masked, e.g. "-12345".
+      acc: ["account #", "rekeningnummer", "kaartnummer", "card number"],
+    },
+    accKey: (raw) => {
+      const d = raw.replace(/\D/g, "");
+      return d.length >= 4 ? "AMEX-" + d.slice(-5) : "";
     },
     flip: true,
     dateFormat: "MDY", // Amex dates are US MM/DD/YYYY in both English and Dutch exports
@@ -377,13 +385,18 @@ function parseABN(rows: string[][]): {
     // `balance` above, so the last (max-date) row wins.
     accounts[acc].balanceDate = date;
     let cp = "";
-    const nm = info.match(
-      /(?:SEPA\s+\w+\s+)?(?:Naam|NAAM)[:\s]+([^\n]+?)(?:\s{2,}|IBAN|Omschrijving|Kenmerk|Machtiging|$)/i,
-    );
-    if (nm) cp = nm[1].trim().slice(0, 60);
-    if (!cp) {
-      const bea = info.match(/(?:BEA|GEA)[^,]*,[^,]*,\s*([^,]{3,40})/i);
-      if (bea) cp = bea[1].trim();
+    // The two patterns below scan from every start position, so they only run on
+    // a field of normal length. A bank description is a few hundred characters;
+    // a longer one falls through to the plain first-segment rule.
+    if (info.length <= MAX_INFO_FOR_PATTERNS) {
+      const nm = info.match(
+        /(?:SEPA\s+\w+\s+)?(?:Naam|NAAM)[:\s]+(\S[^\n]*?)(?:\s{2,}|IBAN|Omschrijving|Kenmerk|Machtiging|$)/i,
+      );
+      if (nm) cp = nm[1].trim().slice(0, 60);
+      if (!cp) {
+        const bea = info.match(/(?:BEA|GEA)[^,]*,[^,]*,\s*([^,]{3,40})/i);
+        if (bea) cp = bea[1].trim();
+      }
     }
     if (!cp) cp = info.split(/\s{2,}/)[0].slice(0, 60);
     txs.push({
@@ -465,7 +478,46 @@ function parseSavingsBalances(
   return { accounts, txs: [] };
 }
 
-export type ParsedBankCsv = { accounts: Account[]; txs: Array<Omit<Tx, "id">>; profile: string };
+/* --- Trading 212 export actions. UNVERIFIED AGAINST A REAL EXPORT: the card
+ * action names come from third-party descriptions, not from a file the owner
+ * supplied. Adjust this block when he supplies one. Matching is on the
+ * lower-cased, trimmed Action text. --- */
+const T212_CASH = /deposit|withdraw|dividend|interest|storting|opname/;
+/** Card spending: always money OUT, whatever sign the file carries. */
+const T212_CARD_OUT = /^card debit/;
+/** Money back on the card: always money IN. */
+const T212_CARD_IN = /^(card credit|card refund|spending cashback)/;
+/** Trades and conversions: not account cash flow, ignored as before. */
+const T212_IGNORED = /\b(buy|sell)\b|stock split|currency conversion/;
+/** The card's own account, stable across re-imports (never the filename). */
+export const T212_CARD_ACCOUNT_KEY = "TRADING212-CARD";
+
+/** Rows a profile saw but could not place, by Action text. */
+export type UnrecognisedAction = { action: string; count: number };
+
+export type ParseOptions = {
+  /** Account key to use when the file itself names none (the card the person
+   *  picked). Beats the filename, loses to an account column. */
+  accountHint?: string;
+};
+
+export type ParsedBankCsv = {
+  accounts: Account[];
+  txs: Array<Omit<Tx, "id">>;
+  profile: string;
+  /** Trading 212 rows with an Action no rule knows; counted, never dropped silently. */
+  unrecognised: UnrecognisedAction[];
+  /** Rows with a date but an amount cell that could not be read; counted, not imported. */
+  unreadable: number;
+};
+
+/** Excel day serial (1900 system) to ISO date; null when not a plausible serial. */
+function excelSerialDate(v: string): string | null {
+  if (!/^\d{5}(\.\d+)?$/.test(v.trim())) return null;
+  const n = Math.floor(Number(v));
+  if (n < 20000 || n > 80000) return null;
+  return new Date(Date.UTC(1899, 11, 30) + n * 86_400_000).toISOString().slice(0, 10);
+}
 
 /**
  * Detects the bank from the CSV header signature (or, for ABN AMRO, from its
@@ -473,15 +525,33 @@ export type ParsedBankCsv = { accounts: Account[]; txs: Array<Omit<Tx, "id">>; p
  * accounts it can derive, e.g. by IBAN). `fallbackAccountKey` is used when a
  * row/profile has no per-row account column (e.g. Revolut/Amex/Trading 212).
  */
-export function parseBankCsv(text: string, fallbackAccountKey: string): ParsedBankCsv {
+export function parseBankCsv(
+  text: string,
+  fallbackAccountKey: string,
+  opts: ParseOptions = {},
+): ParsedBankCsv {
   const delim = sniffDelim(text);
   const rows = splitRows(text, delim);
-  if (!rows.length) return { accounts: [], txs: [], profile: "leeg" };
+  if (!rows.length) return { accounts: [], txs: [], profile: "leeg", unrecognised: [], unreadable: 0 };
 
   if (delim === "\t" && looksLikeABN(rows)) {
     const { accounts, txs } = parseABN(rows);
-    return { accounts: Object.values(accounts), txs, profile: "ABN AMRO" };
+    return { accounts: Object.values(accounts), txs, profile: "ABN AMRO", unrecognised: [], unreadable: 0 };
   }
+  return parseBankRows(rows, fallbackAccountKey, opts);
+}
+
+/** The same engine over rows already split into cells (a CSV, or a spreadsheet
+ *  read by the web layer). Excel date serials are accepted in the date column. */
+/** Longest description the counterparty patterns are run on. */
+const MAX_INFO_FOR_PATTERNS = 2000;
+
+export function parseBankRows(
+  rows: string[][],
+  fallbackAccountKey: string,
+  opts: ParseOptions = {},
+): ParsedBankCsv {
+  if (!rows.length) return { accounts: [], txs: [], profile: "leeg", unrecognised: [], unreadable: 0 };
 
   const accounts: Record<string, Account> = {};
   const txs: Array<Omit<Tx, "id">> = [];
@@ -492,7 +562,13 @@ export function parseBankCsv(text: string, fallbackAccountKey: string): ParsedBa
   // detection since it has no amount column the generic engine could use.
   if (looksLikeSavingsBalance(hNorm)) {
     const parsed = parseSavingsBalances(header, rows);
-    return { accounts: parsed.accounts, txs: parsed.txs, profile: "Spaarrekeningen" };
+    return {
+      accounts: parsed.accounts,
+      txs: parsed.txs,
+      profile: "Spaarrekeningen",
+      unrecognised: [],
+      unreadable: 0,
+    };
   }
 
   const prof = PROFILES.find((p) => p.test(hNorm));
@@ -510,6 +586,15 @@ export function parseBankCsv(text: string, fallbackAccountKey: string): ParsedBa
     fee: pick(idx, m.fee ?? []),
     bal: pick(idx, m.bal ?? []),
   };
+  // Trading 212 card columns, only looked up when the file has them.
+  const t212 = prof?.cashOnly
+    ? { merchant: pick(idx, ["merchant name"]), notes: pick(idx, ["notes"]) }
+    : { merchant: -1, notes: -1 };
+  const unknown = new Map<string, number>();
+  let unreadable = 0;
+  // Trading 212 cash rows keep the filename key whatever card was picked: the
+  // card has its own account and the cash account is not the picked card.
+  const fallbackKey = prof?.cashOnly ? fallbackAccountKey : opts.accountHint || fallbackAccountKey;
 
   // Running-balance capture (Revolut "Saldo"): remember the latest row's balance
   // per account so we can set account.balance to the current position. Rows are
@@ -524,8 +609,10 @@ export function parseBankCsv(text: string, fallbackAccountKey: string): ParsedBa
   for (let i = 1; i < rows.length; i++) {
     const r = rows[i];
     if (!r || r.length < 2) continue;
-    const date = parseDate(r[ci.date], prof?.dateFormat ?? "DMY");
+    const date =
+      excelSerialDate(String(r[ci.date] ?? "")) ?? parseDate(r[ci.date], prof?.dateFormat ?? "DMY");
     let amount = parseAmount(r[ci.amount]);
+    if (date != null && amount == null && String(r[ci.amount] ?? "").trim() !== "") unreadable += 1;
     if (date == null || amount == null) continue;
     if (ci.dc > -1) {
       const d = norm(r[ci.dc]);
@@ -536,18 +623,31 @@ export function parseBankCsv(text: string, fallbackAccountKey: string): ParsedBa
       if (f) amount -= Math.abs(f);
     }
     if (flip) amount = -amount;
+    let cardRow: "out" | "in" | null = null;
     if (cashOnly) {
       const act = norm(r[ci.desc > -1 ? ci.desc : 0]);
-      if (!/deposit|withdraw|dividend|interest|storting|opname/.test(act)) continue;
+      if (T212_CARD_OUT.test(act)) cardRow = "out";
+      else if (T212_CARD_IN.test(act)) cardRow = "in";
+      else if (T212_CASH.test(act)) cardRow = null;
+      else if (T212_IGNORED.test(act)) continue;
+      else {
+        const label = String(r[ci.desc > -1 ? ci.desc : 0] ?? "").trim() || "(leeg)";
+        unknown.set(label, (unknown.get(label) ?? 0) + 1);
+        continue;
+      }
+      // Card rows: money out whatever the sign in the file; money back is in.
+      if (cardRow === "out") amount = -Math.abs(amount);
+      else if (cardRow === "in") amount = Math.abs(amount);
     }
     const accRaw = ci.acc > -1 ? String(r[ci.acc] ?? "").trim() : "";
-    const acc = findIban(accRaw) || accRaw || fallbackAccountKey;
+    const fromCol = prof?.accKey ? prof.accKey(accRaw) : findIban(accRaw) || accRaw;
+    const acc = cardRow !== null ? T212_CARD_ACCOUNT_KEY : fromCol || fallbackKey;
     const cur = (ci.cur > -1 ? String(r[ci.cur] ?? "").trim() : "") || "EUR";
     const bank = prof?.bank ?? bankFromIban(acc) ?? "";
     accounts[acc] = accounts[acc] || {
       key: acc,
       iban: findIban(acc) ?? "",
-      name: acc,
+      name: cardRow !== null ? "Trading 212 Card" : acc,
       bank,
       entity: "",
       currency: cur,
@@ -565,7 +665,14 @@ export function parseBankCsv(text: string, fallbackAccountKey: string): ParsedBa
       date,
       amount,
       currency: cur,
-      counterparty: ci.cp > -1 ? String(r[ci.cp] ?? "").trim() : "",
+      counterparty:
+        cardRow !== null
+          ? (t212.merchant > -1 ? String(r[t212.merchant] ?? "").trim() : "") ||
+            (t212.notes > -1 ? String(r[t212.notes] ?? "").trim() : "") ||
+            String(r[ci.desc] ?? "").trim()
+          : ci.cp > -1
+            ? String(r[ci.cp] ?? "").trim()
+            : "",
       description: ci.desc > -1 ? String(r[ci.desc] ?? "").trim() : "",
       category: "",
       manual: false,
@@ -581,5 +688,11 @@ export function parseBankCsv(text: string, fallbackAccountKey: string): ParsedBa
     }
   }
 
-  return { accounts: Object.values(accounts), txs, profile: prof ? prof.bank : "generic" };
+  return {
+    accounts: Object.values(accounts),
+    txs,
+    profile: prof ? prof.bank : "generic",
+    unrecognised: [...unknown].map(([action, count]) => ({ action, count })),
+    unreadable,
+  };
 }

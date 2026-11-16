@@ -1,3 +1,4 @@
+import { shortLocalId } from "../../lib/localId";
 import { useState, type FormEvent } from "react";
 import {
   accountTypeKind,
@@ -64,7 +65,7 @@ function GoalEditor({
         at: await nowIso(),
         startCents,
         first: false,
-        nonce: String(Math.random()).slice(2, 10),
+        nonce: shortLocalId(),
       }),
     );
   const toggle = async (id: string, on: boolean) => {

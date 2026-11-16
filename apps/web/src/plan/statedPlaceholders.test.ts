@@ -93,8 +93,8 @@ test("other is shown with the other label and no brand", () => {
     entries,
   });
   expect(out).toEqual([
-    { id: "other", kind: "credit", name: "Een andere kaart", brand: null },
-    { id: "other", kind: "debit", name: "Een andere pas", brand: null },
+    { id: "other", kind: "credit", name: "Een andere kaart", brand: null, fileOnly: false },
+    { id: "other", kind: "debit", name: "Een andere pas", brand: null, fileOnly: false },
   ]);
 });
 
@@ -121,4 +121,41 @@ test("credit comes before debit, each in stated order", () => {
     "debit:knab-betaalpas",
     "debit:ing-betaalpas",
   ]);
+});
+
+const T212 = "212-card";
+
+test("a file-fed account clears the credit card it was imported for", () => {
+  const out = statedCardPlaceholders({
+    credit: [AMEX],
+    debit: [],
+    accounts: [acct("AMEX-1", { bank: "American Express", source: "file", statedCardId: AMEX })],
+    entries,
+  });
+  expect(out).toEqual([]);
+});
+
+test("a Trading 212 cash account does not clear the Trading 212 card; the card file does", () => {
+  const cash = acct("TRADING212", { bank: "Trading 212", linkedAt: "2026-11-01T00:00:00Z" });
+  const before = statedCardPlaceholders({ credit: [], debit: [T212], accounts: [cash], entries });
+  expect(before).toMatchObject([{ id: T212, brand: "trading-212", fileOnly: true }]);
+  const card = acct("TRADING212-CARD", {
+    bank: "Trading 212",
+    source: "file",
+    statedCardId: T212,
+    linkedAt: "2026-11-01T00:00:00Z",
+  });
+  expect(
+    statedCardPlaceholders({ credit: [], debit: [T212], accounts: [cash, card], entries }),
+  ).toEqual([]);
+});
+
+test("an ordinary bank debit card still clears on a live link", () => {
+  const out = statedCardPlaceholders({
+    credit: [],
+    debit: ["ing-betaalpas"],
+    accounts: [acct("x", { bank: "ING", linkedAt: "2026-11-01T00:00:00Z" })],
+    entries,
+  });
+  expect(out).toEqual([]);
 });

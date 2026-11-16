@@ -67,6 +67,8 @@ export function heldCatalogueIds(
   for (const account of cards) {
     const entry = entryFor(account, entries, feeProductIdOf(costs.get(account.key)));
     if (entry !== null) ids.add(entry.id);
+    // A file-fed account stands in for the card it was imported for.
+    if (account.statedCardId !== undefined) ids.add(account.statedCardId);
   }
   return ids;
 }

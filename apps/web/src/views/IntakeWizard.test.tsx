@@ -10,6 +10,7 @@ import {
   type AdvisorProfileStore,
   type RewardsBalance,
 } from "@lavega/core";
+import { CardFileContext, type OpenCardFile } from "../components/import/CardFileContext.js";
 import IntakeWizard from "./IntakeWizard";
 import { wizardCopy } from "../copy/wizard";
 import {
@@ -35,11 +36,15 @@ import {
   applyStatedHousing,
 } from "../intake/state";
 import { inviteState } from "../intake/inviteState";
-import { isAnswered, isFinishedIntake, markDone, resumeScreen, screensFor } from "../intake/wizard/screens";
+import {
+  isAnswered,
+  isFinishedIntake,
+  markDone,
+  resumeScreen,
+  screensFor,
+} from "../intake/wizard/screens";
 
-(
-  globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }
-).IS_REACT_ACT_ENVIRONMENT = true;
+(globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 const AS_OF = "2026-10-23";
 const NOW = () => "2026-10-23T10:00:00Z";
@@ -67,10 +72,7 @@ function mount(
   store: AdvisorProfileStore | null = null,
   onSave: (s: AdvisorProfileStore) => Promise<void> = async () => {},
   corrupt = false,
-  onImport: (f: File) => Promise<{ ok: true; count: number } | { ok: false }> = async () => ({
-    ok: true,
-    count: 0,
-  }),
+  openCardFile: OpenCardFile | null = () => {},
   extra: Partial<React.ComponentProps<typeof IntakeWizard>> = {},
 ): Mounted {
   const spy = vi.fn(onSave);
@@ -80,17 +82,18 @@ function mount(
   root = createRoot(el);
   act(() =>
     root!.render(
-      <IntakeWizard
-        store={store}
-        corrupt={corrupt}
-        asOf={AS_OF}
-        onSave={spy}
-        onImport={onImport}
-        onFinish={onFinish}
-        onExit={() => {}}
-        now={NOW}
-        {...extra}
-      />,
+      <CardFileContext.Provider value={openCardFile}>
+        <IntakeWizard
+          store={store}
+          corrupt={corrupt}
+          asOf={AS_OF}
+          onSave={spy}
+          onFinish={onFinish}
+          onExit={() => {}}
+          now={NOW}
+          {...extra}
+        />
+      </CardFileContext.Provider>,
     ),
   );
   return {
@@ -104,9 +107,7 @@ const flush = () => act(async () => {});
 const counter = (c: HTMLElement) => c.querySelector(".wz-counter")!.textContent;
 const h1 = (c: HTMLElement) => c.querySelector("h1")!.textContent;
 const tile = (c: HTMLElement, text: string) =>
-  [...c.querySelectorAll<HTMLButtonElement>('[role="radio"]')].find(
-    (b) => b.textContent === text,
-  )!;
+  [...c.querySelectorAll<HTMLButtonElement>('[role="radio"]')].find((b) => b.textContent === text)!;
 /** Pick a tile and press Verder, which is how every screen moves on. On a
  *  screen that still needs more input, Verder is disabled and nothing moves. */
 async function tap(c: HTMLElement, text: string) {
@@ -115,10 +116,7 @@ async function tap(c: HTMLElement, text: string) {
 }
 async function type(input: HTMLInputElement, value: string) {
   await act(async () => {
-    const set = Object.getOwnPropertyDescriptor(
-      HTMLInputElement.prototype,
-      "value",
-    )!.set!;
+    const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
     set.call(input, value);
     input.dispatchEvent(new Event("input", { bubbles: true }));
   });
@@ -131,8 +129,7 @@ async function pickWork(c: HTMLElement, text = "Employed") {
   await act(async () => box(c, text).click());
   await act(async () => c.querySelector<HTMLButtonElement>(".wz-next")!.click());
 }
-const nextBtn = (c: HTMLElement) =>
-  c.querySelector<HTMLButtonElement>(".wz-next")!;
+const nextBtn = (c: HTMLElement) => c.querySelector<HTMLButtonElement>(".wz-next")!;
 async function birth(c: HTMLElement, year = "1990") {
   await type(c.querySelector("input")!, year);
   await act(async () => nextBtn(c).click());
@@ -209,9 +206,7 @@ test("Nee on children skips child-years and the counter shows 21", async () => {
 test("Ja on children goes to child-years, and Back then Ja again still does", async () => {
   const { c } = mount();
   await reachIncome(c);
-  await act(async () =>
-    c.querySelector<HTMLButtonElement>(".wz-back")!.click(),
-  );
+  await act(async () => c.querySelector<HTMLButtonElement>(".wz-back")!.click());
   await tap(c, "Yes");
   expect(h1(c)).toBe("What year were they born?");
 });
@@ -267,23 +262,13 @@ test("the last risk tap then invested calls onFinish with blocksDone 3", async (
   }
   expect(h1(c)).toContain("invested before");
   expect(onFinish).not.toHaveBeenCalled();
-  await act(async () =>
-    c.querySelectorAll<HTMLButtonElement>('[role="radio"]')[0]!.click(),
-  );
+  await act(async () => c.querySelectorAll<HTMLButtonElement>('[role="radio"]')[0]!.click());
   await act(async () => nextBtn(c).click());
   expect(saved().current.intake.blocksDone).toBe(3);
   expect(onFinish).not.toHaveBeenCalled();
   expect(h1(c)).toBe("What do you want LaVega to help you with?");
 });
 
-const pickFile = async (c: HTMLElement) => {
-  const input = c.querySelector<HTMLInputElement>('input[type="file"]')!;
-  const file = new File(["x"], "a.csv");
-  await act(async () => {
-    Object.defineProperty(input, "files", { value: [file], configurable: true });
-    input.dispatchEvent(new Event("change", { bubbles: true }));
-  });
-};
 const laterBtn = (c: HTMLElement, text: string) =>
   [...c.querySelectorAll<HTMLButtonElement>("button")].find((b) => b.textContent === text)!;
 
@@ -295,11 +280,22 @@ test("Later finishes and marks upload done", async () => {
   expect(onFinish).toHaveBeenCalledTimes(1);
 });
 
-test("successful import shows the count then finishes", async () => {
-  const onImport = vi.fn(async () => ({ ok: true as const, count: 12 }));
-  const { c, saved, onFinish } = mount(fromScreen("summary"), undefined, false, onImport);
-  await pickFile(c);
-  expect(onImport).toHaveBeenCalledTimes(1);
+const uploadBtn = (c: HTMLElement) => laterBtn(c, "Upload bank statement");
+
+test("the upload button opens the file dialog for the cards no bank link reaches", async () => {
+  const open = vi.fn();
+  const { c } = mount(fromScreen("summary"), undefined, false, open);
+  await act(async () => uploadBtn(c).click());
+  expect(open).toHaveBeenCalledTimes(1);
+  expect(open.mock.calls[0]![0]).toBeNull();
+  expect(open.mock.calls[0]![1]).toMatchObject({ fileOnly: true });
+});
+
+test("a finished file add shows the count then finishes", async () => {
+  const open = vi.fn();
+  const { c, saved, onFinish } = mount(fromScreen("summary"), undefined, false, open);
+  await act(async () => uploadBtn(c).click());
+  act(() => open.mock.calls[0]![1].onDone(12));
   expect(c.textContent).toContain("12 transactions added");
   expect(onFinish).not.toHaveBeenCalled();
   await act(async () => laterBtn(c, "Go to your plan").click());
@@ -308,33 +304,28 @@ test("successful import shows the count then finishes", async () => {
 });
 
 test("count 0 shows nothingNew and still finishes", async () => {
-  const onImport = vi.fn(async () => ({ ok: true as const, count: 0 }));
-  const { c, onFinish } = mount(fromScreen("summary"), undefined, false, onImport);
-  await pickFile(c);
+  const open = vi.fn();
+  const { c, onFinish } = mount(fromScreen("summary"), undefined, false, open);
+  await act(async () => uploadBtn(c).click());
+  act(() => open.mock.calls[0]![1].onDone(0));
   expect(c.textContent).toContain("These transactions were already in.");
   expect(c.textContent).not.toContain("transactions added");
   await act(async () => laterBtn(c, "Go to your plan").click());
   expect(onFinish).toHaveBeenCalledTimes(1);
 });
 
-test("failed import stays on upload", async () => {
-  const onImport = vi.fn(async () => ({ ok: false as const }));
-  const { c, onFinish, onSave } = mount(fromScreen("summary"), undefined, false, onImport);
-  await pickFile(c);
-  expect(c.querySelector('[role="alert"]')!.textContent).toBe("We could not read this file.");
-  expect(h1(c)).toBe("Do you want to add your bank statement?");
-  expect(onFinish).not.toHaveBeenCalled();
-  expect(onSave).not.toHaveBeenCalled();
+test("without the dialog there is no upload button, only Later", () => {
+  const { c } = mount(fromScreen("summary"), undefined, false, null);
+  expect([...c.querySelectorAll("button")].some((b) => b.textContent === "Upload bank statement")).toBe(
+    false,
+  );
 });
 
 test("reopening a half-done store resumes at the saved screen", () => {
   let s = emptyProfileStore(NOW());
   s = {
     ...s,
-    current: markAt(
-      applyHousehold(s.current, { kind: "alone" }, AS_OF),
-      "spend",
-    ),
+    current: markAt(applyHousehold(s.current, { kind: "alone" }, AS_OF), "spend"),
   };
   const { c } = mount(s);
   expect(h1(c)).toBe("What does housing cost you per month?");
@@ -343,11 +334,7 @@ test("reopening a half-done store resumes at the saved screen", () => {
 test("no rendered screen contains advice language", () => {
   const base = emptyProfileStore(NOW()).current;
   const filled = applyChildren(
-    applyHousehold(
-      base,
-      { kind: "together", partnerIncomeInScope: true },
-      AS_OF,
-    ),
+    applyHousehold(base, { kind: "together", partnerIncomeInScope: true }, AS_OF),
     [{ id: "c1", birthYear: 2015 }],
     AS_OF,
   );
@@ -359,10 +346,9 @@ test("no rendered screen contains advice language", () => {
       const current = i === 0 ? filled : markAt(filled, all[i - 1]!);
       const { c } = mount({ ...emptyProfileStore(NOW()), current });
       expect(c.querySelector("h1")!.textContent, `${lang} ${id}`).not.toBe("");
-      expect(
-        findAdviceLanguage(document.body.textContent ?? "", lang),
-        `${lang} ${id}`,
-      ).toEqual([]);
+      expect(findAdviceLanguage(document.body.textContent ?? "", lang), `${lang} ${id}`).toEqual(
+        [],
+      );
       act(() => root!.unmount());
       el!.remove();
       root = null;
@@ -370,15 +356,15 @@ test("no rendered screen contains advice language", () => {
   }
 });
 
-const inputs = (c: HTMLElement) => [
-  ...c.querySelectorAll<HTMLInputElement>("input"),
-];
-const backBtn = (c: HTMLElement) =>
-  c.querySelector<HTMLButtonElement>(".wz-back")!;
+const inputs = (c: HTMLElement) => [...c.querySelectorAll<HTMLInputElement>("input")];
+const backBtn = (c: HTMLElement) => c.querySelector<HTMLButtonElement>(".wz-back")!;
 /** The round-1 answers a user who walked the wizard up to `id` has given. A
  *  profile that skipped them would be sent back to them on resume. */
 const NEW_ANSWERS: Partial<
-  Record<Parameters<typeof markDone>[1], (p: AdvisorProfileStore["current"]) => AdvisorProfileStore["current"]>
+  Record<
+    Parameters<typeof markDone>[1],
+    (p: AdvisorProfileStore["current"]) => AdvisorProfileStore["current"]
+  >
 > = {
   "birth-year": (p) => applyBirthYear(p, 1990, AS_OF),
   "income-regularity": (p) => applyIncomeRegularity(p, "fixed", AS_OF),
@@ -430,9 +416,7 @@ test("Back and resave of the goal replaces wizard-goal and leaves other goals al
     priority: "must" as const,
     accountRefs: [],
   };
-  const { c, saved } = mount(
-    fromScreen("foreign-spend", (p) => applyGoals(p, [old], AS_OF)),
-  );
+  const { c, saved } = mount(fromScreen("foreign-spend", (p) => applyGoals(p, [old], AS_OF)));
   expect(inputs(c)[0]!.value).toBe("");
   await type(inputs(c)[0]!, "Holiday");
   await type(inputs(c)[1]!, "2000");
@@ -456,15 +440,11 @@ test("a corrupt store shows the notice", () => {
 
 test("a child row can be removed but one stays", async () => {
   const { c, saved } = mount(
-    fromScreen("children", (p) =>
-      applyChildren(p, [{ id: "a", birthYear: 2015 }], AS_OF),
-    ),
+    fromScreen("children", (p) => applyChildren(p, [{ id: "a", birthYear: 2015 }], AS_OF)),
   );
   expect(h1(c)).toBe("What year were they born?");
   expect(c.querySelectorAll(".wz-link").length).toBe(1);
-  await act(async () =>
-    c.querySelector<HTMLButtonElement>(".wz-link")!.click(),
-  );
+  await act(async () => c.querySelector<HTMLButtonElement>(".wz-link")!.click());
   expect(inputs(c).length).toBe(2);
   await type(inputs(c)[1]!, "2018");
   const remove = [...c.querySelectorAll<HTMLButtonElement>(".wz-link")].find(
@@ -472,15 +452,11 @@ test("a child row can be removed but one stays", async () => {
   )!;
   await act(async () => remove.click());
   expect(inputs(c).length).toBe(1);
-  expect(
-    [...c.querySelectorAll(".wz-link")].some((b) =>
-      b.textContent?.startsWith("Remove"),
-    ),
-  ).toBe(false);
+  expect([...c.querySelectorAll(".wz-link")].some((b) => b.textContent?.startsWith("Remove"))).toBe(
+    false,
+  );
   await act(async () => nextBtn(c).click());
-  expect(saved().current.children?.value.map((k) => k.birthYear)).toEqual([
-    2018,
-  ]);
+  expect(saved().current.children?.value.map((k) => k.birthYear)).toEqual([2018]);
 });
 
 const submitForm = (c: HTMLElement) =>
@@ -636,9 +612,7 @@ test("employed-only work skips the VAT question", async () => {
 
 const spendScreen = () => fromScreen("income");
 const link = (c: HTMLElement, text: string) =>
-  [...c.querySelectorAll<HTMLButtonElement>(".wz-link")].find(
-    (b) => b.textContent === text,
-  )!;
+  [...c.querySelectorAll<HTMLButtonElement>(".wz-link")].find((b) => b.textContent === text)!;
 
 test("spend band saves its range and advances", async () => {
   const { c, saved } = mount(spendScreen());
@@ -728,7 +702,13 @@ test("opening American Express in the wizard lists its business and corporate ca
   const { c } = mount(fromScreen("debit-cards"));
   await openBrand(c, /American Express/);
   const labels = boxes(c).map((b) => b.textContent ?? "");
-  for (const n of ["Blue Card", "Gold Card", "Platinum Card", "Business Gold Card", "Corporate Card"])
+  for (const n of [
+    "Blue Card",
+    "Gold Card",
+    "Platinum Card",
+    "Business Gold Card",
+    "Corporate Card",
+  ])
     expect(labels).toContain(`American Express ${n}`);
 });
 
@@ -820,7 +800,6 @@ test("exact mode prefills only an exact stored spend, never a band", async () =>
   expect(c.querySelector("input")!.value).toBe("");
 });
 
-
 // --- card details: balance, paid in full, rate, points -----------------------
 
 const AMEX = "american-express-gold-card";
@@ -829,8 +808,7 @@ const withCards = (ids: string[]) =>
     applyCardRepayment(applyStatedCards(p, ids, AS_OF), "full", AS_OF),
   );
 const field = (c: HTMLElement, label: RegExp) =>
-  [...c.querySelectorAll<HTMLLabelElement>("label")]
-    .find((l) => label.test(l.textContent ?? ""))!
+  [...c.querySelectorAll<HTMLLabelElement>("label")].find((l) => label.test(l.textContent ?? ""))!
     .control as HTMLInputElement;
 
 test("the card-details screen follows the card picker, with a row per card", () => {
@@ -899,12 +877,20 @@ test("skipping stores nothing and moves on to the spend-mix question", async () 
 
 test("stored balances and points come back prefilled when the screen is reopened", () => {
   const p = fromScreen("card-repayment", (q) =>
-    applyCardBalances(applyCardRepayment(applyStatedCards(q, [AMEX], AS_OF), "full", AS_OF), [
-      { cardId: AMEX, balanceCents: 250_000, paysInFull: false, ratePct: 9.5 },
-    ], AS_OF),
+    applyCardBalances(
+      applyCardRepayment(applyStatedCards(q, [AMEX], AS_OF), "full", AS_OF),
+      [{ cardId: AMEX, balanceCents: 250_000, paysInFull: false, ratePct: 9.5 }],
+      AS_OF,
+    ),
   );
   const { c } = mount(p, async () => {}, false, undefined, {
-    rewards: [makeRewardsBalance({ program: "American Express Membership Rewards", points: 7000, updatedAt: AS_OF })],
+    rewards: [
+      makeRewardsBalance({
+        program: "American Express Membership Rewards",
+        points: 7000,
+        updatedAt: AS_OF,
+      }),
+    ],
     onSaveRewards: async () => {},
   });
   expect(field(c, /Outstanding balance/).value).toBe("2500");
@@ -961,14 +947,14 @@ test("income regularity saves and moves on", async () => {
 test("housing asks only an amount and keeps an existing kind", async () => {
   const { c, saved } = mount(fromScreen("spend"));
   expect(h1(c)).toBe("What does housing cost you per month?");
-  expect(c.querySelector(".wz-hint")!.textContent).toBe("Rent or mortgage, including service costs");
+  expect(c.querySelector(".wz-hint")!.textContent).toBe(
+    "Rent or mortgage, including service costs",
+  );
   expect(c.querySelectorAll('[role="radio"]').length).toBe(0);
   await type(c.querySelector("input")!, "1200");
   await act(async () => nextBtn(c).click());
   expect(saved().current.housing?.value).toEqual({ kind: "other", monthlyCents: 120000 });
-  const again = mount(
-    fromScreen("spend", (p) => applyStatedHousing(p, "rent", 90000, AS_OF)),
-  );
+  const again = mount(fromScreen("spend", (p) => applyStatedHousing(p, "rent", 90000, AS_OF)));
   expect(inputs(again.c)[0]!.value).not.toBe("");
   await type(inputs(again.c)[0]!, "950");
   await act(async () => nextBtn(again.c).click());
@@ -1172,7 +1158,9 @@ test("Wijzig on income opens income and Verder returns to the summary", async ()
   );
   expect(h1(c)).toBe("This is what LaVega knows about you now");
   expect(c.querySelectorAll(".wz-summary-row")).toHaveLength(9);
-  const change = c.querySelector<HTMLButtonElement>('.wz-summary-row button[data-screen="income"]')!;
+  const change = c.querySelector<HTMLButtonElement>(
+    '.wz-summary-row button[data-screen="income"]',
+  )!;
   await act(async () => change.click());
   expect(h1(c)).toBe("What do you earn, net per month?");
   await type(c.querySelector("input")!, "4000");
@@ -1214,15 +1202,15 @@ test("the summary has a line for the invested-before answer", async () => {
       applyKnowledge(applyHousehold(p, { kind: "alone" }, AS_OF), {}, true, AS_OF),
     ),
   );
-  const row = c.querySelector('.wz-summary-row button[data-screen="invested"]')!.closest(".wz-summary-row")!;
+  const row = c
+    .querySelector('.wz-summary-row button[data-screen="invested"]')!
+    .closest(".wz-summary-row")!;
   expect(row.textContent).toContain("Invested before");
   expect(row.textContent).toContain("Yes");
 });
 
 test("Back from an edit returns to the summary", async () => {
-  const { c } = mount(
-    fromScreen("priorities", (p) => applyHousehold(p, { kind: "alone" }, AS_OF)),
-  );
+  const { c } = mount(fromScreen("priorities", (p) => applyHousehold(p, { kind: "alone" }, AS_OF)));
   await act(async () =>
     c.querySelector<HTMLButtonElement>('.wz-summary-row button[data-screen="household"]')!.click(),
   );
@@ -1264,7 +1252,13 @@ test("replacing the stated card from the summary asks the card details again for
   await openBrand(c, /^ING/);
   await act(async () => box(c, "ING creditcard").click());
   await openBrand(c, /^American Express/);
-  await act(async () => (boxes(c).find((b) => b.getAttribute("aria-checked") === "true" && b.textContent !== "ING creditcard") as HTMLElement).click());
+  await act(async () =>
+    (
+      boxes(c).find(
+        (b) => b.getAttribute("aria-checked") === "true" && b.textContent !== "ING creditcard",
+      ) as HTMLElement
+    ).click(),
+  );
   await act(async () => nextBtn(c).click());
   expect(h1(c)).toBe("What is on your credit cards right now?");
 });
@@ -1278,11 +1272,10 @@ test("editing household to together asks money sharing, then returns to the summ
   expect(h1(c)).toBe("This is what LaVega knows about you now");
 });
 
-const incomeRegularityStored = (v: "fixed" | "varies") =>
-  (p: AdvisorProfileStore["current"]) => ({
-    ...p,
-    incomeRegularity: { value: v, source: "stated" as const, at: AS_OF },
-  });
+const incomeRegularityStored = (v: "fixed" | "varies") => (p: AdvisorProfileStore["current"]) => ({
+  ...p,
+  incomeRegularity: { value: v, source: "stated" as const, at: AS_OF },
+});
 
 test("freelance preselects varies", async () => {
   const { c, saved, onSave } = mount(fromScreen("birth-year"));
@@ -1295,7 +1288,11 @@ test("freelance preselects varies", async () => {
   const saves = onSave.mock.calls.length;
   expect(saved().current.incomeRegularity).toBeUndefined();
   await act(async () => nextBtn(c).click());
-  expect(saved().current.incomeRegularity).toEqual({ value: "varies", source: "stated", at: AS_OF });
+  expect(saved().current.incomeRegularity).toEqual({
+    value: "varies",
+    source: "stated",
+    at: AS_OF,
+  });
   expect(onSave.mock.calls.length).toBe(saves + 1);
 });
 
@@ -1375,7 +1372,6 @@ function mountRound2(store: AdvisorProfileStore) {
         round={2}
         asOf={AS_OF}
         onSave={onSave}
-        onImport={async () => ({ ok: true, count: 0 })}
         onFinish={onFinish}
         onExit={() => {}}
         now={NOW}
@@ -1420,7 +1416,11 @@ test("programs allows none", async () => {
   const s = finishedAnswered();
   const { c, saved } = mountRound2({
     ...s,
-    current: applyCutTargets(applyCheckInCadence(applyConfidence(s.current, 2, AS_OF), "daily", AS_OF), ["travel"], AS_OF),
+    current: applyCutTargets(
+      applyCheckInCadence(applyConfidence(s.current, 2, AS_OF), "daily", AS_OF),
+      ["travel"],
+      AS_OF,
+    ),
   });
   expect(h1(c)).toBe("Which points programmes do you collect in?");
   expect(nextBtn(c).disabled).toBe(false);
@@ -1512,7 +1512,11 @@ function stubBankFetch() {
   const original = globalThis.fetch;
   globalThis.fetch = (async (url: string) =>
     String(url).includes("/api/eb/auth")
-      ? ({ ok: true, status: 200, json: async () => ({ url: "https://bank.example/auth" }) } as Response)
+      ? ({
+          ok: true,
+          status: 200,
+          json: async () => ({ url: "https://bank.example/auth" }),
+        } as Response)
       : ({
           ok: true,
           status: 200,
@@ -1603,7 +1607,7 @@ test("Later and the upload are disabled while the redirect save is in flight", a
     await flush();
     await act(async () => btn(c, "Authorise").click());
     expect(btn(c, "Later").disabled).toBe(true);
-    expect(c.querySelector<HTMLInputElement>('input[type="file"]')!.disabled).toBe(true);
+    expect(c.querySelector<HTMLButtonElement>(".wz-upload")!.disabled).toBe(true);
     await act(async () => release());
   } finally {
     restore();
@@ -1614,8 +1618,8 @@ test("status unknown: the action area is held, no bank link, no upload, then ren
   const { c } = mount(fromScreen("summary"), undefined, false, undefined, { bankLink: "pending" });
   expect(h1(c)).toBe("Connect your bank");
   expect(c.querySelector('[aria-busy="true"]')).not.toBeNull();
-    expect(btn(c, "Later").disabled).toBe(true);
-  expect(c.querySelector<HTMLInputElement>('input[type="file"]')!.disabled).toBe(true);
+  expect(btn(c, "Later").disabled).toBe(true);
+  expect(c.querySelector<HTMLButtonElement>(".wz-upload")!.disabled).toBe(true);
 });
 
 test("a banks answer with no card of the kind still lets the user go on", async () => {
