@@ -385,13 +385,18 @@ function parseABN(rows: string[][]): {
     // `balance` above, so the last (max-date) row wins.
     accounts[acc].balanceDate = date;
     let cp = "";
-    const nm = info.match(
-      /(?:SEPA\s+\w+\s+)?(?:Naam|NAAM)[:\s]+([^\n]+?)(?:\s{2,}|IBAN|Omschrijving|Kenmerk|Machtiging|$)/i,
-    );
-    if (nm) cp = nm[1].trim().slice(0, 60);
-    if (!cp) {
-      const bea = info.match(/(?:BEA|GEA)[^,]*,[^,]*,\s*([^,]{3,40})/i);
-      if (bea) cp = bea[1].trim();
+    // The two patterns below scan from every start position, so they only run on
+    // a field of normal length. A bank description is a few hundred characters;
+    // a longer one falls through to the plain first-segment rule.
+    if (info.length <= MAX_INFO_FOR_PATTERNS) {
+      const nm = info.match(
+        /(?:SEPA\s+\w+\s+)?(?:Naam|NAAM)[:\s]+(\S[^\n]*?)(?:\s{2,}|IBAN|Omschrijving|Kenmerk|Machtiging|$)/i,
+      );
+      if (nm) cp = nm[1].trim().slice(0, 60);
+      if (!cp) {
+        const bea = info.match(/(?:BEA|GEA)[^,]*,[^,]*,\s*([^,]{3,40})/i);
+        if (bea) cp = bea[1].trim();
+      }
     }
     if (!cp) cp = info.split(/\s{2,}/)[0].slice(0, 60);
     txs.push({
@@ -538,6 +543,9 @@ export function parseBankCsv(
 
 /** The same engine over rows already split into cells (a CSV, or a spreadsheet
  *  read by the web layer). Excel date serials are accepted in the date column. */
+/** Longest description the counterparty patterns are run on. */
+const MAX_INFO_FOR_PATTERNS = 2000;
+
 export function parseBankRows(
   rows: string[][],
   fallbackAccountKey: string,

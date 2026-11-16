@@ -1,3 +1,4 @@
+import { shortLocalId } from "../../lib/localId";
 import { useId, useState, type ReactNode } from "react";
 import type { WorkKind } from "@lavega/core";
 import type { WizardCopy } from "../../copy/wizard.js";
@@ -112,10 +113,7 @@ export function HousingScreen(
 
 type Row = { id: string; year: string };
 
-export const newId = (): string =>
-  typeof crypto !== "undefined" && "randomUUID" in crypto
-    ? crypto.randomUUID().slice(0, 8)
-    : Math.random().toString(36).slice(2, 10);
+export const newId = shortLocalId;
 
 export function ChildYearsScreen(
   p: Busy & {
