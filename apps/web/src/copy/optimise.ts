@@ -322,9 +322,32 @@ export type OptimalisatieCopy = {
       assumed: boolean;
       altKind?: string;
       extra: string;
+      /** A stated card with unknown cashback exists: the comparison only covers
+       *  the cards LaVega sees in the accounts. */
+      limited?: boolean;
     }) => string;
 
     conditions: { summary: string; sourceLine: (url: string, asOf: string) => string };
+
+    /** Cards the person named in the intake wizard that no connected account
+     *  shows. Never a figure; the wording never says "advice". */
+    stated: {
+      badge: string;
+      statedOn: (date: string) => string;
+      rowSentence: string;
+      invite: (names: string) => string;
+      /** Link text next to the invite; leads to Rekeningen. */
+      openAccounts: string;
+      debtNote: (why: "not-in-full" | "balance") => string;
+      /** The wizard's "no credit card" answer: a first CREDIT card. */
+      firstCard: {
+        noSpend: string;
+        tooLittle: string;
+        worthIt: (card: string, net: string) => string;
+        notWorthIt: (threshold: string) => string;
+        noComparable: string;
+      };
+    };
 
     emptyReasons: {
       noAccounts: string;
@@ -808,15 +831,44 @@ const optimalisatieCopy_nl: OptimalisatieCopy = {
       tail: `${approximate ? "tot " : ""}${amount} per jaar`,
     }),
 
-    answerLine: ({ product, bank, pct, ownPct, assumed, altKind, extra }) =>
-      `${product}${bank ? ` bij ${bank}` : ""} geeft ${pct} terug op wat je uitgeeft, tegen ${ownPct} op je beste eigen kaart` +
-      (assumed ? " aangenomen" : "") +
-      (altKind ? ` ${altKind}` : "") +
+    answerLine: ({ product, bank, pct, ownPct, assumed, altKind, extra, limited }) =>
+      `${product}${bank ? ` bij ${bank}` : ""} geeft ${pct} terug op wat je uitgeeft, tegen ${ownPct} ` +
+      // Limited: the markers go in brackets, or "ziet aangenomen prepaidkaart"
+      // reads as one verb phrase.
+      (limited
+        ? `${assumed ? "(aangenomen) " : ""}bij de beste van de kaarten die LaVega in je rekeningen ziet${altKind ? ` (${altKind})` : ""}`
+        : `op je beste eigen kaart${assumed ? " aangenomen" : ""}${altKind ? ` ${altKind}` : ""}`) +
       ` — ${extra} per jaar meer, vóór kaartkosten.`,
 
     conditions: {
       summary: "Aan dit tarief hangen voorwaarden — lees ze voordat je hierop rekent",
       sourceLine: (url, asOf) => `Bron: ${url} · peildatum ${asOf}`,
+    },
+
+    stated: {
+      badge: "volgens je antwoorden",
+      statedOn: (date) => `opgegeven op ${date}`,
+      rowSentence: "cashback onbekend, want LaVega ziet deze kaart niet in je rekeningen.",
+      invite: (names) =>
+        `Voor ${names} kent LaVega je uitgaven niet. Verbind die rekening of upload een bestand, dan rekent LaVega het uit.`,
+      openAccounts: "Naar Rekeningen",
+      debtNote: (why) =>
+        (why === "not-in-full"
+          ? "Je gaf aan dat je je creditcard niet altijd volledig aflost."
+          : "Je gaf een openstaand saldo op je creditcard aan.") +
+        " Dan kan de rente zwaarder wegen dan cashback, dus LaVega toont hier geen andere kaart.",
+      firstCard: {
+        noSpend:
+          "Je hebt geen creditcard. Verbind een rekening of upload een bestand, dan ziet LaVega of een eerste creditcard meer oplevert dan hij kost.",
+        tooLittle:
+          "Je hebt geen creditcard. LaVega heeft nog te weinig maanden aan uitgaven om dit uit te rekenen.",
+        worthIt: (card, net) =>
+          `Je hebt geen creditcard. Een eerste creditcard kan lonen: ${card} levert je naar schatting ${net} per jaar op, na de kosten van de kaart.`,
+        notWorthIt: (threshold) =>
+          `Je hebt geen creditcard. Op je uitgaven haalt geen creditcard ${threshold} per jaar na kosten, dus een creditcard nemen loont nu niet.`,
+        noComparable:
+          "Je hebt geen creditcard. LaVega kan geen creditcard met bekende kosten naast je uitgaven leggen, dus er is hier geen bedrag.",
+      },
     },
 
     emptyReasons: {
@@ -1306,15 +1358,42 @@ const optimalisatieCopy_en: OptimalisatieCopy = {
       tail: `${approximate ? "up to " : ""}${amount} per year`,
     }),
 
-    answerLine: ({ product, bank, pct, ownPct, assumed, altKind, extra }) =>
-      `${product}${bank ? ` at ${bank}` : ""} gives ${pct} back on what you spend, against ${ownPct} on your best own card` +
-      (assumed ? " assumed" : "") +
-      (altKind ? ` ${altKind}` : "") +
+    answerLine: ({ product, bank, pct, ownPct, assumed, altKind, extra, limited }) =>
+      `${product}${bank ? ` at ${bank}` : ""} gives ${pct} back on what you spend, against ${ownPct} ` +
+      (limited
+        ? `${assumed ? "(assumed) " : ""}on the best of the cards LaVega sees in your accounts${altKind ? ` (${altKind})` : ""}`
+        : `on your best own card${assumed ? " assumed" : ""}${altKind ? ` ${altKind}` : ""}`) +
       ` — ${extra} more per year, before card costs.`,
 
     conditions: {
       summary: "This rate comes with conditions — read them before you count on it",
       sourceLine: (url, asOf) => `Source: ${url} · as of ${asOf}`,
+    },
+
+    stated: {
+      badge: "from your answers",
+      statedOn: (date) => `stated on ${date}`,
+      rowSentence: "cashback unknown, because LaVega does not see this card in your accounts.",
+      invite: (names) =>
+        `LaVega does not know what you spend on ${names}. Connect that account or upload a file, and LaVega will calculate it.`,
+      openAccounts: "Go to Accounts",
+      debtNote: (why) =>
+        (why === "not-in-full"
+          ? "You said you do not always pay your credit card in full."
+          : "You stated an unpaid balance on your credit card.") +
+        " Interest can then outweigh cashback, so LaVega shows no other card here.",
+      firstCard: {
+        noSpend:
+          "You have no credit card. Connect an account or upload a file, and LaVega will see whether a first credit card earns more than it costs.",
+        tooLittle:
+          "You have no credit card. LaVega does not have enough months of spending yet to work this out.",
+        worthIt: (card, net) =>
+          `You have no credit card. A first credit card can pay off: ${card} earns you an estimated ${net} a year, after the card's own cost.`,
+        notWorthIt: (threshold) =>
+          `You have no credit card. On your spending no credit card reaches ${threshold} a year after costs, so taking a credit card does not pay off now.`,
+        noComparable:
+          "You have no credit card. LaVega cannot set a credit card with known costs against your spending, so there is no amount here.",
+      },
     },
 
     emptyReasons: {
