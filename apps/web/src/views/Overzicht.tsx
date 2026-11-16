@@ -23,6 +23,9 @@ import type { View } from "../App";
 import type { ConversionMode } from "../settings.js";
 import { useAppLocale } from "../appLocale.js";
 import { shellCopy } from "../copy/shell.js";
+import { instinctCopy } from "../copy/instinct.js";
+import Module from "../components/Module";
+import Button from "../components/ui/Button.js";
 import ModuleGrid from "../components/ModuleGrid";
 import HomeAddArea from "../components/HomeAddArea";
 import { AandachtWidget } from "../components/blocks/AandachtBlock";
@@ -82,6 +85,8 @@ type OverzichtProps = {
   mode: ConversionMode;
   onBufferChange: (cents: number) => void;
   onNavigate: (view: View) => void;
+  /** The daily message is on: shows the small link to the Meldingen list. */
+  agentEnabled?: boolean;
   onSelectCategory: (category: string) => void;
   /** Everything the travel module needs, passed straight through. */
   travel: TravelBlockProps;
@@ -111,6 +116,7 @@ export default function Overzicht({
   mode,
   onBufferChange,
   onNavigate,
+  agentEnabled = false,
   onSelectCategory,
   travel,
   intake,
@@ -174,6 +180,15 @@ export default function Overzicht({
     <>
       <ModuleGrid label={c.overzicht.gridLabel} className="home-grid">
         <AandachtWidget alerts={alerts} bufferCents={bufferCents} onBufferChange={onBufferChange} />
+
+        {agentEnabled && (
+          <Module title={instinctCopy[locale].overview.title} span={3}>
+            <p className="cell-sub">{instinctCopy[locale].overview.body}</p>
+            <Button onClick={() => onNavigate("meldingen")}>
+              {instinctCopy[locale].overview.open}
+            </Button>
+          </Module>
+        )}
 
         <PositieWidget
           accounts={accounts}

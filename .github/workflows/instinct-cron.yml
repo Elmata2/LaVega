@@ -1,0 +1,42 @@
+name: instinct cron
+on:
+  schedule:
+    # Minute 7, not 0: GitHub queues top-of-hour schedules and delays them most.
+    - cron: "7 * * * *"
+  workflow_dispatch:
+# The job only calls a public URL with a bearer secret; it needs no token scopes.
+permissions: {}
+# Two runs must never overlap: the route claims each user's day, but a second
+# run would only waste the first run's 300 s budget. Never cancel a run midway.
+concurrency:
+  group: instinct-cron
+  cancel-in-progress: false
+jobs:
+  trigger:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - name: Call the instinct cron route
+        env:
+          INSTINCT_CRON_URL: ${{ vars.INSTINCT_CRON_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          if [ -z "$INSTINCT_CRON_URL" ] || [ -z "$CRON_SECRET" ]; then
+            echo "::notice::Instinct cron trigger is not configured (set repository variable INSTINCT_CRON_URL and secret CRON_SECRET). Nothing was called."
+            exit 0
+          fi
+          body="$(mktemp)"
+          # The header goes in through a config on stdin, not an argument, so the
+          # secret never shows in the runner's process list.
+          status="$(printf 'header = "Authorization: Bearer %s"\n' "$CRON_SECRET" |
+            curl --silent --show-error --max-time 300 --config - \
+              --output "$body" --write-out '%{http_code}' \
+              "$INSTINCT_CRON_URL")" || status="000"
+          echo "HTTP status: $status"
+          # Counters only (due, failed, skipped); the body never holds user ids,
+          # and anything else in it is not printed.
+          jq -c '{due, failed, skipped}' "$body" 2>/dev/null || true
+          case "$status" in
+            2??) exit 0 ;;
+            *) echo "::error::Instinct cron route answered $status"; exit 1 ;;
+          esac

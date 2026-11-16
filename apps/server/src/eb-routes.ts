@@ -64,8 +64,19 @@ export const PENDING_TTL_MS = 15 * 60 * 1000;
  *  A day longer than the consent, so the row outlives the thing it describes
  *  and the screen can say "this consent expired, reconnect" instead of the row
  *  vanishing and the app saying nothing at all. */
-export const SESSION_TTL_MS = 90 * 24 * 60 * 60 * 1000;
+export const MAX_CONSENT_DAYS = 180;
+export const SESSION_TTL_MS = (MAX_CONSENT_DAYS + 1) * 86_400_000;
+/** Fallback consent length when the bank states no maximum. */
 export const CONSENT_DAYS = 89;
+
+/** Consent length to ask for: the bank's own `maximum_consent_validity`
+ *  (seconds, from GET /aspsps) capped at 180 days, else CONSENT_DAYS. */
+export function consentDaysFor(aspsp: { maximum_consent_validity?: number } | undefined): number {
+  const seconds = aspsp?.maximum_consent_validity;
+  if (typeof seconds !== "number" || !Number.isFinite(seconds) || seconds <= 0) return CONSENT_DAYS;
+  const days = Math.floor(seconds / 86_400);
+  return days > 0 ? Math.min(days, MAX_CONSENT_DAYS) : CONSENT_DAYS;
+}
 
 /* Verversen kost quotum bij Enable Banking en tijd van de functie: per sessie
  * één saldo-aanroep en tot twintig transactiepagina's PER REKENING. De
@@ -84,6 +95,15 @@ function clientConfig(cfg: EbConfig): EbClientConfig {
     privateKey: cfg.privateKey,
     privateKeyFile: cfg.privateKeyFile,
   };
+}
+
+/** The echoed `valid_until`, only if it lies in [now, now + 180 d]; else 89 days. */
+function grantedValidUntil(echoed: string | undefined): string {
+  const ms = Date.parse(echoed ?? "");
+  const now = Date.now();
+  if (Number.isNaN(ms) || ms < now || ms > now + MAX_CONSENT_DAYS * 86_400_000)
+    return validUntil(CONSENT_DAYS);
+  return new Date(ms).toISOString();
 }
 
 /** RFC3339 timestamp `days` from now — for the consent's `valid_until`. */
@@ -195,9 +215,24 @@ export function registerEbRoutes(app: Hono, dependencies: EbRouteDependencies): 
     const psuType = psuTypeParam(body.psuType, cfg.psuType);
     if (!psuType) return c.json({ error: "Ongeldig type rekening." }, 400);
     const state = randomUUID();
+    /* The bank's stated maximum, looked up by name. A failed lookup must not
+     * stop a connection: it falls back to the conservative default. */
+    let consentDays = CONSENT_DAYS;
+    try {
+      const list = (await eb(
+        clientConfig(cfg),
+        "GET",
+        `/aspsps?country=${country}&psu_type=${psuType}`,
+      )) as { aspsps?: Array<{ name?: string; maximum_consent_validity?: number }> };
+      consentDays = consentDaysFor(
+        list.aspsps?.find((a) => a.name?.trim().toLowerCase() === name.trim().toLowerCase()),
+      );
+    } catch {
+      consentDays = CONSENT_DAYS;
+    }
     try {
       const data = (await eb(clientConfig(cfg), "POST", "/auth", {
-        access: { valid_until: validUntil(CONSENT_DAYS) },
+        access: { valid_until: validUntil(consentDays) },
         aspsp: { name, country },
         state,
         redirect_url: cfg.redirectUrl,
@@ -249,6 +284,7 @@ export function registerEbRoutes(app: Hono, dependencies: EbRouteDependencies): 
         session_id?: string;
         accounts?: Array<Record<string, unknown>>;
         aspsp?: { name?: string };
+        access?: { valid_until?: string };
       };
       if (!data.session_id)
         return c.redirect(`/?eb_error=${encodeURIComponent("Geen sessie ontvangen.")}`);
@@ -256,7 +292,9 @@ export function registerEbRoutes(app: Hono, dependencies: EbRouteDependencies): 
       await store.putSession(authorised.userId, data.session_id, {
         accounts: data.accounts ?? [],
         aspsp: aspspName,
-        validUntil: validUntil(CONSENT_DAYS),
+        /* What the bank granted (echoed from the consent we asked for in
+         * /auth); an absent or unparseable value falls back to the safe 89. */
+        validUntil: grantedValidUntil(data.access?.valid_until),
       });
       /* ONE LIVE ROW PER BANK. Every authorisation mints a fresh session_id and
        * `putSession` upserts on that id alone, so without this a user who
@@ -369,17 +407,19 @@ export function registerEbRoutes(app: Hono, dependencies: EbRouteDependencies): 
  *  and not a second copy of it. The two used to be one route, and the moment
  *  there were two ways to read a bank the interesting bug would have been the
  *  drift between them. */
-async function fetchSessionItems(
+export async function fetchSessionItems(
   cfg: EbConfig,
   session: EbSession,
+  days = 365,
+  client: typeof eb = eb,
 ): Promise<Array<{ account: unknown; balances: unknown[]; transactions: unknown[] }>> {
-  const dateFrom = isoDaysAgo(365);
+  const dateFrom = isoDaysAgo(days);
   const cc = clientConfig(cfg);
   const items = [];
   for (const account of session.accounts) {
     const uid = String((account as { uid?: string }).uid || "");
     if (!uid) continue;
-    const balancesRes = (await eb(cc, "GET", `/accounts/${uid}/balances`)) as {
+    const balancesRes = (await client(cc, "GET", `/accounts/${uid}/balances`)) as {
       balances?: unknown[];
     };
     // Transactions are paginated via continuation_key; follow it (capped).
@@ -388,7 +428,7 @@ async function fetchSessionItems(
     for (let page = 0; page < 20; page++) {
       const q =
         `date_from=${dateFrom}` + (cont ? `&continuation_key=${encodeURIComponent(cont)}` : "");
-      const txRes = (await eb(cc, "GET", `/accounts/${uid}/transactions?${q}`)) as {
+      const txRes = (await client(cc, "GET", `/accounts/${uid}/transactions?${q}`)) as {
         transactions?: unknown[];
         continuation_key?: string;
       };

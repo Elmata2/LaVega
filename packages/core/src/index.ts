@@ -100,6 +100,23 @@ export * from "./advisor/capacity.js";
 export * from "./advisor/riskScale.js";
 export * from "./advisor/knowledge.js";
 export * from "./advisor/resolve.js";
+export * from "./instinct/types.js";
+/* `addDays` stays internal to the instinct module: bills/index.ts already exports a different `addDays`. */
+export {
+  daysFromTo,
+  amsterdamDay,
+  spendOf,
+  spendOnDay,
+  spendingCandidate,
+  upcomingRenewals,
+  deadlineCandidates,
+  offerCandidates,
+  type UpcomingRenewal,
+} from "./instinct/candidates.js";
+export * from "./instinct/tips.js";
+export * from "./instinct/dailyMessage.js";
+export * from "./instinct/render.js";
+export * from "./instinct/tools.js";
 export * from "./bills/index.js";
 export * from "./interop/index.js";
 export * from "./assistant.js";

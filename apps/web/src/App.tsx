@@ -21,6 +21,7 @@ import type {
   VaultDocument,
   ImportSession,
 } from "@lavega/core";
+import type { PlanResult } from "@lavega/core";
 import {
   capacityFor,
   computeRoom,
@@ -206,9 +207,11 @@ import Punten from "./views/Punten";
 import Koppelingen from "./views/Koppelingen";
 import Backup from "./views/Backup";
 import Profiel from "./views/Profiel";
+import AgentFeed from "./views/AgentFeed";
 import type { N8nNotice, PendingInvoice } from "./n8n.js";
 import { adminCopy } from "./copy/admin.js";
 import { useAppLocale } from "./appLocale.js";
+import { useAgentMirror } from "./agent/useAgentMirror.js";
 import { shellCopy } from "./copy/shell.js";
 import { importSessionCopy } from "./copy/importSession.js";
 import { type ShellNotice } from "./shellNotice.js";
@@ -354,6 +357,9 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
   // silently orphaning a pair is the failure this exists to prevent.
   const [transferLinksDropped, setTransferLinksDropped] = useState<number | null>(null);
   const [scheduledFlows, setScheduledFlows] = useState<ScheduledFlow[]>([]);
+  // The latest plan computed on the Plan page; only its card figures reach the
+  // daily-message mirror (see agent/mirror.ts).
+  const [agentPlan, setAgentPlan] = useState<PlanResult | null>(null);
   // Bills + their materialized occurrences (#286). Occurrences are derived from
   // the series and stored, because matching/second-half work keys on their
   // identity; materialization runs lazily on unlock and writes ONE vault save.
@@ -1614,6 +1620,16 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
     () => [...scheduledFlows, ...invoiceFlows],
     [scheduledFlows, invoiceFlows],
   );
+  // Daily-message mirror: only for signed-in accounts that opted in. The hook
+  // owns the on/off state per account (see agent/useAgentMirror.ts).
+  const agent = useAgentMirror({
+    accountId: owner.kind === "account" ? owner.id : null,
+    ready: gate === "ready",
+    rules,
+    flows: allScheduledFlows,
+    plan: agentPlan,
+    locale,
+  });
   // Scheduled flows constrained to BOTH scopes, so Overzicht/Forecast never
   // show a company's VAT reservation while you are looking at your private
   // money. A flow carries its own entity (it can exist before that entity has
@@ -1677,27 +1693,33 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
   ): Promise<{ ok: true; count: number } | { ok: false; partial: boolean }> {
     setBusy(true);
     try {
-      const r = await commitToStorage(storage, { accounts, txs }, files, asOf, async (_a, freshTxs) => {
-        const freshAccounts = _a;
-        setAccounts(freshAccounts);
-        setTxs(freshTxs);
-        // An `expected` invoice whose settling bank transaction now appears flips to
-        // `paid`; a new statement can also hold the payment a bill was waiting for.
-        const curInvoices = await storage.getInvoices();
-        const reconciled = reconcileInvoices(curInvoices, freshTxs);
-        if (JSON.stringify(reconciled) !== JSON.stringify(curInvoices))
-          await saveInvoices(reconciled);
-        const matched = runBillMatcher({
-          bills,
-          occurrences: billOccurrences,
-          decisions: billDecisions,
-          txs: freshTxs,
-          accounts: freshAccounts,
-          asOf,
-        });
-        if (matched.changed)
-          await saveBillPlan(matched.bills, matched.occurrences, matched.decisions);
-      });
+      const r = await commitToStorage(
+        storage,
+        { accounts, txs },
+        files,
+        asOf,
+        async (_a, freshTxs) => {
+          const freshAccounts = _a;
+          setAccounts(freshAccounts);
+          setTxs(freshTxs);
+          // An `expected` invoice whose settling bank transaction now appears flips to
+          // `paid`; a new statement can also hold the payment a bill was waiting for.
+          const curInvoices = await storage.getInvoices();
+          const reconciled = reconcileInvoices(curInvoices, freshTxs);
+          if (JSON.stringify(reconciled) !== JSON.stringify(curInvoices))
+            await saveInvoices(reconciled);
+          const matched = runBillMatcher({
+            bills,
+            occurrences: billOccurrences,
+            decisions: billDecisions,
+            txs: freshTxs,
+            accounts: freshAccounts,
+            asOf,
+          });
+          if (matched.changed)
+            await saveBillPlan(matched.bills, matched.occurrences, matched.decisions);
+        },
+      );
       if (r.ok) return { ok: true, count: r.count };
       // The state must match what is really stored, whatever failed.
       if (r.accounts) setAccounts(r.accounts);
@@ -2394,7 +2416,7 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
           setGate("ready");
         }}
         onRetry={() => setOpenAttempt((n) => n + 1)}
-        onSignOut={() => void signOut().finally(() => window.location.assign("/"))}
+        onSignedOut={() => window.location.assign("/")}
       />
     );
   }
@@ -2540,6 +2562,7 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
               mode={fxConversionMode}
               onBufferChange={handleBufferChange}
               onNavigate={setView}
+              agentEnabled={agent.enabled}
               {...(profileRead !== "loading" && profileRead !== "error"
                 ? { intake: { store: profileRead.kind === "ok" ? profileRead.store : null } }
                 : {})}
@@ -2777,8 +2800,11 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
             />
           )}
 
+          {view === "meldingen" && <AgentFeed locale={locale} onNavigate={setView} />}
+
           {view === "plan" && (
             <PlanRoute
+              onComputed={setAgentPlan}
               profileRead={profileRead}
               onRetry={() => void retryProfileRead()}
               store={
@@ -2845,6 +2871,7 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
               ownerName={ownerName}
               onOwnerNameChange={handleOwnerNameChange}
               onLock={handleLock}
+              onAgentEnabledChange={agent.setEnabled}
               entity={entity}
               onEntityChange={setEntity}
               busy={busy}
