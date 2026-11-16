@@ -93,7 +93,7 @@ tx = {
 
 ## Broker access (investing)
 
-Specified in **`docs/investing/CONNECTORS.md`** — `BrokerAccessAdapter` contract, per-broker auth/sync/risk for DeGiro, Interactive Brokers and Trading 212, and the credential-persistence rules. DeGiro is import-only: it uses the `FileImport` seam (manual CSV exports, no `sync()`), so it has no credentials and no scheduled sync. Read it before touching `packages/adapters/src/brokers/`.
+Specified in **`docs/investing/CONNECTORS.md`** — `BrokerAccessAdapter` contract, per-broker auth/sync/risk for DeGiro, Interactive Brokers and Trading 212, and the credential-persistence rules. DeGiro is import-only: it uses the `FileImport` seam (manual CSV exports, no `sync()`), so it has no credentials and no scheduled sync. Read it before touching `packages/adapters/src/brokers/`. A browser-extension export helper is decided no ([ADR 0015](adr/0015-no-degiro-export-helper-in-the-extension.md)): `apps/extension` sends nothing out, and manual import costs two files a month.
 
 ## Portfolio agents (investing)
 

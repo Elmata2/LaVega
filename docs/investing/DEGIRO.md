@@ -689,8 +689,10 @@ written to the verification test tenant with the owner's explicit permission.
 ### Out of scope
 
 - DeGiro login, session reuse, scheduled sync, browser automation (#25, #33).
-- A browser-extension export helper. Tracked as a separate decision (D16); not
-  blocking.
+- A browser-extension export helper. D16 decided no
+  ([ADR 0015](../adr/0015-no-degiro-export-helper-in-the-extension.md)): no
+  measured friction, two files at most on a monthly cadence, and the extension
+  is a no-network, no-account artifact whose build gate rejects any request.
 
 ### Privacy
 
@@ -720,6 +722,8 @@ number and keep the Saldo walk consistent.
 | D16 [#328](https://github.com/Elmata2/lavega/issues/328) | Decision: extension export helper (optional)                | D15           |
 
 Order: D1 and D8 start in parallel. D2 → D3/D4 → D5 is the critical path.
+The graph ends at D16: no extension export helper, manual import only
+([ADR 0015](../adr/0015-no-degiro-export-helper-in-the-extension.md)).
 
 Landed: D1 (#313, fixtures), D8 (#320, one broker list), D2 (#314, reader and
 header-signature detection), D3 (#315, account statement to cash flows plus the
