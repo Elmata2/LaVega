@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { StatedAnswers } from "./plan/optimalisatieStated";
 import type {
   Account,
   Rule,
@@ -61,6 +62,7 @@ import {
   EMPTY_BILL_DECISIONS,
   reconcileInvoices,
   applyCategorizations,
+  applyCategoryChoice,
   findDuplicateAccounts,
   mergeAccounts,
   upsertFacts,
@@ -147,6 +149,7 @@ import {
 import {
   computeShareableTotalCents,
   deleteNetWorthTotal,
+  setNetWorthShareSuspended,
   putNetWorthTotal,
   todayIso,
 } from "./netWorthShare.js";
@@ -174,6 +177,7 @@ import { TopBarActions } from "./components/TopBar";
 import CardLink from "./components/ui/CardLink.js";
 import Button from "./components/ui/Button.js";
 import StatusLine from "./components/ui/StatusLine.js";
+import { createCategorizeSaver, diffPatch } from "./categorize-persist";
 import {
   enabledModules as resolveModules,
   navModules,
@@ -267,6 +271,23 @@ function statedOf(
   return read.store.current[key]?.value;
 }
 
+/** The card answers from the intake wizard, for Optimalisatie. Undefined while
+ *  the profile is not readable, or when it holds no card answer at all. */
+function cardAnswersOf(read: ProfileRead | "loading" | "error"): StatedAnswers | undefined {
+  if (read === "loading" || read === "error" || read.kind !== "ok") return undefined;
+  const p = read.store.current;
+  if (p.statedCards === undefined && p.statedDebitCards === undefined && p.intake.noCards !== true)
+    return undefined;
+  return {
+    credit: p.statedCards?.value ?? [],
+    debit: p.statedDebitCards?.value ?? [],
+    repayment: p.cardRepayment?.value ?? null,
+    balances: p.cardBalances?.value ?? [],
+    noCards: p.intake.noCards === true,
+    statedAt: p.statedCards?.at ?? p.statedDebitCards?.at ?? null,
+  };
+}
+
 /** Replace-or-append one transfer decision by its content id. Confirming and
  *  rejecting write the SAME row (a pair is in exactly one state), so a plain
  *  append could leave a confirmed and a rejected copy of one pair behind — and
@@ -303,6 +324,28 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
     session: number;
   }>({ open: false, card: null, choices: [], session: 0 });
   const [rules, setRules] = useState<Rule[]>([]);
+  // The newest txs/rules, for the categorise saver (it must build and write its
+  // patch against the CURRENT lists, not a render closure). Assigned on every
+  // render; the saver also advances them itself after each commit.
+  const txsRef = useRef(txs);
+  txsRef.current = txs;
+  const rulesRef = useRef(rules);
+  rulesRef.current = rules;
+  const categorizeSaver = useRef<ReturnType<typeof createCategorizeSaver> | null>(null);
+  categorizeSaver.current ??= createCategorizeSaver({
+    getTxs: () => txsRef.current,
+    getRules: () => rulesRef.current,
+    updateTxs: (fn) => {
+      txsRef.current = fn(txsRef.current);
+      setTxs(fn);
+    },
+    updateRules: (fn) => {
+      rulesRef.current = fn(rulesRef.current);
+      setRules(fn);
+    },
+    putTxs: (t) => storage.putTxs(t),
+    putRules: (r) => storage.putRules(r),
+  });
   // Stored transfer decisions only (confirmed pairs + rejection memory); a
   // suggestion is derived from the ledger on read, never kept here.
   const [transfers, setTransfers] = useState<TransferPair[]>([]);
@@ -409,25 +452,28 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
     setFxConversionMode(mode);
     setFxConversionModeState(mode);
   }
-  /* Opt-in share of Totale positie into LaVega Investing's net worth. Off is
-   * the default. Two flags, not one, because turning it off must not leave
-   * data behind: `shareNetWorthEnabledStored` is the underlying preference
-   * and stays "on" until the DELETE it triggers actually succeeds;
-   * `shareNetWorthPendingDelete` is set the instant the owner switches off
-   * and is the sole trigger for the retry effect below, which is also what
+  /* Share of Totale positie into LaVega Investing's net worth. On is the
+   * default (an unset key reads as on). Two flags, not one, because turning it
+   * off must not leave data behind: `shareNetWorthEnabledStored` is the
+   * preference and is written "0" the instant the owner switches off (an
+   * explicit off must survive a failed DELETE or a reset);
+   * `shareNetWorthPendingDelete` is set at the same moment and stays until the
+   * DELETE it triggers succeeds. It is the sole trigger for the retry effect below, which is also what
    * runs the very first attempt — so "toggle off" and "retry on next
    * unlock/app start" are the same code path, never two.
    *
    * The EFFECTIVE state everything else reads is `shareNetWorthEnabled`
-   * (derived): pending delete always means "not sharing", even while the
-   * stored preference technically remains on as the retry's memory. */
+   * (derived): pending delete always means "not sharing". */
   const [shareNetWorthEnabledStored, setShareNetWorthEnabledStoredState] = useState<boolean>(() =>
     getShareNetWorthEnabled(),
   );
   const [shareNetWorthPendingDelete, setShareNetWorthPendingDeleteState] = useState<boolean>(() =>
     getShareNetWorthPendingDelete(),
   );
-  const shareNetWorthEnabled = shareNetWorthEnabledStored && !shareNetWorthPendingDelete;
+  // Sharing needs a signed-in account: a device-only vault has no Investing
+  // side to send to, so nothing leaves the browser whatever the default is.
+  const shareNetWorthEnabled =
+    owner.kind === "account" && shareNetWorthEnabledStored && !shareNetWorthPendingDelete;
   function handleShareNetWorthEnabledChange(on: boolean) {
     if (on) {
       setShareNetWorthEnabled(true);
@@ -436,6 +482,12 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
       setShareNetWorthPendingDeleteState(false);
       return;
     }
+    // The explicit off is written NOW, not after the DELETE lands: an unset key
+    // reads as ON, so a failed or interrupted DELETE (offline, tab closed, then
+    // a personal-data reset that removes the pending marker) must never leave
+    // "unset" behind. `pendingDelete` stays only as the retry marker.
+    setShareNetWorthEnabled(false);
+    setShareNetWorthEnabledStoredState(false);
     setShareNetWorthPendingDelete(true);
     setShareNetWorthPendingDeleteState(true);
   }
@@ -445,7 +497,7 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
   // failed) — until it succeeds, at which point the stored preference is
   // finally allowed to flip off too.
   useEffect(() => {
-    if (gate !== "ready" || !shareNetWorthPendingDelete) return;
+    if (gate !== "ready" || !shareNetWorthPendingDelete || owner.kind !== "account") return;
     let cancelled = false;
     void deleteNetWorthTotal().then((outcome) => {
       if (cancelled || outcome !== "deleted") return;
@@ -457,7 +509,7 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
     return () => {
       cancelled = true;
     };
-  }, [gate, shareNetWorthPendingDelete]);
+  }, [gate, shareNetWorthPendingDelete, owner.kind]);
   // Cross-tab sync. Another tab can switch sharing off — and have its DELETE
   // succeed — while THIS tab's React state still holds the old value; without
   // this, this tab's own next sync/import/FX-mode change would read a stale
@@ -695,7 +747,12 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
     () =>
       storage.onVaultDestroyed((phase) => {
         if (phase === "destroyed") window.location.assign("/app");
-        else setTabReset(phase);
+        else {
+          // Another tab is clearing the personal data: this one must not PUT a
+          // total back while it does. Reuses this lock signal, no second one.
+          setNetWorthShareSuspended(true);
+          setTabReset(phase);
+        }
       }),
     [],
   );
@@ -1177,9 +1234,14 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
 
   // Rules are UI-owned as a whole list (replace-all persistence), so every
   // add/remove goes through this single helper to keep state and storage in sync.
+  // It joins the categorise queue so a rule edit and a categorise save can
+  // never interleave their replace-all writes.
   async function saveRules(next: Rule[]) {
-    setRules(next);
-    await storage.putRules(next);
+    await categorizeSaver.current!.enqueue(async () => {
+      setRules(next);
+      rulesRef.current = next;
+      await storage.putRules(next);
+    });
   }
 
   /* Transfer decisions are UI-owned as a whole list too (replace-all), and the
@@ -1255,24 +1317,38 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
     setProfileRead({ kind: "ok", store: next });
   }
 
-  // Persist the full tx list after an in-memory edit. `putTxs` is upsert-by-id
-  // (not replace-all like putRules), which is correct here because the AI-
-  // categorize flow passes the COMPLETE list back from `applyCategorizations`,
-  // so upserting every id is equivalent to a replace. Used to persist the
-  // `manual` category stamped on decided txs.
-  async function saveTxs(next: Tx[]) {
-    setTxs(next);
-    await storage.putTxs(next);
-  }
-
   // Apply confirmed AI-category decisions against the FULL tx + rules lists
   // (not just the scoped view Transacties shows), then persist. Adding one
   // deduped rule per (counterparty, category) means future imports of the same
   // merchant auto-categorize without another AI call.
-  async function handleApplyCategories(decisions: CategoryDecision[]) {
-    const next = applyCategorizations(txs, rules, decisions);
-    await saveTxs(next.txs);
-    if (next.rules.length !== rules.length) await saveRules(next.rules);
+  async function handleApplyCategories(
+    decisions: CategoryDecision[],
+  ): Promise<{ rememberFailed?: boolean }> {
+    const out = await categorizeSaver.current!.run((cur) => ({
+      patch: diffPatch(cur, applyCategorizations(cur.txs, cur.rules, decisions)),
+      result: null,
+    }));
+    return out.rulesError ? { rememberFailed: true } : {};
+  }
+
+  // The per-row picker: ONE decision through applyCategorizations (via
+  // applyCategoryChoice), on the same queue and write path as the AI apply flow
+  // (see categorize-persist.ts: patch-based, serialised, never overwrites newer
+  // state). Returns what really happened so the screen only states computed numbers.
+  async function handleChooseCategory(
+    txId: string,
+    category: string,
+  ): Promise<{ followers: number; rulesAdded: number; rememberFailed?: boolean }> {
+    const out = await categorizeSaver.current!.run((cur) => {
+      const next = applyCategoryChoice(cur.txs, cur.rules, txId, category, own);
+      return { patch: diffPatch(cur, next), result: next };
+    });
+    const { followers, rulesAdded } = out.result;
+    return {
+      followers: out.rulesError ? 0 : followers,
+      rulesAdded: out.rulesError ? 0 : rulesAdded,
+      ...(out.rulesError ? { rememberFailed: true } : {}),
+    };
   }
 
   // After storage.restore() swaps in a different vault's data (Task 5), reload
@@ -2528,6 +2604,7 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
               onFCategoryChange={setFCategory}
               configured={llmConfigured}
               onApplyCategories={handleApplyCategories}
+              onChooseCategory={handleChooseCategory}
             />
           )}
 
@@ -2602,6 +2679,8 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
               asOf={asOf}
               busy={busy}
               facts={facts}
+              stated={cardAnswersOf(profileRead)}
+              onOpenAccounts={() => setView("accounts")}
               onRateCommit={handleRateCommit}
             />
           )}

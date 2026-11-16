@@ -1,9 +1,11 @@
-import { expect, test } from "vitest";
+import { describe, expect, test } from "vitest";
+import { categorize } from "./views.js";
 import type { Tx, Rule } from "./model.js";
 import { ruleCategoryValue, ruleTextValue } from "./rules/parse.js";
 import {
   uncategorizedTxs,
   applyCategorizations,
+  applyCategoryChoice,
   recategorize,
   uncategorizedByMonth,
   redactForAi,
@@ -356,5 +358,138 @@ test("scrubPersonalValuesDeep passes null and undefined through untouched", () =
     b: undefined,
     c: 0,
     d: false,
+  });
+});
+
+/* --- applyCategoryChoice: one decision from the per-row picker ------------- */
+
+describe("applyCategoryChoice", () => {
+  const rows = (): Tx[] => [
+    tx("t1", "Zorgeloos Qwx", -10),
+    tx("t2", "Zorgeloos Qwx", -12),
+    tx("t3", "Zorgeloos Qwx", -9, "Boodschappen"), // already has a stored category
+    tx("t4", "Other Shop", -5),
+  ];
+
+  test("sets the row manual and teaches the counterparty; same-counterparty rows follow", () => {
+    const out = applyCategoryChoice(rows(), [], "t1", "Eten & drinken");
+    expect(out.txs.find((t) => t.id === "t1")).toMatchObject({
+      category: "Eten & drinken",
+      manual: true,
+    });
+    expect(out.rulesAdded).toBe(1);
+    expect(out.rules).toHaveLength(1);
+    // t2 now derives the category via the new rule; t3 keeps its stored one; t4 untouched.
+    expect(
+      categorize(
+        out.txs.find((t) => t.id === "t2")!,
+        out.rules,
+      ),
+    ).toBe("Eten & drinken");
+    expect(
+      categorize(
+        out.txs.find((t) => t.id === "t3")!,
+        out.rules,
+      ),
+    ).toBe("Boodschappen");
+    expect(
+      categorize(
+        out.txs.find((t) => t.id === "t4")!,
+        out.rules,
+      ),
+    ).toBe("onbekend");
+    expect(out.followers).toBe(1); // only t2 actually changed
+  });
+
+  test("changing an already-set row works the same way", () => {
+    const out = applyCategoryChoice(rows(), [], "t3", "Eten & drinken");
+    expect(out.txs.find((t) => t.id === "t3")).toMatchObject({
+      category: "Eten & drinken",
+      manual: true,
+    });
+    expect(out.followers).toBe(2); // t1 and t2 were onbekend, now follow
+  });
+
+  test("an existing identical rule is not duplicated and counts no new rule", () => {
+    const first = applyCategoryChoice(rows(), [], "t1", "Eten & drinken");
+    const again = applyCategoryChoice(first.txs, first.rules, "t2", "Eten & drinken");
+    expect(again.rules).toHaveLength(1);
+    expect(again.rulesAdded).toBe(0);
+    expect(again.followers).toBe(0);
+  });
+
+  test("a category outside the canonical list changes nothing", () => {
+    const input = rows();
+    const out = applyCategoryChoice(input, [], "t1", "Nonsense");
+    expect(out.txs).toEqual(input);
+    expect(out.rules).toEqual([]);
+    expect(out.rulesAdded).toBe(0);
+    expect(out.followers).toBe(0);
+  });
+
+  test("an empty or IBAN-only counterparty sets the row but creates no rule", () => {
+    const input = [
+      tx("e1", "", -5),
+      tx("i1", "NL17INGB0539576085", -5),
+      tx("i2", "NL17 INGB 0539 5760 85", -5),
+    ];
+    for (const id of ["e1", "i1", "i2"]) {
+      const out = applyCategoryChoice(input, [], id, "Overboekingen");
+      expect(out.txs.find((t) => t.id === id)).toMatchObject({
+        category: "Overboekingen",
+        manual: true,
+      });
+      expect(out.rules).toEqual([]);
+      expect(out.rulesAdded).toBe(0);
+      expect(out.followers).toBe(0);
+    }
+  });
+
+  test("applyCategorizations itself no longer writes an IBAN-only rule", () => {
+    const out = applyCategorizations(
+      [tx("i1", "NL17INGB0539576085", -5)],
+      [],
+      [{ id: "i1", category: "Overboekingen" }],
+    );
+    expect(out.rules).toEqual([]);
+  });
+
+  test("a short counterparty sets only its own row: no substring rule that swallows others", () => {
+    const input = [
+      tx("n1", "NS", -5),
+      tx("n2", "Transavia", -5),
+      tx("n3", "Jansen Bakkerij", -5),
+      tx("n4", "Insurance Co", -5),
+      tx("n5", "Hans Meijer", -5),
+      tx("n6", "Ab", -5),
+    ];
+    const out = applyCategoryChoice(input, [], "n1", "Eigen overboeking");
+    expect(out.txs.find((t) => t.id === "n1")).toMatchObject({
+      category: "Eigen overboeking",
+      manual: true,
+    });
+    for (const id of ["n2", "n3", "n4", "n5", "n6"])
+      expect(out.txs.find((t) => t.id === id)!.category).toBe("");
+    expect(out.rules).toEqual([]);
+    expect(out.rulesAdded).toBe(0);
+    expect(out.followers).toBe(0);
+    for (const id of ["n2", "n3", "n4", "n5"])
+      expect(
+        categorize(
+          out.txs.find((t) => t.id === id)!,
+          out.rules,
+        ),
+      ).not.toBe("Eigen overboeking");
+  });
+
+  test("a 4-letter name still creates a rule", () => {
+    const out = applyCategoryChoice(
+      [tx("h1", "Hema", -5), tx("h2", "Hema", -7)],
+      [],
+      "h1",
+      "Boodschappen",
+    );
+    expect(out.rulesAdded).toBe(1);
+    expect(out.rules).toHaveLength(1);
   });
 });

@@ -48,6 +48,7 @@ import { PortfolioBenchmarkChart } from "./components/PortfolioBenchmarkChart";
 import { PortfolioSummaryCard, type SummaryState } from "./components/PortfolioSummaryCard";
 import { SectorAllocationCard } from "./components/SectorAllocationCard.js";
 import { PortfolioFigureNotes, PortfolioKpiRow } from "./components/PortfolioKpiRow.js";
+import { DeGiroHoldingsNote } from "./components/DeGiroHoldingsNote.js";
 import { OverviewStatus, mergeStatusItems, type StatusItem } from "./components/OverviewStatus.js";
 import { formatMoney, formatSignedPercent, portfolioFigures } from "./lib/portfolioFigures.js";
 import { holdingIdentityLine } from "./lib/holdingIdentity.js";
@@ -116,7 +117,9 @@ function overviewStatusItems({
       severity: "problem",
       action: /credentials cannot be read/i.test(message)
         ? { to: "/brokers/connect", label: "Reconnect broker" }
-        : undefined,
+        : /^DeGiro-gegevens zijn \d+ dagen oud\./.test(message)
+          ? { to: "/profile#degiro-import", label: "Importeer een nieuw rekeningoverzicht" }
+          : undefined,
     });
   if (needsAttention)
     items.push({
@@ -1149,6 +1152,9 @@ function Overview() {
     <div className="space-y-6">
       <h2 className="sr-only">Overview</h2>
       {state.status === "ready" && gate.kind === "ready" && <PortfolioKpiRow data={state.data} />}
+      {state.status === "ready" && gate.kind === "ready" && (
+        <DeGiroHoldingsNote degiro={state.data.degiro} />
+      )}
       <OverviewStatus items={statusItems} />
       <AppOpenSync onProblems={setSyncProblems} />
       {state.status === "loading" ? (
@@ -1252,6 +1258,7 @@ function Positions() {
   return (
     <>
       <DashboardStatus data={state.data} refreshError={state.refreshError} />
+      <DeGiroHoldingsNote degiro={state.data.degiro} />
       <PositionList positions={state.data.positions} currency={state.data.presentationCurrency} />
     </>
   );

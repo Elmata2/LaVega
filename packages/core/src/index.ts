@@ -67,6 +67,7 @@ export * from "./parsers/degiro/account.js";
 export * from "./parsers/degiro/dividends.js";
 export * from "./parsers/degiro/trades.js";
 export * from "./parsers/degiro/accountProfile.js";
+export * from "./parsers/degiro/reconcile.js";
 export * from "./parsers/parseBrokerFile.js";
 export * from "./fxRoutes.js";
 export * from "./n8nSettings.js";

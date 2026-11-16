@@ -41,6 +41,7 @@ import {
   type PositionRealizedSummary,
 } from "./realized.js";
 import type { AccountWrapperEntry } from "./model.js";
+import { DeGiroDataStateSchema, type DeGiroDataState } from "./degiroFreshness.js";
 
 export const PORTFOLIO_RANGES = [
   "1M",
@@ -415,6 +416,10 @@ export const InvestingDashboardDataSchema = Schema.Struct({
   /** Realised-gain and income report (WS4.3/WS4.4, #296). Optional so a
    *  dashboard stored before the report existed still decodes. */
   realized: Schema.optional(RealizedIncomeReportSchema),
+  /** The stored DeGiro import's dates (D13, #325). Optional so a dashboard
+   *  stored before it existed still decodes, and absent when no DeGiro
+   *  import was ever committed. */
+  degiro: Schema.optional(DeGiroDataStateSchema),
 });
 
 export type InvestingDashboardData = DeepMutable<
@@ -439,6 +444,9 @@ export type InvestingDashboardInput = {
   dataVersion?: number;
   /** Account tax-treatment labels keyed by `(broker, account)` (WS4.4). */
   accountWrappers?: readonly AccountWrapperEntry[];
+  /** The stored DeGiro import's dates (D13, #325), for the holdings age note
+   *  and the stale-data rule. */
+  degiro?: DeGiroDataState;
 };
 
 /** The most the composition projection ever names. */
@@ -724,6 +732,7 @@ export function buildInvestingDashboard(reported: InvestingDashboardInput): Inve
     positions,
     position: positionWithRealized,
     problems: [...(input.problems ?? []), ...positionProblems],
+    ...(input.degiro ? { degiro: input.degiro } : {}),
     realized,
     risk: { byBenchmark: {}, defaultBenchmark: null },
     composition: buildCompositionProjection(positions),

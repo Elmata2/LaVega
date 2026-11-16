@@ -606,6 +606,20 @@
   .filter-bar input {
     max-width: 100%;
   }
+  /* Per-row category picker (Transacties). A quiet text-sized control on a
+ * desktop table; a 44px target wherever the pointer is coarse or the table has
+ * turned into cards on a phone. */
+  .cat-edit {
+    font-size: var(--fs-sm, 0.85em);
+    padding: 2px var(--sp-2);
+    max-width: 100%;
+  }
+  @media (pointer: coarse), (max-width: 620px) {
+    .cat-edit {
+      min-height: 44px;
+      min-width: 44px;
+    }
+  }
   /* The search field takes the leftover width rather than a fixed one. */
   .filter-grow {
     flex: 1 1 12rem;
@@ -1096,6 +1110,29 @@
     font-size: 1.15rem;
     font-weight: 600;
     line-height: 1.4;
+  }
+  /* The reasoning behind an answer's "i" is body text, not a second headline. */
+  .travel-winner .toonmeer-panel {
+    font-size: 0.85rem;
+    font-weight: 400;
+    line-height: 1.5;
+  }
+  /* The "i" follows the last word of the line instead of being a flex item of
+     its own: with a long product name the line wraps and the "i" stays attached
+     to the final word (U+2060 forbids a break between them). */
+  .travel-winner .toonmeer-summary {
+    display: block;
+  }
+  .travel-winner .toonmeer-summary > .travel-winner-headline::after,
+  .travel-winner .toonmeer-summary > .travel-winner-pin::after {
+    content: "\2060";
+  }
+  .travel-winner .toonmeer-summary > .toonmeer-mark {
+    margin-left: var(--sp-2);
+    vertical-align: middle;
+  }
+  .travel-winner .travel-why {
+    margin: 0;
   }
   .travel-note {
     line-height: 1.5;

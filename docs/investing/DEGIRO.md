@@ -587,6 +587,69 @@ overlapping account files). A re-import must not append duplicates.
   375 px: [preview](assets/degiro-import-preview.png) and
   [success](assets/degiro-import-success.png).
 
+### Quantity and cash reconciliation (D14, #326)
+
+`packages/core/src/parsers/degiro/reconcile.ts`, called by
+`mergeDeGiroFiles`. Report-only: the portfolio quantities stay the holdings,
+the merged trades are never rewritten, and every disagreement becomes one
+problem naming the identity and both numbers.
+
+- **Quantity.** With a portfolio export and any trade history, the merged
+  trades are walked per ISIN to the portfolio's `asOf`; trades after that day
+  belong to a later snapshot and do not count. A mismatch names the ISIN, its
+  product when known, both quantities, and the likely causes: a split, an ISIN
+  change, a transfer of shares, or a transaction history that starts too late.
+  The check runs both ways: a portfolio holding the trades do not build, and a
+  trade-built quantity the portfolio does not list. A fully sold position walks
+  to zero and is correctly absent. Trades without an ISIN cannot be matched;
+  the readers already report those rows.
+- **No overlap, no comparison.** A portfolio and a trade history that share no
+  ISIN are two unrelated snapshots (the checked-in real fixtures come from
+  different samples). Reporting every holding as miscounted would be noise, not
+  evidence.
+- **Cash.** The portfolio cash row is compared with the account `Saldo` for the
+  same currency and the same day. A difference above half a cent is a problem
+  naming both amounts. A different day describes a different moment and is
+  skipped. A transactions-only import has no `Saldo`, so it checks quantities
+  only.
+- **Report-only means no partial section.** Reconciliation problems reach the
+  import result, but they do not mark a section `partial`: the portfolio still
+  read its holdings in full, and a partial section would leave a first import
+  empty. The adapter adds the reconciliation problems to `BrokerResult.problems`
+  and keeps each section's status from its own parse.
+
+Fixtures `nl/portfolio-reconciled.csv`, `nl/portfolio-split.csv` and
+`nl/portfolio-cash-mismatch.csv` are built against `nl/account.csv` (EUR Saldo
+1467.64 on 2026-03-06). The reconciled file gives zero problems; the split file
+reports one quantity problem (10 held against 5 traded); the cash-mismatch file
+reports one cash problem with both amounts.
+
+### Import age and stale-data problem (D13, #325)
+
+`packages/core/src/investing/degiroFreshness.ts` and
+`apps/investing-server/src/degiroFreshness.ts`.
+
+- **Dashboard shape.** A read carries
+  `degiro: { importedAt, coversFrom, coversTo, positionsAsOf }`. `importedAt`
+  comes from the stored `lastImport`, `coversFrom`/`coversTo` from a complete
+  stored `cashHistory` (an `unknown` window reports both as `null`), and
+  `positionsAsOf` is the latest stored position date. The field is absent when
+  no DeGiro snapshot exists; every present field is `null` or a real date,
+  never invented.
+- **The rule.** The problem names the older of `positionsAsOf` and `coversTo`.
+  When that date is more than 30 days before the read's day, `problems` gets
+  `DeGiro-gegevens zijn <n> dagen oud. Importeer een nieuw rekeningoverzicht.`
+  A 31-day age warns, 30 does not. `importedAt` alone never triggers it: an old
+  import can still hold fresh rows.
+- **Read-time, not build-time.** The read takes its day from `DateTime.now`, so
+  a `TestClock` pins the boundary. The problem is added after the cached or
+  stored dashboard is read and is never stored: a dashboard built on day 10
+  must warn on day 31 without a rebuild.
+- **Web.** Overview and Positions show the import age beside the DeGiro
+  holdings, and the line says that prices update daily while quantities do not.
+  The problem's action opens `/profile#degiro-import`, which selects the DeGiro
+  import tab before the reader scrolls.
+
 ### Out of scope
 
 - DeGiro login, session reuse, scheduled sync, browser automation (#25, #33).
@@ -640,4 +703,9 @@ records `lastImport` inside the encrypted snapshot), D12 (#324, the DeGiro tab
 in Broker settings: export steps, per-file previews, the portfolio export date
 asked for and defaulting to today, commit totals and the `Last imported …`
 status line; the same route answers `GET` with the stored import status and
-writes nothing).
+writes nothing), D13 (#325, the dashboard carries the import's dates, a
+31-day-old DeGiro import warns on every read with the TestClock-pinned rule, and
+Overview and Positions show that age without implying live quantities), D14
+(#326, report-only quantity and same-day cash reconciliation: a split, an ISIN
+change, a transfer or a short history becomes one named problem while the
+portfolio quantities still win).

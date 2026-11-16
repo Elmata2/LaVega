@@ -1,6 +1,7 @@
 import type { CashBalance, Trade } from "../../investing/model.js";
 import type { BrokerFileSection, ParsedBrokerFile } from "../parseBrokerFile.js";
 import { NO_PORTFOLIO_HISTORY_REASON } from "./portfolio.js";
+import { reconcileDeGiroImport } from "./reconcile.js";
 import { NO_ACCOUNT_HISTORY_REASON } from "./transactions.js";
 
 /* One import can hold the account statement, the transaction export and the
@@ -163,6 +164,15 @@ export function mergeDeGiroFiles(parsed: readonly ParsedBrokerFile[]): ParsedBro
     account?.cashBalances ?? portfolio?.cashBalances;
   const positions = portfolio?.positions ?? [];
   const period = account?.period ?? transactions?.period;
+  /* Report-only: portfolio quantities win the holdings, the trade history is
+   * not rewritten, and every disagreement is one problem naming both numbers
+   * (#326). */
+  const reconciliationProblems = reconcileDeGiroImport({
+    positions,
+    trades,
+    portfolioCashBalances: portfolio?.cashBalances,
+    accountCashBalances: account?.cashBalances,
+  });
 
   const parts: string[] = [];
   if (account !== undefined) parts.push("account");
@@ -184,5 +194,6 @@ export function mergeDeGiroFiles(parsed: readonly ParsedBrokerFile[]): ParsedBro
     ...(period !== undefined ? { period } : {}),
     source: `DeGiro ${parts.join(" + ")}`,
     problems: [...problems, ...tradeProblems],
+    ...(reconciliationProblems.length > 0 ? { reconciliationProblems } : {}),
   };
 }

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type {
   Account,
   OwnAccounts,
@@ -39,6 +39,7 @@ import Badge from "../components/ui/Badge.js";
 import Button from "../components/ui/Button.js";
 import Card from "../components/ui/Card.js";
 import Pill from "../components/ui/Pill.js";
+import StatusLine from "../components/ui/StatusLine.js";
 import { Table, TableWrap, Th, Td } from "../components/ui/Table.js";
 
 /* Which UnknownReason maps to which moneyCopy.transacties.reason entry, and
@@ -91,7 +92,17 @@ type TransactiesProps = {
   configured: boolean;
   /** Apply confirmed AI-category decisions against the full tx + rules lists
    *  (App owns that + persistence). */
-  onApplyCategories: (decisions: CategoryDecision[]) => Promise<void>;
+  onApplyCategories: (
+    decisions: CategoryDecision[],
+  ) => Promise<void | { rememberFailed?: boolean }>;
+  /** The per-row picker: ONE decision, persisted by App through the same path
+   *  as `onApplyCategories`. Resolves with what really happened (how many OTHER
+   *  rows now follow, whether a rule was added) so the notice states only
+   *  computed numbers; rejects when the save fails. */
+  onChooseCategory: (
+    txId: string,
+    category: string,
+  ) => Promise<{ followers: number; rulesAdded: number; rememberFailed?: boolean }>;
   /** Stored transfer decisions. A confirmed pair's two legs get the "Transfer"
    *  badge; a rejected pair is the matcher's memory and is never proposed. */
   transfers: TransferPair[];
@@ -125,6 +136,7 @@ export default function Transacties({
   onFCategoryChange,
   configured,
   onApplyCategories,
+  onChooseCategory,
   transfers,
   suggestions,
   onConfirmTransfer,
@@ -231,9 +243,11 @@ export default function Transacties({
   const [aiPhase, setAiPhase] = useState<"idle" | "consent" | "loading" | "review">("idle");
   const [proposals, setProposals] = useState<{ tx: Tx; category: string }[]>([]);
   const [aiNote, setAiNote] = useState<string | null>(null);
+  const [aiWarn, setAiWarn] = useState<string | null>(null);
 
   async function runAiCategorize() {
     setAiNote(null);
+    setAiWarn(null);
     setAiPhase("loading");
     try {
       const results = await categorizeTxs(batch.items);
@@ -268,17 +282,123 @@ export default function Transacties({
 
   async function applyReview() {
     const decisions = toDecisions(proposals.map((p) => ({ id: p.tx.id, category: p.category })));
+    if (saving) return;
+    // One flag for the picker AND this apply: neither can start while the other
+    // is saving (App also serialises them on one queue).
+    setSaving(true);
     try {
-      await onApplyCategories(decisions);
+      const res = await onApplyCategories(decisions);
       setProposals([]);
       setAiPhase("idle");
-      setAiNote(
-        decisions.length > 0
-          ? c.transacties.gecategoriseerdNote(decisions.length)
-          : c.transacties.nietsToegepast,
-      );
+      if (res && res.rememberFailed) {
+        // The txs ARE saved; only the remembered rules were not. Leave review
+        // (so the same decisions cannot be applied twice) and say so.
+        setAiNote(null);
+        setAiWarn(c.transacties.aiRegelsNietOnthouden);
+      } else {
+        setAiWarn(null);
+        setAiNote(
+          decisions.length > 0
+            ? c.transacties.gecategoriseerdNote(decisions.length)
+            : c.transacties.nietsToegepast,
+        );
+      }
     } catch (e) {
       setAiNote(e instanceof Error ? e.message : c.transacties.opslaanMislukt);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  // --- Per-row category picker ---------------------------------------------
+  // One row at a time is in "edit" mode (a native <select>); every other row
+  // shows the category text plus a "Wijzig" button. Choosing goes out through
+  // onChooseCategory — App runs applyCategorizations for that one decision and
+  // persists it like the AI flow — and the notice reports what came back.
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [pickNote, setPickNote] = useState<{
+    tone: "success" | "warning" | "problem";
+    text: string;
+  } | null>(null);
+  // While a save is in flight no picker can open: the next decision would be
+  // built on a list that does not yet hold this one.
+  const [saving, setSaving] = useState(false);
+  const restoreFocusId = useRef<string | null>(null);
+  // Focus goes back to the row's button once the picker is closed AND the save
+  // has finished (the button is disabled while saving, and a disabled button
+  // cannot take focus).
+  useEffect(() => {
+    if (editingId === null && !saving && restoreFocusId.current) {
+      document.getElementById(`cat-edit-${restoreFocusId.current}`)?.focus();
+      restoreFocusId.current = null;
+    }
+  }, [editingId, saving]);
+
+  // A closed native <select> fires `change` on EVERY arrow key, so committing
+  // on change would save an intermediate category per keypress (and teach a
+  // wrong rule). While the person navigates by keyboard the shown value is a
+  // DRAFT. A draft is never lost silently: Enter and blur both commit it;
+  // Escape is the only way to discard it. A `change` with no navigation key
+  // before it (mouse, finger, an open popup) commits at once — a phone has no
+  // Enter. Navigation keys are arrows, Home, End, PageUp/PageDown and printable
+  // characters; Space, Enter, Tab, Escape and modifiers are not.
+  const [draft, setDraft] = useState<string | null>(null);
+  const draftRef = useRef<string | null>(null);
+  const keyNav = useRef(false);
+  const enterPressed = useRef(false);
+  const selectRef = useRef<HTMLSelectElement | null>(null);
+  // Focus the select ONCE per open, not on every re-render while it is open.
+  useEffect(() => {
+    if (editingId !== null) selectRef.current?.focus();
+  }, [editingId]);
+
+  function resetNav() {
+    keyNav.current = false;
+    enterPressed.current = false;
+  }
+  function closePicker(id: string) {
+    restoreFocusId.current = id;
+    resetNav();
+    draftRef.current = null;
+    setDraft(null);
+    setEditingId(null);
+  }
+  function setDraftValue(v: string) {
+    draftRef.current = v;
+    setDraft(v);
+  }
+  /** Commit the pending draft exactly once; a draft equal to the current
+   *  category (or none) only closes. */
+  function commitDraft(t: Tx, current: string) {
+    const v = draftRef.current;
+    if (v && v !== current) void chooseCategory(t, v);
+    else closePicker(t.id);
+  }
+
+  async function chooseCategory(t: Tx, category: string) {
+    const who = t.counterparty.trim() || t.description.trim() || "—";
+    closePicker(t.id);
+    if (!category || saving) return;
+    setSaving(true);
+    try {
+      const r = await onChooseCategory(t.id, category);
+      setPickNote({
+        tone: r.rememberFailed ? "warning" : "success",
+        text: r.rememberFailed
+          ? c.transacties.categorieGezetNietOnthouden
+          : r.followers > 0
+            ? c.transacties.categorieGezetVolgen(r.followers, who)
+            : r.rulesAdded > 0
+            ? c.transacties.categorieGezetOnthouden(who)
+            : c.transacties.categorieGezetPlain,
+      });
+    } catch (e) {
+      setPickNote({
+        tone: "problem",
+        text: e instanceof Error ? e.message : c.transacties.opslaanMislukt,
+      });
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -332,10 +452,73 @@ export default function Transacties({
           })()}
         </>
       );
+    const who = t.counterparty.trim() || t.description.trim() || "—";
+    const label = c.transacties.categorieWijzigenVoor(who);
+    const picker =
+      editingId === t.id ? (
+        <select
+          className="cat-edit"
+          aria-label={label}
+          value={
+            draft ?? ((CATEGORY_OPTIONS as readonly string[]).includes(category) ? category : "")
+          }
+          ref={selectRef}
+          onPointerDown={resetNav}
+          onMouseDown={resetNav}
+          onTouchStart={resetNav}
+          onClick={resetNav}
+          onChange={(e) => {
+            const v = e.target.value;
+            if (keyNav.current && !enterPressed.current) setDraftValue(v);
+            else if (v && v !== category) void chooseCategory(t, v);
+            else closePicker(t.id);
+          }}
+          onBlur={() => {
+            if (draftRef.current) commitDraft(t, category);
+            else setEditingId((cur) => (cur === t.id ? null : cur));
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Escape") closePicker(t.id);
+            else if (e.key === "Enter") {
+              if (draftRef.current) commitDraft(t, category);
+              else enterPressed.current = true;
+            } else if (
+              !e.ctrlKey &&
+              !e.metaKey &&
+              !e.altKey &&
+              ((e.key.length === 1 && e.key !== " ") || /^(Arrow|Page|Home|End)/.test(e.key))
+            ) {
+              keyNav.current = true;
+            }
+          }}
+        >
+          <option value="">{c.transacties.kiesCategorie}</option>
+          {CATEGORY_OPTIONS.map((cat) => (
+            <option key={cat} value={cat}>
+              {categoryLabel(locale, cat)}
+            </option>
+          ))}
+        </select>
+      ) : (
+        <button
+          type="button"
+          id={`cat-edit-${t.id}`}
+          className="cat-edit"
+          aria-label={label}
+          disabled={saving}
+          onClick={() => {
+            setPickNote(null);
+            setDraft(null);
+            setEditingId(t.id);
+          }}
+        >
+          {c.transacties.wijzig}
+        </button>
+      );
     return (
       <>
         {rest}
-        {transferBadge ? <> {transferBadge}</> : null}
+        {transferBadge ? <> {transferBadge}</> : null} {picker}
       </>
     );
   }
@@ -345,6 +528,21 @@ export default function Transacties({
       <h2 style={{ margin: 0 }}>{c.transacties.heading}</h2>
 
       {aiNote && aiPhase === "idle" && <p className="cell-sub">{aiNote}</p>}
+      {aiWarn && aiPhase === "idle" && (
+        <StatusLine tone="warning" role="alert">
+          {aiWarn}
+        </StatusLine>
+      )}
+
+      {/* A live region that is always mounted, so a screen reader hears the
+          notice when it fills. A failed save is announced as an alert. */}
+      <StatusLine
+        tone={pickNote?.tone ?? "success"}
+        role={pickNote?.tone === "problem" ? "alert" : "status"}
+        data-testid="category-pick-note"
+      >
+        {pickNote?.text}
+      </StatusLine>
 
       {/* --- The onbekend panel. This is where the AI route now lives, because
           this is where the unknowns are visible: a button on the page header
@@ -495,7 +693,7 @@ export default function Transacties({
               {aiNote}
             </p>
           )}
-          <Button variant="primary" onClick={() => void applyReview()}>
+          <Button variant="primary" disabled={saving} onClick={() => void applyReview()}>
             {c.transacties.toepassen}
           </Button>{" "}
           <Button onClick={cancelReview}>{c.transacties.annuleer}</Button>

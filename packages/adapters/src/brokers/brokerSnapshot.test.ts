@@ -89,6 +89,7 @@ test("a restored snapshot keeps its import metadata", () => {
   });
   const restored = createBrokerDataCache(cache.snapshot());
   expect(restored.snapshot().degiro?.lastImport).toEqual(lastImport);
+  expect(restored.read().lastImports.degiro).toEqual(lastImport);
 });
 
 describe("IBKR history windows", () => {

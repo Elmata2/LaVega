@@ -54,6 +54,9 @@ import {
   holdingCostOfProduct,
   netBenefit,
   productFeesById,
+  CARD_ADVICE_MIN_GAIN_CENTS,
+  noCardAdvice,
+  emptyPlanPreferences,
 } from "@lavega/core";
 import { createRatesProvider, type RatesResult } from "@lavega/adapters";
 import { CATALOGUE_RATES, CATALOGUE_ENTRIES } from "../catalogue-rates";
@@ -74,6 +77,16 @@ import Module, { ModulePeriod } from "../components/Module";
 import ModuleGrid from "../components/ModuleGrid";
 import ToonMeer from "../components/ToonMeer";
 import Badge from "../components/ui/Badge.js";
+import { MOVED_CATEGORIES } from "../components/blocks/statistics";
+import { planShellCopy } from "../copy/plan/index.js";
+import {
+  cardDebtStated,
+  cardDebtReason,
+  firstCardOutcome,
+  firstCreditCardApplies,
+  statedHeldRows,
+  type StatedAnswers,
+} from "../plan/optimalisatieStated";
 import CardLink from "../components/ui/CardLink.js";
 import SaldoInput from "../components/ui/SaldoInput.js";
 import { Table, TableWrap, Th, Td } from "../components/ui/Table.js";
@@ -145,8 +158,17 @@ type OptimalisatieProps = {
    *  statische render niet draait. Zonder dit haakje was de nettoberekening van de
    *  rentemodule op dit scherm niet te testen. App.tsx geeft niets mee. */
   initialRates?: readonly RateBenchmark[];
+  /** What the intake wizard was told about cards. Optional: without it the
+   *  screen reads connected accounts only, exactly as before. Connected data
+   *  always beats these answers; they only mark and explain cards the screen
+   *  cannot see. */
+  stated?: StatedAnswers;
+  /** Opens Rekeningen, where a card that is not connected is connected. */
+  onOpenAccounts?: () => void;
   onRateCommit: (key: string, value: string) => void;
 };
+
+const MOVED = new Set(MOVED_CATEGORIES.map((m) => m.category));
 
 const euro = (locale: Locale, cents: number) => formatEuroIn(locale, cents / 100);
 const signedEuro = (locale: Locale, cents: number) => formatSignedEuroIn(locale, cents / 100);
@@ -704,6 +726,8 @@ export default function Optimalisatie({
   facts,
   entries = CATALOGUE_ENTRIES,
   initialRates,
+  stated,
+  onOpenAccounts,
   onRateCommit,
 }: OptimalisatieProps) {
   const [locale] = useAppLocale();
@@ -962,6 +986,20 @@ export default function Optimalisatie({
     [alleTallies],
   );
 
+  /* WHAT HE TOLD THE WIZARD, AFTER WHAT IS CONNECTED. A stated card that no
+     connected account stands in for is a held row with unknown cashback: never a
+     figure, never a zero, and never the baseline of a "you gain" claim. The
+     stated answers are personal, so the business half does not read them. */
+  const statedRows = useMemo(
+    () =>
+      stated === undefined || entityScope === "business"
+        ? []
+        : statedHeldRows(stated, accounts, entries),
+    [stated, accounts, entries, entityScope],
+  );
+  const statedDate = stated?.statedAt ? formatIsoDateIn(locale, stated.statedAt) : null;
+  const carriesDebt = entityScope !== "business" && cardDebtStated(stated);
+
   const rankable = heldCashback.filter((h) => cashbackPctOf(h.k) !== null);
   /* WHAT HE COULD OPEN, not only what he holds. Valuta ranks every bank and the
      travel agent already offers alternatives; this module was the last one asking
@@ -1061,13 +1099,68 @@ export default function Optimalisatie({
      checked here so the message below can name WHICH half is missing. */
   const cashbackUpgrade = useMemo(
     () =>
-      monthlyBaseCents === null
+      carriesDebt || monthlyBaseCents === null
         ? null
         : cashbackSwitchGain(bestHeldCashback, bestOffer, yearlySpendCents),
-    [bestHeldCashback, bestOffer, yearlySpendCents, monthlyBaseCents],
+    [bestHeldCashback, bestOffer, yearlySpendCents, monthlyBaseCents, carriesDebt],
   );
   /** The field minus the card the comparison already named. */
-  const otherOffers = cashbackUpgrade ? cashbackOffers.slice(1, 5) : cashbackOffers.slice(0, 5);
+  const otherOffers = carriesDebt
+    ? []
+    : cashbackUpgrade
+      ? cashbackOffers.slice(1, 5)
+      : cashbackOffers.slice(0, 5);
+  /* A FIRST CREDIT CARD. "Geen creditcard" in the wizard is about credit cards
+     only, so a current account or a debit card does not suppress it. The
+     figure is the plan's own (`noCardAdvice`: the same spend history, the same
+     minimum of full months, the same threshold); below the minimum there is no
+     figure and no verdict. */
+  const firstCard = useMemo(() => {
+    if (entityScope === "business" || carriesDebt || !firstCreditCardApplies(stated, accounts))
+      return null;
+    return firstCardOutcome(
+      noCardAdvice({
+        txs,
+        accounts,
+        entityProfiles: [],
+        rules,
+        own,
+        asOf,
+        mode: "convert",
+        fxHistory: {},
+        movedCategories: MOVED,
+        catalogue: entries,
+        preferences: emptyPlanPreferences(),
+      }),
+    );
+  }, [entityScope, carriesDebt, stated, accounts, txs, rules, own, asOf, entries]);
+  const routingShown = carriesDebt ? [] : routing;
+  const answerShown =
+    cashbackUpgrade !== null && monthlyBaseCents !== null && bestHeldCashback !== null;
+  const inviteOnly = !carriesDebt && statedRows.length > 0 && spendable.length === 0;
+  /* The generic "nothing to compare" / "already best" line steps aside for the
+     first-credit-card line: "je zit al goed" is not true for someone with no
+     credit card. */
+  const suppressEmpty =
+    firstCard !== null &&
+    !inviteOnly &&
+    (spendable.length === 0 ||
+      (bestHeldCashback !== null && monthlyBaseCents !== null && cashbackOffers.length > 0));
+  const accountsLink = onOpenAccounts ? (
+    <CardLink onClick={onOpenAccounts}>{c.cashback.stated.openAccounts}</CardLink>
+  ) : null;
+  /* The stated card's invite: visible, never behind a fold, and with a way to
+     act on it. */
+  const invite =
+    statedRows.length > 0 ? (
+      <p
+        className="cell-sub"
+        data-testid="cashback-stated-invite"
+        style={{ marginTop: "var(--sp-3)" }}
+      >
+        {c.cashback.stated.invite(statedRows.map((r) => r.label).join(", "))} {accountsLink}
+      </p>
+    ) : null;
   // How the base was measured, so the figure can be checked against the same
   // afschrift it was read from rather than taken on trust.
   const spendOf = useMemo(() => new Map(returns.map((r) => [r.account.key, r.spend])), [returns]);
@@ -1079,8 +1172,9 @@ export default function Optimalisatie({
      De vergelijking telt alleen mee als hij ook echt te tonen is — dezelfde drie
      voorwaarden als de antwoordregel, want de plooi bevat zíjn onderbouwing. */
   const cashbackOnderbouwing =
-    routing.length > 0 ||
+    routingShown.length > 0 ||
     heldCashback.length > 0 ||
+    statedRows.length > 0 ||
     otherOffers.length > 0 ||
     (cashbackUpgrade !== null && monthlyBaseCents !== null && bestHeldCashback !== null);
 
@@ -2098,9 +2192,9 @@ export default function Optimalisatie({
 
               ALLEEN DE REGEL ZELF, sinds de top-downronde: waar die euro's over
               gerekend zijn staat in de plooi onderaan, bij de rest van de meting. */}
-          {routing.length > 0 && (
+          {routingShown.length > 0 && (
             <div className="flex flex-col gap-[var(--sp-3)]">
-              {routing.map((a) => {
+              {routingShown.map((a) => {
                 const routed = c.cashback.routingSentence({
                   toBank: a.to.bank,
                   fromBank: a.from.bank,
@@ -2124,7 +2218,7 @@ export default function Optimalisatie({
           monthlyBaseCents !== null &&
           bestHeldCashback !== null ? (
             <div
-              className={`flex flex-col gap-[var(--sp-3)]${routing.length > 0 ? " mt-[var(--sp-4)]" : ""}`}
+              className={`flex flex-col gap-[var(--sp-3)]${routingShown.length > 0 ? " mt-[var(--sp-4)]" : ""}`}
             >
               {/* HET ANTWOORD, IN ÉÉN REGEL. Welke kaart, tegen welke van hem, en
                   hoeveel dat bruto scheelt — daarna doet `Productkosten` er de
@@ -2155,8 +2249,10 @@ export default function Optimalisatie({
                   assumed: bestHeld?.k.tier === "aangenomen",
                   altKind: altKindLabel(locale, bestOfferKind),
                   extra: euro(locale, cashbackUpgrade.extraPerYearCents),
+                  limited: statedRows.length > 0,
                 })}
               </p>
+              {statedRows.length > 0 && invite}
 
               {/* WAT DE KAART ZELF KOST, in de drie toestanden die er echt zijn.
                   Dezelfde component en dezelfde zinnen als de Rente-module
@@ -2195,25 +2291,65 @@ export default function Optimalisatie({
                he is already in the best place, because an absence of a
                comparison is not a comparison. Dit is een weigering en dus de
                uitkomst zelf — hij staat vooraan en vouwt nooit op. */
+            !suppressEmpty && (
+              <p
+                className="block-empty"
+                data-testid={
+                  carriesDebt ? "cashback-debt" : inviteOnly ? "cashback-stated-invite" : undefined
+                }
+                style={{ marginTop: routingShown.length > 0 ? "var(--sp-4)" : undefined }}
+              >
+                {carriesDebt ? (
+                  c.cashback.stated.debtNote(cardDebtReason(stated) ?? "balance")
+                ) : spendable.length === 0 ? (
+                  inviteOnly ? (
+                    <>
+                      {c.cashback.stated.invite(statedRows.map((r) => r.label).join(", "))}{" "}
+                      {accountsLink}
+                    </>
+                  ) : (
+                    c.cashback.emptyReasons.noAccounts
+                  )
+                ) : bestHeldCashback === null ? (
+                  /* WAAROM DE AANNAME HIER NIET GELDT, en niet alleen dat er iets
+                     ontbreekt. Deze tak haalt het sinds review 4 alleen nog bij
+                     kaarten die buiten de aanname vallen — een prepaidkaart, een
+                     Amex, een neobank — of als hij de aanname zelf heeft
+                     uitgezet. De lijst in de plooi noemt per kaart welke van die
+                     redenen het is. */
+                  c.cashback.emptyReasons.cannotAssume
+                ) : monthlyBaseCents === null ? (
+                  c.cashback.emptyReasons.tooLittleHistory(MIN_SPEND_DAYS)
+                ) : cashbackOffers.length === 0 ? (
+                  c.cashback.emptyReasons.noCatalogueCards
+                ) : (
+                  c.cashback.emptyReasons.alreadyBest
+                )}
+              </p>
+            )
+          )}
+
+          {firstCard !== null && (
             <p
               className="block-empty"
-              style={{ marginTop: routing.length > 0 ? "var(--sp-4)" : undefined }}
+              data-testid="cashback-first-card"
+              style={{ marginTop: "var(--sp-3)" }}
             >
-              {spendable.length === 0
-                ? c.cashback.emptyReasons.noAccounts
-                : bestHeldCashback === null
-                  ? /* WAAROM DE AANNAME HIER NIET GELDT, en niet alleen dat er iets
-                       ontbreekt. Deze tak haalt het sinds review 4 alleen nog bij
-                       kaarten die buiten de aanname vallen — een prepaidkaart, een
-                       Amex, een neobank — of als hij de aanname zelf heeft
-                       uitgezet. De lijst in de plooi noemt per kaart welke van die
-                       redenen het is. */
-                    c.cashback.emptyReasons.cannotAssume
-                  : monthlyBaseCents === null
-                    ? c.cashback.emptyReasons.tooLittleHistory(MIN_SPEND_DAYS)
-                    : cashbackOffers.length === 0
-                      ? c.cashback.emptyReasons.noCatalogueCards
-                      : c.cashback.emptyReasons.alreadyBest}
+              {firstCard.kind === "worth-it"
+                ? c.cashback.stated.firstCard.worthIt(
+                    firstCard.card,
+                    euro(locale, firstCard.gainCents),
+                  )
+                : firstCard.kind === "not-worth-it"
+                  ? c.cashback.stated.firstCard.notWorthIt(euro(locale, CARD_ADVICE_MIN_GAIN_CENTS))
+                  : firstCard.kind === "too-little"
+                    ? c.cashback.stated.firstCard.tooLittle
+                    : firstCard.kind === "none-comparable"
+                      ? c.cashback.stated.firstCard.noComparable
+                      : c.cashback.stated.firstCard.noSpend}
+              {(firstCard.kind === "no-spend" || firstCard.kind === "too-little") && (
+                <> {accountsLink}</>
+              )}
             </p>
           )}
 
@@ -2221,6 +2357,8 @@ export default function Optimalisatie({
               module. Het is geen uitleg maar een weigering: over deze kaarten
               mag niets worden ingevuld, dus het bedrag hierboven gaat niet over
               hen. Wie dat opvouwt laat een afwezigheid een conclusie dragen. */}
+          {statedRows.length > 0 && spendable.length > 0 && !carriesDebt && !answerShown && invite}
+
           {openCashbackGaps.length > 0 && (
             <p
               className="cell-sub"
@@ -2374,12 +2512,12 @@ export default function Optimalisatie({
                   op een betaalrekening zitten huur en incasso's nog in de basis,
                   dus het bedrag is het meeste dat het kan zijn — en de zin die dat
                   zegt hoort bij de meting, niet bij het antwoord. */}
-              {routing.length > 0 && (
+              {routingShown.length > 0 && (
                 <div style={{ marginTop: "var(--sp-3)" }}>
                   <p style={{ margin: 0 }}>
                     <strong>{c.cashback.routingBasis.heading}</strong>
                   </p>
-                  {routing.map((a) => {
+                  {routingShown.map((a) => {
                     const base = spendOf.get(a.from.key);
                     return (
                       <p className="cell-sub" key={`basis-${a.from.key}${a.to.key}`}>
@@ -2468,10 +2606,12 @@ export default function Optimalisatie({
                   Het STAAT er, per kaart, met het woord "aangenomen" voluit — dat
                   is de prijs van een aanname: hij mag, mits hij overal te vinden
                   is. */}
-              {heldCashback.length > 0 && (
+              {heldCashback.length + statedRows.length > 0 && (
                 <div data-testid="cashback-kaarten" style={{ marginTop: "var(--sp-3)" }}>
                   <p style={{ margin: 0 }}>
-                    <strong>{c.cashback.perCardSourceHeading(heldCashback.length)}</strong>
+                    <strong>
+                      {c.cashback.perCardSourceHeading(heldCashback.length + statedRows.length)}
+                    </strong>
                   </p>
                   <ul className="cell-sub" style={{ margin: ".35rem 0 0", paddingLeft: "1.1rem" }}>
                     {heldCashback.map((h) => (
@@ -2481,6 +2621,25 @@ export default function Optimalisatie({
                             dingen net iets anders — zie `describeHeldCashback`. */}
                         <strong>{h.product}</strong> —{" "}
                         {heldCashbackSentence(describeHeldCashback(h.k), locale)}
+                      </li>
+                    ))}
+                    {statedRows.map((r) => (
+                      <li key={`stated:${r.id}`} data-testid="cashback-stated-row">
+                        <strong>{r.label}</strong> — {c.cashback.stated.rowSentence}{" "}
+                        <Badge
+                          data-testid="stated-badge"
+                          title={
+                            statedDate === null ? undefined : c.cashback.stated.statedOn(statedDate)
+                          }
+                        >
+                          {c.cashback.stated.badge}
+                          {statedDate !== null && (
+                            <span className="sr-only">
+                              {" "}
+                              ({c.cashback.stated.statedOn(statedDate)})
+                            </span>
+                          )}
+                        </Badge>
                       </li>
                     ))}
                   </ul>
@@ -2904,6 +3063,13 @@ export default function Optimalisatie({
           </Module>
         )}
       </ModuleGrid>
+      <p
+        className="cell-sub"
+        data-testid="optimalisatie-disclaimer"
+        style={{ marginTop: "var(--sp-5)" }}
+      >
+        {planShellCopy[locale].footer.notice}
+      </p>
     </>
   );
 }

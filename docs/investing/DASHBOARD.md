@@ -184,7 +184,7 @@ Expose price progress separately from broker progress at `GET /api/prices/sync/s
 
 Render cached partial data while backfill continues. A failed symbol retries on the next orchestrator run because it has no completed cache range. Benchmark lines appear and extend as their own histories arrive. They never block the portfolio line.
 
-`GET /api/investing/dashboard` returns a valid empty dashboard with a problem message when the read model cannot be assembled. It must not return 503 for broker, snapshot, price-cache, FX, or benchmark-read failures, because the dashboard shell also contains reconnect and resync controls. The server logs the redacted failure under `investing.dashboard_read.problems`; the browser keeps the dashboard open and shows the problem banner.
+`GET /api/investing/dashboard` returns a valid empty dashboard with a problem message when the read model cannot be assembled. It must not return 503 for broker, snapshot, price-cache, FX, or benchmark-read failures, because the dashboard shell also contains reconnect and resync controls. A DeGiro import also adds `degiro: { importedAt, coversFrom, coversTo, positionsAsOf }` and, when the holdings or cash are older than 30 days, a stale-data problem; the rule is recomputed on every read, so a cached payload warns on the day it becomes stale (see `DEGIRO.md`). The server logs the redacted failure under `investing.dashboard_read.problems`; the browser keeps the dashboard open and shows the problem banner.
 
 Maintain an in-memory `dataVersion`. Increment it after broker data is applied and after a price-store upsert completes. Cache the last `InvestingDashboardData` with its version. Recompute only when the version changes.
 
@@ -453,10 +453,9 @@ The net-worth chart has its own range, crosshair, and zoom state. Do not synchro
 
 Prototype reference: [`prototype-networth-85`](https://github.com/Elmata2/LaVega/tree/prototype-networth-85/apps/investing-chart-prototype).
 
-### Personal's opt-in share (owner's own bank money)
+### Personal's share (owner's own bank money, on by default)
 
-The owner may opt in, from Personal's (`apps/web`) own profile settings, to
-share their Personal bank position into this chart. The figure is
+Personal (`apps/web`) shares the owner's Personal bank position into this chart. The figure is
 `positionSeries` (`apps/web/src/totalePositie.ts`) over the accounts that are
 NOT investment accounts: a `Beleggingsrekening` (or an explicitly crypto-typed
 account) is the Investing portfolio's own figure, so adding its Personal
@@ -466,14 +465,17 @@ card; the shared total is the bank half only, and `personalShareAccounts`
 (`@lavega/core`) is the one rule both the share and the transfer
 classification use. A confirmed contribution from a bank account into an
 investment account therefore lowers the shared total and raises the portfolio
-by the same cents, leaving the combined net worth unchanged. Off by default;
-nothing crosses the network until the owner turns the switch on. The switch is
-**per device**: turning it on only shares totals from visits on that browser,
+by the same cents, leaving the combined net worth unchanged. On by default since
+16 Nov 2026 (owner decision): a stored `lavega.shareNetWorth` of `0` is the
+owner's explicit off and always wins; only a never-set key reads as on. Nothing
+crosses the network without a signed-in account (a device-only vault never
+sends), and the switch plus a plain explanation sit in Profiel. The reset keeps
+this choice. The switch is **per device**: it only shares totals from visits on that browser,
 and a total already shared stays with Investing until the switch is turned off
 again on a device where it is on.
 
-What crosses the boundary, and nothing else: while the switch is on and the
-Personal vault is unlocked, after every sync/import and on unlock, Personal
+What crosses the boundary, and nothing else: while the switch is on, the owner
+is signed in and the Personal vault is unlocked, after every sync/import and on unlock, Personal
 computes the current day's total (read fresh at send time, not memoized from
 when the tab loaded) in EUR and sends `PUT /api/personal/net-worth-total` with
 exactly `{ date, totalCents, currency: "EUR" }`. No transaction, account,
