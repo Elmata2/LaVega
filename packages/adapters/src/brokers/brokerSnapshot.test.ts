@@ -1163,3 +1163,63 @@ test("a complete DeGiro statement replaces stored unknown coverage even as a bac
     expect.objectContaining({ status: "complete", from: "2026-01-05", to: "2026-03-06" }),
   ]);
 });
+
+test("a newer portfolio in a merged DeGiro import applies despite an older account window", async () => {
+  const account = () =>
+    readFileSync(
+      new URL("../../../core/src/parsers/__fixtures__/degiro/nl/account.csv", import.meta.url),
+      "utf8",
+    );
+  const portfolio = () =>
+    readFileSync(
+      new URL("../../../core/src/parsers/__fixtures__/degiro/nl/portfolio.csv", import.meta.url),
+      "utf8",
+    );
+  const overlap = () =>
+    readFileSync(
+      new URL(
+        "../../../core/src/parsers/__fixtures__/degiro/nl/transactions-overlap.csv",
+        import.meta.url,
+      ),
+      "utf8",
+    );
+
+  const cache = createBrokerDataCache();
+  const load = (asOf: string, files: { filename: string; text: string }[]) =>
+    createDeGiroFileImport().load({ files, entity: "personal", asOf });
+
+  /* Stored state: a portfolio dated one day earlier, no account statement. */
+  cache.apply(
+    deGiroOutcome(
+      await load("2026-11-15", [
+        { filename: "Portfolio.csv", text: portfolio() },
+        { filename: "Transactions.csv", text: overlap() },
+      ]),
+    ),
+  );
+  expect(cache.read().positions.every((position) => position.asOf === "2026-11-15")).toBe(true);
+
+  /* The account window ends 2026-03-06, older than the stored portfolio, but
+   * the same import carries a portfolio dated 2026-11-16. The import is forward
+   * for holdings and its newer EUR cash row; the USD anchor stays the statement's. */
+  cache.apply(
+    deGiroOutcome(
+      await load("2026-11-16", [
+        { filename: "Account.csv", text: account() },
+        { filename: "Portfolio.csv", text: portfolio() },
+        { filename: "Transactions.csv", text: overlap() },
+      ]),
+    ),
+  );
+  const data = cache.read();
+  expect(data.positions.every((position) => position.asOf === "2026-11-16")).toBe(true);
+  expect(data.cashBalances).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ currency: "EUR", amount: 201.76, asOf: "2026-11-16" }),
+      expect.objectContaining({ currency: "USD", amount: 0, asOf: "2026-01-16" }),
+    ]),
+  );
+  expect(data.cashCoverage).toEqual([
+    expect.objectContaining({ status: "complete", from: "2026-01-05", to: "2026-03-06" }),
+  ]);
+});

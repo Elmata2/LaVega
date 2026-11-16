@@ -130,7 +130,7 @@ test("transactions alone yield trades but no cash-history claim", () => {
   expect(parsed.sections).toEqual(["trades"]);
 });
 
-test("the account statement and the portfolio export merge, account balances winning", () => {
+test("the account statement and the portfolio export merge, newest cash anchor per currency winning", () => {
   const parsed = parseBrokerFiles(
     [
       { filename: "Account.csv", text: account },
@@ -143,8 +143,12 @@ test("the account statement and the portfolio export merge, account balances win
   expect(parsed.source).toBe("DeGiro account + portfolio");
   expect(parsed.problems).toEqual([]);
   expect(parsed.positions).toHaveLength(12);
-  // The statement's Saldo walk proves both anchors; the portfolio has one cash row.
-  expect(parsed.cashBalances).toHaveLength(2);
+  /* The portfolio is dated later than the statement's last row, so its EUR cash
+   * row is the newest EUR anchor. USD exists only in the statement. */
+  expect(parsed.cashBalances).toEqual([
+    { currency: "EUR", amount: 201.76, asOf: AS_OF },
+    { currency: "USD", amount: 0, asOf: "2026-01-16" },
+  ]);
   expect(parsed.sections).toEqual([
     "trades",
     "dividends",

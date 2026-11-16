@@ -451,10 +451,11 @@ balance, all dated 2026-11-12. `portfolio.test.ts` pins three positions exactly,
 the ISIN identity and the cash row.
 
 Multi-file precedence (`mergeDeGiroFiles`): the first portfolio export supplies
-the positions, and the account statement's `Saldo` anchors win the cash balances
-when it read them; the portfolio cash row stands in otherwise. The account
-statement stays the cash truth, the transaction export only enriches executions,
-and the portfolio export supplies holdings. A merged source reads
+the positions. Cash balances are merged per currency: the newest dated anchor
+wins, and the account statement wins a tie. The account statement is the truth
+for its own date; a portfolio export dated later carries the newer current cash
+row, and a currency only one file reports keeps that file's anchor. The
+transaction export only enriches executions. A merged source reads
 `DeGiro account + transactions + portfolio`.
 
 The parser owns which sections it read: account = `trades`, `dividends`,
@@ -531,13 +532,16 @@ overlapping account files). A re-import must not append duplicates.
   reports and keeps the rest.
 - Backfill. An import whose window ends before the stored latest date (from
   positions, cash balances or coverage) adds history only: it never overwrites
-  the stored cash balances. Coverage is one union while windows touch or
-  overlap; across a gap the stored span cannot vouch for the days between, so a
-  forward import replaces it. An **unknown** stored coverage proves nothing, so
-  a complete import replaces it even when its window ends before the stored
-  latest date. That is the normal case when a user imports a portfolio first and
-  adds the account statement later: the statement ends before the portfolio's
-  export date, and its proven window must not be discarded as a backfill.
+  the stored cash balances. The import's end is the later of the statement
+  period and the portfolio's own date, so a merged import with an older account
+  window and a newer portfolio is forward for the holdings, not a backfill.
+  Coverage is one union while windows touch or overlap; across a gap the stored
+  span cannot vouch for the days between, so a forward import replaces it. An
+  **unknown** stored coverage proves nothing, so a complete import replaces it
+  even when its window ends before the stored latest date. That is the normal
+  case when a user imports a portfolio first and adds the account statement
+  later: the statement ends before the portfolio's export date, and its proven
+  window must not be discarded as a backfill.
 - Portfolio `asOf` rule. A portfolio import replaces positions and its cash row
   only when its `asOf` is not older than the stored positions' latest `asOf`.
   An older portfolio is a holdings backfill: positions, cash row and stored

@@ -336,17 +336,27 @@ export function createBrokerDataCache(initial: BrokerDataSnapshot = {}) {
           cashHistoryByBroker.get(outcome.broker),
         );
         const statementEnd = incoming.statementTo ?? incoming.period?.to;
+        /* A merged DeGiro import can carry an older account window and a newer
+         * portfolio. The later date is what the import proves; using only the
+         * statement period would classify the whole import as a backfill and
+         * leave the newer holdings unapplied. */
+        const incomingPositionDay = latestDay(sections.positions.rows);
+        const importEnd =
+          statementEnd !== undefined && incomingPositionDay !== undefined
+            ? incomingPositionDay > statementEnd
+              ? incomingPositionDay
+              : statementEnd
+            : (statementEnd ?? incomingPositionDay);
         const backfill =
           (outcome.broker === "ibkr" || outcome.broker === "degiro") &&
-          statementEnd !== undefined &&
+          importEnd !== undefined &&
           storedLatest !== undefined &&
-          statementEnd < storedLatest;
+          importEnd < storedLatest;
         /* DeGiro dates a portfolio export on its rows rather than naming a
          * period. Older holdings are a backfill: they must not move the
          * positions, the cash row or the stored coverage backwards. */
         const today = new Date().toISOString().slice(0, 10);
         const storedPositionDay = latestDay(positionsByBroker.get(outcome.broker));
-        const incomingPositionDay = latestDay(sections.positions.rows);
         const stalePortfolio =
           outcome.broker === "degiro" &&
           incomingPositionDay !== undefined &&
