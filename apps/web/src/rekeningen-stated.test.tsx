@@ -148,3 +148,106 @@ test("a file-fed account shows via bestand", () => {
   });
   expect(h.querySelector('[data-testid="via-file"]')!.textContent).toContain("via bestand");
 });
+
+function mountAccounts(accounts: Account[]) {
+  const h = document.createElement("div");
+  document.body.appendChild(h);
+  host = h;
+  root = createRoot(h);
+  act(() =>
+    root!.render(
+      <Rekeningen
+        accounts={accounts}
+        txs={[]}
+        busy={false}
+        onEntityChange={() => {}}
+        onAccountCommit={() => {}}
+        onAccountFieldChange={() => {}}
+        onSaldoCommit={() => {}}
+        onTypeCommit={() => {}}
+        onSelectAccount={() => {}}
+        onDeleteAccount={() => {}}
+        duplicateGroups={[]}
+        onMergeDuplicates={() => {}}
+        asOf="2026-01-01"
+        onOpeningCommit={() => {}}
+        onValuationCommit={() => {}}
+        onValuationRemove={() => {}}
+        onRefreshBank={() => {}}
+      />,
+    ),
+  );
+  act(() => {
+    [...h.querySelectorAll("button")].find((b) => b.textContent === "Alle rekeningen")!.click();
+  });
+  return h;
+}
+
+test("a file-fed account with no balance gets Saldo invullen, which focuses its existing saldo field", () => {
+  const h = mountAccounts([{ ...ING, bank: "American Express", name: "Amex Card", source: "file", balance: null }]);
+  // (a generic CSV import has the same gap: see the next test)
+  const btn = [...h.querySelectorAll("button")].find((b) => b.textContent === "Saldo invullen")!;
+  expect(btn).toBeTruthy();
+  act(() => btn.click());
+  const input = h.querySelector<HTMLInputElement>('[data-testid="saldo-input"]')!;
+  expect(document.activeElement).toBe(input);
+});
+
+test("Saldo invullen also shows for a generic CSV account with no balance, not for a live link or a known balance", () => {
+  const h = mountAccounts([
+    { ...ING, key: "csv", balance: null },
+    { ...ING, key: "live", balance: null, balanceFetchedAt: "2026-01-01" },
+    { ...ING, key: "known", balance: 5 },
+  ]);
+  expect([...h.querySelectorAll("button")].filter((b) => b.textContent === "Saldo invullen")).toHaveLength(1);
+});
+
+test("a failed save leaves no value in the field and says so", async () => {
+  const h = document.createElement("div");
+  document.body.appendChild(h);
+  host = h;
+  root = createRoot(h);
+  act(() =>
+    root!.render(
+      <Rekeningen
+        accounts={[{ ...ING, key: "csv", name: "Csv", balance: null }]}
+        txs={[]}
+        busy={false}
+        onEntityChange={() => {}}
+        onAccountCommit={() => {}}
+        onAccountFieldChange={() => {}}
+        onSaldoCommit={async () => {
+          throw new Error("write failed");
+        }}
+        onTypeCommit={() => {}}
+        onSelectAccount={() => {}}
+        onDeleteAccount={() => {}}
+        duplicateGroups={[]}
+        onMergeDuplicates={() => {}}
+        asOf="2026-01-01"
+        onOpeningCommit={() => {}}
+        onValuationCommit={() => {}}
+        onValuationRemove={() => {}}
+        onRefreshBank={() => {}}
+      />,
+    ),
+  );
+  act(() => {
+    [...h.querySelectorAll("button")].find((b) => b.textContent === "Alle rekeningen")!.click();
+  });
+  const input = h.querySelector<HTMLInputElement>('[data-testid="saldo-input"]')!;
+  const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
+  act(() => {
+    set.call(input, "250");
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await act(async () => {
+    input.dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
+  });
+  await act(async () => {
+    await new Promise((r) => setTimeout(r, 10));
+  });
+  expect(h.querySelector('[role="alert"]')!.textContent).toBe("Opslaan lukte niet. Probeer het opnieuw.");
+  expect(h.querySelector<HTMLInputElement>('[data-testid="saldo-input"]')!.value).toBe("");
+});
+

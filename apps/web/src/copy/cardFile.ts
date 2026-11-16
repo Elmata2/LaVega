@@ -26,6 +26,19 @@ export type CardFileCopy = {
   xls: string;
   unreadableFile: string;
   failedPartial: string;
+  balanceCredit: string;
+  balanceDebit: string;
+  balanceOther: (name: string) => string;
+  helperAmex: string;
+  helperT212: string;
+  helperCredit: string;
+  helperOther: string;
+  perToday: string;
+  save: string;
+  skip: string;
+  notAmount: string;
+  balanceSaved: string;
+  balanceFailed: string;
   question: (account: string) => string;
   questionYes: (account: string) => string;
   questionNo: string;
@@ -86,6 +99,19 @@ export const cardFileCopy: Record<Locale, CardFileCopy> = {
     xls: "Dit is een oud Excel-bestand (.xls). Kies CSV of .xlsx.",
     unreadableFile: "Dit bestand konden we niet lezen. Probeer CSV of Excel (.xlsx).",
     failedPartial: "Niet alles is opgeslagen. Controleer je rekeningen en probeer het opnieuw.",
+    balanceCredit: "Openstaand bedrag op je kaart",
+    balanceDebit: "Saldo op je kaart nu",
+    balanceOther: (n) => `Saldo van ${n} nu`,
+    helperAmex: "Te vinden in de Amex-app of op je laatste afschrift. Laat leeg als je het niet weet.",
+    helperT212: "Te vinden in de Trading 212-app.",
+    helperCredit: "Te vinden in de app van je kaart of op je laatste afschrift. Laat leeg als je het niet weet.",
+    helperOther: "Laat leeg als je het niet weet.",
+    perToday: "per vandaag",
+    save: "Opslaan",
+    skip: "Overslaan",
+    notAmount: "Dit is geen bedrag. Typ bijvoorbeeld 842,17.",
+    balanceSaved: "Saldo opgeslagen.",
+    balanceFailed: "Opslaan lukte niet. Probeer het opnieuw.",
     question: (a) => `Je hebt al een American Express-rekening: ${a}. Is dit dezelfde kaart?`,
     questionYes: (a) => `Ja, voeg toe aan ${a}`,
     questionNo: "Nee, dit is een andere kaart",
@@ -157,6 +183,19 @@ export const cardFileCopy: Record<Locale, CardFileCopy> = {
     xls: "This is an old Excel file (.xls). Choose CSV or .xlsx.",
     unreadableFile: "We could not read this file. Try CSV or Excel (.xlsx).",
     failedPartial: "Not everything was saved. Check your accounts and try again.",
+    balanceCredit: "Amount you currently owe on the card",
+    balanceDebit: "Card balance now",
+    balanceOther: (n) => `Balance of ${n} now`,
+    helperAmex: "You can find it in the Amex app or on your latest statement. Leave empty if you don't know.",
+    helperT212: "You can find it in the Trading 212 app.",
+    helperCredit: "You can find it in your card's app or on your latest statement. Leave empty if you don't know.",
+    helperOther: "Leave empty if you don't know.",
+    perToday: "as of today",
+    save: "Save",
+    skip: "Skip",
+    notAmount: "That is not an amount. Type for example 842.17.",
+    balanceSaved: "Balance saved.",
+    balanceFailed: "Saving failed. Try again.",
     question: (a) => `You already have an American Express account: ${a}. Is this the same card?`,
     questionYes: (a) => `Yes, add to ${a}`,
     questionNo: "No, this is a different card",

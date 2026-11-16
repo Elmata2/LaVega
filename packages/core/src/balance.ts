@@ -28,6 +28,24 @@ export function isCardAccount(a: Account): boolean {
   return READS_AS_CREDIT_CARD.test(`${a.bank ?? ""} ${a.name ?? ""}`);
 }
 
+/** What a typed balance means for this account: "owed" (a credit card: the user
+ *  types the amount they OWE, as a positive) or "plain" (the figure as typed).
+ *  The ONE classifier: the question the app asks and the sign it stores both
+ *  come from here, so a label "Openstaand bedrag" can never meet a positive
+ *  stored value, or the reverse. */
+export function balanceAskKind(a: Account): "owed" | "plain" {
+  return isCardAccount(a) ? "owed" : "plain";
+}
+
+/** The stored balance for an amount the user typed. A debt is stored negative
+ *  whatever sign was typed; zero is stored as 0, never -0 (which would render as
+ *  "-0,00"). null stays null (unknown). */
+export function signedBalanceFor(a: Account, amount: number | null): number | null {
+  if (amount === null) return null;
+  if (amount === 0) return 0;
+  return balanceAskKind(a) === "owed" ? -Math.abs(amount) : amount;
+}
+
 export const ACCOUNT_TYPES = [
   "Betaalrekening",
   "Spaarrekening",

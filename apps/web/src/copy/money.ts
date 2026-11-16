@@ -119,6 +119,10 @@ type RekeningenCopy = {
   rekeningenTonen: string;
   samenvoegen: string;
   saldoOnbekend: string;
+  /** The row action that focuses the saldo field of a file-fed account with no balance. */
+  saldoInvullen: string;
+  /** Shown under the saldo field when the write failed (the field is reset to what is stored). */
+  saldoNietOpgeslagen: string;
   dagOnbekend: string;
   tabelBank: string;
   tabelType: string;
@@ -704,6 +708,8 @@ const nl: MoneyCopy = {
     rekeningenTonen: "Rekeningen tonen",
     samenvoegen: "Samenvoegen",
     saldoOnbekend: "saldo onbekend",
+    saldoInvullen: "Saldo invullen",
+    saldoNietOpgeslagen: "Opslaan lukte niet. Probeer het opnieuw.",
     dagOnbekend: "dag onbekend",
     tabelBank: "Bank",
     tabelType: "Type",
@@ -1428,6 +1434,8 @@ const en: MoneyCopy = {
     rekeningenTonen: "Show accounts",
     samenvoegen: "Merge",
     saldoOnbekend: "balance unknown",
+    saldoInvullen: "Enter balance",
+    saldoNietOpgeslagen: "Saving failed. Try again.",
     dagOnbekend: "day unknown",
     tabelBank: "Bank",
     tabelType: "Type",
