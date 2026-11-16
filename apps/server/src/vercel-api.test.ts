@@ -195,3 +195,26 @@ test("client disconnect cancels model response and aborts its request", async ()
   await timeout(cancelledPromise);
   expect(upstreamRequest.signal.aborted).toBe(true);
 });
+
+test("forwards a multipart upload as raw bytes", async () => {
+  let upstream: Request | undefined;
+  serverFetch.mockImplementation(async (request: Request) => {
+    upstream = request;
+    return new Response("{}", { headers: { "content-type": "application/json" } });
+  });
+
+  const form = new FormData();
+  form.append("files", new Blob(["Datum,Tijd\n"], { type: "text/csv" }), "Transactions (1).csv");
+  form.append("asOf", "2026-11-12");
+
+  const response = await fetch(await endpoint(), { method: "POST", body: form });
+  expect(response.status).toBe(200);
+  expect(upstream).toBeDefined();
+
+  const received = await upstream!.formData();
+  expect(received.get("asOf")).toBe("2026-11-12");
+  const file = received.get("files");
+  expect(file).toBeInstanceOf(File);
+  expect((file as File).name).toBe("Transactions (1).csv");
+  expect(await (file as File).text()).toBe("Datum,Tijd\n");
+});
