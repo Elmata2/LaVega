@@ -1097,6 +1097,29 @@
     font-weight: 600;
     line-height: 1.4;
   }
+  /* The reasoning behind an answer's "i" is body text, not a second headline. */
+  .travel-winner .toonmeer-panel {
+    font-size: 0.85rem;
+    font-weight: 400;
+    line-height: 1.5;
+  }
+  /* The "i" follows the last word of the line instead of being a flex item of
+     its own: with a long product name the line wraps and the "i" stays attached
+     to the final word (U+2060 forbids a break between them). */
+  .travel-winner .toonmeer-summary {
+    display: block;
+  }
+  .travel-winner .toonmeer-summary > .travel-winner-headline::after,
+  .travel-winner .toonmeer-summary > .travel-winner-pin::after {
+    content: "\2060";
+  }
+  .travel-winner .toonmeer-summary > .toonmeer-mark {
+    margin-left: var(--sp-2);
+    vertical-align: middle;
+  }
+  .travel-winner .travel-why {
+    margin: 0;
+  }
   .travel-note {
     line-height: 1.5;
   }

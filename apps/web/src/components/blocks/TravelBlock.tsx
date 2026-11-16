@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { View } from "../../App";
 import type {
   Account,
@@ -35,7 +35,6 @@ import {
   makeFact,
   costOnReferenceSpend,
   netBenefit,
-  payHeadline,
   TRAVEL_AGENT,
   TRAVEL_REFERENCE_SPEND,
   TRAVEL_REFERENCE_WITHDRAWAL,
@@ -316,6 +315,13 @@ function travelEuro(locale: Locale, n: number): string {
   return locale === "nl" ? `€ ${n.toFixed(2).replace(".", ",")}` : formatEuroIn(locale, n);
 }
 
+/** A round reference amount without its cents ("€ 200"), so the short line reads
+ *  "€ 3,50 per € 200". Not a round number keeps its cents. */
+function referenceEuro(locale: Locale, n: number): string {
+  const full = travelEuro(locale, n);
+  return Number.isInteger(n) ? full.replace(/[.,]00$/, "") : full;
+}
+
 /** The one place a `BareHoldingCostClause` becomes a sentence — the simpler of
  *  the two card-cost tails, used when there is no benefit to net the price
  *  against. `null` renders as "" (no fragment), same as core's own convention. */
@@ -402,9 +408,9 @@ function netBenefitDescriptionSentence(
 }
 
 /** The one place a `HoldingCostClause` becomes a sentence — the card-cost tail
- *  `payHeadline` and `withdrawHeadline`'s "not-held" both append to their own
- *  sentence. Each branch keeps its own leading space, same convention as the
- *  type it renders (see travel.ts). */
+ *  `payAnswer` and `withdrawAnswer`'s "not-held" put behind the "i". Each branch
+ *  keeps its own leading space, same convention as the type it renders (see
+ *  travel.ts). */
 function holdingCostClauseSentence(
   clause: HoldingCostClause,
   c: TravelCopy,
@@ -461,73 +467,102 @@ function versusNoteSentence(v: VersusNote, c: TravelCopy, locale: Locale): strin
     : c.versusNote.cheaperVia(amount, displayProduct(v.alt.via, c));
 }
 
-/** The one place a `JourneyHeadline` becomes a sentence — `payHeadline`'s
- *  fallback when the winning route is one of his own. */
-function journeyHeadlineSentence(
+/** ONE ANSWER ON SCREEN: the line (the move and the number) and, behind the
+ *  "i", the sentences that used to trail it. Built from core's structs by the
+ *  `payAnswer` / `withdrawAnswer` switches below, never from a string cut. */
+export type TravelAnswer = {
+  line: string;
+  why: string[];
+  /** A money warning that must stay visible under the line, never only behind
+   *  the "i" (the flat fee per withdrawal). Rendered after the "Let op:" label. */
+  caution?: string;
+};
+
+const nonEmpty = (xs: Array<string | null | undefined>): string[] =>
+  xs.map((x) => (x ?? "").trim()).filter((x) => x !== "");
+
+/** "€ 4,00 op € 1.000", "geen wisselkosten", or null when no figure is known. */
+function costPhrase(cost: number | null, c: TravelCopy, locale: Locale): string | null {
+  if (cost === null) return null;
+  return cost === 0 ? c.answer.free : c.answer.perReference(travelEuro(locale, cost));
+}
+
+/** `JourneyHeadline` as an answer — `payAnswer`'s case when the winning route is
+ *  one of his own. */
+function journeyAnswer(
   h: JourneyHeadline,
   c: TravelCopy,
   locale: Locale,
   rail: string,
-): string {
+): TravelAnswer {
   switch (h.kind) {
     case "eur":
-      return c.common.euroNoExchangeNeeded;
+      return { line: c.common.euroNoExchangeNeeded, why: [] };
     case "no-route":
-      return c.journeyHeadline.noRoute;
+      return { line: c.answer.noTariffs, why: [] };
     case "route": {
-      const head =
-        h.head.kind === "direct"
-          ? c.journeyHeadline.direct(displayProduct(h.head.provider, c))
-          : c.journeyHeadline.via(
-              h.head.fundedFrom ?? "",
-              displayProduct(h.head.via, c),
-              h.head.free ? rail : null,
-            );
-      const cost =
-        h.costOnReference === null
-          ? ""
-          : h.costOnReference === 0
-            ? c.journeyHeadline.costFree
-            : c.journeyHeadline.costAmount(travelEuro(locale, h.costOnReference));
-      return `${head}${cost}${versusNoteSentence(h.versus, c, locale)}`;
+      const cost = costPhrase(h.costOnReference, c, locale);
+      const versus = nonEmpty([versusNoteSentence(h.versus, c, locale)]);
+      if (h.head.kind === "direct") {
+        return {
+          line: c.answer.payDirect(displayProduct(h.head.provider, c), cost),
+          why: [c.answer.cheapestOwn, ...versus],
+        };
+      }
+      const transfer = h.head.free
+        ? c.answer.transferFree(h.head.fundedFrom, rail)
+        : h.head.fundedFrom
+          ? c.answer.transferPlain(h.head.fundedFrom)
+          : null;
+      return {
+        line: c.answer.payVia(displayProduct(h.head.via, c), cost),
+        // Two sentences at most: the comparison replaces "LaVega moves nothing",
+        // which the fold's reference note says anyway.
+        why: nonEmpty([transfer, versus[0] ?? c.answer.movesNothing]),
+      };
     }
   }
 }
 
-/** The one place a `PayHeadline` becomes a sentence — THE answer the block
- *  leads with. Exhaustive by switch, so a new kind in `payHeadline` (core)
- *  fails the build here instead of rendering nothing. */
-export function payHeadlineSentence(
+/** The one place a `PayHeadline` becomes the block's first answer. Exhaustive
+ *  by switch, so a new kind in `payHeadline` (core) fails the build here
+ *  instead of rendering nothing.
+ *
+ *  `showHoldingTail` is false when the `Kaartkosten` fields under the answer
+ *  already carry the card's own price: then the clause stays out of the "i" too
+ *  (one figure, said once). */
+export function payAnswer(
   h: PayHeadline,
   c: TravelCopy,
   locale: Locale,
   rail: string,
-): string {
+  showHoldingTail: boolean,
+): TravelAnswer {
   switch (h.kind) {
     case "eur":
-      return c.common.euroNoExchangeNeeded;
+      return { line: c.common.euroNoExchangeNeeded, why: [] };
     case "journey":
-      return journeyHeadlineSentence(h.headline, c, locale, rail);
+      return journeyAnswer(h.headline, c, locale, rail);
     case "catalogue-card": {
-      const cost =
-        h.costOnReference === null
-          ? ""
-          : h.costOnReference === 0
-            ? c.payHeadline.costFree
-            : c.payHeadline.costAmount(travelEuro(locale, h.costOnReference));
+      // `savingOnReference` is GROSS (the surcharge difference on € 1.000, the
+      // card's own price not deducted), so it is only ever said together with
+      // the card it is measured against.
       const versus =
-        h.savingOnReference !== null && h.ownProduct
-          ? c.payHeadline.versusOwn(
-              travelEuro(locale, h.savingOnReference),
-              displayProduct(h.ownProduct, c),
-            )
-          : "";
-      return c.payHeadline.catalogueCard(
-        displayProduct(h.product, c),
-        cost,
-        versus,
-        holdingCostClauseSentence(h.holdingCost, c, locale),
-      );
+        h.savingOnReference !== null && h.savingOnReference > 0 && h.ownProduct
+          ? {
+              saving: travelEuro(locale, h.savingOnReference),
+              own: displayProduct(h.ownProduct, c),
+            }
+          : null;
+      const cost = costPhrase(h.costOnReference, c, locale);
+      return {
+        line: c.answer.payOpen(displayProduct(h.product, c), cost, versus),
+        why: nonEmpty([
+          versus && cost ? c.answer.cardCost(cost) : null,
+          c.answer.notHeldYet,
+          showHoldingTail ? holdingCostClauseSentence(h.holdingCost, c, locale) : null,
+        ]),
+      };
     }
   }
 }
@@ -586,8 +621,8 @@ function missingCashNoteSentence(note: MissingCashNote, c: TravelCopy, locale: L
     locale,
   );
   return note.missing.length === 1
-    ? c.withdrawHeadline.missingCashSingular(names)
-    : c.withdrawHeadline.missingCashPlural(names);
+    ? c.answer.pin.missingOne(names)
+    : c.answer.pin.missingMany(names);
 }
 
 function withdrawalPctSuffix(locale: Locale, pct: number | null): string {
@@ -602,7 +637,7 @@ function smallWithdrawalPenaltySentence(
   locale: Locale,
 ): string {
   if (p.kind === "none") return "";
-  return c.withdrawHeadline.smallPenalty(
+  return c.answer.pin.flatFee(
     displayProduct(p.provider, c),
     travelEuro(locale, TRAVEL_SMALL_WITHDRAWAL),
     formatPercentIn(locale, p.smallEffectivePct),
@@ -615,59 +650,118 @@ function ownWithdrawalComparisonSentence(
   c: TravelCopy,
   locale: Locale,
 ): string {
-  if (own.kind === "unknown") return c.withdrawHeadline.ownUnknown;
+  if (own.kind === "unknown") return c.answer.pin.ownUnknown;
   const extra =
     own.extraCostVsWinner === null
       ? ""
-      : c.withdrawHeadline.ownExtraCost(travelEuro(locale, own.extraCostVsWinner));
-  return c.withdrawHeadline.ownKnown(
+      : c.answer.pin.ownExtra(travelEuro(locale, own.extraCostVsWinner));
+  return c.answer.pin.ownKnown(
     displayProduct(own.ownProduct, c),
     travelEuro(locale, own.ownCostOnReference),
     extra,
   );
 }
 
-/** The one place a `WithdrawalHeadline` becomes a sentence — the "Pinnen:"
- *  line's own answer. Exhaustive by switch, so a new kind in
- *  `withdrawalHeadline` (core) fails the build here instead of rendering
- *  nothing. */
-function withdrawalHeadlineSentence(h: WithdrawalHeadline, c: TravelCopy, locale: Locale): string {
+function withdrawalPriceLine(
+  product: string,
+  costOnReference: number,
+  effectivePct: number | null,
+  c: TravelCopy,
+  locale: Locale,
+): string {
+  return c.answer.pin.line(
+    product,
+    c.answer.pin.price(
+      travelEuro(locale, costOnReference),
+      referenceEuro(locale, TRAVEL_REFERENCE_WITHDRAWAL),
+      withdrawalPctSuffix(locale, effectivePct),
+    ),
+  );
+}
+
+/** The one place a `WithdrawalHeadline` becomes the "Pinnen:" answer.
+ *  Exhaustive by switch, so a new kind in `withdrawalHeadline` (core) fails the
+ *  build here instead of rendering nothing. `showHoldingTail` follows the same
+ *  rule as in `payAnswer`. */
+export function withdrawAnswer(
+  h: WithdrawalHeadline,
+  c: TravelCopy,
+  locale: Locale,
+  showHoldingTail: boolean,
+): TravelAnswer {
   switch (h.kind) {
     case "eur":
-      return c.withdrawHeadline.eur;
+      return { line: c.answer.pin.eur, why: [c.answer.pin.eurWhy] };
     case "no-accounts":
-      return c.withdrawHeadline.noAccounts;
+      return { line: c.answer.pin.noAccounts, why: [c.answer.addCard] };
     case "no-known-price":
-      return c.withdrawHeadline.noKnownPrice(missingCashNoteSentence(h.missingCashNote, c, locale));
-    case "held": {
-      const price = c.withdrawHeadline.priceLine(
-        travelEuro(locale, h.costOnReference),
-        travelEuro(locale, TRAVEL_REFERENCE_WITHDRAWAL),
-        withdrawalPctSuffix(locale, h.effectivePct),
-      );
-      return c.withdrawHeadline.held(
-        displayProduct(h.product, c),
-        price,
-        smallWithdrawalPenaltySentence(h.small, c, locale),
-        missingCashNoteSentence(h.missingCashNote, c, locale),
-      );
-    }
-    case "not-held": {
-      const price = c.withdrawHeadline.priceLine(
-        travelEuro(locale, h.costOnReference),
-        travelEuro(locale, TRAVEL_REFERENCE_WITHDRAWAL),
-        withdrawalPctSuffix(locale, h.effectivePct),
-      );
-      return c.withdrawHeadline.notHeld(
-        displayProduct(h.product, c),
-        price,
-        ownWithdrawalComparisonSentence(h.own, c, locale),
-        holdingCostClauseSentence(h.holdingCost, c, locale),
-        smallWithdrawalPenaltySentence(h.small, c, locale),
-        missingCashNoteSentence(h.missingCashNote, c, locale),
-      );
-    }
+      return {
+        line: c.answer.pin.unknown,
+        why: nonEmpty([
+          c.answer.pin.unknownWhy,
+          missingCashNoteSentence(h.missingCashNote, c, locale),
+        ]),
+      };
+    case "held":
+      return {
+        line: withdrawalPriceLine(
+          displayProduct(h.product, c),
+          h.costOnReference,
+          h.effectivePct,
+          c,
+          locale,
+        ),
+        why: nonEmpty([missingCashNoteSentence(h.missingCashNote, c, locale)]),
+        caution: smallWithdrawalPenaltySentence(h.small, c, locale) || undefined,
+      };
+    case "not-held":
+      return {
+        line: withdrawalPriceLine(
+          displayProduct(h.product, c),
+          h.costOnReference,
+          h.effectivePct,
+          c,
+          locale,
+        ),
+        why: nonEmpty([
+          ownWithdrawalComparisonSentence(h.own, c, locale),
+          missingCashNoteSentence(h.missingCashNote, c, locale),
+          showHoldingTail ? holdingCostClauseSentence(h.holdingCost, c, locale) : null,
+        ]),
+        caution: smallWithdrawalPenaltySentence(h.small, c, locale) || undefined,
+      };
   }
+}
+
+/** A line with its reasoning behind the "i" (`ToonMeer` variant "info"), or the
+ *  bare line when there is no reasoning. `lead` (status icon, label, the
+ *  "nog niet van jou" chip) rides along inside the heading, so the chip is read
+ *  before the line either way. The "i" itself is a native <summary>: Tab, Enter,
+ *  Space and the spoken state come from the browser, and its accessible name is
+ *  `c.answer.whySummary`. */
+function AnswerLine({
+  lead,
+  lineClass,
+  answer,
+}: {
+  lead?: ReactNode;
+  lineClass: string;
+  answer: TravelAnswer;
+}) {
+  const [locale] = useAppLocale();
+  const c = optimiseCopy[locale].travel;
+  const head = (
+    <>
+      {lead}
+      <span className={lineClass}>{answer.line}</span>
+    </>
+  );
+  if (answer.why.length === 0) return head;
+  return (
+    <ToonMeer variant="info" heading={head} summary={c.answer.whySummary}>
+      <p className="travel-why">{answer.why.join(" ")}</p>
+    </ToonMeer>
+  );
 }
 
 /** THE ONE MARK THAT KEEPS THE TWO QUESTIONS APART.
@@ -1655,51 +1749,40 @@ export default function TravelBlock({
     ? termsState(plan, aiAvailable, searched.includes(destination), pendingTerms)
     : null;
 
-  /* HET BEDRAG STOND ER TWEE KEER, en hier valt de ene weg.
+  /* HET ANTWOORD IS EEN KORTE REGEL, de redenering staat achter het "i".
    *
-   * Core's `payHeadline` sluit af met de kostenstaart: "… Testkaart Licht kost
-   * zelf € 1,00 per maand en dat betaal je minstens één maand, dus je houdt
-   * € 9,00 over." Direct daaronder staan diezelfde € 1,00, dezelfde ondergrens en
-   * dezelfde € 9,00 nog een keer, uit elkaar getrokken in de velden van
-   * `Kaartkosten`. Twee formuleringen van één bedrag lezen als twee bedragen, en
-   * dan gaat de lezer het verschil zoeken dat er niet is.
+   * Eén bedrag, één keer: de kostenstaart van een kaart die hij nog moet openen
+   * ("kost zelf € 1,00 per maand, dus je houdt € 9,00 over") staat in de velden
+   * van `Kaartkosten` direct eronder, en dus niet óók nog eens achter het "i".
+   * De velden winnen van de zin, want ze staan er altijd en de zin niet: zodra er
+   * geen beprijsde eigen route is, vervangt `causeAnswer` hieronder de regel.
+   * `showHoldingTail` is daarom alleen waar als die velden NIET renderen.
    *
-   * DE VELDEN WINNEN, NIET DE KOP, en niet omdat ze mooier zijn. De kop is de
-   * zwakkere drager: `termsHeadline` hierboven VERVANGT hem volledig zodra er geen
-   * beprijsde eigen route is, en dat is de begintoestand van iedere nieuwe
-   * gebruiker. Precies daar viel die staart al een keer weg en stond er "dat kost
-   * je niets op € 1.000" boven een kaart van € 16,90 per maand. Wie andersom kiest
-   * — staart houden, velden schrappen — bouwt die fout opnieuw. Dat de kop zegt
-   * wát je moet doen en de velden laten zien hoe het bedrag is opgebouwd, is de
-   * tweede reden; de eerste is dat de velden er altijd staan en de kop niet.
-   *
-   * DE STAART WORDT NIET UIT CORE GESLOOPT. Daar is `payHeadline` de enige plek
-   * waar die zin bestaat, en core weet niet of zijn lezer velden heeft — de
-   * core-tests lezen `plan.headline` kaal. Dus wordt dezelfde functie om dezelfde
-   * zin gevraagd zonder het stuk dat hieronder al staat: een advies zonder
-   * `holdingCost` en zonder `benefit` heeft geen kosten om over te praten en core
-   * laat de staart dan zelf weg. Eén bron voor de kop, minus één stuk — geen
-   * tweede zinsbouw hier, en geen knipwerk op een string dat bij de volgende
-   * formulering stilletjes de verkeerde helft pakt. De test pint het als PREFIX:
-   * wat op het scherm staat moet het begin van core's eigen zin zijn.
-   *
-   * Alleen als die velden ook echt renderen (`hasVisibleHoldingCost`). Bij zijn
-   * eigen kaart staat er geen veld en heeft core ook geen staart, en dan is er
-   * niets te kiezen. */
-  const answer =
+   * Beide regels komen uit core's structs (`plan.headline`, `plan.withdrawHeadline`)
+   * via `payAnswer` en `withdrawAnswer`: geen eigen zinsbouw en geen knipwerk op
+   * een string. */
+  const answer: TravelAnswer | null =
     plan === null
-      ? ""
-      : payHeadlineSentence(
-          plan.pay && !plan.pay.held && hasVisibleHoldingCost(plan.pay.holdingCost)
-            ? payHeadline(
-                { ...plan.pay, holdingCost: null, benefit: null },
-                plan.journeys,
-                plan.currency,
-              )
-            : plan.headline,
+      ? null
+      : payAnswer(
+          plan.headline,
           c,
           locale,
           rail,
+          !(plan.pay && !plan.pay.held && hasVisibleHoldingCost(plan.pay.holdingCost)),
+        );
+  const pinAnswer: TravelAnswer | null =
+    plan === null
+      ? null
+      : withdrawAnswer(
+          plan.withdrawHeadline,
+          c,
+          locale,
+          !(
+            plan.withdrawAdvice &&
+            !plan.withdrawAdvice.held &&
+            hasVisibleHoldingCost(plan.withdrawAdvice.holdingCost)
+          ),
         );
 
   /* DE AANBEVELING WINT VAN DE OORZAAK, en dat is een omkering van hoe het stond.
@@ -1723,7 +1806,16 @@ export default function TravelBlock({
    *
    * De oorzaak staat daarmee precies één keer: als kop óf als regel eronder. */
   const cause = (terms && termsHeadline(terms, c)) ?? null;
-  const headline = plan?.pay ? answer : (cause ?? answer);
+  /* Zonder aanbeveling is de oorzaak het antwoord: een korte kop, de oorzaak
+   * zelf achter het "i". Geen kaarten is een eigen kop, want daar valt niets op te
+   * zoeken. */
+  const causeAnswer: TravelAnswer | null =
+    terms && cause
+      ? terms.kind === "no-products"
+        ? { line: c.answer.noCard, why: [c.answer.addCard] }
+        : { line: c.answer.noTariffs, why: [cause] }
+      : null;
+  const headline = plan?.pay ? answer : (causeAnswer ?? answer);
   const causeLine = plan?.pay ? cause : null;
 
   /* Het label van de uitklap is een BELOFTE en geen "meer informatie", anders
@@ -1773,23 +1865,26 @@ export default function TravelBlock({
             data-priced={bestJourney ? "true" : "false"}
           >
             <div className="travel-winner-name">
-              {bestJourney && <StatusIcon tone="success" />}
-              {/* HET MERKTEKEN BLIJFT VOORAAN, de uitleg erachter niet. De kop
-                  zegt zelf al "die heb je nog niet", maar een woord alleen is niet
-                  genoeg gebleken: de aanbeveling mag een kaart uit de catalogus
-                  zijn (review 3, punt 2) en dan moet zichtbaar anders zijn dat je
-                  hem morgenochtend niet kunt pinnen. Vóór de zin, zodat je het
-                  advies niet kunt lezen zonder het merkteken. */}
-              {plan.pay && !plan.pay.held && (
-                <>
-                  <NotYours />{" "}
-                </>
+              {headline && (
+                <AnswerLine
+                  lead={
+                    <>
+                      {bestJourney && <StatusIcon tone="success" />}
+                      {/* HET MERKTEKEN BLIJFT VOORAAN. De aanbeveling mag een kaart
+                          uit de catalogus zijn en dan moet zichtbaar anders zijn dat
+                          je hem morgenochtend niet kunt pinnen. Vóór de zin, zodat
+                          je het antwoord niet kunt lezen zonder het merkteken. */}
+                      {plan.pay && !plan.pay.held && (
+                        <>
+                          <NotYours />{" "}
+                        </>
+                      )}
+                    </>
+                  }
+                  lineClass="travel-winner-headline"
+                  answer={headline}
+                />
               )}
-              {/* De zin in een eigen span, want de kop moet los te lezen zijn: een
-                  test pint dat wat hier staat het BEGIN van core's eigen zin is,
-                  en met het merkteken erin gemengd zou die vergelijking op de
-                  chip stuklopen in plaats van op een gewijzigde formulering. */}
-              <span className="travel-winner-headline">{headline}</span>
             </div>
             {/* DE VOORWAARDE BIJ HET TARIEF DAT DE KOP NOEMT. Dit is `capNote`,
                 door `fxCaveat` HERKEND uit de voorwaarden — geen vrije tekst. Een
@@ -1828,15 +1923,32 @@ export default function TravelBlock({
                 sentence rather than a footnote under the card advice. Het is ook
                 de tweede helft van wat vooraan mag blijven staan: waarmee betaal
                 je, en waar kun je pinnen. */}
-            <p className="cell-sub travel-winner-cash">
-              <strong>{c.winner.pinnenLabel}</strong>{" "}
-              {plan.withdrawAdvice && !plan.withdrawAdvice.held && (
-                <>
-                  <NotYours />{" "}
-                </>
+            <div className="cell-sub travel-winner-cash">
+              {pinAnswer && (
+                <AnswerLine
+                  lead={
+                    <>
+                      <strong>{c.winner.pinnenLabel}</strong>{" "}
+                      {plan.withdrawAdvice && !plan.withdrawAdvice.held && (
+                        <>
+                          <NotYours />{" "}
+                        </>
+                      )}
+                    </>
+                  }
+                  lineClass="travel-winner-pin"
+                  answer={pinAnswer}
+                />
               )}
-              {withdrawalHeadlineSentence(plan.withdrawHeadline, c, locale)}
-            </p>
+            </div>
+            {/* DE KLEINE-OPNAME-WAARSCHUWING BLIJFT ZICHTBAAR. Een vast bedrag per
+                opname maakt kleine opnames procentueel veel duurder; dat is een
+                geldwaarschuwing en geen uitleg, dus niet achter het "i". */}
+            {pinAnswer?.caution && (
+              <p className="cell-sub travel-winner-caution" data-testid="travel-pin-caution">
+                <strong>{c.common.caveatLabel}</strong> {pinAnswer.caution}
+              </p>
+            )}
             {/* Pinnen is een aparte kaart en dus een aparte prijs. Dezelfde drie
                 toestanden; bij zijn eigen kaart staat er niets. */}
             {plan.withdrawAdvice && !plan.withdrawAdvice.held && (

@@ -10,14 +10,14 @@ import TravelBlock, {
   type TravelBlockProps,
   figureAge,
   TermsNotice,
-  payHeadlineSentence,
+  payAnswer,
 } from "./TravelBlock";
 // De klassenamen van de uitklap uit hun eigen bestand, niet overgetikt: een
 // hernoeming daar komt dan ook hier langs in plaats van deze test stil te laten
 // slagen op een klasse die niet meer bestaat.
 import { TOONMEER_CLASS } from "../ToonMeer";
 import { moduleClass } from "../../module-grid.js";
-import { optimiseCopy } from "../../copy/optimise.js";
+import { optimiseCopy, formatPercentIn } from "../../copy/optimise.js";
 import type { CatalogueEntryLike } from "@lavega/core";
 import { formatEuro, formatSignedEuroIn } from "../../format";
 import { accounts, ASOF, txs } from "./fixtures";
@@ -162,9 +162,9 @@ function byText(selector: string, text: string): HTMLElement {
  *    precies de dubbeling wegtoetsen die de test moest vinden.
  */
 const fold = (c: HTMLElement = container!): HTMLDetailsElement =>
-  c.querySelector<HTMLDetailsElement>(`details.${TOONMEER_CLASS.root}`)!;
+  c.querySelector<HTMLDetailsElement>(`details.${TOONMEER_CLASS.root}-regel`)!;
 const foldPanel = (c: HTMLElement = container!): HTMLElement =>
-  c.querySelector<HTMLElement>(`.${TOONMEER_CLASS.panel}`)!;
+  c.querySelector<HTMLElement>(`.${TOONMEER_CLASS.root}-regel > .${TOONMEER_CLASS.panel}`)!;
 const foldText = (c: HTMLElement = container!): string => foldPanel(c).textContent ?? "";
 
 /** Klik de samenvatting open. jsdom voert de KLIK-activering van een <summary>
@@ -221,9 +221,9 @@ test("the assumed-NL note's link navigates to the profile, where the country is 
   expect(seen).toEqual(["profiel"]);
 });
 
-test("the block leads with the plan's headline — the one answer, in euros", () => {
+test("the block leads with the plan's headline — one short line, the reasoning behind the i", () => {
   const c = renderWithDestination();
-  const expected = payHeadlineSentence(
+  const expected = payAnswer(
     planTravel({
       accounts: travelAccounts,
       txs: [],
@@ -235,12 +235,23 @@ test("the block leads with the plan's headline — the one answer, in euros", ()
     optimiseCopy.nl.travel,
     "nl",
     optimiseCopy.nl.travel.railFor("NL"),
+    true,
   );
 
-  const answer = c.querySelector(".travel-winner-name")!;
-  expect(answer.textContent).toBe(expected);
-  expect(expected).toContain("Revolut betaalpas"); // the cheapest whole route, not the cheapest card
-  expect(expected).toContain("iDEAL");
+  // The visible line IS core's struct, said short: the move and the number.
+  expect(c.querySelector(".travel-winner-headline")!.textContent).toBe(expected.line);
+  expect(expected.line.split(/\s+/).length).toBeLessThanOrEqual(12);
+  expect(expected.line).toContain("Revolut betaalpas"); // the cheapest whole route, not the cheapest card
+  expect(expected.line).toMatch(/^Zet geld over naar /);
+
+  // The how (transfer rail) moved behind the i, in the same <details>.
+  const info = c.querySelector<HTMLDetailsElement>(".travel-winner-name details.toonmeer-info")!;
+  expect(info.open).toBe(false);
+  expect(info.querySelector(".travel-winner-headline")).not.toBeNull();
+  expect(info.querySelector(".toonmeer-panel")!.textContent).toContain("iDEAL");
+  expect(c.querySelector(".travel-winner-name")!.querySelector("summary")!.textContent).toContain(
+    optimiseCopy.nl.travel.answer.whySummary,
+  );
 
   // The routes and the three sections are detail, not a rival answer: ze staan
   // in het paneel van de uitklap, en die is dicht. Ze staan wél in de DOM — zo
@@ -825,7 +836,11 @@ test("the cash line recommends the proven cheapest and names the card it cannot 
   expect(cash).toContain("N26 Go betaalpas");
   expect(cash).toContain("ING betaalpas"); // his own cheapest proven, for comparison
   expect(cash).toContain("Revolut betaalpas"); // the gap, named
-  expect(cash).not.toMatch(/gratis|kost je niets/i);
+  // Unknown stays apart from free, in words: "Onbekend is niet gratis".
+  expect(cash).toContain("Onbekend is niet gratis");
+  expect(cash.replace(/Onbekend is niet gratis/g, "")).not.toMatch(
+    /gratis|geen kosten|kost je niets/i,
+  );
   expect(el.querySelector('.travel-winner-cash [data-testid="badge"]')).not.toBeNull();
 });
 
@@ -1135,36 +1150,37 @@ test("de kaartprijs en het nettobedrag staan één keer in de aanbeveling, in de
   );
 });
 
-test("de kop is core's eigen zin minus precies de kostenstaart, niet een eigen zin", () => {
+test("de regel komt uit core's struct; de kostenstaart zit alleen achter het i als de velden hem niet tonen", () => {
   const el = renderWithDestination({ facts: DEARER_OWN, catalogue: GOEDKOOP });
-  const full = payHeadlineSentence(
-    planTravel({
-      accounts: travelAccounts,
-      txs: [],
-      rates: [],
-      facts: DEARER_OWN,
-      destination: "US",
-      asOf: ASOF,
-      catalogue: GOEDKOOP,
-    }).headline,
-    optimiseCopy.nl.travel,
-    "nl",
-    optimiseCopy.nl.travel.railFor("NL"),
-  );
-  const shown = headlineText(el);
+  const headline = planTravel({
+    accounts: travelAccounts,
+    txs: [],
+    rates: [],
+    facts: DEARER_OWN,
+    destination: "US",
+    asOf: ASOF,
+    catalogue: GOEDKOOP,
+  }).headline;
+  const nl = optimiseCopy.nl.travel;
+  const withTail = payAnswer(headline, nl, "nl", nl.railFor("NL"), true);
+  const noTail = payAnswer(headline, nl, "nl", nl.railFor("NL"), false);
 
-  // PREFIX, en dat is de hele bewaking: er mag een staart af, er mag niets aan
-  // veranderen. Zou de web-laag de zin zelf opnieuw formuleren, dan lopen twee
-  // formuleringen van dezelfde aanbeveling uiteen zonder dat iemand het merkt.
-  expect(full.startsWith(shown)).toBe(true);
-  expect(shown.length).toBeLessThan(full.length);
+  // Dezelfde regel op het scherm als uit de struct, en de staart verandert hem niet.
+  expect(headlineText(el)).toBe(noTail.line);
+  expect(withTail.line).toBe(noTail.line);
+  expect(headlineText(el).split(/\s+/).length).toBeLessThanOrEqual(14);
 
-  // En wat eraf gaat is precies het stuk dat de velden overnemen.
-  const dropped = full.slice(shown.length);
-  expect(dropped).toContain("kost zelf");
-  expect(dropped).toContain("€ 1,00");
-  expect(dropped).toContain("€ 9,00");
-  expect(dropped).toContain("minstens één maand");
+  // De staart bestaat in core's struct (niets is weggegooid) maar staat hier één
+  // keer, in de velden, en dus niet ook nog eens achter het i.
+  const tail = withTail.why.join(" ");
+  expect(tail).toContain("kost zelf");
+  expect(tail).toContain("€ 1,00");
+  expect(tail).toContain("€ 9,00");
+  expect(tail).toContain("minstens één maand");
+  expect(noTail.why.join(" ")).not.toContain("kost zelf");
+  const shownWhy = el.querySelector(".travel-winner-name .toonmeer-panel")!.textContent ?? "";
+  expect(shownWhy).toBe(noTail.why.join(" "));
+  expect(shownWhy).toContain("Je hebt deze kaart nog niet.");
 });
 
 test("in de begintoestand van een nieuwe gebruiker staat de prijs er nog steeds, en ook één keer", () => {
@@ -1347,6 +1363,35 @@ test("een voorwaarde bij het tarief dat de kop noemt blijft wél vooraan staan",
   expect(caveat.textContent).toContain("Let op");
   expect(caveat.textContent).toMatch(/grens|limiet/i);
   expect(foldPanel(el).contains(caveat)).toBe(false);
+  // En ook niet achter het i: een voorwaarde die het cijfer kan omkeren is geen uitleg.
+  for (const info of el.querySelectorAll(".travel-winner details.toonmeer-info")) {
+    expect(info.contains(caveat)).toBe(false);
+  }
+});
+
+test("Kaartkosten blijft zichtbaar naast de regel en zit nooit achter een i", () => {
+  const el = renderWithDestination({ facts: DEARER_OWN, catalogue: GOEDKOOP });
+  const kosten = el.querySelector('[data-testid="travel-pay-kosten"]')!;
+  expect(kosten).not.toBeNull();
+  const infos = [...el.querySelectorAll(".travel-winner details.toonmeer-info")];
+  expect(infos.length).toBeGreaterThan(0);
+  for (const info of infos) expect(info.contains(kosten)).toBe(false);
+  // Elk i is bereikbaar en heeft een naam: een <summary> met het label.
+  for (const info of infos) {
+    const summary = info.querySelector("summary")!;
+    expect(summary.textContent).toContain(optimiseCopy.nl.travel.answer.whySummary);
+  }
+});
+
+test("de pinregel is één korte regel; de redenering zit achter een eigen i", () => {
+  const el = renderWithDestination({ facts: DEARER_OWN, catalogue: GOEDKOOP });
+  const cash = el.querySelector(".travel-winner-cash")!;
+  const line = cash.querySelector(".travel-winner-pin")!.textContent ?? "";
+  expect(line).toMatch(/^(Pin met|Nog geen kaart|Pinprijs|Daar pin je)/);
+  expect(line.split(/\s+/).length).toBeLessThanOrEqual(14);
+  expect(cash.textContent).toContain(optimiseCopy.nl.travel.winner.pinnenLabel);
+  // Geen bijzin-optelsom meer in de regel zelf.
+  expect(line).not.toMatch(/geen nul|een gat|Het voordeligst/);
 });
 
 test("de knop 'voorwaarden verversen' zit in de uitklap, niet in de samenvatting", () => {
@@ -1371,7 +1416,9 @@ test("zonder aanbeveling neemt de oorzaak de kop, en nooit 'ververs eerst de voo
   const el = renderWithDestination({ facts: [], catalogue: [], aiAvailable: true });
   const zin = "De voorwaarden van je kaarten zijn nog niet opgezocht.";
 
-  expect(headlineText(el)).toBe(zin);
+  // Korte kop, de oorzaak zelf achter het i.
+  expect(headlineText(el)).toBe("Nog geen tarieven van je kaarten bekend.");
+  expect(el.querySelector(".travel-winner-name .toonmeer-panel")!.textContent).toBe(zin);
   expect(el.querySelector(".travel-winner-cause")).toBeNull();
   expect(times(winnerText(el), zin)).toBe(1);
   // Core's eigen zin adviseert een verversing die op een server zonder sleutel
@@ -1383,7 +1430,7 @@ test("mét een aanbeveling staat die in de kop en de oorzaak als eigen regel ero
   const el = renderWithDestination({ facts: [], catalogue: GOEDKOOP, aiAvailable: true });
   const zin = "De voorwaarden van je kaarten zijn nog niet opgezocht.";
 
-  expect(headlineText(el)).toContain("Betaal met Testkaart Licht");
+  expect(headlineText(el)).toContain("Open Testkaart Licht");
   expect(el.querySelector(".travel-winner-cause")!.textContent).toBe(zin);
   expect(times(winnerText(el), zin)).toBe(1); // niet ook in de kop
 });
@@ -1423,8 +1470,8 @@ for (const t of TOESTANDEN) {
     // DE AANBEVELING, in core's eigen formulering. Wegvallen deed ze toen
     // `termsHeadline` de hele zin verving; twee keer staan deed ze toen de
     // catalogusregel haar eronder herhaalde. Nu: de kop, en verder nergens.
-    expect(headlineText(el)).toContain(`Betaal met ${t.product}`);
-    expect(times(voor, `Betaal met ${t.product}`)).toBe(1);
+    expect(headlineText(el)).toContain(`Open ${t.product}`);
+    expect(times(voor, `Open ${t.product}`)).toBe(1);
 
     // DE KAARTPRIJS, in de velden van `Kaartkosten` en verder nergens vooraan.
     expect(times(voor, t.prijs)).toBe(1);
@@ -1543,4 +1590,108 @@ test("the travel caveats and the savings line follow the reader's language", () 
   expect(en.storeNote({ kind: "already-best" })).not.toMatch(/spaargeld|plek/);
   expect(en.caveat({ kind: "limited" })).not.toMatch(/tarief|voorwaarden/);
   expect(en.withdrawalFee([{ kind: "fixed", eur: 5 }])).not.toMatch(/opname/);
+});
+
+/* ═════ DE REGEL DRAAGT DE GETALLEN VAN CORE, NIET VAN `payAnswer` ═══════════
+ *
+ * De toets hierboven bouwt zijn verwachting met `payAnswer` zelf en is dus
+ * rond. Deze toetsen lezen de bedragen uit de ECHTE velden van `planTravel`
+ * (`costOnReference`, `savingOnReference`, `effectivePct`) en eisen dat de
+ * getoonde regel ze bevat. Een bedrag dat in de web-laag verkeerd wordt
+ * afgeleid, valt hier door. */
+const realPlan = (facts: LearnedFact[], catalogue: CatalogueEntryLike[]) =>
+  planTravel({
+    accounts: travelAccounts,
+    txs: [],
+    rates: [],
+    facts,
+    destination: "US",
+    asOf: ASOF,
+    catalogue,
+  });
+const shownLine = (el: HTMLElement, cls: string) =>
+  flat(el.querySelector(`.${cls}`)!.textContent ?? "");
+
+test("regel, eigen kaart direct: het bedrag is core's costOnReference", () => {
+  const facts = [fact("ING betaalpas", "fxFeePct", "1.4")];
+  const plan = realPlan(facts, []);
+  const best = plan.journeys.find((j) => j.known)!;
+  expect(best.via).toBeNull();
+  const el = renderWithDestination({ facts, catalogue: [] });
+  const line = shownLine(el, "travel-winner-headline");
+  expect(line).toMatch(/^Betaal met ING betaalpas: /);
+  expect(line).toContain(flat(formatEuro(best.costOnReference!)));
+});
+
+test("regel, via overzetten: het bedrag is core's costOnReference van de beste route", () => {
+  const facts = [
+    fact("ING betaalpas", "fxFeePct", "1.4"),
+    fact("Revolut betaalpas", "fxFeePct", "0.5"),
+    fact("Revolut betaalpas", "convertFeePct", "0.3"),
+    fact("Revolut betaalpas", "transferFreeViaIdeal", "1"),
+  ];
+  const plan = realPlan(facts, []);
+  const best = plan.journeys.find((j) => j.known)!;
+  expect(best.via).not.toBeNull();
+  expect(best.costOnReference).toBeGreaterThan(0);
+  const el = renderWithDestination({ facts, catalogue: [] });
+  const line = shownLine(el, "travel-winner-headline");
+  expect(line).toMatch(/^Zet geld over naar /);
+  expect(line).toContain(flat(formatEuro(best.costOnReference!)));
+});
+
+test("regel, kaart die hij nog niet heeft: de besparing is core's savingOnReference, met de eigen kaart erbij genoemd", () => {
+  const plan = realPlan(DEARER_OWN, GOEDKOOP);
+  expect(plan.pay!.held).toBe(false);
+  const saving = plan.pay!.savingOnReference!;
+  const own = plan.pay!.ownProduct!;
+  const el = renderWithDestination({ facts: DEARER_OWN, catalogue: GOEDKOOP });
+  const line = shownLine(el, "travel-winner-headline");
+  expect(line).toContain(flat(formatEuro(saving)));
+  // Een besparing staat nooit zonder de kaart waartegen ze gemeten is.
+  expect(line).toContain(own);
+  expect(line).toMatch(/minder dan met je /);
+});
+
+test("regel, pinnen: bedrag en effectief percentage zijn core's velden", () => {
+  const plan = realPlan(DEARER_OWN, CATALOGUE);
+  const adv = plan.withdrawAdvice!;
+  const el = renderWithDestination({ facts: DEARER_OWN, catalogue: CATALOGUE });
+  const line = shownLine(el, "travel-winner-pin");
+  expect(line).toContain(flat(formatEuro(adv.costOnReference!)));
+  if (adv.effectivePct !== null && adv.effectivePct !== 0) {
+    expect(line).toContain(flat(formatPercentIn("nl", adv.effectivePct)));
+  }
+});
+
+test("regel, pinnen met eigen kaart: bedrag en percentage zijn core's velden", () => {
+  const ing = CATALOGUE.filter((e) => e.product === "ING betaalpas");
+  const plan = realPlan(travelFacts, ing);
+  const adv = plan.withdrawAdvice!;
+  expect(adv.held).toBe(true);
+  const el = renderWithDestination({ catalogue: ing });
+  const line = shownLine(el, "travel-winner-pin");
+  expect(line).toMatch(/^Pin met ING betaalpas: /);
+  expect(line).toContain(flat(formatEuro(adv.costOnReference!)));
+  expect(line).toContain(flat(formatPercentIn("nl", adv.effectivePct!)));
+});
+
+test("regel, pinnen zonder bekende prijs blijft een eerlijke korte regel", () => {
+  const plan = realPlan(DEARER_OWN, []);
+  expect(plan.withdrawHeadline.kind).toBe("no-known-price");
+  const el = renderWithDestination({ facts: DEARER_OWN, catalogue: [] });
+  expect(shownLine(el, "travel-winner-pin")).toBe("Pinprijs van je kaarten onbekend.");
+});
+
+test("de kleine-opname-waarschuwing staat zichtbaar, buiten elk <details>", () => {
+  const el = renderWithCatalogue();
+  const caution = el.querySelector('[data-testid="travel-pin-caution"]')!;
+  expect(caution).not.toBeNull();
+  expect(caution.textContent).toContain(optimiseCopy.nl.travel.common.caveatLabel);
+  expect(caution.textContent).toContain("Neem in één keer meer op");
+  expect(caution.closest("details")).toBeNull();
+  // Eén keer gezegd: niet ook nog eens achter het i.
+  for (const info of el.querySelectorAll(".travel-winner details.toonmeer-info")) {
+    expect(info.textContent).not.toContain("Neem in één keer meer op");
+  }
 });

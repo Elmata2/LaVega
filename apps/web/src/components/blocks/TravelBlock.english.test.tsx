@@ -103,6 +103,12 @@ test("the English screen never prints the Dutch identity word", () => {
   expect(winnerName).toContain("Revolut Standard debit card");
   expect(winnerName).not.toContain("betaalpas");
 
+  // One short English line, not the old two-clause sentence.
+  expect(c.querySelector(".travel-winner-headline")!.textContent).toMatch(
+    /^Open Revolut Standard debit card: .* per €1,000/,
+  );
+  expect(c.querySelector(".travel-winner-pin")!.textContent).toMatch(/^Withdraw with /);
+
   const cashLine = c.querySelector(".travel-winner-cash")!.textContent ?? "";
   expect(cashLine).toContain("Revolut Standard debit card");
   expect(cashLine).not.toContain("betaalpas");
