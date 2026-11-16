@@ -71,7 +71,6 @@ async function render(overrides: Partial<Parameters<typeof Profiel>[0]> = {}) {
     onEntityChange: () => {},
     busy: false,
     problems: [],
-    onImport: () => {},
     onRefreshBank: () => {},
     storage,
     asOf: "2026-08-16",
@@ -113,14 +112,25 @@ test("the cards hidden for now are not rendered, even when their data and handle
 
 const SHARE = '[aria-label="Delen met LaVega Investing"]';
 
-test("net-worth share card: not opted in -> absent", async () => {
+const ACCOUNT = { kind: "account", id: "u1" } as const;
+
+test("net-worth share card: device-only vault (no account) -> absent", async () => {
   await render();
   expect(container!.querySelector(SHARE)).toBeNull();
 });
 
+test("net-worth share card: account, switched off -> still present, so it can be switched back on", async () => {
+  await render({ owner: ACCOUNT, shareNetWorthEnabled: false });
+  expect(container!.querySelector(SHARE)).not.toBeNull();
+});
+
 test("net-worth share card: opted in -> present, after Back-up, and the toggle turns it off", async () => {
   const onChange = vi.fn();
-  await render({ shareNetWorthEnabled: true, onShareNetWorthEnabledChange: onChange });
+  await render({
+    owner: ACCOUNT,
+    shareNetWorthEnabled: true,
+    onShareNetWorthEnabledChange: onChange,
+  });
   const card = container!.querySelector(SHARE)!;
   expect(card).not.toBeNull();
   const backup = container!.querySelector('[aria-label="Back-up"]')!;
@@ -130,7 +140,7 @@ test("net-worth share card: opted in -> present, after Back-up, and the toggle t
 });
 
 test("net-worth share card: pending delete -> card and warning shown", async () => {
-  await render({ shareNetWorthEnabled: false, shareNetWorthPendingDelete: true });
+  await render({ owner: ACCOUNT, shareNetWorthEnabled: false, shareNetWorthPendingDelete: true });
   const card = container!.querySelector(SHARE)!;
   expect(card).not.toBeNull();
   expect(card.querySelector('[role="alert"]')).not.toBeNull();

@@ -230,3 +230,24 @@ test("account, transactions and portfolio in one import read every section", asy
   }
   expect(result.cashHistory).toMatchObject({ status: "complete" });
 });
+
+test("a quantity disagreement is reported without downgrading the sections", async () => {
+  const result = await createDeGiroFileImport().load({
+    files: [
+      { filename: "Account.csv", text: account() },
+      { filename: "Portfolio.csv", text: fixture("nl/portfolio-split.csv") },
+    ],
+    entity: "BV1",
+    asOf: "2026-03-06",
+  });
+
+  expect(result.problems).toHaveLength(1);
+  expect(result.problems[0]).toContain("IE0VORB00033");
+  expect(result.problems[0]).toContain("portfolio zegt 10");
+  expect(result.problems[0]).toContain("transacties geven 5");
+  /* Report-only: the portfolio read its holdings, so the snapshot may still
+   * replace them. Marking it partial would leave the first import empty. */
+  expect(result.sections.positions.status).toBe("complete");
+  expect(result.sections.positions.rows[0]?.quantity).toBe(10);
+  expect(result.sections.trades.status).toBe("complete");
+});

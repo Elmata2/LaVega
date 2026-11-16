@@ -12,6 +12,10 @@ import {
   directDebit,
   PERSON_CATEGORY,
   DIRECT_DEBIT_CATEGORY,
+  OWN_TRANSFER_CATEGORY,
+  categoryHaystack,
+  isRevolutInternalMove,
+  nsTokenCategory,
   type OwnName,
 } from "./categories.js";
 
@@ -213,7 +217,7 @@ export function categorizeDetailed(
 ): RuleDecision {
   if (tx.category)
     return { category: tx.category, source: "stored", ruleId: null, locked: tx.manual };
-  const hay = matchNorm(tx.counterparty + " " + tx.description);
+  const hay = categoryHaystack(tx);
   if (own && own.all.length) {
     // Compare against a space-stripped haystack so an IBAN printed with spaces
     // ("NL95 INGB 0674 ...") still matches the compact stored identifier.
@@ -246,6 +250,12 @@ export function categorizeDetailed(
     if (hay.includes(r.m))
       return { category: r.category, source: "builtin", ruleId: null, locked: false };
   }
+  // AFTER the named merchants, so a prepaid top-up at Vodafone stays Abonnementen: Revolut's own top-ups / currency exchanges / pocket moves: his own money.
+  if (isRevolutInternalMove(tx.counterparty))
+    return { category: OWN_TRANSFER_CATEGORY, source: "builtin", ruleId: null, locked: false };
+  // Bare "NS": a token rule, after every substring merchant has had its say.
+  const ns = nsTokenCategory(tx, sign);
+  if (ns) return { category: ns, source: "builtin", ruleId: null, locked: false };
   // LAST, AND ONLY WHERE NOTHING ELSE SPOKE: a card payment made at a terminal
   // abroad. His three Barcelona rows were reaching "onbekend" while the app had
   // already worked out they were foreign — the detection existed and produced a
@@ -713,6 +723,16 @@ export function mergeImportedAccounts(existing: Account[], imported: Account[]):
       // ever came from a parser does not, so an improved parser can still fix a
       // stale row (his old ING savings accounts came in as their own number).
       ...(prev.renamed ? { bank: prev.bank, name: prev.name, renamed: true } : {}),
+      // A file-fed card stays one: a later plain import of the same key (no card
+      // picked) must not drop the marker, the link to the stated card, or its name.
+      // An account that comes from a live bank link (it carries `balanceFetchedAt`,
+      // which a file never sets) is no longer file-fed: neither marker survives.
+      ...(imp.balanceFetchedAt === undefined && imp.statedCardId === undefined && prev.statedCardId !== undefined
+        ? { statedCardId: prev.statedCardId, ...(prev.renamed ? {} : { name: prev.name }) }
+        : {}),
+      ...(imp.balanceFetchedAt === undefined && imp.source === undefined && prev.source !== undefined
+        ? { source: prev.source }
+        : {}),
     };
   });
 }

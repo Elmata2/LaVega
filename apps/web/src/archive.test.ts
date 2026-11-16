@@ -44,7 +44,10 @@ test("the Profiel cards hidden for now are off, and their code is kept", () => {
   expect(SHOW_OWN_COLUMNS_IMPORT).toBe(false);
   expect(SHOW_DOCUMENTS_CARD).toBe(false);
   expect(SHOW_CASHBACK_CORRECTION).toBe(false);
-  expect(SHOW_NET_WORTH_SHARE).toBe(false);
+});
+
+test("the net-worth share card is visible: sharing is on by default, so it must be switchable off", () => {
+  expect(SHOW_NET_WORTH_SHARE).toBe(true);
 });
 
 test("stored prefs naming archived ids are ignored, not an error", () => {

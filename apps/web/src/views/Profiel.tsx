@@ -124,7 +124,6 @@ type ProfielProps = {
   onEntityChange: (entity: string) => void;
   busy: boolean;
   problems: ShellNotice[];
-  onImport: (file: File) => void;
   onRefreshBank: () => void;
   /** Back-up (unchanged component). */
   storage: VaultStorage;
@@ -511,7 +510,6 @@ export default function Profiel({
   onEntityChange,
   busy,
   problems,
-  onImport,
   onRefreshBank,
   storage,
   asOf,
@@ -708,43 +706,42 @@ export default function Profiel({
         onEntityChange={onEntityChange}
         busy={busy}
         problems={problems}
-        onImport={onImport}
         onRefreshBank={onRefreshBank}
       />
 
       <Backup storage={storage} asOf={asOf} owner={owner} onRestored={onRestored} />
 
-      {/* Hidden unless the owner already opted in (or a delete is pending): then it stays
-          visible so the choice can be seen and revoked. */}
-      {(SHOW_NET_WORTH_SHARE || shareNetWorthEnabled || shareNetWorthPendingDelete) && (
-        <Card as="section" aria-label={c.profiel.netWorthShare.ariaLabel}>
-          <CardHeader>
-            <h2>{c.profiel.netWorthShare.heading}</h2>
-          </CardHeader>
-          <p className="cell-sub">{c.profiel.netWorthShare.description}</p>
-          <p className="cell-sub">{c.profiel.netWorthShare.privacyNote}</p>
-          <p className="cell-sub">{c.profiel.netWorthShare.perDeviceNote}</p>
-          <label>
-            <input
-              type="checkbox"
-              checked={shareNetWorthEnabled}
-              aria-label={c.profiel.netWorthShare.toggleLabel}
-              onChange={(e) => onShareNetWorthEnabledChange(e.target.checked)}
-            />{" "}
-            {c.profiel.netWorthShare.toggleLabel}
-          </label>
-          <p className="cell-sub">
-            {shareNetWorthEnabled
-              ? c.profiel.netWorthShare.onStatus
-              : c.profiel.netWorthShare.offStatus}
-          </p>
-          {shareNetWorthPendingDelete && (
-            <StatusLine tone="warning" role="alert">
-              {c.profiel.netWorthShare.pendingDeleteStatus}
-            </StatusLine>
-          )}
-        </Card>
-      )}
+      {/* Account only: a device-only vault has no Investing side to share with. */}
+      {owner.kind === "account" &&
+        (SHOW_NET_WORTH_SHARE || shareNetWorthEnabled || shareNetWorthPendingDelete) && (
+          <Card as="section" aria-label={c.profiel.netWorthShare.ariaLabel}>
+            <CardHeader>
+              <h2>{c.profiel.netWorthShare.heading}</h2>
+            </CardHeader>
+            <p className="cell-sub">{c.profiel.netWorthShare.description}</p>
+            <p className="cell-sub">{c.profiel.netWorthShare.privacyNote}</p>
+            <p className="cell-sub">{c.profiel.netWorthShare.perDeviceNote}</p>
+            <label>
+              <input
+                type="checkbox"
+                checked={shareNetWorthEnabled}
+                aria-label={c.profiel.netWorthShare.toggleLabel}
+                onChange={(e) => onShareNetWorthEnabledChange(e.target.checked)}
+              />{" "}
+              {c.profiel.netWorthShare.toggleLabel}
+            </label>
+            <p className="cell-sub">
+              {shareNetWorthEnabled
+                ? c.profiel.netWorthShare.onStatus
+                : c.profiel.netWorthShare.offStatus}
+            </p>
+            {shareNetWorthPendingDelete && (
+              <StatusLine tone="warning" role="alert">
+                {c.profiel.netWorthShare.pendingDeleteStatus}
+              </StatusLine>
+            )}
+          </Card>
+        )}
 
       {/* Hidden for now (archive.ts flags). The cards stay in the code. */}
       {SHOW_OWN_COLUMNS_IMPORT && onGenericImport != null && (

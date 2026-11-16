@@ -624,6 +624,29 @@
     gap: 8px;
     margin-top: 20px;
   }
+  /* "Add a card by file": a long preview scrolls; the title and the buttons stay. */
+  .ui-dialog:has(.card-file) .ui-dialog-title {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    /* Full width of the body, so nothing scrolls into view beside the title. */
+    margin: 0 -24px;
+    padding: 24px 56px 12px 24px;
+    background: var(--surface);
+  }
+  .ui-dialog:has(.card-file) .ui-dialog-close {
+    z-index: 2;
+  }
+  .ui-dialog:has(.card-file) .ui-dialog-body {
+    padding-top: 0;
+  }
+  .card-file-actions {
+    position: sticky;
+    bottom: 0;
+    margin-top: 0;
+    padding: 12px 0 24px;
+    background: var(--surface);
+  }
   .ui-dialog-close {
     position: absolute;
     top: 6px;

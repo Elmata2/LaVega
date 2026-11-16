@@ -5,7 +5,8 @@ import { useAppLocale } from "../appLocale.js";
 import { intakeCopy } from "../copy/intake.js";
 import { wizardCopy } from "../copy/wizard.js";
 import { inviteKindOf, inviteState, type InviteState } from "../intake/inviteState.js";
-import { unconnectedBrands } from "../intake/unconnectedBrands.js";
+import { unconnectedItems } from "../intake/unconnectedBrands.js";
+import { useOpenCardFile } from "./import/CardFileContext.js";
 import { useProfileCommit } from "../intake/useProfileCommit.js";
 import { reopenRisk } from "../intake/wizard/screens.js";
 import {
@@ -28,7 +29,7 @@ export type HomePopupsProps = {
   profileReady: boolean;
   asOf: string;
   hasTransactions: boolean;
-  accounts: readonly Pick<Account, "bank" | "linkedAt">[];
+  accounts: readonly Pick<Account, "bank" | "linkedAt" | "source">[];
   onSave: (next: AdvisorProfileStore) => Promise<void>;
   onOpenIntake: () => void;
   onOpenRound2: () => void;
@@ -38,7 +39,13 @@ export type HomePopupsProps = {
 
 /* What the open dialog shows, fixed at the moment it opened: a risk save
  * changes the store under it, and the text must not change with it. */
-type Shown = { id: PopupId; invite: InviteState | null; brands: string[] };
+type Shown = {
+  id: PopupId;
+  invite: InviteState | null;
+  brands: string[];
+  /** The brands among `brands` that only a file can feed. */
+  files: string[];
+};
 
 const clock = () => new Date().toISOString();
 
@@ -51,6 +58,7 @@ export function HomePopups(props: HomePopupsProps) {
   const names = wizardCopy[locale].bankNames;
   const now = props.now ?? clock;
   const { update } = useProfileCommit(props.store, props.onSave, now);
+  const openCardFile = useOpenCardFile();
   const [shown, setShown] = useState<Shown | null>(null);
   const [open, setOpen] = useState(false);
   const primaryRef = useRef<HTMLButtonElement>(null);
@@ -69,7 +77,9 @@ export function HomePopups(props: HomePopupsProps) {
     const frame = requestAnimationFrame(() => {
       const p = latest.current;
       const invite = inviteState(p.store, p.asOf, p.hasTransactions);
-      const brands = unconnectedBrands(p.store, p.accounts);
+      const items = unconnectedItems(p.store, p.accounts);
+      const brands = items.map((i) => i.brand);
+      const files = items.filter((i) => i.route === "file").map((i) => i.brand);
       const id = nextPopup({
         view: p.view,
         inviteKind: inviteKindOf(invite),
@@ -81,7 +91,7 @@ export function HomePopups(props: HomePopupsProps) {
       });
       if (id === null) return;
       markShownThisSession();
-      setShown({ id, invite, brands });
+      setShown({ id, invite, brands, files });
       setOpen(true);
     });
     return () => cancelAnimationFrame(frame);
@@ -124,12 +134,25 @@ export function HomePopups(props: HomePopupsProps) {
       <ul className="m-0 list-none p-0">
         {shown.brands.map((b) => (
           <li key={b} className="py-1">
-            {c.connect.line(names[b] ?? b)}
+            {shown.files.includes(b)
+              ? c.connect.fileLine(names[b] ?? b)
+              : c.connect.line(names[b] ?? b)}
           </li>
         ))}
       </ul>
     );
-    action = primary(c.connect.link, () => go(props.onOpenAccounts));
+    const onlyFiles = shown.files.length === shown.brands.length;
+    const upload =
+      openCardFile && shown.files.length > 0 ? () => go(() => openCardFile(null)) : null;
+    action =
+      onlyFiles && upload ? (
+        primary(c.connect.fileLink, upload)
+      ) : (
+        <>
+          {upload && <Button onClick={upload}>{c.connect.fileLink}</Button>}
+          {primary(c.connect.link, () => go(props.onOpenAccounts))}
+        </>
+      );
   } else if (invite?.kind === "new-questions") {
     heading = i.newQuestions.title;
     body = <p className="m-0">{i.newQuestions.count(invite.count)}</p>;

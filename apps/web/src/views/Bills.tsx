@@ -1,3 +1,4 @@
+import { localId } from "../lib/localId";
 import { useMemo, useState } from "react";
 import type {
   Account,
@@ -175,9 +176,7 @@ function emptyDraft(asOf: string): Draft {
 }
 
 function newId(): string {
-  const c = globalThis.crypto as Crypto | undefined;
-  if (c != null && typeof c.randomUUID === "function") return `bill-${c.randomUUID()}`;
-  return `bill-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
+  return `bill-${localId()}`;
 }
 
 function billFromDraft(draft: Draft): Bill {

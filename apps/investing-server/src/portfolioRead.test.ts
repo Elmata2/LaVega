@@ -1,5 +1,6 @@
 import { expect, test, vi } from "vitest";
-import { ManagedRuntime } from "effect";
+import { Effect, ManagedRuntime } from "effect";
+import { TestClock } from "effect/testing";
 import {
   createBrokerDataCache,
   createInMemorySharedPriceStore,
@@ -509,4 +510,106 @@ test("the read builds the realised report and groups it by the injected account 
   expect(result.realized?.accounts).toEqual([
     expect.objectContaining({ broker: "trading212", account: "ISA", treatment: "tax-exempt" }),
   ]);
+});
+
+/** Issue #325: the stale rule reads Effect's clock, so the acceptance boundary
+ *  is set, not waited for. */
+async function runReadAt(
+  sources: PortfolioReadSources,
+  instant: string,
+): Promise<InvestingDashboardData> {
+  const runtime = ManagedRuntime.make(portfolioReadLayer(sources));
+  const effect = Effect.gen(function* () {
+    yield* TestClock.setTime(Date.parse(instant));
+    const read = yield* PortfolioRead;
+    return yield* read.read({ tenantId: TENANT });
+  }).pipe(Effect.provide(TestClock.layer()));
+  return runtime.runPromise(effect);
+}
+
+function degiroData(day: string): BrokerDataSnapshot {
+  return {
+    degiro: {
+      positions: [
+        {
+          entity: "personal",
+          broker: "degiro",
+          symbol: "XS00PF000003",
+          description: "VOORBEELD GLOBAL EQUITY ETF",
+          quantity: 3,
+          averagePrice: null,
+          marketPrice: 100,
+          marketValue: 300,
+          currency: "EUR",
+          asOf: day,
+        },
+      ],
+      trades: [],
+      dividends: [],
+      cashHistory: {
+        entity: "personal",
+        broker: "degiro",
+        tradeCash: "cash-flows",
+        status: "complete",
+        from: "2026-09-01",
+        to: day,
+      },
+      lastImport: {
+        importedAt: `${day}T09:00:00.000Z`,
+        files: [{ filename: "Account.csv", sha256: "a".repeat(64) }],
+      },
+    },
+  };
+}
+
+test("a 31-day-old DeGiro import is stale and a 29-day-old one is quiet", async () => {
+  const result = await runReadAt(
+    makeSources({ data: degiroData("2026-10-01") }),
+    "2026-11-01T12:00:00Z",
+  );
+  expect(result.degiro).toEqual({
+    importedAt: "2026-10-01T09:00:00.000Z",
+    coversFrom: "2026-09-01",
+    coversTo: "2026-10-01",
+    positionsAsOf: "2026-10-01",
+  });
+  expect(result.problems).toContain(
+    "DeGiro-gegevens zijn 31 dagen oud. Importeer een nieuw rekeningoverzicht.",
+  );
+});
+
+test("a 29-day-old DeGiro import carries the ages without the stale problem", async () => {
+  const result = await runReadAt(
+    makeSources({ data: degiroData("2026-10-03") }),
+    "2026-11-01T12:00:00Z",
+  );
+  expect(result.degiro?.positionsAsOf).toBe("2026-10-03");
+  expect(result.problems.some((problem) => problem.startsWith("DeGiro-gegevens zijn"))).toBe(false);
+});
+
+test("a cached dashboard gets the stale problem on the day it becomes stale, not when it was built", async () => {
+  const day = "2026-10-01";
+  const stored = {
+    ...emptyInvestingDashboard(),
+    degiro: {
+      importedAt: `${day}T09:00:00.000Z`,
+      coversFrom: "2026-09-01",
+      coversTo: day,
+      positionsAsOf: day,
+    },
+  };
+  const sources = makeSources({
+    snapshots: {
+      get: async () => ({ version: 1, dashboard: stored, priceKeys: [], updatedAt: null }),
+      put: async () => undefined,
+    },
+  });
+  const freshEnough = await runReadAt(sources, "2026-10-30T12:00:00Z");
+  expect(freshEnough.problems).not.toContain(
+    "DeGiro-gegevens zijn 29 dagen oud. Importeer een nieuw rekeningoverzicht.",
+  );
+  const stale = await runReadAt(sources, "2026-11-01T12:00:00Z");
+  expect(stale.problems).toContain(
+    "DeGiro-gegevens zijn 31 dagen oud. Importeer een nieuw rekeningoverzicht.",
+  );
 });

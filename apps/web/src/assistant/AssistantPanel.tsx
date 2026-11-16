@@ -1,3 +1,4 @@
+import { localId } from "../lib/localId";
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import type { VaultStorage } from "@lavega/adapters";
 import {
@@ -36,10 +37,7 @@ type OpenApproval = {
   createdAt: string;
 };
 
-const newId = (): string =>
-  typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
-    ? crypto.randomUUID()
-    : `assistant-${Math.random().toString(36).slice(2)}`;
+const newId = localId;
 
 function monthLabel(locale: "nl" | "en", month: string): string {
   return new Intl.DateTimeFormat(localeTag(locale), {

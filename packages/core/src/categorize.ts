@@ -369,6 +369,53 @@ export function recategorize(
 
 export type CategoryDecision = { id: string; category: string };
 
+/** Fewer letters than this and a "contains" rule swallows unrelated merchants
+ *  ("NS" is inside "Transavia", "Insurance", "Hans"). */
+const MIN_RULE_LETTERS = 4;
+
+/** Whether a counterparty is a name worth remembering as a rule: at least
+ *  MIN_RULE_LETTERS letters, and not just an IBAN (compact or space-grouped). */
+function ruleWorthyCounterparty(counterparty: string): boolean {
+  const s = counterparty.trim();
+  if ((s.match(/\p{L}/gu) ?? []).length < MIN_RULE_LETTERS) return false;
+  return !/^[A-Z]{2}\d{2}[A-Z0-9]{8,30}$/i.test(s.replace(/\s+/g, ""));
+}
+
+export type CategoryChoice = {
+  txs: Tx[];
+  rules: Rule[];
+  /** How many NEW rules this choice added (0 or 1). */
+  rulesAdded: number;
+  /** How many OTHER transactions resolve to the chosen category now and did not
+   *  before — computed by running the categoriser, not estimated. */
+  followers: number;
+};
+
+/** One decision from the per-row picker: the existing `applyCategorizations`
+ *  path for a single decision, plus an honest count of the other rows that now
+ *  follow. A category outside CATEGORY_OPTIONS changes nothing. Pure. */
+export function applyCategoryChoice(
+  txs: Tx[],
+  rules: Rule[],
+  txId: string,
+  category: string,
+  own?: OwnAccounts,
+): CategoryChoice {
+  const next = applyCategorizations(txs, rules, [{ id: txId, category }]);
+  const rulesAdded = next.rules.length - rules.length;
+  let followers = 0;
+  if (rulesAdded > 0)
+    for (let i = 0; i < txs.length; i++) {
+      if (txs[i]!.id === txId) continue;
+      if (
+        categorize(txs[i]!, rules, own) !== category &&
+        categorize(next.txs[i]!, next.rules, own) === category
+      )
+        followers++;
+    }
+  return { txs: next.txs, rules: next.rules, rulesAdded, followers };
+}
+
 /** Apply confirmed category decisions: set a manual category on the decided
  *  transactions (ignoring any category not in CATEGORY_OPTIONS), and append one
  *  deduped rule per (counterparty, category) so future imports auto-categorize.
@@ -397,7 +444,9 @@ export function applyCategorizations(
     const cat = byId.get(t.id);
     if (!cat) continue;
     const match = t.counterparty.trim();
-    if (!match) continue;
+    // No usable name, or only an account number: a rule on that would be junk
+    // (it can never recur on a different row, or matches by IBAN fragment).
+    if (!ruleWorthyCounterparty(match)) continue;
     const key = `${norm(match)}|${cat}`;
     if (seen.has(key)) continue;
     seen.add(key);

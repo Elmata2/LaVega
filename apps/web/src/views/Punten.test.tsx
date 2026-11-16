@@ -158,7 +158,7 @@ test("de melding bij een onbekende dag noemt de oorzaak: de koppeling vernieuwt 
 });
 
 test("geen enkele melding stelt een handeling voor die op deze pagina niet bestaat", () => {
-  // De knop "Koppel bank (Enable Banking)" zit in het Importeren-blok in Profiel,
+  // De knop "Koppel je bank" zit in het Importeren-blok in Profiel,
   // niet in Rekeningen. "Koppel opnieuw om bij te werken" zou hier dus een advies
   // zijn dat niet uit te voeren is — en er is ook geen verversroute om naar te
   // wijzen: de server heeft aspsps/auth/callback/accounts en niets anders.

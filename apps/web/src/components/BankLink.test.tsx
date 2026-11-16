@@ -75,7 +75,7 @@ test("initial load fetches the bank list with psu_type=business, the default", a
   const mock = mockFetch([{ name: "ING", country: "NL" }]);
   try {
     await render();
-    click(byText("button", "Koppel bank (Enable Banking)"));
+    click(byText("button", "Koppel je bank"));
     await flush();
     expect(mock.calls).toHaveLength(1);
     expect(mock.calls[0].url).toContain("psu_type=business");
@@ -88,7 +88,7 @@ test("clicking Particulier refetches the bank list with psu_type=personal", asyn
   const mock = mockFetch([{ name: "ING", country: "NL" }]);
   try {
     await render();
-    click(byText("button", "Koppel bank (Enable Banking)"));
+    click(byText("button", "Koppel je bank"));
     await flush();
     click(byText("button", "Particulier"));
     await flush();
@@ -115,13 +115,13 @@ test("a failed refetch after switching type clears the stale list instead of lea
   }) as unknown as typeof fetch;
   try {
     await render();
-    click(byText("button", "Koppel bank (Enable Banking)"));
+    click(byText("button", "Koppel je bank"));
     await flush();
     expect(() => byText("button", "Autoriseer")).not.toThrow();
     click(byText("button", "Particulier"));
     await flush();
     expect(() => byText("button", "Autoriseer")).toThrow();
-    expect(() => byText("button", "Koppel bank (Enable Banking)")).not.toThrow();
+    expect(() => byText("button", "Koppel je bank")).not.toThrow();
   } finally {
     globalThis.fetch = original;
   }
@@ -131,7 +131,7 @@ test("connecting a bank after switching to Particulier sends psuType personal", 
   const mock = mockFetch([{ name: "ING", country: "NL" }]);
   try {
     await render();
-    click(byText("button", "Koppel bank (Enable Banking)"));
+    click(byText("button", "Koppel je bank"));
     await flush();
     click(byText("button", "Particulier"));
     await flush();
@@ -174,7 +174,7 @@ for (const badUrl of BAD_AUTH_URLS) {
     }) as unknown as typeof fetch;
     try {
       await render();
-      click(byText("button", "Koppel bank (Enable Banking)"));
+      click(byText("button", "Koppel je bank"));
       await flush();
       const before = window.location.href;
       click(byText("button", "Autoriseer"));

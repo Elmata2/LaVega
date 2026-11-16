@@ -145,15 +145,19 @@ export function setCashbackAssumptionEnabled(on: boolean): void {
  *  second time. */
 export const SHARE_NET_WORTH_KEY = "lavega.shareNetWorth";
 
-/** Opt-in toggle for sharing today's "Totale positie" with LaVega Investing's
- *  net worth (see apps/web/src/netWorthShare.ts). Defaults false: no number
- *  leaves this browser until the owner turns this on, exactly like AI
- *  extraction, chat and AI-categorisation above — the switch itself is a
- *  preference, so it lives in localStorage; the totals it sends are the truth
- *  Investing reads, and live on the server instead. */
+/** Switch for sharing today's "Totale positie" with LaVega Investing's net
+ *  worth (see apps/web/src/netWorthShare.ts). Defaults ON (owner decision,
+ *  Nov 2026): "never set" (no stored value) reads as on, an explicit "0" is the
+ *  owner's own off and always wins, and anything else unreadable counts as
+ *  off. Only ever sends with a signed-in account (App.tsx); this getter says
+ *  nothing about that. The switch is a preference, so it lives in
+ *  localStorage; the totals it sends are the truth Investing reads, and live
+ *  on the server instead. */
 export function getShareNetWorthEnabled(): boolean {
   try {
-    return typeof localStorage !== "undefined" && localStorage.getItem(SHARE_NET_WORTH_KEY) === "1";
+    if (typeof localStorage === "undefined") return true;
+    const stored = localStorage.getItem(SHARE_NET_WORTH_KEY);
+    return stored === null || stored === "1";
   } catch {
     return false;
   }

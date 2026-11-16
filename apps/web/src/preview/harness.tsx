@@ -205,7 +205,6 @@ export function Stage({ mode, dataset }: { mode: Mode; dataset: Dataset }) {
         store={profileResumingAt(mode.stop, today)}
         asOf={asOf}
         onSave={async () => {}}
-        onImport={async () => ({ ok: true, count: 12 })}
         onFinish={() => {}}
         onExit={() => {}}
       />

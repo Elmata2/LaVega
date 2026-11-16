@@ -164,12 +164,28 @@ test("een in de wizard genoemde kaart staat er als 'nog niet gekoppeld', en Kopp
   // Geen saldo en geen IBAN: die heeft LaVega niet.
   expect(card!.textContent).not.toContain("geen IBAN bekend");
   expect(card!.textContent).not.toContain("Saldo");
-  const btn = [...card!.querySelectorAll("button")].find((b) => b.textContent === "Koppelen");
-  expect(btn).toBeDefined();
+  // American Express has no bank link: no dead-end Koppelen, only the file route.
+  const labels = [...card!.querySelectorAll("button")].map((b) => b.textContent);
+  expect(labels).toEqual(["Bestand uploaden"]);
   act(() => {
-    btn!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    card!.querySelector("button")!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
   });
+  // No dialog provided in this mount: it falls back to Rekeningen.
   expect(seen).toEqual(["accounts"]);
+  m.unmount();
+});
+
+test("een kaart met een bankkoppeling houdt Koppelen", () => {
+  const m = mountKaarten(
+    <KaartenBlock
+      accounts={[]}
+      statedCredit={["ing-creditcard"]}
+      statedDebit={[]}
+      onNavigate={() => {}}
+    />,
+  );
+  const card = m.host.querySelector<HTMLElement>('article[aria-label$="nog niet gekoppeld"]')!;
+  expect([...card.querySelectorAll("button")].map((b) => b.textContent)).toContain("Koppelen");
   m.unmount();
 });
 

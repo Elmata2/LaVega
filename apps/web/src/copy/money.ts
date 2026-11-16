@@ -220,6 +220,15 @@ type TransactiesCopy = {
   slaOver: string;
   toepassen: string;
   categorieVoor: (tegenpartij: string) => string;
+  /** Per-row category picker. */
+  wijzig: string;
+  categorieWijzigenVoor: (tegenpartij: string) => string;
+  kiesCategorie: string;
+  categorieGezetPlain: string;
+  aiRegelsNietOnthouden: string;
+  categorieGezetNietOnthouden: string;
+  categorieGezetOnthouden: (tegenpartij: string) => string;
+  categorieGezetVolgen: (n: number, tegenpartij: string) => string;
   gecategoriseerdNote: (n: number) => string;
   nietsToegepast: string;
   categorisatieMislukt: string;
@@ -848,6 +857,18 @@ const nl: MoneyCopy = {
     slaOver: "Sla over",
     toepassen: "Toepassen",
     categorieVoor: (tegenpartij) => `Categorie voor ${tegenpartij}`,
+    wijzig: "Wijzig",
+    categorieWijzigenVoor: (tegenpartij) => `Categorie wijzigen voor ${tegenpartij}`,
+    kiesCategorie: "Kies een categorie",
+    categorieGezetPlain: "Categorie gezet.",
+    aiRegelsNietOnthouden:
+      "Categorieën gezet, maar de regels zijn niet onthouden. Zet de categorie opnieuw via Wijzig om de regel te bewaren.",
+    categorieGezetNietOnthouden:
+      "Categorie gezet, maar niet onthouden: opslaan van de regel mislukte. Andere transacties volgen niet mee.",
+    categorieGezetOnthouden: (tegenpartij) =>
+      `Categorie gezet. Volgende transacties van ${tegenpartij} volgen mee.`,
+    categorieGezetVolgen: (n, tegenpartij) =>
+      `Categorie gezet. ${n} andere ${n === 1 ? "transactie" : "transacties"} van ${tegenpartij} ${n === 1 ? "volgt" : "volgen"} mee.`,
     gecategoriseerdNote: (n) => `${n} ${n === 1 ? "transactie" : "transacties"} gecategoriseerd.`,
     nietsToegepast: "Niets toegepast.",
     categorisatieMislukt: "categorisatie mislukt",
@@ -1293,7 +1314,7 @@ const nl: MoneyCopy = {
     ververs: "Ververs bankgegevens",
     ververshHint: "Haalt saldo en transacties opnieuw op bij elke gekoppelde bank.",
     laden: "Laden…",
-    koppelBankEnableBanking: "Koppel bank (Enable Banking)",
+    koppelBankEnableBanking: "Koppel je bank",
     koppelJeBank: "Koppel je bank",
     geenBankenBeschikbaar: "Geen banken beschikbaar.",
     doorsturen: "Doorsturen…",
@@ -1558,6 +1579,18 @@ const en: MoneyCopy = {
     slaOver: "Skip",
     toepassen: "Apply",
     categorieVoor: (tegenpartij) => `Category for ${tegenpartij}`,
+    wijzig: "Change",
+    categorieWijzigenVoor: (tegenpartij) => `Change category for ${tegenpartij}`,
+    kiesCategorie: "Choose a category",
+    categorieGezetPlain: "Category set.",
+    aiRegelsNietOnthouden:
+      "Categories set, but the rules were not remembered. Set the category again with Change to keep the rule.",
+    categorieGezetNietOnthouden:
+      "Category set, but not remembered: saving the rule failed. Other transactions will not follow.",
+    categorieGezetOnthouden: (tegenpartij) =>
+      `Category set. Future transactions from ${tegenpartij} will follow.`,
+    categorieGezetVolgen: (n, tegenpartij) =>
+      `Category set. ${n} other transaction${n === 1 ? "" : "s"} from ${tegenpartij} follow${n === 1 ? "s" : ""}.`,
     gecategoriseerdNote: (n) => `${n} transaction${n === 1 ? "" : "s"} categorised.`,
     nietsToegepast: "Nothing applied.",
     categorisatieMislukt: "categorisation failed",
@@ -1997,7 +2030,7 @@ const en: MoneyCopy = {
     ververs: "Refresh bank data",
     ververshHint: "Fetches balances and transactions again from every connected bank.",
     laden: "Loading…",
-    koppelBankEnableBanking: "Link bank (Enable Banking)",
+    koppelBankEnableBanking: "Link your bank",
     koppelJeBank: "Connect your bank",
     geenBankenBeschikbaar: "No banks available.",
     doorsturen: "Redirecting…",

@@ -88,6 +88,15 @@ export function parseAmount(v: unknown): number | null {
   if (v == null) return null;
   let s = String(v).trim().replace(/^"|"$/g, "");
   if (!s) return null;
+  // "(12,34)" is a negative in accounting style; a leading or trailing currency
+  // symbol ("€ 12,34", "-€ 12,34", "12,34 €") is noise.
+  let negate = false;
+  const paren = s.match(/^\((.*)\)$/);
+  if (paren) {
+    negate = true;
+    s = paren[1]!.trim();
+  }
+  s = s.replace(/^(-?)\s*[€$£]\s*/, "$1").replace(/\s*[€$£]$/, "");
   const lastC = s.lastIndexOf(",");
   const lastD = s.lastIndexOf(".");
   if (lastC > -1 && lastD > -1) {
@@ -100,7 +109,7 @@ export function parseAmount(v: unknown): number | null {
     if (dec === 3 && /^\d{1,3}(\.\d{3})+$/.test(s)) s = s.replace(/\./g, "");
   }
   const n = parseFloat(s);
-  return isNaN(n) ? null : n;
+  return isNaN(n) ? null : negate ? -Math.abs(n) : n;
 }
 
 /* --- maps a normalized header cell -> column index. --- */

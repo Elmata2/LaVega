@@ -13,6 +13,8 @@ import { moneyCopy, type MoneyCopy } from "../../copy/money.js";
 import { wizardCopy } from "../../copy/wizard.js";
 import { CATALOGUE_ENTRIES } from "../../catalogue-rates";
 import { statedCardPlaceholders } from "../../plan/statedPlaceholders";
+import { useOpenCardFile } from "../import/CardFileContext.js";
+import { cardFileCopy } from "../../copy/cardFile.js";
 
 /* Je kaarten — the card-art strip from `Modules for homescreen 5/7.png`.
  *
@@ -222,6 +224,8 @@ export default function KaartenBlock({
   const typesCopy = moneyCopy[locale].accountTypes;
   const ramps = useBrandRamps();
   const wc = wizardCopy[locale];
+  const openCardFile = useOpenCardFile();
+  const fc = cardFileCopy[locale];
   const placeholders = useMemo(
     () =>
       statedCardPlaceholders({
@@ -306,6 +310,14 @@ export default function KaartenBlock({
                       />
                     ) : null}
                     {account.bank || c.onbekendeBank}
+                    {account.source === "file" && (
+                      <span
+                        data-testid="via-file"
+                        className="ml-2 font-mono text-[0.6rem] tracking-[0.1em] uppercase opacity-75"
+                      >
+                        {fc.viaFile}
+                      </span>
+                    )}
                   </span>
                   <span className="flex-none font-mono text-[0.6rem] tracking-[0.1em] uppercase opacity-75">
                     {typeLabel(typesCopy, kind)}
@@ -389,13 +401,32 @@ export default function KaartenBlock({
                 <div className="text-[0.85rem]" style={{ color: "var(--muted)" }}>
                   {c.nietGekoppeld}
                 </div>
-                <footer className="flex">
-                  <Button
-                    className="px-3 py-1 text-[0.85rem] font-semibold bg-transparent"
-                    onClick={() => onNavigate("accounts")}
-                  >
-                    {c.koppelen}
-                  </Button>
+                <footer className="flex gap-2 flex-wrap">
+                  {!p.fileOnly && (
+                    <Button
+                      className="px-3 py-1 text-[0.85rem] font-semibold bg-transparent"
+                      onClick={() => onNavigate("accounts")}
+                    >
+                      {c.koppelen}
+                    </Button>
+                  )}
+                  {(openCardFile || p.fileOnly) && (
+                    <Button
+                      className="px-3 py-1 text-[0.85rem] font-semibold bg-transparent min-h-[44px]"
+                      aria-label={fc.uploadFor(p.name)}
+                      onClick={() =>
+                        openCardFile
+                          ? openCardFile(
+                              p.id === "other"
+                                ? null
+                                : { id: p.id, name: p.name, brand: p.brand, kind: p.kind },
+                            )
+                          : onNavigate("accounts")
+                      }
+                    >
+                      {fc.upload}
+                    </Button>
+                  )}
                 </footer>
               </article>
             );

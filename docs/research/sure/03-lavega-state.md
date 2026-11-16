@@ -79,7 +79,7 @@ lives under `/app` with one segment per view (`apps/web/src/appRoutes.ts:7-44`).
 | `/app/transactions` | Transacties + inline Regels (rules) | live | `apps/web/src/App.tsx:1799-1843` |
 | `/app/accounts` | Rekeningen: per-account balances, types, merge duplicates, per-entity grouping | live | `apps/web/src/App.tsx:1844`; `apps/web/src/views/Rekeningen.tsx` |
 | `/app/forecast` | 91-day deterministic cashflow forecast | live | `apps/web/src/App.tsx:1871`; `apps/web/src/views/Forecast.tsx:1-50` |
-| `/app/optimalisatie` | subscription/savings/card optimisation, rates catalogue | live | `apps/web/src/App.tsx:1884`; `apps/web/src/views/Optimalisatie.tsx` |
+| `/app/optimalisatie` | subscription/savings/card optimisation, rates catalogue. Cashback module reads connected accounts first, then the intake wizard's stated cards (marked "volgens je antwoorden", cashback unknown, no euro gain claim; none shown while card debt is stated) via `plan/optimalisatieStated.ts` | live | `apps/web/src/App.tsx:1884`; `apps/web/src/views/Optimalisatie.tsx` |
 | `/app/punten` | manual rewards/points balances | live | `apps/web/src/App.tsx:1949` |
 | `/app/plan` | CFO plan: month, buffer, debts, spending limits, subscriptions, cards, goals | live when intake has ≥1 block done | `apps/web/src/App.tsx:1971`; `apps/web/src/views/Plan.tsx`; gate at `App.tsx:1117-1121` |
 | `/app/intake`, `/app/about-you` | adviser intake wizard + profile answers | live | `apps/web/src/App.tsx:1656`, `1999`; `apps/web/src/views/IntakeWizard.tsx` |
@@ -111,7 +111,7 @@ Routes declared in `apps/server/src` (all under a session guard unless on the pu
 | `/api/n8n/status`, `/api/n8n/queue`, `/api/n8n/forward-address` (GET/POST) | invoice queue proxy + per-user forwarding local-part | `n8n-routes.ts:46,55,130,144`; ADR `0006-invoice-queue-server-proxy.md` |
 | `/api/agent/status`, `/api/agent/budget`, `/api/agent/extract-invoice`, `/api/agent/chat`, `/api/agent/categorize`, `/api/agent/travel-facts`, `/api/card-terms/ingest` | LLM-backed invoice extraction, chat SSE, bulk categorization, card terms | `agent-routes.ts:219,225,247,311,410,475,536` |
 | `/api/vault/key`, `/api/vault/backup` (GET/PUT) | account-held vault key; sealed vault backup | `vault-routes.ts:70,84,101` |
-| `/api/personal/net-worth-total` (PUT/DELETE) | opt-in shared personal total for investing net worth | `net-worth-routes.ts:73,96` |
+| `/api/personal/net-worth-total` (PUT/DELETE) | shared personal total (on by default, account only) for investing net worth | `net-worth-routes.ts:73,96` |
 | `DELETE /api/account/data` | erase all data | `account-routes.ts:36` |
 | `/api/investing/*`, `/investing/api/*`, `/investing/*` | investing API alias + SPA mount | `index.ts:398-446`; `apps/server/src/investing-mount.ts:1-90` |
 | `GET /api/cron/investing-sync` | daily tenant sync (bearer `CRON_SECRET`) | `index.ts:401` |

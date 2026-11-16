@@ -464,6 +464,12 @@ export function createBrokerDataCache(initial: BrokerDataSnapshot = {}) {
         cashBalances: [...cashBalancesByBroker.values()].flat(),
         cashFlows: [...cashFlowsByBroker.values()].flat(),
         cashCoverage: [...cashHistoryByBroker.values()],
+        /* Provenance only, as a fresh map so the cache's own map stays private.
+         * The full snapshot() clones every row; the dashboard read needs only
+         * this map to publish the DeGiro import age (D13, #325). */
+        lastImports: Object.fromEntries(lastImportByBroker) as Partial<
+          Record<BrokerId, NonNullable<BrokerAccountSnapshot["lastImport"]>>
+        >,
         problems: [...problems],
         dataVersion,
       };

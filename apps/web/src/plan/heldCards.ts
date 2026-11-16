@@ -67,6 +67,8 @@ export function heldCatalogueIds(
   for (const account of cards) {
     const entry = entryFor(account, entries, feeProductIdOf(costs.get(account.key)));
     if (entry !== null) ids.add(entry.id);
+    // A file-fed account stands in for the card it was imported for.
+    if (account.statedCardId !== undefined) ids.add(account.statedCardId);
   }
   return ids;
 }
@@ -91,6 +93,30 @@ function programFor(account: Account, rewards: readonly RewardsBalance[]): strin
     return name !== "" && hay.includes(` ${name} `);
   });
   return hits.length === 1 ? hits[0]!.id : null;
+}
+
+/** A card the person stated, as a held row: no account, no learned cashback
+ *  fact, and the catalogue has no cashback figure, so its cashback is unknown,
+ *  never an assumed zero. */
+export function statedHeldCard(entry: CatalogueEntryLike): HeldCardInput {
+  const fx = sourced(entry, "fxFeePct");
+  const pts = sourced(entry, "pointsPerEuro");
+  const provenance: Provenance = {
+    ...(fx === null ? {} : { fxFeePct: fx.provenance }),
+    ...(pts === null ? {} : { pointsPerEuro: pts.provenance }),
+  };
+  const interest = sourced(entry, "interestPct");
+  return {
+    accountKey: `${STATED_CARD_PREFIX}${entry.id}`,
+    label: entry.product,
+    cashback: { tier: "onbekend", reason: "soort-onbekend" },
+    fee: accountFees([entry])[0] ?? null,
+    fxFeePct: fx?.value ?? null,
+    pointsPerEuro: pts?.value ?? null,
+    programId: null,
+    ...(interest === null ? {} : { interestPct: interest.value }),
+    ...(Object.keys(provenance).length === 0 ? {} : { provenance }),
+  };
 }
 
 /** The cards the cards section works on. The cashback state is derived exactly
@@ -164,25 +190,7 @@ export function buildHeldCards(i: {
   const stated = [...new Set(i.statedCreditIds ?? [])].flatMap((id): HeldCardInput[] => {
     const entry = byId.get(id);
     if (id === OTHER_CARD || entry === undefined || held.has(id)) return [];
-    const fx = sourced(entry, "fxFeePct");
-    const pts = sourced(entry, "pointsPerEuro");
-    const provenance: Provenance = {
-      ...(fx === null ? {} : { fxFeePct: fx.provenance }),
-      ...(pts === null ? {} : { pointsPerEuro: pts.provenance }),
-    };
-    return [
-      {
-        accountKey: `${STATED_CARD_PREFIX}${id}`,
-        label: entry.product,
-        cashback: { tier: "onbekend", reason: "soort-onbekend" },
-        fee: accountFees([entry])[0] ?? null,
-        fxFeePct: fx?.value ?? null,
-        pointsPerEuro: pts?.value ?? null,
-        programId: null,
-        ...interestOf(entry),
-        ...(Object.keys(provenance).length === 0 ? {} : { provenance }),
-      },
-    ];
+    return [statedHeldCard(entry)];
   });
   return [...bank, ...stated];
 }

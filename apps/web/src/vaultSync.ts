@@ -2,6 +2,7 @@ import { VaultDestroyError, type CipherBlob, type VaultStorage } from "@lavega/a
 import type { VaultOwner } from "./vaultKey.js";
 import { parseBackup } from "./backup.js";
 import { apiErrorMessageIn } from "./api.js";
+import { setNetWorthShareSuspended } from "./netWorthShare.js";
 import type { Locale } from "./locale.js";
 
 /* Talking to /api/vault/backup. The server stores the vault's own CipherBlob
@@ -86,7 +87,6 @@ export const PERSONAL_LOCAL_KEYS = [
   "lavega.bufferCents",
   "lavega.ebLastRefreshAt",
   "lavega.ebEverConnected",
-  "lavega.shareNetWorth",
   "lavega.shareNetWorthPendingDelete",
   "lavega.n8nHandledMessageIds",
   "lavega.n8n.autoBooked.v1",
@@ -152,6 +152,22 @@ export async function resetPersonalData(options: {
   navigate?: (url: string) => void;
 }): Promise<ErasureReport> {
   let report: ErasureReport = [];
+  // From here the page is still mounted with accounts in memory; a share PUT
+  // now would re-create the total this reset deletes. Lifted on failure only:
+  // on success the page navigates away.
+  setNetWorthShareSuspended(true);
+  try {
+    return await clearPersonal(options, report);
+  } catch (error) {
+    setNetWorthShareSuspended(false);
+    throw error;
+  }
+}
+
+async function clearPersonal(
+  options: Parameters<typeof resetPersonalData>[0],
+  report: ErasureReport,
+): Promise<ErasureReport> {
   if (options.owner.kind === "account") {
     let response: Response;
     try {

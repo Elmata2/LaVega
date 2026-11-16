@@ -63,12 +63,12 @@ with the existing account routes. Tenant comes from the session only. The body m
    (close the storage connection first; use the storage layer's own way to drop a vault if it has
    one, otherwise delete the owner's IndexedDB database).
 3. Remove these browser keys, which hold personal state: `lavega.bufferCents`,
-   `lavega.ebLastRefreshAt`, `lavega.ebEverConnected`, `lavega.shareNetWorth`,
-   `lavega.shareNetWorthPendingDelete`, `lavega.n8nHandledMessageIds`,
+   `lavega.ebLastRefreshAt`, `lavega.ebEverConnected`, `lavega.shareNetWorthPendingDelete`, `lavega.n8nHandledMessageIds`,
    `lavega.n8n.autoBooked.v1`, `lavega.forwardingGuide.v1`, `lavega.invoiceForwardAddress`,
    `lavega.n8nInvoiceUrl`, `lavega.n8nInvoiceToken`, `lavega.n8nBaseUrl`, `lavega.n8nApiKey` (secrets),
    `lavega.onboardingSeen`, `lavega.popups`, `lavega.overviewWidgets`, `lavega.navModules`, and
-   `lavega.popupShown` in sessionStorage.
+   `lavega.popupShown` in sessionStorage. `lavega.shareNetWorth` is deliberately NOT removed (16 Nov 2026):
+   sharing is on by default, so wiping an explicit off would switch it back on.
 4. Kept: theme, sidebar and assistant widths, language, chart choice, owner name, country and
    region, tax country, and the behaviour preferences. Also kept, as preferences: `lavega.defaultEntity` and `lavega.defaultScope`.
 5. Reload the app at `/app`. The app then creates an empty vault with the same key and the user

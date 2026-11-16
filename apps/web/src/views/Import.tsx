@@ -6,6 +6,8 @@ import Card from "../components/ui/Card.js";
 import { cn } from "../components/ui/utils.js";
 import StatusLine from "../components/ui/StatusLine.js";
 import type { ShellNotice } from "../shellNotice.js";
+import { useOpenCardFile } from "../components/import/CardFileContext.js";
+import { cardFileCopy } from "../copy/cardFile.js";
 
 type ImportProps = {
   entity: string;
@@ -13,7 +15,6 @@ type ImportProps = {
   busy: boolean;
   problems: ShellNotice[];
   onRefreshBank: () => void;
-  onImport: (file: File) => void;
   /** Passed on to BankLink: runs just before the redirect to the bank. */
   onBeforeBankRedirect?: () => void | Promise<void>;
   bankDefaultPsuType?: "business" | "personal";
@@ -24,13 +25,14 @@ export default function Import({
   onEntityChange,
   busy,
   problems,
-  onImport,
   onRefreshBank,
   onBeforeBankRedirect,
   bankDefaultPsuType,
 }: ImportProps) {
   const [locale] = useAppLocale();
   const c = shellCopy[locale];
+  const openCardFile = useOpenCardFile();
+  const fc = cardFileCopy[locale];
   return (
     <Card as="section" id="import" aria-label={c.import.ariaLabel}>
       <h2>{c.import.heading}</h2>
@@ -41,21 +43,17 @@ export default function Import({
           {c.import.entityLabel}{" "}
           <input value={entity} onChange={(e) => onEntityChange(e.target.value)} disabled={busy} />
         </label>
-        {/* No `accept` filter: format is detected from the file's *contents*
-            (parseBankFile sniffs MT940 vs CSV), so restricting extensions only
-            risks the OS dialog greying out a valid file (e.g. an uppercase
-            .STA). An unrecognized file is reported via `problems`, not a crash. */}
-        <input
-          type="file"
-          className={cn(buttonVariants(), "import-file")}
-          aria-label={c.import.fileInputAriaLabel}
-          disabled={busy}
-          onChange={(e) => {
-            const file = e.target.files?.[0];
-            e.target.value = "";
-            if (file) void onImport(file);
-          }}
-        />
+        {openCardFile && (
+          <button
+            type="button"
+            className={cn(buttonVariants(), "import-file min-h-[44px]")}
+            aria-label={c.import.fileInputAriaLabel}
+            disabled={busy}
+            onClick={() => openCardFile(null)}
+          >
+            {fc.upload}
+          </button>
+        )}
       </div>
       {problems.length > 0 && (
         <StatusLine tone="problem" role="alert">

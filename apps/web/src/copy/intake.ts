@@ -119,6 +119,9 @@ export type IntakeCopy = {
       line: (bank: string) => string;
       /** The one button of the connect pop-up: to Rekeningen. */
       link: string;
+      /** A card only a file can feed (Amex, Trading 212). */
+      fileLine: (bank: string) => string;
+      fileLink: string;
     };
   };
   block3: {
@@ -173,6 +176,8 @@ export const intakeCopy: Record<Locale, IntakeCopy> = {
         title: "Koppel voor het complete beeld",
         line: (bank) => `${bank} is nog niet gekoppeld`,
         link: "Koppelen",
+        fileLine: (bank) => `${bank}: voeg een bestand toe`,
+        fileLink: "Bestand uploaden",
       },
     },
     block3: {
@@ -409,6 +414,8 @@ export const intakeCopy: Record<Locale, IntakeCopy> = {
         title: "Connect for the full picture",
         line: (bank) => `${bank} is not connected yet`,
         link: "Connect",
+        fileLine: (bank) => `${bank}: add a file`,
+        fileLink: "Upload file",
       },
     },
     block3: {

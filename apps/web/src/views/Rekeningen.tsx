@@ -30,6 +30,8 @@ import BankLink from "../components/BankLink";
 import { CATALOGUE_ENTRIES } from "../catalogue-rates";
 import { wizardCopy } from "../copy/wizard";
 import { statedCardPlaceholders } from "../plan/statedPlaceholders";
+import { useOpenCardFile } from "../components/import/CardFileContext.js";
+import { cardFileCopy } from "../copy/cardFile.js";
 import { Table, TableWrap, Th, Td } from "../components/ui/Table.js";
 import StatusLine, { StatusIcon } from "../components/ui/StatusLine.js";
 import "../styles/views.css";
@@ -338,7 +340,12 @@ function NameCell({
         {account.bank ? (
           <>
             <div style={{ fontWeight: 600 }}>{account.bank}</div>
-            <div className="cell-sub">{account.name}</div>
+            <div className="cell-sub">
+              {account.name}
+              {account.source === "file" && (
+                <span data-testid="via-file"> · {cardFileCopy[locale].viaFile}</span>
+              )}
+            </div>
           </>
         ) : (
           <div style={{ fontWeight: 600 }}>{account.name || "—"}</div>
@@ -1163,6 +1170,8 @@ export default function Rekeningen({
   const [rename, setRename] = useState<{ key: string; bank: string } | null>(null);
   const [linking, setLinking] = useState(false);
   const wc = wizardCopy[locale];
+  const openCardFile = useOpenCardFile();
+  const fc = cardFileCopy[locale];
   const placeholders = statedCardPlaceholders({
     credit: statedCredit,
     debit: statedDebit,
@@ -1271,13 +1280,15 @@ export default function Rekeningen({
         >
           <div className="flex items-center justify-between gap-3 flex-wrap">
             <h3 className="m-0">{c.nietGekoppeldHeading}</h3>
-            <Button
-              className="px-3 py-1 font-semibold bg-transparent"
-              aria-expanded={linking}
-              onClick={() => setLinking(!linking)}
-            >
-              {c.nietGekoppeldKoppelen}
-            </Button>
+            {placeholders.some((p) => !p.fileOnly) && (
+              <Button
+                className="px-3 py-1 font-semibold bg-transparent"
+                aria-expanded={linking}
+                onClick={() => setLinking(!linking)}
+              >
+                {c.nietGekoppeldKoppelen}
+              </Button>
+            )}
           </div>
           <ul className="m-0 mt-2 pl-5">
             {placeholders.map((p) => (
@@ -1286,6 +1297,21 @@ export default function Rekeningen({
                 <span className="text-muted">
                   ({p.kind === "credit" ? c.nietGekoppeldCredit : c.nietGekoppeldDebit})
                 </span>
+                {openCardFile && (
+                  <Button
+                    className="ml-2 px-3 py-1 text-[0.85rem] font-semibold bg-transparent min-h-[44px]"
+                    aria-label={fc.uploadFor(p.name)}
+                    onClick={() =>
+                      openCardFile(
+                        p.id === "other"
+                          ? null
+                          : { id: p.id, name: p.name, brand: p.brand, kind: p.kind },
+                      )
+                    }
+                  >
+                    {fc.upload}
+                  </Button>
+                )}
               </li>
             ))}
           </ul>
