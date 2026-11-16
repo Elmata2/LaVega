@@ -124,7 +124,18 @@ const render = (props: Partial<Parameters<typeof Optimalisatie>[0]> = {}) => {
 const row = (html: string, testid: string): string => {
   const m = html.match(new RegExp(`data-testid="${testid}"[^>]*>([\\s\\S]*?)</p>`));
   if (!m) throw new Error(`no line with data-testid="${testid}"`);
-  return m[1]!.replace(/<[^>]+>/g, "");
+  return stripTags(m[1]!);
+};
+
+/** Text of server-rendered test markup. Repeats until stable, so a tag that
+ *  only forms after one pass is removed too. */
+const stripTags = (html: string): string => {
+  let text = html;
+  for (;;) {
+    const next = text.replace(/<[^>]+>/g, "");
+    if (next === text) return text;
+    text = next;
+  }
 };
 
 const bare = (html: string) =>
