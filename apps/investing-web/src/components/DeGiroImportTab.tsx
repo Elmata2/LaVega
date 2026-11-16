@@ -288,7 +288,7 @@ export function DeGiroImportTab() {
         </div>
 
         <div className="space-y-5">
-          <label
+          <div
             onDragOver={(event) => {
               event.preventDefault();
               if (!busy) setDragging(true);
@@ -300,7 +300,7 @@ export function DeGiroImportTab() {
               if (busy) return;
               addFiles([...event.dataTransfer.files]);
             }}
-            className={`flex min-h-40 cursor-pointer flex-col items-center justify-center rounded-card border border-dashed p-6 text-center transition-colors duration-150 ease-out focus-within:ring-2 focus-within:ring-ring motion-reduce:transition-none ${
+            className={`flex min-h-40 flex-col items-center justify-center rounded-card border border-dashed p-6 text-center transition-colors duration-150 ease-out motion-reduce:transition-none ${
               dragging ? "border-ring bg-secondary/60" : "border-border hover:border-ring/60"
             }`}
           >
@@ -310,18 +310,31 @@ export function DeGiroImportTab() {
               multiple
               accept=".csv,text/csv"
               className="sr-only"
+              tabIndex={-1}
               disabled={busy}
               onChange={(event) => {
                 addFiles([...(event.target.files ?? [])]);
                 event.target.value = "";
               }}
             />
-            <span className="block font-semibold">Choose CSV files</span>
-            <span className="block text-sm text-muted-foreground">or drop them here</span>
-            <span className="mt-1 block text-xs text-muted-foreground">
+            {/* A button calls the input directly. A label that wraps a hidden
+             * input is the usual pattern, but a click on it did not open the
+             * picker in production. */}
+            <button
+              type="button"
+              data-action="choose-degiro-files"
+              disabled={busy}
+              aria-describedby="degiro-file-hint"
+              onClick={() => fileInputRef.current?.click()}
+              className="flex w-full cursor-pointer flex-col items-center rounded-tile px-2 py-3 disabled:pointer-events-none disabled:opacity-50"
+            >
+              <span className="block font-semibold">Choose CSV files</span>
+              <span className="block text-sm text-muted-foreground">or drop them here</span>
+            </button>
+            <span id="degiro-file-hint" className="mt-1 block text-xs text-muted-foreground">
               Account statement, transactions and portfolio. Up to 3 files, 4 MB total.
             </span>
-          </label>
+          </div>
 
           {pickerProblem !== null && (
             <p role="alert" className="text-sm text-negative">

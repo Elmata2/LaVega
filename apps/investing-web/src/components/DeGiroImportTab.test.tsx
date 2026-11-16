@@ -299,3 +299,18 @@ test("a refused commit can be retried without picking the files again", async ()
   expect(view.textContent).toContain("Import complete.");
   expect(calls.filter((call) => call.url.includes("mode=commit"))).toHaveLength(2);
 });
+
+test("the picker button opens the hidden file input", async () => {
+  stubRoutes({
+    status: emptyStatus(),
+    preview: { mode: "preview", files: [] },
+    commit: { mode: "commit", committed: false, files: [], totals: noRows, problems: [] },
+  });
+  const view = await render();
+  const input = fileInput(view);
+  const click = vi.spyOn(input, "click").mockImplementation(() => undefined);
+  const button = view.querySelector<HTMLButtonElement>('[data-action="choose-degiro-files"]');
+  expect(button).not.toBeNull();
+  await act(async () => button!.click());
+  expect(click).toHaveBeenCalledOnce();
+});
