@@ -1185,6 +1185,9 @@ function Overview() {
                   <AllocationDonut
                     instrument={state.data.allocation.instrument}
                     entity={state.data.allocation.entity}
+                    {...(state.data.allocation.broker
+                      ? { broker: state.data.allocation.broker }
+                      : {})}
                     {...(state.data.allocation.ladder
                       ? { ladder: state.data.allocation.ladder }
                       : {})}

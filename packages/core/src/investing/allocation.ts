@@ -4,9 +4,10 @@
  */
 
 import type { Position } from "./model.js";
+import { brokerLabel, isBrokerId } from "./brokers.js";
 import { convertCurrency, type FxRates } from "./portfolio.js";
 
-export type AllocationGroup = "instrument" | "entity";
+export type AllocationGroup = "instrument" | "entity" | "broker";
 export type AllocationBucket = {
   key: string;
   label: string;
@@ -18,7 +19,10 @@ export type Allocation = {
   unpriced: string[];
 };
 
-export type PricedAllocationPosition = Pick<Position, "symbol" | "entity" | "description"> & {
+export type PricedAllocationPosition = Pick<
+  Position,
+  "symbol" | "entity" | "description" | "broker"
+> & {
   marketValue: number | null;
 };
 
@@ -49,21 +53,34 @@ export function bucketAllocation(
   const unpriced = new Set<string>();
 
   for (const position of positions) {
-    const key = group === "instrument" ? position.symbol : position.entity;
+    const broker = position.broker ?? "unknown";
+    const key =
+      group === "instrument" ? position.symbol : group === "broker" ? broker : position.entity;
     const label =
-      group === "instrument" ? position.description || position.symbol : position.entity;
+      group === "instrument"
+        ? position.description || position.symbol
+        : group === "broker"
+          ? isBrokerId(broker)
+            ? brokerLabel(broker)
+            : "Unknown platform"
+          : position.entity;
     const value = positionValue(position, presentationCurrency, fxRates);
     const existing = buckets.get(key);
 
     if (value === null) {
-      unpriced.add(group === "instrument" ? position.symbol : position.entity);
+      unpriced.add(group === "entity" ? position.entity : position.symbol);
       if (!existing) buckets.set(key, { key, label, value: null, unpriced: true });
-      else existing.unpriced = true;
+      /* A platform total stays useful when one holding on it has no price:
+       * keep the priced part and list the unpriced symbol separately. */
+      else if (group !== "broker") existing.unpriced = true;
       continue;
     }
 
     if (!existing) buckets.set(key, { key, label, value, unpriced: false });
-    else existing.value = (existing.value ?? 0) + value;
+    else {
+      existing.value = (existing.value ?? 0) + value;
+      if (group === "broker") existing.unpriced = false;
+    }
   }
 
   return {
@@ -96,9 +113,19 @@ export function bucketPricedAllocation(
   const buckets = new Map<string, AllocationBucket>();
   const unpriced = new Set<string>();
   for (const position of positions) {
-    const key = group === "instrument" ? position.symbol : position.entity;
+    const broker = position.broker ?? "unknown";
+    const key =
+      group === "instrument" ? position.symbol : group === "broker" ? broker : position.entity;
     const label =
-      group === "instrument" ? position.description || position.symbol : position.entity;
+      group === "instrument"
+        ? position.description || position.symbol
+        : group === "broker"
+          ? broker === "multiple"
+            ? "Multiple platforms"
+            : isBrokerId(broker)
+              ? brokerLabel(broker)
+              : "Unknown platform"
+          : position.entity;
     const existing = buckets.get(key);
     if (position.marketValue === null) {
       unpriced.add(position.symbol);

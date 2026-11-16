@@ -362,7 +362,7 @@ Prototype reference: [`prototype-crosshair-84`](https://github.com/Elmata2/LaVeg
 
 ## Allocation donut
 
-Show current allocation by instrument and by entity. Keep it compact in the right rail. Do not label entity grouping as broker grouping. `Position` has no reliable broker field, and broker grouping remains deferred ([Fix bucketAllocationByBroker](https://github.com/Elmata2/LaVega/issues/83)).
+Show current allocation by instrument, by entity, and by platform. Keep it compact in the right rail. The platform split groups by `Position.broker` and names each bucket through the shared `BROKERS` table, so DeGiro, Interactive Brokers and Trading 212 read the same here as in settings. A snapshot written before broker provenance has no platform and reads `Unknown platform`; a holding reported by more than one broker reads `Multiple platforms`.
 
 Use priced portfolio value as denominator. Make unpriced positions visible as incomplete data instead of silently treating them as zero.
 
@@ -376,7 +376,7 @@ Show current open holdings only ([Positions table: columns, sorting, grouping](h
 
 Use these columns:
 
-- `Instrument`: name or ticker, plus entity.
+- `Instrument`: name or ticker, plus platform (broker label) and entity as the fallback.
 - `Waarde`: current value in EUR.
 - `% portefeuille`: weight against priced portfolio value.
 - `Totaal rendement`: `+€X (+Y%)` from the position-return model.
@@ -558,6 +558,5 @@ Map-wide future work:
 
 v1 deferrals:
 
-- Broker grouping in the allocation donut or positions table. `Position.broker` exists but is optional on older persisted snapshots.
 - Position-versus-benchmark or position-versus-portfolio comparison.
 - A separate closed-position history or transaction browser.

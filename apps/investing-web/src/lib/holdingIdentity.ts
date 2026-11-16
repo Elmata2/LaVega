@@ -1,3 +1,5 @@
+import { brokerLabel, isBrokerId } from "@lavega/core";
+
 /** An ISIN is a product identifier, not a name. DeGiro reports one as the
  *  symbol while its `description` holds the product name, so the identity line
  *  must not repeat it. */
@@ -14,12 +16,19 @@ export function holdingIdentityLine(position: {
   symbol: string;
   description?: string | undefined;
   entity?: string | undefined;
+  brokers?: readonly string[] | undefined;
   quantity: number;
 }): string {
   const shares = `${position.quantity.toLocaleString("en-GB")} shares`;
+  /* The platform is what the owner asks for ("where do I hold this?"). The
+   * entity is the fallback for a snapshot written before broker provenance. */
+  const platforms = position.brokers
+    ?.map((broker) => (isBrokerId(broker) ? brokerLabel(broker) : broker))
+    .join(" + ");
+  const account = platforms || position.entity;
   if (position.description && isIsinSymbol(position.symbol))
-    return position.entity ? `${position.entity} · ${shares}` : shares;
-  return [position.symbol, position.entity, shares]
+    return account ? `${account} · ${shares}` : shares;
+  return [position.symbol, account, shares]
     .filter((part): part is string => Boolean(part))
     .join(" · ");
 }

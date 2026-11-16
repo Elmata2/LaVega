@@ -12,6 +12,8 @@ type AllocationLadderView = NonNullable<InvestingDashboardData["allocation"]["la
 type AllocationDonutProps = {
   instrument: Allocation;
   entity: Allocation;
+  /** Platform split. Absent on a dashboard stored before broker provenance. */
+  broker?: Allocation;
   /** Cash-aware ladder with the documented denominator (WS4.6, #297). Absent
    *  on a dashboard payload stored before the ladder existed. */
   ladder?: AllocationLadderView;
@@ -144,12 +146,15 @@ function LadderRows({
 export function AllocationDonut({
   instrument,
   entity,
+  broker,
   ladder,
   currency = "EUR",
 }: AllocationDonutProps) {
-  const [group, setGroup] = useState<"instrument" | "entity">("instrument");
+  const [group, setGroup] = useState<"instrument" | "entity" | "broker">("instrument");
   const [showOverige, setShowOverige] = useState(false);
-  const allocation = group === "instrument" ? instrument : entity;
+  const allocation =
+    group === "instrument" ? instrument : group === "broker" ? (broker ?? entity) : entity;
+  const groupNoun = group === "instrument" ? "holding" : group === "broker" ? "platform" : "entity";
   const priced = allocation.buckets.filter(
     (bucket) => !bucket.unpriced && bucket.value !== null && bucket.value > 0,
   );
@@ -183,6 +188,19 @@ export function AllocationDonut({
           >
             Entity
           </button>
+          {broker && (
+            <button
+              type="button"
+              aria-pressed={group === "broker"}
+              onClick={() => {
+                setGroup("broker");
+                setShowOverige(false);
+              }}
+              className={segmentedItem(group === "broker")}
+            >
+              Platform
+            </button>
+          )}
         </div>
       </CardHeader>
       <CardContent>
@@ -196,7 +214,7 @@ export function AllocationDonut({
             <div
               className="relative"
               role="img"
-              aria-label={`Portfolio allocation per ${group === "instrument" ? "holding" : "entity"}`}
+              aria-label={`Portfolio allocation per ${groupNoun}`}
             >
               {display.length > 0 ? (
                 <ChartContainer className="h-[180px]" aria-hidden="true">
@@ -291,19 +309,35 @@ export function AllocationDonut({
                   )}
                 </li>
               ))}
+              {group === "broker" &&
+                allocation.buckets
+                  .filter((bucket) => bucket.value === null)
+                  .map((bucket) => (
+                    <li
+                      key={`unknown-${bucket.key}`}
+                      className="flex items-center justify-between gap-3"
+                    >
+                      <span className="flex min-w-0 items-center gap-2">
+                        <Swatch className="size-2 shrink-0 rounded-full" color={otherColor} />
+                        <span className="truncate">{bucket.label}</span>
+                      </span>
+                      <span className="text-xs text-muted-foreground">Value unknown</span>
+                    </li>
+                  ))}
               {allocation.unpriced.length > 0 && (
                 <li role="status" className="border-t border-warning/30 pt-3 text-warning">
                   <span className="font-semibold">Value unknown:</span>{" "}
                   {allocation.unpriced.join(", ")}
                   <span className="block text-xs text-muted-foreground">
-                    Not included in the chart or percentage.
+                    No usable price yet, so they stay out of the chart and percentage. Allow market
+                    data on Overview; the next price sync values them.
                   </span>
                 </li>
               )}
             </ul>
           </div>
         )}
-        {ladder && (
+        {ladder && group !== "broker" && (
           <LadderRows
             ladder={group === "instrument" ? ladder.instrument : ladder.entity}
             currency={currency}

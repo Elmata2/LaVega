@@ -28,6 +28,7 @@ test("empty dashboard has every range and no invented records", () => {
     allocation: {
       instrument: { buckets: [], unpriced: [] },
       entity: { buckets: [], unpriced: [] },
+      broker: { buckets: [], unpriced: [] },
     },
     positions: [],
     position: null,

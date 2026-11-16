@@ -36,3 +36,27 @@ test("an ISIN without a product name still identifies the holding", () => {
     "XS00PF000003 · DeGiro · 3 shares",
   );
 });
+
+test("an ISIN names the platform, not the account wrapper", () => {
+  expect(
+    holdingIdentityLine({
+      symbol: "XS00PF000003",
+      description: "VOORBEELD GLOBAL EQUITY ETF",
+      entity: "personal",
+      brokers: ["degiro"],
+      quantity: 3,
+    }),
+  ).toBe("DeGiro · 3 shares");
+});
+
+test("a holding reported by two brokers names both", () => {
+  expect(
+    holdingIdentityLine({
+      symbol: "XS00PF000003",
+      description: "VOORBEELD GLOBAL EQUITY ETF",
+      entity: "personal",
+      brokers: ["degiro", "ibkr"],
+      quantity: 3,
+    }),
+  ).toBe("DeGiro + Interactive Brokers · 3 shares");
+});
