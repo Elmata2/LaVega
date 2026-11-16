@@ -2,7 +2,12 @@ import { describe, expect, test } from "vitest";
 import type { Rule, Tx } from "./model.js";
 import { categorize } from "./views.js";
 import { FOREIGN_COUNTRY_CODES } from "./categories.js";
-import { NL_CATEGORY_RULES, matchNorm } from "./categories.js";
+import {
+  NL_CATEGORY_RULES,
+  matchNorm,
+  stripProcessorNoise,
+  categoryHaystack,
+} from "./categories.js";
 
 const tx = (counterparty: string, description = "", category = ""): Tx => ({
   id: counterparty + description,
@@ -587,4 +592,151 @@ describe("name splitting runs in linear time and keeps its results", () => {
       expect(performance.now() - t0).toBeLessThan(100);
     }
   });
+});
+
+/* --- processor prefixes, Revolut internal moves, bare "NS" ----------------- */
+
+describe("processor prefixes are stripped before the built-in rules read the text", () => {
+  test("stripProcessorNoise removes the prefix and nothing else", () => {
+    expect(stripProcessorNoise("CCV*ALBERT HEIJN")).toBe("ALBERT HEIJN");
+    expect(stripProcessorNoise("CCV *Bakkerij Mol")).toBe("Bakkerij Mol");
+    expect(stripProcessorNoise("SumUp *Kapper Jan")).toBe("Kapper Jan");
+    expect(stripProcessorNoise("SUMUP  *KAPPER")).toBe("KAPPER");
+    expect(stripProcessorNoise("Zettle_*Cafe Noord")).toBe("Cafe Noord");
+    expect(stripProcessorNoise("iZettle *Cafe Noord")).toBe("Cafe Noord");
+    expect(stripProcessorNoise("Boekhandel Dominicanen via iDEAL")).toBe("Boekhandel Dominicanen");
+    expect(stripProcessorNoise("via iDEAL Boekhandel")).toBe("Boekhandel");
+  });
+
+  test("strings without those prefixes are returned unchanged", () => {
+    for (const s of [
+      "Albert Heijn 1234 AMSTERDAM",
+      "SumUp Payments Limited", // brand text without the marker is not a prefix
+      "Accvision*x", // 'ccv' inside a word
+      "Ideal Standard BV",
+      "Geld toegevoegd",
+      "",
+    ])
+      expect(stripProcessorNoise(s)).toBe(s);
+  });
+
+  test("categoryHaystack equals matchNorm for text without a prefix", () => {
+    for (const [cp, d] of [
+      ["Albert Heijn", "Pas 123"],
+      ["Nationale-Nederlanden", "Premie"],
+      ["K.v.K.", ""],
+    ] as const)
+      expect(categoryHaystack({ counterparty: cp, description: d })).toBe(matchNorm(cp + " " + d));
+  });
+
+  test("the merchant behind the prefix is what the rules see", () => {
+    expect(cat(tx("CCV*ALBERT HEIJN"))).toBe("Boodschappen");
+    expect(cat(tx("SumUp *Albert Heijn"))).toBe("Boodschappen");
+    expect(cat(tx("Zettle_*Albert Heijn"))).toBe("Boodschappen");
+    expect(cat(tx("Albert Heijn via iDEAL"))).toBe("Boodschappen");
+    expect(cat(tx("SumUp *NS"))).toBe("Transport"); // needs the stripped, whole-word text
+  });
+
+  test("a processor-only string matches nothing", () => {
+    for (const cp of ["SumUp *", "CCV*", "iZettle *", "Zettle_*", "via iDEAL"])
+      expect(cat(tx(cp))).toBe("onbekend");
+  });
+
+  test("a processor-prefixed row is a merchant row, never a person", () => {
+    expect(cat(tx("Zettle_Jan de Vries"))).not.toBe("Tussen personen");
+    expect(cat(tx("SumUp *Jan de Vries"))).not.toBe("Tussen personen");
+    // The same name without a processor marker is unchanged: still a person.
+    expect(cat(tx("Jan de Vries"))).toBe("Tussen personen");
+  });
+
+  test("Mollie/Stripe/Adyen stay excluded, with or without a processor prefix", () => {
+    expect(cat(tx("MOLLIE B.V.", "Uitbetaling"))).toBe("onbekend");
+    expect(cat(tx("Adyen N.V."))).toBe("onbekend");
+    expect(cat({ ...tx("STRIPE PAYMENTS UK"), amount: 250 })).toBe("onbekend");
+  });
+});
+
+describe("Revolut internal movements are the owner's own money", () => {
+  test.each([
+    ["Top-up by *1234"],
+    ["Top-Up by *1234"],
+    ["Top-up via Apple Pay"],
+    ["Top-up via Google Pay"],
+    ["Top-up by card"],
+    ["Exchanged to EUR"],
+    ["Exchanged from USD"],
+    ["Exchange to GBP"],
+    ["To EUR"],
+    ["From EUR Pocket"],
+    ["To USD Vault"],
+  ])("%s -> Eigen overboeking, both directions", (cp) => {
+    expect(cat(tx(cp))).toBe("Eigen overboeking");
+    expect(cat({ ...tx(cp), amount: 50 })).toBe("Eigen overboeking");
+  });
+
+  test("ambiguous look-alikes are NOT treated as internal", () => {
+    expect(cat(tx("To Bob"))).not.toBe("Eigen overboeking");
+    expect(cat(tx("To Jan de Vries"))).not.toBe("Eigen overboeking");
+    expect(cat(tx("Top-up Cafe"))).not.toBe("Eigen overboeking"); // no funding marker
+    expect(cat(tx("Pietje", "Exchange to EUR"))).not.toBe("Eigen overboeking"); // description only
+    expect(cat(tx("Exchange Rate Fee"))).not.toBe("Eigen overboeking");
+    expect(cat(tx("To the Moon BV"))).not.toBe("Eigen overboeking");
+  });
+
+  test("a named merchant and a bare TOP UP keep their pre-existing category", () => {
+    // Pinned to what origin/master returned for each of these.
+    expect(cat(tx("Topup by Vodafone"))).toBe("Abonnementen");
+    expect(cat(tx("Top-up by Odido"))).toBe("Abonnementen");
+    expect(cat(tx("Top-up door Lebara"))).toBe("Abonnementen");
+    expect(cat(tx("TOP UP"))).toBe("Tussen personen");
+    expect(cat(tx("Top-up", "Prepaid KPN"))).toBe("Abonnementen");
+  });
+
+  test("a user rule and a stored category still win", () => {
+    const rules: Rule[] = [{ id: "r1", match: "top up", category: "Mijn" }];
+    expect(cat(tx("Top-up by *1234"), rules)).toBe("Mijn");
+    expect(cat(tx("Top-up by *1234", "", "Handmatig"))).toBe("Handmatig");
+  });
+});
+
+describe('bare "NS" is a whole-word, upper-case token', () => {
+  test("matches the railway as its own word", () => {
+    expect(cat(tx("NS"))).toBe("Transport");
+    expect(cat(tx("NS 1234 UTRECHT CS"))).toBe("Transport");
+  });
+
+  test("does not match inside words, names, initials or lower case", () => {
+    for (const cp of [
+      "INSURANCE COMPANY",
+      "TRANSFER",
+      "Jansen",
+      "JANSEN BV",
+      "Hans Jansen",
+      "N.S. Jansen",
+      "Collins",
+      "ns",
+      "Monsanto",
+    ])
+      expect(cat(tx(cp))).not.toBe("Transport");
+  });
+
+  test("digits, descriptions and prose never make an NS token (pinned to origin/master)", () => {
+    expect(cat(tx("Jansen", "Kenmerk 123NS456"))).not.toBe("Transport");
+    expect(cat(tx("X", "REF 1NS2"))).not.toBe("Transport");
+    expect(cat(tx("Jan de Vries", "Terugbetaling NS kaartje"))).toBe("Tussen personen");
+    expect(cat(tx("Pietje Puk", "Treinkaartje NS Amsterdam"))).toBe("Tussen personen");
+    expect(cat(tx("Vereniging X", "Contributie NS-korting"))).not.toBe("Transport");
+  });
+
+  test("an incoming NS booking (salary, refund) is not labelled Transport", () => {
+    expect(cat({ ...tx("NS"), amount: 100 })).not.toBe("Transport");
+  });
+});
+
+test("stripProcessorNoise stays linear on long whitespace and dot runs", () => {
+  const t0 = Date.now();
+  stripProcessorNoise("a" + " ".repeat(50_000) + "b");
+  stripProcessorNoise("a" + ". ".repeat(25_000) + "b");
+  stripProcessorNoise("x" + "- ".repeat(25_000) + "via");
+  expect(Date.now() - t0).toBeLessThan(500);
 });

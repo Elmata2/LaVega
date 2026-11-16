@@ -606,6 +606,20 @@
   .filter-bar input {
     max-width: 100%;
   }
+  /* Per-row category picker (Transacties). A quiet text-sized control on a
+ * desktop table; a 44px target wherever the pointer is coarse or the table has
+ * turned into cards on a phone. */
+  .cat-edit {
+    font-size: var(--fs-sm, 0.85em);
+    padding: 2px var(--sp-2);
+    max-width: 100%;
+  }
+  @media (pointer: coarse), (max-width: 620px) {
+    .cat-edit {
+      min-height: 44px;
+      min-width: 44px;
+    }
+  }
   /* The search field takes the leftover width rather than a fixed one. */
   .filter-grow {
     flex: 1 1 12rem;
