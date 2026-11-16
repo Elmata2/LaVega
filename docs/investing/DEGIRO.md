@@ -663,6 +663,22 @@ reports one cash problem with both amounts.
   The problem's action opens `/profile#degiro-import`, which selects the DeGiro
   import tab before the reader scrolls.
 
+### Live verification (D15, #327)
+
+On 2026-11-16 a real owner export — account statement (747 rows, EN header),
+transactions (25 rows) and portfolio (13 rows) — was imported on a Vercel
+preview with the preview test tenant. Result: 25 trades, 346 cash flows, 107
+dividends, 12 positions, complete coverage 2022-03-30..2026-10-28, zero parse
+problems and zero reconciliation problems. After a price sync all 12 positions
+were priced and all 12 returns were available. Re-importing the same files kept
+the same totals and holdings; only `importedAt` advanced. No amounts are
+recorded here.
+
+The run found and fixed three long-tail gaps: the EN account header had no
+signature, the Saldo walk rejected the one-cent rounding on a `Koop` row, and
+the cache kept a stored unknown coverage over a complete backfill. Production
+was not written; the owner limited the run to the preview test tenant.
+
 ### Out of scope
 
 - DeGiro login, session reuse, scheduled sync, browser automation (#25, #33).

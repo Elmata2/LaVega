@@ -66,8 +66,8 @@ type ClassificationRule = {
 const CLASSIFICATION_TABLE: readonly ClassificationRule[] = [
   // #316 owns dividends. Both tax rules sit before the gross rule: the wording
   // starts with "Dividend"/"dividend", so the looser gross rule must never see
-  // it. The EN rule is forward-looking for the day an English statement appears
-  // (no EN account signature exists yet).
+  // it. The EN rule is forward-looking; the observed EN-header export kept Dutch
+  // row descriptions.
   // Both carry no Order Id; the structural rule keeps them a dividend even if
   // one ever did.
   { description: /^dividendbelasting\b/i, bucket: "dividend", kind: null, dividendKind: "tax" },
