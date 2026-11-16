@@ -671,17 +671,20 @@ reports one cash problem with both amounts.
 
 On 2026-11-16 a real owner export — account statement (747 rows, EN header),
 transactions (25 rows) and portfolio (13 rows) — was imported on a Vercel
-preview with the preview test tenant. Result: 25 trades, 346 cash flows, 107
-dividends, 12 positions, complete coverage 2022-03-30..2026-10-28, zero parse
-problems and zero reconciliation problems. After a price sync all 12 positions
-were priced and all 12 returns were available. Re-importing the same files kept
-the same totals and holdings; only `importedAt` advanced. No amounts are
-recorded here.
+preview, then in the production test tenant. Result on both: 25 trades, 346 cash
+flows, 107 dividends, 12 positions, complete coverage 2022-03-30..2026-10-28,
+zero parse problems and zero reconciliation problems. After a price sync all 12
+positions were priced and all 12 returns were available. Re-importing the same
+files kept the same totals and holdings; only `importedAt` advanced. No amounts
+are recorded here.
 
-The run found and fixed three long-tail gaps: the EN account header had no
-signature, the Saldo walk rejected the one-cent rounding on a `Koop` row, and
-the cache kept a stored unknown coverage over a complete backfill. Production
-was not written; the owner limited the run to the preview test tenant.
+The run found and fixed five long-tail gaps: the EN account header had no
+signature, the Saldo walk rejected the one-cent rounding on a `Koop` row, the
+cache kept a stored unknown coverage over a complete backfill, a merged import
+with an older account window and a newer portfolio was treated as a backfill and
+left the newer holdings unapplied, and the cash-balance merge used the account
+file wholesale instead of the newest anchor per currency. Production was
+written to the verification test tenant with the owner's explicit permission.
 
 ### Out of scope
 
@@ -741,4 +744,8 @@ writes nothing), D13 (#325, the dashboard carries the import's dates, a
 Overview and Positions show that age without implying live quantities), D14
 (#326, report-only quantity and same-day cash reconciliation: a split, an ISIN
 change, a transfer or a short history becomes one named problem while the
-portfolio quantities still win).
+portfolio quantities still win), D15 (#327, live verification on preview and the
+production test tenant with a real EN-header account statement, transactions and
+portfolio; the run fixed the EN header, one-cent Saldo rounding, unknown-coverage
+replacement, merged-backfill holdings and per-currency cash anchors, and the docs
+are closed out).
