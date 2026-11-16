@@ -227,11 +227,34 @@ test("pinnen, not held: the card and the price; own-card comparison behind the i
     },
     false,
   );
-  expect(a.line).toBe("Pin met N26 betaalpas: € 0,00 op € 200.");
+  // Not held and not named on the pay line: the verb marks the card.
+  expect(a.line).toBe("Open N26 betaalpas om te pinnen: € 0,00 op € 200.");
   expect(a.why).toEqual([
     "Van je eigen kaarten pin je het goedkoopst met ING betaalpas: € 6,30, dus € 6,30 duurder.",
   ]);
+  expect(b.line).toBe("Open N26 debit card to withdraw: €0.00 per €200.");
+});
+
+test("pinnen, not held and the SAME card the pay line already names: plain 'Pin met', no open wording", () => {
+  const h: WithdrawalHeadline = {
+    kind: "not-held",
+    product: "N26 betaalpas",
+    costOnReference: 0,
+    effectivePct: null,
+    own: { kind: "unknown" },
+    holdingCost: { kind: "bare", clause: null },
+    small: none,
+    missingCashNote: none,
+  };
+  const a = flat(check(withdrawAnswer(h, nl, "nl", false, "N26 betaalpas")));
+  const b = flat(check(withdrawAnswer(h, en, "en", false, "N26 betaalpas")));
+  expect(a.line).toBe("Pin met N26 betaalpas: € 0,00 op € 200.");
   expect(b.line).toBe("Withdraw with N26 debit card: €0.00 per €200.");
+  // A different pay-line card does not count as "already named".
+  const c = flat(check(withdrawAnswer(h, nl, "nl", false, "ING betaalpas")));
+  expect(c.line).toMatch(/^Open N26 betaalpas om te pinnen: /);
+  // The explanation behind the i is unchanged.
+  expect(a.why).toEqual(["Van je eigen kaarten kennen we geen opnametarief."]);
 });
 
 test("pinnen, unknown / no cards / euro country", () => {

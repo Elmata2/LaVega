@@ -796,9 +796,11 @@ test("a cheaper card he does not hold LEADS the answer, and is marked as not his
   // The headline itself, not a footnote under it (review 3, item 2).
   expect(el.querySelector(".travel-winner-name")!.textContent).toContain("212 Card");
   expect(winner.textContent).toContain("€ 10,00"); // 1% of € 1.000 saved
-  expect(winner.textContent).toMatch(/nog niet van jou|heb je nog niet/i);
+  expect(winner.textContent).toMatch(/Je hebt deze kaart nog niet/);
   // A card he cannot tap tomorrow morning must LOOK different from one he can.
-  expect(winner.querySelector('[data-testid="badge"]')).not.toBeNull();
+  // ONE mark, by the verb: "Open …" and no chip beside it.
+  expect(el.querySelector(".travel-winner-headline")!.textContent).toMatch(/^Open /);
+  expect(winner.querySelector('[data-testid="badge"]')).toBeNull();
 });
 
 test("wat hij vandaag kan betalen blijft bestaan, maar staat in de uitklap", () => {
@@ -841,7 +843,11 @@ test("the cash line recommends the proven cheapest and names the card it cannot 
   expect(cash.replace(/Onbekend is niet gratis/g, "")).not.toMatch(
     /gratis|geen kosten|kost je niets/i,
   );
-  expect(el.querySelector('.travel-winner-cash [data-testid="badge"]')).not.toBeNull();
+  // Marked by the verb, never by a chip.
+  expect(el.querySelector(".travel-winner-pin")!.textContent).toMatch(
+    /^(Open .* om te pinnen|Pin met )/,
+  );
+  expect(el.querySelector('.travel-winner-cash [data-testid="badge"]')).toBeNull();
 });
 
 test("catalogue cashback is shown with its gate, never subtracted from the price", () => {
@@ -1088,10 +1094,13 @@ test("de pinaanbeveling noemt de kaartprijs ook als er geen voordeel is om hem t
       ),
     ],
   });
-  const kosten = el.querySelector('[data-testid="travel-pin-kosten"]')!;
-  expect(kosten).not.toBeNull();
+  // Pay en pin raden hier DEZELFDE kaart aan en de pinregel heeft geen eigen
+  // netto: de prijs staat dan één keer vooraan, in de rij onder de betaalregel,
+  // en de pinrij herhaalt hem niet.
+  expect(el.querySelector('[data-testid="travel-pin-kosten"]')).toBeNull();
+  const kosten = el.querySelector('[data-testid="travel-pay-kosten"]')!;
   expect(kosten.textContent).toContain(`${formatEuro(2.55)} per maand`);
-  expect(kosten.textContent).not.toMatch(/netto/i);
+  expect(times(winnerText(el), `${formatEuro(2.55)} per maand`)).toBe(1);
 });
 
 /* ════════════ HET BEDRAG STAAT PRECIES ÉÉN KEER OP HET SCHERM ═══════════════
@@ -1479,7 +1488,8 @@ for (const t of TOESTANDEN) {
 
     // Het merkteken blijft vooraan: geen van deze drie kaarten heeft hij, en dat
     // moet zichtbaar anders zijn dan een kaart die hij morgen kan pinnen.
-    expect(el.querySelector('.travel-winner-name [data-testid="badge"]')).not.toBeNull();
+    expect(el.querySelector(".travel-winner-headline")!.textContent).toMatch(/^Open /);
+    expect(el.querySelector('.travel-winner [data-testid="badge"]')).toBeNull();
 
     // En de herkomst is verplaatst, niet weggegooid.
     expect(foldText(el)).toContain("staat in de catalogus");
@@ -1694,4 +1704,59 @@ test("de kleine-opname-waarschuwing staat zichtbaar, buiten elk <details>", () =
   for (const info of el.querySelectorAll(".travel-winner details.toonmeer-info")) {
     expect(info.textContent).not.toContain("Neem in één keer meer op");
   }
+});
+
+/* ═════ EEN KAART DIE HIJ NIET HEEFT, ÉÉN KEER GEMARKEERD ═════════════════════
+ * Vooraan door het werkwoord, nooit door een chip ernaast; in de uitklap (lijsten)
+ * blijft de chip. */
+const NIET_VAN_JOU = optimiseCopy.nl.travel.badge.notYours;
+
+test("vooraan staat geen chip, ook niet bij de pinregel; de uitklap houdt zijn chips", () => {
+  const el = renderWithCatalogue({ facts: DEARER_OWN });
+  const winner = el.querySelector(".travel-winner")!;
+  expect(winner.querySelector('[data-testid="badge"]')).toBeNull();
+  expect(winner.textContent).not.toContain(NIET_VAN_JOU);
+  expect(foldPanel(el).querySelectorAll('[data-testid="badge"]').length).toBeGreaterThan(0);
+});
+
+test("pin met een andere kaart dan de betaalregel: 'Open … om te pinnen', zonder chip", () => {
+  const el = renderWithCatalogue({ facts: DEARER_OWN });
+  const pay = el.querySelector(".travel-winner-headline")!.textContent ?? "";
+  const pin = el.querySelector(".travel-winner-pin")!.textContent ?? "";
+  expect(pay).toMatch(/^Open 212 Card/);
+  expect(pin).toMatch(/^Open .+ om te pinnen: /);
+  expect(pin).not.toContain("212 Card");
+  expect(el.querySelector('[data-testid="travel-pin-kosten"]')).not.toBeNull();
+});
+
+test("pin met dezelfde kaart als de betaalregel: 'Pin met', geen tweede chip en geen herhaalde Kaartkosten", () => {
+  const same = [
+    marketCard(
+      "een",
+      "Testkaart Een",
+      "Eenbank N.V.",
+      0,
+      { value: 1, period: "maand" },
+      "Geldt bij betalen; bij geldopname in vreemde valuta geldt een apart tarief (€ 1,00 + 0,10%).",
+    ),
+  ];
+  const el = renderWithDestination({ facts: DEARER_OWN, catalogue: same });
+  const plan = realPlan(DEARER_OWN, same);
+  expect(plan.pay!.product).toBe(plan.withdrawAdvice!.product);
+  expect(plan.pay!.held).toBe(false);
+  expect(plan.withdrawAdvice!.held).toBe(false);
+  expect(el.querySelector(".travel-winner-headline")!.textContent).toMatch(/^Open Testkaart Een/);
+  expect(el.querySelector(".travel-winner-pin")!.textContent).toMatch(/^Pin met Testkaart Een: /);
+  expect(el.querySelector('.travel-winner [data-testid="badge"]')).toBeNull();
+  expect(el.querySelector('[data-testid="travel-pay-kosten"]')).not.toBeNull();
+  expect(el.querySelector('[data-testid="travel-pin-kosten"]')).toBeNull();
+});
+
+test("pin met een kaart die hij heeft blijft ongewijzigd", () => {
+  const ing = CATALOGUE.filter((e) => e.product === "ING betaalpas");
+  const el = renderWithDestination({ catalogue: ing });
+  const pin = el.querySelector(".travel-winner-pin")!.textContent ?? "";
+  expect(pin).toMatch(/^Pin met ING betaalpas: /);
+  expect(pin).not.toMatch(/Open/);
+  expect(el.querySelector('.travel-winner [data-testid="badge"]')).toBeNull();
 });
