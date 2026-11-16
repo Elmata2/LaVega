@@ -60,6 +60,10 @@ function upload(files: readonly File[], options: { mode?: string; asOf?: string 
   );
 }
 
+function statusRequest(): Request {
+  return new Request("http://localhost/api/investing/brokers/degiro/import", { method: "GET" });
+}
+
 function csv(name: string, text: string): File {
   return new File([text], name, { type: "text/csv" });
 }
@@ -112,6 +116,14 @@ type CommitBody = PreviewBody & {
   problems: string[];
 };
 
+type StatusBody = {
+  mode: string;
+  importedAt: string | null;
+  files: { filename: string; sha256: string }[];
+  coverage: { status?: string; from?: string; to?: string } | null;
+  positionsAsOf: string | null;
+};
+
 test("a preview parses every file, hashes the bytes and writes nothing", async () => {
   const { handler, vault, operations, writes } = makeSources();
   const text = fixture("nl/account.csv");
@@ -131,6 +143,54 @@ test("a preview parses every file, hashes the bytes and writes nothing", async (
   expect(vault.ensureWritable).not.toHaveBeenCalled();
   expect(writes).toHaveLength(0);
   expect(await operations.progress("degiro")).toBeNull();
+});
+
+test("a status read on an empty vault reports no import and writes nothing", async () => {
+  const { handler, vault, operations } = makeSources();
+
+  const response = await handler(statusRequest());
+  expect(response.status).toBe(200);
+  const body = (await response.json()) as StatusBody;
+  expect(body).toEqual({
+    mode: "status",
+    importedAt: null,
+    files: [],
+    coverage: null,
+    positionsAsOf: null,
+  });
+  expect(vault.putBrokerSnapshot).not.toHaveBeenCalled();
+  expect(vault.ensureWritable).not.toHaveBeenCalled();
+  expect(await operations.progress("degiro")).toBeNull();
+});
+
+test("a status read reports the committed import, its files and the holdings date", async () => {
+  const account = fixture("nl/account.csv");
+  const portfolio = fixture("nl/portfolio.csv");
+  const { handler, vault } = makeSources();
+  const committed = await handler(
+    upload([csv("Account.csv", account), csv("portfolio.csv", portfolio)], {
+      mode: "commit",
+      asOf: "2026-11-12",
+    }),
+  );
+  expect(committed.status).toBe(200);
+
+  const response = await handler(statusRequest());
+  expect(response.status).toBe(200);
+  const body = (await response.json()) as StatusBody;
+  expect(body.mode).toBe("status");
+  expect(body.importedAt).toBe(NOW);
+  expect(body.files).toEqual([
+    { filename: "Account.csv", sha256: createHash("sha256").update(account).digest("hex") },
+    { filename: "portfolio.csv", sha256: createHash("sha256").update(portfolio).digest("hex") },
+  ]);
+  expect(body.coverage).toMatchObject({
+    status: "complete",
+    from: "2026-01-05",
+    to: "2026-03-06",
+  });
+  expect(body.positionsAsOf).toBe("2026-11-12");
+  expect(vault.putBrokerSnapshot).toHaveBeenCalledTimes(1);
 });
 
 test("committing the same file twice leaves the stored snapshot deep-equal", async () => {
@@ -287,10 +347,22 @@ test("a committed import reaches its own tenant's dashboard and no other", async
   ).json()) as InvestingDashboardData;
   expect(mine.positions.map((position) => position.symbol)).toContain("XS00PF000003");
 
+  const mineStatus = (await (
+    await app.request("/api/investing/brokers/degiro/import")
+  ).json()) as StatusBody;
+  expect(mineStatus.importedAt).not.toBeNull();
+  expect(mineStatus.files.map((file) => file.filename)).toEqual(["Account.csv", "portfolio.csv"]);
+
   currentTenant = "tenant-b";
   const theirs = (await (
     await app.request("/api/investing/dashboard")
   ).json()) as InvestingDashboardData;
   expect(theirs.positions.map((position) => position.symbol)).not.toContain("XS00PF000003");
   expect(tenants.vaults.get("tenant-b")).toBeUndefined();
+
+  const theirStatus = (await (
+    await app.request("/api/investing/brokers/degiro/import")
+  ).json()) as StatusBody;
+  expect(theirStatus.importedAt).toBeNull();
+  expect(theirStatus.files).toEqual([]);
 });
