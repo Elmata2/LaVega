@@ -120,6 +120,32 @@ export const privacyHtml = page(
 </table>
 <p>Geen verkoop van gegevens, geen advertenties, geen tracking of analytics.</p>
 
+<h2>Wie is verantwoordelijk en op welke grondslag</h2>
+<p>LaVega is de verwerkingsverantwoordelijke in de zin van de AVG voor de persoonsgegevens die onze server verwerkt. Gegevens die alleen versleuteld in je eigen browser staan en waar wij niet bij kunnen, beheer je zelf. Contact over privacy: <a href="mailto:${CONTACT_EMAIL}">${CONTACT_EMAIL}</a>.</p>
+<table>
+  <tr><th align="left">Verwerking</th><th align="left">Grondslag (AVG art. 6)</th></tr>
+  <tr><td>Account, inloggen, beveiliging van je account</td><td>Uitvoering van de overeenkomst (lid 1 b)</td></tr>
+  <tr><td>Back-up van je kluis, brokerkoppeling en opgehaalde standen, voorkeuren</td><td>Uitvoering van de overeenkomst (lid 1 b)</td></tr>
+  <tr><td>AI-functies, dagelijkse melding, WhatsApp-vragen, doorstuuradres voor facturen</td><td>Jouw toestemming (lid 1 a). Je trekt die in door de functie uit te zetten; dat maakt de eerdere verwerking niet onrechtmatig.</td></tr>
+  <tr><td>Foutmeldingen en beveiligingslogs</td><td>Gerechtvaardigd belang (lid 1 f): de dienst stabiel en veilig houden</td></tr>
+</table>
+
+<h2>Bewaartermijnen</h2>
+<ul>
+  <li>Account, kluis-back-up, brokerkoppeling en voorkeuren: tot je ze zelf verwijdert of je account verwijdert.</li>
+  <li>Meldingen van de dagelijkse melding en WhatsApp-gesprekken: 90 dagen, of eerder als je ze zelf verwijdert.</li>
+  <li>Een publieke koerscache bevat geen persoonsgegevens.</li>
+</ul>
+
+<h2>Doorgifte buiten de Europese Economische Ruimte</h2>
+<p>Een deel van onze verwerkers (Vercel, Neon, Meta) kan gegevens in de Verenigde Staten verwerken. Dat gebeurt op basis van het EU-VS Data Privacy Framework of de standaardcontractbepalingen van de Europese Commissie. Mistral verwerkt binnen de EU.</p>
+
+<h2>Beveiliging en datalekken</h2>
+<p>Financiële gegevens in je browser zijn versleuteld met AES-GCM-256. Gegevens op de server zijn per gebruiker afgeschermd (row-level security) en reizen over TLS. Bij een datalek dat een risico voor jou meebrengt melden wij dat binnen 72 uur aan de Autoriteit Persoonsgegevens, en aan jou als het risico hoog is.</p>
+
+<h2>Leeftijd</h2>
+<p>LaVega is bedoeld voor mensen van 16 jaar en ouder.</p>
+
 <h2>Jouw controle</h2>
 <p>Je gegevens staan op je eigen apparaat: exporteren en verwijderen kan in de app. Het wissen van je browseropslag verwijdert je lokale kluis.</p>
 <p><strong>Dat wist niet meer alles.</strong> Staat er een back-up of een brokerkoppeling op de server, dan blijft die na het legen van je browser gewoon staan. Om die ook weg te halen is er een aparte handeling: <strong>het verwijderen van je gegevens op de server</strong>. Die verwijdert in één keer je kluis-back-up, je brokerkoppelingen en opgehaalde standen, je voorkeuren, je synchronisatiestand en je agent-geschiedenis. Het is niet terug te draaien, en wij bewaren daarna geen kopie. Je account zelf (je inlog) verwijderen we op verzoek — <a href="mailto:alexander.steunenberg@gmail.com">stuur een bericht</a> en we doen het.</p>
