@@ -172,8 +172,22 @@ export async function resetPassword(
   return { ok: false, kind: "unreachable" };
 }
 
+/** Rejects with a stable message when the session may still be valid (network
+ *  error or non-2xx), so callers stay on the page instead of navigating away. */
 export async function signOut(): Promise<void> {
-  await fetch("/api/auth/sign-out", { method: "POST", credentials: "same-origin" });
+  let response: Response;
+  try {
+    // The auth server answers 415 to a POST without a JSON content type.
+    response = await fetch("/api/auth/sign-out", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "content-type": "application/json" },
+      body: "{}",
+    });
+  } catch {
+    throw new Error("sign-out-failed");
+  }
+  if (!response.ok) throw new Error("sign-out-failed");
 }
 
 export function useAuthState(): { state: AuthState; refresh: () => void } {

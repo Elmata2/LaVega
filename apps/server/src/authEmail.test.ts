@@ -15,6 +15,26 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+test("a failed send logs event, name and status only, never the Resend reason or address", async () => {
+  process.env.RESEND_API_KEY = "re_test";
+  process.env.AUTH_EMAIL_FROM = "a@b.dev";
+  const err = vi.spyOn(console, "error").mockImplementation(() => undefined);
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(
+      async () =>
+        new Response(JSON.stringify({ message: "bad to victim@secret.nl" }), { status: 422 }),
+    ),
+  );
+  await expect(
+    sendAuthEmail({ to: "victim@secret.nl", from: "a@b.dev", subject: "s", text: "t", html: "h" }),
+  ).rejects.toThrow();
+  const line = err.mock.calls.map((c) => String(c[0])).join("\n");
+  expect(JSON.parse(line)).toEqual({ event: "auth_email.failed", kind: "Error", status: 422 });
+  expect(line).not.toContain("@");
+  err.mockRestore();
+});
+
 test("auth email is unconfigured until both the key and the from-address are set", () => {
   expect(authEmailConfig().configured).toBe(false);
   process.env.RESEND_API_KEY = "re_test";

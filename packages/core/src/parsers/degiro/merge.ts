@@ -114,9 +114,10 @@ function mergeTrades(
  * first transaction export and the first portfolio export are the import; every
  * other file, including an unknown header, contributes its problems only.
  *
- * Positions come from the portfolio export alone. Cash balances come from the
- * account statement when it read them, because only its `Saldo` walk proves the
- * anchors; otherwise the portfolio's current cash row stands in.
+ * Positions come from the portfolio export alone. Cash balances are merged per
+ * currency: the newest dated anchor wins, and the account statement wins a tie.
+ * The account `Saldo` is the truth for its own date; a portfolio export dated
+ * later carries the newer current cash row.
  *
  * Never throws. When the import holds no mapped file, the first parsed result
  * stands.
@@ -158,10 +159,18 @@ export function mergeDeGiroFiles(parsed: readonly ParsedBrokerFile[]): ParsedBro
   const readSections = new Set<BrokerFileSection>();
   for (const file of parsed) for (const section of file.sections ?? []) readSections.add(section);
 
-  /* The account statement keeps its `Saldo` anchors; the portfolio cash row is a
-   * current balance and only stands in when no statement read one. */
+  /* Per currency, the newest anchor wins; the account statement wins a tie.
+   * A portfolio exported after the statement's last row has the newer current
+   * cash; a currency only one file reports keeps that file's anchor. */
+  const cashByCurrency = new Map<string, Omit<CashBalance, "entity" | "broker">>();
+  for (const balance of account?.cashBalances ?? []) cashByCurrency.set(balance.currency, balance);
+  for (const balance of portfolio?.cashBalances ?? []) {
+    const existing = cashByCurrency.get(balance.currency);
+    if (existing === undefined || balance.asOf > existing.asOf)
+      cashByCurrency.set(balance.currency, balance);
+  }
   const cashBalances: Omit<CashBalance, "entity" | "broker">[] | undefined =
-    account?.cashBalances ?? portfolio?.cashBalances;
+    cashByCurrency.size > 0 ? [...cashByCurrency.values()] : undefined;
   const positions = portfolio?.positions ?? [];
   const period = account?.period ?? transactions?.period;
   /* Report-only: portfolio quantities win the holdings, the trade history is

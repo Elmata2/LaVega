@@ -131,7 +131,12 @@ export function compareOffer(
     }
   }
   const promo = offer.promo;
-  if (!promo && (found.promoRatePct !== null || found.signupUntil !== null)) {
+  // A sign-up window that closed before `today` is history. Revolut keeps the
+  // footnote online for a while after the deadline, so reading the page alone
+  // would report the closed window as "Nieuwe actie op de pagina" once the offer
+  // drops it. Only an open window (or a rate with no readable dates) counts.
+  const foundPromoOpen = found.signupUntil === null || found.signupUntil >= today;
+  if (!promo && foundPromoOpen && (found.promoRatePct !== null || found.signupUntil !== null)) {
     const window = `${found.signupFrom ?? "?"}..${found.signupUntil ?? "?"}`;
     findings.push({
       kind: "changed",

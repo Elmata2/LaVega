@@ -37,11 +37,14 @@ ID`, semicolon). No real DeGiro export has that shape; D1 deleted them and
 
 ## Verified: the account statement (`Account.csv`)
 
-Observed in three real NL exports (109, 21 and 9 rows). Headers and
-description vocabulary only; no amounts are recorded here.
+Observed in three real NL exports (109, 21 and 9 rows) and one real EN-header
+export of 2026-11-16 (747 rows). The EN export localises the header only; its
+`Description` cells stayed Dutch. Headers and description vocabulary only; no
+amounts are recorded here.
 
 ```
 Datum,Tijd,Valutadatum,Product,ISIN,Omschrijving,FX,Mutatie,,Saldo,,Order Id
+Date,Time,Value date,Product,ISIN,Description,FX,Change,,Balance,,Order Id
 ```
 
 - Comma delimiter, quoted fields, optional UTF-8 BOM.
@@ -122,6 +125,7 @@ Product,Symbol/ISIN,Amount,Closing,Local value,,Value in EUR
 | File                          | Source                                 | Rows | Notes                                                                                                                |
 | ----------------------------- | -------------------------------------- | ---- | -------------------------------------------------------------------------------------------------------------------- |
 | `nl/account.csv`              | real 109-row NL account statement      | 29   | header byte-identical; sell, partial fill, split, transfer-in and a full AutoFX group added by hand                  |
+| `en/account.csv`              | real EN-header account statement       | 2    | header byte-identical; EN header with Dutch descriptions; synthetic rows keep the walk and the trade parse covered   |
 | `nl/transactions.csv`         | real 25-row NL transaction export      | 25   | header byte-identical; partial-fill Order Id kept                                                                    |
 | `en/transactions.csv`         | real 25-row EN transaction export      | 25   | same rows; EN header                                                                                                 |
 | `nl/transactions-overlap.csv` | hand-built against the account fixture | 4    | header byte-identical to `nl/transactions.csv`; every execution overlaps `nl/account.csv` by Order Id + Datum + Tijd |
@@ -165,9 +169,9 @@ asserts the headers, the walk, the row kinds and the internal arithmetic.
   - portfolio: `Lokale waarde` holds the currency, the unnamed column holds the
     amount.
 - `detectProfile(header)` — exact header signature per profile and language.
-  Five signatures are verified: account NL, transactions NL, transactions EN,
-  portfolio NL, portfolio EN. An account statement has been observed in NL only,
-  so there is deliberately no EN account signature. Unknown header gives
+  Six signatures are verified: account NL, account EN, transactions NL,
+  transactions EN, portfolio NL, portfolio EN. The EN account header has the
+  same column layout as the NL one. Unknown header gives
   `{ known: false, problem: "onbekend DeGiro-formaat: <header>" }`. It never
   throws, never guesses, and takes no filename.
 - `readDeGiroCsv(text)` — sync, never throws, at most one problem: empty file
@@ -447,10 +451,11 @@ balance, all dated 2026-11-12. `portfolio.test.ts` pins three positions exactly,
 the ISIN identity and the cash row.
 
 Multi-file precedence (`mergeDeGiroFiles`): the first portfolio export supplies
-the positions, and the account statement's `Saldo` anchors win the cash balances
-when it read them; the portfolio cash row stands in otherwise. The account
-statement stays the cash truth, the transaction export only enriches executions,
-and the portfolio export supplies holdings. A merged source reads
+the positions. Cash balances are merged per currency: the newest dated anchor
+wins, and the account statement wins a tie. The account statement is the truth
+for its own date; a portfolio export dated later carries the newer current cash
+row, and a currency only one file reports keeps that file's anchor. The
+transaction export only enriches executions. A merged source reads
 `DeGiro account + transactions + portfolio`.
 
 The parser owns which sections it read: account = `trades`, `dividends`,
@@ -485,8 +490,11 @@ section would tell the snapshot the broker reported nothing and wipe stored rows
   For the rest, per currency: `Saldo[n] = Saldo[n-1] + Mutatie[n]`. Verified on
   the three real exports (109, 21 and 9 rows): no break, except one row in two
   of the files that differs by €0.01 because the file rounds quantity × price
-  to cents. The naive rule, which includes sweeps and information lines, breaks
-  on every sweep and information row.
+  to cents. The walk tolerates exactly that one-cent rounding on a trade row; a
+  larger break is a real gap. The 747-row EN-header export of 2026-11-16 has two
+  such trade rows and proves complete with the same tolerance. The naive rule,
+  which includes sweeps and information lines, breaks on every sweep and
+  information row.
 
 - **Cash flow kinds.** External money only is `deposit`/`withdrawal`. FX legs
   and flatex transfer lines are `other` with the description. The cash sweep is
@@ -524,9 +532,16 @@ overlapping account files). A re-import must not append duplicates.
   reports and keeps the rest.
 - Backfill. An import whose window ends before the stored latest date (from
   positions, cash balances or coverage) adds history only: it never overwrites
-  the stored cash balances. Coverage is one union while windows touch or
-  overlap; across a gap the stored span cannot vouch for the days between, so a
-  forward import replaces it.
+  the stored cash balances. The import's end is the later of the statement
+  period and the portfolio's own date, so a merged import with an older account
+  window and a newer portfolio is forward for the holdings, not a backfill.
+  Coverage is one union while windows touch or overlap; across a gap the stored
+  span cannot vouch for the days between, so a forward import replaces it. An
+  **unknown** stored coverage proves nothing, so a complete import replaces it
+  even when its window ends before the stored latest date. That is the normal
+  case when a user imports a portfolio first and adds the account statement
+  later: the statement ends before the portfolio's export date, and its proven
+  window must not be discarded as a backfill.
 - Portfolio `asOf` rule. A portfolio import replaces positions and its cash row
   only when its `asOf` is not older than the stored positions' latest `asOf`.
   An older portfolio is a holdings backfill: positions, cash row and stored
@@ -652,11 +667,32 @@ reports one cash problem with both amounts.
   The problem's action opens `/profile#degiro-import`, which selects the DeGiro
   import tab before the reader scrolls.
 
+### Live verification (D15, #327)
+
+On 2026-11-16 a real owner export — account statement (747 rows, EN header),
+transactions (25 rows) and portfolio (13 rows) — was imported on a Vercel
+preview, then in the production test tenant. Result on both: 25 trades, 346 cash
+flows, 107 dividends, 12 positions, complete coverage 2022-03-30..2026-10-28,
+zero parse problems and zero reconciliation problems. After a price sync all 12
+positions were priced and all 12 returns were available. Re-importing the same
+files kept the same totals and holdings; only `importedAt` advanced. No amounts
+are recorded here.
+
+The run found and fixed five long-tail gaps: the EN account header had no
+signature, the Saldo walk rejected the one-cent rounding on a `Koop` row, the
+cache kept a stored unknown coverage over a complete backfill, a merged import
+with an older account window and a newer portfolio was treated as a backfill and
+left the newer holdings unapplied, and the cash-balance merge used the account
+file wholesale instead of the newest anchor per currency. Production was
+written to the verification test tenant with the owner's explicit permission.
+
 ### Out of scope
 
 - DeGiro login, session reuse, scheduled sync, browser automation (#25, #33).
-- A browser-extension export helper. Tracked as a separate decision (D16); not
-  blocking.
+- A browser-extension export helper. D16 decided no
+  ([ADR 0015](../adr/0015-no-degiro-export-helper-in-the-extension.md)): no
+  measured friction, two files at most on a monthly cadence, and the extension
+  is a no-network, no-account artifact whose build gate rejects any request.
 
 ### Privacy
 
@@ -686,6 +722,8 @@ number and keep the Saldo walk consistent.
 | D16 [#328](https://github.com/Elmata2/lavega/issues/328) | Decision: extension export helper (optional)                | D15           |
 
 Order: D1 and D8 start in parallel. D2 → D3/D4 → D5 is the critical path.
+The graph ends at D16: no extension export helper, manual import only
+([ADR 0015](../adr/0015-no-degiro-export-helper-in-the-extension.md)).
 
 Landed: D1 (#313, fixtures), D8 (#320, one broker list), D2 (#314, reader and
 header-signature detection), D3 (#315, account statement to cash flows plus the
@@ -710,4 +748,8 @@ writes nothing), D13 (#325, the dashboard carries the import's dates, a
 Overview and Positions show that age without implying live quantities), D14
 (#326, report-only quantity and same-day cash reconciliation: a split, an ISIN
 change, a transfer or a short history becomes one named problem while the
-portfolio quantities still win).
+portfolio quantities still win), D15 (#327, live verification on preview and the
+production test tenant with a real EN-header account statement, transactions and
+portfolio; the run fixed the EN header, one-cent Saldo rounding, unknown-coverage
+replacement, merged-backfill holdings and per-currency cash anchors, and the docs
+are closed out).

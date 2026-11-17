@@ -77,11 +77,11 @@ The credential status API reports `brokers.ibkr` and `brokers.trading212` as `em
 
 **Whether credentials are persisted differs per broker, and the reason is lockout risk, not convenience:**
 
-| Broker              | Persisted?   | Why                                                                                                                                                                                                                      |
-| ------------------- | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Broker              | Persisted?   | Why                                                                                                                                                                                                                                             |
+| ------------------- | ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | DeGiro              | N/A          | No login. Manual CSV import (D1–D14): the user exports the account statement, transactions and portfolio files from DeGiro's web app and uploads them. No credentials touch LaVega at all ([#25](https://github.com/Elmata2/LaVega/issues/25)). |
-| Interactive Brokers | Yes, locally | Flex token + Query ID only fetch a pre-defined report. There is no login they can trigger, so DeGiro's reasoning doesn't transfer ([#11](https://github.com/Elmata2/LaVega/issues/11)).                                  |
-| Trading 212         | Yes, locally | API key, no lockout mechanism. Same reasoning as IBKR ([#12](https://github.com/Elmata2/LaVega/issues/12)).                                                                                                              |
+| Interactive Brokers | Yes, locally | Flex token + Query ID only fetch a pre-defined report. There is no login they can trigger, so DeGiro's reasoning doesn't transfer ([#11](https://github.com/Elmata2/LaVega/issues/11)).                                                         |
+| Trading 212         | Yes, locally | API key, no lockout mechanism. Same reasoning as IBKR ([#12](https://github.com/Elmata2/LaVega/issues/12)).                                                                                                                                     |
 
 ## Risk-disclosure gates
 
@@ -112,6 +112,8 @@ The verified headers, mapping rules, fixtures and issue graph are in [`DEGIRO.md
 **Hosted/cloud tier:** DeGiro's CSV import works there too — file upload has no custody problem the way credentials would, so this isn't local-only ([#25](https://github.com/Elmata2/LaVega/issues/25)).
 
 **Deferred:** driving DeGiro's real web UI (local Playwright) to get live, scheduled sync without a manual export step is real future work, not part of v1. See [Future work](#future-work).
+
+**A browser-extension export helper is not deferred; it is decided no** ([ADR 0015](../adr/0015-no-degiro-export-helper-in-the-extension.md), [#328](https://github.com/Elmata2/LaVega/issues/328)). Manual import costs two files at most: the account statement proves the cash history and the portfolio export supplies positions.
 
 ## Interactive Brokers
 

@@ -68,6 +68,7 @@ import CardLink from "../components/ui/CardLink.js";
 import SaldoInput from "../components/ui/SaldoInput.js";
 import StatusLine from "../components/ui/StatusLine.js";
 import SignInForm from "../components/SignInForm.js";
+import AgentSettings from "./AgentSettings";
 
 /* Profiel — five things, in this order: Algemeen (account e-mail, name, country and
  * region, language, appearance), Jouw plan (with the "what LaVega knows" link),
@@ -116,6 +117,8 @@ type ProfielProps = {
   ownerName: OwnerName;
   onOwnerNameChange: (name: OwnerName) => void;
   onLock: () => void;
+  /** The daily message was turned on or off here; the browser mirror follows. */
+  onAgentEnabledChange?: (enabled: boolean) => void;
   /** Import (unchanged component, moved here from the homescreen). */
   entity: string;
   onEntityChange: (entity: string) => void;
@@ -462,6 +465,29 @@ function CashbackCorrigeren({
   );
 }
 
+/* The daily message: only for a signed-in account, because the server keeps
+ * its settings per account. Nothing renders while the session is loading, so a
+ * signed-out card never flashes. */
+function AgentBlock({
+  onEnabledChange,
+  onNavigate,
+}: {
+  onEnabledChange: ((enabled: boolean) => void) | undefined;
+  onNavigate: ((view: View) => void) | undefined;
+}) {
+  const [locale] = useAppLocale();
+  const { state } = useAuthState();
+  if (state.kind !== "signed-in") return null;
+  return (
+    <AgentSettings
+      locale={locale}
+      accountEmail={state.email}
+      {...(onEnabledChange ? { onEnabledChange } : {})}
+      {...(onNavigate ? { onNavigate } : {})}
+    />
+  );
+}
+
 export default function Profiel({
   owner,
   planUnlocked,
@@ -479,6 +505,7 @@ export default function Profiel({
   ownerName,
   onOwnerNameChange,
   onLock,
+  onAgentEnabledChange,
   entity,
   onEntityChange,
   busy,
@@ -656,6 +683,8 @@ export default function Profiel({
           ))}
         </div>
       </Card>
+
+      <AgentBlock onEnabledChange={onAgentEnabledChange} onNavigate={onNavigate} />
 
       <Card as="section" aria-label={c.nav.moduleLabels.plan} className="profiel-plan">
         <h2>{c.nav.moduleLabels.plan}</h2>

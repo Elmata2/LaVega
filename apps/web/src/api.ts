@@ -194,3 +194,246 @@ export async function streamChat(
   }
   if (buffer.trim()) dispatchSseRecord(buffer, handlers);
 }
+
+/* The daily message (instinct agent): settings, push subscription and feed.
+ * Every call answers with a KIND, never a sentence, so the screen picks the
+ * words from copy/instinct.ts in the user's language. */
+
+export type AgentChannelName = "feed" | "push" | "email" | "whatsapp";
+export type AgentSettingsRecord = {
+  enabled: boolean;
+  channels: AgentChannelName[];
+  sendHour: number;
+  locale: "nl" | "en";
+  email: string | null;
+  consentVersion: string;
+  consentedAt: string | null;
+};
+export type AgentSettingsInput = Omit<AgentSettingsRecord, "consentedAt">;
+export type AgentFeedEvent = {
+  id: string;
+  channel: string;
+  type: string;
+  body: { text: string; meta?: Record<string, string | number> };
+  createdAt: string;
+};
+
+export type AgentSettingsLoad =
+  | {
+      kind: "ok";
+      settings: AgentSettingsRecord | null;
+      bankConnected: boolean;
+      consentVersion: string;
+      vapidPublicKey: string | null;
+    }
+  | { kind: "signedOut" }
+  | { kind: "unavailable" }
+  | { kind: "error" };
+
+export type AgentSettingsSave =
+  | { kind: "ok" }
+  | { kind: "bank-required" }
+  | { kind: "consent-required" }
+  | { kind: "unavailable" }
+  | { kind: "error" };
+
+export type AgentFeedLoad =
+  | { kind: "ok"; events: AgentFeedEvent[]; next: string | null }
+  | { kind: "signedOut" }
+  | { kind: "unavailable" }
+  | { kind: "error" };
+
+/** `phone` is masked by the server (last two digits); `number` is the one users message. */
+export type AgentWhatsappLoad =
+  | { kind: "ok"; linked: boolean; phone: string | null; number: string | null }
+  | { kind: "unavailable" }
+  | { kind: "error" };
+
+export type AgentLinkCodeLoad =
+  | { kind: "ok"; code: string; expiresAt: string; number: string | null }
+  | { kind: "agent-off" }
+  | { kind: "unavailable" }
+  | { kind: "error" };
+
+export type AgentApi = {
+  getSettings(): Promise<AgentSettingsLoad>;
+  putSettings(input: AgentSettingsInput): Promise<AgentSettingsSave>;
+  turnOff(): Promise<AgentSettingsSave>;
+  putPush(subscription: PushSubscriptionJSON): Promise<boolean>;
+  deletePush(endpoint: string): Promise<boolean>;
+  listFeed(opts: { channel?: string; before?: string; limit?: number }): Promise<AgentFeedLoad>;
+  deleteEvent(id: string): Promise<boolean>;
+  /** Removes every event of one channel (the "verwijder gesprek" action). */
+  deleteConversation(channel: AgentChannelName): Promise<boolean>;
+  getWhatsapp(): Promise<AgentWhatsappLoad>;
+  /** `aiConsent` is the user's tick on "WhatsApp questions go to Mistral (EU)"; the server refuses without it. */
+  createLinkCode(aiConsent: true): Promise<AgentLinkCodeLoad>;
+  unlinkWhatsapp(): Promise<boolean>;
+};
+
+const agentJson = (method: string, body?: unknown): RequestInit => ({
+  method,
+  credentials: "same-origin",
+  headers: { "content-type": "application/json" },
+  ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+});
+
+async function agentFailure(
+  res: Response,
+): Promise<"bank-required" | "consent-required" | "unavailable" | "error"> {
+  if (res.status === 503) return "unavailable";
+  const code = ((await res.json().catch(() => ({}))) as { code?: string }).code;
+  if (res.status === 409 && code === "bank-required") return "bank-required";
+  if (code === "consent-required") return "consent-required";
+  return "error";
+}
+
+export const agentApi: AgentApi = {
+  async getSettings() {
+    try {
+      const res = await fetch(`${API_BASE}/api/agent/settings`, { credentials: "same-origin" });
+      if (res.status === 401) return { kind: "signedOut" };
+      if (res.status === 503) return { kind: "unavailable" };
+      if (!res.ok) return { kind: "error" };
+      const body = (await res.json()) as {
+        settings: AgentSettingsRecord | null;
+        bankConnected: boolean;
+        consentVersion: string;
+        vapidPublicKey?: string | null;
+      };
+      return {
+        kind: "ok",
+        settings: body.settings,
+        bankConnected: body.bankConnected,
+        consentVersion: body.consentVersion,
+        vapidPublicKey: body.vapidPublicKey ?? null,
+      };
+    } catch {
+      return { kind: "error" };
+    }
+  },
+  async putSettings(input) {
+    try {
+      const res = await fetch(`${API_BASE}/api/agent/settings`, agentJson("PUT", input));
+      if (res.ok) return { kind: "ok" };
+      return { kind: await agentFailure(res) };
+    } catch {
+      return { kind: "error" };
+    }
+  },
+  async turnOff() {
+    try {
+      const res = await fetch(
+        `${API_BASE}/api/agent/settings`,
+        agentJson("PUT", { enabled: false }),
+      );
+      if (res.ok) return { kind: "ok" };
+      return { kind: await agentFailure(res) };
+    } catch {
+      return { kind: "error" };
+    }
+  },
+  async putPush(subscription) {
+    try {
+      const res = await fetch(`${API_BASE}/api/agent/push`, agentJson("POST", subscription));
+      return res.ok;
+    } catch {
+      return false;
+    }
+  },
+  async deletePush(endpoint) {
+    try {
+      const res = await fetch(`${API_BASE}/api/agent/push`, agentJson("DELETE", { endpoint }));
+      return res.ok;
+    } catch {
+      return false;
+    }
+  },
+  async listFeed({ channel, before, limit }) {
+    try {
+      const query = new URLSearchParams();
+      if (channel) query.set("channel", channel);
+      if (before) query.set("before", before);
+      if (limit) query.set("limit", String(limit));
+      const res = await fetch(`${API_BASE}/api/agent/feed?${query}`, {
+        credentials: "same-origin",
+      });
+      if (res.status === 401) return { kind: "signedOut" };
+      if (res.status === 503) return { kind: "unavailable" };
+      if (!res.ok) return { kind: "error" };
+      const body = (await res.json()) as { events: AgentFeedEvent[]; next: string | null };
+      return { kind: "ok", events: body.events, next: body.next };
+    } catch {
+      return { kind: "error" };
+    }
+  },
+  async deleteEvent(id) {
+    try {
+      const res = await fetch(`${API_BASE}/api/agent/events/${encodeURIComponent(id)}`, {
+        method: "DELETE",
+        credentials: "same-origin",
+      });
+      return res.ok;
+    } catch {
+      return false;
+    }
+  },
+  async deleteConversation(channel) {
+    try {
+      const res = await fetch(
+        `${API_BASE}/api/agent/conversation/${encodeURIComponent(channel)}`,
+        agentJson("DELETE"),
+      );
+      return res.ok;
+    } catch {
+      return false;
+    }
+  },
+  async getWhatsapp() {
+    try {
+      const res = await fetch(`${API_BASE}/api/agent/whatsapp`, { credentials: "same-origin" });
+      if (res.status === 503) return { kind: "unavailable" };
+      if (!res.ok) return { kind: "error" };
+      const body = (await res.json()) as {
+        linked: boolean;
+        phone: string | null;
+        number?: string | null;
+      };
+      return { kind: "ok", linked: body.linked, phone: body.phone, number: body.number ?? null };
+    } catch {
+      return { kind: "error" };
+    }
+  },
+  async createLinkCode(aiConsent) {
+    try {
+      const res = await fetch(
+        `${API_BASE}/api/agent/whatsapp/link-code`,
+        agentJson("POST", { aiConsent }),
+      );
+      if (res.status === 503) return { kind: "unavailable" };
+      if (res.status === 409) return { kind: "agent-off" };
+      if (!res.ok) return { kind: "error" };
+      const body = (await res.json()) as {
+        code: string;
+        expiresAt: string;
+        number?: string | null;
+      };
+      return {
+        kind: "ok",
+        code: body.code,
+        expiresAt: body.expiresAt,
+        number: body.number ?? null,
+      };
+    } catch {
+      return { kind: "error" };
+    }
+  },
+  async unlinkWhatsapp() {
+    try {
+      const res = await fetch(`${API_BASE}/api/agent/whatsapp`, agentJson("DELETE"));
+      return res.ok;
+    } catch {
+      return false;
+    }
+  },
+};

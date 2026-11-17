@@ -5,6 +5,7 @@ import { moneyCopy } from "./money.js";
 import { optimiseCopy } from "./optimise.js";
 import { apiErrorCopy } from "./apiErrors.js";
 import { intakeCopy } from "./intake.js";
+import { instinctCopy } from "./instinct.js";
 import { billsCopy } from "./bills.js";
 import { documentsCopy } from "./documents.js";
 import { importSessionCopy } from "./importSession.js";
@@ -97,6 +98,7 @@ const MODULES: Array<[string, { nl: unknown; en: unknown }]> = [
   ["optimise", optimiseCopy],
   ["apiErrors", apiErrorCopy],
   ["intake", intakeCopy],
+  ["instinct", instinctCopy],
   ["bills", billsCopy],
   ["documents", documentsCopy],
   ["importSession", importSessionCopy],

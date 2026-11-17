@@ -100,7 +100,7 @@ await cp(`${root}/apps/server/src/agent/prompts`, `${functionDir}/prompts`, { re
 {
   const shipped = (await readdir(`${functionDir}/prompts`)).filter((f) => f.endsWith(".md"));
   if (shipped.length === 0) throw new Error("vercel-build: no agent prompts shipped");
-  for (const required of ["_base.md", "facturen-extract.md"])
+  for (const required of ["_base.md", "facturen-extract.md", "_instinct.md"])
     if (!shipped.includes(required))
       throw new Error(`vercel-build: ${required} did not ship into the function`);
 }
@@ -309,7 +309,12 @@ await writeFile(
        * path refreshes holdings on its own lane; this pass runs both lanes, and
        * the history gate no longer reads "synced 18 h ago" as fresh, so a user
        * who synced at 10:00 is not skipped the next morning. */
-      crons: [{ path: "/api/cron/investing-sync", schedule: "0 4 * * *" }],
+      crons: [
+        { path: "/api/cron/investing-sync", schedule: "0 4 * * *" },
+        /* /api/cron/instinct is NOT here: it must run hourly and the Vercel plan
+         * allows daily crons only. The hourly trigger lives in
+         * .github/workflows/instinct-cron.yml. */
+      ],
       routes: [
         /* Applied to every response, then `continue` so routing carries on and
          * the filesystem handler still serves the file. */

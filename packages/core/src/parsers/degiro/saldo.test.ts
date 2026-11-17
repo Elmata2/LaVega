@@ -155,21 +155,22 @@ test("empty input is a clean walk", () => {
   expect(walkSaldo([])).toEqual({ ok: true, problems: [], closing: new Map() });
 });
 
-test("the tolerance accepts half a cent and rejects a full cent", () => {
-  expect(SALDO_TOLERANCE).toBe(0.005);
+test("the tolerance accepts one cent of trade rounding and rejects more", () => {
+  expect(SALDO_TOLERANCE).toBeGreaterThanOrEqual(0.01);
+  expect(SALDO_TOLERANCE).toBeLessThan(0.02);
 
   const passes = walkSaldo([
-    row(2, amount("EUR", 1), amount("EUR", 101.004)),
+    row(2, amount("EUR", 1), amount("EUR", 101.01)),
     row(3, amount("EUR", 10), amount("EUR", 100)),
   ]);
   expect(passes.ok).toBe(true);
   expect(passes.problems).toEqual([]);
 
   const fails = walkSaldo([
-    row(2, amount("EUR", 1), amount("EUR", 101.01)),
+    row(2, amount("EUR", 1), amount("EUR", 101.02)),
     row(3, amount("EUR", 10), amount("EUR", 100)),
   ]);
   expect(fails.ok).toBe(false);
   expect(fails.problems).toHaveLength(1);
-  expect(fails.problems[0]).toMatch(/^rij 2: saldo EUR is 101\.01, verwacht 101 \(100 \+ 1\)$/);
+  expect(fails.problems[0]).toMatch(/^rij 2: saldo EUR is 101\.02, verwacht 101 \(100 \+ 1\)$/);
 });

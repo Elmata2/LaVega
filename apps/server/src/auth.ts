@@ -79,11 +79,19 @@ const appUrl = () => `${authBaseUrl()}/`;
  * already changed and the address already confirmed, so a Resend outage must
  * not turn either into an error page for the person who did it.
  */
-async function sendNotice(to: string, email: AuthEmail): Promise<void> {
+export async function sendNotice(to: string, email: AuthEmail): Promise<void> {
   try {
     await sendAuthEmail({ to, ...email });
   } catch (error) {
-    console.error("Auth notice email was not sent", error);
+    // Event name, error name and HTTP status only: the Resend reason can echo the recipient.
+    const status = (error as { status?: unknown } | null)?.status;
+    console.error(
+      JSON.stringify({
+        event: "auth_notice.failed",
+        kind: error instanceof Error ? error.name : "UnknownError",
+        ...(typeof status === "number" ? { status } : {}),
+      }),
+    );
   }
 }
 

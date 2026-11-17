@@ -115,6 +115,7 @@ export type ShellCopy = {
       unreadable: string;
       retry: string;
       signOut: string;
+      signOutError: string;
     };
   };
   overzicht: {
@@ -161,6 +162,7 @@ export type ShellCopy = {
       passwordLabel: string;
       signIn: string;
       signOut: string;
+      signOutError: string;
       /** Waarom het inloggen niet doorging, per kind uit `authClient`. */
       signInError: Record<SignInFailure, string>;
       showPassword: string;
@@ -336,6 +338,7 @@ const nl: ShellCopy = {
       intake: "Intake",
       "about-you": "Wat LaVega weet",
       plan: "Jouw plan",
+      meldingen: "Meldingen",
     },
     scopeGroupLabel: "Persoonlijk of zakelijk",
     addWidget: "Widget toevoegen",
@@ -459,6 +462,7 @@ const nl: ShellCopy = {
         "De sleutel van je kluis kan niet worden gelezen. Je gegevens zijn niet weg. Neem contact met ons op.",
       retry: "Opnieuw proberen",
       signOut: "Uitloggen",
+      signOutError: "Uitloggen lukte niet. Probeer het later opnieuw.",
     },
   },
   overzicht: {
@@ -538,6 +542,7 @@ const nl: ShellCopy = {
       passwordLabel: "Wachtwoord",
       signIn: "Inloggen",
       signOut: "Uitloggen",
+      signOutError: "Uitloggen lukte niet. Probeer het later opnieuw.",
       signInError: {
         "wrong-credentials": "Onjuist e-mailadres of wachtwoord.",
         unverified:
@@ -745,6 +750,7 @@ const en: ShellCopy = {
       intake: "Intake",
       "about-you": "What LaVega knows",
       plan: "Your plan",
+      meldingen: "Alerts",
     },
     scopeGroupLabel: "Personal or business",
     addWidget: "Add widget",
@@ -867,6 +873,7 @@ const en: ShellCopy = {
       unreadable: "Your vault key cannot be read. Your data is not lost. Please contact us.",
       retry: "Try again",
       signOut: "Sign out",
+      signOutError: "Signing out didn't work. Please try again later.",
     },
   },
   overzicht: {
@@ -946,6 +953,7 @@ const en: ShellCopy = {
       passwordLabel: "Password",
       signIn: "Sign in",
       signOut: "Sign out",
+      signOutError: "Signing out didn't work. Please try again later.",
       signInError: {
         "wrong-credentials": "Wrong email address or password.",
         unverified: "Confirm your email address first. We just sent you a new confirmation link.",
