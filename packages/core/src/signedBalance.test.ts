@@ -20,14 +20,12 @@ const written = (csv: string, name: string, target: Parameters<typeof applyCardF
 const amex = written(AMEX, "a.csv", { cardId: "american-express-gold-card", label: "American Express Gold Card", brand: "amex" })[0]!;
 const t212 = written(T212, "trading212.csv", { cardId: "212-card", label: "212 Card", brand: "trading-212" });
 const t212Card = t212.find((a) => a.key === "TRADING212-CARD")!;
-const t212Cash = t212.find((a) => a.key === "TRADING212")!;
 const ing = written(ING, "ing.csv", null)[0]!;
 
 test("a typed 250 is stored with the sign of what the account is", () => {
   expect(signedBalanceFor(amex, 250)).toBe(-250); // a debt
   expect(signedBalanceFor(amex, -250)).toBe(-250); // a typed minus does not flip it
   expect(signedBalanceFor(t212Card, 250)).toBe(250);
-  expect(signedBalanceFor(t212Cash, 250)).toBe(250);
   expect(signedBalanceFor(ing, 250)).toBe(250);
   expect(signedBalanceFor(amex, null)).toBeNull();
 });
@@ -42,7 +40,7 @@ test("zero is stored as 0, never -0, and renders without a minus", () => {
 });
 
 test("the question asked and the sign stored come from one rule", () => {
-  for (const a of [amex, t212Card, t212Cash, ing]) {
+  for (const a of [amex, t212Card, ing]) {
     const stored = signedBalanceFor(a, 250)!;
     expect(balanceAskKind(a) === "owed").toBe(stored < 0);
   }

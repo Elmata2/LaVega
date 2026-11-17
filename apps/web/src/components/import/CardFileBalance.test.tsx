@@ -25,8 +25,7 @@ const acc = (over: Partial<Account>): Account => ({
   balance: null,
   ...over,
 });
-const CARD_T212 = acc({ key: "TRADING212-CARD", name: "212 Card", bank: "Trading 212", statedCardId: "212-card" });
-const CASH_T212 = acc({ key: "TRADING212", name: "TRADING212", bank: "Trading 212" });
+const CARD_T212 = acc({ key: "TRADING212-CARD", name: "Trading 212", bank: "Trading 212", statedCardId: "212-card" });
 
 let root: Root | null = null;
 let el: HTMLElement | null = null;
@@ -100,14 +99,13 @@ test("a credit card without a balance gets the owed-amount field, focused, with 
   expect(field().getAttribute("aria-label") ?? dialog().querySelector("label")).toBeTruthy();
 });
 
-test("Trading 212: the card gets the card-balance label, the cash account its own", async () => {
-  mount([CARD_T212, CASH_T212], {}, { id: "212-card", name: "212 Card", brand: "trading-212", kind: "debit" });
+test("Trading 212: the one account gets the card-balance label, asked once", async () => {
+  mount([CARD_T212], {}, { id: "212-card", name: "212 Card", brand: "trading-212", kind: "debit" });
   await importFile(T212_CSV);
   const t = dialog().textContent!;
   expect(t).toContain("Saldo op je kaart nu");
   expect(t).toContain("Te vinden in de Trading 212-app.");
-  expect(t).toContain("Saldo van TRADING212 nu");
-  expect(dialog().querySelectorAll('[data-testid="balance-input"]')).toHaveLength(2);
+  expect(dialog().querySelectorAll('[data-testid="balance-input"]')).toHaveLength(1);
 });
 
 test("an account with a known balance gets no field", async () => {
@@ -193,7 +191,6 @@ test("the label kind matches the stored sign for every kind of account", async (
   const cases: [Account, string][] = [
     [acc({}), "Openstaand bedrag op je kaart"],
     [CARD_T212, "Saldo op je kaart nu"],
-    [CASH_T212, "Saldo van TRADING212 nu"],
     [acc({ key: "NL01INGB0001", name: "Betaalrekening", bank: "ING" }), "Saldo van Betaalrekening nu"],
   ];
   for (const [account, label] of cases) {

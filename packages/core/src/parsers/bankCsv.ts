@@ -489,8 +489,13 @@ const T212_CARD_OUT = /^card debit/;
 const T212_CARD_IN = /^(card credit|card refund|spending cashback)/;
 /** Trades and conversions: not account cash flow, ignored as before. */
 const T212_IGNORED = /\b(buy|sell)\b|stock split|currency conversion/;
-/** The card's own account, stable across re-imports (never the filename). */
-export const T212_CARD_ACCOUNT_KEY = "TRADING212-CARD";
+/** The ONE Trading 212 account: the card spends the cash balance, so card and
+ *  cash rows share it. Stable across re-imports (never the file name, never the
+ *  picked card). The value is the key the card rows already had, so rows stored
+ *  before keep their ids and a re-import adds nothing. */
+export const T212_ACCOUNT_KEY = "TRADING212-CARD";
+/** What the account is called (also its bank). */
+export const T212_ACCOUNT_NAME = "Trading 212";
 
 /** Rows a profile saw but could not place, by Action text. */
 export type UnrecognisedAction = { action: string; count: number };
@@ -592,9 +597,7 @@ export function parseBankRows(
     : { merchant: -1, notes: -1 };
   const unknown = new Map<string, number>();
   let unreadable = 0;
-  // Trading 212 cash rows keep the filename key whatever card was picked: the
-  // card has its own account and the cash account is not the picked card.
-  const fallbackKey = prof?.cashOnly ? fallbackAccountKey : opts.accountHint || fallbackAccountKey;
+  const fallbackKey = prof?.cashOnly ? T212_ACCOUNT_KEY : opts.accountHint || fallbackAccountKey;
 
   // Running-balance capture (Revolut "Saldo"): remember the latest row's balance
   // per account so we can set account.balance to the current position. Rows are
@@ -641,13 +644,14 @@ export function parseBankRows(
     }
     const accRaw = ci.acc > -1 ? String(r[ci.acc] ?? "").trim() : "";
     const fromCol = prof?.accKey ? prof.accKey(accRaw) : findIban(accRaw) || accRaw;
-    const acc = cardRow !== null ? T212_CARD_ACCOUNT_KEY : fromCol || fallbackKey;
+    // Trading 212: every kept row (card or cash) goes to the one account.
+    const acc = cashOnly ? T212_ACCOUNT_KEY : fromCol || fallbackKey;
     const cur = (ci.cur > -1 ? String(r[ci.cur] ?? "").trim() : "") || "EUR";
     const bank = prof?.bank ?? bankFromIban(acc) ?? "";
     accounts[acc] = accounts[acc] || {
       key: acc,
       iban: findIban(acc) ?? "",
-      name: cardRow !== null ? "Trading 212 Card" : acc,
+      name: cashOnly ? T212_ACCOUNT_NAME : acc,
       bank,
       entity: "",
       currency: cur,

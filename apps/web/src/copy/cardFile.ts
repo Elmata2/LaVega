@@ -21,7 +21,9 @@ export type CardFileCopy = {
   metaLine: (dup: number, period: string, issuer: string) => string;
   nothingNew: (total: number) => string;
   unreadableRows: (k: number) => string;
-  noCardPayments: string;
+  foldsExisting: string;
+  foldBlocked: string;
+  failedPartialFold: string;
   unmatchedExisting: string;
   xls: string;
   unreadableFile: string;
@@ -93,7 +95,10 @@ export const cardFileCopy: Record<Locale, CardFileCopy> = {
         : `Niets nieuws: alle ${t} transacties stonden er al in.`,
     unreadableRows: (k) =>
       k === 1 ? "1 regel kon niet gelezen worden." : `${k} regels konden niet gelezen worden.`,
-    noCardPayments: "Dit bestand bevat geen kaartbetalingen, alleen stortingen/rente.",
+    foldsExisting: "Je Trading 212-rekeningen worden samengevoegd tot één.",
+    foldBlocked:
+      "Je Trading 212-rekeningen horen bij verschillende profielen en worden niet samengevoegd.",
+    failedPartialFold: "Niet alles is opgeslagen. Importeer het bestand opnieuw om het af te maken.",
     unmatchedExisting:
       "We konden je bestaande American Express-gegevens niet aan dit bestand koppelen. Controleer na het toevoegen of er dubbele transacties staan.",
     xls: "Dit is een oud Excel-bestand (.xls). Kies CSV of .xlsx.",
@@ -177,7 +182,9 @@ export const cardFileCopy: Record<Locale, CardFileCopy> = {
         : `Nothing new: all ${t} transactions were already here.`,
     unreadableRows: (k) =>
       k === 1 ? "1 row could not be read." : `${k} rows could not be read.`,
-    noCardPayments: "This file has no card payments, only deposits/interest.",
+    foldsExisting: "Your Trading 212 accounts will be merged into one.",
+    foldBlocked: "Your Trading 212 accounts belong to different profiles and are not merged.",
+    failedPartialFold: "Not everything was saved. Import the file again to finish it.",
     unmatchedExisting:
       "We could not match your existing American Express data to this file. After adding, check for duplicate transactions.",
     xls: "This is an old Excel file (.xls). Choose CSV or .xlsx.",

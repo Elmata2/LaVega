@@ -73,9 +73,10 @@ export function connectChecklist(i: ConnectChecklistInput): ConnectItem[] {
   const fileBrands = all.filter((b) => FILE_ROUTE_BRANDS.includes(b));
   const linked = i.accounts.filter(countsAsLinked);
   // Only a file can feed these brands: it counts once it was imported FOR the
-  // stated card (`statedCardId`). A Trading 212 cash account (no `statedCardId`)
-  // is not the card. Amex also keeps what it always had: an account imported from
-  // a file before cards were stamped (`linkedAt` set, never a live link) counts.
+  // stated card (`statedCardId`). Trading 212 has ONE account (card and cash
+  // rows); it counts once a file for the stated card stamped it. Amex also keeps
+  // what it always had: an account imported from a file before cards were
+  // stamped (`linkedAt` set, never a live link) counts.
   const filed = i.accounts.filter(
     (a) =>
       a.statedCardId !== undefined || (a.linkedAt !== undefined && a.balanceFetchedAt === undefined),

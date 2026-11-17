@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { parseBankCsv, parseBankRows, T212_CARD_ACCOUNT_KEY } from "./bankCsv.js";
+import { parseBankCsv, parseBankRows, T212_ACCOUNT_KEY } from "./bankCsv.js";
 import { parseBankFile, parseBankSheet } from "./parseBankFile.js";
 import {
   applyCardFiles,
@@ -102,11 +102,11 @@ test("Trading 212: card rows kept as money out/in, cash kept, trades ignored, un
   const r = parseBankCsv(T212, "TRADING212");
   expect(r.profile).toBe("Trading 212");
   const byDesc = (d: string) => r.txs.filter((t) => t.description === d);
-  expect(byDesc("Deposit")[0]).toMatchObject({ amount: 1000, accountKey: "TRADING212" });
+  expect(byDesc("Deposit")[0]).toMatchObject({ amount: 1000, accountKey: T212_ACCOUNT_KEY });
   expect(byDesc("Card debit").map((t) => t.amount)).toEqual([-12.4, -7]);
   expect(byDesc("Card debit")[0]).toMatchObject({
     counterparty: "Cafe Test",
-    accountKey: T212_CARD_ACCOUNT_KEY,
+    accountKey: T212_ACCOUNT_KEY,
     date: "2026-01-15",
   });
   expect(byDesc("Card credit")[0]!.amount).toBe(3);
@@ -116,14 +116,14 @@ test("Trading 212: card rows kept as money out/in, cash kept, trades ignored, un
     { action: "Card fee", count: 1 },
     { action: "Mystery action", count: 2 },
   ]);
-  expect(r.accounts.map((a) => a.key).sort()).toEqual(["TRADING212", T212_CARD_ACCOUNT_KEY]);
+  expect(r.accounts.map((a) => a.key)).toEqual([T212_ACCOUNT_KEY]);
 });
 
-test("Trading 212: card account key ignores the filename and the hint", () => {
+test("Trading 212: the account key ignores the filename and the hint", () => {
   const a = parseBankFile("a.csv", T212, { accountHint: "FILE-x" });
   const b = parseBankFile("other-name.csv", T212);
-  const key = (p: typeof a) => p.accounts.find((x) => x.name === "Trading 212 Card")!.key;
-  expect(key(a)).toBe(key(b));
+  expect(a.accounts.map((x) => x.key)).toEqual(b.accounts.map((x) => x.key));
+  expect(a.accounts[0]!.name).toBe("Trading 212");
 });
 
 test("Trading 212: counterparty falls back to Notes, then the action text", () => {
@@ -202,17 +202,19 @@ test("several existing Amex accounts: match by digits, else say it could not be 
   expect(other.unmatchedExisting).toBe(true);
 });
 
-test("Trading 212 file with cash rows only: not tied to the card, flagged", () => {
+test("Trading 212 file with cash rows only for the stated card: the one account, tied to the card", () => {
   const cash = `Action,Time,Currency (Total),Total
 Deposit,2026-01-14 08:00:00,EUR,1000.00
 Interest on cash,2026-01-15 08:00:00,EUR,0.50`;
   const f = file(cash, "trading212.csv", T212_TARGET);
-  const [plan] = planCardFiles({ accounts: [], txs: [] }, [f], ASOF);
-  expect(plan!.noCardPayments).toBe(true);
   const out = applyCardFiles({ accounts: [], txs: [] }, [f], ASOF);
   expect(out.accounts).toHaveLength(1);
-  expect(out.accounts[0]!.statedCardId).toBeUndefined();
-  expect(out.accounts[0]!.name).toBe("TRADING212");
+  expect(out.accounts[0]).toMatchObject({
+    key: T212_ACCOUNT_KEY,
+    name: "Trading 212",
+    statedCardId: "212-card",
+    source: "file",
+  });
 });
 
 test("rows with an unreadable amount are counted, and (12,34) / € 12,34 read", () => {
@@ -242,12 +244,11 @@ test("stampCardFile: file marker on all, card link on one; merge keeps it on a p
   });
 });
 
-test("stampCardFile: T212 links the card account only", () => {
+test("stampCardFile: T212 has one account and it is tied to the card", () => {
   const parsed = parseBankFile("t.csv", T212);
-  const out = stampCardFile(parsed, { cardId: "212-card", label: "Trading 212 Card", brand: "trading-212" });
-  expect(out.find((a) => a.key === T212_CARD_ACCOUNT_KEY)?.statedCardId).toBe("212-card");
-  expect(out.find((a) => a.key === "TRADING212")?.statedCardId).toBeUndefined();
-  expect(out.every((a) => a.source === "file")).toBe(true);
+  const out = stampCardFile(parsed, { cardId: "212-card", label: "212 Card", brand: "trading-212" });
+  expect(out).toHaveLength(1);
+  expect(out[0]).toMatchObject({ key: T212_ACCOUNT_KEY, statedCardId: "212-card", source: "file", name: "Trading 212" });
 });
 
 test("PDF gets its own problem", () => {
@@ -255,11 +256,11 @@ test("PDF gets its own problem", () => {
 });
 void sheetRows;
 
-test("Trading 212 with a picked card: cash rows keep the filename key, card rows the card key", () => {
+test("Trading 212 with a picked card: card and cash rows share the one account", () => {
   const r = parseBankFile("t212.csv", T212, { accountHint: cardFileHintKey("212-card") });
-  expect(r.accounts.map((a) => a.key).sort()).toEqual(["TRADING212", T212_CARD_ACCOUNT_KEY]);
+  expect(r.accounts.map((a) => a.key)).toEqual([T212_ACCOUNT_KEY]);
   const out = stampCardFile(r, { cardId: "212-card", label: "212 Card", brand: "trading-212" });
-  expect(out.find((a) => a.key === "TRADING212")!.name).toBe("TRADING212");
+  expect(out[0]!.name).toBe("Trading 212");
 });
 
 test("a live bank link on a file-fed key clears the file flag; a plain file re-import keeps it", () => {

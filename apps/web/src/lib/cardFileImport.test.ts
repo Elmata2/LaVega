@@ -67,23 +67,41 @@ test("an ING file for an Amex card does not match the chosen card until the user
   expect(toInput(p, AMEX, true)!.link).toBe(false);
 });
 
-test("Trading 212: a card file clears the card; a cash-only file does not, and the checklist agrees", async () => {
+test("Trading 212: a card file and a cash-only file both land in the ONE account and clear the card", async () => {
   const card = await read(T212_CSV, "t212.csv", T212);
   const [plan] = planCardFiles({ accounts: [], txs: [] }, [toInput(card, T212, false)!], ASOF);
   expect(plan!.unrecognised).toEqual([{ action: "Mystery", count: 1 }]);
+  expect(plan!.destination).toEqual({ existing: false, name: "Trading 212" });
   const out = applyCardFiles({ accounts: [], txs: [] }, [toInput(card, T212, false)!], ASOF);
   expect(statedCardPlaceholders({ ...stateOf(out), credit: [] })).toEqual([]);
 
-  const cash = await read(T212_CASH, "trading212.csv", T212);
+  const cash = await read(T212_CASH, "trading212-other-name.csv", T212);
   const cin = toInput(cash, T212, false)!;
-  expect(planCardFiles({ accounts: [], txs: [] }, [cin], ASOF)[0]!.noCardPayments).toBe(true);
+  const [again] = planCardFiles({ accounts: out.accounts, txs: out.txs }, [cin], ASOF);
+  expect(again).toMatchObject({ foldsExisting: false, destination: { existing: true, name: "Trading 212" } });
+  const both = applyCardFiles({ accounts: out.accounts, txs: out.txs }, [cin], ASOF);
+  expect(both.txs.map((t) => t.accountKey)).toEqual(["TRADING212-CARD", "TRADING212-CARD"]);
+
+  // a cash-only export alone also stamps the card and clears the placeholder
   const held = applyCardFiles({ accounts: [], txs: [] }, [cin], ASOF);
-  expect(statedCardPlaceholders({ ...stateOf(held), credit: [] })).toHaveLength(1);
+  expect(held.accounts).toHaveLength(1);
+  expect(statedCardPlaceholders({ ...stateOf(held), credit: [] })).toEqual([]);
   const items = unconnectedItems(
     { current: { statedBanks: { value: ["trading-212"] } } } as never,
     held.accounts,
   );
-  expect(items).toEqual([{ brand: "trading-212", connected: false, route: "file" }]);
+  expect(items).toEqual([]);
+});
+
+test("Trading 212 preview: the fold line only appears when a fold will happen, and planning writes nothing", async () => {
+  const card = await read(T212_CSV, "t212.csv", T212);
+  const input = toInput(card, T212, false)!;
+  const old = { key: "FILE-NAME", iban: "", name: "FILE-NAME", bank: "Trading 212", entity: "P", currency: "EUR", balance: null, source: "file", linkedAt: "2026-11-01" } as Account;
+  const held = { accounts: [old], txs: [] };
+  const snap = JSON.stringify(held);
+  expect(planCardFiles(held, [input], ASOF)[0]).toMatchObject({ foldsExisting: true, destination: { name: "Trading 212" } });
+  expect(JSON.stringify(held)).toBe(snap);
+  expect(planCardFiles({ accounts: [], txs: [] }, [input], ASOF)[0]!.foldsExisting).toBe(false);
 });
 
 test("two overlapping files in one list store 3 rows; previews say 2 new then 1 new", async () => {
