@@ -112,6 +112,21 @@ export function formatEuroAxisIn(locale: Locale, n: number): string {
   }).format(n);
 }
 
+/** formatCurrencyIn without minor units ("NZ$ 1.850"), for a round reference
+ *  amount where cents would be false precision. */
+export function formatCurrencyWholeIn(locale: Locale, n: number, currency: string): string {
+  try {
+    return new Intl.NumberFormat(tag(locale), {
+      style: "currency",
+      currency,
+      maximumFractionDigits: 0,
+      minimumFractionDigits: 0,
+    }).format(n);
+  } catch {
+    return `${currency} ${new Intl.NumberFormat(tag(locale), { maximumFractionDigits: 0 }).format(n)}`;
+  }
+}
+
 export function formatCurrencyIn(locale: Locale, n: number, currency: string): string {
   try {
     return new Intl.NumberFormat(tag(locale), { style: "currency", currency }).format(n);

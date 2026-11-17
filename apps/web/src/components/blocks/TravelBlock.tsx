@@ -32,6 +32,8 @@ import type {
 } from "@lavega/core";
 import {
   planTravel,
+  rateOn,
+  countryCurrency,
   makeFact,
   costOnReferenceSpend,
   netBenefit,
@@ -42,8 +44,15 @@ import {
   nameSome,
   splitProductName,
 } from "@lavega/core";
+import { getLiveEcb, type LiveEcb } from "../../liveFxRate.js";
 import catalogueFile from "../../../../../docs/catalog/catalog.json";
-import { formatEuroIn, formatSignedEuroIn, formatDate } from "../../format.js";
+import {
+  formatCurrencyIn,
+  formatCurrencyWholeIn,
+  formatEuroIn,
+  formatSignedEuroIn,
+  formatDate,
+} from "../../format.js";
 import { useAppLocale, pick, readAppLocale } from "../../appLocale.js";
 import { optimiseCopy, formatPercentIn, type TravelCopy } from "../../copy/optimise.js";
 import type { Locale } from "../../locale.js";
@@ -99,6 +108,7 @@ import StatusLine, { StatusIcon } from "../ui/StatusLine.js";
  * because a request tells the server on the other end who is asking. The
  * figures are as fresh as the last deploy, and every one carries the date its
  * own document states, so the screen can show how old a number is. */
+const CCY_KEY = "lavega-travel-ccy";
 const BUNDLED_CATALOGUE = (catalogueFile as { entries?: CatalogueEntryLike[] }).entries ?? [];
 
 export type TravelBlockProps = {
@@ -129,6 +139,10 @@ export type TravelBlockProps = {
   onRefreshTerms: (destination: string) => void;
   /** Persist a corrected fact. The correction outlives every later refresh. */
   onCorrectFact: (fact: LearnedFact) => void;
+  /** The vault's ECB reference history (units per euro, by currency and date).
+   *  The only exchange rate this block uses to show amounts in the destination
+   *  currency; without a fresh rate for that currency everything stays in euro. */
+  fxHistory?: Record<string, Record<string, number>>;
 };
 
 /** Fills `{name}`-style placeholders in a copy template. The copy module holds
@@ -322,6 +336,90 @@ function referenceEuro(locale: Locale, n: number): string {
   return Number.isInteger(n) ? full.replace(/[.,]00$/, "") : full;
 }
 
+/* ═══════════ BEDRAGEN IN DE VALUTA VAN HET LAND (alleen weergave) ═══════════
+ *
+ * Core rekent alles in euro op een vaste referentie (€ 1.000 besteden, € 200
+ * pinnen). Wat je in het buitenland uitgeeft of opneemt, tonen we standaard in de
+ * valuta van het land, omgerekend uit die euro's tegen de koers die de app al
+ * heeft (de ECB-referentiekoers in de kluis: het midden, geen bankkoers). Een
+ * omgerekend bedrag is een benadering en draagt daarom een "≈" direct voor het
+ * bedrag (geen extra woord, dus de regel blijft even kort).
+ *
+ * WAT NIET MEE VERHUIST: alles wat in euro wordt afgerekend ongeacht het land,
+ * dus `Kaartkosten` en wat daaruit volgt (bruto/netto, de kostenstaart). Een
+ * netto is "voordeel minus kaartprijs" en die som klopt alleen in één valuta.
+ * Core markeert niet welk bedrag een vast eurotarief is, dus waar dat niet
+ * vaststaat blijft het bedrag in euro in plaats van te gokken. */
+export type Conv = { code: string; rate: number; date: string };
+
+/** The destination's ECB rate (units per euro) and the date it is from, or null.
+ *  Same lookback as `rateOn` (ten days, never past `asOf`): an older rate is no
+ *  rate, so nothing is ever converted at a stale figure. */
+export function destinationConv(
+  history: Record<string, Record<string, number>> | undefined,
+  destination: string,
+  asOf: string,
+): Conv | null {
+  const code = countryCurrency(destination);
+  if (!history || !code || code === "EUR") return null;
+  const rate = rateOn(history, code, asOf);
+  if (rate === null) return null;
+  const byDate = history[code];
+  const cursor = new Date(`${asOf}T00:00:00Z`);
+  for (let i = 0; i < 11; i++) {
+    const iso = cursor.toISOString().slice(0, 10);
+    if (typeof byDate[iso] === "number" && byDate[iso] > 0) return { code, rate, date: iso };
+    cursor.setUTCDate(cursor.getUTCDate() - 1);
+  }
+  return null;
+}
+
+/** The same, from the live ECB table (`liveFxRate.ts`), for a currency the vault's
+ *  history does not hold. Equally strict about age: ten days before `asOf`, never
+ *  after it. */
+export function liveConv(live: LiveEcb | null, destination: string, asOf: string): Conv | null {
+  const code = countryCurrency(destination);
+  const rate = code && live ? live.rates[code] : undefined;
+  if (!live || !code || !(typeof rate === "number" && rate > 0)) return null;
+  const days =
+    (Date.parse(`${asOf}T00:00:00Z`) - Date.parse(`${live.date}T00:00:00Z`)) / 86_400_000;
+  return Number.isFinite(days) && days >= 0 && days <= 10 ? { code, rate, date: live.date } : null;
+}
+
+/** An amount abroad, in `travelEuro`'s style, or converted with a leading ≈. */
+function amountLine(locale: Locale, euros: number, conv: Conv | null): string {
+  return conv
+    ? `≈${formatCurrencyIn(locale, euros * conv.rate, conv.code)}`
+    : travelEuro(locale, euros);
+}
+/** The same for lists and the fold, in `formatEuroIn`'s style. */
+function amountList(locale: Locale, euros: number, conv: Conv | null): string {
+  return conv
+    ? `≈${formatCurrencyIn(locale, euros * conv.rate, conv.code)}`
+    : formatEuroIn(locale, euros);
+}
+/** A round reference amount (€ 1.000, € 200): whole units, so no false cents. */
+function referenceAmount(locale: Locale, euros: number, conv: Conv | null, euroText: string) {
+  return conv ? `≈${formatCurrencyWholeIn(locale, euros * conv.rate, conv.code)}` : euroText;
+}
+/** The reference spend / withdrawal as the fold writes them. */
+function refSpend(locale: Locale, conv: Conv | null): string {
+  return referenceAmount(
+    locale,
+    TRAVEL_REFERENCE_SPEND,
+    conv,
+    formatEuroIn(locale, TRAVEL_REFERENCE_SPEND),
+  );
+}
+function refWithdrawal(locale: Locale, conv: Conv | null): string {
+  return referenceAmount(
+    locale,
+    TRAVEL_REFERENCE_WITHDRAWAL,
+    conv,
+    formatEuroIn(locale, TRAVEL_REFERENCE_WITHDRAWAL),
+  );
+}
+
 /** The one place a `BareHoldingCostClause` becomes a sentence — the simpler of
  *  the two card-cost tails, used when there is no benefit to net the price
  *  against. `null` renders as "" (no fragment), same as core's own convention. */
@@ -459,9 +557,14 @@ function holdingCostClauseSentence(
 
 /** The one place a `VersusNote` becomes a sentence — the runner-up clause
  *  `journeyHeadline` appends when there is a real saving to name. */
-function versusNoteSentence(v: VersusNote, c: TravelCopy, locale: Locale): string {
+function versusNoteSentence(
+  v: VersusNote,
+  c: TravelCopy,
+  locale: Locale,
+  conv: Conv | null,
+): string {
   if (v.kind === "none") return "";
-  const amount = travelEuro(locale, v.savingEuros);
+  const amount = amountLine(locale, v.savingEuros, conv);
   return v.alt.kind === "direct"
     ? c.versusNote.cheaperDirect(amount, displayProduct(v.alt.provider, c))
     : c.versusNote.cheaperVia(amount, displayProduct(v.alt.via, c));
@@ -482,9 +585,19 @@ const nonEmpty = (xs: Array<string | null | undefined>): string[] =>
   xs.map((x) => (x ?? "").trim()).filter((x) => x !== "");
 
 /** "€ 4,00 op € 1.000", "geen wisselkosten", or null when no figure is known. */
-function costPhrase(cost: number | null, c: TravelCopy, locale: Locale): string | null {
+function costPhrase(
+  cost: number | null,
+  c: TravelCopy,
+  locale: Locale,
+  conv: Conv | null,
+): string | null {
   if (cost === null) return null;
-  return cost === 0 ? c.answer.free : c.answer.perReference(travelEuro(locale, cost));
+  return cost === 0
+    ? c.answer.free
+    : c.answer.perReference(
+        amountLine(locale, cost, conv),
+        referenceAmount(locale, TRAVEL_REFERENCE_SPEND, conv, c.answer.referenceSpend),
+      );
 }
 
 /** `JourneyHeadline` as an answer — `payAnswer`'s case when the winning route is
@@ -494,6 +607,7 @@ function journeyAnswer(
   c: TravelCopy,
   locale: Locale,
   rail: string,
+  conv: Conv | null,
 ): TravelAnswer {
   switch (h.kind) {
     case "eur":
@@ -501,8 +615,8 @@ function journeyAnswer(
     case "no-route":
       return { line: c.answer.noTariffs, why: [] };
     case "route": {
-      const cost = costPhrase(h.costOnReference, c, locale);
-      const versus = nonEmpty([versusNoteSentence(h.versus, c, locale)]);
+      const cost = costPhrase(h.costOnReference, c, locale, conv);
+      const versus = nonEmpty([versusNoteSentence(h.versus, c, locale, conv)]);
       if (h.head.kind === "direct") {
         return {
           line: c.answer.payDirect(displayProduct(h.head.provider, c), cost),
@@ -524,6 +638,22 @@ function journeyAnswer(
   }
 }
 
+/** Behind the "i": say that the amounts were converted, at which rate date. Only
+ *  when the line actually carries a converted figure; a line without amounts
+ *  claims nothing. */
+function withConvertedNote(
+  answer: TravelAnswer,
+  c: TravelCopy,
+  locale: Locale,
+  conv: Conv | null,
+): TravelAnswer {
+  if (!conv || !answer.line.includes("≈")) return answer;
+  return {
+    ...answer,
+    why: [...answer.why, c.answer.convertedNote(conv.code, formatDate(locale, conv.date))],
+  };
+}
+
 /** The one place a `PayHeadline` becomes the block's first answer. Exhaustive
  *  by switch, so a new kind in `payHeadline` (core) fails the build here
  *  instead of rendering nothing.
@@ -537,12 +667,14 @@ export function payAnswer(
   locale: Locale,
   rail: string,
   showHoldingTail: boolean,
+  /** The destination conversion in force, or null for euro. */
+  conv: Conv | null = null,
 ): TravelAnswer {
   switch (h.kind) {
     case "eur":
       return { line: c.common.euroNoExchangeNeeded, why: [] };
     case "journey":
-      return journeyAnswer(h.headline, c, locale, rail);
+      return withConvertedNote(journeyAnswer(h.headline, c, locale, rail, conv), c, locale, conv);
     case "catalogue-card": {
       // `savingOnReference` is GROSS (the surcharge difference on € 1.000, the
       // card's own price not deducted), so it is only ever said together with
@@ -550,19 +682,25 @@ export function payAnswer(
       const versus =
         h.savingOnReference !== null && h.savingOnReference > 0 && h.ownProduct
           ? {
-              saving: travelEuro(locale, h.savingOnReference),
+              saving: amountLine(locale, h.savingOnReference, conv),
               own: displayProduct(h.ownProduct, c),
             }
           : null;
-      const cost = costPhrase(h.costOnReference, c, locale);
-      return {
-        line: c.answer.payOpen(displayProduct(h.product, c), cost, versus),
+      const cost = costPhrase(h.costOnReference, c, locale, conv);
+      const answer: TravelAnswer = {
+        line: c.answer.payOpen(
+          displayProduct(h.product, c),
+          cost,
+          versus,
+          referenceAmount(locale, TRAVEL_REFERENCE_SPEND, conv, c.answer.referenceSpend),
+        ),
         why: nonEmpty([
           versus && cost ? c.answer.cardCost(cost) : null,
           c.answer.notHeldYet,
           showHoldingTail ? holdingCostClauseSentence(h.holdingCost, c, locale) : null,
         ]),
       };
+      return withConvertedNote(answer, c, locale, conv);
     }
   }
 }
@@ -635,11 +773,12 @@ function smallWithdrawalPenaltySentence(
   p: SmallWithdrawalPenalty,
   c: TravelCopy,
   locale: Locale,
+  conv: Conv | null,
 ): string {
   if (p.kind === "none") return "";
   return c.answer.pin.flatFee(
     displayProduct(p.provider, c),
-    travelEuro(locale, TRAVEL_SMALL_WITHDRAWAL),
+    amountLine(locale, TRAVEL_SMALL_WITHDRAWAL, conv),
     formatPercentIn(locale, p.smallEffectivePct),
   );
 }
@@ -649,15 +788,16 @@ function ownWithdrawalComparisonSentence(
   own: OwnWithdrawalComparison,
   c: TravelCopy,
   locale: Locale,
+  conv: Conv | null,
 ): string {
   if (own.kind === "unknown") return c.answer.pin.ownUnknown;
   const extra =
     own.extraCostVsWinner === null
       ? ""
-      : c.answer.pin.ownExtra(travelEuro(locale, own.extraCostVsWinner));
+      : c.answer.pin.ownExtra(amountLine(locale, own.extraCostVsWinner, conv));
   return c.answer.pin.ownKnown(
     displayProduct(own.ownProduct, c),
-    travelEuro(locale, own.ownCostOnReference),
+    amountLine(locale, own.ownCostOnReference, conv),
     extra,
   );
 }
@@ -669,12 +809,18 @@ function withdrawalPriceLine(
   c: TravelCopy,
   locale: Locale,
   open = false,
+  conv: Conv | null = null,
 ): string {
   return (open ? c.answer.pin.lineOpen : c.answer.pin.line)(
     product,
     c.answer.pin.price(
-      travelEuro(locale, costOnReference),
-      referenceEuro(locale, TRAVEL_REFERENCE_WITHDRAWAL),
+      amountLine(locale, costOnReference, conv),
+      referenceAmount(
+        locale,
+        TRAVEL_REFERENCE_WITHDRAWAL,
+        conv,
+        referenceEuro(locale, TRAVEL_REFERENCE_WITHDRAWAL),
+      ),
       withdrawalPctSuffix(locale, effectivePct),
     ),
   );
@@ -694,6 +840,8 @@ export function withdrawAnswer(
    *  is already marked one line up. Otherwise the verb "Open … om te pinnen"
    *  marks it. Passed in: the copy never reads render state. */
   payNotHeldProduct: string | null = null,
+  /** The destination conversion in force, or null for euro. */
+  conv: Conv | null = null,
 ): TravelAnswer {
   switch (h.kind) {
     case "eur":
@@ -716,9 +864,11 @@ export function withdrawAnswer(
           h.effectivePct,
           c,
           locale,
+          false,
+          conv,
         ),
         why: nonEmpty([missingCashNoteSentence(h.missingCashNote, c, locale)]),
-        caution: smallWithdrawalPenaltySentence(h.small, c, locale) || undefined,
+        caution: smallWithdrawalPenaltySentence(h.small, c, locale, conv) || undefined,
       };
     case "not-held":
       return {
@@ -729,13 +879,14 @@ export function withdrawAnswer(
           c,
           locale,
           h.product !== payNotHeldProduct,
+          conv,
         ),
         why: nonEmpty([
-          ownWithdrawalComparisonSentence(h.own, c, locale),
+          ownWithdrawalComparisonSentence(h.own, c, locale, conv),
           missingCashNoteSentence(h.missingCashNote, c, locale),
           showHoldingTail ? holdingCostClauseSentence(h.holdingCost, c, locale) : null,
         ]),
-        caution: smallWithdrawalPenaltySentence(h.small, c, locale) || undefined,
+        caution: smallWithdrawalPenaltySentence(h.small, c, locale, conv) || undefined,
       };
   }
 }
@@ -1054,15 +1205,21 @@ function rejectedByPrice(
  *  as free — that rule is why the ranking can be trusted at all. A leg that does
  *  not exist on this route (no transfer when you pay directly) is not a price,
  *  so it renders as "n.v.t." rather than as a zero. */
-function legCost(locale: Locale, c: TravelCopy, costPct: number | null): string {
+function legCost(
+  locale: Locale,
+  c: TravelCopy,
+  costPct: number | null,
+  conv: Conv | null = null,
+): string {
   if (costPct === null) return c.common.unknown;
   const euros = costOnReferenceSpend(costPct);
   if (euros === null) return c.common.unknown;
   // `-0` is a real outcome here (a leg with no cashback prices at minus nothing)
   // and formats as "€ -0,00", which reads like a rounding error. It is zero.
   if (euros === 0) return formatEuroIn(locale, 0);
-  if (euros < 0) return fill(c.legs.cashback, { amount: formatEuroIn(locale, Math.abs(euros)) });
-  return formatEuroIn(locale, euros);
+  if (euros < 0)
+    return fill(c.legs.cashback, { amount: amountList(locale, Math.abs(euros), conv) });
+  return amountList(locale, euros, conv);
 }
 
 type Leg = { name: string; detail: string; cost: string };
@@ -1071,27 +1228,33 @@ type Leg = { name: string; detail: string; cost: string };
  *  wisselen → betalen. Named after the sections they replace, so the detail the
  *  owner already knows how to read is still there — now inside one route
  *  instead of standing next to it as a rival answer. */
-function legsOf(j: Journey, locale: Locale, c: TravelCopy, rail: string): Leg[] {
+function legsOf(
+  j: Journey,
+  locale: Locale,
+  c: TravelCopy,
+  rail: string,
+  conv: Conv | null = null,
+): Leg[] {
   const product = productLabel(j.bank, j.productKind, c);
   if (j.via === null) {
     return [
       { name: c.legs.transfer, detail: c.legs.directTransferDetail, cost: c.common.notApplicable },
       { name: c.legs.exchange, detail: c.legs.directExchangeDetail, cost: c.common.notApplicable },
-      { name: c.legs.pay, detail: product, cost: legCost(locale, c, j.spendPct) },
+      { name: c.legs.pay, detail: product, cost: legCost(locale, c, j.spendPct, conv) },
     ];
   }
   return [
     {
       name: c.legs.transfer,
       detail: `${j.fundedFrom ?? c.legs.defaultFundingSource} → ${product}${j.free ? fill(c.legs.viaMethodSuffix, { method: rail }) : ""}`,
-      cost: legCost(locale, c, j.transferPct),
+      cost: legCost(locale, c, j.transferPct, conv),
     },
     {
       name: c.legs.exchange,
       detail: fill(c.legs.atProvider, { via: product }),
-      cost: legCost(locale, c, j.convertPct),
+      cost: legCost(locale, c, j.convertPct, conv),
     },
-    { name: c.legs.pay, detail: product, cost: legCost(locale, c, j.spendPct) },
+    { name: c.legs.pay, detail: product, cost: legCost(locale, c, j.spendPct, conv) },
   ];
 }
 
@@ -1443,8 +1606,8 @@ export function TermsNotice({
 
 /** What one withdrawal costs, or "onbekend"/"unknown". Never a zero — a
  *  missing price is not a free one, and abroad that difference is real money. */
-function cashCost(locale: Locale, c: TravelCopy, euros: number | null): string {
-  return euros === null ? c.common.unknown : formatEuroIn(locale, euros);
+function cashCost(locale: Locale, c: TravelCopy, euros: number | null, conv: Conv | null): string {
+  return euros === null ? c.common.unknown : amountList(locale, euros, conv);
 }
 
 /** His own cards, priced for pulling out cash. The reason a row has no price is
@@ -1455,6 +1618,7 @@ export function CashSection({
   options,
   asOf,
   advice = null,
+  conv = null,
 }: {
   options: readonly WithdrawOption[];
   asOf: string;
@@ -1462,22 +1626,22 @@ export function CashSection({
    *  his. Named here too, because the list below is his cards only and the
    *  cheapest one of those is not the answer to "which card should I use". */
   advice?: WithdrawAdvice | null;
+  /** The destination conversion in force; null keeps everything in euro. */
+  conv?: Conv | null;
 }) {
   const [locale] = useAppLocale();
   const c = optimiseCopy[locale].travel;
   return (
     <div className="travel-step travel-cash">
       <h3 className="travel-step-title">{c.cash.title}</h3>
-      <p className="cell-sub">
-        {fill(c.cash.intro, { amount: formatEuroIn(locale, TRAVEL_REFERENCE_WITHDRAWAL) })}
-      </p>
+      <p className="cell-sub">{fill(c.cash.intro, { amount: refWithdrawal(locale, conv) })}</p>
       {advice && !advice.held && (
         <p className="cell-sub travel-note">
           <NotYours />{" "}
           {fill(c.cash.advice, {
             product: displayProduct(advice.product, c),
-            cost: cashCost(locale, c, advice.costOnReference),
-            amount: formatEuroIn(locale, TRAVEL_REFERENCE_WITHDRAWAL),
+            cost: cashCost(locale, c, advice.costOnReference, conv),
+            amount: refWithdrawal(locale, conv),
           })}
           {advice.asOf && <> · {figureAge(advice.asOf, asOf)}</>}.
         </p>
@@ -1509,7 +1673,7 @@ export function CashSection({
                 {o.asOf && <span className="eyebrow"> · {figureAge(o.asOf, asOf)}</span>}
               </span>
               <span className="flex-none tabular-nums whitespace-nowrap">
-                {cashCost(locale, c, o.costOnReference)}
+                {cashCost(locale, c, o.costOnReference, conv)}
               </span>
             </li>
           ))}
@@ -1522,7 +1686,7 @@ export function CashSection({
               <p className="cell-sub travel-note">
                 {fill(c.cash.smallWithdrawalNote, {
                   provider: productLabel(o.bank, o.productKind, c),
-                  amount: formatEuroIn(locale, TRAVEL_SMALL_WITHDRAWAL),
+                  amount: amountList(locale, TRAVEL_SMALL_WITHDRAWAL, conv),
                   pctSmall: formatPercentIn(locale, o.smallEffectivePct),
                   pctNormal: formatPercentIn(locale, o.effectivePct ?? 0),
                 })}
@@ -1564,6 +1728,7 @@ export function OffersSection({
   asOf,
   shown = 6,
   ownPct = null,
+  conv = null,
 }: {
   offers: readonly CardOffer[];
   asOf: string;
@@ -1572,6 +1737,8 @@ export function OffersSection({
    *  kaart staan wat overstappen NETTO oplevert. Zonder dat getal blijft het bij de
    *  prijzen: een netto met één helft ontbrekend is een verzonnen bedrag. */
   ownPct?: number | null;
+  /** The destination conversion in force; null keeps everything in euro. */
+  conv?: Conv | null;
 }) {
   const [locale] = useAppLocale();
   const c = optimiseCopy[locale].travel;
@@ -1593,7 +1760,7 @@ export function OffersSection({
           stond. Nu staat die helft er, per rij. */}
       <p className="cell-sub">
         {fill(tripMonths === 1 ? c.offers.intro2One : c.offers.intro2Many, {
-          reference: formatEuroIn(locale, TRAVEL_REFERENCE_SPEND),
+          reference: refSpend(locale, conv),
           months: tripMonths,
         })}
       </p>
@@ -1610,8 +1777,8 @@ export function OffersSection({
                 data-testid="travel-journey-cost"
               >
                 {fill(c.offers.amountOnReference, {
-                  amount: formatEuroIn(locale, costOnReferenceSpend(o.netCostPct) ?? 0),
-                  reference: formatEuroIn(locale, TRAVEL_REFERENCE_SPEND),
+                  amount: amountList(locale, costOnReferenceSpend(o.netCostPct) ?? 0, conv),
+                  reference: refSpend(locale, conv),
                 })}
               </span>
             </div>
@@ -1621,8 +1788,8 @@ export function OffersSection({
                 ` · ${fill(c.offers.cashbackSuffix, { pct: formatPercentIn(locale, o.cashbackPct) })}`}
               {o.withdrawalOnReference !== null
                 ? ` · ${fill(c.offers.withdrawalSuffix, {
-                    amount: formatEuroIn(locale, o.withdrawalOnReference),
-                    reference: formatEuroIn(locale, TRAVEL_REFERENCE_WITHDRAWAL),
+                    amount: amountList(locale, o.withdrawalOnReference, conv),
+                    reference: refWithdrawal(locale, conv),
                   })}`
                 : ` · ${c.offers.withdrawalUnknown}`}
               {" · "}
@@ -1703,6 +1870,7 @@ export default function TravelBlock({
   onRefreshTerms,
   onRecheckAi,
   onCorrectFact,
+  fxHistory,
   catalogue = BUNDLED_CATALOGUE,
 }: TravelBlockProps) {
   const [locale] = useAppLocale();
@@ -1712,6 +1880,41 @@ export default function TravelBlock({
   // the neutral rail rather than repeating that specific guess.
   const rail = c.railFor(homeCountryChosen ? homeCountry : "");
   const [destination, setDestination] = useState("");
+  /* "NZD | EUR": default is the destination currency. A choice for EUR is kept
+   * for the session, per viewer, so it survives switching country and a re-mount.
+   * Storage can be absent or throw (private window), and then the default holds. */
+  const [showEuro, setShowEuro] = useState<boolean>(() => {
+    try {
+      return sessionStorage.getItem(CCY_KEY) === "eur";
+    } catch {
+      return false;
+    }
+  });
+  /* The vault's history first (ECB, as the ledger's currencies need it); the live
+   * rate is only the fallback, fetched once per session and never written into
+   * the vault. Until it arrives, or when it does not, everything stays in euro. */
+  const historyConv = destination ? destinationConv(fxHistory, destination, asOf) : null;
+  const destinationCode = destination ? countryCurrency(destination) : null;
+  const needLive = destinationCode !== null && destinationCode !== "EUR" && historyConv === null;
+  const [live, setLive] = useState<LiveEcb | null>(null);
+  useEffect(() => {
+    if (!needLive) return;
+    let alive = true;
+    void getLiveEcb().then((r) => {
+      if (alive && r) setLive(r);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [needLive, destination]);
+  function chooseCurrency(euro: boolean) {
+    setShowEuro(euro);
+    try {
+      sessionStorage.setItem(CCY_KEY, euro ? "eur" : "dest");
+    } catch {
+      /* the choice then lasts for this mounted block only */
+    }
+  }
   /* Eén uitklap voor het hele blok, en die staat in `ToonMeer` — geen `useState`
    * meer hier. Dat is niet alleen minder code: de stand zat in React en dus
    * NERGENS anders, waardoor de opmaak niets van open of dicht wist en elk blok
@@ -1748,6 +1951,11 @@ export default function TravelBlock({
     ? planTravel({ accounts, txs, rates, facts, destination, asOf, catalogue })
     : null;
 
+  /* The rate the destination can be converted at, or null (no switch, all euro).
+   * `conv` is what is IN FORCE: null when he chose EUR. */
+  const available = historyConv ?? (destination ? liveConv(live, destination, asOf) : null);
+  const conv = available && !showEuro ? available : null;
+
   const bestJourney = plan?.journeys.find((j) => j.known) ?? null;
   /* Zijn beste BEPRIJSDE route, met dezelfde test als core's `bestPayAdvice`
      gebruikt om de winnaar te kiezen — `bestJourney` hierboven laat `costOnReference`
@@ -1783,6 +1991,7 @@ export default function TravelBlock({
           locale,
           rail,
           !(plan.pay && !plan.pay.held && hasVisibleHoldingCost(plan.pay.holdingCost)),
+          conv,
         );
   /* Pay and pin kunnen dezelfde kaart aanraden. De kaart wordt dan één keer
    * gemarkeerd (door "Open X" op de betaalregel) en de pinregel zegt alleen "Pin
@@ -1816,6 +2025,7 @@ export default function TravelBlock({
             hasVisibleHoldingCost(plan.withdrawAdvice.holdingCost)
           ),
           payNotHeldProduct,
+          conv,
         );
 
   /* DE AANBEVELING WINT VAN DE OORZAAK, en dat is een omkering van hoe het stond.
@@ -1850,6 +2060,13 @@ export default function TravelBlock({
       : null;
   const headline = plan?.pay ? answer : (causeAnswer ?? answer);
   const causeLine = plan?.pay ? cause : null;
+  /* The conversion note lives behind the pay line's "i". When the pay line has no
+   * amount (no priced route), the pin line carries it instead, so a converted
+   * figure is never left unexplained. */
+  const pinShown =
+    pinAnswer && headline && !headline.line.includes("≈")
+      ? withConvertedNote(pinAnswer, c, locale, conv)
+      : pinAnswer;
 
   /* Het label van de uitklap is een BELOFTE en geen "meer informatie", anders
    * klikt niemand en is de onderbouwing niet opgevouwen maar zoek. Twee vormen,
@@ -1877,6 +2094,16 @@ export default function TravelBlock({
         </label>
         {plan?.currency && (
           <span className="eyebrow">{fill(c.controls.payingIn, { currency: plan.currency })}</span>
+        )}
+        {available && (
+          <div className="travel-ccy" role="group" aria-label={c.answer.showAmountsIn}>
+            <button type="button" aria-pressed={!showEuro} onClick={() => chooseCurrency(false)}>
+              {available.code}
+            </button>
+            <button type="button" aria-pressed={showEuro} onClick={() => chooseCurrency(true)}>
+              EUR
+            </button>
+          </div>
         )}
       </div>
       {!homeCountryChosen && (
@@ -1953,7 +2180,7 @@ export default function TravelBlock({
                 de tweede helft van wat vooraan mag blijven staan: waarmee betaal
                 je, en waar kun je pinnen. */}
             <div className="cell-sub travel-winner-cash">
-              {pinAnswer && (
+              {pinShown && (
                 <AnswerLine
                   lead={
                     <>
@@ -1961,16 +2188,16 @@ export default function TravelBlock({
                     </>
                   }
                   lineClass="travel-winner-pin"
-                  answer={pinAnswer}
+                  answer={pinShown}
                 />
               )}
             </div>
             {/* DE KLEINE-OPNAME-WAARSCHUWING BLIJFT ZICHTBAAR. Een vast bedrag per
                 opname maakt kleine opnames procentueel veel duurder; dat is een
                 geldwaarschuwing en geen uitleg, dus niet achter het "i". */}
-            {pinAnswer?.caution && (
+            {pinShown?.caution && (
               <p className="cell-sub travel-winner-caution" data-testid="travel-pin-caution">
-                <strong>{c.common.caveatLabel}</strong> {pinAnswer.caution}
+                <strong>{c.common.caveatLabel}</strong> {pinShown.caution}
               </p>
             )}
             {/* Pinnen is een aparte kaart en dus een aparte prijs. Dezelfde drie
@@ -2027,8 +2254,8 @@ export default function TravelBlock({
                   <strong>{c.detail.todayLabel}</strong>{" "}
                   {fill(c.detail.todayBody, {
                     product: displayProduct(plan.pay.ownProduct, c),
-                    cost: formatEuroIn(locale, plan.pay.ownCostOnReference ?? 0),
-                    reference: formatEuroIn(locale, TRAVEL_REFERENCE_SPEND),
+                    cost: amountList(locale, plan.pay.ownCostOnReference ?? 0, conv),
+                    reference: refSpend(locale, conv),
                   })}
                 </p>
               )}
@@ -2067,7 +2294,7 @@ export default function TravelBlock({
               {bestJourney && (
                 <div className="cell-sub">
                   {fill(c.detail.referenceNote, {
-                    reference: formatEuroIn(locale, TRAVEL_REFERENCE_SPEND),
+                    reference: refSpend(locale, conv),
                   })}
                 </div>
               )}
@@ -2112,12 +2339,12 @@ export default function TravelBlock({
                           className={`font-semibold tabular-nums whitespace-nowrap${j.known ? "" : " text-muted font-medium"}`}
                           data-testid="travel-journey-cost"
                         >
-                          {j.known ? legCost(locale, c, j.totalCostPct) : c.common.unknown}
+                          {j.known ? legCost(locale, c, j.totalCostPct, conv) : c.common.unknown}
                         </span>
                       </div>
 
                       <ul className="list-none mt-2 mx-0 mb-0 p-0 flex flex-col gap-1">
-                        {legsOf(j, locale, c, rail).map((leg) => (
+                        {legsOf(j, locale, c, rail, conv).map((leg) => (
                           <li
                             key={leg.name}
                             className="flex items-baseline justify-between gap-3 text-[0.85rem] text-muted"
@@ -2238,7 +2465,7 @@ export default function TravelBlock({
                             <span className="flex-none tabular-nums whitespace-nowrap">
                               {cost === null
                                 ? c.common.unknown
-                                : legCost(locale, c, option.netCostPct)}
+                                : legCost(locale, c, option.netCostPct, conv)}
                             </span>
                           </li>
                         );
@@ -2251,9 +2478,14 @@ export default function TravelBlock({
 
               {/* Full width, outside the three-column grid: both are lists, and
                   a list of thirteen tariffs does not belong in a 240px column. */}
-              <CashSection options={plan.withdraw} asOf={asOf} advice={plan.withdrawAdvice} />
+              <CashSection
+                options={plan.withdraw}
+                asOf={asOf}
+                advice={plan.withdrawAdvice}
+                conv={conv}
+              />
 
-              <OffersSection offers={plan.offers} asOf={asOf} ownPct={ownPct} />
+              <OffersSection offers={plan.offers} asOf={asOf} ownPct={ownPct} conv={conv} />
 
               {plan.unidentifiedCount > 0 && (
                 <p className="cell-sub">

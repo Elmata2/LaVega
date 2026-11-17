@@ -18,7 +18,7 @@ import {
   parseFxRatePayload,
   rankFxRoutes,
 } from "@lavega/core";
-import { API_BASE } from "../api";
+import { fetchFxRatePayload } from "../liveFxRate";
 import Module from "../components/Module";
 import ModuleGrid from "../components/ModuleGrid";
 import Globe from "../components/Globe";
@@ -515,8 +515,7 @@ export default function Valuta({ accounts, facts = [], entries = CATALOGUE_FX }:
 
   useEffect(() => {
     let ok = true;
-    void fetch(`${API_BASE}/api/fx/rate`)
-      .then((r) => (r.ok ? r.json() : null))
+    void fetchFxRatePayload()
       .then((j) => {
         const parsed = parseFxRatePayload(j);
         if (ok && parsed) {
