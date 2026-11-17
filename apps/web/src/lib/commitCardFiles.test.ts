@@ -54,3 +54,11 @@ test("a failing follow-up step after the rows are in is partial too", async () =
   expect(r).toMatchObject({ ok: false, partial: true });
   if (!r.ok) expect(r.txs).toHaveLength(1);
 });
+
+test("the result names the accounts this import wrote, as stored", async () => {
+  const f = fake(null);
+  const r = await commitToStorage(f.store, { accounts: [], txs: [] }, files, "2026-11-16", async () => {});
+  if (!r.ok) throw new Error("expected ok");
+  expect(r.written.map((a) => a.key)).toEqual(["AMEX-11111"]);
+  expect(r.written[0]!.balance).toBeNull();
+});

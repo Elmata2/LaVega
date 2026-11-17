@@ -8,7 +8,14 @@ type Store = {
 };
 
 export type CommitResult =
-  | { ok: true; count: number; accounts: Account[]; txs: Tx[] }
+  | {
+      ok: true;
+      count: number;
+      accounts: Account[];
+      txs: Tx[];
+      /** The accounts this import wrote, as stored (the dialog asks for missing balances). */
+      written: Account[];
+    }
   | {
       ok: false;
       /** Something had already been written when it failed. */
@@ -38,7 +45,8 @@ export async function commitToStorage(
     await store.putTxs(out.txs);
     const [accounts, txs] = await Promise.all([store.getAccounts(), store.getTxs()]);
     await after(accounts, txs);
-    return { ok: true, count: out.added, accounts, txs };
+    const keys = new Set(out.accounts.map((a) => a.key));
+    return { ok: true, count: out.added, accounts, txs, written: accounts.filter((a) => keys.has(a.key)) };
   } catch {
     try {
       const [accounts, txs] = await Promise.all([store.getAccounts(), store.getTxs()]);

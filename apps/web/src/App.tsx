@@ -48,7 +48,6 @@ import {
   normalizeValuation,
   valuationId,
   withCurrentBalances,
-  isCardAccount,
   mergeImportedAccounts,
   withLinkedAt,
   ownAccounts,
@@ -108,6 +107,7 @@ import { HomePopups } from "./components/HomePopups.js";
 import CardFileDialog from "./components/import/CardFileDialog.js";
 import { CardFileContext, type OpenCardFile } from "./components/import/CardFileContext.js";
 import type { CardTarget } from "./lib/cardFileImport.js";
+import { saveBalance } from "./lib/saveBalance.js";
 import { commitToStorage } from "./lib/commitCardFiles.js";
 import { focusAfterFileDialog } from "./lib/focusAfterFile.js";
 import { statedCardPlaceholders } from "./plan/statedPlaceholders";
@@ -1690,7 +1690,7 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
   async function commitCardFiles(
     files: CardFileInput[],
     _card: CardTarget | null,
-  ): Promise<{ ok: true; count: number } | { ok: false; partial: boolean }> {
+  ): Promise<{ ok: true; count: number; written: Account[] } | { ok: false; partial: boolean }> {
     setBusy(true);
     try {
       const r = await commitToStorage(
@@ -1720,7 +1720,7 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
             await saveBillPlan(matched.bills, matched.occurrences, matched.decisions);
         },
       );
-      if (r.ok) return { ok: true, count: r.count };
+      if (r.ok) return { ok: true, count: r.count, written: r.written };
       // The state must match what is really stored, whatever failed.
       if (r.accounts) setAccounts(r.accounts);
       if (r.txs) setTxs(r.txs);
@@ -1769,6 +1769,7 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
       txs={txs}
       asOf={asOf}
       onCommit={commitCardFiles}
+      onSaveBalance={handleSaldoCommit}
       {...(fileDialog.onDone ? { onDone: fileDialog.onDone } : {})}
     />
   );
@@ -1825,18 +1826,12 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
   // value is "current as of today", so it also anchors balanceDate to asOf;
   // blank clears both back to unknown/unanchored.
   async function handleSaldoCommit(key: string, value: string) {
-    const trimmed = value.trim().replace(",", ".");
-    const raw = trimmed === "" ? null : Number(trimmed);
-    if (raw !== null && !Number.isFinite(raw)) return; // ignore garbage input
     const account = accounts.find((a) => a.key === key);
-    // For a credit card the typed value is the amount OWED, so store it as a
-    // negative (debt) in the net position — the user types a plain positive.
-    const balance = raw === null ? null : account && isCardAccount(account) ? -Math.abs(raw) : raw;
-    const balanceDate = balance === null ? undefined : asOf;
-    const next = accounts.map((a) => (a.key === key ? { ...a, balance, balanceDate } : a));
-    setAccounts(next);
-    const changed = next.find((a) => a.key === key);
-    if (changed) await storage.putAccounts([changed]);
+    if (!account) return;
+    // Write first, update the screen only after it is stored: a failed write
+    // rethrows, so the caller can say so, and no balance shows that is not saved.
+    const changed = await saveBalance(storage, account, value, asOf);
+    if (changed) setAccounts((cur) => cur.map((a) => (a.key === key ? changed : a)));
   }
 
   // Set an account's soort (type) — a select commits immediately (no draft/blur

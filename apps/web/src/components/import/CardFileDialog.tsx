@@ -1,5 +1,7 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import {
+  balanceAskKind,
+  parseBalanceReply,
   planCardFiles,
   type Account,
   type CardFileInput,
@@ -42,7 +44,9 @@ export type CardFileDialogProps = {
   onCommit: (
     files: CardFileInput[],
     card: CardTarget | null,
-  ) => Promise<{ ok: true; count: number } | { ok: false; partial: boolean }>;
+  ) => Promise<{ ok: true; count: number; written?: Account[] } | { ok: false; partial: boolean }>;
+  /** The EXISTING balance path (Rekeningen's saldo field): key + typed amount. */
+  onSaveBalance?: (key: string, value: string) => Promise<void> | void;
   onDone?: (count: number) => void;
 };
 
@@ -139,6 +143,7 @@ function Body({
   onCommit,
   onDone,
   onBusy,
+  onSaveBalance,
   entity,
   accounts,
   txs,
@@ -162,6 +167,9 @@ function Body({
   const [reading, setReading] = useState(0);
   const [stage, setStage] = useState<Stage>("form");
   const [count, setCount] = useState(0);
+  // Accounts this import wrote that have no balance yet: asked for once, optionally.
+  const [askBalance, setAskBalance] = useState<Account[]>([]);
+  const [savedBalance, setSavedBalance] = useState(false);
   const [failed, setFailed] = useState<"none" | "partial" | null>(null);
   const [dragging, setDragging] = useState(false);
   const cardName = card?.name ?? c.otherName;
@@ -219,6 +227,7 @@ function Body({
       );
       if (r.ok) {
         setCount(r.count);
+        setAskBalance(onSaveBalance ? (r.written ?? []).filter((a) => a.balance === null) : []);
         setStage("done");
         onDone?.(r.count);
       } else {
@@ -234,15 +243,22 @@ function Body({
     }
   }
 
-  // Entering the success state: focus goes to its one button, not to <body>.
+  // Entering the success state: focus goes to the first balance field when there is
+  // one, else to the Sluiten button; never to <body>.
+  const doneRef = useRef<HTMLDivElement>(null);
+  const asking = askBalance.length;
   useEffect(() => {
-    if (stage === "done") firstRef.current?.focus();
-  }, [stage, firstRef]);
+    if (stage !== "done") return;
+    // On entering, and again whenever a field was answered or skipped: the next
+    // field, else the Sluiten button.
+    const next = doneRef.current?.querySelector<HTMLInputElement>("input");
+    (next ?? firstRef.current)?.focus();
+  }, [stage, asking, firstRef]);
   const headingId = useId();
 
   if (stage === "done")
     return (
-      <div className="card-file">
+      <div className="card-file flex flex-col gap-4" ref={doneRef}>
         <p role="status" className="m-0" data-testid="card-file-done">
           {count === 0
             ? c.doneNothing(cardName)
@@ -250,6 +266,25 @@ function Body({
               ? c.doneDiff(count, previewed - count, cardName)
               : c.done(count, cardName)}
         </p>
+        {askBalance.map((a) => (
+          <BalanceField
+            key={a.key}
+            account={a}
+            onSave={async (value) => {
+              await onSaveBalance?.(a.key, value);
+              setSavedBalance(true);
+              setAskBalance((l) => l.filter((x) => x.key !== a.key));
+            }}
+            onSkip={() => {
+              setAskBalance((l) => l.filter((x) => x.key !== a.key));
+            }}
+          />
+        ))}
+        {savedBalance && (
+          <p role="status" className="m-0 text-muted" data-testid="balance-saved">
+            {c.balanceSaved}
+          </p>
+        )}
         <div className="ui-dialog-actions card-file-actions">
           <Button ref={firstRef} variant="primary" className="min-h-[44px]" onClick={onClose}>
             {c.doneClose}
@@ -499,5 +534,101 @@ function PreviewCard(p: {
         </div>
       )}
     </li>
+  );
+}
+
+/** One optional balance question for an account the import wrote without a balance.
+ *  A credit card is asked as the amount owed (typed positive; the existing path
+ *  stores the debt as a negative). The date is today: the existing path anchors
+ *  `balanceDate` to today, so there is no date control. */
+function BalanceField(p: {
+  account: Account;
+  onSave: (value: string) => Promise<void>;
+  onSkip: () => void;
+}) {
+  const [locale] = useAppLocale();
+  const c = cardFileCopy[locale];
+  const id = useId();
+  const [draft, setDraft] = useState("");
+  const [bad, setBad] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const a = p.account;
+  const credit = balanceAskKind(a) === "owed";
+  const t212Card = a.statedCardId !== undefined && !credit;
+  const label = credit ? c.balanceCredit : t212Card ? c.balanceDebit : c.balanceOther(a.name);
+  const helper = credit
+    ? /american express|amex/i.test(a.bank)
+      ? c.helperAmex
+      : c.helperCredit
+    : t212Card && /trading\s*212/i.test(a.bank)
+      ? c.helperT212
+      : c.helperOther;
+
+  async function submit() {
+    if (draft.trim() === "") return p.onSkip();
+    const n = parseBalanceReply(draft);
+    if (n === null) {
+      setBad(true);
+      return;
+    }
+    setBad(false);
+    setFailed(false);
+    setSaving(true);
+    try {
+      await p.onSave(String(n));
+    } catch {
+      // Keep what was typed and let the user try again; nothing was stored.
+      setFailed(true);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <form
+      className="border border-line rounded p-3 flex flex-col gap-2"
+      onSubmit={(e) => {
+        e.preventDefault();
+        void submit();
+      }}
+    >
+      <label htmlFor={id} className="font-semibold">
+        {label}
+      </label>
+      <input
+        id={id}
+        data-testid="balance-input"
+        inputMode="decimal"
+        autoComplete="off"
+        className="saldo-input w-full min-h-[44px] text-right tabular-nums"
+        value={draft}
+        aria-describedby={`${id}-h`}
+        aria-invalid={bad}
+        onChange={(e) => setDraft(e.target.value)}
+      />
+      <div id={`${id}-h`} className="text-muted text-[0.85rem]">
+        <div>{helper}</div>
+        <div>{c.perToday}</div>
+      </div>
+      {bad && (
+        <StatusLine tone="problem" role="alert">
+          {c.notAmount}
+        </StatusLine>
+      )}
+      {failed && (
+        <StatusLine tone="problem" role="alert">
+          {c.balanceFailed}
+        </StatusLine>
+      )}
+      <div className="flex gap-2 flex-wrap">
+        <Button type="submit" variant="primary" className="min-h-[44px]" disabled={saving}>
+          {c.save}
+        </Button>
+        <Button className="min-h-[44px]" disabled={saving} onClick={p.onSkip}>
+          {c.skip}
+        </Button>
+      </div>
+    </form>
   );
 }

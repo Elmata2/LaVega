@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type { Account, AccountSummary, Tx, DuplicateGroup, Valuation } from "@lavega/core";
 import {
   accountSummaries,
@@ -45,7 +45,7 @@ type RekeningenProps = {
   onAccountCommit: (account: Account) => void;
   /** Patch an account in memory while typing; committed on blur. */
   onAccountFieldChange: (key: string, patch: Partial<Account>) => void;
-  onSaldoCommit: (key: string, value: string) => void;
+  onSaldoCommit: (key: string, value: string) => unknown;
   onTypeCommit: (key: string, type: string) => void;
   /** Open this account's transactions (transactions has no own nav item — it's
    *  reached from here and from the Overzicht category totals). */
@@ -394,10 +394,11 @@ function SaldoCell({
 }: {
   account: Account;
   busy: boolean;
-  onCommit: (key: string, value: string) => void;
+  onCommit: (key: string, value: string) => unknown;
   locale: Locale;
 }) {
   const c = moneyCopy[locale].rekeningen;
+  const [failed, setFailed] = useState(false);
   // A liability (credit card, loan, other debt) stores a NEGATIVE balance but
   // the user types/reads the amount OWED as a positive — show the absolute
   // value in the field. Same rule for every liability kind, not cards only.
@@ -414,6 +415,7 @@ function SaldoCell({
     setDraft(balanceKey === null ? "" : String(card ? Math.abs(balanceKey) : balanceKey));
   }
   const cls = account.balance === null ? "" : account.balance >= 0 ? " text-pos" : " text-neg";
+  const inputRef = useRef<HTMLInputElement>(null);
   return (
     <>
       <span
@@ -421,16 +423,36 @@ function SaldoCell({
         aria-hidden="true"
       />{" "}
       <SaldoInput
+        ref={inputRef}
         className={cls}
         inputMode="decimal"
         placeholder={c.saldoOnbekendPlaceholder}
         aria-label={card ? c.openstaandBedragVanLabel(account.name) : c.saldoVanLabel(account.name)}
         value={draft}
         onChange={(e) => setDraft(e.target.value)}
-        onBlur={() => onCommit(account.key, draft)}
+        onBlur={() => {
+          setFailed(false);
+          // A rejected write must not leave a value on screen that was not stored.
+          Promise.resolve(onCommit(account.key, draft)).catch(() => {
+            setFailed(true);
+            setDraft(account.balance === null ? "" : String(shown(account.balance)));
+          });
+        }}
         disabled={busy}
       />
       {card && <span className="eyebrow"> {c.schuld}</span>}
+      {/* An export has transactions and no balance: say where to type it. This only
+          focuses the field above; there is no second editor. */}
+      {failed && (
+        <span role="alert" className="text-neg">
+          {c.saldoNietOpgeslagen}
+        </span>
+      )}
+      {account.balance === null && account.balanceFetchedAt === undefined && (
+        <CardLink onClick={() => inputRef.current?.focus()} disabled={busy}>
+          {c.saldoInvullen}
+        </CardLink>
+      )}
     </>
   );
 }

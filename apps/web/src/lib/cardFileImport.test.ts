@@ -137,3 +137,18 @@ test("focus after close never stays on body", () => {
   document.getElementById("b")!.focus();
   expect(focusAfterFileDialog()?.id).toBe("b");
 });
+
+test("keeping current: a file-fed card's entered balance is rolled forward by LATER imported rows", async () => {
+  const { withCurrentBalances } = await import("@lavega/core");
+  const p = await read(AMEX_CSV, "amex.csv", AMEX);
+  const out = applyCardFiles({ accounts: [], txs: [] }, [toInput(p, AMEX, false)!], ASOF);
+  // The user entered what they owe on 16 Nov (stored negative by the saldo path).
+  const acct = { ...out.accounts[0]!, balance: -842.17, balanceDate: "2026-11-16" };
+  const later = ingest(out.txs, [
+    { accountKey: acct.key, date: "2026-11-18", amount: -10, currency: "EUR", counterparty: "NEW", description: "", category: "", manual: false },
+  ]);
+  const [rolled] = withCurrentBalances([acct], later, "2026-11-20");
+  expect(rolled!.balance).toBeCloseTo(-852.17, 2);
+  // Rows dated before the balance date are already in it and do not move it.
+  expect(withCurrentBalances([acct], out.txs, "2026-11-20")[0]!.balance).toBeCloseTo(-842.17, 2);
+});
