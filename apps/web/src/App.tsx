@@ -2578,6 +2578,7 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
                 termsGaveUp,
                 onRecheckAi: () => void recheckLlm(),
                 onCorrectFact: (fact) => void saveFacts([fact]),
+                fxHistory,
               }}
               onSelectCategory={(c) => {
                 // Match exactly what the Per-categorie totals showed: only the

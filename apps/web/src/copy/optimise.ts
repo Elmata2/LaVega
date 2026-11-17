@@ -3240,6 +3240,16 @@ const TRAVEL_COUNTRIES = [
   { code: "PL", nl: "Polen", en: "Poland" },
   { code: "CA", nl: "Canada", en: "Canada" },
   { code: "AU", nl: "Australië", en: "Australia" },
+  { code: "NZ", nl: "Nieuw-Zeeland", en: "New Zealand" },
+  { code: "SG", nl: "Singapore", en: "Singapore" },
+  { code: "KR", nl: "Zuid-Korea", en: "South Korea" },
+  { code: "CN", nl: "China", en: "China" },
+  { code: "IN", nl: "India", en: "India" },
+  { code: "ZA", nl: "Zuid-Afrika", en: "South Africa" },
+  { code: "BR", nl: "Brazilië", en: "Brazil" },
+  { code: "MX", nl: "Mexico", en: "Mexico" },
+  { code: "CZ", nl: "Tsjechië", en: "Czechia" },
+  { code: "HU", nl: "Hongarije", en: "Hungary" },
   { code: "AE", nl: "Verenigde Arabische Emiraten", en: "United Arab Emirates" },
   { code: "MA", nl: "Marokko", en: "Morocco" },
   { code: "ID", nl: "Indonesië", en: "Indonesia" },
@@ -3247,6 +3257,10 @@ const TRAVEL_COUNTRIES = [
   { code: "DE", nl: "Duitsland", en: "Germany" },
   { code: "FR", nl: "Frankrijk", en: "France" },
   { code: "IT", nl: "Italië", en: "Italy" },
+  { code: "PT", nl: "Portugal", en: "Portugal" },
+  { code: "GR", nl: "Griekenland", en: "Greece" },
+  { code: "AT", nl: "Oostenrijk", en: "Austria" },
+  { code: "BE", nl: "België", en: "Belgium" },
 ] as const;
 
 /** Home country → the instant-transfer rail that country's banks actually
@@ -3350,8 +3364,15 @@ export type TravelCopy = {
   answer: {
     /** Accessible name of the "i" behind an answer. */
     whySummary: string;
-    /** "{amount} op € 1.000" */
-    perReference: (amount: string) => string;
+    /** "{amount} op {reference}" */
+    perReference: (amount: string, reference: string) => string;
+    /** The euro reference spend as written in a line: "€ 1.000". */
+    referenceSpend: string;
+    /** Behind the "i" when the amounts are converted to the destination
+     *  currency: which rate, from when, and that the card still settles in euro. */
+    convertedNote: (code: string, date: string) => string;
+    /** Accessible name of the "NZD | EUR" switch. */
+    showAmountsIn: string;
     /** "geen wisselkosten" */
     free: string;
     /** "Betaal met {provider}: {cost}." (cost null: no figure known) */
@@ -3365,6 +3386,7 @@ export type TravelCopy = {
       product: string,
       cost: string | null,
       versus: { saving: string; own: string } | null,
+      reference: string,
     ) => string;
     /** "Deze kaart: {cost}." — the card's own exchange cost, behind the "i". */
     cardCost: (cost: string) => string;
@@ -3756,7 +3778,11 @@ const travelCopy_nl: TravelCopy = {
   },
   answer: {
     whySummary: "Uitleg bij dit antwoord",
-    perReference: (amount) => `${amount} op € 1.000`,
+    perReference: (amount, reference) => `${amount} op ${reference}`,
+    referenceSpend: "€ 1.000",
+    convertedNote: (code, date) =>
+      `Bedragen omgerekend naar ${code} tegen de ECB-koers van ${date}; je kaart rekent zelf in euro af.`,
+    showAmountsIn: "Bedragen tonen in",
     free: "geen wisselkosten",
     payDirect: (provider, cost) =>
       cost ? `Betaal met ${provider}: ${cost}.` : `Betaal met ${provider}.`,
@@ -3764,9 +3790,9 @@ const travelCopy_nl: TravelCopy = {
       cost
         ? `Zet geld over naar ${via}, betaal daar: ${cost}.`
         : `Zet geld over naar ${via} en betaal daar.`,
-    payOpen: (product, cost, versus) =>
+    payOpen: (product, cost, versus, reference) =>
       versus
-        ? `Open ${product}: ${versus.saving} minder dan met je ${versus.own} op € 1.000.`
+        ? `Open ${product}: ${versus.saving} minder dan met je ${versus.own} op ${reference}.`
         : `Open ${product}${cost ? `: ${cost}` : ""}.`,
     cardCost: (cost) => `Deze kaart: ${cost}.`,
     cheapestOwn: "Dit is de goedkoopste kaart die je al hebt.",
@@ -4088,15 +4114,19 @@ const travelCopy_en: TravelCopy = {
   },
   answer: {
     whySummary: "Explanation for this answer",
-    perReference: (amount) => `${amount} per €1,000`,
+    perReference: (amount, reference) => `${amount} per ${reference}`,
+    referenceSpend: "€1,000",
+    convertedNote: (code, date) =>
+      `Amounts converted to ${code} at the ECB rate of ${date}; your card still settles in euro.`,
+    showAmountsIn: "Show amounts in",
     free: "no exchange fee",
     payDirect: (provider, cost) =>
       cost ? `Pay with ${provider}: ${cost}.` : `Pay with ${provider}.`,
     payVia: (via, cost) =>
       cost ? `Move money to ${via}, pay there: ${cost}.` : `Move money to ${via} and pay there.`,
-    payOpen: (product, cost, versus) =>
+    payOpen: (product, cost, versus, reference) =>
       versus
-        ? `Open ${product}: ${versus.saving} less than with your ${versus.own} per €1,000.`
+        ? `Open ${product}: ${versus.saving} less than with your ${versus.own} per ${reference}.`
         : `Open ${product}${cost ? `: ${cost}` : ""}.`,
     cardCost: (cost) => `This card: ${cost}.`,
     cheapestOwn: "Cheapest card you already hold.",
