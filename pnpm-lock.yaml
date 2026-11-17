@@ -228,8 +228,8 @@ importers:
         specifier: ^4.13.7
         version: 4.13.7
       posthog-node:
-        specifier: ^5.55.0
-        version: 5.55.0
+        specifier: ^5.74.0
+        version: 5.74.0(@opentelemetry/api@1.9.1)
       tsx:
         specifier: ^4.23.1
         version: 4.23.1
@@ -1542,8 +1542,14 @@ packages:
   '@posthog/core@1.55.3':
     resolution: {integrity: sha512-XnmG9jo7WlxTeN4oCNWH4ESLQHR6ZPZ+mcq+8JxU62k5i1BAe3BSrybnmXHjqKp7e3rUvLK2bOzGZGSlfHvlNA==}
 
+  '@posthog/core@1.68.0':
+    resolution: {integrity: sha512-5kjPcLquzj47qBGn52+7RRXrJJvrTHaRKgxV9izYPFzoVFEftFqSXYZF/ug+yialxDU73dR9apyi+mSaAeaXPw==}
+
   '@posthog/types@1.413.0':
     resolution: {integrity: sha512-tYAVzNojWckuG/wxBB0fwE70sFruQQq4xbhkci7eH2ARU3mMfUTkvpN1HwBMpm0AtbxidLiH0IFvagmdJ8opPw==}
+
+  '@posthog/types@1.425.1':
+    resolution: {integrity: sha512-mh7jyQ5lN+XCeOnMdYkBEFtO/G0TxeLOKTWNH6E6OZjxS4nVM0Tb2xQt+FG5DCFM9qzL2HmuX6A793TwlJVDvw==}
 
   '@reduxjs/toolkit@2.12.0':
     resolution: {integrity: sha512-KiT+RzZbp6mQET+Mg+h2c97+9j1sNflUxQkIHI7Yuzf6Peu+OYpmkn6nbHWmLLWj+1ZODUJFwGZ7gx3L9R9EOw==}
@@ -3052,12 +3058,18 @@ packages:
       react:
         optional: true
 
-  posthog-node@5.55.0:
-    resolution: {integrity: sha512-8dFtlDTqs0CKGZ8t4mUnk4NdShAgzru3B9D0MfM/NTBzlRyAjctivzWINLtMLRQxYjvgBohxy7RTwiQf4mPycQ==}
+  posthog-node@5.74.0:
+    resolution: {integrity: sha512-lAnGzPVobruQ7rZe45kzcXKZAcCK3J+1dMNS3WOOdx9mnM4ECRc2WRxBdS1ncBO/h/vDtHIEmcuIr/LUxxze5w==}
     engines: {node: ^20.20.0 || >=22.22.0}
     peerDependencies:
+      '@opentelemetry/api': ^1.2.0
+      '@react-email/render': ^2.1.0
       rxjs: ^7.0.0
     peerDependenciesMeta:
+      '@opentelemetry/api':
+        optional: true
+      '@react-email/render':
+        optional: true
       rxjs:
         optional: true
 
@@ -4365,7 +4377,13 @@ snapshots:
     dependencies:
       '@posthog/types': 1.413.0
 
+  '@posthog/core@1.68.0':
+    dependencies:
+      '@posthog/types': 1.425.1
+
   '@posthog/types@1.413.0': {}
+
+  '@posthog/types@1.425.1': {}
 
   '@reduxjs/toolkit@2.12.0(react-redux@9.3.0(@types/react@18.3.31)(react@18.3.1)(redux@5.0.1))(react@18.3.1)':
     dependencies:
@@ -5758,9 +5776,11 @@ snapshots:
     transitivePeerDependencies:
       - preact-render-to-string
 
-  posthog-node@5.55.0:
+  posthog-node@5.74.0(@opentelemetry/api@1.9.1):
     dependencies:
-      '@posthog/core': 1.55.3
+      '@posthog/core': 1.68.0
+    optionalDependencies:
+      '@opentelemetry/api': 1.9.1
 
   preact@10.29.8: {}
 
