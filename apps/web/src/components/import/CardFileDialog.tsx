@@ -171,6 +171,8 @@ function Body({
   const [askBalance, setAskBalance] = useState<Account[]>([]);
   const [savedBalance, setSavedBalance] = useState(false);
   const [failed, setFailed] = useState<"none" | "partial" | null>(null);
+  // The failed import included a Trading 212 fold: importing again finishes it.
+  const [failedFold, setFailedFold] = useState(false);
   const [dragging, setDragging] = useState(false);
   const cardName = card?.name ?? c.otherName;
 
@@ -219,6 +221,7 @@ function Body({
     setStage("adding");
     onBusy(true);
     setFailed(null);
+    setFailedFold(writable.some((pv) => plans.get(pv.id)?.foldsExisting === true));
     setPreviewed(writable.reduce((n, pv) => n + (plans.get(pv.id)?.newCount ?? 0), 0));
     try {
       const r = await onCommit(
@@ -384,7 +387,7 @@ function Body({
 
       {failed && (
         <StatusLine tone="problem" role="alert">
-          {failed === "partial" ? c.failedPartial : c.failed}
+          {failed === "partial" ? (failedFold ? c.failedPartialFold : c.failedPartial) : c.failed}
         </StatusLine>
       )}
 
@@ -503,9 +506,14 @@ function PreviewCard(p: {
               {c.unrecognisedLine(plan.unrecognised)}
             </StatusLine>
           )}
-          {plan.noCardPayments && (
+          {plan.foldBlocked && (
             <StatusLine tone="warning" role="status">
-              {c.noCardPayments}
+              {c.foldBlocked}
+            </StatusLine>
+          )}
+          {plan.foldsExisting && (
+            <StatusLine tone="warning" role="status">
+              {c.foldsExisting}
             </StatusLine>
           )}
           {plan.unmatchedExisting && (

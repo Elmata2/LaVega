@@ -108,7 +108,7 @@ import CardFileDialog from "./components/import/CardFileDialog.js";
 import { CardFileContext, type OpenCardFile } from "./components/import/CardFileContext.js";
 import type { CardTarget } from "./lib/cardFileImport.js";
 import { saveBalance } from "./lib/saveBalance.js";
-import { commitToStorage } from "./lib/commitCardFiles.js";
+import { commitToStorage, type FoldRefsState } from "./lib/commitCardFiles.js";
 import { focusAfterFileDialog } from "./lib/focusAfterFile.js";
 import { statedCardPlaceholders } from "./plan/statedPlaceholders";
 import { OTHER_CARD } from "./intake/wizard/cardOptions";
@@ -1693,6 +1693,18 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
   ): Promise<{ ok: true; count: number; written: Account[] } | { ok: false; partial: boolean }> {
     setBusy(true);
     try {
+      // The records that point at transaction ids / account keys: a Trading 212
+      // fold rewrites them BEFORE it deletes the old rows (see commitToStorage), and
+      // the follow-up below reads the rewritten copies, not the stale closure.
+      let refs: FoldRefsState = {
+        transfers,
+        valuations,
+        bills,
+        billOccurrences,
+        decisions: billDecisions,
+        sessions: importSessions,
+        documents,
+      };
       const r = await commitToStorage(
         storage,
         { accounts, txs },
@@ -1709,15 +1721,28 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
           if (JSON.stringify(reconciled) !== JSON.stringify(curInvoices))
             await saveInvoices(reconciled);
           const matched = runBillMatcher({
-            bills,
-            occurrences: billOccurrences,
-            decisions: billDecisions,
+            bills: refs.bills,
+            occurrences: refs.billOccurrences,
+            decisions: refs.decisions,
             txs: freshTxs,
             accounts: freshAccounts,
             asOf,
           });
           if (matched.changed)
             await saveBillPlan(matched.bills, matched.occurrences, matched.decisions);
+        },
+        {
+          state: refs,
+          store: storage,
+          onWritten: (next) => {
+            refs = next;
+            setTransfers(next.transfers);
+            setValuations(next.valuations);
+            setBills(next.bills);
+            setBillDecisions(next.decisions);
+            setImportSessions(next.sessions);
+            setDocuments(next.documents);
+          },
         },
       );
       if (r.ok) return { ok: true, count: r.count, written: r.written };

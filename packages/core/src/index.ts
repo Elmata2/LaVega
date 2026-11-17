@@ -16,6 +16,7 @@ export * from "./views.js";
  * it); its barrel exports only the engine, the types and the dry run. */
 export * from "./rules/index.js";
 export * from "./accounts.js";
+export * from "./foldRefs.js";
 export * from "./entities.js";
 export * from "./tracking.js";
 export * from "./facts.js";

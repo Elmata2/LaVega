@@ -135,8 +135,8 @@ test("a file-fed account clears the credit card it was imported for", () => {
   expect(out).toEqual([]);
 });
 
-test("a Trading 212 cash account does not clear the Trading 212 card; the card file does", () => {
-  const cash = acct("TRADING212", { bank: "Trading 212", linkedAt: "2026-11-01T00:00:00Z" });
+test("an unstamped Trading 212 account (older import) does not clear the Trading 212 card; once stamped it does", () => {
+  const cash = acct("FILE-NAME-KEY", { bank: "Trading 212", linkedAt: "2026-11-01T00:00:00Z" });
   const before = statedCardPlaceholders({ credit: [], debit: [T212], accounts: [cash], entries });
   expect(before).toMatchObject([{ id: T212, brand: "trading-212", fileOnly: true }]);
   const card = acct("TRADING212-CARD", {

@@ -353,3 +353,46 @@ test("a throwing commit never leaves the dialog stuck: alert shown, Escape works
   });
   expect(onClose).toHaveBeenCalledTimes(1);
 });
+
+const T212_FILE = `Action,Time,Currency (Total),Total,Merchant name
+Card debit,2026-01-01 10:00:00,EUR,-1.00,Shop A
+Deposit,2026-01-04 10:00:00,EUR,100.00,`;
+
+test("Trading 212: the preview names the one account and says a fold will happen only when it will", async () => {
+  const old = { key: "FILE-NAME", iban: "", name: "FILE-NAME", bank: "Trading 212", entity: "P", currency: "EUR", balance: null, source: "file" as const, linkedAt: "2026-11-01" };
+  const { onCommit } = mount({ card: T212, accounts: [old] });
+  await feed("t212.csv", T212_FILE);
+  expect(dialog().querySelector('[data-testid="destination"]')!.textContent).toBe("Komt in: Trading 212");
+  expect(dialog().textContent).toContain("Je Trading 212-rekeningen worden samengevoegd tot één.");
+  expect(onCommit).not.toHaveBeenCalled(); // nothing happens before Toevoegen
+});
+
+test("Trading 212: no fold line when there is nothing to fold", async () => {
+  mount({ card: T212, accounts: [] });
+  await feed("t212.csv", T212_FILE);
+  expect(dialog().querySelector('[data-testid="destination"]')!.textContent).toBe("Nieuwe rekening: Trading 212");
+  expect(dialog().textContent).not.toContain("samengevoegd");
+});
+
+test("Trading 212: accounts in different entities are not merged and the preview says so", async () => {
+  const mkOld = (key: string, entity: string) => ({ key, iban: "", name: key, bank: "Trading 212", entity, currency: "EUR", balance: null, source: "file" as const, linkedAt: "2026-11-01" });
+  mount({ card: T212, accounts: [mkOld("A", "P"), mkOld("B", "BV")] });
+  await feed("t212.csv", T212_FILE);
+  expect(dialog().textContent).toContain("horen bij verschillende profielen");
+  expect(dialog().textContent).not.toContain("worden samengevoegd tot één");
+});
+
+test("a failed import that included a fold tells the user to import the file again", async () => {
+  const old = { key: "FILE-NAME", iban: "", name: "FILE-NAME", bank: "Trading 212", entity: "P", currency: "EUR", balance: null, source: "file" as const, linkedAt: "2026-11-01" };
+  mount({ card: T212, accounts: [old], onCommit: vi.fn(async () => ({ ok: false as const, partial: true })) });
+  await feed("t212.csv", T212_FILE);
+  await act(async () => button("Toevoegen").click());
+  expect(dialog().textContent).toContain("Importeer het bestand opnieuw om het af te maken.");
+});
+
+test("a failed import without a fold keeps the general partial message", async () => {
+  mount({ card: T212, accounts: [], onCommit: vi.fn(async () => ({ ok: false as const, partial: true })) });
+  await feed("t212.csv", T212_FILE);
+  await act(async () => button("Toevoegen").click());
+  expect(dialog().textContent).toContain("Controleer je rekeningen");
+});
