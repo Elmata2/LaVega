@@ -100,7 +100,7 @@ import {
   type RatesResult,
 } from "@lavega/adapters";
 import { CATALOGUE_ENTRIES, CATALOGUE_RATES } from "./catalogue-rates";
-import { API_BASE } from "./api.js";
+import { API_BASE, agentApi, onAgentFeedChange } from "./api.js";
 import { CONTENT_CONTAINER_CLASS } from "./module-grid.js";
 import { Shell } from "./components/Shell.js";
 import { HomePopups } from "./components/HomePopups.js";
@@ -212,6 +212,7 @@ import type { N8nNotice, PendingInvoice } from "./n8n.js";
 import { adminCopy } from "./copy/admin.js";
 import { useAppLocale } from "./appLocale.js";
 import { useAgentMirror } from "./agent/useAgentMirror.js";
+import { createFeedStore } from "./agent/feedStore.js";
 import { shellCopy } from "./copy/shell.js";
 import { importSessionCopy } from "./copy/importSession.js";
 import { type ShellNotice } from "./shellNotice.js";
@@ -1630,6 +1631,19 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
     plan: agentPlan,
     locale,
   });
+  // One shared read of the daily messages for the Assistent panel and the
+  // meldingen view; a new account gets a new store.
+  const feedStore = useMemo(
+    () => (owner.kind === "account" ? createFeedStore(agentApi) : null),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [owner.kind === "account" ? owner.id : null],
+  );
+  // Any successful delete of a message empties the shared read; so does the
+  // agent not being on (turn-off, a reset, an account that is signed out).
+  useEffect(() => onAgentFeedChange(() => feedStore?.invalidate()), [feedStore]);
+  useEffect(() => {
+    if (agent.status !== "on") feedStore?.invalidate();
+  }, [agent.status, feedStore]);
   // Scheduled flows constrained to BOTH scopes, so Overzicht/Forecast never
   // show a company's VAT reservation while you are looking at your private
   // money. A flow carries its own entity (it can exist before that entity has
@@ -2486,7 +2500,22 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
       <Shell
         title={shell.topBar.viewTitles[view]}
         onOverlayChange={setOverlayOpen}
-        assistant={<AssistantPanel storage={storage} asOf={asOf} />}
+        assistant={
+          <AssistantPanel
+            storage={storage}
+            asOf={asOf}
+            {...(feedStore
+              ? {
+                  instinct: {
+                    status: agent.status,
+                    store: feedStore,
+                    onOpenFeed: () => setView("meldingen"),
+                    onOpenSettings: () => setView("profiel"),
+                  },
+                }
+              : {})}
+          />
+        }
         nav={{
           view,
           modules: navModules(modules),
@@ -2821,7 +2850,9 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
             />
           )}
 
-          {view === "meldingen" && <AgentFeed locale={locale} onNavigate={setView} />}
+          {view === "meldingen" && (
+            <AgentFeed locale={locale} onNavigate={setView} {...(feedStore ? { feedStore } : {})} />
+          )}
 
           {view === "plan" && (
             <PlanRoute

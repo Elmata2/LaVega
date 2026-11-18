@@ -186,6 +186,20 @@ export async function fetchAgentEnabled(): Promise<boolean> {
   }
 }
 
+/** Like `fetchAgentEnabled`, but tells "off" from "the server has no such feature" (503)
+ *  and from "could not find out" (401, 500, offline): that last one is `unknown`, never off. */
+export async function fetchAgentStatus(): Promise<boolean | "unavailable" | "unknown"> {
+  try {
+    const res = await fetch("/api/agent/settings", { credentials: "same-origin" });
+    if (res.status === 503) return "unavailable";
+    if (!res.ok) return "unknown";
+    const body = (await res.json()) as { settings?: { enabled?: boolean } | null };
+    return body.settings?.enabled === true;
+  } catch {
+    return "unknown";
+  }
+}
+
 export const agentMirrorApi: MirrorApi = {
   async put(m) {
     const res = await fetch("/api/agent/mirror", {

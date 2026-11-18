@@ -371,3 +371,46 @@ test("device owner with a stale pending delete: no network call to the share rou
   await act(async () => {});
   expect(shareTotalCalls()).toHaveLength(0);
 });
+
+const agentCalls = (part: string) =>
+  fetchMock.mock.calls.filter((call: unknown[]) => String(call[0]).includes(part));
+
+test("device-only owner: no request to the agent settings or the feed", async () => {
+  await renderApp({ kind: "device" });
+  await act(async () => {});
+  expect(agentCalls("/api/agent/settings")).toHaveLength(0);
+  expect(agentCalls("/api/agent/feed")).toHaveLength(0);
+});
+
+test("account with the agent on: one settings request and one feed request, the messages show", async () => {
+  fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
+    const url = String(input);
+    if (url.includes("/api/agent/settings"))
+      return new Response(JSON.stringify({ settings: { enabled: true } }), { status: 200 });
+    if (url.includes("/api/agent/feed"))
+      return new Response(
+        JSON.stringify({
+          events: [
+            {
+              id: "e1",
+              channel: "feed",
+              type: "message",
+              body: { text: "Je huur komt eraan." },
+              createdAt: "2026-11-15T08:00:00.000Z",
+            },
+          ],
+          next: null,
+        }),
+        { status: 200 },
+      );
+    return new Response(null, { status: 404 });
+  });
+  const el = await renderApp();
+  await act(async () => {});
+  await act(async () => {});
+  expect(agentCalls("/api/agent/settings")).toHaveLength(1);
+  expect(agentCalls("/api/agent/feed")).toHaveLength(1);
+  expect(el.querySelector('[data-testid="instinct-section"]')?.textContent).toContain(
+    "Je huur komt eraan.",
+  );
+});

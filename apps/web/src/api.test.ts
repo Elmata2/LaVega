@@ -2,7 +2,9 @@
 import { afterEach, expect, test, vi } from "vitest";
 import {
   apiErrorMessage,
+  agentApi,
   apiErrorMessageIn,
+  onAgentFeedChange,
   categorizeTxs,
   dispatchSseRecord,
   SIGNED_OUT_MESSAGE,
@@ -110,4 +112,18 @@ test("dispatchSseRecord: an error record's code: line reaches onError as the sec
   );
 
   expect(onError).toHaveBeenCalledWith("De AI-limiet voor vandaag is bereikt.", "ai-budget-day");
+});
+
+test("every successful event or conversation delete tells the feed listeners; a failed one does not", async () => {
+  const heard = vi.fn();
+  const stop = onAgentFeedChange(heard);
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, status: 200 }));
+  await agentApi.deleteEvent("e1");
+  await agentApi.deleteConversation("whatsapp");
+  expect(heard).toHaveBeenCalledTimes(2);
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 500 }));
+  await agentApi.deleteEvent("e1");
+  await agentApi.deleteConversation("whatsapp");
+  expect(heard).toHaveBeenCalledTimes(2);
+  stop();
 });

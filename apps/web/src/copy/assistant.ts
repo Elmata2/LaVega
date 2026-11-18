@@ -48,6 +48,16 @@ export type AssistantCopy = {
     decidedAt: (date: string) => string;
     stored: (preference: string) => string;
   };
+  /** The daily Instinct messages above the chat. */
+  instinct: {
+    title: string;
+    off: string;
+    turnOn: string;
+    empty: string;
+    failed: string;
+    retry: string;
+    all: string;
+  };
   decisions: string;
   memory: {
     title: string;
@@ -130,6 +140,15 @@ export const assistantCopy: Record<Locale, AssistantCopy> = {
       decidedAt: (date) => `Beslist op ${date}`,
       stored: (pref) => `Ik onthoud nu: ${pref}.`,
     },
+    instinct: {
+      title: "Meldingen",
+      off: "Je dagelijkse bericht staat uit.",
+      turnOn: "Aanzetten in Profiel",
+      empty: "Nog geen berichten. Je krijgt er hooguit één per dag.",
+      failed: "Berichten laden lukte niet.",
+      retry: "Opnieuw",
+      all: "Alle meldingen",
+    },
     decisions: "Je beslissingen",
     memory: {
       title: "Wat ik van je onthouden heb",
@@ -181,6 +200,15 @@ export const assistantCopy: Record<Locale, AssistantCopy> = {
       rejected: "Not remembered",
       decidedAt: (date) => `Decided on ${date}`,
       stored: (pref) => `I now remember: ${pref}.`,
+    },
+    instinct: {
+      title: "Alerts",
+      off: "Your daily message is off.",
+      turnOn: "Turn on in Profile",
+      empty: "No alerts yet. You get at most one a day.",
+      failed: "Could not load alerts.",
+      retry: "Try again",
+      all: "All alerts",
     },
     decisions: "Your decisions",
     memory: {
