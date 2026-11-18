@@ -229,8 +229,9 @@ function instinctDeps(): InstinctDeps {
     },
     send: {
       feed: async () => "sent",
-      push: (u, msg) =>
+      push: (u, msg, s) =>
         sendPush(u, msg, repo(u), {
+          locale: s.locale,
           webpush: {
             sendNotification: (async (sub: { endpoint: string }, payload: string) => {
               pushCalls.push({ endpoint: sub.endpoint, payload });
@@ -689,12 +690,8 @@ test("scan detects a leak in an outbound http body", async () => {
 
 test("scan detects a leak in a push payload", async () => {
   const { A } = await setup();
-  await instinctDeps().send.push(
-    A,
-    { title: "t", short: SENTINEL, long: SENTINEL, whatsappParams: [SENTINEL] } as never,
-    {} as never,
-    "e",
-  );
+  // The real push payload is generic now; the scan itself must still see a leaking payload.
+  pushCalls.push({ endpoint: "https://push.example/leak", payload: SENTINEL });
   expect(leaks(await sinks(A))).toContain("push payload");
 });
 

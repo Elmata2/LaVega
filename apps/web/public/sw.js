@@ -1,6 +1,7 @@
 /* LaVega service worker: shows a push notification and opens the app when it
- * is clicked. It caches nothing and intercepts no requests. The payload is the
- * title and the short text only. */
+ * is clicked. It caches nothing and intercepts no requests. The server sends a generic
+ * title and text ("you have a new message") and the feed URL; the worker shows exactly
+ * what it is given and never builds text of its own from user data. */
 /* Only a same-origin path is ever opened; anything else becomes /app. */
 function safeTarget(raw) {
   if (typeof raw !== "string") return "/app";

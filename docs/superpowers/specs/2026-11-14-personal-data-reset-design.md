@@ -37,6 +37,7 @@ Tables deleted, in this order (`PERSONAL_RESET_TABLES`):
 3. `personal.n8n_forwarding` (invoice forwarding address)
 4. `personal.vaults` (the server copy of the sealed vault)
 5. `personal.net_worth_totals` (Personal's daily total that Investing may read)
+6. to 12. The Instinct agent (added 18 Nov 2026): `personal.agent_whatsapp`, `agent_link_codes`, `agent_events`, `agent_push_subscriptions`, `agent_mirror`, `agent_state`, `agent_settings`, in the child-first order of `USER_DATA_TABLES`. After a reset the agent is off (no settings row). The browser's own push subscription is not removed by the reset (it cannot reach the settings card's code); with no server row it receives nothing.
 
 Tables kept, with the reason:
 
@@ -83,7 +84,7 @@ In the Back-up card under "Meer opties", above the existing full erase:
 - Button "Persoonlijke gegevens wissen" / "Clear personal data".
 - Inline confirm (same pattern as the full erase, not a dialog) with this content, nl and en:
   - what goes: accounts, transactions, intake answers and documents in this browser; the server
-    copy of the vault; the bank links;
+    copy of the vault; the bank links; the daily message and its messages;
   - what stays: the login and everything in LaVega Investing;
   - cannot be undone; make a back-up file first if a way back is wanted;
   - another browser or device keeps its own copy until it is cleared there too;

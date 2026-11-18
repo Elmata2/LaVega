@@ -18,8 +18,8 @@ import { AgentEventList } from "./AgentFeed.js";
  * checkbox, then "Zet aan". Turning off deletes the server copy, so it asks
  * first. Push permission is requested only when the user ticks the push box. */
 
+/* Stored and sent, not shown: the daily run ignores it. Kept so an hourly schedule can return. */
 const DEFAULT_HOUR = 8;
-const HOURS = Array.from({ length: 24 }, (_, h) => h);
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const POLL_MS = 3000;
 /* 15 minutes of polling, then the code is treated as expired. */
@@ -409,6 +409,11 @@ export default function AgentSettings({
             <p className="cell-sub">{c.switchLabel}</p>
           )}
           <p data-testid="instinct-consent">{c.consent}</p>
+          <p className="cell-sub">
+            <a href="/privacy" target="_blank" rel="noopener noreferrer">
+              {c.privacyLink}
+            </a>
+          </p>
           <label>
             <input
               type="checkbox"
@@ -555,17 +560,7 @@ export default function AgentSettings({
         )}
       </fieldset>
 
-      <p>
-        <label htmlFor={`${ids}-hour`}>{c.timeLabel}</label>{" "}
-        <select id={`${ids}-hour`} value={hour} onChange={(e) => setHour(Number(e.target.value))}>
-          {HOURS.map((h) => (
-            <option key={h} value={h}>
-              {String(h).padStart(2, "0")}:00
-            </option>
-          ))}
-        </select>
-      </p>
-      <p className="cell-sub">{c.timeNotice}</p>
+      <p className="cell-sub">{c.scheduleNote}</p>
 
       {notice && notice !== "saved" && (
         <p role="alert" className="text-warn">

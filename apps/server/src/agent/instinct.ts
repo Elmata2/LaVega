@@ -70,8 +70,9 @@ const EMPTY_MIRROR: AgentMirror = { rules: [], dueDates: [], cardOffer: null };
 /**
  * Everything here is keyed by the real current Amsterdam date: the claim, the no-repeat keys, the
  * dedupe keys, the day words the reader sees and the bank's fetch counter. The due-listing
- * (migration 0040) may call this after midnight for a send hour that began the evening before; that
- * retry still delivers, and it takes the real date's claim. So a user gets at most one message per
+ * (migration 0040) may, on an hourly schedule, call this after midnight for a send hour that began
+ * the evening before; that retry still delivers, and it takes the real date's claim. (Today's
+ * daily cron lists with a full-day window, so that case does not arise.) So a user gets at most one message per
  * real calendar date, the claim never moves backwards, and the regular send of that same date is
  * then not made (it comes the next day). Claim and content are never a date apart.
  */
@@ -234,7 +235,8 @@ async function act(
 }
 
 /** Sends on every chosen channel; true when at least one went out. When none
- *  did, the day's claim is released so the next run in the window tries again. */
+ *  did, the day's claim is released; the daily cron tries again the next day (a manual run the same
+ *  day would also try again). */
 async function deliver(
   deps: InstinctDeps,
   repo: AgentRepository,

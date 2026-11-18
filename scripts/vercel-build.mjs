@@ -311,9 +311,11 @@ await writeFile(
        * who synced at 10:00 is not skipped the next morning. */
       crons: [
         { path: "/api/cron/investing-sync", schedule: "0 4 * * *" },
-        /* /api/cron/instinct is NOT here: it must run hourly and the Vercel plan
-         * allows daily crons only. The hourly trigger lives in
-         * .github/workflows/instinct-cron.yml. */
+        /* The Instinct agent: one run a day for every opted-in user, whatever send
+         * hour they stored. Vercel cron is fixed in UTC: 07:00 UTC is 08:00 in
+         * Amsterdam in winter (CET) and 09:00 in summer (CEST). The GitHub workflow
+         * .github/workflows/instinct-cron.yml is a manual trigger only. */
+        { path: "/api/cron/instinct", schedule: "0 7 * * *" },
       ],
       routes: [
         /* Applied to every response, then `continue` so routing carries on and

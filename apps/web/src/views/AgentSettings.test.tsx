@@ -10,9 +10,9 @@ import AgentSettings from "./AgentSettings";
 
 (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
-const V = "2026-11-v2";
+const V = "2026-11-v3";
 const NL_CONSENT =
-  "LaVega leest elke dag rond het tijdstip dat jij kiest je transacties om je melding te maken, en ook wanneer je via WhatsApp een vraag stelt. LaVega bewaart je transacties niet. De meldingen en antwoorden die je krijgt blijven 90 dagen in je overzicht staan; je kunt ze eerder wissen.";
+  "LaVega leest elke ochtend je transacties en saldi van de laatste 90 dagen bij je bank, zonder dat jij erbij bent, om hoogstens één melding per dag te maken. Die transacties en saldi bewaren we niet. Wel bewaren we je instellingen, een kopie van je categorieregels en naderende deadlines die je browser ons doorgeeft, en de meldingen zelf, 90 dagen. Een melding kan de naam van een tegenpartij, een bedrag en een datum noemen en komt via de kanalen die jij kiest: in LaVega, per e-mail, via WhatsApp of als pushmelding. Een pushmelding zegt alleen dat er een bericht is; de inhoud lees je in LaVega of in je e-mail. Je kunt dit op elk moment uitzetten; dan verwijderen we alles. Meer staat in het privacybeleid.";
 const c = instinctCopy.nl;
 
 let root: Root | null = null;
@@ -143,7 +143,39 @@ test("the consent sentence is shown verbatim and Zet aan needs the checkbox", as
   await click(checkbox(c.consentCheckbox));
   expect(button(c.turnOn)!.disabled).toBe(false);
   expect(container!.textContent).toContain(c.offNote);
-  expect(container!.textContent).toContain(c.timeNotice);
+  expect(container!.textContent).toContain(c.scheduleNote);
+  expect(container!.querySelector("select")).toBeNull();
+});
+
+test("the card says one message a day in the morning and offers no hour control", async () => {
+  await render(fakeApi(load()));
+  expect(c.scheduleNote).toBe("Je krijgt hooguit één bericht per dag, 's ochtends.");
+  expect(instinctCopy.en.scheduleNote).toBe("You get at most one message a day, in the morning.");
+  expect(container!.textContent).toContain(c.scheduleNote);
+  expect(container!.querySelector("select")).toBeNull();
+  expect(container!.textContent).not.toContain("Tijdstip");
+});
+
+test("the consent screen links to the privacy policy, in both languages", async () => {
+  await render(fakeApi(load()));
+  const link = container!.querySelector<HTMLAnchorElement>('a[href="/privacy"]');
+  expect(link?.textContent).toBe(c.privacyLink);
+  expect(link?.getAttribute("target")).toBe("_blank");
+  expect(link?.getAttribute("rel")).toContain("noopener");
+  expect(c.privacyLink).toBe("Lees het privacybeleid");
+  expect(instinctCopy.en.privacyLink).toBe("Read the privacy policy");
+});
+
+test("the WhatsApp AI consent line says the read happens and the cap", () => {
+  expect(c.whatsappAiConsent).toContain("hoogstens 3 keer per dag");
+  expect(instinctCopy.en.whatsappAiConsent).toContain("at most 3 times a day");
+});
+
+test("saving keeps the stored send hour of an existing setting", async () => {
+  const api = fakeApi(load({ settings: on({ sendHour: 21 }) }));
+  await render(api);
+  await click(button(c.save));
+  expect(api.putSettings).toHaveBeenCalledWith(expect.objectContaining({ sendHour: 21 }));
 });
 
 test("turning on sends the default 08:00, the feed channel and the consent version", async () => {
