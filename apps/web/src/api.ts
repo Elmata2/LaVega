@@ -288,6 +288,16 @@ async function agentFailure(
   return "error";
 }
 
+/* Whoever holds a copy of the feed (the Assistent panel's shared store) hears
+ * about every successful delete here, in the one place all three lists call, so
+ * no list can forget to tell it. */
+const feedListeners = new Set<() => void>();
+export function onAgentFeedChange(listener: () => void): () => void {
+  feedListeners.add(listener);
+  return () => void feedListeners.delete(listener);
+}
+const feedChanged = () => feedListeners.forEach((listener) => listener());
+
 export const agentApi: AgentApi = {
   async getSettings() {
     try {
@@ -373,6 +383,7 @@ export const agentApi: AgentApi = {
         method: "DELETE",
         credentials: "same-origin",
       });
+      if (res.ok) feedChanged();
       return res.ok;
     } catch {
       return false;
@@ -384,6 +395,7 @@ export const agentApi: AgentApi = {
         `${API_BASE}/api/agent/conversation/${encodeURIComponent(channel)}`,
         agentJson("DELETE"),
       );
+      if (res.ok) feedChanged();
       return res.ok;
     } catch {
       return false;

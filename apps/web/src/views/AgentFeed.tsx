@@ -5,6 +5,8 @@ import type { Locale } from "../locale.js";
 import type { View } from "../appRoutes.js";
 import Button from "../components/ui/Button.js";
 import Card, { CardHeader } from "../components/ui/Card.js";
+import { AgentEventItem, eventDateFormat } from "../components/AgentEventItem.js";
+import type { FeedStore } from "../agent/feedStore.js";
 
 /* Meldingen — what the daily message has sent, newest first. The same list
  * (AgentEventList) also sits in the settings under "what LaVega keeps", so
@@ -21,6 +23,7 @@ export function AgentEventList({
   channel,
   emptyText,
   label,
+  store,
 }: {
   locale: Locale;
   api: AgentApi;
@@ -29,6 +32,8 @@ export function AgentEventList({
   emptyText: string;
   /** Accessible name of the list; defaults to the feed title. */
   label?: string;
+  /** Feed channel only: the first page comes through this shared store. */
+  store?: FeedStore;
 }) {
   const c = instinctCopy[locale];
   const [events, setEvents] = useState<AgentFeedEvent[]>([]);
@@ -43,11 +48,14 @@ export function AgentEventList({
 
   const load = useCallback(
     async (before?: string) => {
-      const res = await api.listFeed({
-        ...(channel ? { channel } : {}),
-        ...(before ? { before } : {}),
-        limit: PAGE,
-      });
+      const res =
+        store && channel === "feed" && !before
+          ? await store.firstPage()
+          : await api.listFeed({
+              ...(channel ? { channel } : {}),
+              ...(before ? { before } : {}),
+              limit: PAGE,
+            });
       if (!alive.current) return;
       if (res.kind !== "ok") {
         setState(res.kind);
@@ -55,13 +63,15 @@ export function AgentEventList({
       }
       setEvents((cur) => {
         const seen = new Set(cur.map((e) => e.id));
-        const merged = before ? [...cur, ...res.events.filter((e) => !seen.has(e.id))] : res.events;
+        const merged = before
+          ? [...cur, ...res.events.filter((e) => !seen.has(e.id))]
+          : [...res.events];
         return merged.sort(newestFirst);
       });
       setNext(res.next);
       setState("ok");
     },
-    [api, channel],
+    [api, channel, store],
   );
 
   useEffect(() => {
@@ -87,10 +97,7 @@ export function AgentEventList({
     else setDeleteFailed(true);
   }
 
-  const when = new Intl.DateTimeFormat(locale === "nl" ? "nl-NL" : "en-GB", {
-    dateStyle: "medium",
-    timeStyle: "short",
-  });
+  const when = eventDateFormat(locale);
 
   if (state === "loading") return <p className="cell-sub">{c.loading}</p>;
   if (state === "signedOut") return <p role="alert">{c.signInNeeded}</p>;
@@ -108,26 +115,21 @@ export function AgentEventList({
       ) : (
         <ul aria-label={label ?? c.feed.title} className="m-0 list-none p-0">
           {events.map((e) => (
-            <li
+            <AgentEventItem
               key={e.id}
-              className="flex items-start justify-between gap-3 border-b border-line py-3"
-            >
-              <div>
-                <p id={`${idBase}-${e.id}`} className="m-0">
-                  {e.body.text}
-                </p>
-                <p className="cell-sub m-0">
-                  <time dateTime={e.createdAt}>{when.format(new Date(e.createdAt))}</time>
-                </p>
-              </div>
-              <Button
-                aria-label={c.deleteItem}
-                aria-describedby={`${idBase}-${e.id}`}
-                onClick={() => void remove(e.id)}
-              >
-                {c.deleteItem}
-              </Button>
-            </li>
+              event={e}
+              format={when}
+              textId={`${idBase}-${e.id}`}
+              action={
+                <Button
+                  aria-label={c.deleteItem}
+                  aria-describedby={`${idBase}-${e.id}`}
+                  onClick={() => void remove(e.id)}
+                >
+                  {c.deleteItem}
+                </Button>
+              }
+            />
           ))}
         </ul>
       )}
@@ -226,10 +228,13 @@ export default function AgentFeed({
   locale,
   api = agentApi,
   onNavigate,
+  feedStore,
 }: {
   locale: Locale;
   api?: AgentApi;
   onNavigate?: (view: View) => void;
+  /** Shared with the Assistent panel so the feed is read once. */
+  feedStore?: FeedStore;
 }) {
   const c = instinctCopy[locale];
   return (
@@ -238,7 +243,13 @@ export default function AgentFeed({
         <h2>{c.feed.title}</h2>
       </CardHeader>
       <p className="cell-sub">{c.feed.intro}</p>
-      <AgentEventList locale={locale} api={api} channel="feed" emptyText={c.feed.empty} />
+      <AgentEventList
+        locale={locale}
+        api={api}
+        channel="feed"
+        emptyText={c.feed.empty}
+        {...(feedStore ? { store: feedStore } : {})}
+      />
       <WhatsappConversation locale={locale} api={api} />
       {onNavigate && (
         <p>

@@ -17,6 +17,7 @@ import { formatEuroIn, localeTag } from "../format.js";
 import { isSpendingSummary, runReadTool, type AssistantVaultSnapshot } from "./tools.js";
 import Button from "../components/ui/Button.js";
 import StatusLine from "../components/ui/StatusLine.js";
+import { InstinctSection, type InstinctPanelProps } from "./InstinctSection.js";
 
 /*
  * The personal assistant panel (WS5.8 thin slice, issue #301).
@@ -68,6 +69,8 @@ export type AssistantPanelProps = {
   hideTitle?: boolean;
   /** False while the column is closed; going true re-reads the stored state. */
   active?: boolean;
+  /** The daily Instinct messages. Absent for a device vault: no section, no request. */
+  instinct?: InstinctPanelProps;
 };
 
 export function AssistantPanel({
@@ -76,6 +79,7 @@ export function AssistantPanel({
   onClose,
   hideTitle = false,
   active = true,
+  instinct,
 }: AssistantPanelProps) {
   const [locale] = useAppLocale();
   const copy = assistantCopy[locale];
@@ -287,6 +291,8 @@ export function AssistantPanel({
           </button>
         )}
       </div>
+
+      {instinct && <InstinctSection locale={locale} {...instinct} />}
 
       <div
         className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto"

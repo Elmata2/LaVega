@@ -9,7 +9,7 @@ import {
   type Tx,
 } from "@lavega/core";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { buildMirror, createMirrorSync } from "./mirror.js";
+import { buildMirror, createMirrorSync, fetchAgentStatus } from "./mirror.js";
 
 const NOW = new Date("2026-11-10T09:00:00Z");
 
@@ -286,4 +286,32 @@ test("a mirrored transfer rule keeps the transaction out of spend; without it th
   expect(spendOf(upper, withRule, own)).toEqual(spendOf(upper, upgraded, own));
   const inDescription = { ...tikkieTx, counterparty: "x", description: "betaling Jansen" };
   expect(spendOf(inDescription, withRule, own)).toEqual(spendOf(inDescription, upgraded, own));
+});
+
+const answer = (status: number, body: unknown = {}) =>
+  vi.fn(async () => new Response(JSON.stringify(body), { status }));
+
+test("fetchAgentStatus: 503 is unavailable, a clean answer is on or off", async () => {
+  vi.stubGlobal("fetch", answer(503));
+  expect(await fetchAgentStatus()).toBe("unavailable");
+  vi.stubGlobal("fetch", answer(200, { settings: { enabled: true } }));
+  expect(await fetchAgentStatus()).toBe(true);
+  vi.stubGlobal("fetch", answer(200, { settings: null }));
+  expect(await fetchAgentStatus()).toBe(false);
+  vi.unstubAllGlobals();
+});
+
+test("fetchAgentStatus: a 500, a 401 or a thrown error is unknown, never a false off", async () => {
+  vi.stubGlobal("fetch", answer(500));
+  expect(await fetchAgentStatus()).toBe("unknown");
+  vi.stubGlobal("fetch", answer(401));
+  expect(await fetchAgentStatus()).toBe("unknown");
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => {
+      throw new Error("offline");
+    }),
+  );
+  expect(await fetchAgentStatus()).toBe("unknown");
+  vi.unstubAllGlobals();
 });

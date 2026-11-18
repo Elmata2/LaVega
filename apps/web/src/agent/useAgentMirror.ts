@@ -4,9 +4,12 @@ import {
   agentMirrorApi,
   buildMirror,
   createMirrorSync,
-  fetchAgentEnabled,
+  fetchAgentStatus,
   type MirrorApi,
 } from "./mirror.js";
+
+/** `unknown`: no answer yet, or no account. `unavailable`: the server answered 503. */
+export type AgentStatus = "unknown" | "off" | "on" | "unavailable";
 
 /* Keeps the server's copy of the mirror current, for opted-in accounts only.
  * "Enabled" is React state keyed to the signed-in account: it starts false for
@@ -24,11 +27,23 @@ export function useAgentMirror(i: {
   plan: PlanResult | null;
   locale: "nl" | "en";
   api?: MirrorApi;
-  lookup?: () => Promise<boolean>;
+  lookup?: () => Promise<boolean | "unavailable" | "unknown">;
   debounceMs?: number;
-}): { enabled: boolean; setEnabled: (on: boolean) => void } {
-  const [enabledFor, setEnabledFor] = useState<{ accountId: string; on: boolean } | null>(null);
-  const enabled = i.accountId !== null && enabledFor?.accountId === i.accountId && enabledFor.on;
+}): { enabled: boolean; status: AgentStatus; setEnabled: (on: boolean) => void } {
+  const [enabledFor, setEnabledFor] = useState<{
+    accountId: string;
+    on: boolean;
+    unavailable?: true;
+  } | null>(null);
+  const known = i.accountId !== null && enabledFor?.accountId === i.accountId ? enabledFor : null;
+  const enabled = known?.on === true;
+  const status: AgentStatus = !known
+    ? "unknown"
+    : known.unavailable
+      ? "unavailable"
+      : known.on
+        ? "on"
+        : "off";
   const enabledRef = useRef(false);
   enabledRef.current = enabled;
 
@@ -54,9 +69,18 @@ export function useAgentMirror(i: {
     if (!i.ready || i.accountId === null) return;
     let live = true;
     const id = i.accountId;
-    void (i.lookup ?? fetchAgentEnabled)().then((on) => {
-      if (live) setEnabledFor({ accountId: id, on });
-    });
+    void (i.lookup ?? fetchAgentStatus)()
+      .catch((): "unknown" => "unknown")
+      .then((answer) => {
+        if (!live) return;
+        setEnabledFor(
+          answer === "unknown"
+            ? null
+            : answer === "unavailable"
+              ? { accountId: id, on: false, unavailable: true }
+              : { accountId: id, on: answer },
+        );
+      });
     return () => {
       live = false;
     };
@@ -78,6 +102,7 @@ export function useAgentMirror(i: {
 
   return {
     enabled,
+    status,
     setEnabled: (on) => {
       if (i.accountId !== null) setEnabledFor({ accountId: i.accountId, on });
     },

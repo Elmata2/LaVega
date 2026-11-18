@@ -90,3 +90,50 @@ test("a 409 from the server turns the local state off", async () => {
   expect(put).toHaveBeenCalledTimes(1);
   expect(last.enabled).toBe(false);
 });
+
+test("status tells off, on and not-configured apart; enabled stays a plain boolean", async () => {
+  const put = vi.fn(async () => undefined);
+  await render(base({ api: { put }, lookup: async () => false }));
+  await settle(50);
+  expect(last.status).toBe("off");
+  expect(last.enabled).toBe(false);
+
+  await render(base({ api: { put }, lookup: async () => "unavailable", accountId: "u2" }));
+  await settle(50);
+  expect(last.status).toBe("unavailable");
+  expect(last.enabled).toBe(false);
+
+  await render(base({ api: { put }, lookup: async () => true, accountId: "u3" }));
+  await settle(50);
+  expect(last.status).toBe("on");
+  expect(last.enabled).toBe(true);
+});
+
+test("status is unknown before the lookup answers and for a device vault", async () => {
+  const put = vi.fn(async () => undefined);
+  await render(base({ api: { put }, lookup: () => new Promise<boolean>(() => undefined) }));
+  expect(last.status).toBe("unknown");
+  await render(base({ api: { put }, lookup: async () => true, accountId: null }));
+  expect(last.status).toBe("unknown");
+});
+
+test("a failed lookup (reject or unknown) is status unknown, enabled false, and sends nothing", async () => {
+  const put = vi.fn(async () => undefined);
+  await render(
+    base({
+      api: { put },
+      lookup: async () => {
+        throw new Error("offline");
+      },
+    }),
+  );
+  await settle(500);
+  expect(last.status).toBe("unknown");
+  expect(last.enabled).toBe(false);
+
+  await render(base({ api: { put }, lookup: async () => "unknown", accountId: "u2" }));
+  await settle(500);
+  expect(last.status).toBe("unknown");
+  expect(last.enabled).toBe(false);
+  expect(put).not.toHaveBeenCalled();
+});
