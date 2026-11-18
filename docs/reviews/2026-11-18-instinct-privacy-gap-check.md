@@ -4,7 +4,7 @@
 |---|---|
 | **What this is** | A check of the Instinct privacy text and consent wording against the code. Not legal advice. Not a legal sign-off. |
 | **Blocker** | GitHub issue #348 stays open until a lawyer answers the "Ask a lawyer" list. |
-| **Reviewed at** | `master`, commit `706d0b05b`, 18 Nov 2026. Consent v3 and the push/reset fixes landed in `10ffbffa3` while this review was being written; this version reflects them. Line numbers move; re-check after edits. |
+| **Reviewed at** | `master`, commit `f39527e27`, 18 Nov 2026. Consent v3 and the push/reset fixes landed in `10ffbffa3` while this review was being written; this version reflects them. Line numbers move; re-check after edits. |
 | **Supersedes** | The 18 Nov 2026 comment by the cofounder. Section 2 lists what that comment got wrong or stale. |
 | **Legend** | **V** = verified in code at `file:line`. **NV** = not verifiable from this repository. **Mismatch** = the text promises something the code does not do. |
 
@@ -213,7 +213,7 @@ No production service was called for this review.
 
 ## 12. Evidence log
 
-Read at `706d0b05b`:
+Read at `f39527e27`:
 
 - `apps/server/src/legal.ts`
 - `apps/server/src/instinctConsent.ts`
