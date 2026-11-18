@@ -10,7 +10,7 @@ import { migratedTestDatabase } from "@lavega/database/testing";
 import { afterAll, afterEach, beforeAll, beforeEach, expect, test, vi } from "vitest";
 import { CONSENT_VERSION } from "../instinctConsent.js";
 import { runForUser, type InstinctDeps } from "./instinct.js";
-import { amsterdamHour, runInstinctCron, type CronDeps } from "./instinctCron.js";
+import { runInstinctCron, type CronDeps } from "./instinctCron.js";
 
 const SECRET = "cron-secret";
 const T0 = Date.parse("2026-11-11T07:00:00Z"); // 08:00 in Amsterdam
@@ -83,20 +83,16 @@ test("a misconfigured agent fails the run cleanly, naming no secret", async () =
 });
 
 test.each([
-  // Spring forward 2026-03-29: 01:00 UTC is 03:00 CEST.
-  ["2026-03-29T00:59:00Z", 1, "2026-03-29"],
-  ["2026-03-29T01:00:00Z", 3, "2026-03-29"],
-  // Fall back 2026-10-25: 00:59 UTC is 02:59 CEST, 01:00 UTC is 02:00 CET.
-  ["2026-10-25T00:59:00Z", 2, "2026-10-25"],
-  ["2026-10-25T01:00:00Z", 2, "2026-10-25"],
-  ["2026-10-24T22:30:00Z", 0, "2026-10-25"],
-  ["2026-10-25T22:30:00Z", 23, "2026-10-25"],
-  ["2026-11-11T07:00:00Z", 8, "2026-11-11"],
-])("at %s the Amsterdam hour is %i on %s", async (iso, hour, day) => {
-  expect(amsterdamHour(new Date(iso))).toBe(hour);
+  ["2026-03-29T00:59:00Z", "2026-03-29"],
+  ["2026-10-24T22:30:00Z", "2026-10-25"],
+  ["2026-10-25T22:30:00Z", "2026-10-25"],
+  ["2026-11-11T07:00:00Z", "2026-11-11"],
+  ["2026-07-01T07:00:00Z", "2026-07-01"],
+])("at %s the run lists with a full-day window for Amsterdam date %s", async (iso, day) => {
   const listDue = vi.fn(async () => []);
   await runInstinctCron(request(SECRET), fakeDeps({ now: () => new Date(iso), listDue }));
-  expect(listDue).toHaveBeenCalledWith(hour, 2, day);
+  // Hour 23 with 23 retry hours: every send hour is inside the window and the message day is today.
+  expect(listDue).toHaveBeenCalledWith(23, 23, day);
 });
 
 test("one throwing user does not stop the next, and the log holds the id and the error name only", async () => {
@@ -118,6 +114,57 @@ test("one throwing user does not stop the next, and the log holds the id and the
   expect(logs.join()).toContain('"userId":"a"');
   expect(logs.join()).toContain("BankError");
   expect(logs.join()).not.toContain("SENTINEL");
+});
+
+test("the run ends with one run_done log line holding the counters only", async () => {
+  const logs: string[] = [];
+  vi.spyOn(console, "log").mockImplementation((line: string) => void logs.push(line));
+  const run = vi.fn(async (id: string) => {
+    if (id === "b") throw Object.assign(new Error("SENTINEL"), { name: "BankError" });
+    return "sent" as const;
+  });
+  await runInstinctCron(
+    request(SECRET),
+    fakeDeps({ listDue: async () => [due("a"), due("b"), due("c")], run }),
+  );
+  const done = logs.map((l) => JSON.parse(l)).filter((l) => l.event === "instinct.run_done");
+  expect(done).toEqual([{ event: "instinct.run_done", due: 3, failed: 1, skipped: 0 }]);
+  expect(logs.join()).not.toContain("SENTINEL");
+});
+
+test("the due list is rotated by the Amsterdam day, so the same users are not always skipped", async () => {
+  const ids = ["a", "b", "c", "d"];
+  const firstServed = async (iso: string) => {
+    let clock = Date.parse(iso);
+    const seen: string[] = [];
+    await runInstinctCron(
+      request(SECRET),
+      fakeDeps({
+        now: () => new Date(clock),
+        listDue: async () => ids.map((id) => due(id)),
+        run: async (id) => {
+          seen.push(id);
+          clock += 100_000; // the second user already exceeds the 80 percent budget
+          return "sent";
+        },
+        budgetMs: 150_000,
+      }),
+    );
+    return seen;
+  };
+  const day1 = await firstServed("2026-11-11T07:00:00Z");
+  const day2 = await firstServed("2026-11-12T07:00:00Z");
+  const again = await firstServed("2026-11-11T07:00:00Z");
+  // Two users fit per run; which two depends on the day, and the same day gives the same two.
+  expect(day1).toHaveLength(2);
+  expect(day2).toHaveLength(2);
+  expect(day1).not.toEqual(day2);
+  expect(again).toEqual(day1);
+  // Over four consecutive days every user is served at least once.
+  const served = new Set<string>();
+  for (const d of ["11", "12", "13", "14"])
+    for (const id of await firstServed(`2026-11-${d}T07:00:00Z`)) served.add(id);
+  expect([...served].sort()).toEqual(ids);
 });
 
 test("the link-attempt purge runs once per run, even with nobody due, and a failure only logs (F6)", async () => {
@@ -163,18 +210,21 @@ test("the run stops starting users once 80 percent of the function limit is used
   expect((await res.json()).skipped).toBe(1);
 });
 
-test("the hourly trigger is the GitHub workflow, not a Vercel cron entry", () => {
+test("the Vercel build registers the daily 07:00 UTC cron and the workflow is manual only", () => {
   const build = readFileSync(
     new URL("../../../../scripts/vercel-build.mjs", import.meta.url),
     "utf8",
   );
-  // The Vercel plan allows daily crons only; an hourly entry fails every deploy.
-  expect(build).not.toContain('path: "/api/cron/instinct"');
+  expect(build).toContain('{ path: "/api/cron/instinct", schedule: "0 7 * * *" }');
+  expect(build).toContain('{ path: "/api/cron/investing-sync", schedule: "0 4 * * *" }');
   const workflow = readFileSync(
     new URL("../../../../.github/workflows/instinct-cron.yml", import.meta.url),
     "utf8",
   );
-  expect(workflow).toContain('cron: "7 * * * *"');
+  expect(workflow).not.toMatch(/^\s*schedule:/m);
+  expect(workflow).toContain("workflow_dispatch:");
+  expect(workflow).toContain("calls PRODUCTION");
+  expect(workflow).toContain("sends real messages and takes that day's message");
   expect(workflow).toContain("secrets.CRON_SECRET");
   expect(workflow).toContain("vars.INSTINCT_CRON_URL");
 });
@@ -269,6 +319,73 @@ test("two overlapping cron runs send once per user", async () => {
   expect(await listAgentDueUsers(db, 8, 2, "2026-11-11")).toEqual([]);
 });
 
+test("one daily run sends to every enabled user whatever the send hour, once a day", async () => {
+  await pglite.exec("RESET ROLE;");
+  for (const t of ["events", "mirror", "state", "settings"])
+    await pglite.exec(`DELETE FROM personal.agent_${t};`);
+  await pglite.exec("SELECT set_config('app.user_id', '', false); SET ROLE lavega_runtime;");
+  const hours: Record<string, number> = { late: 23, now: 8, early: 0, claimed: 5, yesterday: 23 };
+  for (const [user, sendHour] of Object.entries(hours)) {
+    const repo = createAgentRepository(db, user);
+    await repo.putSettings({ ...settings, sendHour });
+    await repo.putMirror({
+      rules: [],
+      dueDates: [{ kind: "vat", label: "BTW", date: "2026-11-14" }],
+      cardOffer: null,
+    });
+  }
+  // "claimed" already had today's message; "yesterday" got yesterday's.
+  await pglite.exec(
+    `RESET ROLE;
+     INSERT INTO personal.agent_state (user_id, last_sent_date) VALUES ('claimed', '2026-11-11')
+       ON CONFLICT (user_id) DO UPDATE SET last_sent_date = '2026-11-11';
+     INSERT INTO personal.agent_state (user_id, last_sent_date) VALUES ('yesterday', '2026-11-10')
+       ON CONFLICT (user_id) DO UPDATE SET last_sent_date = '2026-11-10';
+     SELECT set_config('app.user_id', '', false); SET ROLE lavega_runtime;`,
+  );
+  const sends: string[] = [];
+  const instinct: InstinctDeps = {
+    db,
+    now: () => new Date(T0),
+    fetchSessions: async () => [
+      {
+        sessionId: "s1",
+        payload: { aspsp: "ING", accounts: [] },
+        createdAt: "2026-11-01T00:00:00.000Z",
+      },
+    ],
+    rates: [],
+    send: {
+      feed: async (userId) => (sends.push(userId), "sent"),
+      push: async () => "failed",
+      email: async () => "failed",
+      whatsapp: async () => "failed",
+    },
+    fetchOutcome: async () => ({
+      status: "ok",
+      txs: [],
+      accounts: [account],
+      balances: [],
+      consentExpiresAt: new Date(T0 + 60 * 86_400_000).toISOString(),
+      banks: [{ bank: "ING", state: "ok" }],
+    }),
+  };
+  const deps = fakeDeps({
+    listDue: (hour, retry, today) => listAgentDueUsers(db, hour, retry, today),
+    run: (userId) => runForUser(instinct, userId),
+  });
+
+  const first = await (await runInstinctCron(request(SECRET), deps)).json();
+  expect(first.due).toBe(4);
+  expect(first.failed).toBe(0);
+  expect(sends.sort()).toEqual(["early", "late", "now", "yesterday"]);
+
+  sends.length = 0;
+  const second = await (await runInstinctCron(request(SECRET), deps)).json();
+  expect(second.due).toBe(0);
+  expect(sends).toEqual([]);
+});
+
 test("a failing due listing still purges the link attempts, answers 503 and logs the name only (W7)", async () => {
   const logs: string[] = [];
   vi.spyOn(console, "log").mockImplementation((line: string) => void logs.push(line));
@@ -308,6 +425,19 @@ test("a failing purge and a failing listing both only log their error names (W7)
   expect(logs.join()).not.toContain("secret detail");
   expect(logs.join()).not.toContain("list detail");
 });
+
+/* The listing function still supports an hourly schedule (send hour + 2 retry hours); the two
+ * simulations below keep it honest by feeding it the real Amsterdam hour every hour. */
+const hourly = (ms: number): number =>
+  Number(
+    new Intl.DateTimeFormat("en-GB", {
+      timeZone: "Europe/Amsterdam",
+      hour: "2-digit",
+      hourCycle: "h23",
+    })
+      .formatToParts(new Date(ms))
+      .find((p) => p.type === "hour")?.value,
+  );
 
 /* Every hour across the two DST changes, against the real listing and claim: each local
  * date gets exactly one claim, whatever the send hour, including the hours that do not
@@ -365,7 +495,7 @@ test.each([
     };
     const deps = fakeDeps({
       now: () => new Date(at),
-      listDue: (hour, retry, today) => listAgentDueUsers(db, hour, retry, today),
+      listDue: (_hour, _retry, today) => listAgentDueUsers(db, hourly(at), 2, today),
       run: (userId) => runForUser(instinct, userId),
     });
     for (; at <= Date.parse(to); at += 3_600_000) {
@@ -441,7 +571,7 @@ test.each([
     };
     const deps = fakeDeps({
       now: () => new Date(at),
-      listDue: (hour, retry, today) => listAgentDueUsers(db, hour, retry, today),
+      listDue: (_hour, _retry, today) => listAgentDueUsers(db, hourly(at), 2, today),
       run: (userId) => runForUser(instinct, userId),
     });
     const claims: (string | null)[] = [];

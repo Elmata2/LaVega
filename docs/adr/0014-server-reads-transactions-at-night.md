@@ -19,8 +19,9 @@ is not an agent.
 
 Choice A. Only for users who opted in:
 
-1. Once an hour, a cron (triggered at minute 7 by the GitHub workflow `.github/workflows/instinct-cron.yml`, because the Vercel plan allows daily crons only) lists the users whose send time has come (`personal.list_agent_due_users`,
-   migration 0040). A user is due when the Amsterdam hour is the user's send hour (default 08:00)
+1. **Amended 18 Nov 2026 (issue #353):** one run a day, a Vercel cron at 07:00 UTC (08:00 Amsterdam in winter, 09:00 in summer). GitHub's hourly schedule started only 3 of 15 runs, so it was removed (the workflow is manual only). The run lists with local hour 23 and 23 retry hours, so every enabled user without today's claim is due whatever the stored `sendHour` (no migration; the field stays for a later hourly schedule). The rule below is the SQL's behaviour, which an hourly schedule would use again.
+   Once a day, a cron lists the users who are due (`personal.list_agent_due_users`,
+   migration 0040). With an hourly schedule a user is due when the Amsterdam hour is the user's send hour (default 08:00)
    or up to `RETRY_HOURS` (2) later, counted round the clock so the window can pass midnight, and
    the user's day claim is empty or earlier than the "message day". The message day (the Amsterdam
    date on which the send hour fell) only decides who is due. The run itself uses the real
@@ -87,7 +88,7 @@ Choice A. Only for users who opted in:
    runtime role. It is not part of account erasure because it holds no user id. Rows older than
    15 minutes are purged by `agent_consume_link_code` on every call and by
    `personal.agent_purge_link_attempts()`, which the cron calls once per run.
-7. Consent is explicit, off by default, and worded exactly (NL): "LaVega leest elke dag rond het tijdstip dat jij kiest je transacties om je melding te maken, en ook wanneer je via WhatsApp een vraag stelt. LaVega bewaart je transacties niet. De meldingen en antwoorden die je krijgt blijven 90 dagen in je overzicht staan; je kunt ze eerder wissen."
+7. (Amended 18 Nov 2026: `CONSENT_VERSION` is now "2026-11-v3"; the sentence quoted below is the v2 text. The v3 text, in `apps/server/src/instinctConsent.ts`, says LaVega reads each morning, what is stored, the channels, that a push only says there is a message, and links to the privacy policy. The WhatsApp read moved into the WhatsApp AI consent line. Push payloads are generic. The personal-data reset deletes the agent tables.) Consent is explicit, off by default, and worded exactly (NL): "LaVega leest elke dag rond het tijdstip dat jij kiest je transacties om je melding te maken, en ook wanneer je via WhatsApp een vraag stelt. LaVega bewaart je transacties niet. De meldingen en antwoorden die je krijgt blijven 90 dagen in je overzicht staan; je kunt ze eerder wissen."
    (EN: "LaVega reads your transactions each day around the time you choose to make your message, and also when you ask a question on WhatsApp. LaVega does not store your transactions. The messages and answers you receive stay in your overview for 90 days; you can delete them sooner.") (`CONSENT_TEXT_NL` and `CONSENT_TEXT_EN` in `apps/server/src/instinctConsent.ts`,
    version `CONSENT_VERSION`, now "2026-11-v2"). The first version said "elke nacht"; this wording
    replaced it on 11 Nov 2026 and users on v1 must consent again (the cron and the WhatsApp answer path skip them until then; the answer path sends one fixed reply and makes no model, bank or budget call).

@@ -124,7 +124,7 @@ Specified in **`docs/investing/STACK.md`** — the investing side's own stack, d
 
 ## Instinct agent glossary
 
-- **Instinct agent / daily message** — the opt-in agent (`docs/adr/0014-server-reads-transactions-at-night.md`). An hourly cron sends a user at most one short money message a day, at the user's send time (default 08:00 Europe/Amsterdam), by feed, web push, email or a WhatsApp template. The server reads the bank into memory for that run only. On WhatsApp the user can also ask read-only questions. It cannot cancel anything; cancelling is phase 3 and waits for a lawyer.
+- **Instinct agent / daily message** — the opt-in agent (`docs/adr/0014-server-reads-transactions-at-night.md`). A daily Vercel cron (07:00 UTC, so 08:00 Amsterdam in winter, 09:00 in summer) sends every opted-in user at most one short money message a day, by feed, web push, email or a WhatsApp template. The server reads the bank into memory for that run only. On WhatsApp the user can also ask read-only questions. It cannot cancel anything; cancelling is phase 3 and waits for a lawyer.
 
 ### Personal app glossary
 

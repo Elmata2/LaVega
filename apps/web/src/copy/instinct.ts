@@ -9,12 +9,14 @@ export type InstinctSettingsCopy = {
   title: string;
   /** Exact consent sentence; the NL one is pinned by Global Constraints. */
   consent: string;
+  /** Link to the privacy policy, shown under the consent sentence. */
+  privacyLink: string;
   consentCheckbox: string;
   switchLabel: string;
   channelsLabel: string;
   channels: { feed: string; push: string; email: string };
-  timeLabel: string;
-  timeNotice: string;
+  /** One plain line: the daily run is fixed, so no hour is offered. */
+  scheduleNote: string;
   noBank: string;
   storedHeading: string;
   storedEmpty: string;
@@ -87,13 +89,13 @@ export const instinctCopy: Record<Locale, InstinctSettingsCopy> = {
   nl: {
     title: "Dagelijkse melding",
     consent:
-      "LaVega leest elke dag rond het tijdstip dat jij kiest je transacties om je melding te maken, en ook wanneer je via WhatsApp een vraag stelt. LaVega bewaart je transacties niet. De meldingen en antwoorden die je krijgt blijven 90 dagen in je overzicht staan; je kunt ze eerder wissen.",
+      "LaVega leest elke ochtend je transacties en saldi van de laatste 90 dagen bij je bank, zonder dat jij erbij bent, om hoogstens één melding per dag te maken. Die transacties en saldi bewaren we niet. Wel bewaren we je instellingen, een kopie van je categorieregels en naderende deadlines die je browser ons doorgeeft, en de meldingen zelf, 90 dagen. Een melding kan de naam van een tegenpartij, een bedrag en een datum noemen en komt via de kanalen die jij kiest: in LaVega, per e-mail, via WhatsApp of als pushmelding. Een pushmelding zegt alleen dat er een bericht is; de inhoud lees je in LaVega of in je e-mail. Je kunt dit op elk moment uitzetten; dan verwijderen we alles. Meer staat in het privacybeleid.",
+    privacyLink: "Lees het privacybeleid",
     consentCheckbox: "Ik snap dit en geef toestemming",
     switchLabel: "Stuur me een dagelijkse melding",
     channelsLabel: "Waar wil je de melding?",
     channels: { feed: "In LaVega", push: "Pushmelding", email: "E-mail" },
-    timeLabel: "Tijdstip",
-    timeNotice: "Meldingen komen op je gekozen tijd, nooit eerder",
+    scheduleNote: "Je krijgt hooguit één bericht per dag, 's ochtends.",
     noBank: "Koppel eerst een bank, dan kun je dit aanzetten.",
     storedHeading: "Wat LaVega bewaart",
     storedEmpty: "Er is niets bewaard.",
@@ -127,7 +129,7 @@ export const instinctCopy: Record<Locale, InstinctSettingsCopy> = {
     whatsappLinked: (phone) => `Gekoppeld aan ${phone}`,
     whatsappLink: "Koppel WhatsApp",
     whatsappAiConsent:
-      "Vragen die je via WhatsApp stelt gaan naar Mistral (EU) om te bepalen welke berekening past. Je losse transacties, namen van tegenpartijen, rekeningnummers en saldi gaan niet mee. Wel gaan de uitgerekende zinnen (totalen, data en categorienamen) mee; Mistral kiest welke je ziet en kiest een openingszin en een slotzin uit een vaste lijst. Mistral schrijft zelf niets dat naar jou wordt gestuurd. Antwoorden met namen van tegenpartijen gaan niet naar Mistral.",
+      "Stel je via WhatsApp een vraag, dan leest LaVega op dat moment ook je transacties, hoogstens 3 keer per dag. Je vraag kan persoonlijke informatie bevatten die ons filter niet herkent; die gaat dan ook naar Mistral. Vragen die je via WhatsApp stelt gaan naar Mistral (EU) om te bepalen welke berekening past. Je losse transacties, namen van tegenpartijen, rekeningnummers en saldi gaan niet mee. Wel gaan de uitgerekende zinnen (totalen, data en categorienamen) mee; Mistral kiest welke je ziet en kiest een openingszin en een slotzin uit een vaste lijst. Mistral schrijft zelf niets dat naar jou wordt gestuurd. Antwoorden met namen van tegenpartijen gaan niet naar Mistral.",
     whatsappUnlink: "Ontkoppel WhatsApp",
     whatsappSend: (number) =>
       number
@@ -173,13 +175,13 @@ export const instinctCopy: Record<Locale, InstinctSettingsCopy> = {
   en: {
     title: "Daily message",
     consent:
-      "LaVega reads your transactions each day around the time you choose to make your message, and also when you ask a question on WhatsApp. LaVega does not store your transactions. The messages and answers you receive stay in your overview for 90 days; you can delete them sooner.",
+      "Each morning LaVega reads your transactions and balances from the last 90 days at your bank, without you being there, to make at most one message a day. We do not store those transactions and balances. We do store your settings, a copy of your category rules and upcoming deadlines that your browser passes to us, and the messages themselves, for 90 days. A message can name a counterparty, an amount and a date and arrives through the channels you choose: in LaVega, by email, via WhatsApp or as a push notification. A push notification only says there is a message; you read the content in LaVega or in your email. You can turn this off at any time; we then delete everything. More is in the privacy policy.",
+    privacyLink: "Read the privacy policy",
     consentCheckbox: "I understand and give consent",
     switchLabel: "Send me a daily message",
     channelsLabel: "Where do you want the message?",
     channels: { feed: "In LaVega", push: "Push notification", email: "Email" },
-    timeLabel: "Time",
-    timeNotice: "Messages arrive at the time you choose, never earlier",
+    scheduleNote: "You get at most one message a day, in the morning.",
     noBank: "Connect a bank first, then you can turn this on.",
     storedHeading: "What LaVega keeps",
     storedEmpty: "Nothing is stored.",
@@ -213,7 +215,7 @@ export const instinctCopy: Record<Locale, InstinctSettingsCopy> = {
     whatsappLinked: (phone) => `Linked to ${phone}`,
     whatsappLink: "Link WhatsApp",
     whatsappAiConsent:
-      "Questions you ask over WhatsApp go to Mistral (EU) to decide which calculation fits. Your individual transactions, counterparty names, account numbers and balances are not sent. The calculated sentences (totals, dates and category names) are sent; Mistral chooses which ones you see and picks an opening and a closing sentence from a fixed list. Mistral writes nothing that is sent to you. Answers that contain counterparty names are not sent to Mistral.",
+      "If you ask a question over WhatsApp, LaVega also reads your transactions at that moment, at most 3 times a day. Your question can contain personal information our filter does not recognise; that also goes to Mistral. Questions you ask over WhatsApp go to Mistral (EU) to decide which calculation fits. Your individual transactions, counterparty names, account numbers and balances are not sent. The calculated sentences (totals, dates and category names) are sent; Mistral chooses which ones you see and picks an opening and a closing sentence from a fixed list. Mistral writes nothing that is sent to you. Answers that contain counterparty names are not sent to Mistral.",
     whatsappUnlink: "Unlink WhatsApp",
     whatsappSend: (number) =>
       number

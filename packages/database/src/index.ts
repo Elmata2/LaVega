@@ -1687,10 +1687,19 @@ export const PERSONAL_RESET_TABLES = [
   "personal.n8n_forwarding",
   "personal.vaults",
   "personal.net_worth_totals",
+  /* The Instinct agent: after a reset it is off (no settings row) and holds nothing. Same
+   * child-first order as USER_DATA_TABLES; the privacy policy says the reset removes it. */
+  "personal.agent_whatsapp",
+  "personal.agent_link_codes",
+  "personal.agent_events",
+  "personal.agent_push_subscriptions",
+  "personal.agent_mirror",
+  "personal.agent_state",
+  "personal.agent_settings",
 ] as const;
 
 /**
- * Clear one person's personal-side data and nothing else: the five tables in
+ * Clear one person's personal-side data and nothing else: the tables in
  * PERSONAL_RESET_TABLES, in one transaction, each `DELETE ... WHERE user_id = $1`
  * with the id as a bound parameter. The login, Investing and the vault key stay.
  * Not a GDPR erasure; see `eraseUserData` for that.

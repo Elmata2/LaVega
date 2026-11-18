@@ -1,8 +1,12 @@
 name: instinct cron
+# Manual trigger only. The daily run is the Vercel cron registered in
+# scripts/vercel-build.mjs (07:00 UTC). GitHub's schedule was dropped: it started
+# an "hourly" run 3 times in 15 hours.
+# WARNING: when the repository variable INSTINCT_CRON_URL is set (production), "Run
+# workflow" calls PRODUCTION. It sends real messages and takes that day's message for
+# every opted-in user who has not had one yet (the day claim then blocks the 07:00 UTC
+# run for those users). Use it on purpose, not as a dry run.
 on:
-  schedule:
-    # Minute 7, not 0: GitHub queues top-of-hour schedules and delays them most.
-    - cron: "7 * * * *"
   workflow_dispatch:
 # The job only calls a public URL with a bearer secret; it needs no token scopes.
 permissions: {}

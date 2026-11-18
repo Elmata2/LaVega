@@ -1646,7 +1646,7 @@ const nlBackup: BackupCopy = {
   },
   resetPersonal: {
     button: "Persoonlijke gegevens wissen",
-    goes: "Weg gaat: je rekeningen, transacties, intakeantwoorden en documenten in deze browser, de kopie van je kluis op de server, je bankkoppelingen, je doorstuuradres voor facturen en het dagelijkse totaal dat je deelt met de nettowaardepagina van LaVega Investing.",
+    goes: "Weg gaat: je rekeningen, transacties, intakeantwoorden en documenten in deze browser, de kopie van je kluis op de server, je bankkoppelingen, je dagelijkse melding en de berichten daarvan, je doorstuuradres voor facturen en het dagelijkse totaal dat je deelt met de nettowaardepagina van LaVega Investing.",
     goesLocalOnly:
       "Weg gaat: je rekeningen, transacties, intakeantwoorden en documenten in deze browser. Dit apparaat is zonder account; een kopie op een server, als die er is, blijft ongemoeid.",
     stays:
@@ -2505,7 +2505,7 @@ const enBackup: BackupCopy = {
   },
   resetPersonal: {
     button: "Clear personal data",
-    goes: "Goes: your accounts, transactions, intake answers and documents in this browser, the copy of your vault on the server, your bank links, your invoice forwarding address and the daily total you share with LaVega Investing's net-worth page.",
+    goes: "Goes: your accounts, transactions, intake answers and documents in this browser, the copy of your vault on the server, your bank links, your daily message and its messages, your invoice forwarding address and the daily total you share with LaVega Investing's net-worth page.",
     goesLocalOnly:
       "Goes: your accounts, transactions, intake answers and documents in this browser. This device is without an account; a copy on a server, if there is one, is not touched.",
     stays:

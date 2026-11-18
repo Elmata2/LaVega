@@ -2,8 +2,9 @@ import type { RenderedMessage } from "@lavega/core";
 import type { createAgentRepository } from "@lavega/database";
 import * as webpush from "web-push";
 
-/* The web push channel. The payload is the title and the short text, which the
- * service worker shows as is; no amounts or merchants are added or logged.
+/* The web push channel. The payload is a fixed, generic text in the user's language: it says
+ * there is a message and nothing else, so no counterparty name, amount or date from the user's
+ * data reaches the push service or a lock screen. The full text stays in the feed and the e-mail.
  * A subscription the push service reports gone (404, 410) is deleted. */
 
 type Repo = Pick<ReturnType<typeof createAgentRepository>, "listPush" | "deletePush">;
@@ -11,11 +12,17 @@ type Sender = Pick<typeof webpush, "sendNotification">;
 
 const GONE = new Set([404, 410]);
 
+const GENERIC = {
+  nl: { title: "LaVega", body: "Je hebt een nieuwe melding." },
+  en: { title: "LaVega", body: "You have a new message." },
+} as const;
+const FEED_URL = "/app/meldingen";
+
 export async function sendPush(
   _userId: string,
-  msg: RenderedMessage,
+  _msg: RenderedMessage,
   repo: Repo,
-  deps: { webpush?: Sender } = {},
+  deps: { webpush?: Sender; locale?: "nl" | "en" } = {},
 ): Promise<"sent" | "failed"> {
   const publicKey = process.env.VAPID_PUBLIC_KEY?.trim();
   const privateKey = process.env.VAPID_PRIVATE_KEY?.trim();
@@ -29,7 +36,7 @@ export async function sendPush(
     return "failed";
   }
   const sender = deps.webpush ?? webpush;
-  const payload = JSON.stringify({ title: msg.title, body: msg.short, url: "/app" });
+  const payload = JSON.stringify({ ...GENERIC[deps.locale ?? "nl"], url: FEED_URL });
   let delivered = false;
   for (const sub of subs) {
     const { endpoint, keys } = sub;

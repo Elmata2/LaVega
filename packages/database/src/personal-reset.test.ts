@@ -2,7 +2,11 @@ import { afterAll, beforeAll, beforeEach, expect, test } from "vitest";
 import type { PGlite } from "@electric-sql/pglite";
 import {
   createOpaqueVaultRepository,
-  erasePersonalData, eraseUserData, PERSONAL_RESET_TABLES, type Database } from "./index.js";
+  erasePersonalData,
+  eraseUserData,
+  PERSONAL_RESET_TABLES,
+  type Database,
+} from "./index.js";
 import { databaseOver, migratedTestDatabase } from "./testing.js";
 
 /* Real migrations, real Postgres (PGlite) acting as `lavega_runtime`, as
@@ -17,6 +21,14 @@ const DELETED = [
   "personal.n8n_forwarding",
   "personal.vaults",
   "personal.net_worth_totals",
+  // The Instinct agent, child-first as in the full erase (USER_DATA_TABLES).
+  "personal.agent_whatsapp",
+  "personal.agent_link_codes",
+  "personal.agent_events",
+  "personal.agent_push_subscriptions",
+  "personal.agent_mirror",
+  "personal.agent_state",
+  "personal.agent_settings",
 ] as const;
 
 const KEPT_BY_USER_ID = [
@@ -81,6 +93,17 @@ async function seed(id: string, tag: string): Promise<void> {
     INSERT INTO personal.vaults (user_id, vault_blob) VALUES (${e(id)}, '\\x01');
     INSERT INTO personal.net_worth_totals (user_id, date, total_cents)
       VALUES (${e(id)}, '2026-11-01', 100);
+    INSERT INTO personal.agent_settings (user_id, enabled) VALUES (${e(id)}, true);
+    INSERT INTO personal.agent_state (user_id, last_sent_date) VALUES (${e(id)}, '2026-11-01');
+    INSERT INTO personal.agent_mirror (user_id, payload_blob) VALUES (${e(id)}, '\\x01');
+    INSERT INTO personal.agent_push_subscriptions (user_id, endpoint_hash, subscription_blob)
+      VALUES (${e(id)}, ${e(`ep-${tag}`)}, '\\x01');
+    INSERT INTO personal.agent_events (user_id, id, channel, type, body_blob)
+      VALUES (${e(id)}, ${e(`00000000-0000-0000-0000-0000000000e${tag === "a" ? 1 : 2}`)}, 'feed', 'message', '\\x01');
+    INSERT INTO personal.agent_whatsapp (user_id, phone_hash, phone_blob, ai_consent_at)
+      VALUES (${e(id)}, ${e(`ph-${tag}`)}, '\\x01', CURRENT_TIMESTAMP);
+    INSERT INTO personal.agent_link_codes (user_id, code_hash, expires_at, ai_consent_at)
+      VALUES (${e(id)}, ${e(`ch-${tag}`)}, CURRENT_TIMESTAMP + INTERVAL '15 minutes', CURRENT_TIMESTAMP);
     INSERT INTO personal.vault_keys (user_id, wrapped_key) VALUES (${e(id)}, '\\x01');
     INSERT INTO personal.ai_usage (day, route, model, cost_cents, user_id)
       VALUES ('2026-11-01', 'categorize', 'm', 5, ${e(id)});
@@ -113,6 +136,10 @@ beforeEach(async () => {
       DELETE FROM personal.eb_sessions; DELETE FROM personal.eb_pending_auth;
       DELETE FROM personal.n8n_forwarding; DELETE FROM personal.vaults;
       DELETE FROM personal.net_worth_totals; DELETE FROM personal.vault_keys;
+      DELETE FROM personal.agent_whatsapp; DELETE FROM personal.agent_link_codes;
+      DELETE FROM personal.agent_events; DELETE FROM personal.agent_push_subscriptions;
+      DELETE FROM personal.agent_mirror; DELETE FROM personal.agent_state;
+      DELETE FROM personal.agent_settings;
       DELETE FROM personal.ai_usage;
       DELETE FROM investing.broker_vaults; DELETE FROM investing.preferences;
       DELETE FROM investing.sync_state; DELETE FROM investing.agent_runs;
@@ -137,7 +164,7 @@ const count = (table: string, userId: string, column = "user_id") =>
     return result.rows[0]!.n;
   });
 
-test("PERSONAL_RESET_TABLES is exactly the five personal tables, in the specified order", () => {
+test("PERSONAL_RESET_TABLES is the five personal tables plus the seven Instinct agent tables, in the specified order", () => {
   expect([...PERSONAL_RESET_TABLES]).toEqual([...DELETED]);
 });
 
@@ -151,7 +178,7 @@ test("the seed really puts a row of user A and of user B into every table under 
   }
 });
 
-test("reset deletes user A's five personal tables, reports five tables, nothing else of A goes", async () => {
+test("reset deletes user A's personal and Instinct tables, reports each, nothing else of A goes", async () => {
   const report = await erasePersonalData(db, "user-a");
 
   expect(report.map((entry) => entry.table)).toEqual([...DELETED]);
@@ -178,6 +205,18 @@ test("reset leaves every row of user B untouched, including the table with no RL
     expect(await count(table, "user-b", column), table).toBe(1);
   // eb_pending_auth has no RLS: only the WHERE user_id clause protects B here.
   expect(await count("personal.eb_pending_auth", "user-b")).toBe(1);
+});
+
+test("after a reset the Instinct agent is off: no settings row, so nothing is due and nothing is sent", async () => {
+  await erasePersonalData(db, "user-a");
+  expect(await count("personal.agent_settings", "user-a")).toBe(0);
+  expect(await count("personal.agent_settings", "user-b")).toBe(1);
+  await asOwner(async () => {
+    const due = await pglite.query<{ tenant_id: string }>(
+      "SELECT tenant_id FROM personal.list_agent_due_users(23, 23, '2026-11-18')",
+    );
+    expect(due.rows.map((r) => r.tenant_id)).toEqual(["user-b"]);
+  });
 });
 
 test("after a reset the kept vault key is still there, so the browser vault stays openable", async () => {
@@ -216,7 +255,7 @@ test("the full erase still removes everything the reset keeps (the two are diffe
   expect(await count("personal.vaults", "user-b")).toBe(1);
 });
 
-test("the exact statements: one transaction, tenant bound via set_config, five fixed DELETEs with the id as $1", async () => {
+test("the exact statements: one transaction, tenant bound via set_config, twelve fixed DELETEs with the id as $1", async () => {
   const seen: { text: string; params: unknown[] | undefined }[] = [];
   const fake = databaseOver(async () => ({
     query: async (text: string, params?: unknown[]) => {
@@ -274,7 +313,10 @@ test("a first-ever backup (client expects nothing) still creates the row, and a 
 
   const first = await repository.put(Buffer.from("first"), null);
   expect(first.status).toBe("stored");
-  const second = await repository.put(Buffer.from("second"), (first as { updatedAt: string }).updatedAt);
+  const second = await repository.put(
+    Buffer.from("second"),
+    (first as { updatedAt: string }).updatedAt,
+  );
   expect(second.status).toBe("stored");
   expect((await repository.get())!.blob.toString()).toBe("second");
   // Expecting nothing while a row exists is still a conflict.

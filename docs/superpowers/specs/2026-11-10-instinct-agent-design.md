@@ -56,7 +56,7 @@ read-only; cancelling a subscription is phase 3 and is not built.
   Same on an incoming WhatsApp question that needs fresh data: fetch, answer,
   discard. Both paths share one fetch counter per user per day: WhatsApp takes
   a read while the count is below 3, the cron while it is below 4. Clear consent
-  text, NL (v2, `CONSENT_VERSION` "2026-11-v2"): "LaVega leest elke dag rond het tijdstip dat jij kiest je transacties om je melding te maken, en ook wanneer je via WhatsApp een vraag stelt. LaVega bewaart je transacties niet. De meldingen en antwoorden die je krijgt blijven 90 dagen in je overzicht staan; je kunt ze eerder wissen."
+  text, NL (v2, `CONSENT_VERSION` "2026-11-v2"; superseded 18 Nov 2026 by v3 in `apps/server/src/instinctConsent.ts`, see ADR 0014): "LaVega leest elke dag rond het tijdstip dat jij kiest je transacties om je melding te maken, en ook wanneer je via WhatsApp een vraag stelt. LaVega bewaart je transacties niet. De meldingen en antwoorden die je krijgt blijven 90 dagen in je overzicht staan; je kunt ze eerder wissen."
   EN: "LaVega reads your transactions each day around the time you choose to make your message, and also when you ask a question on WhatsApp. LaVega does not store your transactions. The messages and answers you receive stay in your overview for 90 days; you can delete them sooner." This changes today's privacy promise (vault closed to
   the server) for opted-in users only; the vault itself stays as it is. The first
   sentence said "elke nacht"; v2 replaced it (see ADR 0014).
@@ -87,7 +87,7 @@ listable and deletable by the user, and "erase everything" covers it.
   number), email, push subscription(s), language, consent version and date.
   As built there are no quiet hours; the send hour takes their place. The
   cancellation authorisation text is phase 3.
-- **Hourly job** (hourly trigger `7 * * * *` from the GitHub workflow `.github/workflows/instinct-cron.yml` on `/api/cron/instinct`; Vercel plan allows daily crons only, per due
+- **Daily job** (amended 18 Nov 2026, issue #353: a Vercel cron `0 7 * * *` UTC, 08:00 or 09:00 Amsterdam, lists every enabled user without today's claim with a full-day window, whatever the send hour; the GitHub workflow is manual only; the text below describes the original hourly design, still supported by the SQL). Original: hourly trigger `7 * * * *` from the GitHub workflow `.github/workflows/instinct-cron.yml` on `/api/cron/instinct`; Vercel plan allows daily crons only, per due
   opted-in user): fetch 90 days → compute candidates in memory using
   existing core functions (spending by day, `computeSubscriptions`, card
   comparison, live rates; the card gain comes from the browser's mirror) → pick at most one message → render per channel →

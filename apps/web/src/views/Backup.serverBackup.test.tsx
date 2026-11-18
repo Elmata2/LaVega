@@ -596,3 +596,10 @@ test("a server copy that was cleared elsewhere: the conflict says so and offers 
   });
   expect(container!.textContent).toContain("Back-up opgeslagen");
 });
+
+test("the personal reset confirmation names the daily message and its messages, in both languages", () => {
+  expect(adminCopy.nl.backup.resetPersonal.goes).toContain(
+    "je dagelijkse melding en de berichten daarvan",
+  );
+  expect(adminCopy.en.backup.resetPersonal.goes).toContain("your daily message and its messages");
+});
