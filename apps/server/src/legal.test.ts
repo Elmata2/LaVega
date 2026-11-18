@@ -89,7 +89,7 @@ test("the policy carries the daily message consent sentence verbatim, and says w
   expect(privacyHtml).toContain(CONSENT_TEXT_NL);
   expect(privacyHtml).toContain(CONSENT_TEXT_EN);
   expect(privacyHtml).toMatch(
-    /leest de server één keer per dag, rond het tijdstip dat jij koos[^<]*transacties en saldi van de laatste 90 dagen/,
+    /leest de server één keer per dag, in de ochtend[^<]*transacties en saldi van de laatste 90 dagen/,
   );
   expect(privacyHtml).toMatch(/Meldingen bewaren we 90 dagen/);
   expect(privacyHtml).toContain("Dagelijkse melding");
@@ -113,15 +113,47 @@ test("the policy covers the WhatsApp link: Meta, the sealed number, 90 days, 15 
   expect(text).toMatch(/WhatsApp[^.]*in English|In English[\s\S]*WhatsApp/);
 });
 
-test("the policy states when the server reads: daily around the chosen hour, retries, WhatsApp questions, memory only", () => {
+test("the policy states when the server reads: one daily morning run for everyone, retry next day, WhatsApp questions, memory only", () => {
   const text = privacyHtml.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
   expect(text).not.toMatch(/elke nacht|each night|every night/i);
-  expect(text).toContain("standaard 08:00");
-  expect(text).toContain("tot 2 uur na dat tijdstip opnieuw");
+  expect(text).not.toContain("standaard 08:00");
+  expect(text).not.toContain("kijkt elk uur");
+  expect(text).not.toContain("tot 2 uur na dat tijdstip");
+  expect(text).not.toContain("up to 2 hours after that time");
+  expect(text).toContain("tussen 08:00 en 10:00 Nederlandse tijd");
+  expect(text).toContain("between 08:00 and 10:00 Dutch time");
+  expect(text).toContain("elke gebruiker die dit aanzette");
+  expect(text).toContain("de volgende dag");
+  expect(text).toContain("the next day");
   expect(text).toContain("hoogstens 3 keer per dag");
   expect(text).toContain("alleen in het werkgeheugen tijdens die ene run of dat ene antwoord");
   expect(text).toContain("at most 3 times a day");
-  expect(text).toContain("up to 2 hours after that time");
+});
+
+test("the policy states the stored copy, retention, reminder, filter limits and the push text (nl and en)", () => {
+  const text = privacyHtml.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
+  for (const needle of [
+    "de teksten van je categorieregels (woorden die jij zelf typte, vaak namen van winkels)",
+    "de naam van een betere kaart met het jaarlijkse voordeel",
+    "de kopie van je regels en deadlines op onze server",
+    "zeven dagen voordat je bankkoppeling verloopt",
+    "burgerservicenummers die de elfproef doorstaan",
+    "Andere persoonlijke tekst die je zelf typt herkennen we niet",
+    "een korte lijst van wat we je al meldden, 30 dagen",
+    "tot je de melding uitzet, het nummer ontkoppelt of je account verwijdert",
+    "Je vragen via WhatsApp bewaren we zoals je ze typte",
+    "een generieke tekst zonder namen of bedragen",
+    "de e-mail bevat de volledige tekst",
+    "text of the rules you typed",
+    "the name of a better card with the yearly gain",
+    "the copy of your rules and deadlines on our server",
+    "seven days before your bank link expires",
+    "social security numbers that pass the 11-proof",
+    "Other personal text you type is not recognised",
+    "a generic text without names or amounts",
+    "the e-mail carries the full text",
+  ])
+    expect(text, needle).toContain(needle);
 });
 
 test("the WhatsApp paragraph uses the same terms as the consent label, word for word", async () => {
@@ -219,7 +251,7 @@ test("the owner-review marker sits in the source, once", async () => {
 test("the WhatsApp paragraph lists exactly what the question filter removes (W2)", async () => {
   const text = privacyHtml.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
   expect(text).toContain(
-    "Eerst gaat er een filter overheen dat rekeningnummers (IBAN, van elk land), e-mailadressen, Nederlandse telefoonnummers (06…, 010… en +31), burgerservicenummers en bedragen met € of EUR ervoor (zoals € 45) eruit haalt; een bedrag met het valutateken erachter, zoals 45 EUR of 45€, blijft staan",
+    "Eerst gaat er een filter overheen dat rekeningnummers (IBAN, van elk land), e-mailadressen, Nederlandse telefoonnummers (06…, 010… en +31), burgerservicenummers die de elfproef doorstaan en bedragen met € of EUR ervoor (zoals € 45) eruit haalt; een bedrag met het valutateken erachter, zoals 45 EUR of 45€, blijft staan",
   );
   expect(text).not.toMatch(/telefoonnummers en bedragen eruit haalt/);
   expect(text).not.toMatch(/bedragen die met € of EUR zijn geschreven/);

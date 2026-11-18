@@ -242,12 +242,14 @@ async function complete(ctx: Ctx, input: Parameters<LlmProvider["complete"]>[0])
 
 async function converse(ctx: Ctx, text: string): Promise<Outcome> {
   const { deps, userId, locale } = ctx;
-  // An older consent text did not mention WhatsApp reads: no model, bank or budget call.
+  // The daily-message consent must be the current version; the WhatsApp read itself is authorised
+  // by the separate WhatsApp AI consent below (its text names the read and the cap of 3 a day).
+  // An outdated version: no model, bank or budget call.
   if (!ctx.consentCurrent) {
     await sendFixed(ctx, "consentOutdated");
     return "fallback";
   }
-  // The question goes to the AI provider only for a user who agreed to that when linking.
+  // The bank read and the question go out only for a user who ticked that consent when linking.
   if (!ctx.aiConsent) {
     await sendFixed(ctx, "aiConsentNeeded");
     return "fallback";

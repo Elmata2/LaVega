@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import type { RenderedMessage } from "@lavega/core";
+import { renderCandidate, type Candidate, type RenderedMessage } from "@lavega/core";
 import { sendPush } from "./pushChannel.js";
 
 const msg: RenderedMessage = {
@@ -38,8 +38,49 @@ test("one subscription gets one notification carrying only title and short text"
     string,
   ];
   expect(target.endpoint).toBe("https://push.example/1");
-  expect(JSON.parse(payload)).toEqual({ title: msg.title, body: msg.short, url: "/app" });
+  expect(JSON.parse(payload)).toEqual({
+    title: "LaVega",
+    body: "Je hebt een nieuwe melding.",
+    url: "/app/meldingen",
+  });
 });
+
+const renewal: Candidate = {
+  kind: "deadline",
+  key: "deadline:renewal:netflix|out|1599:2026-11-13",
+  figures: {
+    what: "renewal",
+    name: "Netflix",
+    dueDate: "2026-11-13",
+    daysAway: 2,
+    amountCents: 1599,
+  },
+};
+
+test.each([
+  ["nl", "Je hebt een nieuwe melding."],
+  ["en", "You have a new message."],
+] as const)(
+  "a renewal push in %s is generic: no name, no amount, no digits",
+  async (locale, body) => {
+    const rendered = renderCandidate(renewal, locale);
+    // The full text does carry the name and the amount: e-mail and feed keep it.
+    expect(rendered.long).toContain("Netflix");
+    expect(rendered.long).toMatch(/15[.,]99/);
+    const sendNotification = vi.fn(async () => ({}));
+    await sendPush("u", rendered, repoWith([sub(1)]), {
+      webpush: { sendNotification } as never,
+      locale,
+    });
+    const payload = (sendNotification.mock.calls[0] as unknown as [unknown, string])[1];
+    expect(JSON.parse(payload)).toEqual({ title: "LaVega", body, url: "/app/meldingen" });
+    expect(payload).not.toContain("Netflix");
+    expect(payload).not.toMatch(/15[.,]99|1599/);
+    expect(payload).not.toContain(rendered.short);
+    expect(payload).not.toContain(rendered.title);
+    expect(payload).not.toMatch(/\d/);
+  },
+);
 
 test("410 deletes that subscription and still reports sent when another succeeded", async () => {
   const sendNotification = vi.fn(async (s: { endpoint: string }) => {

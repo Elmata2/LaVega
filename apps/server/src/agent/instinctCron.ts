@@ -18,13 +18,18 @@ import { sendWhatsAppDaily } from "../whatsapp/channel.js";
 import { sendPush } from "./pushChannel.js";
 import { runForUser, type InstinctDeps, type RunResult } from "./instinct.js";
 
-/* The hourly agent cron. It asks the database which opted-in users are due at
- * this Amsterdam hour (send time up to RETRY_HOURS ago, counted round midnight, and no
- * claim yet for that send day), then runs each one on its own: one user's failure
- * never stops the next. The listing's day only decides who is due; the claim is the real date.
- * Logs carry the user id and the error's name, nothing from the bank. */
+/* The daily agent cron (Vercel cron, 07:00 UTC = 08:00 Amsterdam in winter, 09:00 in summer).
+ * One run a day sends to every opted-in user who has no claim for today's Amsterdam date,
+ * whatever send hour they stored. The listing function (migration 0040) is reused as is: with
+ * local hour 23 and 23 retry hours every send hour is inside the window ((23 - h + 24) % 24 <= 23
+ * for all h in 0..23) and the message day is today (23 >= h). The claim stays the real once-a-day
+ * guard: a second call the same day lists nobody. A failed send releases the claim as before.
+ * Each user runs on its own: one failure never stops the next. Logs carry the user id and the
+ * error's name, nothing from the bank. */
 
-export const RETRY_HOURS = 2;
+/** Local hour and retry hours passed to the listing: a window that covers the whole day. */
+export const FULL_DAY_HOUR = 23;
+export const FULL_DAY_RETRY_HOURS = 23;
 /** `maxDuration` in scripts/vercel-build.mjs. */
 export const FUNCTION_LIMIT_MS = 300_000;
 export const BUDGET_SHARE = 0.8;
@@ -40,14 +45,15 @@ export type CronDeps = {
   budgetMs: number;
 };
 
-/** The local hour (0-23) in Europe/Amsterdam; follows the CET/CEST change. */
-export function amsterdamHour(instant: Date): number {
-  const parts = new Intl.DateTimeFormat("en-GB", {
-    timeZone: "Europe/Amsterdam",
-    hour: "2-digit",
-    hourCycle: "h23",
-  }).formatToParts(instant);
-  return Number(parts.find((p) => p.type === "hour")?.value);
+/** The listing is ordered by user id. When the time budget runs out the tail is skipped, so the
+ *  list starts at a different user each day (days since 1970 modulo the length): over a few days
+ *  everyone is reached first once. The same day always gives the same order. */
+function rotateByDay<T>(list: readonly T[], day: string): T[] {
+  if (list.length === 0) return [];
+  const [y, m, d] = day.split("-").map(Number);
+  const days = Math.floor(Date.UTC(y!, m! - 1, d!) / 86_400_000);
+  const offset = days % list.length;
+  return [...list.slice(offset), ...list.slice(0, offset)];
 }
 
 const log = (event: string, fields: Record<string, string | number> = {}) =>
@@ -68,7 +74,10 @@ function defaultDeps(): CronDeps {
       send: {
         // The stored event is the feed; `deliver` writes it after the sends.
         feed: async () => "sent",
-        push: (userId, msg) => sendPush(userId, msg, createAgentRepository(database, userId)),
+        push: (userId, msg, settings) =>
+          sendPush(userId, msg, createAgentRepository(database, userId), {
+            locale: settings.locale,
+          }),
         email: async (_userId, msg, settings) =>
           settings.email
             ? sendAgentEmail(settings.email, msg, settings.locale, authBaseUrl())
@@ -120,7 +129,7 @@ export async function runInstinctCron(request: Request, given?: CronDeps): Promi
 
   let due: DueUser[];
   try {
-    due = await deps.listDue(amsterdamHour(instant), RETRY_HOURS, amsterdamDay(instant));
+    due = await deps.listDue(FULL_DAY_HOUR, FULL_DAY_RETRY_HOURS, amsterdamDay(instant));
   } catch (error) {
     log("list_failed", { kind: kindOf(error) });
     return Response.json({ problems: ["Could not list due users"] }, { status: 503 });
@@ -129,7 +138,7 @@ export async function runInstinctCron(request: Request, given?: CronDeps): Promi
   const results: Record<string, number> = {};
   let failed = 0;
   let reached = 0;
-  for (const { userId } of due) {
+  for (const { userId } of rotateByDay(due, amsterdamDay(instant))) {
     if (deps.now().getTime() - started >= deps.budgetMs) break;
     reached += 1;
     try {
@@ -145,5 +154,7 @@ export async function runInstinctCron(request: Request, given?: CronDeps): Promi
       log("purge_failed", { userId, kind: kindOf(error) });
     }
   }
-  return Response.json({ due: due.length, results, failed, skipped: due.length - reached });
+  const skipped = due.length - reached;
+  log("run_done", { due: due.length, failed, skipped });
+  return Response.json({ due: due.length, results, failed, skipped });
 }

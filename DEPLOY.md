@@ -374,10 +374,11 @@ locally, create your own Neon branch and put its connection string, a
   existing browser subscriptions are tied to the public key.
 - `CRON_SECRET` — bearer secret that Vercel sends to the cron routes. It
   guards `/api/cron/investing-sync` (daily, `0 4 * * *`) and the instinct
-  agent's `/api/cron/instinct`. The instinct route runs hourly, but not from
-  Vercel (the plan allows daily crons only): the GitHub workflow
-  `.github/workflows/instinct-cron.yml` calls it at minute 7 of every hour with
-  this same secret as a bearer token. The route and its guard are unchanged.
+  agent's `/api/cron/instinct` (daily, `0 7 * * *` UTC, which is 08:00 in
+  Amsterdam in winter and 09:00 in summer). Vercel sends the bearer on both
+  crons when `CRON_SECRET` is set. The GitHub workflow
+  `.github/workflows/instinct-cron.yml` is a manual trigger only (it sends the
+  same secret as a bearer token). The route and its guard are unchanged.
 - `LAVEGA_ALLOW_UNAUTHENTICATED` — set to `1` ONLY for a run with no
   authentication at all (local dev, single-user self-host). Never in production
   or preview: it opens every `/api/*` route to anyone.
@@ -427,9 +428,18 @@ done and its environment variables are set.
 
 Done (11 Nov 2026): the five tips are reviewed (`packages/core/src/instinct/tips.ts`;
 a NEW tip starts with `reviewedAt: null` and is never sent until reviewed), and
-the consent wording is decided (`CONSENT_VERSION` "2026-11-v2", sentences in
+the consent wording is decided (`CONSENT_VERSION` now "2026-11-v3", changed 18 Nov 2026 because the daily run no longer follows a chosen hour and the sentence now names what is stored, the channels and that a push says only "new message"; sentences in
 `apps/server/src/instinctConsent.ts`; users on v1 must consent again, and the
-cron and WhatsApp answers skip them until they do).
+cron and WhatsApp answers skip them until they do; so do users on v2). The
+WhatsApp bank read is authorised by the separate WhatsApp AI consent line
+(`whatsappAiConsent`, which now names the read and the cap of 3 a day); a WhatsApp
+link made under the old line should be unlinked and linked again. Push
+notifications carry a fixed generic text ("Je hebt een nieuwe melding.") and open
+`/app/meldingen`; the e-mail and the feed keep the full text. The personal-data
+reset (Back-up card) now deletes the seven Instinct tables too. The cron lists
+due users rotated by the Amsterdam day, so the same tail users are not always the
+ones skipped when the 240 s budget ends, and it logs one `instinct.run_done` line
+(due, failed, skipped).
 
 Still open for the owner, in this order:
 
@@ -484,14 +494,22 @@ owner legal review pending`, above the privacy policy. Review together: the
 6. **Review the phrase lists** in `apps/server/src/whatsapp/copy.ts`
    (`FRAMING_PHRASES`, NL and EN): the fixed greetings and closings that
    WhatsApp answers can use.
-7. **Set up the hourly trigger on GitHub.** Add repository variable
-   `INSTINCT_CRON_URL` (production: `https://www.lavega.dev/api/cron/instinct`)
-   and repository secret `CRON_SECRET` (same value as on Vercel). Until both are
-   set the workflow prints a notice and does nothing. Scheduled workflows run
-   only from the default branch, so the trigger starts after the merge to
-   master. To test on a preview deployment, call the URL by hand with `curl`
-   (item 8). GitHub schedules can run late or skip an hour; the 2-hour retry
-   window after each user's send hour covers that.
+7. **The scheduler is the Vercel daily cron** (`/api/cron/instinct`, `0 7 * * *`
+   UTC, registered in `scripts/vercel-build.mjs`; 08:00 Amsterdam in winter, 09:00
+   in summer). One run a day sends to every opted-in user without today's
+   message, whatever send hour they stored (the hour is still stored, not used).
+   Vercel sends `Authorization: Bearer $CRON_SECRET`; set `CRON_SECRET` on Vercel.
+   The plan must allow a second cron (Hobby: 2 crons, daily only; Pro: 40).
+   Practical limit: the function stops starting users after 80 percent of
+   `maxDuration` (300 s, so 240 s); at roughly 5 to 8 s per user that is about
+   30 to 50 users per run. The rest log `skipped` and wait until the next day;
+   the list is rotated by the Amsterdam day, so a different tail is skipped each
+   day. Revisit before that many users opt in. The GitHub workflow
+   `.github/workflows/instinct-cron.yml` has no schedule now: "Run workflow" for
+   a manual test only. Its repository variable `INSTINCT_CRON_URL` (production:
+   `https://www.lavega.dev/api/cron/instinct`) and secret `CRON_SECRET` are used
+   by that manual run only. A manual run after the daily one sends nothing (the
+   day claim).
 8. **Verify on the preview deployment**: turn the agent on for a test account
    with a sandbox bank, call
    `curl -H "Authorization: Bearer $CRON_SECRET" https://<preview>/api/cron/instinct`,
