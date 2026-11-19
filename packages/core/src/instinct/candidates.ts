@@ -62,13 +62,15 @@ function weekdayOf(day: string): number {
 /** What one transaction counts as spend, in cents, with its category; null when
  *  it is not spend. Money moved, not spent: own transfers, card payoffs (the
  *  card's own spend is already counted) and "Overboekingen" (Tikkie, top-ups)
- *  are skipped. Counting them would raise a false "you spent a lot" alarm. */
+ *  are skipped. Counting them would raise a false "you spent a lot" alarm.
+ *  A row the owner marked `excluded` in the vault (e.g. reimbursed) is not spend either;
+ *  bank rows read on the server never carry that flag. */
 export function spendOf(
   t: Tx,
   rules: Rule[],
   own: OwnAccounts,
 ): { cents: number; category: string } | null {
-  if (t.amount >= 0 || !isEurCurrency(t.currency)) return null;
+  if (t.amount >= 0 || t.excluded === true || !isEurCurrency(t.currency)) return null;
   const category = categorize(t, rules, own);
   if (
     category === "Eigen overboeking" ||

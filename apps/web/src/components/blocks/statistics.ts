@@ -1,5 +1,16 @@
 import type { CategorySelection, ConversionMode, OwnAccounts, Rule, Tx } from "@lavega/core";
-import { categorize, isEurCurrency, selectMajorCategories, toEur } from "@lavega/core";
+import {
+  categorize,
+  isEurCurrency,
+  isMovedCategory,
+  MOVED_CATEGORIES,
+  movedCategoryWhy,
+  selectMajorCategories,
+  toEur,
+  type MovedCategory,
+} from "@lavega/core";
+
+export { isMovedCategory, MOVED_CATEGORIES, type MovedCategory };
 import {
   daysBetween,
   mondayOf,
@@ -79,46 +90,12 @@ import { moneyCopy, dayLabelIn } from "../../copy/money.js";
  * per category and per direction, and the block prints it under the chart. He has
  * to be able to see that something is outside the diagram, and why. */
 
-export type MovedCategory = {
-  category: string;
-  /** Why it is outside the diagram, in the sentence the block prints. */
-  why: string;
-};
-
-export const MOVED_CATEGORIES: readonly MovedCategory[] = [
-  { category: "Eigen overboeking", why: "een overboeking tussen je eigen rekeningen" },
-  { category: "Sparen & beleggen", why: "geld naar je eigen spaar- of beleggingsrekening" },
-  {
-    category: "Creditcard afbetaald",
-    why: "een afbetaling aan je eigen creditcard — die uitgaven staan al op de creditcardrekening",
-  },
-  /* GELDOPNAME STAAT HIER BEWUST NIET IN, op zijn beslissing van 20 augustus.
-   *
-   * Strikt genomen is contant opnemen ook "dezelfde euro op een andere plek": het
-   * geld zit in je zak in plaats van op de rekening. Maar het verschil met een
-   * spaarrekening is dat LaVega het daarna nooit meer terugziet — er komt geen
-   * transactie die zegt waar het heen ging. Als opnemen buiten de uitgaven valt,
-   * verdwijnt dat geld uit elke telling en zou de som van zijn categorieën minder
-   * zijn dan wat er werkelijk van zijn rekening ging.
-   *
-   * Een creditcard-afbetaling is een apart geval en nog niet beslist: daar staan de
-   * echte uitgaven wél in de app, op de creditcardrekening, dus die afbetaling
-   * dubbel tellen is een reëel risico. Dat wacht op hem. */
-];
-
-const MOVED_BY_CATEGORY = new Map(MOVED_CATEGORIES.map((m) => [m.category, m.why]));
-
 /** How every function in this file turns a row's own-currency amount into
  *  EUR: convert via the ECB history when the owner asked for it, otherwise
  *  keep it out of every total the same way an unrecognised currency always
  *  was. One shape, reused at every guard below, so the eight sites cannot
  *  drift into eight slightly different definitions of "in euros". */
 type Conversion = { fxHistory: Record<string, Record<string, number>>; mode: ConversionMode };
-
-/** Whether a category is money moving rather than money spent. */
-export function isMovedCategory(category: string): boolean {
-  return MOVED_BY_CATEGORY.has(category);
-}
 
 export type MovedTotal = MovedCategory & {
   /** Positive euro cents that left the account in this window. */
@@ -159,7 +136,7 @@ export function movedTotals(
     byCat.set(category, bucket);
   }
   return [...byCat.entries()]
-    .map(([category, b]) => ({ category, why: MOVED_BY_CATEGORY.get(category) ?? "", ...b }))
+    .map(([category, b]) => ({ category, why: movedCategoryWhy(category), ...b }))
     .sort((a, b) => b.outCents - a.outCents || b.inCents - a.inCents);
 }
 

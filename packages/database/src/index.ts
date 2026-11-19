@@ -1903,7 +1903,8 @@ export type AiUsage = {
     | "sector-inference"
     | "cash-flow-suggestion"
     | "identifier-selection"
-    | "instinct-reply";
+    | "instinct-reply"
+    | "assistant-chat";
   model: string;
   inputTokens: number;
   outputTokens: number;

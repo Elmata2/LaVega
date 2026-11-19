@@ -43,7 +43,7 @@ Goals
 
 Non-goals (this spec)
 - Drag to reorder, per-card collapse, width/height presets, a "customize" mode, a period picker above the page. Sure has these; LaVega does not get them in this round.
-- New assistant capabilities: no model call, no new tools, no server route. Only the mounting and the look change.
+- New assistant capabilities: no model call, no new tools, no server route (for this change; superseded for the chat by docs/superpowers/specs/2026-11-18-assistant-is-instinct-design.md). Only the mounting and the look change.
 - The Profiel rework (a later session) and any change to Optimalisatie, Rekeningen or the intake wizard itself.
 - An assistant route or view. On a phone the assistant opens in a sheet, not on a page.
 - Changing what any data block computes.

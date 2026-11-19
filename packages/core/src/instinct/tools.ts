@@ -38,8 +38,13 @@ export type ToolResult = {
   empty: boolean;
 };
 
-/** The fetch window: the last 90 days up to and including `today`. */
+/** The default window: the last 90 days up to and including `today`. The daily
+ *  message and WhatsApp use it as is; the assistant chat passes a longer one. */
 const WINDOW_DAYS = 90;
+/** The longest window a caller may ask for. */
+export const MAX_WINDOW_DAYS = 366;
+
+export type RunToolOptions = { windowDays?: number };
 const MAX_UPCOMING_DAYS = 31;
 const TOP_N = 5;
 const UPCOMING_LIST_MAX = 10;
@@ -57,6 +62,9 @@ const KNOWN_CATEGORIES: ReadonlySet<string> = new Set([
   "Reizen",
   "onbekend",
 ]);
+
+/** The category names `spending_in_range` accepts, sorted: the closed list a model may name. */
+export const TOOL_CATEGORIES: readonly string[] = [...KNOWN_CATEGORIES].sort();
 
 const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -130,8 +138,8 @@ function weekdayOf(day: string): number {
 
 type Window = { from: string; to: string };
 
-function windowOf(i: DailyInput): Window {
-  return { from: addDays(i.today, -(WINDOW_DAYS - 1)), to: i.today };
+function windowOf(i: DailyInput, windowDays: number): Window {
+  return { from: addDays(i.today, -(windowDays - 1)), to: i.today };
 }
 
 /** Clamp a requested range to the window; null when nothing of it is covered. */
@@ -152,11 +160,20 @@ function outside(w: Window, requested: Record<string, string>, k: Copy): ToolRes
 
 type Copy = (typeof INSTINCT_COPY)[MessageLocale]["tools"];
 
-export function runTool(call: ToolCall, i: DailyInput, locale: MessageLocale): ToolResult {
+export function runTool(
+  call: ToolCall,
+  i: DailyInput,
+  locale: MessageLocale,
+  options: RunToolOptions = {},
+): ToolResult {
   const k = INSTINCT_COPY[locale].tools;
   const day = (d: string) => formatDay(locale, d);
   const money = (c: number) => formatCents(locale, c);
-  const w = windowOf(i);
+  const askedDays = options.windowDays ?? WINDOW_DAYS;
+  const windowDays = Number.isInteger(askedDays)
+    ? Math.min(MAX_WINDOW_DAYS, Math.max(1, askedDays))
+    : WINDOW_DAYS;
+  const w = windowOf(i, windowDays);
 
   switch (call.tool) {
     case "spending_on_day": {

@@ -2514,6 +2514,21 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
                   },
                 }
               : {})}
+            key={owner.kind === "account" ? owner.id : "device"}
+            {...(owner.kind === "account"
+              ? {
+                  chat: {
+                    plan: agentPlan,
+                    accountId: owner.id,
+                    accounts: scopedAccounts,
+                    txs: scopedTxs,
+                    flows: scopedScheduledFlows,
+                    bills,
+                    occurrences: billOccurrences,
+                    scope: scope === "business" ? "zakelijk" : "persoonlijk",
+                  },
+                }
+              : {})}
           />
         }
         nav={{

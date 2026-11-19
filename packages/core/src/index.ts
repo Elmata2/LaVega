@@ -117,7 +117,10 @@ export {
 export * from "./instinct/tips.js";
 export * from "./instinct/dailyMessage.js";
 export * from "./instinct/render.js";
+export * from "./instinct/cardOffer.js";
 export * from "./instinct/tools.js";
+export * from "./chat/index.js";
+export * from "./movedMoney.js";
 export * from "./bills/index.js";
 export * from "./interop/index.js";
 export * from "./assistant.js";

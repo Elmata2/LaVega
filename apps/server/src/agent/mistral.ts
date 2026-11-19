@@ -192,6 +192,78 @@ export function createMistralProvider(
       return { text: content, usage };
     },
 
+    async chatWithTools({ system, messages, tools, toolChoice, maxTokens }) {
+      const startedAt = Date.now();
+      const res = await fetchWithTimeout(
+        `${BASE_URL}/chat/completions`,
+        {
+          method: "POST",
+          headers,
+          body: JSON.stringify({
+            model,
+            messages: [
+              { role: "system", content: system },
+              ...messages.map((m) => {
+                if (m.role === "tool")
+                  return {
+                    role: "tool",
+                    tool_call_id: m.toolCallId,
+                    name: m.name,
+                    content: m.content,
+                  };
+                if (m.role === "assistant" && m.toolCalls && m.toolCalls.length > 0)
+                  return {
+                    role: "assistant",
+                    content: m.content,
+                    tool_calls: m.toolCalls.map((c) => ({
+                      id: c.id,
+                      type: "function",
+                      function: { name: c.name, arguments: c.arguments },
+                    })),
+                  };
+                return { role: m.role, content: m.content };
+              }),
+            ],
+            tools: tools.map((t) => ({
+              type: "function",
+              function: { name: t.name, description: t.description, parameters: t.parameters },
+            })),
+            tool_choice: toolChoice,
+            max_tokens: maxTokens,
+          }),
+        },
+        DEFAULT_TIMEOUT_MS,
+        "chat",
+      );
+      if (!res.ok) throw new MistralHttpError(res.status, "chat", await errorBody(res));
+      const data = await res.json();
+      const message = data?.choices?.[0]?.message;
+      /* No logging of the body here, on purpose: this route carries the user's
+       * question and figures, so even an "unexpected response" line could echo them. */
+      if (!isRecord(message)) throw new Error("onverwachte respons");
+      const usage = parseMistralUsage(data);
+      await captureAiGeneration(observability, {
+        model,
+        operation: "chat",
+        inputTokens: usage.input,
+        outputTokens: usage.output,
+        latencyMs: Date.now() - startedAt,
+      });
+      const rawCalls: unknown[] = Array.isArray(message.tool_calls) ? message.tool_calls : [];
+      const calls = rawCalls.flatMap((c) => {
+        const fn = isRecord(c) && isRecord(c.function) ? c.function : null;
+        if (!isRecord(c) || !fn || typeof c.id !== "string" || typeof fn.name !== "string")
+          return [];
+        const args =
+          typeof fn.arguments === "string" ? fn.arguments : JSON.stringify(fn.arguments ?? {});
+        return [{ id: c.id, name: fn.name, arguments: args }];
+      });
+      if (calls.length > 0) return { type: "tool_calls" as const, calls, usage };
+      if (typeof message.content !== "string" && !Array.isArray(message.content))
+        throw new Error("onverwachte respons");
+      return { type: "answer" as const, text: blockText(message.content), usage };
+    },
+
     async ocrPdf({ pdfBase64, pages }) {
       const startedAt = Date.now();
       const res = await fetchWithTimeout(

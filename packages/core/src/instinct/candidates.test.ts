@@ -6,6 +6,7 @@ import {
   amsterdamDay,
   deadlineCandidates,
   offerCandidates,
+  spendOnDay,
   spendingCandidate,
 } from "./candidates.js";
 import type { DailyInput } from "./types.js";
@@ -380,5 +381,21 @@ describe("offerCandidates", () => {
   });
   it("errors never carry merchant names or amounts", () => {
     expect(() => spendingCandidate(input({ today: "garbage" }))).toThrow(/invalid/);
+  });
+});
+
+describe("spendOf and the vault's excluded flag", () => {
+  it("does not count a row the owner excluded", () => {
+    const i = input({
+      txs: [tx("2026-11-10", -20), tx("2026-11-10", -80, "Terugbetaald", { excluded: true })],
+    });
+    expect(spendOnDay(i, "2026-11-10")).toBe(2000);
+  });
+
+  it("counts a row whose flag is false or absent", () => {
+    const i = input({
+      txs: [tx("2026-11-10", -20, "A", { excluded: false }), tx("2026-11-10", -5)],
+    });
+    expect(spendOnDay(i, "2026-11-10")).toBe(2500);
   });
 });

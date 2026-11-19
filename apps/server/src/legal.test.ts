@@ -269,7 +269,8 @@ test("the WhatsApp paragraph lists exactly what the question filter removes (W2)
   expect(scrubPersonalValues("45 EUR en 45€ en +49 30 123456")).toBe(
     "45 EUR en 45€ en +49 30 123456",
   );
-});
+  // The first import of the whole core package takes a few seconds on a loaded CI runner.
+}, 30_000);
 
 test("link codes expire after 15 minutes and are deleted on the next code, on unlink and on turn-off (W2)", () => {
   const text = privacyHtml.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
@@ -305,4 +306,62 @@ test("the categorise bullet says exactly what redactForAi removes and what is se
   expect(
     redactForAi("AH 45 betaald 14 juli 14-07 NL91ABNA0417164300 01-08-2026 € 45 12,50 123456"),
   ).toBe("AH 45 betaald 14 juli 14-07");
+});
+
+const NEW_NAMES =
+  "namen van tegenpartijen (winkels, maar ook personen en bedrijven waaraan je betaalt of van wie je geld krijgt), van je rekeningen en van rekeningen die je zelf invoerde, en de namen van je vaste lasten, facturen en abonnementen (een rekeningnaam kan de naam van een persoon bevatten)";
+
+/* The Assistent chat (issue #363): the AI-functions list, the Mistral row and the
+ * legal-basis row must say what the chat really sends. Nothing about Mistral's own
+ * retention or training is claimed: that is not verified. */
+test("the policy lists the assistant chat as the fifth AI function, with what goes and what does not", () => {
+  expect(privacyHtml).toContain("vijf functies die een AI-model van <strong>Mistral</strong>");
+  expect(privacyHtml).not.toContain("vier functies die een AI-model");
+  const item =
+    /<li><strong>Vragen in de assistent<\/strong>[^<]*<\/li>/.exec(privacyHtml)?.[0] ?? "";
+  expect(item).toContain(NEW_NAMES);
+  expect(item).toContain("rekeningnummers halen we eruit voordat er iets verstuurd wordt");
+  expect(item).not.toContain("geen rekeningnummers");
+  expect(item).toContain("wij bewaren ze niet");
+});
+
+test("the policy says the assistant answers from figures in your browser and can be switched off", () => {
+  expect(privacyHtml).toMatch(/assistent[^<]*uitzetten|uitzetten[^<]*assistent/i);
+  expect(privacyHtml).toContain("opent je kluis in je browser");
+});
+
+test("the policy has an English line for the assistant", () => {
+  const en =
+    /<p lang="en"><em>In English\.<\/em> The assistant[^<]*<\/p>/.exec(privacyHtml)?.[0] ?? "";
+  expect(en).toContain("counterparties");
+  expect(en).toContain("fixed costs, invoices and subscriptions");
+  expect(en).toContain("person's name");
+  expect(en).toContain("account numbers");
+  expect(en).toContain("does not store");
+  expect(en).toContain("turn it off");
+});
+
+test("the Mistral row and the legal-basis row name the assistant; the WhatsApp wording stays true", () => {
+  const row =
+    /<tr><td><strong>Mistral<\/strong> \(EU\)<\/td>[\s\S]*?<\/tr>/.exec(privacyHtml)?.[0] ?? "";
+  expect(row).toContain("bij de assistent");
+  expect(row).toContain(NEW_NAMES);
+  expect(row).toContain("toestemming in de assistent");
+  expect(row).toContain("geen losse transacties of namen van tegenpartijen");
+  const basis = /<tr><td>AI-functies[^<]*<\/td>/.exec(privacyHtml)?.[0] ?? "";
+  expect(basis).toContain("de assistent");
+});
+
+test("the assistant text claims nothing about what Mistral does with the data", () => {
+  const section = privacyHtml.slice(
+    privacyHtml.indexOf("<h2>AI-functies"),
+    privacyHtml.indexOf("<h2>Beleggingskant"),
+  );
+  expect(section).not.toMatch(/trainen|training|nul dagen|zero.retention/i);
+});
+
+test("D4: the 'you see what is sent first' sentence has the exception for the assistant", () => {
+  const intro = /<p>LaVega heeft vijf functies[^]*?<\/p>/.exec(privacyHtml)?.[0] ?? "";
+  expect(intro).toContain("wat er verstuurd wordt krijg je eerst te zien ter bevestiging");
+  expect(intro).toMatch(/Uitzondering: de assistent[^<]*zonder bevestiging per bericht/);
 });
