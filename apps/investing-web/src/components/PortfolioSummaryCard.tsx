@@ -132,10 +132,7 @@ export function PortfolioSummaryCard({
         <CardTitle size="md">Risk &amp; composition</CardTitle>
       </CardHeader>
       <CardContent spacing="loose">
-        <div className="flex flex-wrap gap-3 text-sm">
-          <Button type="button" variant="outline" size="sm" className="self-end" onClick={refresh}>
-            Refresh risk
-          </Button>
+        <div className="flex flex-wrap items-end gap-3 text-sm">
           <label className="flex flex-col gap-1">
             <span className="text-xs text-muted-foreground">Risk period</span>
             <select
@@ -166,6 +163,9 @@ export function PortfolioSummaryCard({
               </select>
             </label>
           )}
+          <Button type="button" variant="outline" size="sm" className="min-h-10" onClick={refresh}>
+            Refresh risk
+          </Button>
         </div>
         <div className="space-y-2 text-xs text-muted-foreground">
           <p className="font-medium text-foreground">

@@ -120,7 +120,7 @@ function BrokerSyncAction() {
         </p>
       </div>
       <div className="mt-4 shrink-0 sm:mt-0">
-        <Button type="button" onClick={sync} disabled={status === "loading"}>
+        <Button type="button" variant="outline" onClick={sync} disabled={status === "loading"}>
           {status === "loading" ? "Syncing…" : "Start sync"}
         </Button>
       </div>
@@ -562,10 +562,7 @@ export function BrokerSettings() {
         orientation="vertical"
         className="grid items-start gap-5 lg:grid-cols-[15rem_minmax(0,1fr)]"
       >
-        <TabsList
-          aria-label="Broker setup"
-          className="grid gap-2 sm:grid-cols-2 lg:grid-cols-1"
-        >
+        <TabsList aria-label="Broker setup" className="grid gap-2 sm:grid-cols-2 lg:grid-cols-1">
           {BROKER_SETTINGS_TABS.map((entry) => (
             <TabsTab
               key={entry.id}

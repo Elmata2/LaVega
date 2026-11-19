@@ -9,6 +9,7 @@ import type {
 import { formatMoney } from "../lib/portfolioFigures.js";
 import { count } from "../lib/utils.js";
 import { shortDate } from "../lib/dates.js";
+import { brokerLabel, isBrokerId } from "@lavega/core";
 
 /** The wrapper choices the select offers. The label names the account type; it
  *  is account metadata, not a tax calculation. */
@@ -251,7 +252,11 @@ export function RealizedReport({
                   className="border-b border-border/60"
                 >
                   <td className="py-2 pr-4 font-semibold">
-                    {account.broker || "Unassigned broker"}
+                    {account.broker
+                      ? isBrokerId(account.broker)
+                        ? brokerLabel(account.broker)
+                        : account.broker
+                      : "Unassigned broker"}
                     {account.account ? ` · ${account.account}` : ""}
                   </td>
                   <td className="py-2 pr-4">

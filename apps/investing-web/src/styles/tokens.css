@@ -175,6 +175,7 @@
     --border: 0 0% 100% / 0.12; /* white at 12% hairline */
     --input: 0 0% 100% / 0.12;
     --ring: 199.4 98.2% 43.9%; /* #0297de */
+    --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23a9b4bb' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
     --pos: 143.8 56.9% 60%; /* #5fd38d */
     --neg: 0 100% 78%; /* #ff8f8f */
     --positive: var(--pos);
@@ -194,6 +195,7 @@
    * which flip on their own (white pill on dark, ink pill on paper).
    * Proved by scripts/check-contrast.mjs. */
   :root[data-theme="light"] {
+    --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236e6c63' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
     color-scheme: light;
     --background: 40 27% 97%; /* warm paper */
     --foreground: 60 7% 10%; /* ink */
@@ -244,6 +246,18 @@
   :focus-visible {
     @apply outline-hidden ring-2 ring-ring ring-offset-2 ring-offset-background;
   }
+}
+
+/* One chevron for every native select, in the muted token, so selects look the
+   same in every browser and theme. Unlayered so the arrow's room beats the
+   px-* utility on the control; fill, stroke and radius stay with utilities. */
+select {
+  appearance: none;
+  background-image: var(--select-chevron);
+  background-repeat: no-repeat;
+  background-position: right 0.75rem center;
+  background-size: 14px;
+  padding-right: 2.25rem;
 }
 
 /*

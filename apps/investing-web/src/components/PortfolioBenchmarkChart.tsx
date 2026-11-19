@@ -16,7 +16,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Segmented } from "./ui/segmented";
 import { axisTick, ChartContainer, ChartTooltip } from "./ui/chart";
 import { chartRanges, pointsInWindow, useChartWindow, type ChartWindow } from "./useChartWindow";
-import { shortDate } from "../lib/dates.js";
+import { axisDateFormatter, shortDate } from "../lib/dates.js";
+import { compactMoney } from "../lib/utils.js";
 // The portfolio series is always chart-blue; benchmarks take the rest in order.
 // Never pos/neg/coral: a series colour must not read as gain or loss.
 const portfolioColor = "chart-blue";
@@ -446,7 +447,10 @@ export function PortfolioBenchmarkChart({
                     tick={axisTick}
                     tickLine={false}
                     axisLine={false}
-                    tickFormatter={(value: string) => value.slice(5)}
+                    tickFormatter={axisDateFormatter(
+                      chartPoints[0]?.date,
+                      chartPoints.at(-1)?.date,
+                    )}
                   />
                   <YAxis
                     tick={axisTick}
@@ -455,7 +459,7 @@ export function PortfolioBenchmarkChart({
                     width={72}
                     domain={["auto", "auto"]}
                     tickFormatter={(value: number) =>
-                      mode === "euros" ? money(value, currency) : percent(value)
+                      mode === "euros" ? compactMoney(value, currency) : percent(value)
                     }
                   />
                   {mode === "indexed" && (

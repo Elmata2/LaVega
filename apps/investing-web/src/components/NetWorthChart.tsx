@@ -8,7 +8,8 @@ import { axisTick, ChartContainer, ChartTooltip } from "./ui/chart";
 import { chartRanges, pointsInWindow, useChartWindow, type ChartWindow } from "./useChartWindow";
 import { shortDate } from "../lib/dates.js";
 import { LineSwatch } from "./Swatch";
-import { count } from "../lib/utils.js";
+import { compactMoney, count } from "../lib/utils.js";
+import { axisDateFormatter } from "../lib/dates.js";
 
 /** A portfolio point, optionally carrying the owner's opted-in Personal total
  *  (`@lavega/core`'s `mergeInPersonalNetWorth`). Both extra fields are
@@ -293,7 +294,10 @@ export function NetWorthChart({ data, currency = "EUR", personalAsOfDate = null 
                     tick={axisTick}
                     tickLine={false}
                     axisLine={false}
-                    tickFormatter={(value: string) => value.slice(5)}
+                    tickFormatter={axisDateFormatter(
+                      chartPoints[0]?.date,
+                      chartPoints.at(-1)?.date,
+                    )}
                   />
                   <YAxis
                     tick={axisTick}
@@ -301,7 +305,7 @@ export function NetWorthChart({ data, currency = "EUR", personalAsOfDate = null 
                     axisLine={false}
                     width={72}
                     domain={["auto", "auto"]}
-                    tickFormatter={(value: number) => money(value, currency)}
+                    tickFormatter={(value: number) => compactMoney(value, currency)}
                   />
                   {focusIndex !== null && chartPoints[focusIndex] && (
                     <ReferenceLine
@@ -446,7 +450,8 @@ export function NetWorthChart({ data, currency = "EUR", personalAsOfDate = null 
                 )}
                 {warnings.cashEstimated.length > 0 && (
                   <p>
-                    Cash estimated from unproven history: {count(warnings.cashEstimated.length, "account")}
+                    Cash estimated from unproven history:{" "}
+                    {count(warnings.cashEstimated.length, "account")}
                   </p>
                 )}
               </div>

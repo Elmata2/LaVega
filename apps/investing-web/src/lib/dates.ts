@@ -15,9 +15,14 @@ export function longDate(value: string): string {
   return longFormatter.format(new Date(`${value}T00:00:00Z`));
 }
 
-const axisFormatter = formatter({ day: "numeric", month: "short" });
+const dayMonthFormatter = formatter({ day: "numeric", month: "short" });
+const monthYearFormatter = formatter({ month: "short", year: "numeric" });
+const YEAR_MS = 300 * 24 * 60 * 60 * 1000;
 
-/** A chart axis tick: "19 Oct". The year is on the tooltip and the range picker. */
-export function axisDate(value: string): string {
-  return axisFormatter.format(new Date(`${value}T00:00:00Z`));
+/** Chart axis ticks: "19 Oct" inside a year, "Oct 2025" across a longer span.
+ *  The full date stays on the tooltip. */
+export function axisDateFormatter(first?: string, last?: string): (value: string) => string {
+  const long = !!first && !!last && Date.parse(last) - Date.parse(first) > YEAR_MS;
+  const format = long ? monthYearFormatter : dayMonthFormatter;
+  return (value) => format.format(new Date(`${value}T00:00:00Z`));
 }

@@ -228,7 +228,10 @@ export function AgentMemorySection() {
               <Segmented
                 label="Risk tolerance"
                 value={memory.riskTolerance}
-                options={LEVELS.map((level) => ({ value: level, label: RISK_TOLERANCE_LABELS[level] }))}
+                options={LEVELS.map((level) => ({
+                  value: level,
+                  label: RISK_TOLERANCE_LABELS[level],
+                }))}
                 onValueChange={(level) => void chooseRisk(level)}
                 className="mt-3"
               />

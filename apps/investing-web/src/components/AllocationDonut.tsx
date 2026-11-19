@@ -95,6 +95,8 @@ function buildDisplayBuckets(
   ];
 }
 
+const LADDER_PREVIEW_ROWS = 12;
+
 function LadderRows({
   ladder,
   currency,
@@ -102,6 +104,14 @@ function LadderRows({
   ladder: AllocationLadderView["instrument"];
   currency: string;
 }) {
+  const [showAll, setShowAll] = useState(false);
+  const hidden = ladder.rows.filter(
+    (row, index) => row.kind === "holding" && index >= LADDER_PREVIEW_ROWS,
+  ).length;
+  const rows =
+    showAll || hidden === 0
+      ? ladder.rows
+      : ladder.rows.filter((row, index) => row.kind !== "holding" || index < LADDER_PREVIEW_ROWS);
   return (
     <div className="mt-5 border-t border-border pt-4" data-dashboard-section="allocation-ladder">
       <div className="flex items-baseline justify-between gap-3">
@@ -113,7 +123,7 @@ function LadderRows({
         </span>
       </div>
       <ul aria-label="Allocation ladder" className="mt-2 space-y-1.5 text-sm">
-        {ladder.rows.map((row) => (
+        {rows.map((row) => (
           <li key={`${row.kind}-${row.key}`} className="flex items-center justify-between gap-3">
             <span className="flex min-w-0 items-center gap-2">
               <span
@@ -123,15 +133,12 @@ function LadderRows({
               >
                 {row.label}
               </span>
-              <span className="rounded-chip bg-secondary px-1.5 py-0.5 text-2xs font-semibold uppercase tracking-wide text-muted-foreground">
-                {row.kind}
-              </span>
             </span>
-            <span className="flex items-baseline gap-2">
-              <span className="text-xs text-muted-foreground tabular-nums">
+            <span className="flex shrink-0 items-baseline gap-2">
+              <span className="w-12 text-right text-xs text-muted-foreground tabular-nums">
                 {row.weight === null ? "Unknown" : `${(row.weight * 100).toFixed(1)}%`}
               </span>
-              <span className="font-semibold tabular-nums">
+              <span className="min-w-16 text-right font-semibold tabular-nums">
                 {row.value === null
                   ? "Unknown"
                   : row.value.toLocaleString("en-GB", {
@@ -144,6 +151,16 @@ function LadderRows({
           </li>
         ))}
       </ul>
+      {hidden > 0 && (
+        <button
+          type="button"
+          aria-expanded={showAll}
+          onClick={() => setShowAll((open) => !open)}
+          className="mt-2 text-xs font-semibold text-accent hover:underline"
+        >
+          {showAll ? "Show fewer" : `Show all ${ladder.rows.length} rows`}
+        </button>
+      )}
       <p className="mt-3 text-xs text-muted-foreground">{ladder.denominatorRule}</p>
     </div>
   );

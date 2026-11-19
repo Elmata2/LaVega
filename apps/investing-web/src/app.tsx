@@ -240,8 +240,9 @@ function PositionList({
   const percent = (value: number) =>
     value.toLocaleString("en-GB", {
       style: "percent",
+      minimumFractionDigits: 1,
       maximumFractionDigits: 1,
-      signDisplay: "always",
+      signDisplay: "exceptZero",
     });
   function changeSort(next: PositionSort) {
     const nextDirection: SortDirection =
@@ -257,14 +258,14 @@ function PositionList({
   const query = searchParams.toString();
   return (
     <div
-      className="overflow-x-auto rounded-card border border-border"
+      className="rounded-card border border-border sm:overflow-x-auto"
       role="table"
       aria-label="Positions"
     >
-      <div className="min-w-[760px]">
+      <div className="sm:min-w-[760px]">
         <div
           role="row"
-          className="grid grid-cols-[minmax(220px,1.35fr)_minmax(130px,.8fr)_minmax(130px,.7fr)_minmax(220px,1fr)] bg-secondary/30 px-5 py-3"
+          className="flex flex-wrap gap-x-4 gap-y-1 bg-secondary/30 px-4 py-3 sm:grid sm:grid-cols-[minmax(220px,1.35fr)_minmax(130px,.8fr)_minmax(130px,.7fr)_minmax(220px,1fr)] sm:gap-0 sm:px-5"
         >
           {POSITION_SORTS.map((column, index) => (
             <div
@@ -273,12 +274,12 @@ function PositionList({
                 sort === column.key ? (direction === "asc" ? "ascending" : "descending") : "none"
               }
               key={column.key}
-              className={index === 0 ? "text-left" : "text-right"}
+              className={index === 0 ? "text-left" : "text-left sm:text-right"}
             >
               <button
                 type="button"
                 onClick={() => changeSort(column.key)}
-                className="rounded-chip text-xs font-semibold uppercase tracking-wide text-muted-foreground outline-hidden hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                className="rounded-chip text-xs font-semibold text-muted-foreground outline-hidden hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
               >
                 {column.label}
                 {sort === column.key ? (direction === "asc" ? " ↑" : " ↓") : ""}
@@ -295,9 +296,9 @@ function PositionList({
                 pathname: `/positions/${encodeURIComponent(position.symbol)}`,
                 search: query ? `?${query}` : "",
               }}
-              className="group grid grid-cols-[minmax(220px,1.35fr)_minmax(130px,.8fr)_minmax(130px,.7fr)_minmax(220px,1fr)] items-center px-5 py-4 outline-hidden hover:bg-secondary/40 focus-visible:bg-secondary/40 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+              className="group grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 px-4 py-4 outline-hidden sm:grid-cols-[minmax(220px,1.35fr)_minmax(130px,.8fr)_minmax(130px,.7fr)_minmax(220px,1fr)] sm:gap-0 sm:px-5 hover:bg-secondary/40 focus-visible:bg-secondary/40 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
             >
-              <div role="cell" className="min-w-0 pr-4">
+              <div role="cell" className="min-w-0 sm:pr-4">
                 <span className="block truncate font-semibold text-accent">
                   {position.description ?? position.symbol}
                 </span>
@@ -327,14 +328,20 @@ function PositionList({
                   </>
                 )}
               </div>
-              <div role="cell" className="text-right text-sm tabular-nums">
+              <div
+                role="cell"
+                className="text-xs text-muted-foreground tabular-nums sm:text-right sm:text-sm sm:text-foreground"
+              >
                 {position.portfolioWeight === null ? (
                   <span className="text-muted-foreground">Unavailable</span>
                 ) : (
-                  percent(position.portfolioWeight).replace(/^\+/, "")
+                  <>
+                    {percent(position.portfolioWeight).replace(/^\+/, "")}
+                    <span className="sm:hidden"> of portfolio</span>
+                  </>
                 )}
               </div>
-              <div role="cell" className="pl-4 text-right text-sm tabular-nums">
+              <div role="cell" className="text-right text-sm tabular-nums sm:pl-4">
                 {position.returns.status === "broker-unrealized" &&
                 position.returns.unrealizedGain !== null ? (
                   <>
@@ -1234,11 +1241,11 @@ function Positions() {
   if (state.status === "loading") return <DashboardLoading />;
   if (state.status === "error") return <DashboardError message={state.message} />;
   return (
-    <>
-      <DashboardStatus data={state.data} refreshError={state.refreshError} />
+    <div className="space-y-6">
       <DeGiroHoldingsNote degiro={state.data.degiro} />
+      <DashboardStatus data={state.data} refreshError={state.refreshError} />
       <PositionList positions={state.data.positions} currency={state.data.presentationCurrency} />
-    </>
+    </div>
   );
 }
 
@@ -1280,18 +1287,18 @@ function Reports() {
     readDashboard();
   };
   return (
-    <>
+    <div className="space-y-6">
       <DashboardStatus data={state.data} refreshError={state.refreshError} />
       {saveError && (
         <p
           role="status"
-          className="mb-4 rounded-tile border border-warning/30 bg-warning/10 px-4 py-3 text-sm"
+          className="rounded-tile border border-warning/30 bg-warning/10 px-4 py-3 text-sm"
         >
           {saveError}
         </p>
       )}
       <RealizedReport report={report} onSetWrapper={setWrapper} />
-    </>
+    </div>
   );
 }
 
@@ -1354,7 +1361,9 @@ function PositionDetailSummary({ position }: { position: InvestingPositionDetail
               )}
             </dd>
             {position.priceStatus === "forward-filled" && position.quoteDate && (
-              <p className="mt-1 text-xs text-warning">Estimated from the {shortDate(position.quoteDate)} price</p>
+              <p className="mt-1 text-xs text-warning">
+                Estimated from the {shortDate(position.quoteDate)} price
+              </p>
             )}
           </div>
         )}
@@ -1623,7 +1632,7 @@ function CompletePositionDetail({ position }: { position: InvestingPositionDetai
 function PositionDetail() {
   const { symbol } = useParams<{ symbol: string }>();
   const [searchParams] = useSearchParams();
-  const positionSymbol = symbol?.trim().toUpperCase() ?? "";
+  const positionSymbol = symbol?.trim() ?? "";
   const state = useDashboard(positionSymbol || undefined);
   const query = searchParams.toString();
   return (
@@ -1643,7 +1652,7 @@ function PositionDetail() {
         <DashboardLoading />
       ) : state.status === "error" ? (
         <DashboardError message={state.message} />
-      ) : state.data.position?.symbol.toUpperCase() === positionSymbol ? (
+      ) : state.data.position?.symbol.toUpperCase() === positionSymbol.toUpperCase() ? (
         <>
           <DashboardStatus data={state.data} refreshError={state.refreshError} />
           <CompletePositionDetail position={state.data.position} />

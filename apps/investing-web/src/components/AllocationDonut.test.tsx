@@ -93,7 +93,6 @@ test("labels the unclassified bucket when a holding has no classification", () =
 
   const text = container.textContent ?? "";
   expect(text).toContain("Unclassified");
-  expect(text).toContain("unclassified");
 });
 
 test("a dashboard payload without a ladder renders no ladder section", () => {

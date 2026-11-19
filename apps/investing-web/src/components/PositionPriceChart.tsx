@@ -15,7 +15,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Segmented } from "./ui/segmented";
 import { axisTick, ChartContainer } from "./ui/chart";
 import { chartRanges, positionPointsForRange, useChartWindow } from "./useChartWindow";
-import { shortDate } from "../lib/dates.js";
+import { axisDateFormatter, shortDate } from "../lib/dates.js";
 
 type PositionPriceChartProps = {
   symbol: string;
@@ -256,7 +256,13 @@ export function PositionPriceChart({
             >
               <ChartContainer className="h-[300px]" aria-hidden="true">
                 <LineChart data={plotPoints} margin={{ top: 12, right: 12, left: 0, bottom: 0 }}>
-                  <XAxis dataKey="date" tick={axisTick} tickLine={false} axisLine={false} />
+                  <XAxis
+                    dataKey="date"
+                    tick={axisTick}
+                    tickLine={false}
+                    axisLine={false}
+                    tickFormatter={axisDateFormatter(plotPoints[0]?.date, plotPoints.at(-1)?.date)}
+                  />
                   <YAxis
                     tick={axisTick}
                     tickLine={false}
@@ -321,7 +327,7 @@ export function PositionPriceChart({
             <div aria-label="Chart series" className="mt-4 flex flex-wrap gap-2 text-xs">
               <span className="inline-flex items-center gap-2 px-2 py-1 font-semibold text-foreground">
                 <LineSwatch thick color="hsl(var(--chart-blue))" />
-                {symbol} price
+                {symbol} price in {currency}
               </span>
             </div>
             <div aria-label="Price markers" className="mt-4 flex flex-wrap gap-2 text-xs">
