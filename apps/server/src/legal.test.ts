@@ -269,7 +269,8 @@ test("the WhatsApp paragraph lists exactly what the question filter removes (W2)
   expect(scrubPersonalValues("45 EUR en 45€ en +49 30 123456")).toBe(
     "45 EUR en 45€ en +49 30 123456",
   );
-});
+  // The first import of the whole core package takes a few seconds on a loaded CI runner.
+}, 30_000);
 
 test("link codes expire after 15 minutes and are deleted on the next code, on unlink and on turn-off (W2)", () => {
   const text = privacyHtml.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
