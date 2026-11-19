@@ -588,7 +588,7 @@ export function buildInvestingDashboard(reported: InvestingDashboardInput): Inve
   const position =
     selected && sample
       ? buildPositionDetail({
-          selected,
+          symbol: sample.symbol,
           sampleCurrency: sample.currency,
           positions: selectedPositions,
           trades: selectedTrades,
@@ -740,8 +740,10 @@ export function buildInvestingDashboard(reported: InvestingDashboardInput): Inve
   return { ...dashboard, risk: buildRiskProjection(dashboard) };
 }
 
+/** `symbol` is the matched record's own spelling: lookup is case-insensitive,
+ *  but a ticker such as Trading 212's `NVDd_EQ` is case-significant to read. */
 function buildPositionDetail(input: {
-  selected: string;
+  symbol: string;
   sampleCurrency: string;
   positions: Position[];
   trades: Trade[];
@@ -871,7 +873,7 @@ function buildPositionDetail(input: {
     input.trades.find((item) => item.description)?.description ??
     input.dividends.find((item) => item.description)?.description;
   return {
-    symbol: input.selected,
+    symbol: input.symbol,
     ...(description ? { description } : {}),
     currency: input.presentationCurrency,
     priceCurrency: valuation.quoteCurrency ?? input.sampleCurrency,

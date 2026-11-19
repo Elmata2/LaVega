@@ -23,12 +23,15 @@ The landing view: portfolio value over time, KPIs, allocation, and a status aler
   the title is `Portfolio` and the axis is `Portfolio value` (euros). With a benchmark
   selected the title is `Comparison` and the axis is `Indexed return`; portfolio and
   benchmark are percents (`packages/core` `deriveChartMode`). Empty chart title:
-  `No portfolio data`. Empty copy: `The value chart is built from your transaction history. While your broker provides no transactions for it, it stays empty.` Period group `Choose period`:
-  `1 month`, `6 months`, `1 year`, `YTD`, `All`, `Custom`. `+ Compare` opens benchmark
+  `No portfolio data`. Empty copy: `The value chart is built from your transaction history. While your broker provides no transactions for it, it stays empty.` Period control `Choose period`
+  (ui-sdk segmented control: `role="radiogroup"`, items are `role="radio"` with
+  `aria-checked`): `1 month`, `6 months`, `1 year`, `YTD`, `All`, `Custom`. `+ Compare` opens benchmark
   search.
 - allocation donut widget (`data-dashboard-section="allocation"`) in that
   same main column. Eyebrow `Allocation`, title `Portfolio`. Group
-  `Holding` / `Entity` (`aria-label="Group allocation"`). Empty book: title
+  `Holding` / `Entity` / `Platform` (`aria-label="Group allocation"`, radio group). The
+  ladder shows the first 12 holdings plus cash and unclassified rows; `Show all N rows`
+  expands it. Empty book: title
   `No positions`, then `Your allocation appears after the first broker sync.`
 - summary card widget (`Risk & composition`, `data-dashboard-section="risk"`) in the aside.
   Card `aria-label="Portfolio summary"`, title `Summary`, eyebrow `Risk & composition`.

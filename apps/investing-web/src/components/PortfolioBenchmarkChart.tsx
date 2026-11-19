@@ -48,7 +48,7 @@ const benchmarkLabel = (benchmark: { name: string; converted?: boolean }): strin
   benchmark.converted ? `${benchmark.name} (converted)` : benchmark.name;
 const valueOrUnknown = (value: number | null, formatter: (value: number) => string) =>
   value === null ? "Unknown" : formatter(value);
-const signedPercent = (value: number) => `${value >= 0 ? "+" : ""}${percent(value)}`;
+const signedPercent = (value: number) => `${value > 0 ? "+" : ""}${percent(value)}`;
 const cappedXirrText = (value: number, format: (value: number) => string) =>
   value > 9.99 ? "> +999%" : value < -0.99 ? "< -99%" : format(value);
 const cappedXirr = (value: number | null) =>

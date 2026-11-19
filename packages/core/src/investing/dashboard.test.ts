@@ -933,3 +933,21 @@ test("dashboard carries the cash-aware allocation ladder and the canonical instr
   expect(dashboard.positions[0]!.instrumentKey).toBe("isin:US0378331005");
   expect(dashboard.positions[1]!.instrumentKey).toBe("sym:MSFT");
 });
+
+test("position detail keeps the ticker's own case when the lookup is case-insensitive", () => {
+  const rename = <T extends { symbol: string }>(rows: readonly T[]) =>
+    rows.map((row) => (row.symbol === "AAPL" ? { ...row, symbol: "AAPLd_EQ" } : row));
+  const dashboard = buildInvestingDashboard({
+    positions: rename(POSITIONS),
+    trades: rename(TRADES),
+    dividends: [],
+    priceBars: rename(PRICE_BARS),
+    benchmarkBars: BENCHMARK_BARS,
+    presentationCurrency: "EUR",
+    fxRates: FX_RATES,
+    selectedSymbol: "AAPLD_EQ",
+    today: "2026-02-02",
+  });
+
+  expect(dashboard.position?.symbol).toBe("AAPLd_EQ");
+});

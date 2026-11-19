@@ -164,7 +164,7 @@ export function NetWorthChart({ data, currency = "EUR", personalAsOfDate = null 
                     ? activePoint.cashValue - first.cashValue
                     : null;
                 const formatChange = (value: number | null) =>
-                  value === null ? "Unknown" : `${value >= 0 ? "+" : ""}${money(value, currency)}`;
+                  value === null ? "Unknown" : `${value > 0 ? "+" : ""}${money(value, currency)}`;
                 const tone = (value: number | null) =>
                   value === null
                     ? "text-muted-foreground"

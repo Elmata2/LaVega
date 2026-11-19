@@ -324,7 +324,7 @@ export function RealizedReport({
               <tbody>
                 {report.disposals.map((disposal) => (
                   <tr key={disposal.id} className="border-b border-border/60">
-                    <td className="py-2 pr-4 whitespace-nowrap">{disposal.date}</td>
+                    <td className="py-2 pr-4 whitespace-nowrap">{shortDate(disposal.date)}</td>
                     <td className="py-2 pr-4 font-semibold">{disposal.symbol}</td>
                     <td className="py-2 pr-4 text-right tabular-nums">{disposal.quantity}</td>
                     <td className="py-2 pr-4 text-right tabular-nums">

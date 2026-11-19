@@ -56,11 +56,12 @@ export function formatMoney(
   currency: string,
   signDisplay: "auto" | "always" = "auto",
 ): string {
+  // "always" means "mark gains and losses": a zero carries no sign.
   return value.toLocaleString("en-GB", {
     style: "currency",
     currency,
     maximumFractionDigits: 2,
-    signDisplay,
+    signDisplay: signDisplay === "always" ? "exceptZero" : "auto",
   });
 }
 
@@ -68,7 +69,7 @@ export function formatSignedPercent(value: number): string {
   return value.toLocaleString("en-GB", {
     style: "percent",
     maximumFractionDigits: 2,
-    signDisplay: "always",
+    signDisplay: "exceptZero",
   });
 }
 

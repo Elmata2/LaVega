@@ -17,8 +17,10 @@ the shared `lavega_locale` cookie and renders Dutch when it says `nl`.
 
 Every other route (`/`, `/positions`, `/positions/:symbol`, `/net-worth`, `/agents`,
 `/agents/:agentId`, `/reports`, `/profile`) sits behind `RequireAuth`. `/brokers/connect` redirects to
-`/profile#brokers`. The top bar's tabs are exactly the modules the tenant's stored layout
-enables, plus the always-on Overview tab. A `Personal` link beside that nav leaves this
+`/profile#brokers`. The top bar's pill track holds exactly the modules the tenant's stored layout
+enables, plus the always-on Overview and Reports links. Profile switches, period and
+grouping controls and broker tabs are ui-sdk widgets (`role="switch"`, `role="radio"`,
+`role="tab"`). A `Personal` link beside that nav leaves this
 app for LaVega Personal. It is not an investing route.
 
 | Feature                                                        | Route                                                                                             | File                                                   |

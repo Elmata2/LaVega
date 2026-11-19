@@ -275,7 +275,7 @@ Interactive widgets come from `@ui-sdk/react` (pinned to an exact beta version),
 ### Data rows
 
 - Table and tile labels are sentence case, Mist; never uppercase with tracking.
-- Weights always show one decimal (`2.0%`). Zero carries no sign (`€0.00`, not `+€0.00`).
+- Weights in tables and the ladder show one decimal (`2.0%`). The donut legend keeps whole percents that sum to 100. Zero carries no sign (`€0.00`, not `+€0.00`); `formatMoney(…, "always")` maps to `exceptZero`.
 - Dates read `19 Nov 2026`; chart ticks `19 Oct` inside a year and `Oct 2025` across longer spans; axis amounts are compact (`€14K`).
 - The positions table stacks to two columns on phones: name and value, then weight and return.
 - The allocation ladder shows the first 12 holdings with a "Show all" toggle; cash and unclassified rows always show.

@@ -235,7 +235,7 @@ function PositionList({
       style: "currency",
       currency,
       maximumFractionDigits: 2,
-      signDisplay: "always",
+      signDisplay: "exceptZero",
     });
   const percent = (value: number) =>
     value.toLocaleString("en-GB", {
