@@ -257,15 +257,32 @@ Native `<details>` with a `cursor-pointer` summary at 12px Mist for supporting d
 
 ### Navigation
 
-Header with the serif wordmark "LaVega" (1.875rem) and a small Mist "Investing" beside it. The module nav is a pill track on Surface 2; the active item is a white pill with midnight text (`bg-foreground text-background`), inactive items are Mist with white on hover. Active is white, never coral.
+Header with the serif wordmark "LaVega" (1.875rem) and a small Mist "Investing" beside it. The module nav is a pill track on Surface 2 that holds every module plus Reports; the active item is a white pill with midnight text (`bg-foreground text-background`), inactive items are Mist with white on hover. Active is white, never coral. On phones the track scrolls sideways (items never shrink below their text) and the `scroll-fade-x` mask marks the edge with more items; no arrow is drawn over it.
 
 ### Auth layout
 
 Serif wordmark and a small "Investing" in Mist, a serif headline ("Every broker. One honest view.") with a 38ch Mist promise, and the form card beside it from `lg`. Below the form, a 12px Mist honesty line: "Your data is encrypted. We hold the keys, so technically we can access your data. Broker connections are read only." Its meaning must match the public FAQ; do not soften or strengthen it. The page fades in over 180ms.
 
+### Controls (ui-sdk)
+
+Interactive widgets come from `@ui-sdk/react` (pinned to an exact beta version), styled with Tailwind from its `data-*` state attributes. `web.css` is not imported; this file owns the look. `@layer ui-sdk;` sits above the Tailwind import in `tokens.css`. Do not hand-roll a `role="switch"`, `"tablist"` or `"radiogroup"`.
+
+- **Switch** (`components/ui/switch.tsx`): 44x24 pill, Surface 2 track off, blue track on, `bg-foreground` thumb sliding 20px. Disabled at 60% opacity.
+- **Segmented** (`components/ui/segmented.tsx`): every period, grouping and risk-tolerance picker. Surface 2 track with a white pill indicator that slides behind the checked item (200ms, ease-out, off under reduced motion). On phones it scrolls sideways instead of wrapping.
+- **Tabs**: broker setup on Profile. Panels stay mounted.
+- **Native selects** keep the native popup but share one muted chevron (`--select-chevron`, per theme) and 2.25rem end padding.
+
+### Data rows
+
+- Table and tile labels are sentence case, Mist; never uppercase with tracking.
+- Weights always show one decimal (`2.0%`). Zero carries no sign (`€0.00`, not `+€0.00`).
+- Dates read `19 Nov 2026`; chart ticks `19 Oct` inside a year and `Oct 2025` across longer spans; axis amounts are compact (`€14K`).
+- The positions table stacks to two columns on phones: name and value, then weight and return.
+- The allocation ladder shows the first 12 holdings with a "Show all" toggle; cash and unclassified rows always show.
+
 ### Motion
 
-Auth fade 180ms `cubic-bezier(0.23, 1, 0.32, 1)`; button press 150ms ease-out; mention menu 120ms ease-out with 4px rise and 0.97 scale; chart axis label opacity 160ms. All of these are disabled under `prefers-reduced-motion: reduce`.
+Auth fade 180ms `cubic-bezier(0.23, 1, 0.32, 1)`; button press 150ms ease-out; segmented indicator 200ms and switch thumb 150ms ease-out; mention menu 120ms ease-out with 4px rise and 0.97 scale; chart axis label opacity 160ms. All of these are disabled under `prefers-reduced-motion: reduce`.
 
 ## Do's and Don'ts
 

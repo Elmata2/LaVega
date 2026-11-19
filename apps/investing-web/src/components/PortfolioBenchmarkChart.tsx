@@ -649,9 +649,11 @@ function PerformanceSummary({
                   </p>
                   <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 border-t border-border pt-2 text-2xs text-muted-foreground">
                     <span>
+                      Portfolio value{" "}
                       {valueOrUnknown(point.portfolioValue, (value) => money(value, currency))}
                     </span>
                     <span>
+                      {benchmarkLabel(benchmark)} price{" "}
                       {valueOrUnknown(point.benchmarkValues[benchmark.symbol] ?? null, (value) =>
                         money(value, benchmark.currency),
                       )}
