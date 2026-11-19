@@ -11,6 +11,7 @@ import {
   redactForAi,
   scrubPersonalValues,
   scrubPersonalValuesDeep,
+  scrubIdentifiers,
   aiCategorizeItems,
   foreignCode,
   unknownReason,
@@ -491,5 +492,37 @@ describe("applyCategoryChoice", () => {
     );
     expect(out.rulesAdded).toBe(1);
     expect(out.rules).toHaveLength(1);
+  });
+});
+
+/* --- scrubIdentifiers: identifiers out, amounts stay (assistant chat) ------- */
+
+describe("scrubIdentifiers", () => {
+  test("removes an IBAN, an e-mail address, a Dutch phone number and a BSN", () => {
+    const out = scrubIdentifiers(
+      "Van NL91 ABNA 0417 1643 00 en NL91ABNA0417164300, mail a.b@example.nl, bel 06 12345678 of +31 6 12345678, bsn 111222333",
+    );
+    expect(out).not.toMatch(/NL91|ABNA|@|0612|06 1234|\+31|111222333/);
+    expect(out).toContain("[IBAN]");
+    expect(out).toContain("[EMAIL]");
+    expect(out).toContain("[TEL]");
+    expect(out).toContain("[BSN]");
+  });
+
+  test("removes an e-mail address with non-ASCII letters", () => {
+    expect(scrubIdentifiers("mail jörg@exämple.de graag")).toBe("mail [EMAIL] graag");
+  });
+
+  test("keeps amounts, so a question about a figure still works", () => {
+    expect(scrubIdentifiers("Kan ik deze maand EUR 12,50 of € 500 sparen?")).toBe(
+      "Kan ik deze maand EUR 12,50 of € 500 sparen?",
+    );
+    expect(scrubPersonalValues("Kan ik EUR 12,50 sparen?")).toBe("Kan ik [BEDRAG] sparen?");
+  });
+
+  test("leaves a nine-digit number that fails the elfproef, and ordinary words", () => {
+    expect(scrubIdentifiers("factuur 123456789 van Albert Heijn")).toBe(
+      "factuur 123456789 van Albert Heijn",
+    );
   });
 });

@@ -1,5 +1,10 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { createMistralProvider, fetchWithTimeout, parseMistralUsage } from "./mistral.js";
+import {
+  createMistralProvider,
+  fetchWithTimeout,
+  MistralHttpError,
+  parseMistralUsage,
+} from "./mistral.js";
 
 const fetchMock = vi.fn();
 
@@ -492,4 +497,191 @@ test("complete() returns the provider's cache counts alongside its token counts"
   const provider = createMistralProvider("sk-test", "mistral-small-latest");
   const res = await provider.complete({ system: "s", user: "u", maxTokens: 10 });
   expect(res.usage).toEqual({ input: 10, output: 5, cacheReadTokens: 4 });
+});
+
+/* --- chatWithTools: the assistant chat's function-calling call --- */
+
+const TOOLS = [
+  {
+    name: "spending_on_day",
+    description: "Spending on one day.",
+    parameters: { type: "object", properties: { date: { type: "string" } }, required: ["date"] },
+  },
+];
+
+test("chatWithTools sends tools as functions, tool_choice, and tool-role messages", async () => {
+  fetchMock.mockResolvedValue(
+    jsonResponse({
+      choices: [{ message: { content: "Klaar." } }],
+      usage: { prompt_tokens: 100, completion_tokens: 10 },
+    }),
+  );
+  const provider = createMistralProvider("sk-test", "mistral-small-latest");
+  await provider.chatWithTools({
+    system: "sys",
+    messages: [
+      { role: "user", content: "Wat gaf ik gisteren uit?" },
+      {
+        role: "assistant",
+        content: "",
+        toolCalls: [
+          { id: "abc123XYZ", name: "spending_on_day", arguments: '{"date":"2026-11-17"}' },
+        ],
+      },
+      { role: "tool", toolCallId: "abc123XYZ", name: "spending_on_day", content: '{"data":{}}' },
+    ],
+    tools: TOOLS,
+    toolChoice: "auto",
+    maxTokens: 700,
+  });
+  const [url, init] = fetchMock.mock.calls[0];
+  expect(url).toBe("https://api.mistral.ai/v1/chat/completions");
+  const body = JSON.parse(init.body);
+  expect(body.model).toBe("mistral-small-latest");
+  expect(body.max_tokens).toBe(700);
+  expect(body.tool_choice).toBe("auto");
+  expect(body.tools).toEqual([
+    {
+      type: "function",
+      function: {
+        name: "spending_on_day",
+        description: "Spending on one day.",
+        parameters: TOOLS[0]!.parameters,
+      },
+    },
+  ]);
+  expect(body.messages).toEqual([
+    { role: "system", content: "sys" },
+    { role: "user", content: "Wat gaf ik gisteren uit?" },
+    {
+      role: "assistant",
+      content: "",
+      tool_calls: [
+        {
+          id: "abc123XYZ",
+          type: "function",
+          function: { name: "spending_on_day", arguments: '{"date":"2026-11-17"}' },
+        },
+      ],
+    },
+    { role: "tool", tool_call_id: "abc123XYZ", name: "spending_on_day", content: '{"data":{}}' },
+  ]);
+});
+
+test("chatWithTools returns the tool calls the model asked for, with usage", async () => {
+  fetchMock.mockResolvedValue(
+    jsonResponse({
+      choices: [
+        {
+          finish_reason: "tool_calls",
+          message: {
+            content: "",
+            tool_calls: [
+              {
+                id: "CtZJHspeu",
+                type: "function",
+                function: { name: "balances", arguments: "{}" },
+              },
+              { id: "Aq1Bq2Cq3", function: { name: "subscriptions", arguments: { a: 1 } } },
+            ],
+          },
+        },
+      ],
+      usage: { prompt_tokens: 129, completion_tokens: 22 },
+    }),
+  );
+  const provider = createMistralProvider("sk-test", "mistral-small-latest");
+  const res = await provider.chatWithTools({
+    system: "s",
+    messages: [{ role: "user", content: "x" }],
+    tools: TOOLS,
+    toolChoice: "auto",
+    maxTokens: 700,
+  });
+  expect(res).toEqual({
+    type: "tool_calls",
+    calls: [
+      { id: "CtZJHspeu", name: "balances", arguments: "{}" },
+      { id: "Aq1Bq2Cq3", name: "subscriptions", arguments: '{"a":1}' },
+    ],
+    usage: { input: 129, output: 22 },
+  });
+});
+
+test("chatWithTools returns the text answer, also when content comes as text blocks", async () => {
+  const provider = createMistralProvider("sk-test", "mistral-small-latest");
+  const ask = () =>
+    provider.chatWithTools({
+      system: "s",
+      messages: [{ role: "user", content: "x" }],
+      tools: TOOLS,
+      toolChoice: "none",
+      maxTokens: 700,
+    });
+  fetchMock.mockResolvedValueOnce(
+    jsonResponse({
+      choices: [{ message: { content: "Hoi", tool_calls: null } }],
+      usage: { prompt_tokens: 1, completion_tokens: 2 },
+    }),
+  );
+  expect(await ask()).toEqual({ type: "answer", text: "Hoi", usage: { input: 1, output: 2 } });
+  fetchMock.mockResolvedValueOnce(
+    jsonResponse({
+      choices: [
+        {
+          message: {
+            content: [
+              { type: "text", text: "Hal" },
+              { type: "text", text: "lo" },
+            ],
+          },
+        },
+      ],
+      usage: { prompt_tokens: 1, completion_tokens: 2 },
+    }),
+  );
+  expect((await ask()).type).toBe("answer");
+  expect(JSON.parse(fetchMock.mock.calls[0][1].body).tool_choice).toBe("none");
+});
+
+test("chatWithTools throws MistralHttpError on a non-2xx and never logs the body", async () => {
+  const errSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+  const logSpy = vi.spyOn(console, "log").mockImplementation(() => undefined);
+  fetchMock.mockResolvedValue({
+    ok: false,
+    status: 500,
+    text: () => Promise.resolve("echo of the prompt SENTINEL-PROMPT"),
+  });
+  const provider = createMistralProvider("sk-test", "mistral-small-latest");
+  const err = await provider
+    .chatWithTools({
+      system: "s",
+      messages: [{ role: "user", content: "SENTINEL-PROMPT" }],
+      tools: TOOLS,
+      toolChoice: "auto",
+      maxTokens: 700,
+    })
+    .catch((e: unknown) => e);
+  expect(err).toBeInstanceOf(MistralHttpError);
+  expect((err as MistralHttpError).status).toBe(500);
+  expect(JSON.stringify([errSpy.mock.calls, logSpy.mock.calls])).not.toContain("SENTINEL-PROMPT");
+  errSpy.mockRestore();
+  logSpy.mockRestore();
+});
+
+test("chatWithTools: an unexpected body throws a fixed error and logs nothing", async () => {
+  const errSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+  fetchMock.mockResolvedValue(jsonResponse({ choices: [], note: "SENTINEL-BODY" }));
+  const provider = createMistralProvider("sk-test", "mistral-small-latest");
+  await expect(
+    provider.chatWithTools({
+      system: "s",
+      messages: [{ role: "user", content: "x" }],
+      tools: TOOLS,
+      toolChoice: "auto",
+      maxTokens: 700,
+    }),
+  ).rejects.toThrow("onverwachte respons");
+  expect(JSON.stringify(errSpy.mock.calls)).not.toContain("SENTINEL-BODY");
+  errSpy.mockRestore();
 });

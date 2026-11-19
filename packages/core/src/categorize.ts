@@ -117,7 +117,7 @@ const IBAN_COMPACT = /\b[A-Z]{2}\d{2}[A-Z0-9]{8,30}\b/gi;
 // two check digits, a shape no merchant name has, so this cannot hop into an
 // ALL-CAPS name the way a looser "any grouped caps+digits" pattern would.
 const IBAN_SPACED = /\b[A-Z]{2}\d{2}(?: [A-Z0-9]{4}){2,7}(?: [A-Z0-9]{1,3})?\b/gi;
-const EMAIL = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi;
+const EMAIL = /(?<![\p{L}\p{N}])[\p{L}\p{N}._%+-]+@[\p{L}\p{N}.-]+\.\p{L}{2,}/giu;
 // NL phone numbers: national (06 12345678, 010 1234567, ...) and +31. Digits
 // only — dashes/spaces between groups are optional so either printed form
 // matches, but a lookaround keeps it from firing inside a longer digit run.
@@ -159,6 +159,20 @@ export function scrubPersonalValues(text: string): string {
     .replace(PHONE, "[TEL]")
     .replace(BSN_CANDIDATE, (m) => (passesElfproef(m) ? "[BSN]" : m))
     .replace(AMOUNT_MARKER, "[BEDRAG]");
+}
+
+/** The identifier-only scrub for text the user typed to the assistant chat:
+ *  IBAN, e-mail address, NL phone number and BSN become `[IBAN]`, `[EMAIL]`,
+ *  `[TEL]`, `[BSN]`. Unlike `scrubPersonalValues` it leaves currency-marked
+ *  amounts alone, because "kan ik EUR 500 sparen" needs its figure. Same
+ *  patterns as `scrubPersonalValues`, so a fix there fixes this. Pure. */
+export function scrubIdentifiers(text: string): string {
+  return text
+    .replace(IBAN_SPACED, "[IBAN]")
+    .replace(IBAN_COMPACT, "[IBAN]")
+    .replace(EMAIL, "[EMAIL]")
+    .replace(PHONE, "[TEL]")
+    .replace(BSN_CANDIDATE, (m) => (passesElfproef(m) ? "[BSN]" : m));
 }
 
 /** `scrubPersonalValues` applied to every string ANYWHERE inside an already-

@@ -100,7 +100,7 @@ await cp(`${root}/apps/server/src/agent/prompts`, `${functionDir}/prompts`, { re
 {
   const shipped = (await readdir(`${functionDir}/prompts`)).filter((f) => f.endsWith(".md"));
   if (shipped.length === 0) throw new Error("vercel-build: no agent prompts shipped");
-  for (const required of ["_base.md", "facturen-extract.md", "_instinct.md"])
+  for (const required of ["_base.md", "facturen-extract.md", "_instinct.md", "_assistant.md"])
     if (!shipped.includes(required))
       throw new Error(`vercel-build: ${required} did not ship into the function`);
 }

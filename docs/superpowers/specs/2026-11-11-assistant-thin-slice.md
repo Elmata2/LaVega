@@ -18,7 +18,7 @@ memory-propose call, advice guard, explainer links). Those stay carried.
 
 ## Decisions
 
-1. **No model call in this slice.** The router is a literal NL/EN intent match in
+1. **No model call in this slice.** (_Superseded by docs/superpowers/specs/2026-11-18-assistant-is-instinct-design.md (issue #363): after the one-time opt-in, a question the local skills do not cover goes to Mistral through POST /api/agent/assistant; the tools still run in the browser._) The router is a literal NL/EN intent match in
    `packages/core/src/assistant.ts`. Consequence, stated plainly: **zero bytes
    leave the browser for an assistant turn.** There is no server route for the
    assistant, no fetch in its module, and no ledger row in any request. The
@@ -47,7 +47,7 @@ memory-propose call, advice guard, explainer links). Those stay carried.
    decision and the write it authorises cannot land apart.
 5. **No ledger row to the server.** The panel loads `accounts`/`txs` from the
    vault through the existing storage seam; the tool handlers are pure functions
-   over that snapshot. There is no network call in the assistant path, so the
+   over that snapshot. There is no network call in the assistant path in this slice (superseded after opt-in, see the 2026-11-18 spec), so the
    browser pass's network log shows no request while a turn runs.
 6. **NL and EN copy** live in one typed-complete module (`copy/assistant.ts`),
    like every other copy table; category keys are data, not copy.
@@ -56,7 +56,7 @@ memory-propose call, advice guard, explainer links). Those stay carried.
    storage instance through one additive prop line.
    Amendment 14 Nov 2026: the panel no longer sits on Overzicht (now Home). It lives in the
    shell frame as a right-hand column (a sheet below 1024px), on every view, and reads the
-   vault again before every turn. Still no network call. See
+   vault again before every turn. Still no network call in this slice (superseded after opt-in, see the 2026-11-18 spec). See
    `2026-11-13-home-assistant-popups-design.md`.
 
 ## Approval lifecycle
@@ -80,4 +80,4 @@ memory-propose call, advice guard, explainer links). Those stay carried.
   decision and the memory (the reload proof).
 - Browser pass against the local server: panel visible, ask a spending question,
   make an approval decision, reload, see the decided card and the memory; network
-  log shows no request from the assistant path.
+  log shows no request from the assistant path (in this slice; superseded after opt-in, see the 2026-11-18 spec).

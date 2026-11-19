@@ -73,6 +73,35 @@ export function setChatEnabled(on: boolean): void {
   }
 }
 
+const ASSISTANT_KEY = "lavega.aiAssistant";
+
+/** Opt-in for the Assistent chat, PER ACCOUNT: a second account on the same browser
+ *  profile is asked itself, and one account switching off leaves another alone.
+ *  Defaults false: no question and no figure is sent to the server (and onward to
+ *  Mistral) until the owner presses "Aanzetten" on the card. Read at SEND time, never
+ *  cached, so a switch-off in another tab holds at the next send. */
+export function getAiAssistantEnabled(accountId: string): boolean {
+  if (accountId === "") return false;
+  try {
+    return (
+      typeof localStorage !== "undefined" &&
+      localStorage.getItem(`${ASSISTANT_KEY}.${accountId}`) === "1"
+    );
+  } catch {
+    return false;
+  }
+}
+
+export function setAiAssistantEnabled(accountId: string, on: boolean): void {
+  if (accountId === "") return;
+  try {
+    if (typeof localStorage !== "undefined")
+      localStorage.setItem(`${ASSISTANT_KEY}.${accountId}`, on ? "1" : "0");
+  } catch {
+    /* quota/serialization errors are non-fatal for a preference */
+  }
+}
+
 const CATEGORIZE_KEY = "lavega.aiCategorize";
 
 /** Opt-in toggle for AI transaction-categorization. Defaults false: the

@@ -4,20 +4,35 @@ import type { VaultStorage } from "@lavega/adapters";
 import {
   approvalDecision,
   decideApproval,
+  detectChatLanguage,
   emptyAssistantState,
   routeAssistantIntent,
   storedMemory,
   type AssistantApprovalEvent,
   type AssistantState,
   type AssistantToolName,
+  type Account,
+  type Bill,
+  type BillOccurrence,
+  type PlanResult,
+  type ScheduledFlow,
+  type Tx,
 } from "@lavega/core";
 import { useAppLocale } from "../appLocale.js";
 import { assistantCopy } from "../copy/assistant.js";
+import { getAiAssistantEnabled, setAiAssistantEnabled } from "../settings.js";
 import { formatEuroIn, localeTag } from "../format.js";
 import { isSpendingSummary, runReadTool, type AssistantVaultSnapshot } from "./tools.js";
 import Button from "../components/ui/Button.js";
 import StatusLine from "../components/ui/StatusLine.js";
 import { InstinctSection, type InstinctPanelProps } from "./InstinctSection.js";
+import {
+  AssistantStepError,
+  createAssistantStep,
+  fetchAssistantConfigured,
+  type AssistantErrorReason,
+} from "./chatClient.js";
+import { chatToday, runAssistantQuestion } from "./chatSession.js";
 
 /*
  * The personal assistant panel (WS5.8 thin slice, issue #301).
@@ -27,6 +42,12 @@ import { InstinctSection, type InstinctPanelProps } from "./InstinctSection.js";
  * it, and for a write it shows an approval card: nothing is stored until the
  * owner decides, and the decision is one `putAssistant` save. A reload reads the
  * same decision back — that is the whole acceptance proof.
+ *
+ * The chat (issue #363) is the other half: for a signed-in account whose server
+ * has an AI service, and only after the owner accepted the card, a question that
+ * the local skills do not cover goes to Mistral through the stateless proxy. The
+ * model asks for tools; they run HERE, on the unlocked vault. Nothing is sent
+ * before "Aanzetten", and the conversation lives in this component's state only.
  */
 
 type Message = { id: string; role: "user" | "assistant"; text: string };
@@ -71,6 +92,23 @@ export type AssistantPanelProps = {
   active?: boolean;
   /** The daily Instinct messages. Absent for a device vault: no section, no request. */
   instinct?: InstinctPanelProps;
+  /** The chat. Absent for a device vault: no opt-in card and no request, ever. */
+  chat?: {
+    /** The computed plan, when the owner has opened the Plan page. */
+    plan: PlanResult | null;
+    /** The signed-in account: the opt-in is stored per account. */
+    accountId: string;
+    /** What the owner is looking at, as the app's own views use it: the scoped accounts, the
+     *  transfer-projected scoped transactions, the scoped scheduled flows (invoices included),
+     *  the bills with their occurrences, and the scope's name. All required: the chat does not
+     *  run on anything else, and never reads these from the vault itself. */
+    accounts: Account[];
+    txs: Tx[];
+    flows: readonly ScheduledFlow[];
+    bills: readonly Bill[];
+    occurrences: readonly BillOccurrence[];
+    scope: string;
+  };
 };
 
 export function AssistantPanel({
@@ -80,6 +118,7 @@ export function AssistantPanel({
   hideTitle = false,
   active = true,
   instinct,
+  chat,
 }: AssistantPanelProps) {
   const [locale] = useAppLocale();
   const copy = assistantCopy[locale];
@@ -108,6 +147,70 @@ export function AssistantPanel({
   }
   const [saveError, setSaveError] = useState(false);
 
+  /* The chat. `configured` is the server's answer to "is an AI service set up";
+   * null until it answers, and a failed check counts as yes (the route itself
+   * answers 503 when it is not). */
+  const [configured, setConfigured] = useState<boolean | null>(null);
+  const accountId = chat?.accountId ?? "";
+  const [optedIn, setOptedIn] = useState(() => getAiAssistantEnabled(accountId));
+  /** The question waiting for the owner's decision on the opt-in card. */
+  const [optInFor, setOptInFor] = useState<string | null>(null);
+  const [stepLabel, setStepLabel] = useState<string | null>(null);
+  const [chatError, setChatError] = useState<{
+    reason: AssistantErrorReason;
+    question: string;
+  } | null>(null);
+  const messagesRef = useRef<Message[]>([]);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const wasBusy = useRef(false);
+  /** The question in flight: aborted on switch-off and on unmount. */
+  const abortRef = useRef<AbortController | null>(null);
+  /** Messages before this index never go to the model: nothing from before the opt-in. */
+  const historyStartRef = useRef(getAiAssistantEnabled(accountId) ? 0 : Number.POSITIVE_INFINITY);
+  const hasChat = chat !== undefined;
+  const chatAvailable = hasChat && configured !== false;
+
+  useEffect(() => {
+    if (!hasChat) return;
+    let live = true;
+    void fetchAssistantConfigured().then((ok) => {
+      if (live) setConfigured(ok);
+    });
+    return () => {
+      live = false;
+    };
+  }, [hasChat]);
+
+  useEffect(
+    () => () => {
+      abortRef.current?.abort();
+    },
+    [],
+  );
+
+  /* A scope switch while a question runs must not keep sending the old half's data: the
+   * same abort as switching off. */
+  const scopeName = chat?.scope;
+  const lastScope = useRef(scopeName);
+  useEffect(() => {
+    if (lastScope.current !== scopeName) {
+      lastScope.current = scopeName;
+      abortRef.current?.abort();
+      setStepLabel(null);
+    }
+  }, [scopeName]);
+
+  /* After a turn the input is where the next question goes, unless the person put
+   * focus somewhere else on purpose. */
+  useEffect(() => {
+    if (wasBusy.current && !busy) {
+      const here = document.activeElement;
+      if (!here || here === document.body || here === inputRef.current || here.closest("form"))
+        inputRef.current?.focus();
+    }
+    wasBusy.current = busy;
+  }, [busy]);
+
   useEffect(() => {
     if (!active) return;
     let cancelled = false;
@@ -131,7 +234,8 @@ export function AssistantPanel({
   const money = useMemo(() => (cents: number) => formatEuroIn(locale, cents / 100), [locale]);
 
   function pushMessage(role: Message["role"], text: string) {
-    setMessages((current) => [...current, { id: newId(), role, text }]);
+    messagesRef.current = [...messagesRef.current, { id: newId(), role, text }];
+    setMessages(messagesRef.current);
   }
 
   function answerRead(
@@ -186,12 +290,178 @@ export function AssistantPanel({
     }
   }
 
+  /** One question to the model. The tools run on the vault read just now; the
+   *  step label follows the tool names; a failed round becomes one plain line. */
+  async function askModel(text: string) {
+    const language = detectChatLanguage(text, locale);
+    const today = chatToday();
+    const earlier = messagesRef.current.slice(historyStartRef.current);
+    const last = earlier[earlier.length - 1];
+    const history = (
+      last?.role === "user" && last.text === text ? earlier.slice(0, -1) : earlier
+    ).map((m) => ({ role: m.role, content: m.text }));
+    const controller = new AbortController();
+    abortRef.current = controller;
+    setStepLabel(copy.chat.stepFallback);
+    try {
+      const outcome = await runAssistantQuestion(
+        {
+          storage,
+          asOf: today,
+          plan: chat?.plan ?? null,
+          accounts: chat?.accounts ?? [],
+          txs: chat?.txs ?? [],
+          flows: chat?.flows ?? [],
+          bills: chat?.bills ?? [],
+          occurrences: chat?.occurrences ?? [],
+          scope: chat?.scope ?? "persoonlijk",
+          language,
+          step: createAssistantStep(language, {
+            today,
+            signal: controller.signal,
+            enabled: () => getAiAssistantEnabled(accountId),
+          }),
+          onRound: (names) =>
+            setStepLabel(
+              (names[0] ? copy.chat.steps[names[0]] : undefined) ?? copy.chat.stepFallback,
+            ),
+        },
+        text,
+        history,
+      );
+      switch (outcome.kind) {
+        case "answer":
+          pushMessage("assistant", outcome.text);
+          break;
+        case "facts":
+          pushMessage(
+            "assistant",
+            outcome.lines.length === 0
+              ? copy.chat.noAnswer
+              : [copy.chat.factsHeader, ...outcome.lines].join("\n"),
+          );
+          break;
+        case "advice-refusal":
+          pushMessage("assistant", copy.chat.adviceRefusal);
+          break;
+        case "no-answer":
+          pushMessage("assistant", copy.chat.noAnswer);
+          break;
+      }
+    } catch (error) {
+      if (error instanceof AssistantStepError) {
+        if (error.reason === "cancelled") {
+          /* Consent was withdrawn (here, in another tab) or the panel went away: say nothing. */
+          setOptedIn(getAiAssistantEnabled(accountId));
+        } else if (error.reason === "not-configured") {
+          setConfigured(false);
+          pushMessage("assistant", copy.chat.needsAccount);
+        } else if (
+          (error.reason === "offline" ||
+            error.reason === "unavailable" ||
+            error.reason === "timeout") &&
+          (await answerLocally(text))
+        ) {
+          /* The model cannot be reached: a balance or this-month question still works from here. */
+        } else setChatError({ reason: error.reason, question: text });
+      } else pushMessage("assistant", copy.readError);
+    } finally {
+      if (abortRef.current === controller) abortRef.current = null;
+      setStepLabel(null);
+    }
+  }
+
+  /** The local read skills, used when the model cannot be reached. True when one answered. */
+  async function answerLocally(text: string): Promise<boolean> {
+    const intent = routeAssistantIntent({ text, asOf, locale });
+    if (intent.kind !== "read") return false;
+    try {
+      const [accounts, txs, rules] = await Promise.all([
+        chat?.accounts ?? [],
+        chat?.txs ?? [],
+        storage.getRules(),
+      ]);
+      answerRead(intent, { accounts, txs, rules, asOf });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  async function retryChat() {
+    if (!chatError || !getAiAssistantEnabled(accountId) || !startTurn()) return;
+    const question = chatError.question;
+    setChatError(null);
+    try {
+      await askModel(question);
+    } finally {
+      endTurn();
+    }
+  }
+
+  async function acceptOptIn() {
+    if (!startTurn()) return;
+    setAiAssistantEnabled(accountId, true);
+    setOptedIn(true);
+    const question = optInFor;
+    /* Nothing from before this moment goes to the model: the history starts at the
+     * question that was waiting. */
+    const at = messagesRef.current
+      .map((m) => m.role === "user" && m.text === question)
+      .lastIndexOf(true);
+    historyStartRef.current = at >= 0 ? at : messagesRef.current.length;
+    setOptInFor(null);
+    try {
+      if (question !== null) await askModel(question);
+    } finally {
+      endTurn();
+    }
+  }
+
+  function declineOptIn() {
+    setOptInFor(null);
+    pushMessage("assistant", copy.chat.declined);
+  }
+
+  function turnChatOff() {
+    abortRef.current?.abort();
+    setAiAssistantEnabled(accountId, false);
+    setOptedIn(false);
+    setChatError(null);
+    setOptInFor(null);
+    setStepLabel(null);
+    historyStartRef.current = Number.POSITIVE_INFINITY;
+  }
+
   async function runTurn(text: string) {
     setInput("");
+    setChatError(null);
+    setOptInFor(null);
     pushMessage("user", text);
     const intent = routeAssistantIntent({ text, asOf, locale });
+    if (intent.kind === "write") {
+      const approval: OpenApproval = {
+        id: newId(),
+        tool: intent.tool,
+        payload: { ...intent.payload },
+        createdAt: new Date().toISOString(),
+      };
+      setOpen(approval);
+      pushMessage(
+        "assistant",
+        copy.approval.body(copy.preference(intent.payload.subject, intent.payload.valueId)),
+      );
+      return;
+    }
+    /* Opted in: the model answers everything but a remembered preference, so one
+     * figure has one source (the same tools) however the question is phrased. */
+    if (chatAvailable && optedIn) {
+      await askModel(text);
+      return;
+    }
     if (intent.kind === "unknown") {
-      pushMessage("assistant", copy.unknown);
+      if (chatAvailable) setOptInFor(text);
+      else pushMessage("assistant", copy.unknown);
       return;
     }
     if (intent.kind === "read") {
@@ -208,17 +478,6 @@ export function AssistantPanel({
       }
       return;
     }
-    const approval: OpenApproval = {
-      id: newId(),
-      tool: intent.tool,
-      payload: { ...intent.payload },
-      createdAt: new Date().toISOString(),
-    };
-    setOpen(approval);
-    pushMessage(
-      "assistant",
-      copy.approval.body(copy.preference(intent.payload.subject, intent.payload.valueId)),
-    );
   }
 
   function submit(event: FormEvent) {
@@ -267,7 +526,7 @@ export function AssistantPanel({
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           {!hideTitle && <h2 className="text-lg font-semibold text-ink">{copy.title}</h2>}
-          <p className="mt-1 text-sm text-muted">{copy.intro}</p>
+          <p className="mt-1 text-sm text-muted">{chatAvailable ? copy.chat.intro : copy.intro}</p>
         </div>
         {onClose && (
           <button
@@ -296,6 +555,7 @@ export function AssistantPanel({
 
       <div
         className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto"
+        role="log"
         aria-live="polite"
         data-testid="assistant-log"
       >
@@ -304,14 +564,83 @@ export function AssistantPanel({
             key={message.id}
             className={
               message.role === "user"
-                ? "self-end rounded-sm bg-surface-2 px-3 py-2 text-sm text-ink"
-                : "self-start rounded-sm border border-line px-3 py-2 text-sm text-ink"
+                ? "self-end whitespace-pre-wrap break-words rounded-sm bg-surface-2 px-3 py-2 text-sm text-ink"
+                : "self-start whitespace-pre-wrap break-words rounded-sm border border-line px-3 py-2 text-sm text-ink"
             }
           >
             {message.text}
           </p>
         ))}
+        {optInFor !== null && (
+          <div
+            className="self-start rounded-sm border border-line bg-surface-2 p-3"
+            role="group"
+            aria-label={copy.chat.optIn.title}
+            data-testid="assistant-optin"
+          >
+            <p className="text-sm font-semibold text-ink">{copy.chat.optIn.title}</p>
+            <p className="mt-1 text-sm text-ink">{copy.chat.optIn.body}</p>
+            <div className="mt-2 flex gap-2">
+              <Button
+                variant="primary"
+                disabled={busy}
+                onClick={() => void acceptOptIn()}
+                className="min-h-11 py-1.5 text-sm font-semibold"
+              >
+                {copy.chat.optIn.on}
+              </Button>
+              <Button
+                disabled={busy}
+                onClick={declineOptIn}
+                className="min-h-11 py-1.5 text-sm font-semibold"
+              >
+                {copy.chat.optIn.notNow}
+              </Button>
+            </div>
+          </div>
+        )}
+        {stepLabel !== null && (
+          <p
+            className="self-start text-sm text-muted"
+            data-testid="assistant-step"
+            aria-hidden="true"
+          >
+            {stepLabel}
+          </p>
+        )}
+        {chatError && (
+          <div
+            className="flex flex-wrap items-center gap-2 text-sm text-ink"
+            data-testid="assistant-chat-error"
+          >
+            <span>
+              {chatError.reason === "rate"
+                ? copy.chat.error.rate
+                : chatError.reason === "budget"
+                  ? copy.chat.error.budget
+                  : chatError.reason === "signed-out"
+                    ? copy.chat.error.signedOut
+                    : chatError.reason === "timeout"
+                      ? copy.chat.error.timeout
+                      : copy.chat.error.unavailable}
+            </span>
+            {chatError.reason !== "signed-out" && (
+              <Button
+                disabled={busy}
+                onClick={() => void retryChat()}
+                className="min-h-11 py-1.5 text-sm font-semibold"
+              >
+                {copy.chat.error.retry}
+              </Button>
+            )}
+          </div>
+        )}
       </div>
+      {hasChat && (
+        <p role="status" className="sr-only">
+          {stepLabel !== null ? copy.chat.working : ""}
+        </p>
+      )}
 
       {messages.length === 0 && (
         <div className="flex flex-col items-start gap-2" role="group" aria-label={copy.chipsLabel}>
@@ -414,13 +743,14 @@ export function AssistantPanel({
           {copy.placeholder}
         </label>
         <input
+          ref={inputRef}
           id="assistant-input"
           value={input}
           onChange={(event) => setInput(event.target.value)}
           readOnly={busy}
           aria-busy={busy}
-          placeholder={copy.placeholder}
-          className="min-w-0 flex-1 rounded-sm border border-line bg-bg px-3 py-2 text-sm text-ink"
+          placeholder={chatAvailable ? copy.chat.placeholder : copy.placeholder}
+          className="min-w-0 flex-1 text-ellipsis rounded-sm border border-line bg-bg px-3 py-2 text-sm text-ink"
         />
         <Button
           type="submit"
@@ -433,8 +763,22 @@ export function AssistantPanel({
       </form>
 
       <p className="text-xs text-muted" data-testid="assistant-privacy">
-        {copy.privacy}
+        {chatAvailable ? copy.chat.privacy : copy.privacy}
       </p>
+      {chatAvailable && (
+        <p className="text-xs text-muted" data-testid="assistant-notice">
+          {copy.chat.notice}
+        </p>
+      )}
+      {chatAvailable && optedIn && (
+        <button
+          type="button"
+          onClick={turnChatOff}
+          className="min-h-11 self-start text-left text-sm text-muted underline hover:text-ink"
+        >
+          {copy.chat.turnOff}
+        </button>
+      )}
     </div>
   );
 }

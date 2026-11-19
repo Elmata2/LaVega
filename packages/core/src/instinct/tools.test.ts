@@ -471,3 +471,38 @@ describe("parseToolCall prototype names", () => {
     expect(parseToolCall({ tool: "toString" })).toEqual({ tool: "unknown" });
   });
 });
+
+describe("windowDays", () => {
+  it("defaults to 90 days and leaves the day before the window outside", () => {
+    const i = input({ txs: [tx("2026-08-14", -50)] }); // the window is 2026-08-14 .. 2026-11-11
+    const r = runTool({ tool: "spending_on_day", date: "2026-08-13" }, i, "en");
+    expect(r.figures).toMatchObject({ covered: 0 });
+    const inside = runTool({ tool: "spending_on_day", date: "2026-08-14" }, i, "en");
+    expect(inside.figures).toMatchObject({ totalCents: 5000 });
+  });
+
+  it("a larger window reaches further back", () => {
+    const i = input({ txs: [tx("2026-03-02", -50)] });
+    const narrow = runTool(
+      { tool: "spending_in_range", from: "2026-03-01", to: "2026-03-31" },
+      i,
+      "en",
+    );
+    expect(narrow.figures).toMatchObject({ covered: 0 });
+    const wide = runTool(
+      { tool: "spending_in_range", from: "2026-03-01", to: "2026-03-31" },
+      i,
+      "en",
+      {
+        windowDays: 366,
+      },
+    );
+    expect(wide.figures).toMatchObject({ totalCents: 5000, coveredFrom: "2026-03-01" });
+  });
+
+  it("without the option the result is the same as before", () => {
+    const i = input({ txs: [tx("2026-11-10", -12)] });
+    const call = { tool: "spending_on_day", date: "2026-11-10" } as const;
+    expect(runTool(call, i, "nl", {})).toEqual(runTool(call, i, "nl"));
+  });
+});

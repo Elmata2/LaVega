@@ -10,3 +10,8 @@
 export const MISTRAL_SMALL = "mistral-small-latest";
 export const MISTRAL_MEDIUM = "mistral-medium-latest";
 export const MISTRAL_OCR = "mistral-ocr-latest";
+
+/** The model behind the Assistent chat. The one place to change it; `pricing.ts` prices both
+ *  models and `WORST_CASE_CENTS["assistant-chat"]` in budget.ts must cover the one chosen here.
+ *  Chosen by the evaluation in docs/research/2026-11-18-assistant-chat-eval.md. */
+export const ASSISTANT_MODEL = MISTRAL_SMALL;

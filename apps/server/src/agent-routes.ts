@@ -11,8 +11,11 @@ import {
   type ReservationHandle,
 } from "./agent/budget.js";
 import type { AiUsage } from "@lavega/database";
-import { MISTRAL_SMALL, MISTRAL_MEDIUM } from "./agent/models.js";
-import { MistralHttpError } from "./agent/mistral.js";
+import { ASSISTANT_MODEL, MISTRAL_SMALL, MISTRAL_MEDIUM } from "./agent/models.js";
+import { createMistralProvider, MistralHttpError } from "./agent/mistral.js";
+import { createAiObservationContext } from "./agent/aiObservability.js";
+import { runAssistantStep, sanitizeAssistantRequest } from "./agent/assistant.js";
+import type { LlmProvider } from "./agent/provider.js";
 import { aiFailureCode, upstreamHttpStatus } from "./agent/failure.js";
 import { sanitizeExtractInput, type InvoiceExtractInput } from "./agent/redaction.js";
 import { extractInvoiceFields } from "./agent/invoiceExtract.js";
@@ -27,7 +30,7 @@ import { getBankNlTable } from "./bankNl.js";
 import { clientIp, rateLimitKey } from "./agent/rateLimit.js";
 import { createSharedRateLimiter, type SharedRateLimiter } from "./agent/sharedRateLimit.js";
 import { sessionUserId } from "./apiGuard.js";
-import { AGENTS, type BankNlTable, type LearnedFact } from "@lavega/core";
+import { AGENTS, isLoopUserMessage, type BankNlTable, type LearnedFact } from "@lavega/core";
 import { ValidationError } from "./agent/validationError.js";
 import { secretsMatch } from "./secrets.js";
 
@@ -44,7 +47,17 @@ type Deps = {
   cardComparison?: () => Promise<BankNlTable>;
   /** The process-wide ceiling across every AI route. Injected so a test can pin it. */
   globalLimit?: SharedRateLimiter;
+  /** The per-caller ceiling (20/min). Injected so a test can pin it. */
+  callerLimit?: SharedRateLimiter;
+  /** New assistant questions per account per hour (30). Injected so a test can pin it. */
+  questionLimit?: SharedRateLimiter;
+  /** EVERY assistant request per account per hour (180: 30 questions of up to 6 rounds). */
+  requestLimit?: SharedRateLimiter;
+  /** The model provider of the assistant route. Injected so a test never needs `fetch`. */
+  assistantProvider?: () => LlmProvider;
 };
+
+export { ASSISTANT_MODEL };
 
 /* 20 requests/min per CALLER per route, counted in Neon when DATABASE_URL is
  * set and in this process otherwise (#246). The key comes from `rateLimitKey`,
@@ -70,6 +83,24 @@ const GLOBAL_LIMIT_PER_MINUTE = 120;
 const allCallers = createSharedRateLimiter({
   max: GLOBAL_LIMIT_PER_MINUTE,
   windowMs: 60_000,
+});
+
+/* 30 NEW questions per account per hour on the Assistent chat. A question is the
+ * round whose last message is the user's; the tool rounds that follow it do not
+ * count, they are bounded by the 4-round cap in the browser and by the 20/min
+ * ceiling above. */
+const QUESTIONS_PER_HOUR = 30;
+const assistantQuestions = createSharedRateLimiter({
+  max: QUESTIONS_PER_HOUR,
+  windowMs: 60 * 60_000,
+});
+/* A client can end every body with a fabricated tool result and so never look like a
+ * "new question". The request ceiling counts EVERY request instead, sized for normal
+ * use: 30 questions of up to 6 rounds each. */
+const REQUESTS_PER_HOUR = 180;
+const assistantRequests = createSharedRateLimiter({
+  max: REQUESTS_PER_HOUR,
+  windowMs: 60 * 60_000,
 });
 
 // Mistral's error text (up to 2000 chars of its raw response body, per
@@ -195,6 +226,9 @@ export function registerAgentRoutes(app: Hono, deps: Deps = {}): void {
   const travelFacts = deps.travelFacts ?? lookupProviderTerms;
   const cardComparison = deps.cardComparison ?? (() => getBankNlTable());
   const globalLimit = deps.globalLimit ?? allCallers;
+  const callerLimit = deps.callerLimit ?? limit;
+  const questionLimit = deps.questionLimit ?? assistantQuestions;
+  const requestLimit = deps.requestLimit ?? assistantRequests;
 
   /* Per-caller first, then the shared ceiling. The order matters for
    * availability: a caller already over its own limit must not spend a unit of
@@ -208,7 +242,7 @@ export function registerAgentRoutes(app: Hono, deps: Deps = {}): void {
     c: Parameters<typeof bucket>[0],
     route: string,
   ): Promise<"ok" | "caller" | "global"> => {
-    if (!(await limit(bucket(c, route)))) return "caller";
+    if (!(await callerLimit(bucket(c, route)))) return "caller";
     if (!(await globalLimit("all"))) return "global";
     return "ok";
   };
@@ -422,6 +456,94 @@ export function registerAgentRoutes(app: Hono, deps: Deps = {}): void {
         await writeSseError(stream, code, message);
       }
     });
+  });
+
+  // The Assistent chat: one stateless model round. The browser runs the tool loop
+  // on the unlocked vault and posts the conversation each round; this route adds
+  // the system prompt and the tool schemas, makes ONE model call and returns
+  // tool calls or text. It reads no bank and stores nothing. Guard order:
+  // 503 -> 429 (rate) -> 429 (budget) -> 400 (bad body, hold released) -> 429 (30
+  // new questions an hour, hold released) -> 502.
+  //
+  // NOTHING from the conversation may reach a log, the ledger or analytics: a
+  // failure logs a fixed label and the status only, never the error text (a
+  // provider error body can echo the prompt).
+  app.post("/api/agent/assistant", async (c) => {
+    const { configured, apiKey } = loadLlmConfig();
+    if (!configured || !apiKey)
+      return c.json(
+        { error: "AI-assistent is niet geconfigureerd.", code: "assistant-not-configured" },
+        503,
+      );
+    const assistantRate = await rateCheck(c, "assistant");
+    if (assistantRate !== "ok")
+      return c.json(
+        {
+          error: "Even wachten — te veel verzoeken.",
+          code:
+            assistantRate === "global" ? "ai-rate-limited-global" : "assistant-rate-limited-local",
+        },
+        429,
+      );
+    if (!(await requestLimit(bucket(c, "assistant-requests"))))
+      return c.json(
+        { error: "Je stelde veel vragen kort achter elkaar.", code: "assistant-rate-limited-hour" },
+        429,
+      );
+    const budget = await requireBudget(c, "assistant-chat");
+    if (budget.blocked) return budget.blocked;
+    let input: ReturnType<typeof sanitizeAssistantRequest>;
+    try {
+      input = sanitizeAssistantRequest(await c.req.json());
+    } catch (e) {
+      await releaseReservation(budget.reservation);
+      if (e instanceof ValidationError) return c.json({ error: e.message, code: e.code }, 400);
+      return c.json({ error: "ongeldige invoer", code: "assistant-bad-input" }, 400);
+    }
+    const lastMessage = input.messages[input.messages.length - 1];
+    if (
+      lastMessage?.role === "user" &&
+      !isLoopUserMessage(input.messages) &&
+      !(await questionLimit(bucket(c, "assistant-hour")))
+    ) {
+      await releaseReservation(budget.reservation);
+      return c.json(
+        { error: "Je stelde veel vragen kort achter elkaar.", code: "assistant-rate-limited-hour" },
+        429,
+      );
+    }
+    try {
+      const result = await runAssistantStep(input, {
+        provider:
+          deps.assistantProvider?.() ??
+          createMistralProvider(
+            apiKey,
+            ASSISTANT_MODEL,
+            createAiObservationContext(sessionUserId(c)),
+          ),
+        onUsage: (usage) =>
+          recordUsage(
+            { route: "assistant-chat", model: ASSISTANT_MODEL, ...usage },
+            budget.reservation,
+          ),
+      });
+      return c.json(result);
+    } catch (e) {
+      const { code, message } = aiFailure(e);
+      await recordFailure(
+        {
+          route: "assistant-chat",
+          model: ASSISTANT_MODEL,
+          errorCode: aiFailureCode(e),
+          ...(upstreamHttpStatus(e) === undefined ? {} : { httpStatus: upstreamHttpStatus(e) }),
+        },
+        budget.reservation,
+      );
+      console.error(
+        `agent/assistant: model call failed status=${upstreamHttpStatus(e) ?? 0} kind=${aiFailureCode(e)}`,
+      );
+      return c.json({ error: message, code }, 502);
+    }
   });
 
   // Bulk-categorize onbekend transactions via Mistral. Guard order matches the

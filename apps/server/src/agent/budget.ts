@@ -119,6 +119,10 @@ export const WORST_CASE_CENTS: Record<AiUsage["route"], number> = {
   "portfolio-persona": 1,
   "sector-inference": 1,
   "instinct-reply": 3,
+  /* One round of the Assistent chat on the small model. The body is capped at
+   * 200 KiB; dense JSON at that size is about 1.5 to 2 cents of input, so the
+   * reservation is 3. A typical round costs about 0.05 cent. */
+  "assistant-chat": 3,
   /* Jev-04: one batched Choice over at most 24 unknown types, each with a short
    * type string, description, currency and sign — same order as one
    * portfolio-persona call. */
