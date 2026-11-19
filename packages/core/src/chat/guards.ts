@@ -14,7 +14,10 @@ import { adviceHits, maskDataNames } from "./adviceWords.js";
 
 /** "1.234,56", "1,234.56", "1234.56", "84", "15,99" to a number. */
 export function parseChatAmount(raw: string): number {
-  const s = raw.replace(/[.,]+$/, "");
+  // Trailing dots and commas go, by a plain scan (no pattern to run slowly).
+  let end = raw.length;
+  while (end > 0 && (raw[end - 1] === "." || raw[end - 1] === ",")) end -= 1;
+  const s = raw.slice(0, end);
   const lastDot = s.lastIndexOf(".");
   const lastComma = s.lastIndexOf(",");
   let canonical: string;

@@ -179,7 +179,7 @@ if (out) {
     `| --- | --- | --- | --- | --- | --- |`,
     ...rows.map(
       (r) =>
-        `| ${r.id} | ${r.label} | ${r.failures.length === 0 ? "pass" : `FAIL: ${r.failures.join("; ")}`} | ${r.calls} | ${(r.ms / 1000).toFixed(1)} s | ${r.run.text.replace(/\|/g, "\\|").replace(/\n/g, " / ")} |`,
+        `| ${r.id} | ${r.label} | ${r.failures.length === 0 ? "pass" : `FAIL: ${r.failures.join("; ")}`} | ${r.calls} | ${(r.ms / 1000).toFixed(1)} s | ${r.run.text.replace(/\\/g, "\\\\").replace(/\|/g, "\\|").replace(/\n/g, " / ")} |`,
     ),
     ``,
   ];

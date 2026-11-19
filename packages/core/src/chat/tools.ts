@@ -261,6 +261,14 @@ function aliasesOf(accounts: readonly Account[]): Aliases {
   return { byKey, byAlias };
 }
 
+/** A Trading 212 style export name: "from_<date>_to_<date>…". Plain index
+ *  checks, so a long name cannot make a pattern run slowly. */
+function isExportFileName(name: string): boolean {
+  const lower = name.toLowerCase();
+  const from = lower.indexOf("from_");
+  return from >= 0 && lower.indexOf("_to_", from + 5) >= 0;
+}
+
 /** Does this "name" look like an import artefact rather than a name: the account's own
  *  key or IBAN, four or more digits (card digits, account numbers), or a file name? */
 function looksLikeIdentifier(a: Account): boolean {
@@ -268,7 +276,7 @@ function looksLikeIdentifier(a: Account): boolean {
   const flat = (v: string) => v.replace(/\s+/g, "").toLowerCase();
   if (name === "" || flat(name) === flat(a.key) || flat(name) === flat(a.iban)) return true;
   if ((name.match(/\d/g) ?? []).length >= 4) return true;
-  if (/\.[a-z0-9]{2,4}$/i.test(name) || /from_.*_to_/i.test(name)) return true;
+  if (/\.[a-z0-9]{2,4}$/i.test(name) || isExportFileName(name)) return true;
   return !/\s/.test(name) && name.includes("_");
 }
 

@@ -19,11 +19,20 @@ const NL = new Set(
 // Words both languages use: they carry no vote.
 const SHARED = new Set(["in", "is", "a", "am", "of", "na"]);
 
+/** A word without its leading and trailing apostrophes, by a plain scan. */
+function trimQuotes(word: string): string {
+  let start = 0;
+  let end = word.length;
+  while (start < end && word[start] === "'") start += 1;
+  while (end > start && word[end - 1] === "'") end -= 1;
+  return word.slice(start, end);
+}
+
 export function detectChatLanguage(text: string, fallback: ChatLocale): ChatLocale {
   let en = 0;
   let nl = 0;
   for (const raw of text.toLowerCase().split(/[^\p{L}']+/u)) {
-    const w = raw.replace(/^'+|'+$/g, "");
+    const w = trimQuotes(raw);
     if (w === "" || SHARED.has(w)) continue;
     if (EN.has(w)) en += 1;
     if (NL.has(w)) nl += 1;
