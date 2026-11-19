@@ -1,3 +1,4 @@
+@layer ui-sdk;
 @import "tailwindcss";
 
 @theme {
@@ -271,12 +272,29 @@
   animation: auth-fade-in 180ms cubic-bezier(0.23, 1, 0.32, 1);
 }
 
+/* The pill behind the checked segment. ui-sdk measures the checked item and
+   publishes its box as CSS variables; skip the slide on first placement. */
+.segmented-indicator {
+  top: var(--segmented-control-indicator-top);
+  left: var(--segmented-control-indicator-left);
+  width: var(--segmented-control-indicator-width);
+  height: var(--segmented-control-indicator-height);
+  transition-property: top, left, width, height;
+  transition-duration: 200ms;
+  transition-timing-function: cubic-bezier(0.23, 1, 0.32, 1);
+}
+.segmented-indicator[data-activation-direction="none"] {
+  transition: none;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .auth-fade {
     animation: none;
   }
   .axis-label,
-  .pressable {
+  .pressable,
+  .segmented-indicator,
+  [data-slot="switch-thumb"] {
     transition: none;
   }
   .mention-menu {

@@ -3,11 +3,12 @@ import { useCallback, useId, useMemo } from "react";
 import { Area, AreaChart, Line, ReferenceArea, ReferenceLine, XAxis, YAxis } from "recharts";
 import { EmptyState } from "./EmptyState";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
-import { segmentedItem, segmentedTrack } from "./ui/segmented";
+import { Segmented } from "./ui/segmented";
 import { axisTick, ChartContainer, ChartTooltip } from "./ui/chart";
 import { chartRanges, pointsInWindow, useChartWindow, type ChartWindow } from "./useChartWindow";
 import { shortDate } from "../lib/dates.js";
 import { LineSwatch } from "./Swatch";
+import { count } from "../lib/utils.js";
 
 /** A portfolio point, optionally carrying the owner's opted-in Personal total
  *  (`@lavega/core`'s `mergeInPersonalNetWorth`). Both extra fields are
@@ -121,25 +122,13 @@ export function NetWorthChart({ data, currency = "EUR", personalAsOfDate = null 
   return (
     <Card data-dashboard-section="net-worth">
       <CardHeader gap="wide" className="sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <p className="text-sm font-medium text-muted-foreground">Net worth</p>
-          <CardTitle>Investments and cash</CardTitle>
-        </div>
-        <div role="group" aria-label="Choose net worth period" className={segmentedTrack}>
-          {chartRanges.map((item) => (
-            <button
-              key={item.value}
-              type="button"
-              aria-pressed={chart.window.kind === "preset" && chart.window.range === item.value}
-              onClick={() => chart.applyPreset(item.value)}
-              className={segmentedItem(
-                chart.window.kind === "preset" && chart.window.range === item.value,
-              )}
-            >
-              {item.label}
-            </button>
-          ))}
-        </div>
+        <CardTitle>Investments and cash</CardTitle>
+        <Segmented
+          label="Choose net worth period"
+          value={chart.window.kind === "preset" ? chart.window.range : null}
+          options={chartRanges}
+          onValueChange={chart.applyPreset}
+        />
       </CardHeader>
       <CardContent>
         {points.length === 0 ? (
@@ -175,37 +164,34 @@ export function NetWorthChart({ data, currency = "EUR", personalAsOfDate = null 
                     : null;
                 const formatChange = (value: number | null) =>
                   value === null ? "Unknown" : `${value >= 0 ? "+" : ""}${money(value, currency)}`;
+                const tone = (value: number | null) =>
+                  value === null
+                    ? "text-muted-foreground"
+                    : value < 0
+                      ? "text-negative"
+                      : value > 0
+                        ? "text-positive"
+                        : "";
+                const tiles = [
+                  { label: "Change in period", value: change, size: "text-xl" },
+                  { label: "Investments change", value: investmentChange, size: "text-lg" },
+                  { label: "Cash change", value: cashChange, size: "text-lg" },
+                ];
                 return (
                   <div
                     className="mb-5 grid gap-3 sm:grid-cols-3"
                     aria-label="Net worth change summary"
                   >
-                    <div className="rounded-tile border border-border bg-secondary/30 p-3">
-                      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                        Trend
-                      </p>
-                      <p
-                        className={`mt-1 text-xl font-semibold tabular-nums ${change !== null && change < 0 ? "text-negative" : "text-positive"}`}
-                      >
-                        {formatChange(change)}
-                      </p>
-                    </div>
-                    <div className="rounded-tile border border-border p-3">
-                      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                        Investments
-                      </p>
-                      <p className="mt-1 text-lg font-semibold tabular-nums">
-                        {formatChange(investmentChange)}
-                      </p>
-                    </div>
-                    <div className="rounded-tile border border-border p-3">
-                      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                        Cash
-                      </p>
-                      <p className="mt-1 text-lg font-semibold tabular-nums">
-                        {formatChange(cashChange)}
-                      </p>
-                    </div>
+                    {tiles.map((tile) => (
+                      <div key={tile.label} className="rounded-tile border border-border p-3">
+                        <p className="text-sm text-muted-foreground">{tile.label}</p>
+                        <p
+                          className={`mt-1 ${tile.size} font-semibold tabular-nums ${tone(tile.value)}`}
+                        >
+                          {formatChange(tile.value)}
+                        </p>
+                      </div>
+                    ))}
                   </div>
                 );
               })()}
@@ -447,7 +433,7 @@ export function NetWorthChart({ data, currency = "EUR", personalAsOfDate = null 
                     <span className="sr-only">
                       Excluded due to stale price: {warnings.unpriced.join(", ")}{" "}
                     </span>
-                    Excluded due to stale price: {warnings.unpriced.length} instruments
+                    Excluded due to stale price: {count(warnings.unpriced.length, "instrument")}
                   </p>
                 )}
                 {warnings.cashUnknown.length > 0 && (
@@ -455,12 +441,12 @@ export function NetWorthChart({ data, currency = "EUR", personalAsOfDate = null 
                     <span className="sr-only">
                       Cash value unknown: {warnings.cashUnknown.join(", ")}{" "}
                     </span>
-                    Cash value unknown: {warnings.cashUnknown.length} accounts
+                    Cash value unknown: {count(warnings.cashUnknown.length, "account")}
                   </p>
                 )}
                 {warnings.cashEstimated.length > 0 && (
                   <p>
-                    Cash estimated from unproven history: {warnings.cashEstimated.length} accounts
+                    Cash estimated from unproven history: {count(warnings.cashEstimated.length, "account")}
                   </p>
                 )}
               </div>

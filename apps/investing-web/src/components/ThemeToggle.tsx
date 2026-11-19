@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Switch } from "@ui-sdk/react/switch";
 import { applyTheme, readStoredTheme, storeTheme, type Theme } from "../lib/theme";
 
 /* role="switch": one control with two states, "light theme on" or off. The label
@@ -18,13 +19,11 @@ export function ThemeToggle() {
   };
 
   return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={isLight}
+    <Switch
       aria-label="Light theme"
       title={isLight ? "Switch to dark theme" : "Switch to light theme"}
-      onClick={toggle}
+      checked={isLight}
+      onCheckedChange={toggle}
       className="pressable flex size-11 items-center justify-center rounded-pill border border-border transition-colors hover:bg-secondary"
     >
       <svg
@@ -47,6 +46,6 @@ export function ThemeToggle() {
           </>
         )}
       </svg>
-    </button>
+    </Switch>
   );
 }

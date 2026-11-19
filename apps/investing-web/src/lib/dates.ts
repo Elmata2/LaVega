@@ -14,3 +14,10 @@ export function shortDate(value: string): string {
 export function longDate(value: string): string {
   return longFormatter.format(new Date(`${value}T00:00:00Z`));
 }
+
+const axisFormatter = formatter({ day: "numeric", month: "short" });
+
+/** A chart axis tick: "19 Oct". The year is on the tooltip and the range picker. */
+export function axisDate(value: string): string {
+  return axisFormatter.format(new Date(`${value}T00:00:00Z`));
+}

@@ -3,7 +3,7 @@ import { Cell, Pie, PieChart } from "recharts";
 import type { Allocation, InvestingDashboardData } from "@lavega/core";
 import { EmptyState } from "./EmptyState";
 import { Swatch } from "./Swatch";
-import { segmentedItem, segmentedTrack } from "./ui/segmented";
+import { Segmented } from "./ui/segmented";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { ChartContainer } from "./ui/chart";
 
@@ -51,6 +51,12 @@ type DisplayBucket = {
 // the leftover points to the largest fractional remainders, so the displayed
 // integers always sum to exactly 100 instead of drifting from independent
 // per-bucket rounding.
+const groupOptions = [
+  { value: "instrument" as const, label: "Holding" },
+  { value: "entity" as const, label: "Entity" },
+  { value: "broker" as const, label: "Platform" },
+];
+
 export function apportionPercentages(values: number[]): number[] {
   const total = values.reduce((sum, value) => sum + value, 0);
   if (total <= 0) return values.map(() => 0);
@@ -165,43 +171,15 @@ export function AllocationDonut({
     <Card>
       <CardHeader gap="wide" className="flex-row items-start justify-between">
         <CardTitle>Allocation</CardTitle>
-        <div aria-label="Group allocation" className={segmentedTrack} role="group">
-          <button
-            type="button"
-            aria-pressed={group === "instrument"}
-            onClick={() => {
-              setGroup("instrument");
-              setShowOverige(false);
-            }}
-            className={segmentedItem(group === "instrument")}
-          >
-            Holding
-          </button>
-          <button
-            type="button"
-            aria-pressed={group === "entity"}
-            onClick={() => {
-              setGroup("entity");
-              setShowOverige(false);
-            }}
-            className={segmentedItem(group === "entity")}
-          >
-            Entity
-          </button>
-          {broker && (
-            <button
-              type="button"
-              aria-pressed={group === "broker"}
-              onClick={() => {
-                setGroup("broker");
-                setShowOverige(false);
-              }}
-              className={segmentedItem(group === "broker")}
-            >
-              Platform
-            </button>
-          )}
-        </div>
+        <Segmented
+          label="Group allocation"
+          value={group}
+          options={broker ? groupOptions : groupOptions.slice(0, 2)}
+          onValueChange={(next) => {
+            setGroup(next);
+            setShowOverige(false);
+          }}
+        />
       </CardHeader>
       <CardContent>
         {priced.length === 0 && allocation.unpriced.length === 0 ? (

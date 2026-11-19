@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
+import { Tabs, TabsList, TabsPanel, TabsTab } from "@ui-sdk/react/tabs";
 import {
   BROKERS,
   CREDENTIAL_BROKERS,
@@ -517,7 +518,6 @@ export function BrokerSettings() {
   const [unreadableBrokers, setUnreadableBrokers] = useState<CredentialBroker[]>([]);
   const [storageProblem, setStorageProblem] = useState<string | null>(null);
   const [tab, setTab] = useState<BrokerSettingsTab>(initialTab);
-  const tabRefs = useRef<(HTMLButtonElement | null)[]>([]);
   useEffect(() => {
     void fetch("/api/brokers/credentials/status")
       .then(async (response) => {
@@ -545,25 +545,6 @@ export function BrokerSettings() {
       ? `${unreadableBrokers.map((broker) => BROKERS[broker].shortLabel).join(" and ")} credentials cannot be read. Save new credentials below to reconnect.`
       : null);
 
-  function selectTab(next: BrokerSettingsTab) {
-    setTab(next);
-    tabRefs.current[BROKER_SETTINGS_TABS.findIndex((entry) => entry.id === next)]?.focus();
-  }
-
-  function onTabKeyDown(event: React.KeyboardEvent<HTMLButtonElement>, index: number) {
-    const last = BROKER_SETTINGS_TABS.length - 1;
-    let next: number;
-    if (event.key === "ArrowDown" || event.key === "ArrowRight")
-      next = index === last ? 0 : index + 1;
-    else if (event.key === "ArrowUp" || event.key === "ArrowLeft")
-      next = index === 0 ? last : index - 1;
-    else if (event.key === "Home") next = 0;
-    else if (event.key === "End") next = last;
-    else return;
-    event.preventDefault();
-    selectTab(BROKER_SETTINGS_TABS[next]!.id);
-  }
-
   return (
     <div className="space-y-8" id="degiro-import">
       <BrokerVaultUnlock />
@@ -575,55 +556,36 @@ export function BrokerSettings() {
           {credentialProblem}
         </p>
       )}
-      <div className="grid items-start gap-5 lg:grid-cols-[15rem_minmax(0,1fr)]">
-        <div
-          role="tablist"
+      <Tabs
+        value={tab}
+        onValueChange={(next) => setTab(next as BrokerSettingsTab)}
+        orientation="vertical"
+        className="grid items-start gap-5 lg:grid-cols-[15rem_minmax(0,1fr)]"
+      >
+        <TabsList
           aria-label="Broker setup"
-          aria-orientation="vertical"
           className="grid gap-2 sm:grid-cols-2 lg:grid-cols-1"
         >
-          {BROKER_SETTINGS_TABS.map((entry, index) => {
-            const selected = tab === entry.id;
-            return (
-              <button
-                key={entry.id}
-                ref={(element) => {
-                  tabRefs.current[index] = element;
-                }}
-                type="button"
-                role="tab"
-                id={`broker-tab-${entry.id}`}
-                aria-selected={selected}
-                aria-controls={`broker-panel-${entry.id}`}
-                aria-label={entry.label}
-                aria-describedby={`broker-tab-${entry.id}-description`}
-                tabIndex={selected ? 0 : -1}
-                className={`min-h-11 rounded-tile border p-3 text-left transition-colors duration-150 ease-out motion-reduce:transition-none ${
-                  selected
-                    ? "border-accent/40 bg-secondary text-foreground"
-                    : "border-border bg-card text-muted-foreground hover:bg-secondary/60 hover:text-foreground"
-                }`}
-                onClick={() => setTab(entry.id)}
-                onKeyDown={(event) => onTabKeyDown(event, index)}
+          {BROKER_SETTINGS_TABS.map((entry) => (
+            <TabsTab
+              key={entry.id}
+              value={entry.id}
+              id={`broker-tab-${entry.id}`}
+              aria-label={entry.label}
+              aria-describedby={`broker-tab-${entry.id}-description`}
+              className="min-h-11 rounded-tile border border-border bg-card p-3 text-left text-muted-foreground transition-colors duration-150 ease-out hover:bg-secondary/60 hover:text-foreground motion-reduce:transition-none data-selected:border-accent/40 data-selected:bg-secondary data-selected:text-foreground"
+            >
+              <span className="block text-sm font-semibold">{entry.label}</span>
+              <span
+                id={`broker-tab-${entry.id}-description`}
+                className="mt-0.5 block text-xs leading-5 text-muted-foreground"
               >
-                <span className="block text-sm font-semibold">{entry.label}</span>
-                <span
-                  id={`broker-tab-${entry.id}-description`}
-                  className="mt-0.5 block text-xs leading-5 text-muted-foreground"
-                >
-                  {entry.description}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-        <div
-          role="tabpanel"
-          id="broker-panel-api"
-          aria-labelledby="broker-tab-api"
-          className="space-y-8"
-          hidden={tab !== "api"}
-        >
+                {entry.description}
+              </span>
+            </TabsTab>
+          ))}
+        </TabsList>
+        <TabsPanel value="api" id="broker-panel-api" keepMounted className="space-y-8">
           <BrokerSyncProgressCard />
           <div className="grid gap-5 lg:grid-cols-2">
             <BrokerSetupCard
@@ -666,17 +628,11 @@ export function BrokerSettings() {
             Credentials stay on your machine. Never share Flex tokens, API keys or API secrets in
             chat, screenshots, issues or git.
           </p>
-        </div>
-        <div
-          role="tabpanel"
-          id="broker-panel-degiro"
-          aria-labelledby="broker-tab-degiro"
-          className="space-y-8"
-          hidden={tab !== "degiro"}
-        >
+        </TabsPanel>
+        <TabsPanel value="degiro" id="broker-panel-degiro" keepMounted className="space-y-8">
           <DeGiroImportTab />
-        </div>
-      </div>
+        </TabsPanel>
+      </Tabs>
     </div>
   );
 }

@@ -109,7 +109,7 @@ test("XIRR row shows percent-for-percent, not a pp spread", async () => {
       />,
     );
   });
-  expect(container.textContent).toContain("XIRR p.j. Your portfolio +11.8% · AEX +29.4%");
+  expect(container.textContent).toContain("XIRR p.a. Your portfolio +11.8% · AEX +29.4%");
   expect(container.textContent).not.toContain("pp");
   await act(async () => root.unmount());
 });
@@ -272,7 +272,7 @@ test("Custom tab reveals date inputs and a preset tab hides them again", async (
   expect(container.querySelector('input[aria-label="From date"]')).not.toBeNull();
   expect(container.querySelector('input[aria-label="To date"]')).not.toBeNull();
   expect(container.querySelector('button[type="submit"]')?.textContent).toBe("Apply");
-  expect(customButton.getAttribute("aria-pressed")).toBe("true");
+  expect(customButton.getAttribute("aria-checked")).toBe("true");
   const oneMonthButton = Array.from(container.querySelectorAll("button")).find(
     (button) => button.textContent === "1 month",
   )!;
@@ -281,7 +281,7 @@ test("Custom tab reveals date inputs and a preset tab hides them again", async (
   });
   expect(container.querySelector('input[aria-label="From date"]')).toBeNull();
   expect(container.querySelector('button[type="submit"]')).toBeNull();
-  expect(customButton.getAttribute("aria-pressed")).toBe("false");
+  expect(customButton.getAttribute("aria-checked")).toBe("false");
   await act(async () => root.unmount());
 });
 
@@ -405,13 +405,13 @@ test("a wheel zoom marks the Custom tab pressed, and a preset click un-presses i
     Array.from(container.querySelectorAll("button")).find(
       (button) => button.textContent === "Custom",
     )!;
-  expect(customButton().getAttribute("aria-pressed")).toBe("false");
+  expect(customButton().getAttribute("aria-checked")).toBe("false");
   await act(async () => {
     chart.dispatchEvent(
       new WheelEvent("wheel", { bubbles: true, cancelable: true, clientX: 200, deltaY: -100 }),
     );
   });
-  expect(customButton().getAttribute("aria-pressed")).toBe("true");
+  expect(customButton().getAttribute("aria-checked")).toBe("true");
   expect(container.querySelector('input[aria-label="From date"]')).not.toBeNull();
   const oneMonthButton = Array.from(container.querySelectorAll("button")).find(
     (button) => button.textContent === "1 month",
@@ -419,7 +419,7 @@ test("a wheel zoom marks the Custom tab pressed, and a preset click un-presses i
   await act(async () => {
     oneMonthButton.click();
   });
-  expect(customButton().getAttribute("aria-pressed")).toBe("false");
+  expect(customButton().getAttribute("aria-checked")).toBe("false");
   expect(container.querySelector('input[aria-label="From date"]')).toBeNull();
   await act(async () => root.unmount());
 });

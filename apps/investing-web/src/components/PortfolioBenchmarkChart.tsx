@@ -13,7 +13,7 @@ import { Line, LineChart, ReferenceArea, ReferenceLine, XAxis, YAxis } from "rec
 import { EmptyState } from "./EmptyState";
 import { LineSwatch } from "./Swatch";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
-import { segmentedItem, segmentedTrack } from "./ui/segmented";
+import { Segmented } from "./ui/segmented";
 import { axisTick, ChartContainer, ChartTooltip } from "./ui/chart";
 import { chartRanges, pointsInWindow, useChartWindow, type ChartWindow } from "./useChartWindow";
 import { shortDate } from "../lib/dates.js";
@@ -30,6 +30,7 @@ type Props = {
 type SearchPayload = { results?: BenchmarkInstrument[]; fallback?: boolean; problems?: string[] };
 export type VisibleWindow = ChartWindow;
 // Stable identities: a fresh `[]` default prop would bust the derived memos on every render.
+const periodOptions = [...chartRanges, { value: "custom" as const, label: "Custom" }];
 const noBenchmarks: BenchmarkSeries[] = [];
 const noExternalCashFlows: NonNullable<Props["externalCashFlows"]> = [];
 
@@ -246,32 +247,16 @@ export function PortfolioBenchmarkChart({
     <Card>
       <CardHeader gap="wide" className="sm:flex-row sm:items-start sm:justify-between">
         <CardTitle>{mode === "euros" ? "Portfolio value" : "Indexed return"}</CardTitle>
-        <div role="group" aria-label="Choose period" className={segmentedTrack}>
-          {chartRanges.map((item) => (
-            <button
-              key={item.value}
-              type="button"
-              aria-pressed={chart.window.kind === "preset" && chart.window.range === item.value}
-              onClick={() => chart.applyPreset(item.value)}
-              className={segmentedItem(
-                chart.window.kind === "preset" && chart.window.range === item.value,
-              )}
-            >
-              {item.label}
-            </button>
-          ))}
-          <button
-            type="button"
-            aria-pressed={chart.window.kind === "custom"}
-            onClick={() => {
-              if (points.length === 0) return;
-              chart.openCustom(points[0]!.date, points.at(-1)!.date);
-            }}
-            className={segmentedItem(chart.window.kind === "custom")}
-          >
-            Custom
-          </button>
-        </div>
+        <Segmented
+          label="Choose period"
+          value={chart.window.kind === "preset" ? chart.window.range : "custom"}
+          options={periodOptions}
+          onValueChange={(next) => {
+            if (next !== "custom") return chart.applyPreset(next);
+            if (points.length === 0) return;
+            chart.openCustom(points[0]!.date, points.at(-1)!.date);
+          }}
+        />
       </CardHeader>
       <CardContent>
         <div className="mb-4 flex flex-wrap items-center gap-2" aria-label="Selected benchmarks">
@@ -655,7 +640,7 @@ function PerformanceSummary({
                     {benchmarkLabel(benchmark)} {valueOrUnknown(benchmarkTwr, signedPercent)}
                   </p>
                   <p className="mb-2 text-sm font-semibold">
-                    XIRR p.j. Portfolio {signedCappedXirr(point.portfolioXirr)} ·{" "}
+                    XIRR p.a. Portfolio {signedCappedXirr(point.portfolioXirr)} ·{" "}
                     {benchmarkLabel(benchmark)} {signedCappedXirr(benchmarkMwr)}
                   </p>
                   <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 border-t border-border pt-2 text-2xs text-muted-foreground">
@@ -723,7 +708,7 @@ export function PerformanceTooltip({
                   {benchmarkLabel(benchmark)} {valueOrUnknown(benchmarkTwr, signedPercent)}
                 </p>
                 <p className="text-sm font-semibold">
-                  XIRR p.j. Your portfolio {signedCappedXirr(portfolioMwr)} ·{" "}
+                  XIRR p.a. Your portfolio {signedCappedXirr(portfolioMwr)} ·{" "}
                   {benchmarkLabel(benchmark)} {signedCappedXirr(benchmarkMwr)}
                 </p>
               </div>

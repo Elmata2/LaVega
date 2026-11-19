@@ -1,5 +1,5 @@
 import { useChat } from "@ai-sdk/react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   Link,
   NavLink,
@@ -44,6 +44,7 @@ import { PositionPriceChart } from "./components/PositionPriceChart";
 import { PositionSectorControl } from "./components/PositionSectorControl.js";
 import { RealizedReport } from "./components/RealizedReport.js";
 import { saveAccountWrappers, withWrapper } from "./lib/accountWrappers.js";
+import { useScrollFade } from "./lib/useScrollFade.js";
 import { PortfolioBenchmarkChart } from "./components/PortfolioBenchmarkChart";
 import { PortfolioSummaryCard, type SummaryState } from "./components/PortfolioSummaryCard";
 import { SectorAllocationCard } from "./components/SectorAllocationCard.js";
@@ -52,7 +53,7 @@ import { DeGiroHoldingsNote } from "./components/DeGiroHoldingsNote.js";
 import { OverviewStatus, mergeStatusItems, type StatusItem } from "./components/OverviewStatus.js";
 import { formatMoney, formatSignedPercent, portfolioFigures } from "./lib/portfolioFigures.js";
 import { holdingIdentityLine } from "./lib/holdingIdentity.js";
-import { longDate, shortDate } from "./lib/dates.js";
+import { shortDate } from "./lib/dates.js";
 import { readDashboard, useDashboard } from "./lib/dashboardResource";
 import { HOME_MODULE, MODULES, investingModulePath } from "./lib/investingRegistry.js";
 import { useInvestingLayout } from "./lib/layoutResource.js";
@@ -835,31 +836,10 @@ function ModuleRoute({
 /** The module pill track. On a phone it scrolls sideways: an edge fade says
  *  more is off-screen, and the active pill is scrolled into view on navigation. */
 function ModuleNav({ moduleIds }: { moduleIds: Parameters<typeof investingModulePath>[0][] }) {
-  const ref = useRef<HTMLElement>(null);
   const location = useLocation();
-  const [fade, setFade] = useState<"none" | "start" | "end" | "both">("none");
-  const measure = useCallback(() => {
-    const nav = ref.current;
-    if (!nav) return;
-    const start = nav.scrollLeft > 1;
-    const end = nav.scrollWidth - nav.clientWidth - nav.scrollLeft > 1;
-    setFade(start && end ? "both" : start ? "start" : end ? "end" : "none");
-  }, []);
-  useEffect(() => {
-    const nav = ref.current;
-    if (!nav) return;
-    const active = nav.querySelector<HTMLElement>('[aria-current="page"]');
-    // Not every environment (jsdom) implements scrollIntoView.
-    if (typeof active?.scrollIntoView === "function")
-      active.scrollIntoView({ inline: "center", block: "nearest" });
-    measure();
-    const frame = requestAnimationFrame(measure);
-    window.addEventListener("resize", measure);
-    return () => {
-      cancelAnimationFrame(frame);
-      window.removeEventListener("resize", measure);
-    };
-  }, [location.pathname, moduleIds.length, measure]);
+  const { ref, fade, measure } = useScrollFade<HTMLElement>(
+    `${location.pathname}:${moduleIds.length}`,
+  );
   return (
     <nav
       ref={ref}
@@ -874,12 +854,20 @@ function ModuleNav({ moduleIds }: { moduleIds: Parameters<typeof investingModule
           to={investingModulePath(id)}
           end={id === HOME_MODULE}
           className={({ isActive }) =>
-            `flex min-h-11 items-center rounded-pill px-4 text-sm font-semibold whitespace-nowrap transition-colors ${isActive ? "bg-foreground text-background" : "text-muted-foreground hover:bg-background/40 hover:text-foreground"}`
+            `flex min-h-11 shrink-0 items-center rounded-pill px-4 text-sm font-semibold whitespace-nowrap transition-colors ${isActive ? "bg-foreground text-background" : "text-muted-foreground hover:bg-background/40 hover:text-foreground"}`
           }
         >
           {MODULES.find((m) => m.id === id)?.label ?? id}
         </NavLink>
       ))}
+      <NavLink
+        to="/reports"
+        className={({ isActive }) =>
+          `flex min-h-11 shrink-0 items-center rounded-pill px-4 text-sm font-semibold whitespace-nowrap transition-colors ${isActive ? "bg-foreground text-background" : "text-muted-foreground hover:bg-background/40 hover:text-foreground"}`
+        }
+      >
+        Reports
+      </NavLink>
     </nav>
   );
 }
@@ -917,17 +905,7 @@ function Layout() {
               Investing
             </h1>
           </Link>
-          <div className="flex items-center gap-2">
-            <ModuleNav moduleIds={layout.status === "loading" ? [HOME_MODULE] : layout.modules} />
-            <NavLink
-              to="/reports"
-              className={({ isActive }) =>
-                `flex min-h-11 items-center rounded-pill px-4 text-sm font-semibold whitespace-nowrap transition-colors ${isActive ? "bg-foreground text-background" : "text-muted-foreground hover:bg-secondary hover:text-foreground"}`
-              }
-            >
-              Reports
-            </NavLink>
-          </div>
+          <ModuleNav moduleIds={layout.status === "loading" ? [HOME_MODULE] : layout.modules} />
           <div className="ml-auto flex items-center gap-2">
             {/* DE WEG TERUG. Spiegelt de investing-knop in apps/web's NavBar: een
                 gewone cross-document link, want de persoonlijke app is een eigen
@@ -960,7 +938,7 @@ function Layout() {
               <button
                 type="button"
                 onClick={() => navigate("/profile#widgets")}
-                className="pressable min-h-11 rounded-pill border border-border bg-card px-4 text-xs font-semibold transition-colors hover:bg-secondary"
+                className="pressable min-h-11 rounded-pill border border-border bg-card px-4 text-xs font-semibold whitespace-nowrap transition-colors hover:bg-secondary"
               >
                 <span aria-hidden="true">+</span> Add widget
               </button>
@@ -1317,7 +1295,7 @@ function Reports() {
   );
 }
 
-const detailDate = longDate;
+const detailDate = shortDate;
 
 function PositionDetailSummary({ position }: { position: InvestingPositionDetail }) {
   const [quantityOpen, setQuantityOpen] = useState(false);
@@ -1328,7 +1306,7 @@ function PositionDetailSummary({ position }: { position: InvestingPositionDetail
           style: "currency",
           currency: position.currency,
           maximumFractionDigits: 2,
-          signDisplay: "always",
+          signDisplay: "exceptZero",
         });
   const percent = (value: number | null) =>
     value === null
@@ -1336,7 +1314,7 @@ function PositionDetailSummary({ position }: { position: InvestingPositionDetail
       : value.toLocaleString("en-GB", {
           style: "percent",
           maximumFractionDigits: 1,
-          signDisplay: "always",
+          signDisplay: "exceptZero",
         });
   const available = position.returnStatus === "available";
   const brokerUnrealized = position.returnStatus === "broker-unrealized";
@@ -1376,7 +1354,7 @@ function PositionDetailSummary({ position }: { position: InvestingPositionDetail
               )}
             </dd>
             {position.priceStatus === "forward-filled" && position.quoteDate && (
-              <p className="mt-1 text-xs text-warning">Estimated price of {position.quoteDate}</p>
+              <p className="mt-1 text-xs text-warning">Estimated from the {shortDate(position.quoteDate)} price</p>
             )}
           </div>
         )}
@@ -1515,7 +1493,7 @@ function PositionDetailSummary({ position }: { position: InvestingPositionDetail
       </dl>
       {position.firstBuyDate && (
         <p className="mt-5 border-t border-border pt-4 text-sm text-muted-foreground">
-          Since first purchase:{" "}
+          Since first purchase on {shortDate(position.firstBuyDate)}:{" "}
           <strong
             className={
               position.returns.sinceFirstBuyPercentage === null
@@ -1526,8 +1504,7 @@ function PositionDetailSummary({ position }: { position: InvestingPositionDetail
             }
           >
             {percent(position.returns.sinceFirstBuyPercentage)}
-          </strong>{" "}
-          since {position.firstBuyDate}
+          </strong>
         </p>
       )}
       {quantityOpen && (

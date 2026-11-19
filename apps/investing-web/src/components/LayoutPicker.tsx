@@ -1,10 +1,9 @@
 import { HOME_MODULE, MODULES, WIDGETS } from "../lib/investingRegistry.js";
+import { Switch } from "./ui/switch.js";
 import type { InvestingModuleId, InvestingWidgetId } from "@lavega/core";
 
 /* One row per module or widget: preview, label, one line, switch. Mirrors
- * apps/web/src/components/ModulePicker.tsx's row shape, hand-rolled as a
- * role="switch" button rather than a new shadcn Switch import — investing-web
- * has no Switch component yet and one control does not earn a new dependency. */
+ * apps/web/src/components/ModulePicker.tsx's row shape. */
 
 /* `onChange` reports only the switch that moved, so a caller saves that one
  * choice instead of re-stating every id (which would pin today's defaults
@@ -23,35 +22,7 @@ type LayoutPickerProps =
       disabled?: boolean;
     };
 
-export function Switch({
-  on,
-  disabled,
-  label,
-  onToggle,
-}: {
-  on: boolean;
-  disabled?: boolean;
-  label: string;
-  onToggle: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={on}
-      aria-label={label}
-      disabled={disabled}
-      aria-disabled={disabled}
-      onClick={onToggle}
-      className={`relative h-6 w-11 shrink-0 rounded-pill border border-border transition-colors disabled:opacity-60 ${on ? "bg-accent" : "bg-secondary"}`}
-    >
-      <span
-        aria-hidden="true"
-        className={`absolute top-0.5 size-5 rounded-pill bg-foreground transition-transform ${on ? "translate-x-5" : "translate-x-0.5"}`}
-      />
-    </button>
-  );
-}
+export { Switch };
 
 export function LayoutPicker(props: LayoutPickerProps) {
   if (props.kind === "module") {

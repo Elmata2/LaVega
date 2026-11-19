@@ -7,6 +7,8 @@ import type {
   TaxTreatment,
 } from "@lavega/core";
 import { formatMoney } from "../lib/portfolioFigures.js";
+import { count } from "../lib/utils.js";
+import { shortDate } from "../lib/dates.js";
 
 /** The wrapper choices the select offers. The label names the account type; it
  *  is account metadata, not a tax calculation. */
@@ -127,7 +129,7 @@ function Summary({ report }: { report: RealizedIncomeReportData }) {
     {
       label: "Realised gain",
       value: money(realised, report.currency, "always"),
-      note: unknownDisposals > 0 ? `${unknownDisposals} disposal(s) unknown` : null,
+      note: unknownDisposals > 0 ? `${count(unknownDisposals, "disposal")} unknown` : null,
     },
     {
       label: "Unrealised gain",
@@ -165,7 +167,7 @@ export function RealizedReport({
       <div className="rounded-card border border-border bg-card p-5 sm:p-6">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
           <h1 className="font-display text-4xl">Realised gains and income</h1>
-          <p className="text-sm text-muted-foreground">As of {report.asOf}</p>
+          <p className="text-sm text-muted-foreground">As of {shortDate(report.asOf)}</p>
         </div>
         <p className="mt-3 text-sm text-muted-foreground" role="note">
           {report.notice}

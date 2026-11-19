@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Segmented } from "./ui/segmented.js";
 import {
   fetchMemory,
   RISK_TOLERANCE_LABELS,
@@ -224,20 +225,13 @@ export function AgentMemorySection() {
               <p className="text-sm text-muted-foreground">
                 Every agent reads this before it answers.
               </p>
-              <div role="radiogroup" aria-label="Risk tolerance" className="mt-3 flex gap-2">
-                {LEVELS.map((level) => (
-                  <button
-                    key={level}
-                    type="button"
-                    role="radio"
-                    aria-checked={memory.riskTolerance === level}
-                    onClick={() => void chooseRisk(level)}
-                    className={`pressable rounded-pill border px-3 py-1.5 text-sm font-semibold transition-colors ${memory.riskTolerance === level ? "border-accent bg-accent text-accent-foreground" : "border-border hover:bg-secondary"}`}
-                  >
-                    {RISK_TOLERANCE_LABELS[level]}
-                  </button>
-                ))}
-              </div>
+              <Segmented
+                label="Risk tolerance"
+                value={memory.riskTolerance}
+                options={LEVELS.map((level) => ({ value: level, label: RISK_TOLERANCE_LABELS[level] }))}
+                onValueChange={(level) => void chooseRisk(level)}
+                className="mt-3"
+              />
               {riskError && (
                 <p role="alert" className="mt-2 text-xs text-negative">
                   {riskError}

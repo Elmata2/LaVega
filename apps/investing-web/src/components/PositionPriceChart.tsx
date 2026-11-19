@@ -12,7 +12,7 @@ import {
 import { EmptyState } from "./EmptyState";
 import { LineSwatch, Swatch } from "./Swatch";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
-import { segmentedItem, segmentedTrack } from "./ui/segmented";
+import { Segmented } from "./ui/segmented";
 import { axisTick, ChartContainer } from "./ui/chart";
 import { chartRanges, positionPointsForRange, useChartWindow } from "./useChartWindow";
 import { shortDate } from "../lib/dates.js";
@@ -162,28 +162,16 @@ export function PositionPriceChart({
   return (
     <Card>
       <CardHeader gap="wide" className="sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <p className="text-sm font-medium text-muted-foreground">Price history</p>
-          <CardTitle>{symbol}</CardTitle>
-        </div>
-        <div role="group" aria-label="Choose period" className={segmentedTrack}>
-          {chartRanges.map((range) => (
-            <button
-              key={range.value}
-              type="button"
-              aria-pressed={chart.window.kind === "preset" && chart.window.range === range.value}
-              onClick={() => {
-                chart.applyPreset(range.value);
-                setActiveEventDate(null);
-              }}
-              className={segmentedItem(
-                chart.window.kind === "preset" && chart.window.range === range.value,
-              )}
-            >
-              {range.label}
-            </button>
-          ))}
-        </div>
+        <CardTitle>Price history</CardTitle>
+        <Segmented
+          label="Choose period"
+          value={chart.window.kind === "preset" ? chart.window.range : null}
+          options={chartRanges}
+          onValueChange={(range) => {
+            chart.applyPreset(range);
+            setActiveEventDate(null);
+          }}
+        />
       </CardHeader>
       <CardContent>
         {all.length === 0 ? (
