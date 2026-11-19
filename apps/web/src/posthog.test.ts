@@ -19,6 +19,11 @@ describe("postHogOptions", () => {
     expect(out?.properties).toEqual({ $lib: "web" });
   });
 
+  test("before_send keeps the project token, which ingest needs as the batch api_key", () => {
+    const out = beforeSend(capture({ $lib: "web", token: "phc_public_project_key" }));
+    expect(out?.properties.token).toBe("phc_public_project_key");
+  });
+
   test("before_send passes a dropped capture through as null", () => {
     expect(beforeSend(null)).toBeNull();
   });
