@@ -52,6 +52,9 @@ const ALLOWED = new Set<string>([
   "$geoip_disable",
   "$process_person_profile",
   "distinct_id",
+  /* The public project key. posthog-js reads the batch `api_key` from
+   * `properties.token`; without it ingest rejects every event. */
+  "token",
   // Eigen eventeigenschappen, uit de capture()-aanroepen in de app.
   "direction",
   "duplicate",
