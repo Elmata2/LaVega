@@ -183,6 +183,9 @@ export function AllocationDonut({
   );
   const display = buildDisplayBuckets(priced);
   const percentages = apportionPercentages(display.map((bucket) => bucket.value));
+  const [active, setActive] = useState<number | null>(null);
+  const total = display.reduce((sum, bucket) => sum + bucket.value, 0);
+  const focused = active === null ? null : (display[active] ?? null);
 
   return (
     <Card>
@@ -195,6 +198,7 @@ export function AllocationDonut({
           onValueChange={(next) => {
             setGroup(next);
             setShowOverige(false);
+            setActive(null);
           }}
         />
       </CardHeader>
@@ -230,14 +234,49 @@ export function AllocationDonut({
                        * forces a re-render. A static allocation snapshot has
                        * nothing to gain from sweeping anyway. */
                       isAnimationActive={false}
+                      onMouseEnter={(_, index) => setActive(index)}
+                      onMouseLeave={() => setActive(null)}
+                      onClick={(_, index) =>
+                        setActive((current) => (current === index ? null : index))
+                      }
                     >
-                      {display.map((bucket) => (
-                        <Cell key={bucket.key} fill={bucket.color} />
+                      {display.map((bucket, index) => (
+                        <Cell
+                          key={bucket.key}
+                          fill={bucket.color}
+                          className="cursor-pointer transition-opacity duration-150 ease-out motion-reduce:transition-none"
+                          opacity={active === null || active === index ? 1 : 0.35}
+                        />
                       ))}
                     </Pie>
                   </PieChart>
                 </ChartContainer>
-              ) : (
+              ) : null}
+              {focused && total > 0 && (
+                <div
+                  aria-hidden="true"
+                  className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center text-center"
+                >
+                  <span className="max-w-[96px] truncate text-xs text-muted-foreground">
+                    {focused.label}
+                  </span>
+                  <span className="text-xl font-semibold tabular-nums">
+                    {((focused.value / total) * 100).toLocaleString("en-GB", {
+                      minimumFractionDigits: 1,
+                      maximumFractionDigits: 1,
+                    })}
+                    %
+                  </span>
+                  <span className="text-xs text-muted-foreground tabular-nums">
+                    {focused.value.toLocaleString("en-GB", {
+                      style: "currency",
+                      currency,
+                      maximumFractionDigits: 0,
+                    })}
+                  </span>
+                </div>
+              )}
+              {display.length === 0 && (
                 <div className="mx-auto flex size-[180px] items-center justify-center rounded-full border-22 border-secondary text-center text-xs text-muted-foreground">
                   Not priced
                 </div>
@@ -245,7 +284,12 @@ export function AllocationDonut({
             </div>
             <ul aria-label="Allocation details" className="space-y-3 text-sm">
               {display.map((bucket, index) => (
-                <li key={bucket.key}>
+                <li
+                  key={bucket.key}
+                  onMouseEnter={() => setActive(index)}
+                  onMouseLeave={() => setActive(null)}
+                  className={`transition-opacity duration-150 ease-out motion-reduce:transition-none ${active === null || active === index ? "" : "opacity-50"}`}
+                >
                   <div className="flex items-center justify-between gap-3">
                     <span className="flex min-w-0 items-center gap-2">
                       <Swatch className="size-2 shrink-0 rounded-full" color={bucket.color} />
