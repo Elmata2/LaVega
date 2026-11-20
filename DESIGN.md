@@ -153,9 +153,9 @@ Two themes, same type, radii and components; only color tokens change. Dark is t
 
 **Switch.** An icon button (`ThemeToggle`, `role="switch"`, `aria-checked` = light is on, fixed accessible name "Light theme", tooltip names the action) sits in the top bar before the Profile button, 44px target. Sign-in and sign-up have no toggle; they follow the stored choice.
 
-**Persistence.** `localStorage["lavega-investing-theme"]` = `"dark"` or `"light"`. Every access is in try/catch; missing or blocked storage means dark, and a toggle still works in memory for that page view. Logic: `src/lib/theme.ts`.
+**Persistence.** `localStorage["lavega-investing-theme"]` = `"dark"` or `"light"`. Every access is in try/catch; missing or blocked storage means dark, and a toggle still works in memory for that page view. Logic: `apps/investing-web/src/lib/theme.ts`.
 
-**No flash.** `public/theme-init.js` is a classic external script in `<head>` (CSP `script-src 'self'` forbids inline). It sets `document.documentElement.dataset.theme` and `style.colorScheme` before first paint. Vite rewrites its `src` with the build `base` (`/theme-init.js` standalone, `/investing/theme-init.js` when `VITE_INVESTING_BASE=/investing/`). The script duplicates the key and fallback of `theme.ts`; a test runs the real file.
+**No flash.** `apps/investing-web/public/theme-init.js` is a classic external script in `<head>` (CSP `script-src 'self'` forbids inline). It sets `document.documentElement.dataset.theme` and `style.colorScheme` before first paint. Vite rewrites its `src` with the build `base` (`/theme-init.js` standalone, `/investing/theme-init.js` when `VITE_INVESTING_BASE=/investing/`). The script duplicates the key and fallback of `theme.ts`; a test runs the real file.
 
 **Tokens.** Dark values live on `:root`; light overrides on `:root[data-theme="light"]` (with `color-scheme: light`). Same HSL-triplet format.
 
@@ -267,8 +267,8 @@ Serif wordmark and a small "Investing" in Mist, a serif headline ("Every broker.
 
 Interactive widgets come from `@ui-sdk/react` (pinned to an exact beta version), styled with Tailwind from its `data-*` state attributes. `web.css` is not imported; this file owns the look. `@layer ui-sdk;` sits above the Tailwind import in `tokens.css`. Do not hand-roll a `role="switch"`, `"tablist"` or `"radiogroup"`.
 
-- **Switch** (`components/ui/switch.tsx`): 44x24 pill, Surface 2 track off, blue track on, `bg-foreground` thumb sliding 20px. Disabled at 60% opacity.
-- **Segmented** (`components/ui/segmented.tsx`): every period, grouping and risk-tolerance picker. Surface 2 track with a white pill indicator that slides behind the checked item (200ms, ease-out, off under reduced motion). On phones it scrolls sideways instead of wrapping.
+- **Switch** (`apps/investing-web/src/components/ui/switch.tsx`): 44x24 pill, Surface 2 track off, blue track on, `bg-foreground` thumb sliding 20px. Disabled at 60% opacity.
+- **Segmented** (`apps/investing-web/src/components/ui/segmented.tsx`): every period, grouping and risk-tolerance picker. Surface 2 track with a white pill indicator that slides behind the checked item (200ms, ease-out, off under reduced motion). On phones it scrolls sideways instead of wrapping.
 - **Tabs**: broker setup on Profile. Panels stay mounted.
 - **Native selects** keep the native popup but share one muted chevron (`--select-chevron`, per theme) and 2.25rem end padding.
 
@@ -292,7 +292,7 @@ Auth fade 180ms `cubic-bezier(0.23, 1, 0.32, 1)`; button press 150ms ease-out; s
 - **Do** keep coral for the single filled CTA and blue for links, active state and focus.
 - **Do** separate panels with tone and the 12% white hairline.
 - **Do** show unknown figures as "Unknown" with a reason, never as zero.
-- **Do** keep serif headings at `line-height: 1.18` with `0.01em` tracking, and build hierarchy from size alone.
+- **Do** keep serif headings at `line-height: 1.12` with `0` tracking, and build hierarchy from size alone.
 - **Do** honor `prefers-reduced-motion` for all animation and transitions.
 - **Do** use the semantic radius tokens (card, tile, chip, pill, frame), not ad hoc values.
 - **Do** run `check-contrast.mjs` after any palette change; every text token stays at or above 4.5:1 on midnight, surface and surface-2.
