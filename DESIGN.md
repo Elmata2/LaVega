@@ -23,20 +23,20 @@ typography:
     fontFamily: "Instrument Serif, Georgia, serif"
     fontSize: "3.75rem"
     fontWeight: 400
-    lineHeight: 1.18
-    letterSpacing: "0.01em"
+    lineHeight: 1.12
+    letterSpacing: "0"
   headline:
     fontFamily: "Instrument Serif, Georgia, serif"
     fontSize: "1.875rem"
     fontWeight: 400
-    lineHeight: 1.18
-    letterSpacing: "0.01em"
+    lineHeight: 1.12
+    letterSpacing: "0"
   title:
     fontFamily: "Instrument Serif, Georgia, serif"
     fontSize: "1.5rem"
     fontWeight: 400
-    lineHeight: 1.18
-    letterSpacing: "0.01em"
+    lineHeight: 1.12
+    letterSpacing: "0"
   figure:
     fontFamily: "Geist, system-ui, sans-serif"
     fontSize: "3rem"
