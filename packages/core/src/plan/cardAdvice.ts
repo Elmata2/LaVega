@@ -5,6 +5,7 @@ import {
 } from "../accountCosts.js";
 import { isIsoDate, daysBetween } from "../advisor/months.js";
 import type { CardBalance, CardRepayment } from "../advisor/profile.js";
+import { mayAssumeNoCashback } from "../assumedCashback.js";
 import { isCovered, type CatalogValue } from "../catalog.js";
 import type { CatalogueEntryLike } from "../catalogRates.js";
 import { norm } from "../hash.js";
@@ -79,6 +80,8 @@ export type NotComparableReason =
   | "fx-unknown"
   | "points-unknown"
   | "points-unvalued"
+  /** No covered cashback figure and no typed assumed zero: unknown is never zero. */
+  | "cashback-unknown"
   /** Blockers of the baseline only: the card is not a consumer card in the catalogue. */
   | "not-in-catalogue";
 
@@ -151,7 +154,10 @@ export type CardOption = {
   /** The catalogue percentages the cents above were computed from (percentage points). */
   fxFeePct: number | null;
   fxCostCents: number | null;
-  /** null: the catalogue has no covered cashback figure (not counted, not zero). */
+  /** measured: covered catalogue figure (a covered 0 counts). assumed: typed zero of
+   *  assumedCashback.ts, counted as 0. unknown: no figure, card not ranked. */
+  cashbackTier: "measured" | "assumed" | "unknown";
+  /** null only when the tier is unknown. */
   cashbackPct: number | null;
   cashbackCents: number | null;
   pointsPerEuro: number | null;
@@ -188,15 +194,35 @@ export type CardAdviceSpend = {
 };
 
 /** A card of the user that cannot be put on the comparison, and why. */
-export type BaselineBlocker = { name: string | null; reasons: NotComparableReason[] };
+export type BaselineBlocker = {
+  name: string | null;
+  reasons: NotComparableReason[];
+  /** Set for a connected card the app could not identify: the account to ask about. */
+  accountKey?: string;
+};
 
 export type Baseline =
   | { kind: "best-held"; cardId: string; name: string; netCents: number }
   | { kind: "no-card"; netCents: 0 }
   | { kind: "unknown"; blockers: BaselineBlocker[] };
 
+/** What a switch gain is made of, in integer cents. The four cents parts add up to
+ *  the gain exactly; each is the best card's figure minus the baseline's (a no-card
+ *  baseline counts as all zero). */
+export type GainParts = {
+  pointsCents: number;
+  cashbackCents: number;
+  /** Positive = the best card's fee is lower. */
+  feeCents: number;
+  /** Positive = the best card's FX cost is lower. */
+  fxCents: number;
+  /** Whose value per point priced the best card's points; null when pointsCents is 0. */
+  pointsBasis: "own-examples" | "reference" | null;
+  centsPerPoint: number | null;
+};
+
 export type Verdict =
-  | { kind: "switch"; best: CardOption; gainCents: number }
+  | { kind: "switch"; best: CardOption; gainCents: number; parts: GainParts }
   | { kind: "keep"; gainCents: number }
   | { kind: "no-card-worth-it" }
   | { kind: "unknown-baseline" }
@@ -249,6 +275,9 @@ export type PointsAdvice = {
 
 export type CardAdvice = {
   state: "ok" | "no-spend" | "short-history";
+  /** Where the spend came from: the user's transactions, or his own wizard answers
+   *  (used only while there are too few full months of transactions). */
+  basis: "history" | "stated";
   spend: CardAdviceSpend & { annualCents: number; annualForeignCents: number };
   baseline: Baseline;
   verdict: Verdict;
@@ -289,12 +318,17 @@ export type CardAdviceInput = {
   heldIds: readonly string[];
   /** The user also stated a card that is not in the catalogue. */
   hasOtherCard: boolean;
+  /** Connected credit cards no catalogue row was found for. Each blocks the baseline. */
+  unidentifiedCards?: readonly { accountKey: string; label: string }[];
   cardBalances: readonly CardBalance[];
   cardRepayment: CardRepayment | null;
   rewards: readonly RewardsBalance[];
   preferences: PlanPreferences;
   rates: readonly RateBenchmark[];
   buffer: BufferInput;
+  /** The wizard's yearly spend and foreign share (0 to 1), used only while history is
+   *  shorter than `CARD_ADVICE_MIN_MONTHS`. */
+  statedSpend?: { annualCents: number; foreignShare: number } | null;
   asOf: string;
 };
 
@@ -387,10 +421,18 @@ function optionFor(
 
   const cb = coveredNumber(e, "cashbackPct");
   let cashbackCents: number | null = null;
+  let cashbackPct: number | null = null;
+  let cashbackTier: CardOption["cashbackTier"] = "unknown";
   if (cb !== null) {
+    cashbackTier = "measured";
+    cashbackPct = cb.value;
     cashbackCents = Math.round((annualCents * cb.value) / 100);
     sources.push({ field: "cashback", asOf: cb.checkedAt, sourceUrl: cb.sourceUrl });
-  }
+  } else if (mayAssumeNoCashback(e.issuer ?? "", e.kind ?? "", e.product).ok) {
+    cashbackTier = "assumed";
+    cashbackPct = 0;
+    cashbackCents = 0;
+  } else reasons.push("cashback-unknown");
 
   const ppe = coveredNumber(e, "pointsPerEuro");
   const programName = programForCard(e.id);
@@ -424,9 +466,10 @@ function optionFor(
   // is a guessed zero, so it is left out of the comparison instead.
   if (held && pointsUnvalued) reasons.push("points-unvalued");
   const comparable = reasons.length === 0;
-  const netCents = comparable
-    ? (pointsValueCents ?? 0) + (cashbackCents ?? 0) - (feeCents ?? 0) - (fxCostCents ?? 0)
-    : null;
+  const netCents =
+    comparable && cashbackCents !== null
+      ? (pointsValueCents ?? 0) + cashbackCents - (feeCents ?? 0) - (fxCostCents ?? 0)
+      : null;
   return {
     cardId: e.id,
     name: e.product,
@@ -439,7 +482,8 @@ function optionFor(
     feeConditions: fee?.conditions ?? null,
     fxFeePct: fx?.value ?? null,
     fxCostCents,
-    cashbackPct: cb?.value ?? null,
+    cashbackTier,
+    cashbackPct,
     cashbackCents,
     pointsPerEuro: ppe?.value ?? null,
     pointsEarned,
@@ -540,20 +584,26 @@ function interestAdvice(
 
 export function computeCardAdvice(i: CardAdviceInput): CardAdvice {
   const { spend } = i;
+  const short = spend.months < CARD_ADVICE_MIN_MONTHS;
+  const stated = short && i.statedSpend != null && i.statedSpend.annualCents > 0 ? i.statedSpend : null;
+  const basis: CardAdvice["basis"] = stated === null ? "history" : "stated";
+  const share = stated === null || !Number.isFinite(stated.foreignShare)
+    ? 0
+    : Math.min(1, Math.max(0, stated.foreignShare));
   const annualCents =
-    spend.months >= CARD_ADVICE_MIN_MONTHS
-      ? Math.round((spend.windowCents * FULL_YEAR_MONTHS) / spend.months)
-      : 0;
+    stated !== null
+      ? stated.annualCents
+      : short
+        ? 0
+        : Math.round((spend.windowCents * FULL_YEAR_MONTHS) / spend.months);
   const annualForeignCents =
-    spend.months >= CARD_ADVICE_MIN_MONTHS
-      ? Math.round((spend.foreignCents * FULL_YEAR_MONTHS) / spend.months)
-      : 0;
+    stated !== null
+      ? Math.round(stated.annualCents * share)
+      : short
+        ? 0
+        : Math.round((spend.foreignCents * FULL_YEAR_MONTHS) / spend.months);
   const state: CardAdvice["state"] =
-    spend.months < CARD_ADVICE_MIN_MONTHS
-      ? "short-history"
-      : annualCents <= 0
-        ? "no-spend"
-        : "ok";
+    stated !== null ? "ok" : short ? "short-history" : annualCents <= 0 ? "no-spend" : "ok";
 
   // Debit cards found in the bank data are not part of a credit-card comparison.
   const heldIds = i.heldIds.filter((id) => {
@@ -584,14 +634,35 @@ export function computeCardAdvice(i: CardAdviceInput): CardAdvice {
     else if (!o.comparable) blockers.push({ name: o.name, reasons: o.reasons });
   }
   if (i.hasOtherCard) blockers.push({ name: null, reasons: ["not-in-catalogue"] });
+  const unidentified = i.unidentifiedCards ?? [];
+  for (const u of unidentified)
+    blockers.push({ name: u.label, reasons: ["not-in-catalogue"], accountKey: u.accountKey });
   const heldOptions = options.filter((o) => o.held);
   let baseline: Baseline;
-  if (heldIds.length === 0 && !i.hasOtherCard) baseline = { kind: "no-card", netCents: 0 };
+  if (heldIds.length === 0 && !i.hasOtherCard && unidentified.length === 0) baseline = { kind: "no-card", netCents: 0 };
   else if (blockers.length > 0 || heldOptions.length === 0) baseline = { kind: "unknown", blockers };
   else {
     const top = heldOptions[0]!;
     baseline = { kind: "best-held", cardId: top.cardId, name: top.name, netCents: top.netCents! };
   }
+
+  const partsOf = (best: CardOption, base: CardOption | null): GainParts => {
+    const pointsCents = (best.pointsValueCents ?? 0) - (base?.pointsValueCents ?? 0);
+    // The basis describes the points the best card earns. When the points part is not a
+    // gain (zero, or the held card earns more), there is no points line to explain.
+    const valuation =
+      pointsCents <= 0 || best.programId === null || best.centsPerPoint === null
+        ? null
+        : pointValuation(best.programId, i.preferences);
+    return {
+      pointsCents,
+      cashbackCents: (best.cashbackCents ?? 0) - (base?.cashbackCents ?? 0),
+      feeCents: (base?.feeCents ?? 0) - (best.feeCents ?? 0),
+      fxCents: (base?.fxCostCents ?? 0) - (best.fxCostCents ?? 0),
+      pointsBasis: valuation?.basis ?? null,
+      centsPerPoint: valuation === null ? null : best.centsPerPoint,
+    };
+  };
 
   let verdict: Verdict;
   const best = options[0];
@@ -604,8 +675,12 @@ export function computeCardAdvice(i: CardAdviceInput): CardAdvice {
       Math.round(CARD_ADVICE_MIN_GAIN_SHARE * Math.abs(baseline.netCents)),
     );
     if (baseline.kind === "no-card")
-      verdict = gainCents >= need ? { kind: "switch", best, gainCents } : { kind: "no-card-worth-it" };
-    else if (!best.held && gainCents >= need) verdict = { kind: "switch", best, gainCents };
+      verdict =
+        gainCents >= need
+          ? { kind: "switch", best, gainCents, parts: partsOf(best, null) }
+          : { kind: "no-card-worth-it" };
+    else if (!best.held && gainCents >= need)
+      verdict = { kind: "switch", best, gainCents, parts: partsOf(best, heldOptions[0]!) };
     else verdict = { kind: "keep", gainCents };
   }
 
@@ -638,6 +713,7 @@ export function computeCardAdvice(i: CardAdviceInput): CardAdvice {
 
   return {
     state,
+    basis,
     spend: { ...spend, annualCents, annualForeignCents },
     baseline,
     verdict,

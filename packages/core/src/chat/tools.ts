@@ -755,7 +755,9 @@ function planSummary(view: VaultView): ChatEnvelope {
       : [null, null];
   const rate = month.figures.savingsRate;
   const offer = cardOfferOf(plan, view.asOf);
-  const inUse = cards.nets.find((n) => n.cardKey === cards.cardInUseKey);
+  // The card in use is the verdict's own baseline, so it cannot disagree with the offer.
+  const baseline = cards.advice?.baseline;
+  const inUseName = baseline?.kind === "best-held" ? baseline.name : null;
   return envelope(view, {
     coverage: null,
     data: {
@@ -778,9 +780,12 @@ function planSummary(view: VaultView): ChatEnvelope {
         gapMonths: buffer.figures.gapMonths,
       },
       cards: {
-        inUse: inUse ? cleanName(inUse.name, NAME_MAX) : null,
+        inUse: inUseName ? cleanName(inUseName, NAME_MAX) : null,
         betterCard: offer ? cleanName(offer.name, NAME_MAX) : null,
         yearlyGain: offer ? money(view, offer.yearlyGainCents) : null,
+        // An estimate over a year: fee, currency costs, cashback and the value of points
+        // together. Not money paid out.
+        yearlyGainBasis: offer ? "estimate-incl-points-value" : null,
       },
     },
   });

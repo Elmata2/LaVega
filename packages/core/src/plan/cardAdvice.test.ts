@@ -30,10 +30,13 @@ const entry = (
     ppe?: number;
     cb?: number;
     uncoveredFx?: boolean;
+    /** Default: an ordinary Dutch issuer, so a missing cashback is the typed assumed zero. */
+    issuer?: string;
   },
 ): CatalogueEntryLike => ({
   id,
   product: id.toUpperCase(),
+  issuer: o.issuer ?? "ING Bank N.V.",
   kind: "creditcard",
   fields: {
     ...(o.fee === undefined ? {} : { accountFee: cv(o.fee[0], { period: o.fee[1] }) }),
@@ -181,6 +184,60 @@ describe("net yearly value per catalogue card", () => {
       computeCardAdvice(input({ spend: { ...SPEND, windowCents: 0, foreignCents: 0 } })).state,
     ).toBe("no-spend");
     expect(computeCardAdvice(input({ spend: { ...SPEND, months: 2 } })).options).toEqual([]);
+  });
+});
+
+describe("stated spend when history is short", () => {
+  const SHORT = { ...SPEND, months: 1, windowCents: 100_000, foreignCents: 0 };
+  const STATED = { annualCents: 1_200_000, foreignShare: 0.1 };
+
+  test("short history with stated spend gives a verdict marked stated", () => {
+    const a = computeCardAdvice(input({ spend: SHORT, statedSpend: STATED }));
+    expect(a.basis).toBe("stated");
+    expect(a.state).toBe("ok");
+    expect(a.spend.annualCents).toBe(1_200_000);
+    expect(a.spend.annualForeignCents).toBe(120_000);
+    expect(a.verdict.kind).not.toBe("no-options");
+    expect(a.options.length).toBeGreaterThan(0);
+  });
+
+  test("short history with no stated spend stays short-history", () => {
+    for (const statedSpend of [undefined, null, { annualCents: 0, foreignShare: 0.1 }]) {
+      const a = computeCardAdvice(input({ spend: SHORT, statedSpend }));
+      expect(a.basis).toBe("history");
+      expect(a.state).toBe("short-history");
+      expect(a.options).toEqual([]);
+    }
+  });
+
+  test("three full months ignore the stated spend", () => {
+    const a = computeCardAdvice(
+      input({ spend: { ...SPEND, months: 3, windowCents: 300_000 }, statedSpend: STATED }),
+    );
+    expect(a.basis).toBe("history");
+    expect(a.spend.annualCents).toBe(1_200_000);
+    expect(a.spend.annualForeignCents).toBe(240_000);
+  });
+
+  test("stated spend with foreign share 0 has fxCostCents 0 on every option", () => {
+    const a = computeCardAdvice(
+      input({ spend: SHORT, statedSpend: { annualCents: 1_200_000, foreignShare: 0 } }),
+    );
+    expect(a.basis).toBe("stated");
+    expect(a.spend.annualForeignCents).toBe(0);
+    for (const o of [...a.options, ...a.notComparable])
+      expect(o.fxCostCents === null || o.fxCostCents === 0).toBe(true);
+    const nums = JSON.stringify(a, (_k, v) => (typeof v === "number" && !Number.isFinite(v) ? "BAD" : v));
+    expect(nums).not.toContain("BAD");
+  });
+
+  test("a foreign share outside 0..1 or not finite is clamped", () => {
+    const at = (foreignShare: number) =>
+      computeCardAdvice(input({ spend: SHORT, statedSpend: { annualCents: 1_000_000, foreignShare } }))
+        .spend.annualForeignCents;
+    expect(at(2)).toBe(1_000_000);
+    expect(at(-1)).toBe(0);
+    expect(at(Number.NaN)).toBe(0);
   });
 });
 
@@ -576,12 +633,37 @@ describe("carriesCardDebt", () => {
 describe("real catalogue", () => {
   type Raw = { id: string; kind: string; fields?: { accountFee?: { conditions?: string | null } } };
   const entries = (catalog as unknown as { entries: CatalogueEntryLike[] }).entries;
+  // The eight American Express consumer rows carry a measured 0% cashback (owner decision,
+  // 21 Nov 2026: the reward on spending is points or Miles, not cashback), so the golden
+  // numbers below come from the unmodified catalogue.
+  const withMeasuredZeroCashback = entries;
+
+  test("American Express consumer rows state a measured 0% cashback and are ranked", () => {
+    const a = computeCardAdvice(
+      input({
+        catalogue: entries,
+        spend: { windowCents: 1_369_240, months: 6, foreignCents: 0, excludedForeignCount: 0 },
+      }),
+    );
+    const amex = entries.filter(
+      (e) => e.kind === "creditcard" && /american-express/.test(e.id) && !/business|corporate/.test(e.id),
+    );
+    expect(amex).toHaveLength(8);
+    for (const e of amex) {
+      const o = [...a.options, ...a.notComparable].find((x) => x.cardId === e.id);
+      expect(o?.cashbackTier, e.id).toBe("measured");
+      expect(o?.cashbackCents, e.id).toBe(0);
+      expect(o?.reasons, e.id).not.toContain("cashback-unknown");
+    }
+    for (const id of ["american-express-blue-card", "american-express-gold-card"])
+      expect(a.options.find((o) => o.cardId === id), id).toBeDefined();
+  });
 
   test("golden: the evidence example (Amex Blue +41,08, Gold -157,84) and the switch verdict", () => {
     // EUR 13.692,40 over 6 full months, all in euro: EUR 27.384,80 a year.
     const a = computeCardAdvice(
       input({
-        catalogue: entries,
+        catalogue: withMeasuredZeroCashback,
         spend: { windowCents: 1_369_240, months: 6, foreignCents: 0, excludedForeignCount: 0 },
         heldIds: ["american-express-gold-card"],
       }),
@@ -598,11 +680,33 @@ describe("real catalogue", () => {
   test("golden: the same user spending EUR 2.400 a year no longer gets Blue for free", () => {
     const a = computeCardAdvice(
       input({
-        catalogue: entries,
+        catalogue: withMeasuredZeroCashback,
         spend: { windowCents: 120_000, months: 6, foreignCents: 0, excludedForeignCount: 0 },
       }),
     );
     expect(a.options.find((o) => o.cardId === "american-express-blue-card")!.feeCents).toBe(3_500);
+  });
+
+  test("switch: the parts add up to the gain, over the real catalogue", () => {
+    let switches = 0;
+    for (const cat of [entries, withMeasuredZeroCashback])
+      for (const annual of [600_000, 2_400_000, 6_000_000])
+        for (const heldIds of [[], ["ics-mastercard-classic"]]) {
+          const a = computeCardAdvice(
+            input({
+              catalogue: cat,
+              heldIds,
+              spend: { windowCents: annual / 2, months: 6, foreignCents: annual / 20, excludedForeignCount: 0 },
+            }),
+          );
+          if (a.verdict.kind !== "switch") continue;
+          switches++;
+          const p = a.verdict.parts;
+          expect(p.pointsCents + p.cashbackCents + p.feeCents + p.fxCents).toBe(a.verdict.gainCents);
+          for (const v of [p.pointsCents, p.cashbackCents, p.feeCents, p.fxCents])
+            expect(Number.isInteger(v)).toBe(true);
+        }
+    expect(switches).toBeGreaterThan(0);
   });
 
   test("every consumer card whose fee text carries a condition is in FEE_CONDITIONS", () => {
@@ -619,5 +723,157 @@ describe("real catalogue", () => {
   test("every FEE_CONDITIONS id exists in the catalogue", () => {
     const ids = new Set(entries.map((e) => e.id));
     expect(Object.keys(FEE_CONDITIONS).filter((id) => !ids.has(id))).toEqual([]);
+  });
+});
+
+describe("cashback has three states", () => {
+  const one = (id: string, issuer: string, cb?: number) =>
+    computeCardAdvice(
+      input({
+        catalogue: [
+          entry(id, { fee: [0, "jaar"], fx: 0, ppe: 0, issuer, ...(cb === undefined ? {} : { cb }) }),
+        ],
+      }),
+    );
+  test("cashback: a covered 0 is measured and the card stays ranked", () => {
+    const o = find(one("zero-cb", "Foo Bank", 0), "zero-cb");
+    expect(o).toMatchObject({ cashbackTier: "measured", cashbackPct: 0, cashbackCents: 0, comparable: true });
+    expect(o?.sources.some((s) => s.field === "cashback")).toBe(true);
+  });
+  test("cashback: an ordinary Dutch issuer with no figure gets the assumed zero", () => {
+    expect(find(one("plain", "ING Bank N.V."), "plain")).toMatchObject({
+      cashbackTier: "assumed",
+      cashbackPct: 0,
+      cashbackCents: 0,
+      comparable: true,
+    });
+  });
+  test("cashback: any other card with no figure is not ranked", () => {
+    const a = one("mystery", "Foo Bank");
+    expect(a.options.map((o) => o.cardId)).not.toContain("mystery");
+    const o = a.notComparable.find((x) => x.cardId === "mystery");
+    expect(o).toMatchObject({ cashbackTier: "unknown", cashbackPct: null, cashbackCents: null, netCents: null });
+    expect(o?.reasons).toContain("cashback-unknown");
+  });
+});
+
+describe("switch: what the gain is made of", () => {
+  test("switch: the parts add up to the gain", () => {
+    const a = computeCardAdvice(input({ heldIds: ["free-card"] }));
+    expect(a.verdict).toMatchObject({ kind: "switch", gainCents: 12_000 });
+    if (a.verdict.kind !== "switch") return;
+    // free-card and cashback-card both pay fx 2.400 and no fee; cashback-card adds 12.000 cashback.
+    expect(a.verdict.parts).toMatchObject({
+      pointsCents: 0,
+      cashbackCents: 12_000,
+      feeCents: 0,
+      fxCents: 0,
+      pointsBasis: null,
+      centsPerPoint: null,
+    });
+    const p = a.verdict.parts;
+    expect(p.pointsCents + p.cashbackCents + p.feeCents + p.fxCents).toBe(a.verdict.gainCents);
+  });
+
+  test("switch from a no-card baseline: parts equal the best card's own figures", () => {
+    const a = computeCardAdvice(input());
+    expect(a.baseline.kind).toBe("no-card");
+    if (a.verdict.kind !== "switch") throw new Error("expected a switch");
+    const b = a.verdict.best;
+    expect(a.verdict.parts).toMatchObject({
+      pointsCents: b.pointsValueCents ?? 0,
+      cashbackCents: b.cashbackCents,
+      feeCents: 0 - b.feeCents!,
+      fxCents: 0 - b.fxCostCents!,
+    });
+  });
+
+  test("switch away from a points card: the points part is negative and carries no basis", () => {
+    const a = computeCardAdvice(
+      input({
+        catalogue: [
+          entry("american-express-a", { fee: [100, "jaar"], fx: 0, ppe: 1 }),
+          entry("american-express-b", { fee: [0, "jaar"], fx: 0, ppe: 0 }),
+        ],
+        heldIds: ["american-express-a"],
+      }),
+    );
+    if (a.verdict.kind !== "switch") throw new Error("expected a switch");
+    const p = a.verdict.parts;
+    expect(p.pointsCents).toBeLessThan(0);
+    expect(p.pointsBasis).toBeNull();
+    expect(p.centsPerPoint).toBeNull();
+    expect(p.pointsCents + p.cashbackCents + p.feeCents + p.fxCents).toBe(a.verdict.gainCents);
+  });
+
+  test("switch on Amex points alone: pointsBasis is reference and centsPerPoint is 0.3", () => {
+    const a = computeCardAdvice(
+      input({
+        catalogue: [
+          entry("free-card", { fee: [0, "jaar"], fx: 0, ppe: 0 }),
+          entry("american-express-test-card", { fee: [0, "jaar"], fx: 0, ppe: 1 }),
+        ],
+        heldIds: ["free-card"],
+      }),
+    );
+    if (a.verdict.kind !== "switch") throw new Error("expected a switch");
+    expect(a.verdict.best.cardId).toBe("american-express-test-card");
+    expect(a.verdict.parts).toMatchObject({
+      pointsCents: 3_600,
+      cashbackCents: 0,
+      feeCents: 0,
+      fxCents: 0,
+      pointsBasis: "reference",
+      centsPerPoint: 0.3,
+    });
+    expect(a.verdict.gainCents).toBe(3_600);
+  });
+});
+
+describe("ING credit cards in the committed catalogue", () => {
+  const entries = (catalog as unknown as { entries: CatalogueEntryLike[] }).entries;
+  const ING_IDS = [
+    "ing-creditcard",
+    "ing-creditcard-more",
+    "ing-creditcard-extra",
+    "ing-creditcard-max",
+  ];
+  const spend = { windowCents: 1_200_000, months: 6, foreignCents: 0, excludedForeignCount: 0 };
+
+  test("an ING creditcard holder gets a verdict from the committed catalogue", () => {
+    const a = computeCardAdvice(input({ catalogue: entries, spend, heldIds: ["ing-creditcard"] }));
+    expect(a.spend.annualCents).toBe(2_400_000);
+    expect(a.verdict.kind).not.toBe("unknown-baseline");
+    expect(find(a, "ing-creditcard")?.comparable).toBe(true);
+  });
+
+  test("ING Creditcard More and Extra stay unranked: their package price is unknown", () => {
+    const a = computeCardAdvice(input({ catalogue: entries, spend }));
+    for (const id of ["ing-creditcard-more", "ing-creditcard-extra"]) {
+      const o = a.notComparable.find((x) => x.cardId === id);
+      expect(o?.reasons).toContain("fee-condition-unknown");
+      expect(o?.reasons).not.toContain("points-unknown");
+    }
+  });
+
+  test("ING Platinumcard keeps points unknown: the earn table does not name it", () => {
+    const row = entries.find((e) => e.id === "ing-platinumcard");
+    expect((row!.fields as Record<string, unknown>).pointsPerEuro).toBeUndefined();
+    const a = computeCardAdvice(input({ catalogue: entries, spend }));
+    expect(a.notComparable.find((x) => x.cardId === "ing-platinumcard")?.reasons).toContain(
+      "points-unknown",
+    );
+  });
+
+  test("every ING credit card row in the ING Punten earn table states 0 points per euro with a source", () => {
+    for (const id of ING_IDS) {
+      const row = entries.find((e) => e.id === id);
+      const f = (row!.fields as Record<string, { value: number; sourceUrl: string; checkedAt: string; conditionsKnown: boolean }>).pointsPerEuro;
+      expect(f, id).toBeDefined();
+      expect(f.value).toBe(0);
+      expect(f.conditionsKnown).toBe(true);
+      expect(f.sourceUrl).toMatch(/^https:\/\//);
+      expect(f.checkedAt).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    }
   });
 });

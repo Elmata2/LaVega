@@ -128,7 +128,8 @@ const withFee = (
   },
 });
 
-const CARD = offer({ pct: 2, kind: "creditcard" });
+/* A plain bank card: credit cards are not ranked here any more (the plan's verdict). */
+const CARD = offer({ pct: 2, kind: "betaalrekening" });
 
 const FACTS = [
   makeFact({

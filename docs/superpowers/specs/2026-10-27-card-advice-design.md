@@ -1,3 +1,5 @@
+Superseded in part by docs/superpowers/specs/2026-11-21-one-card-engine-design.md (21 Nov 2026): one engine for all surfaces, three-state cashback, stated-spend basis, Instinct offer from the verdict.
+
 # Card balances, points and card recommendations - design (27 Oct 2026)
 
 Owner words: "aan de hand van de kaarten vraag je de saldi op en maak je een aanbeveling welke kaarten

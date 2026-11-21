@@ -3,9 +3,6 @@ import type { Account } from "@lavega/core";
 import { CATALOGUE_ENTRIES } from "../catalogue-rates";
 import { buildHeldCards } from "./heldCards";
 import {
-  cardDebtStated,
-  cardDebtReason,
-  firstCreditCardApplies,
   statedHeldRows,
   type StatedAnswers,
 } from "./optimalisatieStated";
@@ -78,42 +75,4 @@ test("other, investment accounts and interest products are not payment cards", (
       CATALOGUE_ENTRIES,
     ),
   ).toEqual([]);
-});
-
-test("card debt: repayment sometimes or rarely, or an unpaid balance", () => {
-  expect(cardDebtStated(ans())).toBe(false);
-  expect(cardDebtStated(ans({ repayment: "full" }))).toBe(false);
-  expect(cardDebtStated(ans({ repayment: "sometimes" }))).toBe(true);
-  expect(cardDebtStated(ans({ repayment: "rarely" }))).toBe(true);
-  expect(
-    cardDebtStated(
-      ans({
-        repayment: "full",
-        balances: [{ cardId: AMEX, balanceCents: 5000, paysInFull: false }],
-      }),
-    ),
-  ).toBe(true);
-  expect(cardDebtStated(undefined)).toBe(false);
-});
-
-test("first credit card: applies on 'geen creditcard' with no credit card held", () => {
-  const amex = acct("amex", { bank: "American Express", name: "Platinum", type: "Creditcard" });
-  const none = ans({ noCards: true });
-  expect(firstCreditCardApplies(none, [])).toBe(true);
-  // A connected current account or a debit card is not a credit card.
-  expect(firstCreditCardApplies(none, [acct("ing", { type: "Betaalrekening" })])).toBe(true);
-  expect(firstCreditCardApplies(ans({ noCards: true, debit: ["ing-betaalpas"] }), [])).toBe(true);
-  expect(firstCreditCardApplies(none, [amex])).toBe(false);
-  expect(firstCreditCardApplies(ans({ noCards: true, credit: ["other"] }), [])).toBe(false);
-  expect(firstCreditCardApplies(ans({ noCards: false }), [])).toBe(false);
-  expect(firstCreditCardApplies(undefined, [])).toBe(false);
-});
-
-test("the debt reason follows the answer", () => {
-  expect(cardDebtReason(ans({ repayment: "sometimes" }))).toBe("not-in-full");
-  expect(cardDebtReason(ans({ repayment: "rarely" }))).toBe("not-in-full");
-  expect(
-    cardDebtReason(ans({ balances: [{ cardId: AMEX, balanceCents: 5000, paysInFull: false }] })),
-  ).toBe("balance");
-  expect(cardDebtReason(ans({ repayment: "full" }))).toBeNull();
 });

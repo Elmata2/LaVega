@@ -365,6 +365,7 @@ const cardNet = (n: number, over: Partial<CardNet> = {}): CardNet => ({
 
 const NO_ADVICE: CardsFigures["advice"] = {
   state: "short-history",
+  basis: "history",
   spend: {
     windowCents: 0,
     months: 0,

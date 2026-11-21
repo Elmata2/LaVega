@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
 import type {
   BusinessSavingsOffer,
+  CardAdvice,
   EntityScope,
   Account,
   Tx,
@@ -54,9 +55,6 @@ import {
   holdingCostOfProduct,
   netBenefit,
   productFeesById,
-  CARD_ADVICE_MIN_GAIN_CENTS,
-  noCardAdvice,
-  emptyPlanPreferences,
 } from "@lavega/core";
 import { createRatesProvider, type RatesResult } from "@lavega/adapters";
 import { CATALOGUE_RATES, CATALOGUE_ENTRIES } from "../catalogue-rates";
@@ -77,17 +75,13 @@ import Module, { ModulePeriod } from "../components/Module";
 import ModuleGrid from "../components/ModuleGrid";
 import ToonMeer from "../components/ToonMeer";
 import Badge from "../components/ui/Badge.js";
-import { MOVED_CATEGORIES } from "../components/blocks/statistics";
 import { planShellCopy } from "../copy/plan/index.js";
 import {
-  cardDebtStated,
-  cardDebtReason,
-  firstCardOutcome,
-  firstCreditCardApplies,
   statedHeldRows,
   type StatedAnswers,
 } from "../plan/optimalisatieStated";
 import CardLink from "../components/ui/CardLink.js";
+import OptimalisatieCardVerdict from "../plan/OptimalisatieCardVerdict.js";
 import SaldoInput from "../components/ui/SaldoInput.js";
 import { Table, TableWrap, Th, Td } from "../components/ui/Table.js";
 import "../styles/views.css";
@@ -165,10 +159,16 @@ type OptimalisatieProps = {
   stated?: StatedAnswers;
   /** Opens Rekeningen, where a card that is not connected is connected. */
   onOpenAccounts?: () => void;
+  /** The plan's own card advice (`plan.sections.cards.figures.advice`), the one
+   *  "Jouw plan" shows. The credit-card block prints it and computes nothing.
+   *  Null or absent while the plan loads: the block shows nothing yet. */
+  cardAdvice?: CardAdvice | null;
+  /** Stores the card the user names for a connected card account (the plan's
+   *  writer). Absent: the "Welke kaart is dit?" question is not asked. */
+  onSaveStatedCard?: (accountKey: string, cardId: string) => Promise<void>;
   onRateCommit: (key: string, value: string) => void;
 };
 
-const MOVED = new Set(MOVED_CATEGORIES.map((m) => m.category));
 
 const euro = (locale: Locale, cents: number) => formatEuroIn(locale, cents / 100);
 const signedEuro = (locale: Locale, cents: number) => formatSignedEuroIn(locale, cents / 100);
@@ -728,6 +728,8 @@ export default function Optimalisatie({
   initialRates,
   stated,
   onOpenAccounts,
+  cardAdvice,
+  onSaveStatedCard,
   onRateCommit,
 }: OptimalisatieProps) {
   const [locale] = useAppLocale();
@@ -887,8 +889,14 @@ export default function Optimalisatie({
 
   // Two rates on two bases, from the accounts he already holds. Core owns the
   // whole derivation; this view only prints it.
+  /* CREDIT CARDS ARE NOT IN THIS RANKING. The cashback comparison (baseline
+     rows, the answer line, routing) covers debit, prepaid and crypto. Which
+     credit card is better is the plan's verdict, printed by the card block. */
   const returns = useMemo(
-    () => accountReturns(accounts, txs, rules, own, facts, rates.rates, asOf),
+    () =>
+      accountReturns(accounts, txs, rules, own, facts, rates.rates, asOf).filter(
+        (r) => accountType(r.account) !== "Creditcard",
+      ),
     [accounts, txs, rules, own, facts, rates, asOf],
   );
   const { actions, gaps } = useMemo(() => optimiseReturns(returns), [returns]);
@@ -998,7 +1006,12 @@ export default function Optimalisatie({
     [stated, accounts, entries, entityScope],
   );
   const statedDate = stated?.statedAt ? formatIsoDateIn(locale, stated.statedAt) : null;
-  const carriesDebt = entityScope !== "business" && cardDebtStated(stated);
+  /* CARD DEBT IS THE PLAN'S WORD, not a second reading of the wizard answers:
+     `advice.ignoresInterest`. Offers are no longer hidden by it; only the
+     "route your spending to another card" lines still step aside, because
+     moving spending onto a card is the wrong nudge while a balance is carried. */
+  const showCardAdvice = entityScope !== "business" && cardAdvice != null;
+  const carriesDebt = showCardAdvice && cardAdvice.ignoresInterest;
 
   const rankable = heldCashback.filter((h) => cashbackPctOf(h.k) !== null);
   /* WHAT HE COULD OPEN, not only what he holds. Valuta ranks every bank and the
@@ -1006,7 +1019,13 @@ export default function Optimalisatie({
      "which of YOUR accounts is best", which is a fair question and not the one
      that finds the four percent he described — Trading 212 at 1,5% cashback and
      3,5% savings against an ING at 0% and 1,5%. */
-  const cashbackOffers = useMemo(() => marketCashbackOptions(entries), [entries]);
+  /* CREDIT CARDS ARE NOT RANKED HERE. Which credit card is better, and by how
+     much, is `advice.verdict` of the plan, printed by the card block below. This
+     ranking is for the debit, prepaid and crypto cards the plan does not judge. */
+  const cashbackOffers = useMemo(() => {
+    const creditIds = new Set(entries.filter((e) => e.kind === "creditcard").map((e) => e.id));
+    return marketCashbackOptions(entries).filter((o) => !creditIds.has(o.productId));
+  }, [entries]);
   /* DE BESTE EIGEN KAART, MET ZIJN HARDHEID ERAAN VAST. Niet los een getal, want
      dan is de nul op het scherm niet meer van een gemeten nul te onderscheiden en
      is de hele voorzorg weg.
@@ -1099,50 +1118,22 @@ export default function Optimalisatie({
      checked here so the message below can name WHICH half is missing. */
   const cashbackUpgrade = useMemo(
     () =>
-      carriesDebt || monthlyBaseCents === null
+      monthlyBaseCents === null
         ? null
         : cashbackSwitchGain(bestHeldCashback, bestOffer, yearlySpendCents),
-    [bestHeldCashback, bestOffer, yearlySpendCents, monthlyBaseCents, carriesDebt],
+    [bestHeldCashback, bestOffer, yearlySpendCents, monthlyBaseCents],
   );
   /** The field minus the card the comparison already named. */
-  const otherOffers = carriesDebt
-    ? []
-    : cashbackUpgrade
-      ? cashbackOffers.slice(1, 5)
-      : cashbackOffers.slice(0, 5);
-  /* A FIRST CREDIT CARD. "Geen creditcard" in the wizard is about credit cards
-     only, so a current account or a debit card does not suppress it. The
-     figure is the plan's own (`noCardAdvice`: the same spend history, the same
-     minimum of full months, the same threshold); below the minimum there is no
-     figure and no verdict. */
-  const firstCard = useMemo(() => {
-    if (entityScope === "business" || carriesDebt || !firstCreditCardApplies(stated, accounts))
-      return null;
-    return firstCardOutcome(
-      noCardAdvice({
-        txs,
-        accounts,
-        entityProfiles: [],
-        rules,
-        own,
-        asOf,
-        mode: "convert",
-        fxHistory: {},
-        movedCategories: MOVED,
-        catalogue: entries,
-        preferences: emptyPlanPreferences(),
-      }),
-    );
-  }, [entityScope, carriesDebt, stated, accounts, txs, rules, own, asOf, entries]);
+  const otherOffers = cashbackUpgrade ? cashbackOffers.slice(1, 5) : cashbackOffers.slice(0, 5);
   const routingShown = carriesDebt ? [] : routing;
   const answerShown =
     cashbackUpgrade !== null && monthlyBaseCents !== null && bestHeldCashback !== null;
-  const inviteOnly = !carriesDebt && statedRows.length > 0 && spendable.length === 0;
-  /* The generic "nothing to compare" / "already best" line steps aside for the
-     first-credit-card line: "je zit al goed" is not true for someone with no
-     credit card. */
+  const inviteOnly = statedRows.length > 0 && spendable.length === 0;
+  /* The generic "nothing to compare" / "already best" line makes a statement
+     about cards. While the card block prints the plan's verdict it steps aside:
+     "je zit al goed" must not sit above a verdict that recommends another card. */
   const suppressEmpty =
-    firstCard !== null &&
+    showCardAdvice &&
     !inviteOnly &&
     (spendable.length === 0 ||
       (bestHeldCashback !== null && monthlyBaseCents !== null && cashbackOffers.length > 0));
@@ -2294,14 +2285,10 @@ export default function Optimalisatie({
             !suppressEmpty && (
               <p
                 className="block-empty"
-                data-testid={
-                  carriesDebt ? "cashback-debt" : inviteOnly ? "cashback-stated-invite" : undefined
-                }
+                data-testid={inviteOnly ? "cashback-stated-invite" : undefined}
                 style={{ marginTop: routingShown.length > 0 ? "var(--sp-4)" : undefined }}
               >
-                {carriesDebt ? (
-                  c.cashback.stated.debtNote(cardDebtReason(stated) ?? "balance")
-                ) : spendable.length === 0 ? (
+                {spendable.length === 0 ? (
                   inviteOnly ? (
                     <>
                       {c.cashback.stated.invite(statedRows.map((r) => r.label).join(", "))}{" "}
@@ -2329,35 +2316,19 @@ export default function Optimalisatie({
             )
           )}
 
-          {firstCard !== null && (
-            <p
-              className="block-empty"
-              data-testid="cashback-first-card"
-              style={{ marginTop: "var(--sp-3)" }}
-            >
-              {firstCard.kind === "worth-it"
-                ? c.cashback.stated.firstCard.worthIt(
-                    firstCard.card,
-                    euro(locale, firstCard.gainCents),
-                  )
-                : firstCard.kind === "not-worth-it"
-                  ? c.cashback.stated.firstCard.notWorthIt(euro(locale, CARD_ADVICE_MIN_GAIN_CENTS))
-                  : firstCard.kind === "too-little"
-                    ? c.cashback.stated.firstCard.tooLittle
-                    : firstCard.kind === "none-comparable"
-                      ? c.cashback.stated.firstCard.noComparable
-                      : c.cashback.stated.firstCard.noSpend}
-              {(firstCard.kind === "no-spend" || firstCard.kind === "too-little") && (
-                <> {accountsLink}</>
-              )}
-            </p>
+          {showCardAdvice && (
+            <OptimalisatieCardVerdict
+              advice={cardAdvice}
+              {...(onSaveStatedCard === undefined ? {} : { onIdentify: onSaveStatedCard })}
+              moreLink={accountsLink}
+            />
           )}
 
           {/* DE OPENSTAANDE VRAAG STAAT VOORAAN, en stond eerst onderaan de
               module. Het is geen uitleg maar een weigering: over deze kaarten
               mag niets worden ingevuld, dus het bedrag hierboven gaat niet over
               hen. Wie dat opvouwt laat een afwezigheid een conclusie dragen. */}
-          {statedRows.length > 0 && spendable.length > 0 && !carriesDebt && !answerShown && invite}
+          {statedRows.length > 0 && spendable.length > 0 && !answerShown && invite}
 
           {openCashbackGaps.length > 0 && (
             <p

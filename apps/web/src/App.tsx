@@ -189,6 +189,7 @@ import {
 import IntakeWizard from "./views/IntakeWizard";
 import AboutYou from "./views/AboutYou";
 import PlanRoute from "./plan/PlanRoute";
+import type { UsePlanInput } from "./plan/usePlan";
 import { intakeCopy } from "./copy/intake.js";
 import Overzicht from "./views/Overzicht";
 import { AssistantPanel } from "./assistant/AssistantPanel";
@@ -196,7 +197,7 @@ import Transacties from "./views/Transacties";
 import Regels from "./views/Regels";
 import Rekeningen from "./views/Rekeningen";
 import Forecast from "./views/Forecast";
-import Optimalisatie from "./views/Optimalisatie";
+import OptimalisatieRoute from "./plan/OptimalisatieRoute";
 import Valuta from "./views/Valuta";
 import Belasting from "./views/Belasting";
 import Bills from "./views/Bills";
@@ -1882,6 +1883,16 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
     if (changed) await storage.putAccounts([changed]);
   }
 
+  // The card a person names for a connected card account the app could not
+  // identify. Same persist pattern as the type: state first, then the store.
+  async function handleStatedCardCommit(key: string, cardId: string) {
+    const account = accounts.find((a) => a.key === key);
+    if (!account) return;
+    const changed = { ...account, statedCardId: cardId };
+    await storage.putAccounts([changed]);
+    setAccounts((cur) => cur.map((a) => (a.key === key ? changed : a)));
+  }
+
   // WS3.1: one half of the opening anchor. A liability owner types the amount
   // OWED as a positive; it is stored as a negative like a credit-card balance.
   async function handleOpeningCommit(
@@ -2494,6 +2505,30 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
     );
   }
 
+  /* The one input of the plan. "Jouw plan" and Optimalisatie both run `usePlan`
+     on exactly this object, so the credit-card verdict is one answer. */
+  const planInput: UsePlanInput = {
+    store:
+      profileRead === "loading" || profileRead === "error" || profileRead.kind !== "ok"
+        ? null
+        : profileRead.store,
+    storage,
+    accounts,
+    txs: ledgerTxs,
+    entityProfiles,
+    rules,
+    own: ownWithNames,
+    rewards,
+    facts,
+    catalogue: CATALOGUE_ENTRIES,
+    rates: rates.rates,
+    mode: fxConversionMode,
+    fxHistory,
+    vatSettings,
+    valuations,
+    asOf,
+  };
+
   return (
     <CardFileContext.Provider value={openCardFile}>
       {cardFileHost}
@@ -2758,7 +2793,10 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
           )}
 
           {view === "optimalisatie" && (
-            <Optimalisatie
+            <OptimalisatieRoute
+              planInput={planInput}
+              profileLoaded={profileRead !== "loading" && profileRead !== "error"}
+              onSaveStatedCard={handleStatedCardCommit}
               txs={scopedTxs}
               entityScope={scope}
               accounts={currentScopedAccounts}
@@ -2874,28 +2912,10 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
               onComputed={setAgentPlan}
               profileRead={profileRead}
               onRetry={() => void retryProfileRead()}
-              store={
-                profileRead === "loading" || profileRead === "error" || profileRead.kind !== "ok"
-                  ? null
-                  : profileRead.store
-              }
-              storage={storage}
-              accounts={accounts}
-              txs={ledgerTxs}
-              entityProfiles={entityProfiles}
-              rules={rules}
-              own={ownWithNames}
-              rewards={rewards}
-              facts={facts}
-              catalogue={CATALOGUE_ENTRIES}
-              rates={rates.rates}
-              mode={fxConversionMode}
-              fxHistory={fxHistory}
-              vatSettings={vatSettings}
-              valuations={valuations}
-              asOf={asOf}
+              {...planInput}
               onSaveProfile={saveProfile}
               onSaveRewards={saveRewards}
+              onSaveStatedCard={handleStatedCardCommit}
               onNavigate={setView}
             />
           )}

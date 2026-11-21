@@ -892,3 +892,34 @@ test("an import that DOES carry a balance replaces the fetched-on date with its 
   expect(merged.balanceDate).toBe("2026-09-30");
   expect(merged.balanceFetchedAt).toBeUndefined();
 });
+
+test("mergeImportedAccounts: a stated card survives a live bank sync; an import's own statedCardId wins", () => {
+  const prev: Account = {
+    key: "CC1",
+    iban: "CC1",
+    name: "Mijn kaart",
+    bank: "ING",
+    entity: "BV1",
+    type: "Creditcard",
+    currency: "EUR",
+    balance: -10,
+    balanceDate: "2026-11-01",
+    statedCardId: "ing-creditcard",
+  };
+  const fresh: Account = {
+    key: "CC1",
+    iban: "CC1",
+    name: "Bank naam",
+    bank: "ING",
+    entity: "BV1",
+    currency: "EUR",
+    balance: -20,
+    balanceDate: "2026-11-20",
+    balanceFetchedAt: "2026-11-20T08:00:00Z",
+  };
+  const [kept] = mergeImportedAccounts([prev], [fresh]);
+  expect(kept!.statedCardId).toBe("ing-creditcard");
+  expect(kept!.name).toBe("Bank naam"); // bank name is not overwritten by the stored one
+  const [won] = mergeImportedAccounts([prev], [{ ...fresh, statedCardId: "other-card" }]);
+  expect(won!.statedCardId).toBe("other-card");
+});

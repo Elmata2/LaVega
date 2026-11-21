@@ -76,9 +76,11 @@ export const INSTINCT_COPY: Record<MessageLocale, InstinctCopy> = {
       long: `Bij ${f.name} krijg je naar schatting ${f.gain} per jaar meer rente over je spaargeld dan nu. Bekijk de vergelijking bij Optimalisatie.`,
     }),
     cardOffer: (f) => ({
-      title: "Voordeliger betaalpas of creditcard",
-      short: `Met ${f.name} houd je op basis van je uitgaven naar schatting ${f.gain} per jaar over.`,
-      long: `Met ${f.name} houd je op basis van je uitgaven naar schatting ${f.gain} per jaar over ten opzichte van je huidige kaart. Bekijk de vergelijking bij Optimalisatie.`,
+      // The gain is the plan's card verdict: points value, cashback, fee and currency costs
+      // together. It is not money paid out, so the text says that points are counted in.
+      title: "Voordeliger creditcard",
+      short: `Met ${f.name} kom je naar schatting ${f.gain} per jaar beter uit, punten meegerekend.`,
+      long: `Met ${f.name} kom je op basis van je uitgaven naar schatting ${f.gain} per jaar beter uit dan met je huidige kaart. Daarin zijn kosten en de waarde van punten meegerekend. Bekijk de vergelijking bij Optimalisatie.`,
     }),
     when: (n) => (n === 0 ? "vandaag" : n === 1 ? "morgen" : `over ${n} dagen`),
     tips: {
@@ -163,8 +165,8 @@ export const INSTINCT_COPY: Record<MessageLocale, InstinctCopy> = {
     }),
     cardOffer: (f) => ({
       title: "Better card",
-      short: `Based on your spending, ${f.name} would leave you about ${f.gain} a year better off.`,
-      long: `Based on your spending, ${f.name} would leave you about ${f.gain} a year better off than your current card. See the comparison under Optimise.`,
+      short: `${f.name} would leave you about ${f.gain} a year better off, points included.`,
+      long: `Based on your spending, ${f.name} would leave you about ${f.gain} a year better off than your current card. That counts costs and the value of points. See the comparison under Optimise.`,
     }),
     when: (n) => (n === 0 ? "today" : n === 1 ? "tomorrow" : `in ${n} days`),
     tips: {

@@ -74,7 +74,9 @@ const offer = (
   },
 });
 
-const MARKET: CatalogueEntryLike[] = [offer({ pct: 2, kind: "creditcard" })];
+/* A plain bank card, not a credit card: credit cards are no longer ranked on this
+ * screen (the plan's card verdict covers them), so these fixtures are bank cards. */
+const MARKET: CatalogueEntryLike[] = [offer({ pct: 2, kind: "betaalrekening" })];
 
 const render = (props: Partial<Parameters<typeof Optimalisatie>[0]> = {}) =>
   renderToStaticMarkup(
@@ -226,7 +228,7 @@ test("no euro figure when the spend base cannot be measured, and it says which h
 });
 
 test("a card that does not beat his own is said plainly, with no euro figure", () => {
-  const html = render({ entries: [offer({ pct: 1, kind: "creditcard" })] });
+  const html = render({ entries: [offer({ pct: 1, kind: "betaalrekening" })] });
   expect(html).toContain("even goed of beter");
   expect(html).not.toContain('data-testid="cashback-verschil"');
 });
@@ -327,7 +329,7 @@ const row = (html: string, testid: string): string => {
   return m[0];
 };
 
-const CARD = offer({ pct: 2, kind: "creditcard" });
+const CARD = offer({ pct: 2, kind: "betaalrekening" });
 
 test("het brutoverschil heet bruto, zodra er kaartkosten naast kunnen staan", () => {
   expect(render()).toContain("vóór kaartkosten");

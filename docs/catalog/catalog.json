@@ -39,6 +39,14 @@
           "checkedAt": "2026-01-01",
           "conditions": "Bovenop de € 4,00 per maand van het ING OranjePakket: dit document is het Informatiedocument van die betaalrekening en de kaart is er een 'aan uw betaalrekening gekoppelde dienst'. Een extra Creditcard kost € 1,25 per maand. Koersopslag 2,00% per transactie in vreemde valuta; geldopname met de creditcard 4,00% van het opgenomen bedrag met een minimum van € 4,50, in vreemde valuta plus 2,00% koersopslag; daglimiet € 400. LET OP DE NAAMOVERLAP: het ING Kostenoverzicht van 15 juni 2026 kent deze naam niet meer en zet op precies dezelfde twee bedragen 'ING Creditcard More € 2,00' en 'extra ING Creditcard More € 1,25'. Zie 'openstaandeVragen' in het verslag — dit is vermoedelijk dezelfde kaart onder een oude naam.",
           "conditionsKnown": true
+        },
+        "pointsPerEuro": {
+          "value": 0,
+          "route": "provider-page",
+          "sourceUrl": "https://www.ing.nl/particulier/ing-punten/zo-spaar-je-ing-punten",
+          "checkedAt": "2026-08-21",
+          "conditions": "ING Punten kent geen koers per bestede euro. Je krijgt een vast aantal punten per maand boven een drempel, plus eenmalige bedragen. Daarom 0 punten per euro.",
+          "conditionsKnown": true
         }
       }
     },
@@ -1110,6 +1118,14 @@
           "conditions": "Punten worden niet verdiend op: • rente, vergoedingen (inclusief vergoedingen ingeval van achterstallige betaling), contante opnamen (inclusief transacties die als contante opnamen worden beschouwd), het opladen van prepaid kaarten, aankopen van American Express Travellers Cheques en vreemde valuta; en • bedragen die zijn bijgeschreven op uw Kaartrekening door middel van restituties of andere vormen van crediteringen. De waarde van elke aankoop wordt afgerond op de dichtstbijzijnde EUR en vervolgens worden de Punten toegekend op basis van elke hele EUR die u hebt besteed. Deelname aan het Programma is inbegrepen bij uw jaarlijkse kaartlidmaatschapsbijdrage, tenzij u zichzelf afzonderlijk hebt ingeschreven voor het Programma Essentials, Classic of Accelerator in welk geval een jaarlijkse vergoeding van respectievelijk EUR 15, EUR 25 of EUR 40 (inclusief BTW) in rekening zal worden gebracht.",
           "conditionsKnown": true
         },
+        "cashbackPct": {
+          "value": 0,
+          "route": "provider-page",
+          "sourceUrl": "https://www.americanexpress.com/nl-nl/creditcard/blue-card/",
+          "checkedAt": "2026-08-20",
+          "conditions": "De beloning op uitgaven met deze kaart is in Membership Rewards punten, niet in cashback. Daarom 0% cashback. Vastgesteld door de eigenaar op 21-11-2026 op basis van de kaartpagina.",
+          "conditionsKnown": true
+        },
         "accountFee": {
           "value": 0,
           "period": "jaar",
@@ -1141,6 +1157,14 @@
           "sourceUrl": "https://www.americanexpress.com/nl-nl/creditcard/green-card/",
           "checkedAt": "2026-08-20",
           "conditions": "Punten worden niet verdiend op: • rente, vergoedingen (inclusief vergoedingen ingeval van achterstallige betaling), contante opnamen (inclusief transacties die als contante opnamen worden beschouwd), het opladen van prepaid kaarten, aankopen van American Express Travellers Cheques en vreemde valuta; en • bedragen die zijn bijgeschreven op uw Kaartrekening door middel van restituties of andere vormen van crediteringen. De waarde van elke aankoop wordt afgerond op de dichtstbijzijnde EUR en vervolgens worden de Punten toegekend op basis van elke hele EUR die u hebt besteed. Deelname aan het Programma is inbegrepen bij uw jaarlijkse kaartlidmaatschapsbijdrage, tenzij u zichzelf afzonderlijk hebt ingeschreven voor het Programma Essentials, Classic of Accelerator in welk geval een jaarlijkse vergoeding van respectievelijk EUR 15, EUR 25 of EUR 40 (inclusief BTW) in rekening zal worden gebracht.",
+          "conditionsKnown": true
+        },
+        "cashbackPct": {
+          "value": 0,
+          "route": "provider-page",
+          "sourceUrl": "https://www.americanexpress.com/nl-nl/creditcard/green-card/",
+          "checkedAt": "2026-08-20",
+          "conditions": "De beloning op uitgaven met deze kaart is in Membership Rewards punten, niet in cashback. Daarom 0% cashback. Vastgesteld door de eigenaar op 21-11-2026 op basis van de kaartpagina.",
           "conditionsKnown": true
         },
         "accountFee": {
@@ -1176,6 +1200,14 @@
           "conditions": "Punten worden niet verdiend op: • rente, vergoedingen (inclusief vergoedingen ingeval van achterstallige betaling), contante opnamen (inclusief transacties die als contante opnamen worden beschouwd), het opladen van prepaid kaarten, aankopen van American Express Travellers Cheques en vreemde valuta; en • bedragen die zijn bijgeschreven op uw Kaartrekening door middel van restituties of andere vormen van crediteringen. De waarde van elke aankoop wordt afgerond op de dichtstbijzijnde EUR en vervolgens worden de Punten toegekend op basis van elke hele EUR die u hebt besteed. Deelname aan het Programma is inbegrepen bij uw jaarlijkse kaartlidmaatschapsbijdrage, tenzij u zichzelf afzonderlijk hebt ingeschreven voor het Programma Essentials, Classic of Accelerator in welk geval een jaarlijkse vergoeding van respectievelijk EUR 15, EUR 25 of EUR 40 (inclusief BTW) in rekening zal worden gebracht.",
           "conditionsKnown": true
         },
+        "cashbackPct": {
+          "value": 0,
+          "route": "provider-page",
+          "sourceUrl": "https://www.americanexpress.com/nl-nl/creditcard/gold-card/",
+          "checkedAt": "2026-08-20",
+          "conditions": "De beloning op uitgaven met deze kaart is in Membership Rewards punten, niet in cashback. Daarom 0% cashback. Vastgesteld door de eigenaar op 21-11-2026 op basis van de kaartpagina.",
+          "conditionsKnown": true
+        },
         "accountFee": {
           "value": 20,
           "period": "maand",
@@ -1207,6 +1239,14 @@
           "sourceUrl": "https://www.americanexpress.com/nl-nl/creditcard/platinum-card/",
           "checkedAt": "2026-08-20",
           "conditions": "Punten worden niet verdiend op: • rente, vergoedingen (inclusief vergoedingen ingeval van achterstallige betaling), contante opnamen (inclusief transacties die als contante opnamen worden beschouwd), het opladen van prepaid kaarten, aankopen van American Express Travellers Cheques en vreemde valuta; en • bedragen die zijn bijgeschreven op uw Kaartrekening door middel van restituties of andere vormen van crediteringen. De waarde van elke aankoop wordt afgerond op de dichtstbijzijnde EUR en vervolgens worden de Punten toegekend op basis van elke hele EUR die u hebt besteed. Deelname aan het Programma is inbegrepen bij uw jaarlijkse kaartlidmaatschapsbijdrage, tenzij u zichzelf afzonderlijk hebt ingeschreven voor het Programma Essentials, Classic of Accelerator in welk geval een jaarlijkse vergoeding van respectievelijk EUR 15, EUR 25 of EUR 40 (inclusief BTW) in rekening zal worden gebracht.",
+          "conditionsKnown": true
+        },
+        "cashbackPct": {
+          "value": 0,
+          "route": "provider-page",
+          "sourceUrl": "https://www.americanexpress.com/nl-nl/creditcard/platinum-card/",
+          "checkedAt": "2026-08-20",
+          "conditions": "De beloning op uitgaven met deze kaart is in Membership Rewards punten, niet in cashback. Daarom 0% cashback. Vastgesteld door de eigenaar op 21-11-2026 op basis van de kaartpagina.",
           "conditionsKnown": true
         },
         "accountFee": {
@@ -1242,6 +1282,14 @@
           "conditions": "Koers geldt voor ‘overige uitgaven’; bij Air France, KLM en Hertz is de koers 0,5 Miles per euro. Minimum uitgave is € 1. De volgende uitgaven leveren geen Miles op: kaartlidmaatschapsbijdrage, storneringskosten, vergoedingen, toeslagen, boetes voor te late betalingen en opname van contant geld , aankopen van American Express Travellers Cheques en vreemde valuta, restituties of andere vormen van creditering. Afronding: ‘De waarde van elke aankoop wordt afgerond op de dichtstbijzijnde euro en vervolgens worden de Miles [toegekend]’. Miles van een extra kaart gaan naar het Flying Blue-account van de hoofdkaarthouder.",
           "conditionsKnown": true
         },
+        "cashbackPct": {
+          "value": 0,
+          "route": "provider-page",
+          "sourceUrl": "https://www.americanexpress.com/nl-nl/creditcard/flying-blue-entry-card/",
+          "checkedAt": "2026-08-20",
+          "conditions": "De beloning op uitgaven met deze kaart is in Flying Blue Miles, niet in cashback. Daarom 0% cashback. Vastgesteld door de eigenaar op 21-11-2026 op basis van de kaartpagina.",
+          "conditionsKnown": true
+        },
         "accountFee": {
           "value": 3,
           "period": "maand",
@@ -1273,6 +1321,14 @@
           "sourceUrl": "https://www.americanexpress.com/nl-nl/creditcard/flying-blue-silver-card/",
           "checkedAt": "2026-08-20",
           "conditions": "Koers geldt voor ‘overige uitgaven’; bij Air France, KLM en Hertz is de koers 1 Miles per euro. Minimum uitgave is € 1. De volgende uitgaven leveren geen Miles op: kaartlidmaatschapsbijdrage, storneringskosten, vergoedingen, toeslagen, boetes voor te late betalingen en opname van contant geld , aankopen van American Express Travellers Cheques en vreemde valuta, restituties of andere vormen van creditering. Afronding: ‘De waarde van elke aankoop wordt afgerond op de dichtstbijzijnde euro en vervolgens worden de Miles [toegekend]’. Miles van een extra kaart gaan naar het Flying Blue-account van de hoofdkaarthouder.",
+          "conditionsKnown": true
+        },
+        "cashbackPct": {
+          "value": 0,
+          "route": "provider-page",
+          "sourceUrl": "https://www.americanexpress.com/nl-nl/creditcard/flying-blue-silver-card/",
+          "checkedAt": "2026-08-20",
+          "conditions": "De beloning op uitgaven met deze kaart is in Flying Blue Miles, niet in cashback. Daarom 0% cashback. Vastgesteld door de eigenaar op 21-11-2026 op basis van de kaartpagina.",
           "conditionsKnown": true
         },
         "accountFee": {
@@ -1308,6 +1364,14 @@
           "conditions": "Koers geldt voor ‘overige uitgaven’; bij Air France, KLM en Hertz is de koers 1,5 Miles per euro. Minimum uitgave is € 1. De volgende uitgaven leveren geen Miles op: kaartlidmaatschapsbijdrage, storneringskosten, vergoedingen, toeslagen, boetes voor te late betalingen en opname van contant geld , aankopen van American Express Travellers Cheques en vreemde valuta, restituties of andere vormen van creditering. Afronding: ‘De waarde van elke aankoop wordt afgerond op de dichtstbijzijnde euro en vervolgens worden de Miles [toegekend]’. Miles van een extra kaart gaan naar het Flying Blue-account van de hoofdkaarthouder.",
           "conditionsKnown": true
         },
+        "cashbackPct": {
+          "value": 0,
+          "route": "provider-page",
+          "sourceUrl": "https://www.americanexpress.com/nl-nl/creditcard/flying-blue-gold-card/",
+          "checkedAt": "2026-08-20",
+          "conditions": "De beloning op uitgaven met deze kaart is in Flying Blue Miles, niet in cashback. Daarom 0% cashback. Vastgesteld door de eigenaar op 21-11-2026 op basis van de kaartpagina.",
+          "conditionsKnown": true
+        },
         "accountFee": {
           "value": 16.5,
           "period": "maand",
@@ -1339,6 +1403,14 @@
           "sourceUrl": "https://www.americanexpress.com/nl-nl/creditcard/flying-blue-platinum-card/",
           "checkedAt": "2026-08-20",
           "conditions": "Koers geldt voor ‘overige uitgaven’; bij Air France, KLM en Hertz is de koers 2 Miles per euro. Minimum uitgave is € 1. De volgende uitgaven leveren geen Miles op: kaartlidmaatschapsbijdrage, storneringskosten, vergoedingen, toeslagen, boetes voor te late betalingen en opname van contant geld , aankopen van American Express Travellers Cheques en vreemde valuta, restituties of andere vormen van creditering. Afronding: ‘De waarde van elke aankoop wordt afgerond op de dichtstbijzijnde euro en vervolgens worden de Miles [toegekend]’. Miles van een extra kaart gaan naar het Flying Blue-account van de hoofdkaarthouder.",
+          "conditionsKnown": true
+        },
+        "cashbackPct": {
+          "value": 0,
+          "route": "provider-page",
+          "sourceUrl": "https://www.americanexpress.com/nl-nl/creditcard/flying-blue-platinum-card/",
+          "checkedAt": "2026-08-20",
+          "conditions": "De beloning op uitgaven met deze kaart is in Flying Blue Miles, niet in cashback. Daarom 0% cashback. Vastgesteld door de eigenaar op 21-11-2026 op basis van de kaartpagina.",
           "conditionsKnown": true
         },
         "accountFee": {
@@ -2960,6 +3032,14 @@
           "checkedAt": "2026-06-15",
           "conditions": "Prijs geldt bij ING Go; bij ING More is de kaart inbegrepen in het pakket. Een extra ING Creditcard More kost € 1,25 per maand. De kosten van een additioneel afgenomen creditcard worden 1x per jaar afgeschreven.",
           "conditionsKnown": true
+        },
+        "pointsPerEuro": {
+          "value": 0,
+          "route": "provider-page",
+          "sourceUrl": "https://www.ing.nl/particulier/ing-punten/zo-spaar-je-ing-punten",
+          "checkedAt": "2026-08-21",
+          "conditions": "ING Punten kent geen koers per bestede euro. Je krijgt een vast aantal punten per maand als je meer dan € 100 met de kaart uitgeeft (100 punten bij More, 250 bij Extra en Max), plus eenmalige bedragen. Volgens de voorwaarden hebben de punten geen geldwaarde. Daarom 0 punten per euro.",
+          "conditionsKnown": true
         }
       }
     },
@@ -2985,6 +3065,14 @@
           "checkedAt": "2026-06-15",
           "conditions": "Prijs geldt bij ING Go. Bij ING More € 2,18 (50% korting), bij ING Extra inbegrepen. Additionele ING Creditcard Extra € 2,60 per maand.",
           "conditionsKnown": true
+        },
+        "pointsPerEuro": {
+          "value": 0,
+          "route": "provider-page",
+          "sourceUrl": "https://www.ing.nl/particulier/ing-punten/zo-spaar-je-ing-punten",
+          "checkedAt": "2026-08-21",
+          "conditions": "ING Punten kent geen koers per bestede euro. Je krijgt een vast aantal punten per maand als je meer dan € 100 met de kaart uitgeeft (100 punten bij More, 250 bij Extra en Max), plus eenmalige bedragen. Volgens de voorwaarden hebben de punten geen geldwaarde. Daarom 0 punten per euro.",
+          "conditionsKnown": true
         }
       }
     },
@@ -3009,6 +3097,14 @@
           "sourceUrl": "https://assets.ing.com/m/21a7a55ed70382ab/original/ING_Kostenoverzicht-betaalproducten-particulieren_2023.pdf",
           "checkedAt": "2026-06-15",
           "conditions": "Alleen binnen het ING Max-pakket (€ 44,99 per maand); de kaart zelf kost daarbovenop niets. Een additionele ING Creditcard Max kost € 10,00 per maand. Dit is dus geen gratis kaart, maar een kaart zonder aparte cardfee binnen een betaald pakket.",
+          "conditionsKnown": true
+        },
+        "pointsPerEuro": {
+          "value": 0,
+          "route": "provider-page",
+          "sourceUrl": "https://www.ing.nl/particulier/ing-punten/zo-spaar-je-ing-punten",
+          "checkedAt": "2026-08-21",
+          "conditions": "ING Punten kent geen koers per bestede euro. Je krijgt een vast aantal punten per maand als je meer dan € 100 met de kaart uitgeeft (100 punten bij More, 250 bij Extra en Max), plus eenmalige bedragen. Volgens de voorwaarden hebben de punten geen geldwaarde. Daarom 0 punten per euro.",
           "conditionsKnown": true
         }
       }

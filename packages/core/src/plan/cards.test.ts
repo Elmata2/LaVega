@@ -921,18 +921,19 @@ describe("computeCards: advice", () => {
     conditionsKnown: true,
     ...extra,
   });
+  // cashbackPct is a measured 0 on both rows: the advice no longer counts a missing figure as 0.
   const CAT = [
     {
       id: "gold",
       product: "Gold",
       kind: "creditcard",
-      fields: { accountFee: cv(20, { period: "maand" }), fxFeePct: cv(2.5), pointsPerEuro: cv(0) },
+      fields: { accountFee: cv(20, { period: "maand" }), fxFeePct: cv(2.5), pointsPerEuro: cv(0), cashbackPct: cv(0) },
     },
     {
       id: "free",
       product: "Free",
       kind: "creditcard",
-      fields: { accountFee: cv(0, { period: "jaar" }), fxFeePct: cv(2), pointsPerEuro: cv(0) },
+      fields: { accountFee: cv(0, { period: "jaar" }), fxFeePct: cv(2), pointsPerEuro: cv(0), cashbackPct: cv(0) },
     },
   ] as never;
   const cur = acct("CUR");
@@ -965,6 +966,27 @@ describe("computeCards: advice", () => {
     expect(a.spend.annualCents).toBe(1_200_000);
     expect(a.baseline).toMatchObject({ kind: "best-held", cardId: "gold", netCents: -24_000 });
     expect(a.verdict).toMatchObject({ kind: "switch", gainCents: 24_000 });
+  });
+
+  test("computeCards passes the wizard spend to the advice", () => {
+    const last = MONTHS[MONTHS.length - 1]!;
+    const a = adviceRun({
+      txs: spendOn("CUR", 100_000).filter((t) => t.date.startsWith(last)),
+      profile: {
+        spendStatedRange: { lowCents: 100_000, highCents: 100_000 },
+        foreignSpend: "never",
+      },
+    });
+    expect(a.spend.months).toBe(1);
+    expect(a.basis).toBe("stated");
+    expect(a.state).toBe("ok");
+    expect(a.spend.annualCents).toBe(1_200_000);
+    expect(a.spend.annualForeignCents).toBe(0);
+  });
+
+  test("full history keeps the history basis even with a stated spend", () => {
+    const a = adviceRun({ profile: { spendStatedRange: { lowCents: 1, highCents: 1 } } });
+    expect(a.basis).toBe("history");
   });
 
   test("the interest block uses the stated balance and the buffer surplus", () => {
@@ -1026,6 +1048,82 @@ describe("computeCards: advice", () => {
       profile: { statedCardIds: [], cardBalances: [] },
     });
     expect(a.baseline).toMatchObject({ kind: "best-held", cardId: "free" });
+  });
+
+  describe("a connected card the app cannot identify", () => {
+    const mystery = acct("CC1", { type: "Creditcard", name: "Mystery card" });
+    const known = acct("CC2", { type: "Creditcard", name: "Known card" });
+    const unidentified = card("CC1", { label: "Mystery card", catalogueId: null });
+    const identified = card("CC2", { label: "Known card", catalogueId: "free" });
+
+    test("an unidentified connected card makes the baseline unknown, not no-card", () => {
+      const a = adviceRun({
+        accounts: [cur, mystery],
+        heldCards: [unidentified],
+        profile: { statedCardIds: [], cardBalances: [] },
+      });
+      expect(a.baseline).toEqual({
+        kind: "unknown",
+        blockers: [{ name: "Mystery card", reasons: ["not-in-catalogue"], accountKey: "CC1" }],
+      });
+      expect(a.verdict.kind).toBe("unknown-baseline");
+    });
+
+    test("one identified and one unidentified card: verdict is unknown-baseline", () => {
+      const a = adviceRun({
+        accounts: [cur, mystery, known],
+        heldCards: [unidentified, identified],
+        profile: { statedCardIds: [], cardBalances: [] },
+      });
+      expect(a.baseline.kind).toBe("unknown");
+      expect(a.verdict.kind).toBe("unknown-baseline");
+    });
+
+    const withDebitRow = [
+      ...(CAT as unknown as Record<string, unknown>[]),
+      { id: "pas", product: "Betaalpas", kind: "betaalpas", fields: {} },
+    ] as never;
+
+    test("a credit-card account matched to a non-credit catalogue row is asked for, not treated as no card", () => {
+      const a = adviceRun({
+        accounts: [cur, mystery],
+        catalogue: withDebitRow,
+        heldCards: [card("CC1", { label: "Mystery card", catalogueId: "pas" })],
+        profile: { statedCardIds: [], cardBalances: [] },
+      });
+      expect(a.baseline).toEqual({
+        kind: "unknown",
+        blockers: [{ name: "Mystery card", reasons: ["not-in-catalogue"], accountKey: "CC1" }],
+      });
+      expect(a.verdict.kind).toBe("unknown-baseline");
+    });
+
+    test("a credit-typed account whose own stated card is a debit card is not asked about", () => {
+      const a = adviceRun({
+        accounts: [cur, { ...mystery, statedCardId: "pas" }],
+        catalogue: withDebitRow,
+        heldCards: [card("CC1", { label: "Mystery card", catalogueId: "pas" })],
+        profile: { statedCardIds: [], cardBalances: [] },
+      });
+      expect(a.baseline).toMatchObject({ kind: "no-card" });
+    });
+
+    test("a debit-card account matched to a betaalpas row stays filtered out", () => {
+      const a = adviceRun({
+        catalogue: withDebitRow,
+        heldCards: [card("CUR", { label: "Betaalpas", catalogueId: "pas" })],
+        profile: { statedCardIds: [], cardBalances: [] },
+      });
+      expect(a.baseline).toMatchObject({ kind: "no-card" });
+    });
+
+    test("a debit card or current account with no catalogue match does not make the baseline unknown", () => {
+      const a = adviceRun({
+        heldCards: [card("CUR", { label: "Betaalpas", catalogueId: null })],
+        profile: { statedCardIds: [], cardBalances: [] },
+      });
+      expect(a.baseline).toMatchObject({ kind: "no-card" });
+    });
   });
 
   test("rent and other non-cardable spend stay out of the advice base", () => {

@@ -432,6 +432,12 @@ describe("subscriptions, monthly_totals, upcoming_bills, plan_summary", () => {
             months: 12,
             cardableSpendCents: 100000,
             nets: [net("k1", "Mijn kaart", 1000), net("k2", "Kaart B", 9000)],
+            advice: {
+              basis: "history",
+              ignoresInterest: false,
+              baseline: { kind: "best-held", cardId: "k1", name: "Mijn kaart", netCents: 1000 },
+              verdict: { kind: "switch", best: { name: "Kaart B" }, gainCents: 8000 },
+            },
           },
         },
       },
@@ -448,7 +454,47 @@ describe("subscriptions, monthly_totals, upcoming_bills, plan_summary", () => {
         savingsRatePct: 12.5,
       },
       buffer: { status: "attention", months: 2.5, targetMonths: 3, gap: { cents: 70000 } },
-      cards: { inUse: "Mijn kaart", betterCard: "Kaart B", yearlyGain: { cents: 8000 } },
+      cards: {
+        inUse: "Mijn kaart",
+        betterCard: "Kaart B",
+        yearlyGain: { cents: 8000 },
+        yearlyGainBasis: "estimate-incl-points-value",
+      },
+    });
+  });
+
+  it("plan_summary: the card in use is the verdict's baseline; none when the baseline is unknown", async () => {
+    const view = syntheticChatVault();
+    const base = view;
+    base.plan = {
+      sections: {
+        month: {
+          status: "on-track",
+          statusReason: { key: "room-ok" },
+          figures: { room: { kind: "unknown" }, incomeMiddleCents: null, fixedCents: null, savingsRate: null },
+        },
+        buffer: {
+          status: "attention",
+          statusReason: { key: "below-target" },
+          figures: { incomeBufferMonths: null, targetMonths: 3, gapCents: null, gapMonths: null },
+        },
+        cards: {
+          figures: {
+            cardInUseKey: "k1",
+            nets: [{ cardKey: "k1", name: "Legacy kaart", netCents: 1000 }],
+            advice: {
+              basis: "history",
+              ignoresInterest: false,
+              baseline: { kind: "unknown", blockers: [] },
+              verdict: { kind: "unknown-baseline" },
+            },
+          },
+        },
+      },
+    } as unknown as VaultView["plan"];
+    const e = env(await run(base, "plan_summary"));
+    expect(e.data).toMatchObject({
+      cards: { inUse: null, betterCard: null, yearlyGain: null, yearlyGainBasis: null },
     });
   });
 });

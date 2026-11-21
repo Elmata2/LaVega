@@ -25,6 +25,9 @@ export type PlanCtx = {
    *  Without the saver the points are neither asked nor changed here. */
   rewards?: readonly RewardsBalance[];
   saveRewards?: (next: RewardsBalance[]) => Promise<void>;
+  /** Stores the catalogue card the user names for a connected card account.
+   *  Without it the plan cannot ask which card an account is. */
+  saveStatedCard?: (accountKey: string, cardId: string) => Promise<void>;
   /** Test seam: the verified public facts to read. Default is PUBLIC_FACTS. */
   publicFacts?: readonly PublicFact[];
   onNavigate: (view: View) => void;

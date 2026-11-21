@@ -1,8 +1,14 @@
 // @vitest-environment jsdom
 import { renderToStaticMarkup } from "react-dom/server";
 import { expect, test } from "vitest";
-import type { Account, CatalogueEntryLike, CatalogValue, Tx } from "@lavega/core";
-import { makeFact, ownAccounts, TRAVEL_AGENT } from "@lavega/core";
+import type { Account, CardAdvice, CatalogueEntryLike, CatalogValue, Tx } from "@lavega/core";
+import {
+  computeCardAdvice,
+  emptyPlanPreferences,
+  makeFact,
+  ownAccounts,
+  TRAVEL_AGENT,
+} from "@lavega/core";
 import Optimalisatie from "./views/Optimalisatie";
 import type { StatedAnswers } from "./plan/optimalisatieStated";
 
@@ -43,11 +49,13 @@ const field = (value: unknown): CatalogValue =>
     conditionsKnown: true,
   }) as unknown as CatalogValue;
 
+/* A market card of the cashback ranking. Credit cards are no longer ranked here
+ * (the plan's verdict covers them), so this one is a plain bank card. */
 const MARKET_CARD: CatalogueEntryLike = {
   id: "market-card",
   product: "Marktkaart",
   issuer: "Testbank N.V.",
-  kind: "creditcard",
+  kind: "betaalrekening",
   fields: {
     cashbackPct: field(2),
     pointsPerEuro: field(0),
@@ -138,9 +146,6 @@ const stripTags = (html: string): string => {
   }
 };
 
-const bare = (html: string) =>
-  html.replace(/<p[^>]*data-testid="optimalisatie-disclaimer"[\s\S]*?<\/p>/, "");
-
 test("without the stated prop the page is as before, plus the disclaimer", () => {
   const html = render();
   expect(html).not.toContain('data-testid="stated-badge"');
@@ -223,40 +228,83 @@ test("the disclaimer is the shell's text, once", () => {
   expect(html).toContain('data-testid="optimalisatie-disclaimer"');
 });
 
-test("card debt: no switch offer anywhere, one calm factual note", () => {
-  const html = render({ stated: answers({ repayment: "sometimes" }) });
-  const body = bare(html);
-  expect(body).not.toContain('data-testid="cashback-antwoord"');
-  expect(body).not.toContain("Betaal met <strong>Trading 212</strong>");
-  expect(body).not.toContain("Andere kaarten");
-  expect(html).toContain('data-testid="cashback-debt"');
-  expect(html).toContain("Je gaf aan dat je je creditcard niet altijd volledig aflost.");
-  expect(html).toContain("kan de rente zwaarder wegen dan cashback");
-  expect(html).not.toContain("Je laat een saldo");
-  expect(body).not.toMatch(/advies|adviseur/i);
+/* The plan's advice for a first credit card, built the way the plan builds it. */
+const CREDIT: CatalogueEntryLike = {
+  id: "market-credit",
+  product: "Marktkaart Credit",
+  issuer: "Testbank N.V.",
+  kind: "creditcard",
+  fields: {
+    cashbackPct: field(2),
+    pointsPerEuro: field(0),
+    fxFeePct: field(0),
+    accountFee: { ...field(0), period: "jaar" } as never,
+  },
+};
+const HELD_CREDIT: CatalogueEntryLike = {
+  ...CREDIT,
+  id: "held-credit",
+  product: "Eigen Kaart",
+  fields: { ...CREDIT.fields, accountFee: { ...field(240), period: "jaar" } as never },
+};
+const adviceOf = (
+  months: number,
+  catalogue: CatalogueEntryLike[] = [CREDIT],
+  over: Partial<Parameters<typeof computeCardAdvice>[0]> = {},
+): CardAdvice =>
+  computeCardAdvice({
+    spend: {
+      windowCents: months * 100_000,
+      months,
+      foreignCents: 0,
+      excludedForeignCount: 0,
+    },
+    catalogue,
+    heldIds: [],
+    hasOtherCard: false,
+    cardBalances: [],
+    cardRepayment: null,
+    rewards: [],
+    preferences: emptyPlanPreferences(),
+    rates: [],
+    buffer: null,
+    asOf: "2026-01-15",
+    ...over,
+  });
+
+test("card debt: the plan's pay-off advice leads, the verdict follows and the offer stays visible", () => {
+  const advice = adviceOf(6, [CREDIT, HELD_CREDIT], {
+    heldIds: [HELD_CREDIT.id],
+    cardBalances: [{ cardId: HELD_CREDIT.id, balanceCents: 300_000, paysInFull: false, ratePct: 15 }],
+    cardRepayment: "sometimes",
+    buffer: { liquidSavingsCents: 1_000_000, fixedCostsMonthlyCents: 200_000, targetMonths: 3 },
+  });
+  expect(advice.ignoresInterest).toBe(true);
+  const html = render({ stated: answers({ repayment: "sometimes" }), cardAdvice: advice });
+  const box = document.createElement("div");
+  box.innerHTML = html;
+  const interest = box.querySelector('[data-testid="plan-card-interest"]')!;
+  const verdict = box.querySelector('[data-testid="plan-card-verdict"]')!;
+  expect(interest).not.toBeNull();
+  expect(interest.compareDocumentPosition(verdict) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(box.querySelector('[data-testid="plan-card-interest-ignored"]')).not.toBeNull();
+  // The old hide-on-debt note is gone, and the screen's own offers are not hidden.
+  expect(html).not.toContain('data-testid="cashback-debt"');
+  expect(html).toContain('data-testid="cashback-antwoord"');
+  expect(html).toContain("Marktkaart");
 });
 
-test("an unpaid stated balance is card debt too", () => {
+test("stated debt answers alone no longer hide anything: the screen follows the plan's advice", () => {
   const html = render({
     stated: answers({
-      repayment: "full",
+      repayment: "sometimes",
       balances: [{ cardId: AMEX.id, balanceCents: 50_000, paysInFull: false }],
     }),
   });
-  expect(html).toContain('data-testid="cashback-debt"');
+  expect(html).not.toContain('data-testid="cashback-debt"');
+  expect(html).not.toContain("Je gaf aan dat je je creditcard niet altijd volledig aflost.");
+  expect(html).toContain("Betaal met <strong>Trading 212</strong> in plaats van ING");
 });
-
-test("an unpaid stated balance is named as a balance, not as the repayment answer", () => {
-  const html = render({
-    stated: answers({
-      repayment: "full",
-      balances: [{ cardId: AMEX.id, balanceCents: 50_000, paysInFull: false }],
-    }),
-  });
-  expect(html).toContain("Je gaf een openstaand saldo op je creditcard aan.");
-});
-
-/* ── F: the invite leads somewhere ─────────────────────────────────────── */
 
 test("the invite links to Rekeningen when the app can navigate", () => {
   const html = render({
@@ -287,8 +335,9 @@ test("the business half reads none of it: no rows, invite, first-card or debt no
     accounts: [SAVINGS],
     txs: [],
     stated: answers({ credit: [], noCards: true }),
+    cardAdvice: adviceOf(6),
   });
-  expect(none).not.toContain("cashback-first-card");
+  expect(none).not.toContain("plan-card-verdict");
 });
 
 test("a stated debit card shows a badge, and is gone once a live bank link carries it", () => {
@@ -329,10 +378,15 @@ const noProvider = (over: Partial<Account> = {}) =>
   });
 const noCredit = answers({ credit: [], noCards: true });
 
-test("no credit card and no spend at all: names the credit card, never 'geen kaart'", () => {
-  const html = render({ accounts: [SAVINGS], txs: [], stated: noCredit });
-  const line = row(html, "cashback-first-card");
-  expect(line).toContain("Je hebt geen creditcard.");
+test("no credit card and no spend at all: the plan's not-enough-data line, never 'geen kaart'", () => {
+  const html = render({
+    accounts: [SAVINGS],
+    txs: [],
+    stated: noCredit,
+    cardAdvice: adviceOf(0),
+  });
+  const line = row(html, "plan-card-verdict");
+  expect(line).toContain("minder dan 3 volle maanden");
   expect(line).not.toContain("geen kaart");
   expect(html).not.toContain("even goed of beter");
 });
@@ -342,58 +396,66 @@ test("two full months: no euro figure and no verdict, an honest too-little line"
     accounts: [noProvider()],
     txs: monthsOfSpend("geen", 2),
     stated: noCredit,
+    cardAdvice: adviceOf(2),
   });
-  const line = row(html, "cashback-first-card");
-  expect(line).toContain("LaVega heeft nog te weinig maanden aan uitgaven om dit uit te rekenen.");
+  const line = row(html, "plan-card-verdict");
+  expect(line).toContain("minder dan 3 volle maanden");
+  expect(line).toContain("Er is niets geschat.");
   expect(line).not.toMatch(/€|loont nu niet|kan lonen/);
 });
 
-test("three full months: the first credit card is priced net of its fee", () => {
+test("three full months: the first credit card is the plan's verdict, priced net of its fee", () => {
+  const advice = adviceOf(3);
+  expect(advice.verdict.kind).toBe("switch");
   const html = render({
     accounts: [noProvider()],
     txs: monthsOfSpend("geen", 3),
     stated: noCredit,
+    cardAdvice: advice,
   });
-  const line = row(html, "cashback-first-card");
-  expect(line).toContain("Een eerste creditcard kan lonen");
-  expect(line).toContain("Marktkaart");
+  const line = row(html, "plan-card-verdict");
+  expect(line).toContain("Aanbeveling: Marktkaart Credit");
   expect(line).toMatch(/€/);
 });
 
 test("a card that cannot clear the plan's threshold: says so plainly", () => {
   const dear: CatalogueEntryLike = {
-    ...MARKET_CARD,
-    fields: { ...MARKET_CARD.fields, accountFee: { ...field(900), period: "jaar" } as never },
+    ...CREDIT,
+    fields: { ...CREDIT.fields, accountFee: { ...field(900), period: "jaar" } as never },
   };
+  const advice = adviceOf(4, [dear]);
+  expect(advice.verdict.kind).toBe("no-card-worth-it");
   const html = render({
     accounts: [noProvider()],
     txs: monthsOfSpend("geen", 4),
-    entries: [dear, AMEX],
     stated: noCredit,
+    cardAdvice: advice,
   });
-  const line = row(html, "cashback-first-card");
+  const line = row(html, "plan-card-verdict");
   expect(line).toContain("een creditcard nemen loont nu niet");
   expect(line).toContain("€\u00a020,00");
 });
 
-test("a debit card only, and 'geen creditcard': credit wording", () => {
+test("a debit card only, and 'geen creditcard': the verdict still reads from the plan", () => {
   const html = render({
     accounts: [SAVINGS],
     txs: [],
     entries: [...ENTRIES, ING_DEBIT],
     stated: answers({ credit: [], debit: [ING_DEBIT.id], noCards: true }),
+    cardAdvice: adviceOf(1),
   });
-  expect(row(html, "cashback-first-card")).toContain("Je hebt geen creditcard.");
+  expect(row(html, "plan-card-verdict")).toContain("minder dan 3 volle maanden");
   expect(html).not.toContain("geen kaart");
 });
 
-test("a connected current account does not suppress the first-credit-card line", () => {
+test("a connected current account does not make the generic 'already best' line appear for a first card", () => {
   const html = render({
     accounts: [ING, T212],
     txs: TXS("ing"),
     stated: noCredit,
+    cardAdvice: adviceOf(6),
   });
-  expect(row(html, "cashback-first-card")).toContain("Je hebt geen creditcard.");
+  expect(row(html, "plan-card-verdict")).toContain("Aanbeveling: Marktkaart Credit");
   expect(html).not.toContain("even goed of beter");
 });
 
