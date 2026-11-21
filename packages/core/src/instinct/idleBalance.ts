@@ -76,7 +76,8 @@ export function monthlyMoneyCents(i: DailyInput): number | null {
       .filter((a) => accountTypeKind(a) === "current" && isEurCurrency(a.currency))
       .map((a) => a.key),
   );
-  const txs = i.txs.filter((t) => current.has(t.accountKey) && t.date <= i.today);
+  // A bank row with no booking or value date has date "": it has no day, so it is left out.
+  const txs = i.txs.filter((t) => current.has(t.accountKey) && t.date !== "" && t.date <= i.today);
   if (txs.length === 0) return null;
   const oldest = txs.reduce((m, t) => (t.date < m ? t.date : m), txs[0]!.date);
   const days = daysFromTo(oldest, i.today);

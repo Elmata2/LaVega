@@ -89,6 +89,19 @@ describe("idle-balance tip", () => {
       tx(D(d), -monthly, { accountKey: key, counterparty: "Huisbaas" }),
     ]);
 
+  /* A bank row with no booking date and no value date (a pending card payment) arrives with
+   * date "". It cannot be placed on a day, so it must not decide the age of the history. */
+  it("a row with no date does not break the tip, and does not change the answer", () => {
+    const undated = tx("", -12.5, { counterparty: "Pending" });
+    const withRow = input({ txs: [...flow(2000), undated], balances: [bal(100_000)] });
+    expect(fires(withRow)).toBe(true);
+    expect(fires(input({ txs: [undated], balances: [bal(100_000)] }))).toBe(false);
+  });
+  it("no tip throws on a row with no date", () => {
+    const txs = [...flow(2000), tx("", -12.5, { counterparty: "Pending" })];
+    for (const t of TIPS)
+      expect(() => t.when({}, input({ txs, balances: [bal(100_000)] }))).not.toThrow();
+  });
   it("owner example: three payments of 2000, floor exactly 1000 fires", () => {
     expect(fires(input({ txs: flow(2000), balances: [bal(100_000)] }))).toBe(true);
   });
