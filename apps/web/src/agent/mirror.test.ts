@@ -28,11 +28,6 @@ const rules: Rule[] = [{ id: "r1", match: "albert heijn", category: "Boodschappe
 
 const plan = (cards: unknown): PlanResult =>
   ({ sections: { cards: { figures: cards } } }) as unknown as PlanResult;
-const net = (cardKey: string, name: string, netCents: number | null) => ({
-  cardKey,
-  name,
-  netCents,
-});
 
 test("the mirror serialises without any flow amount or counterparty", () => {
   const m = buildMirror({
@@ -87,58 +82,31 @@ test("non-VAT due dates carry a generic label, never a user typed supplier name"
   expect(en.dueDates[0]?.label).toBe("Payment due");
 });
 
-test("a gain inside the cards.ts margin is not reported", () => {
-  // margin is 10% of |in-use net|: 10000 -> 1000
-  const nets = (best: number) => [net("k1", "A", 10000), net("k2", "B", best)];
-  const at = (best: number) =>
-    buildMirror({
-      rules: [],
-      flows: [],
-      plan: plan({ cardInUseKey: "k1", months: 12, cardableSpendCents: 1, nets: nets(best) }),
-      now: NOW,
-    }).cardOffer;
-  expect(at(10900)).toBeNull();
-  expect(at(11000)).toBeNull();
-  expect(at(11001)?.yearlyGainCents).toBe(1001);
+const advicePlan = (advice: Record<string, unknown>) =>
+  plan({
+    advice: {
+      basis: "history",
+      ignoresInterest: false,
+      baseline: { kind: "best-held", cardId: "k1", name: "Mijn kaart", netCents: 0 },
+      ...advice,
+    },
+  });
+const offerOf = (p: PlanResult) =>
+  buildMirror({ rules: [], flows: [], plan: p, now: NOW }).cardOffer;
+
+test("the card offer is the plan's verdict: best card and its yearly gain", () => {
+  const p = advicePlan({ verdict: { kind: "switch", best: { name: "Kaart B" }, gainCents: 8000 } });
+  expect(offerOf(p)).toEqual({ name: "Kaart B", yearlyGainCents: 8000, computedAt: "2026-11-10" });
 });
 
-test("the card offer is the best other card's gain over the card in use, yearly", () => {
-  const p = plan({
-    cardInUseKey: "k1",
-    months: 12,
-    cardableSpendCents: 100000,
-    nets: [net("k1", "Mijn kaart", 1000), net("k2", "Kaart B", 9000), net("k3", "Kaart C", 4000)],
-  });
-  expect(buildMirror({ rules: [], flows: [], plan: p, now: NOW }).cardOffer).toEqual({
-    name: "Kaart B",
-    yearlyGainCents: 8000,
-    computedAt: "2026-11-10",
-  });
-});
-
-test("a shorter history is scaled to a year; no gain or unknown nets give null", () => {
-  const six = plan({
-    cardInUseKey: "k1",
-    months: 6,
-    cardableSpendCents: 100000,
-    nets: [net("k1", "A", 0), net("k2", "B", 3000)],
-  });
-  expect(
-    buildMirror({ rules: [], flows: [], plan: six, now: NOW }).cardOffer?.yearlyGainCents,
-  ).toBe(6000);
-  for (const nets of [
-    [net("k1", "A", 5000), net("k2", "B", 5000)],
-    [net("k1", "A", null), net("k2", "B", 9000)],
-    [net("k1", "A", 100)],
-  ])
-    expect(
-      buildMirror({
-        rules: [],
-        flows: [],
-        plan: plan({ cardInUseKey: "k1", months: 12, cardableSpendCents: 1, nets }),
-        now: NOW,
-      }).cardOffer,
-    ).toBeNull();
+test("no card offer unless the verdict is a switch on history without carried card debt", () => {
+  const sw = { kind: "switch", best: { name: "B" }, gainCents: 6000 };
+  expect(offerOf(advicePlan({ verdict: { kind: "keep", gainCents: 0 } }))).toBeNull();
+  expect(offerOf(advicePlan({ verdict: { kind: "unknown-baseline" } }))).toBeNull();
+  expect(offerOf(advicePlan({ verdict: sw, ignoresInterest: true }))).toBeNull();
+  expect(offerOf(advicePlan({ verdict: sw, basis: "stated" }))).toBeNull();
+  // A first card (no card held) is not pitched unasked.
+  expect(offerOf(advicePlan({ verdict: sw, baseline: { kind: "no-card", netCents: 0 } }))).toBeNull();
 });
 
 beforeEach(() => vi.useFakeTimers());

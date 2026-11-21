@@ -49,6 +49,19 @@ function entryFor(
   return same.length === 1 ? same[0]! : null;
 }
 
+/** The one answer to "which catalogue row is this account": the card the person
+ *  stated for it (a file import or the question in the plan) when that names a
+ *  catalogue row, else the matcher's row, else null. */
+function catalogueIdOf(
+  account: Account,
+  entries: readonly CatalogueEntryLike[],
+  feeProductId: string | null,
+): string | null {
+  const stated = account.statedCardId;
+  if (stated !== undefined && entries.some((e) => e.id === stated)) return stated;
+  return entryFor(account, entries, feeProductId)?.id ?? null;
+}
+
 type CostOf = ReturnType<typeof accountCosts>["rows"][number]["cost"];
 
 const feeProductIdOf = (cost: CostOf | undefined): string | null =>
@@ -65,10 +78,8 @@ export function heldCatalogueIds(
   const costs = new Map(accountCosts(cards, entries).rows.map((r) => [r.account.key, r.cost]));
   const ids = new Set<string>();
   for (const account of cards) {
-    const entry = entryFor(account, entries, feeProductIdOf(costs.get(account.key)));
-    if (entry !== null) ids.add(entry.id);
-    // A file-fed account stands in for the card it was imported for.
-    if (account.statedCardId !== undefined) ids.add(account.statedCardId);
+    const id = catalogueIdOf(account, entries, feeProductIdOf(costs.get(account.key)));
+    if (id !== null) ids.add(id);
   }
   return ids;
 }
@@ -163,7 +174,8 @@ export function buildHeldCards(i: {
         : cost.matchedBy === "product-name"
           ? cost.fee
           : (cost.agreeing[0] ?? null);
-    const entry = entryFor(account, i.entries, feeProductIdOf(cost));
+    const catalogueId = catalogueIdOf(account, i.entries, feeProductIdOf(cost));
+    const entry = i.entries.find((e) => e.id === catalogueId) ?? null;
     const fx = sourced(entry, "fxFeePct");
     const pts = sourced(entry, "pointsPerEuro");
     const provenance: Provenance = {
@@ -173,7 +185,7 @@ export function buildHeldCards(i: {
     return {
       accountKey: account.key,
       label: accountLabel(account),
-      catalogueId: entry?.id ?? null,
+      catalogueId,
       cashback,
       fee,
       fxFeePct: fx?.value ?? null,

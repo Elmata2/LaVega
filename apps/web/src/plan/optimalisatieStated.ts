@@ -1,8 +1,5 @@
 import {
-  accountType,
-  carriesCardDebt,
   type Account,
-  type CardAdvice,
   type CardBalance,
   type CardRepayment,
   type CatalogueEntryLike,
@@ -55,60 +52,4 @@ export function statedHeldRows(
       return [];
     return [{ id: p.id, kind: p.kind, label: p.name, card: statedHeldCard(entry) }];
   });
-}
-
-/** The plan's one answer to "does this person carry card debt". */
-export function cardDebtStated(stated: StatedAnswers | undefined): boolean {
-  return (
-    stated !== undefined &&
-    carriesCardDebt({
-      cardRepayment: stated.repayment,
-      cardBalances: stated.balances,
-    })
-  );
-}
-
-/** Why the person is taken to carry card debt: the repayment answer says they
- *  do not always pay in full, or a stated card holds an unpaid balance. */
-export type CardDebtReason = "not-in-full" | "balance";
-
-export function cardDebtReason(stated: StatedAnswers | undefined): CardDebtReason | null {
-  if (!cardDebtStated(stated)) return null;
-  return stated!.repayment === "sometimes" || stated!.repayment === "rarely"
-    ? "not-in-full"
-    : "balance";
-}
-
-/** The wizard's "Geen creditcard" answer is about CREDIT cards only. The
- *  first-credit-card framing applies when that was answered and no credit card
- *  is held, stated or connected; a debit card or a current account does not
- *  count as one. */
-export function firstCreditCardApplies(
-  stated: StatedAnswers | undefined,
-  accounts: readonly Account[],
-): boolean {
-  return (
-    stated !== undefined &&
-    stated.noCards &&
-    stated.credit.length === 0 &&
-    !accounts.some((a) => accountType(a) === "Creditcard")
-  );
-}
-
-export type FirstCardOutcome =
-  | { kind: "no-spend" }
-  | { kind: "too-little" }
-  | { kind: "worth-it"; card: string; gainCents: number }
-  | { kind: "not-worth-it" }
-  | { kind: "none-comparable" };
-
-/** The plan's verdict (`noCardAdvice`) as one outcome for the screen. Fewer
- *  full months than the plan's minimum gives no figure and no verdict. */
-export function firstCardOutcome(advice: CardAdvice): FirstCardOutcome {
-  if (advice.state === "short-history")
-    return advice.spend.months === 0 ? { kind: "no-spend" } : { kind: "too-little" };
-  if (advice.state === "no-spend") return { kind: "no-spend" };
-  const v = advice.verdict;
-  if (v.kind === "switch") return { kind: "worth-it", card: v.best.name, gainCents: v.gainCents };
-  return v.kind === "no-card-worth-it" ? { kind: "not-worth-it" } : { kind: "none-comparable" };
 }

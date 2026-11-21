@@ -13,7 +13,7 @@ import {
   type RewardsBalance,
 } from "@lavega/core";
 import { CATALOGUE_ENTRIES } from "../catalogue-rates";
-import { buildHeldCards } from "./heldCards";
+import { buildHeldCards, heldCatalogueIds } from "./heldCards";
 
 const acct = (key: string, o: Partial<Account> = {}): Account => ({
   key,
@@ -151,6 +151,44 @@ test("a bank card the catalogue knows carries its catalogue id; one it does not 
   const cards = buildHeldCards({ ...base, accounts: [known, unknown], facts: [], assumptionOn: false });
   expect(cards[0]!.catalogueId).toBe("abn-amro-creditcard");
   expect(cards[1]!.catalogueId).toBeNull();
+});
+
+test("a file-fed account with statedCardId gets that catalogue id", () => {
+  const fed = acct("fed", { name: "Mijn kaart", bank: "Onbekende Bank", statedCardId: "abn-amro-creditcard" });
+  const [card] = buildHeldCards({ ...base, accounts: [fed], facts: [], assumptionOn: false });
+  expect(card!.catalogueId).toBe("abn-amro-creditcard");
+  expect(heldCatalogueIds([fed], CATALOGUE_ENTRIES).has("abn-amro-creditcard")).toBe(true);
+});
+
+test("statedCardId wins over a name match", () => {
+  const both = acct("both", {
+    name: "creditcard",
+    bank: "ABN AMRO",
+    type: "Creditcard",
+    statedCardId: "ing-creditcard",
+  });
+  const [card] = buildHeldCards({ ...base, accounts: [both], facts: [], assumptionOn: false });
+  expect(card!.catalogueId).toBe("ing-creditcard");
+  const ids = heldCatalogueIds([both], CATALOGUE_ENTRIES);
+  expect(ids.has("ing-creditcard")).toBe(true);
+  expect(ids.has("abn-amro-creditcard")).toBe(false);
+});
+
+test("a statedCardId that names no catalogue row falls through to the name match", () => {
+  const stray = acct("stray", {
+    name: "creditcard",
+    bank: "ABN AMRO",
+    type: "Creditcard",
+    statedCardId: "no-such-card",
+  });
+  const [card] = buildHeldCards({ ...base, accounts: [stray], facts: [], assumptionOn: false });
+  expect(card!.catalogueId).toBe("abn-amro-creditcard");
+});
+
+test("a card account with no match has catalogueId null", () => {
+  const odd = acct("odd", { name: "Pas", bank: "Onbekende Bank" });
+  const [card] = buildHeldCards({ ...base, accounts: [odd], facts: [], assumptionOn: false });
+  expect(card!.catalogueId).toBeNull();
 });
 
 test("stated credit cards are added with catalogue facts; held and other ones are not", () => {

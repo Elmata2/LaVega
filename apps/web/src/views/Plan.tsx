@@ -51,6 +51,8 @@ export type PlanProps = {
   /** The manual points balances and how to store them (the Punten store). */
   rewards?: readonly RewardsBalance[];
   onSaveRewards?: (next: RewardsBalance[]) => Promise<void>;
+  /** Stores the card the user names for a connected card account (`statedCardId`). */
+  onSaveStatedCard?: (accountKey: string, cardId: string) => Promise<void>;
   /** UNSCOPED accounts and the entity profiles that scope them; a goal can be
    *  linked only to a personal account. */
   accounts?: readonly Account[];
@@ -99,6 +101,7 @@ export default function Plan({
   publicFacts,
   rewards,
   onSaveRewards,
+  onSaveStatedCard,
 }: PlanProps) {
   const [locale] = useAppLocale();
   const shell = planShellCopy[locale];
@@ -173,6 +176,7 @@ export default function Plan({
     onNavigate,
     ...(rewards === undefined ? {} : { rewards }),
     ...(onSaveRewards === undefined ? {} : { saveRewards: onSaveRewards }),
+    ...(onSaveStatedCard === undefined ? {} : { saveStatedCard: onSaveStatedCard }),
   };
 
   return (

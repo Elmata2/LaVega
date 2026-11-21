@@ -78,6 +78,10 @@ export type UsePlanInput = {
   /** False while the app is still loading the data the plan reads; nothing is
    *  stored until it is true (a snapshot of half-loaded data would be wrong). */
   ready?: boolean;
+  /** Compute and return the plan, but write nothing to the vault: no snapshot,
+   *  no preference, limit or event write. For a screen that only reads the plan's
+   *  answer (Optimalisatie). Default false. */
+  readOnly?: boolean;
 };
 
 export type UsePlan = {
@@ -149,7 +153,8 @@ export function vatFrequencyOf(
 
 export function usePlan(i: UsePlanInput): UsePlan {
   const { storage } = i;
-  const ready = i.ready ?? true;
+  const readOnly = i.readOnly ?? false;
+  const ready = (i.ready ?? true) && !readOnly;
   // Tagged with the storage it was read from, so state read from another vault
   // (after a restore or sign-in) is never shown for this one.
   const [loaded, setLoaded] = useState<{ storage: PlanStorage; value: Stored } | null>(null);
@@ -247,6 +252,7 @@ export function usePlan(i: UsePlanInput): UsePlan {
       touchesPlan: boolean,
     ): Promise<void> => {
       const owner = storage;
+      if (readOnly) return Promise.reject(new Error("the plan is read-only here; nothing was saved"));
       const p = queue.current.then(async () => {
         const at = await nowIso();
         if (current.current !== owner) throw new Error("the vault changed; the write was dropped");
@@ -270,7 +276,7 @@ export function usePlan(i: UsePlanInput): UsePlan {
       queue.current = p.catch(() => {});
       return p;
     },
-    [commit, storage],
+    [commit, storage, readOnly],
   );
 
   /** The plan section as stored. The preferences keep the vault's own stamp

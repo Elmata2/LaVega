@@ -25,6 +25,10 @@ export type CardAdviceCopy = {
   /** Headline when nothing can be computed (not enough history, no spend, nothing comparable). */
   noAdvice: (a: CardAdvice, fmt: PlanFmt) => string;
   verdict: (a: CardAdvice, fmt: PlanFmt) => string;
+  /** The part of a switch gain that is points, with the value per point used. */
+  gainOfWhichPoints: (amount: string, centsPerPoint: string) => string;
+  /** Shown next to a verdict that picks an American Express card. */
+  amexAcceptance: string;
   rankedTitle: string;
   optionLine: (o: CardOption, a: CardAdvice, fmt: PlanFmt) => string;
   unvaluedPoints: string;
@@ -38,6 +42,8 @@ export type CardAdviceCopy = {
   reasons: Record<NotComparableReason, string>;
   /** The comparison leaves out card interest while a balance is carried. */
   interestIgnored: string;
+  /** Shown near the verdict when the spend comes from the wizard answers. */
+  basisStated: string;
   feeNoteLine: (n: FeeNote, annualCents: number, f: PlanFmt) => string;
   conditionsTitle: string;
   interestTitle: (i: InterestAdvice) => string;
@@ -55,6 +61,10 @@ export type CardAdviceCopy = {
   noCardsToEdit: string;
   otherCardName: string;
   yourCard: string;
+  /** The question for a connected card the app could not identify. */
+  identifyTitle: string;
+  identifyCardLabel: string;
+  identifyFailed: string;
 };
 
 const cents = (v: number, f: PlanFmt) => f.eur(v);
@@ -82,6 +92,9 @@ const nl: CardAdviceCopy = {
   yours: "jouw kaart",
   yourCard: "je creditcard",
   otherCardName: "een andere creditcard",
+  identifyTitle: "Welke kaart is dit?",
+  identifyCardLabel: "Kies de kaart",
+  identifyFailed: "Opslaan lukte niet. Probeer het opnieuw.",
   noAdvice: (a) =>
     a.state === "short-history"
       ? `Er zijn minder dan ${CARD_ADVICE_MIN_MONTHS} volle maanden aan uitgaven. Voor een jaarcijfer is dat te weinig. Er is niets geschat.`
@@ -107,7 +120,10 @@ const nl: CardAdviceCopy = {
       return `Je huidige ${a.baseline.kind === "unknown" && a.baseline.blockers.length === 1 ? "kaart" : "kaarten"} is niet te vergelijken: ${blockerText(a, nl)}. Er is dus geen aanbeveling om over te stappen. Dit zijn de kaarten met de hoogste nettowaarde bij jouw uitgaven.`;
     return "";
   },
+  gainOfWhichPoints: (amount, cpp) => `waarvan ${amount} aan punten, gerekend tegen ${cpp} cent per punt`,
+  amexAcceptance: "American Express wordt niet overal geaccepteerd.",
   rankedTitle: "Kaarten naast elkaar, bij jouw uitgaven",
+  basisStated: "Op basis van je antwoorden, niet van je transacties.",
   interestIgnored:
     "Let op: de rente van kaarten zit niet in deze vergelijking, want de catalogus heeft geen kaartrentes. Bij een openstaand saldo kan de rente zwaarder wegen dan dit verschil.",
   conditionsTitle: "voorwaarden van de bron",
@@ -132,7 +148,9 @@ const nl: CardAdviceCopy = {
   },
   unvaluedPoints: "puntenwaarde niet meegeteld: geen waarde per punt bekend",
   spendCalc: (a, f) =>
-    `Uitgaven die met een kaart te betalen zijn: ${cents(a.spend.windowCents, f)} over ${a.spend.months} volle maanden, dat is ${cents(a.spend.annualCents, f)} per jaar (maal 12, gedeeld door ${a.spend.months}). Huur, hypotheek, belasting, verzekeringen, aflossingen, contant geld en eigen overboekingen zijn niet meegeteld. Alle overige uitgaven staan in deze som op de kaart; of elke winkel de kaart accepteert is niet gecontroleerd. Daarvan in een andere valuta: ${cents(a.spend.annualForeignCents, f)} per jaar.${a.spend.excludedForeignCount > 0 ? ` ${a.spend.excludedForeignCount} regels in een andere valuta zijn niet meegeteld; de opslag daarover is dus niet vergeleken.` : ""}`,
+    a.basis === "stated"
+      ? `Je opgegeven uitgaven zonder woonlasten: ${cents(a.spend.annualCents, f)} per jaar, volgens je antwoorden bij de intake (niet uit je transacties). Niet alles daarvan is met een kaart te betalen, dus dit is een bovengrens. Daarvan in een andere valuta: ${cents(a.spend.annualForeignCents, f)} per jaar.`
+      : `Uitgaven die met een kaart te betalen zijn: ${cents(a.spend.windowCents, f)} over ${a.spend.months} volle maanden, dat is ${cents(a.spend.annualCents, f)} per jaar (maal 12, gedeeld door ${a.spend.months}). Huur, hypotheek, belasting, verzekeringen, aflossingen, contant geld en eigen overboekingen zijn niet meegeteld. Alle overige uitgaven staan in deze som op de kaart; of elke winkel de kaart accepteert is niet gecontroleerd. Daarvan in een andere valuta: ${cents(a.spend.annualForeignCents, f)} per jaar.${a.spend.excludedForeignCount > 0 ? ` ${a.spend.excludedForeignCount} regels in een andere valuta zijn niet meegeteld; de opslag daarover is dus niet vergeleken.` : ""}`,
   optionCalc: (o, a, f) => {
     const out: string[] = [];
     out.push(
@@ -143,7 +161,9 @@ const nl: CardAdviceCopy = {
       out.push(
         `Opslag buitenlandse valuta: ${cents(a.spend.annualForeignCents, f)} maal ${pct(o.fxFeePct, f)} = ${f.eurExact(o.fxCostCents)}.`,
       );
-    if (o.cashbackPct !== null && o.cashbackCents !== null)
+    if (o.cashbackTier === "assumed")
+      out.push(`Cashback: ${pct(0, f)} (aangenomen: geen bron, gewone Nederlandse kaart).`);
+    else if (o.cashbackPct !== null && o.cashbackCents !== null)
       out.push(
         `Cashback: ${cents(a.spend.annualCents, f)} maal ${pct(o.cashbackPct, f)} = ${f.eurExact(o.cashbackCents)}.`,
       );
@@ -176,7 +196,7 @@ const nl: CardAdviceCopy = {
   sourceLink: "bron",
   caveats: [
     "Alle uitgaven staan in deze berekening op de kaart. Niet gecontroleerd: of je als klant wordt geaccepteerd, welke bank of welk pakket de kaart vraagt en of de voorwaarden voor jou gelden.",
-    "Zakelijke kaarten zijn niet meegenomen. Cashback die de catalogus niet kent is niet meegerekend.",
+    "Zakelijke kaarten zijn niet meegenomen. Een kaart zonder bekend cashbackcijfer staat niet in de vergelijking; bij een gewone Nederlandse kaart rekenen we met 0% (aangenomen).",
   ],
   notComparableTitle: (n) => `Niet te vergelijken (${n})`,
   notComparableLine: (o) => `${o.name}: ${o.reasons.map((r) => nl.reasons[r]).join("; ")}`,
@@ -186,6 +206,7 @@ const nl: CardAdviceCopy = {
     "points-unknown": "punten per euro niet in de catalogus",
     "fee-condition-unknown": "de jaarkosten hangen af van iets waarvan de prijs niet in de catalogus staat",
     "points-unvalued": "de waarde van de punten of miles is onbekend; vul een inwisselvoorbeeld in",
+    "cashback-unknown": "cashback onbekend",
     "not-in-catalogue": "niet in de catalogus",
   },
   interestTitle: (i) => `Rente op ${i.name ?? nl.otherCardName}`,
@@ -314,6 +335,9 @@ const en: CardAdviceCopy = {
   yours: "your card",
   yourCard: "your credit card",
   otherCardName: "another credit card",
+  identifyTitle: "Which card is this?",
+  identifyCardLabel: "Choose the card",
+  identifyFailed: "Could not save. Try again.",
   noAdvice: (a) =>
     a.state === "short-history"
       ? `There are fewer than ${CARD_ADVICE_MIN_MONTHS} full months of spending. That is too little for a yearly figure. Nothing has been estimated.`
@@ -339,7 +363,10 @@ const en: CardAdviceCopy = {
       return `Your current ${a.baseline.kind === "unknown" && a.baseline.blockers.length === 1 ? "card" : "cards"} cannot be compared: ${blockerText(a, en)}. So there is no recommendation to switch. These are the cards with the highest net value at your spending.`;
     return "";
   },
+  gainOfWhichPoints: (amount, cpp) => `of which ${amount} in points, at ${cpp} cent per point`,
+  amexAcceptance: "American Express is not accepted everywhere.",
   rankedTitle: "Cards side by side, at your spending",
+  basisStated: "Based on your answers, not on your transactions.",
   interestIgnored:
     "Note: card interest is not part of this comparison, because the catalogue has no card rates. With a balance carried over, interest can weigh more than this difference.",
   conditionsTitle: "the source's terms",
@@ -364,7 +391,9 @@ const en: CardAdviceCopy = {
   },
   unvaluedPoints: "points value not counted: no value per point known",
   spendCalc: (a, f) =>
-    `Spending that can be paid by card: ${cents(a.spend.windowCents, f)} over ${a.spend.months} full months, which is ${cents(a.spend.annualCents, f)} a year (times 12, divided by ${a.spend.months}). Rent, mortgage, tax, insurance, loan repayments, cash and transfers between your own accounts are left out. All other spending is counted as on the card; whether every shop accepts the card is not checked. Of this in another currency: ${cents(a.spend.annualForeignCents, f)} a year.${a.spend.excludedForeignCount > 0 ? ` ${a.spend.excludedForeignCount} lines in another currency are not counted, so the markup on them is not compared.` : ""}`,
+    a.basis === "stated"
+      ? `Your stated spending without housing: ${cents(a.spend.annualCents, f)} a year, from your intake answers (not from your transactions). Not all of it can be paid by card, so this is an upper bound. Of this in another currency: ${cents(a.spend.annualForeignCents, f)} a year.`
+      : `Spending that can be paid by card: ${cents(a.spend.windowCents, f)} over ${a.spend.months} full months, which is ${cents(a.spend.annualCents, f)} a year (times 12, divided by ${a.spend.months}). Rent, mortgage, tax, insurance, loan repayments, cash and transfers between your own accounts are left out. All other spending is counted as on the card; whether every shop accepts the card is not checked. Of this in another currency: ${cents(a.spend.annualForeignCents, f)} a year.${a.spend.excludedForeignCount > 0 ? ` ${a.spend.excludedForeignCount} lines in another currency are not counted, so the markup on them is not compared.` : ""}`,
   optionCalc: (o, a, f) => {
     const out: string[] = [];
     out.push(o.feeCents === null ? "Annual fee: unknown." : `Annual fee: ${f.eurExact(o.feeCents)}.`);
@@ -373,7 +402,9 @@ const en: CardAdviceCopy = {
       out.push(
         `Foreign currency markup: ${cents(a.spend.annualForeignCents, f)} times ${pct(o.fxFeePct, f)} = ${f.eurExact(o.fxCostCents)}.`,
       );
-    if (o.cashbackPct !== null && o.cashbackCents !== null)
+    if (o.cashbackTier === "assumed")
+      out.push(`Cashback: ${pct(0, f)} (assumed: no source, ordinary Dutch card).`);
+    else if (o.cashbackPct !== null && o.cashbackCents !== null)
       out.push(
         `Cashback: ${cents(a.spend.annualCents, f)} times ${pct(o.cashbackPct, f)} = ${f.eurExact(o.cashbackCents)}.`,
       );
@@ -406,7 +437,7 @@ const en: CardAdviceCopy = {
   sourceLink: "source",
   caveats: [
     "All spending counts as on the card in this calculation. Not checked: whether you would be accepted as a customer, which bank or package the card requires, and whether its terms apply to you.",
-    "Business cards are left out. Cashback the catalogue does not know is not counted.",
+    "Business cards are left out. A card with no known cashback figure is not in the comparison; for an ordinary Dutch card we use 0% (assumed).",
   ],
   notComparableTitle: (n) => `Cannot be compared (${n})`,
   notComparableLine: (o) => `${o.name}: ${o.reasons.map((r) => en.reasons[r]).join("; ")}`,
@@ -416,6 +447,7 @@ const en: CardAdviceCopy = {
     "points-unknown": "points per euro not in the catalogue",
     "fee-condition-unknown": "the annual fee depends on something whose price is not in the catalogue",
     "points-unvalued": "the value of the points or miles is unknown; add a redemption example",
+    "cashback-unknown": "cashback unknown",
     "not-in-catalogue": "not in the catalogue",
   },
   interestTitle: (i) => `Interest on ${i.name ?? en.otherCardName}`,

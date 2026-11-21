@@ -209,7 +209,10 @@ export default function CardsSection({ result, ctx }: SectionProps<CardsFigures>
                 heldNames={heldNames}
               />
             ) : null}
-            <CardAdviceBlock advice={f.advice} />
+            <CardAdviceBlock
+              advice={f.advice}
+              {...(ctx.saveStatedCard === undefined ? {} : { onIdentify: ctx.saveStatedCard })}
+            />
             <StatusBody
               section="cards"
               result={result}

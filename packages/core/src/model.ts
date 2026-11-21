@@ -69,8 +69,10 @@ export type Account = {
    *  fed from an uploaded export (Amex, Trading 212 card ...). Absent = unknown
    *  or a bank link. Optional and additive: older vaults decrypt unchanged. */
   source?: "file";
-  /** The catalogue id of the card the owner stated in the wizard that this
-   *  file-fed account stands in for. It clears that "not connected" card. */
+  /** The catalogue id of the card this account stands in for: stated in the wizard
+   *  for a file-fed account, or picked at "Welke kaart is dit?" for a bank-linked
+   *  one. It survives re-imports and bank syncs unless the import carries its own.
+   *  It clears that "not connected" card. */
   statedCardId?: string;
 };
 

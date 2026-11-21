@@ -8,7 +8,7 @@ import Plan, { type PlanProps } from "../views/Plan.js";
 import { usePlan, type UsePlanInput } from "./usePlan.js";
 
 export type PlanRouteProps = UsePlanInput &
-  Pick<PlanProps, "onSaveProfile" | "onNavigate" | "onSaveRewards"> & {
+  Pick<PlanProps, "onSaveProfile" | "onNavigate" | "onSaveRewards" | "onSaveStatedCard"> & {
     profileRead: PlanProps["profileRead"] | "loading" | "error";
     onRetry: () => void;
     /** Called with each freshly computed plan (the agent mirror reads the card figures). */
@@ -25,6 +25,7 @@ export default function PlanRoute({
   onSaveProfile,
   onNavigate,
   onSaveRewards,
+  onSaveStatedCard,
   onComputed,
   ...input
 }: PlanRouteProps) {
@@ -55,6 +56,7 @@ export default function PlanRoute({
       onNavigate={onNavigate}
       rewards={input.rewards}
       {...(onSaveRewards === undefined ? {} : { onSaveRewards })}
+      {...(onSaveStatedCard === undefined ? {} : { onSaveStatedCard })}
       accounts={input.accounts}
       entityProfiles={input.entityProfiles}
       hasTransactions={input.txs.length > 0}

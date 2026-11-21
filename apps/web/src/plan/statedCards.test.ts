@@ -71,7 +71,8 @@ test("a fee billed per year is kept as it is", () => {
 });
 
 test("a field the coverage check rejects is null, not a number", () => {
-  const [row] = statedCardRows(["ing-creditcard"], [], none, labels, "x");
+  // ING Platinumcard: the ING Punten earn table does not name it, so the field stays empty.
+  const [row] = statedCardRows(["ing-platinumcard"], [], none, labels, "x");
   expect(row!.pointsPerEuro).toBeNull();
 });
 

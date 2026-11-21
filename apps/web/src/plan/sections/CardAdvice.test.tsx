@@ -27,11 +27,18 @@ afterEach(() => {
   el = null;
   document.cookie = "lavega_locale=; Max-Age=0; Path=/";
 });
-const mount = (advice: CardAdvice): HTMLElement => {
+const mount = (
+  advice: CardAdvice,
+  onIdentify?: (accountKey: string, cardId: string) => Promise<void> | void,
+): HTMLElement => {
   el = document.createElement("div");
   document.body.append(el);
   root = createRoot(el);
-  act(() => root!.render(<CardAdviceBlock advice={advice} />));
+  act(() =>
+    root!.render(
+      <CardAdviceBlock advice={advice} {...(onIdentify === undefined ? {} : { onIdentify })} />,
+    ),
+  );
   return el;
 };
 const q = (c: ParentNode, id: string) => c.querySelector<HTMLElement>(`[data-testid="${id}"]`);
@@ -55,6 +62,8 @@ const card = (id: string, fee: number, o: { ppe?: number; fx?: number } = {}): C
       accountFee: cv(fee, { period: "jaar" }),
       fxFeePct: cv(o.fx ?? 0),
       pointsPerEuro: cv(o.ppe ?? 0),
+      // Measured 0: a missing figure is cashback-unknown and would unrank the card.
+      cashbackPct: cv(0),
     },
   }) as CatalogueEntryLike;
 
@@ -64,7 +73,7 @@ const base: CardAdviceInput = {
     card("american-express-gold-card", 240, { ppe: 1 }),
     card("cheap-card", 0),
     card("pricey-card", 400),
-    { id: "no-fee", product: "NO-FEE", kind: "creditcard", fields: { fxFeePct: cv(0), pointsPerEuro: cv(0) } } as CatalogueEntryLike,
+    { id: "no-fee", product: "NO-FEE", kind: "creditcard", fields: { fxFeePct: cv(0), pointsPerEuro: cv(0), cashbackPct: cv(0) } } as CatalogueEntryLike,
   ],
   heldIds: ["american-express-gold-card"],
   hasOtherCard: false,
@@ -198,6 +207,14 @@ test("unknown buffer: says why there is no pay-off advice", () => {
   expect(t).not.toContain("los het hele saldo af");
 });
 
+test("with card debt the pay-off advice comes before the verdict, the note after it", () => {
+  const c = mount(computeCardAdvice(base));
+  const before = (a: string, b: string) =>
+    Boolean(q(c, a)!.compareDocumentPosition(q(c, b)!) & Node.DOCUMENT_POSITION_FOLLOWING);
+  expect(before("plan-card-interest", "plan-card-verdict")).toBe(true);
+  expect(before("plan-card-verdict", "plan-card-interest-ignored")).toBe(true);
+});
+
 test("a revolving user is told the comparison leaves out card interest", () => {
   const c = mount(computeCardAdvice(base));
   expect(q(c, "plan-card-interest-ignored")!.textContent).toContain("rente van kaarten zit niet");
@@ -272,4 +289,167 @@ test("not comparable without any named reason prints no empty parentheses, in NL
   }
   expect(cardAdviceCopy.nl.noAdvice(advice, fmt)).toContain("te vergelijken. Er is niets geschat.");
   expect(cardAdviceCopy.en.noAdvice(advice, fmt)).toContain("compared in full. Nothing has been estimated.");
+});
+
+// The spend calculation is one of several "Zo is het berekend" blocks; find it by its foreign-spend sentence.
+const spendCalcOf = (c: ParentNode): string =>
+  qa(c, "plan-card-how")
+    .map((d) => d.textContent!)
+    .find((t) => t.includes("Daarvan in een andere valuta"))!;
+
+test("stated basis says so once and does not claim months of transactions", () => {
+  const stated = computeCardAdvice({
+    ...base,
+    spend: { ...base.spend, months: 1, windowCents: 100_000 },
+    statedSpend: { annualCents: 1_200_000, foreignShare: 0 },
+  });
+  expect(stated.basis).toBe("stated");
+  const c = mount(stated);
+  expect(qa(c, "plan-card-basis-stated")).toHaveLength(1);
+  expect(q(c, "plan-card-basis-stated")!.textContent).toBe(
+    "Op basis van je antwoorden, niet van je transacties.",
+  );
+  const calc = spendCalcOf(c);
+  expect(calc).toContain(
+    "Je opgegeven uitgaven zonder woonlasten: €12.000 per jaar, volgens je antwoorden bij de intake (niet uit je transacties). Niet alles daarvan is met een kaart te betalen, dus dit is een bovengrens.",
+  );
+  expect(calc).not.toMatch(/Uitgaven die met een kaart te betalen zijn/);
+  expect(calc).toContain("Daarvan in een andere valuta");
+  expect(calc).not.toMatch(/volle maanden/);
+  expect(cardAdviceCopy.en.basisStated).toBe("Based on your answers, not on your transactions.");
+  const calcEn = cardAdviceCopy.en.spendCalc(stated, { eur: (n: number) => String(n) } as never);
+  expect(calcEn).not.toMatch(/full months/);
+  expect(calcEn).toContain("Your stated spending without housing:");
+  expect(calcEn).toContain("Not all of it can be paid by card, so this is an upper bound.");
+  expect(calcEn).not.toContain("Spending that can be paid by card");
+});
+
+test("history basis shows no stated line and keeps the months wording", () => {
+  const c = mount(computeCardAdvice(base));
+  expect(q(c, "plan-card-basis-stated")).toBeNull();
+  expect(spendCalcOf(c)).toContain("volle maanden");
+});
+
+const switchTo = (id: string, extra: Partial<CardAdviceInput> = {}): CardAdvice =>
+  computeCardAdvice({
+    ...base,
+    catalogue: [card("cheap-card", 0), card(id, 0, { ppe: 1 })],
+    heldIds: ["cheap-card"],
+    cardBalances: [],
+    rewards: [],
+    ...extra,
+  });
+
+test("a switch that rests on points names the points part and the value per point", () => {
+  const c = mount(switchTo("american-express-test-card"));
+  const lines = q(c, "plan-card-verdict-lines")!.textContent!;
+  // 12.000 points a year at the reference 0,3 cent.
+  expect(lines).toContain("waarvan €36 aan punten, gerekend tegen 0,3 cent per punt");
+});
+
+test("a switch to an American Express card shows the acceptance sentence", () => {
+  const c = mount(switchTo("american-express-test-card"));
+  expect(q(c, "plan-card-verdict-lines")!.textContent).toContain(
+    "American Express wordt niet overal geaccepteerd.",
+  );
+  // Flying Blue has no point value, so this switch rests on the fee alone.
+  const fb = mount(
+    switchTo("flying-blue-american-express-test-card", {
+      catalogue: [card("pricey-card", 30), card("flying-blue-american-express-test-card", 0)],
+      heldIds: ["pricey-card"],
+    }),
+  );
+  expect(q(fb, "plan-card-verdict-lines")!.textContent).toContain("niet overal geaccepteerd");
+});
+
+test("a switch with no points part and no Amex card shows no extra verdict lines", () => {
+  const c = mount(computeCardAdvice(base));
+  expect(q(c, "plan-card-verdict")!.textContent).toContain("Aanbeveling: CHEAP-CARD");
+  expect(q(c, "plan-card-verdict-lines")).toBeNull();
+});
+
+test("English verdict lines", () => {
+  document.cookie = "lavega_locale=en";
+  const t = q(mount(switchTo("american-express-test-card")), "plan-card-verdict-lines")!.textContent!;
+  expect(t).toContain("of which €36 in points, at 0.3 cent per point");
+  expect(t).toContain("American Express is not accepted everywhere.");
+});
+
+test("an assumed zero cashback says it is assumed, a measured zero does not", () => {
+  const assumed = {
+    id: "plain-ing",
+    product: "PLAIN-ING",
+    issuer: "ING Bank N.V.",
+    kind: "creditcard",
+    fields: { accountFee: cv(0, { period: "jaar" }), fxFeePct: cv(0), pointsPerEuro: cv(0) },
+  } as unknown as CatalogueEntryLike;
+  const advice = computeCardAdvice({
+    ...base,
+    catalogue: [assumed, card("measured-card", 5)],
+    heldIds: [],
+    cardBalances: [],
+    rewards: [],
+  });
+  const c = mount(advice);
+  const opts = qa(c, "plan-card-option").map((o) => o.textContent!);
+  const a = opts.find((t) => t.includes("PLAIN-ING"))!;
+  const m = opts.find((t) => t.includes("MEASURED-CARD"))!;
+  expect(a).toContain("Cashback: 0% (aangenomen: geen bron, gewone Nederlandse kaart)");
+  expect(m).not.toContain("aangenomen");
+  expect(m).toContain("Cashback: €12.000 maal 0%");
+  expect(cardAdviceCopy.en.optionCalc(advice.options.find((o) => o.cardId === "plain-ing")!, advice, {
+    eur: (v: number) => `€${v / 100}`,
+    eurExact: (v: number) => `€${v / 100}`,
+    plain: (v: number) => String(v),
+    points: (v: number) => `${v}%`,
+    count: (v: number) => String(v),
+    date: (v: string) => v,
+  } as never)).toContain("Cashback: 0% (assumed: no source, ordinary Dutch card).");
+  expect(cardAdviceCopy.nl.caveats.join(" ")).toContain("rekenen we met 0% (aangenomen)");
+  expect(cardAdviceCopy.en.caveats.join(" ")).toContain("we use 0% (assumed)");
+});
+
+const unidentified = (): CardAdvice =>
+  computeCardAdvice({
+    ...base,
+    heldIds: [],
+    unidentifiedCards: [{ accountKey: "CC1", label: "Mijn mystery kaart" }],
+  });
+
+test("an unidentified connected card asks which card it is, with its label", () => {
+  const c = mount(unidentified(), () => {});
+  const ask = q(c, "plan-card-identify")!;
+  expect(ask.textContent).toContain("Welke kaart is dit?");
+  expect(ask.textContent).toContain("Mijn mystery kaart");
+  expect(ask.querySelector("input[type=search]")).not.toBeNull();
+});
+
+test("the question is in English when the locale is English", () => {
+  document.cookie = "lavega_locale=en";
+  const c = mount(unidentified(), () => {});
+  expect(q(c, "plan-card-identify")!.textContent).toContain("Which card is this?");
+});
+
+test("picking a card calls the account writer with the account key and the card id", () => {
+  const calls: [string, string][] = [];
+  const c = mount(unidentified(), (key, id) => void calls.push([key, id]));
+  const input = q(c, "plan-card-identify")!.querySelector<HTMLInputElement>("input[type=search]")!;
+  const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
+  act(() => {
+    set.call(input, "ING creditcard");
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  const box = [...c.querySelectorAll<HTMLElement>('[role="checkbox"]')].find(
+    (b) => b.textContent === "ING creditcard",
+  )!;
+  act(() => box.click());
+  expect(calls).toEqual([["CC1", "ing-creditcard"]]);
+});
+
+test("no question without a writer, and none for a stated other card", () => {
+  expect(q(mount(unidentified()), "plan-card-identify")).toBeNull();
+  act(() => root!.unmount());
+  el!.remove();
+  const other = computeCardAdvice({ ...base, heldIds: [], hasOtherCard: true });
+  expect(q(mount(other, () => {}), "plan-card-identify")).toBeNull();
 });

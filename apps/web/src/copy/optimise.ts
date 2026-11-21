@@ -338,14 +338,9 @@ export type OptimalisatieCopy = {
       invite: (names: string) => string;
       /** Link text next to the invite; leads to Rekeningen. */
       openAccounts: string;
-      debtNote: (why: "not-in-full" | "balance") => string;
       /** The wizard's "no credit card" answer: a first CREDIT card. */
       firstCard: {
-        noSpend: string;
-        tooLittle: string;
-        worthIt: (card: string, net: string) => string;
         notWorthIt: (threshold: string) => string;
-        noComparable: string;
       };
     };
 
@@ -852,22 +847,9 @@ const optimalisatieCopy_nl: OptimalisatieCopy = {
       invite: (names) =>
         `Voor ${names} kent LaVega je uitgaven niet. Verbind die rekening of upload een bestand, dan rekent LaVega het uit.`,
       openAccounts: "Naar Rekeningen",
-      debtNote: (why) =>
-        (why === "not-in-full"
-          ? "Je gaf aan dat je je creditcard niet altijd volledig aflost."
-          : "Je gaf een openstaand saldo op je creditcard aan.") +
-        " Dan kan de rente zwaarder wegen dan cashback, dus LaVega toont hier geen andere kaart.",
       firstCard: {
-        noSpend:
-          "Je hebt geen creditcard. Verbind een rekening of upload een bestand, dan ziet LaVega of een eerste creditcard meer oplevert dan hij kost.",
-        tooLittle:
-          "Je hebt geen creditcard. LaVega heeft nog te weinig maanden aan uitgaven om dit uit te rekenen.",
-        worthIt: (card, net) =>
-          `Je hebt geen creditcard. Een eerste creditcard kan lonen: ${card} levert je naar schatting ${net} per jaar op, na de kosten van de kaart.`,
         notWorthIt: (threshold) =>
           `Je hebt geen creditcard. Op je uitgaven haalt geen creditcard ${threshold} per jaar na kosten, dus een creditcard nemen loont nu niet.`,
-        noComparable:
-          "Je hebt geen creditcard. LaVega kan geen creditcard met bekende kosten naast je uitgaven leggen, dus er is hier geen bedrag.",
       },
     },
 
@@ -1377,22 +1359,9 @@ const optimalisatieCopy_en: OptimalisatieCopy = {
       invite: (names) =>
         `LaVega does not know what you spend on ${names}. Connect that account or upload a file, and LaVega will calculate it.`,
       openAccounts: "Go to Accounts",
-      debtNote: (why) =>
-        (why === "not-in-full"
-          ? "You said you do not always pay your credit card in full."
-          : "You stated an unpaid balance on your credit card.") +
-        " Interest can then outweigh cashback, so LaVega shows no other card here.",
       firstCard: {
-        noSpend:
-          "You have no credit card. Connect an account or upload a file, and LaVega will see whether a first credit card earns more than it costs.",
-        tooLittle:
-          "You have no credit card. LaVega does not have enough months of spending yet to work this out.",
-        worthIt: (card, net) =>
-          `You have no credit card. A first credit card can pay off: ${card} earns you an estimated ${net} a year, after the card's own cost.`,
         notWorthIt: (threshold) =>
           `You have no credit card. On your spending no credit card reaches ${threshold} a year after costs, so taking a credit card does not pay off now.`,
-        noComparable:
-          "You have no credit card. LaVega cannot set a credit card with known costs against your spending, so there is no amount here.",
       },
     },
 

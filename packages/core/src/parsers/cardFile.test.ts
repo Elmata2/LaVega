@@ -263,14 +263,15 @@ test("Trading 212 with a picked card: card and cash rows share the one account",
   expect(out[0]!.name).toBe("Trading 212");
 });
 
-test("a live bank link on a file-fed key clears the file flag; a plain file re-import keeps it", () => {
+test("a live bank link on a file-fed key clears the file flag but keeps the stated card; a plain file re-import keeps both", () => {
   const prev = { key: "NL01INGB0001", iban: "NL01INGB0001", name: "ING", bank: "ING", entity: "P", currency: "EUR", balance: null, source: "file" as const, statedCardId: "ing-betaalpas", linkedAt: "2026-01-01" };
   const live = { ...prev, source: undefined, statedCardId: undefined, balance: 10, balanceFetchedAt: "2026-02-02" };
   delete (live as Record<string, unknown>).source;
   delete (live as Record<string, unknown>).statedCardId;
   const [afterLive] = mergeImportedAccounts([prev], [live]);
   expect(afterLive!.source).toBeUndefined();
-  expect(afterLive!.statedCardId).toBeUndefined();
+  // The owner's answer to "which card is this?" survives the bank sync.
+  expect(afterLive!.statedCardId).toBe("ing-betaalpas");
   const plain = { ...live, balanceFetchedAt: undefined };
   delete (plain as Record<string, unknown>).balanceFetchedAt;
   const [afterFile] = mergeImportedAccounts([prev], [plain]);

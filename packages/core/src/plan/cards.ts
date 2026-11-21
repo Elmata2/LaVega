@@ -3,6 +3,7 @@ import { daysBetween, isIsoDate } from "../advisor/months.js";
 import { personalView } from "../advisor/scopePersonal.js";
 import type { ProductFee } from "../accountCosts.js";
 import { cashbackPctOf, type HeldCashback } from "../assumedCashback.js";
+import { accountType } from "../balance.js";
 import { hash } from "../hash.js";
 import {
   holdingCostOfProduct,
@@ -580,6 +581,16 @@ export function computeCards(
   // only at the cards the user holds: the user may have stated a card that no
   // bank data shows.
   const adviceSpend = history();
+  const creditKeys = new Set(
+    view.accounts.filter((a) => accountType(a) === "Creditcard").map((a) => a.key),
+  );
+  const isNonCreditRow = (id: string) => {
+    const kind = i.catalogue.find((e) => e.id === id)?.kind;
+    return kind !== undefined && kind !== "creditcard";
+  };
+  // The card the user (or a file import) named for the account. A named debit card is that
+  // debit card, not an unknown credit card, so it is not asked about.
+  const statedByKey = new Map(view.accounts.map((a) => [a.key, a.statedCardId]));
   const advice = computeCardAdvice({
     spend: {
       windowCents: totalOf(adviceSpend),
@@ -595,12 +606,31 @@ export function computeCards(
       ]),
     ],
     hasOtherCard: i.profile.statedCardIds.includes("other"),
+    // A connected credit card with no catalogue row: asked about, never ignored.
+    // A debit card or current account without a match is not a credit card. A credit
+    // account whose catalogue row is not a credit card (betaalpas, prepaid ...) is a
+    // wrong match: the engine drops that id, so the card is asked about instead.
+    unidentifiedCards: held
+      .filter(
+        (c) =>
+          creditKeys.has(c.accountKey) &&
+          (!c.catalogueId ||
+            (isNonCreditRow(c.catalogueId) && statedByKey.get(c.accountKey) !== c.catalogueId)),
+      )
+      .map((c) => ({ accountKey: c.accountKey, label: c.label })),
     cardBalances: i.profile.cardBalances,
     cardRepayment: i.profile.cardRepayment,
     rewards: i.rewards,
     preferences: i.preferences,
     rates: i.rates,
     buffer,
+    statedSpend:
+      statedMonthlyCents === null
+        ? null
+        : {
+            annualCents: statedMonthlyCents * FULL_YEAR_MONTHS,
+            foreignShare: foreignShareOf(i.profile.foreignSpend, i.profile.spendMix),
+          },
     asOf: i.asOf,
   });
 
