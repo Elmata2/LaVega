@@ -252,7 +252,7 @@
       "refersTo": "card",
       "description": "Surface panel, hairline, no shadow.",
       "html": "<div class=\"ds-card\"><h3 class=\"ds-card-title\">Allocation</h3><p class=\"ds-card-muted\">Priced 12 of 12 positions</p></div>",
-      "css": ".ds-card{background:#0d171d;border:1px solid rgba(255,255,255,.12);border-radius:20px;padding:24px;color:#fff;font-family:Geist,system-ui,sans-serif}.ds-card-title{font:400 30px/1.18 'Instrument Serif',Georgia,serif;letter-spacing:.01em;margin:0}.ds-card-muted{font-size:14px;color:#a9b4bb;margin:6px 0 0}"
+      "css": ".ds-card{background:#0d171d;border:1px solid rgba(255,255,255,.12);border-radius:20px;padding:24px;color:#fff;font-family:Geist,system-ui,sans-serif}.ds-card-title{font:400 30px/1.12 'Instrument Serif',Georgia,serif;letter-spacing:0;margin:0}.ds-card-muted{font-size:14px;color:#a9b4bb;margin:6px 0 0}"
     },
     {
       "name": "Input",
