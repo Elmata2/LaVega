@@ -192,3 +192,24 @@ test("a lapsed single consent is an expired entry without calling the bank", asy
   expect(states(out)).toEqual([["ING", "expired"]]);
   expect(client).not.toHaveBeenCalled();
 });
+
+test("a row with no booking date and no value date is left out", async () => {
+  const client = vi.fn(async (_c: unknown, _m: string, path: string) => {
+    const data = bankData(path);
+    if (data.transactions === undefined) return data;
+    return {
+      transactions: [
+        ...data.transactions,
+        {
+          transaction_amount: { amount: "4.20", currency: "EUR" },
+          credit_debit_indicator: "DBIT",
+          status: "PDNG",
+          remittance_information: ["pending"],
+        },
+      ],
+    };
+  });
+  const out = await fetchForAgent([session()], now, { eb: client as never, config });
+  if (out.status !== "ok") throw new Error("expected ok");
+  expect(out.txs.map((t) => t.date)).toEqual(["2026-11-08"]);
+});

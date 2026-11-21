@@ -86,11 +86,14 @@ export async function fetchForAgent(
           sBalances.push({ accountKey: account.key, cents: Math.round(balance * 100) });
         }
         const key = ebAccountKey(raw);
+        /* A row with neither a booking date nor a value date (a pending payment) maps to
+         * date "". It is not booked and has no day, so the agent does not read it: the daily
+         * message and the answers only state things about days. */
         sTxs.push(
           ...assignTxIds(
-            (item.transactions as EbTransaction[]).map((t) =>
-              mapEbTransaction(t, key, account.currency),
-            ),
+            (item.transactions as EbTransaction[])
+              .map((t) => mapEbTransaction(t, key, account.currency))
+              .filter((t) => t.date !== ""),
           ),
         );
       }
