@@ -16,6 +16,7 @@
  */
 import type { CatalogValue } from "./catalog.js";
 import { isCovered } from "./catalog.js";
+import { lastConfirmed } from "./catalogAge.js";
 import type { RateBenchmark } from "./interest.js";
 import { assumeNoCashback, type CashbackKnowledge } from "./assumedCashback.js";
 
@@ -173,7 +174,7 @@ export function savingsBenchmarks(entries: readonly CatalogueEntryLike[]): RateB
       ...(v.conditions ? { conditions: v.conditions } : {}),
       ...(capitalAtRisk ? { capitalAtRisk: true } : {}),
       sourceUrl: v.sourceUrl,
-      asOf: v.checkedAt,
+      asOf: lastConfirmed(v),
     });
   }
   return out;
@@ -210,7 +211,7 @@ function toOption(e: CatalogueEntryLike, v: CatalogValue): MarketOption {
     value: v.value,
     conditions: v.conditions,
     sourceUrl: v.sourceUrl,
-    asOf: v.checkedAt,
+    asOf: lastConfirmed(v),
   };
 }
 
@@ -294,8 +295,13 @@ export function issuerConsensus(
   // Report the OLDEST date among the agreeing figures. They agree on the number;
   // they do not agree on how recently anyone checked, and the weakest link is what
   // the reader should be told.
-  const oldest = hits.reduce((a, b) => (a.checkedAt <= b.checkedAt ? a : b));
-  return { value: first, from: hits.length, asOf: oldest.checkedAt, sourceUrl: oldest.sourceUrl };
+  const oldest = hits.reduce((a, b) => (lastConfirmed(a) <= lastConfirmed(b) ? a : b));
+  return {
+    value: first,
+    from: hits.length,
+    asOf: lastConfirmed(oldest),
+    sourceUrl: oldest.sourceUrl,
+  };
 }
 
 /** THE BEST CARD YOU COULD OPEN, for spending rather than for a trip.
@@ -339,7 +345,7 @@ export function marketCashbackOptions(entries: readonly CatalogueEntryLike[]): S
       cashbackPct: v.value,
       conditions: v.conditions,
       sourceUrl: v.sourceUrl,
-      asOf: v.checkedAt,
+      asOf: lastConfirmed(v),
     });
   }
   return out.sort((a, b) => b.cashbackPct - a.cashbackPct);
@@ -366,7 +372,7 @@ export function lastTermsCheckedAt(entry: CatalogueEntryLike): string | null {
   let newest: string | null = null;
   for (const v of Object.values(entry.fields ?? {})) {
     if (!isCovered(v) || !v) continue;
-    if (newest === null || v.checkedAt > newest) newest = v.checkedAt;
+    if (newest === null || lastConfirmed(v) > newest) newest = lastConfirmed(v);
   }
   return newest;
 }
@@ -410,7 +416,7 @@ export function cashbackKnowledgeOfEntry(entry: CatalogueEntryLike): CashbackKno
       tier: "gemeten",
       pct: v.value,
       sourceUrl: v.sourceUrl,
-      asOf: v.checkedAt,
+      asOf: lastConfirmed(v),
       conditions: v.conditions,
     };
   }

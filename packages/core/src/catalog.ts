@@ -23,6 +23,9 @@ export type CatalogValue = {
   /** The date the SOURCE stated, else the sweep date. Never the date we fetched
    *  it under a different source's stamp — that shipped twice. */
   checkedAt: string;
+  /** Last date a run read this same value from the source; `checkedAt` stays the
+   *  date the source states. */
+  confirmedAt?: string;
   /** null means genuinely unconditional. It does NOT mean unknown; that is what
    *  `conditionsKnown` is for, and conflating the two is the whole reason this
    *  field exists. */

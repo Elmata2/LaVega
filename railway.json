@@ -6,6 +6,7 @@
     "watchPatterns": [
       "apps/**",
       "packages/**",
+      "docs/catalog/**",
       "Dockerfile",
       "package.json",
       "pnpm-lock.yaml",

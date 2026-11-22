@@ -18,6 +18,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      issues: write
     # The sweep's own worst case is ~80 minutes (98 routes x a 20s timeout, plus
     # pdftotext). The default is six hours, which is a long time to hold a runner
     # for a job that has already hung.
@@ -29,14 +30,22 @@ jobs:
         with: { node-version: 22, cache: pnpm }
       - run: sudo apt-get update && sudo apt-get install -y poppler-utils # pdftotext
       - run: pnpm install --frozen-lockfile
-      - run: pnpm catalog:sweep
+      - run: pnpm catalog:sweep -- --summary-out "$RUNNER_TEMP/catalog-summary.json"
       - name: Commit whatever changed
+        id: commit
         run: |
           git config user.name  "lavega-catalog"
           git config user.email "noreply@lavega.dev"
           git add docs/catalog/catalog.json docs/catalog/state.json
           git diff --staged --quiet || git commit -m "chore(catalog): weekly sweep"
           git push
+      # Always runs: a refused or crashed sweep still gets its issue.
+      - name: Report
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PUSH_FAILED: ${{ steps.commit.outcome == 'failure' && '--push-failed' || '' }}
+        run: pnpm catalog:report -- --summary "$RUNNER_TEMP/catalog-summary.json" $PUSH_FAILED
   # Independent of `sweep`: a failed sweep must not skip this, and this only
   # ever writes a GitHub issue, never the repo.
   business-savings:

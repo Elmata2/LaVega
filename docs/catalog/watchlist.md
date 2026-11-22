@@ -1530,3 +1530,119 @@ not just their value: ICS Visa World Card Gold €57,95 → €59,50 and ICS Mas
 **no rates**, `lastChecked: null` on every product and a top-level `lastRun: null`. It exists so the first real
 sweep reports _changes_ rather than re-dumping the world, and so a figure that moves later shows up as a
 reviewable git diff instead of a silent overwrite.
+
+---
+
+## How a change gets published
+
+A maintainer can follow this without reading code. The code lives in `packages/core/src/catalogGuard.ts`,
+`catalogGuardRun.ts`, `catalogAge.ts` and `scripts/catalog/catalogReport.ts`.
+
+### The order
+
+1. **Ladder** — the sweep reads a figure from a source (`scripts/catalog-sweep.ts`).
+2. **Guard** — each field the run read is judged on its own.
+3. **Merge** — the figures that passed go through `mergeCatalogEntries`. A field the guard did not pass is
+   left out, so the old figure stays.
+4. **Write** — `catalog.json` and `state.json` are written, and the workflow commits both to `master`.
+5. **Report** — one GitHub issue says what happened.
+
+### What the guard decides
+
+The guard looks at a found figure and the figure the catalogue holds now. It gives one verdict per field:
+
+- **Not covered** (no usable value): not judged, passes to the merge as before.
+- **Same value as the catalogue** (rounded to 4 decimals): _confirm_. The old figure stays and `confirmedAt` is set
+  to the date of the read (today, or the snapshot date for an archive copy, see `confirmedAt` below). This holds only
+  while the conditions did not flip: if the conditions appeared (null to text) or vanished (text to null), or
+  `conditionsKnown` differs, the read is not a confirm. It goes on through the host and range checks and is
+  _published_, so the new conditions are written (a provider that adds a cap to a 0% fee must not stay "unconditional").
+  Two different wordings of non-null conditions are still a confirm, so model paraphrase does not churn the file.
+- **Source is a comparison site**: held. A comparison site never changes a figure.
+- **Source host is not known for that issuer**: held. Known hosts are the hosts of the issuer's `termsUrl`,
+  `pdfUrl`, `docUrl` and `foundUrl` in `state.json`, plus every host the catalogue already uses as source for that
+  issuer. Hosts come from the state as it was when the run started: a source the search rung finds during the run
+  does not vouch for itself. A web.archive.org copy counts as the host of the archived page, and a `r.jina.ai/<url>`
+  fetch-proxy link counts as the host of `<url>` (`r.jina.ai` itself is never a provider host). A source link that cannot be read is held too.
+- **Value outside the range for the field**: held.
+- **No figure in the catalogue yet**: published.
+- **Large jump from the old figure**: _pending_ (see below). Otherwise published.
+
+Limits, copied from `FIELD_LIMITS` in `catalogGuard.ts`:
+
+| Field                       | Range              | Large jump                                  |
+| --------------------------- | ------------------ | ------------------------------------------- |
+| `fxFeePct`, `convertFeePct` | 0 to 5             | more than 1 point, or to 0 from non-zero    |
+| `interestPct`               | 0 to 10            | more than 1,5 points, or to 0 from non-zero |
+| `cashbackPct`               | 0 to 10            | more than 1 point                           |
+| `pointsPerEuro`             | 0 to 10            | more than double or less than half          |
+| `accountFee`                | 0 to 1000 per year | more than double or less than half          |
+
+For the ratio fields (`pointsPerEuro`, `accountFee`), a move between 0 and non-zero also counts as a large jump.
+The guard judges changes only. Figures already in the catalogue are not judged again.
+
+### Pending
+
+A large jump does not go live at once. The new value is stored in `state.json` under `pending`, with the
+date of the first read (key `productId.field`). The old figure stays. If a later run reads the same value again,
+at least 6 days after the first read (`MIN_DAYS_BETWEEN_READS`, so a manual run the next day does not count), it is
+published and the pending entry is removed. If the run reads something else, the pending
+value is replaced by the new one with today's date. If the run reads the old value again, or the field is
+held, the pending entry is removed. A `seenAt` or run date that cannot be read counts as too early: the entry
+stays pending.
+
+#### What the second-read rule does not catch
+
+A systematic misread. If the same parser reads the same document wrongly, it reads the same wrong value a week
+later, and the second read publishes it. The rule catches a one-off glitch, not a repeatable error. Held reasons,
+the ranges above and the report are the other defences.
+
+### Held
+
+A held change is not published and the old figure stays. Nobody has to act on it. There are four reasons:
+
+- `out-of-range` — the value is outside the range for the field.
+- `unknown-host` — the figure came from a website not seen before for that issuer.
+- `comparison-route` — the figure came from a comparison site, not the provider.
+- `bad-source-url` — the source link is missing or cannot be read.
+
+If a held figure is right, add the page as the product's `termsUrl` or `pdfUrl` in `state.json` and run again.
+
+### `confirmedAt` and `checkedAt`
+
+- `checkedAt` is the date the source states, else the sweep date. It can be old when the sweep re-read an old PDF.
+- `confirmedAt` is the last date a run read this same value from the source. It is set on publish and on every
+  confirm. For a figure read from a web.archive.org snapshot it is the snapshot date (`checkedAt`), not today: the
+  figure was true on that date, so an old snapshot must not look freshly confirmed. A confirm never moves the date
+  backwards (it takes the later of the old date and the date of the read). It is optional: there is no backfill, and a figure without it falls back to `checkedAt`.
+- Age is counted from `confirmedAt` (else `checkedAt`) in calendar months. 12 months or more counts as old.
+  The switch that removes an old figure from the ranking (`AGE_REMOVAL_FIELDS` in `catalogAge.ts`) is empty
+  today, so for now an old figure only keeps its date.
+
+### The weekly report issue
+
+After the commit step, the workflow runs `pnpm catalog:report`, also when the sweep failed (`if: always()`).
+The issue has the label `catalog-report`. It starts with one line, "Checked this run: N of M figures. K figures are older than 12 months." (a summary from
+an older sweep without these counts omits the line). It lists changed, waiting for a second read, held, older than
+12 months (crossed the line this week), "No figure this run", and spend.
+
+- **No issue** when the run wrote the catalogue and has nothing in changed, waiting, held or older than 12
+  months. The job log holds the summary. Failures and spend alone do not open an issue.
+- **A refused run** (the sweep printed `REFUSING TO WRITE`, or the commit or push failed) always opens an issue
+  titled "run refused, nothing published". It states the reason and lists nothing as published.
+- **A crashed run** (no summary file) opens an issue titled "run crashed, no summary written". Treat the
+  catalogue as unchanged until the run log shows otherwise.
+- A dry run (`--dry`) never opens an issue: the report script prints "nothing to report".
+
+The text in the issue comes from scraped pages, so it is cleaned of markdown and mentions.
+
+### Dry run on your machine
+
+```
+pnpm catalog:sweep -- --no-agent --dry --summary-out <path>
+pnpm catalog:report -- --summary <path> --dry
+```
+
+The first command reads the sources and writes nothing but the summary file. With `--dry` the summary has status
+`dry`, and the report step prints "nothing to report", because a dry run has no report. To see the text of a report, use a summary
+with status `written` or `refused`.
