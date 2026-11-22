@@ -4,7 +4,8 @@
     "target": "ES2023",
     "types": ["node"],
     "declaration": false,
-    "verbatimModuleSyntax": false
+    "verbatimModuleSyntax": false,
+    "typeRoots": ["./catalog/node_modules/@types"]
   },
   "include": ["catalog-sweep.ts", "catalog-report.ts", "catalog/**/*.ts"]
 }
