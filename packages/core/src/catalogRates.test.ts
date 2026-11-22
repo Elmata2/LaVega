@@ -60,6 +60,15 @@ describe("savingsBenchmarks", () => {
     ...over,
   });
 
+  test("asOf shows confirmedAt when present, else checkedAt", () => {
+    const [a] = savingsBenchmarks([
+      entry({ fields: { interestPct: covered({ confirmedAt: "2026-11-01" }) } }),
+    ]);
+    expect(a.asOf).toBe("2026-11-01");
+    const [b] = savingsBenchmarks([entry()]);
+    expect(b.asOf).toBe("2025-05-01");
+  });
+
   test("carries the rate with ITS OWN source and date", () => {
     const [b] = savingsBenchmarks([entry()]);
     expect(b.bank).toBe("ABN AMRO Bank");
@@ -284,6 +293,20 @@ describe("names a saver would recognise", () => {
 });
 
 describe("what the whole market offers", () => {
+  test("marketFxOptions asOf shows confirmedAt when present", () => {
+    const e = {
+      id: "a",
+      product: "A",
+      issuer: "Bank A",
+      kind: "creditcard",
+      fields: { fxFeePct: covered({ value: 1, confirmedAt: "2026-11-01" }) },
+    };
+    expect(marketFxOptions([e])[0].asOf).toBe("2026-11-01");
+    expect(marketFxOptions([{ ...e, fields: { fxFeePct: covered({ value: 1 }) } }])[0].asOf).toBe(
+      "2025-05-01",
+    );
+  });
+
   const card = (id: string, product: string, issuer: string, value: number, known = true) => ({
     id,
     product,
@@ -390,6 +413,30 @@ describe("issuerConsensus", () => {
         conditionsKnown: known,
       },
     },
+  });
+
+  test("asOf is the oldest lastConfirmed of the agreeing figures", () => {
+    const withConfirmed = (id: string, checkedAt: string, confirmedAt?: string) => {
+      const c = card(id, "ICS", 2, checkedAt);
+      return confirmedAt
+        ? { ...c, fields: { fxFeePct: { ...c.fields.fxFeePct, confirmedAt } } }
+        : c;
+    };
+    const got = issuerConsensus(
+      [withConfirmed("a", "2025-01-01", "2026-11-01"), withConfirmed("b", "2026-03-01")],
+      "ics",
+      "fxFeePct",
+    );
+    expect(got?.asOf).toBe("2026-03-01");
+    const got2 = issuerConsensus(
+      [
+        withConfirmed("a", "2025-01-01", "2026-11-01"),
+        withConfirmed("b", "2025-06-01", "2026-09-01"),
+      ],
+      "ics",
+      "fxFeePct",
+    );
+    expect(got2?.asOf).toBe("2026-09-01");
   });
 
   test("answers when every candidate agrees — the real Amex case", () => {

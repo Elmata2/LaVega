@@ -48,6 +48,9 @@ import {
   coverage,
   isCovered,
   mergeCatalogEntries,
+  guardRun,
+  knownHostsByIssuer,
+  isOlderThanMaxAge,
   type CatalogValue,
   type CatalogRoute,
   type CatalogField,
@@ -66,6 +69,7 @@ import {
   type ExtractedRate,
 } from "./catalog/catalogInterest.js";
 import { sliceForExtraction } from "./catalog/catalogSlice.js";
+import type { RunSummary } from "./catalog/catalogReport.js";
 
 const UA =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36";
@@ -89,6 +93,8 @@ const onlyList = (args.includes("--only") ? args[args.indexOf("--only") + 1] : "
 const only = onlyList.length ? onlyList.join(",") : null;
 const matchesOnly = (id: string) => onlyList.some((t) => id.includes(t));
 const dry = args.includes("--dry");
+/** Where to leave a RunSummary for scripts/catalog-report.ts. Absent = no summary. */
+const summaryOut = args.includes("--summary-out") ? args[args.indexOf("--summary-out") + 1] : null;
 function numArg(flag: string, fallback: number): number {
   const i = args.indexOf(flag);
   if (i < 0) return fallback;
@@ -915,6 +921,9 @@ async function findSource(
 }
 
 const state = JSON.parse(readFileSync(STATE, "utf8"));
+/** Hosts the guard trusts come from this snapshot, never from a source the search rung
+ *  found during this run: a host discovered today must not vouch for itself. */
+const productsAtStart: typeof state.products = structuredClone(state.products);
 const ids: string[] = Object.keys(state.products).filter((id) => !only || matchesOnly(id));
 /** How many products the PREVIOUS run found any figure for — covered or not.
  *  Snapshotted before the loop overwrites it, because it is half of the guard at
@@ -940,13 +949,30 @@ function figureOf(e: {
   return e.fields.fxFeePct ?? e.fields.interestPct;
 }
 
+const readPrevCatalog = (): { entries: typeof entries } =>
+  existsSync(CATALOG) ? JSON.parse(readFileSync(CATALOG, "utf8")) : { entries: [] };
+
+/** The guard judges this run's rows against the catalogue on disk. It changes
+ *  nothing on disk: the verdicts and the new pending map travel with the result. */
+function guard(rows: typeof entries) {
+  const prev = readPrevCatalog();
+  return guardRun({
+    prev: prev.entries,
+    rows,
+    knownHosts: knownHostsByIssuer(productsAtStart, prev.entries),
+    pending: state.pending ?? {},
+    today,
+  });
+}
+
 /** ONE merge, used by the normal --only exit AND by the fatal-key guard. Two
  *  implementations of "merge a subset into the artifact" would drift, and the one
  *  that drifted would be the error path nobody exercises. */
-function mergeSubset(rows: typeof entries): number {
-  const prev: { entries: typeof entries } = existsSync(CATALOG)
-    ? JSON.parse(readFileSync(CATALOG, "utf8"))
-    : { entries: [] };
+function mergeSubset(
+  rows: typeof entries,
+  guarded: ReturnType<typeof guard> = guard(rows),
+): { total: number; kept: string[]; merged: typeof entries } {
+  const prev = readPrevCatalog();
   // De samenvoeging zelf staat in packages/core/src/catalogMerge.ts: puur en
   // getoetst, want hier was hij niet te testen zonder de sweep te draaien. Twee
   // regels zitten erin — een veld dat deze run niet mat is geen veld dat hij
@@ -955,7 +981,7 @@ function mergeSubset(rows: typeof entries): number {
   // product tegen, inclusief een goed cijfer ernaast.
   const { entries: merged, kept } = mergeCatalogEntries(
     prev.entries,
-    rows,
+    guarded.rows,
     Object.keys(state.products),
   );
   if (kept.length) {
@@ -963,9 +989,11 @@ function mergeSubset(rows: typeof entries): number {
       `  kept ${kept.length} existing covered figure(s) rather than demote them: ${kept.join(", ")}`,
     );
   }
+  // Pending lives next to lastRun, and only the two write paths persist it.
+  state.pending = guarded.pending;
   writeFileSync(CATALOG, JSON.stringify({ generatedAt: today, entries: merged }, null, 2) + "\n");
   writeFileSync(STATE, JSON.stringify(state, null, 2) + "\n");
-  return merged.length;
+  return { total: merged.length, kept, merged };
 }
 
 // From here on a billing failure keeps what has been read rather than discarding it.
@@ -974,7 +1002,7 @@ onFatal = () => {
     console.error("  (nothing had been read yet, so nothing to save)");
     return;
   }
-  const total = mergeSubset(entries);
+  const { total } = mergeSubset(entries);
   const covered = entries.filter((e) => isCovered(figureOf(e))).length;
   console.error(
     `  SAVED ${entries.length} product(s) read before the failure (${covered} covered) into ${CATALOG} (${total} total).`,
@@ -1317,8 +1345,87 @@ console.log(
 // and reports only coverage is a rung nobody can set a cadence for.
 if (spend.size) console.log(`spend:\n${spendLines().join("\n")}`);
 
+// The guard runs once, before the dry exit, so --dry shows the verdicts too.
+const guarded = guard(entries);
+for (const v of guarded.verdicts) {
+  if (v.verdict.kind === "confirm" || v.verdict.kind === "unjudged") continue;
+  const detail =
+    v.verdict.kind === "hold"
+      ? v.verdict.reason
+      : v.verdict.kind === "publish"
+        ? v.verdict.viaPending
+          ? "after second read"
+          : ""
+        : `first read ${v.verdict.pending.seenAt}`;
+  console.log(
+    `GUARD ${v.verdict.kind.padEnd(7)} ${v.id}.${v.field}  ${v.before?.value ?? "—"} → ${v.found.value}${detail ? `  (${detail})` : ""}`,
+  );
+}
+
+/** Figures that crossed the 12-month line since last week, each reported once. */
+function crossedAgeLine(catalogEntries: typeof entries): RunSummary["crossedAgeLine"] {
+  const weekAgo = new Date(Date.parse(`${today}T00:00:00Z`) - 7 * 86_400_000)
+    .toISOString()
+    .slice(0, 10);
+  return catalogEntries.flatMap((e) =>
+    (Object.keys(e.fields) as CatalogField[]).flatMap((field) => {
+      const v = e.fields[field];
+      return v && isOlderThanMaxAge(v, today) && !isOlderThanMaxAge(v, weekAgo)
+        ? [{ product: e.product, field, lastConfirmed: v.confirmedAt ?? v.checkedAt }]
+        : [];
+    }),
+  );
+}
+
+/** How much the run checked: figures in the catalogue after the run, figures the guard judged, figures past the age line. */
+function figureCounts(
+  catalogEntries: typeof entries,
+): Pick<RunSummary, "figuresTotal" | "figuresJudged" | "figuresOlderThan12Months"> {
+  const figures = catalogEntries.flatMap((e) =>
+    Object.values(e.fields).filter((v): v is CatalogValue => !!v),
+  );
+  return {
+    figuresTotal: figures.length,
+    figuresJudged: guarded.verdicts.filter((v) => v.verdict.kind !== "unjudged").length,
+    figuresOlderThan12Months: figures.filter((v) => isOlderThanMaxAge(v, today)).length,
+  };
+}
+
+function writeSummary(
+  status: RunSummary["status"],
+  refusedReason: string | null,
+  kept: string[],
+  catalogEntries: typeof entries,
+) {
+  if (!summaryOut) return;
+  const { GITHUB_SERVER_URL: server, GITHUB_REPOSITORY: repo, GITHUB_RUN_ID: runId } = process.env;
+  const summary: RunSummary = {
+    today,
+    status,
+    refusedReason,
+    verdicts: guarded.verdicts,
+    kept,
+    failures: entries
+      .filter((e) => Object.keys(e.fields).length === 0)
+      .map((e) => ({ product: e.product, reason: state.products[e.id].lastReason ?? "no reason" })),
+    crossedAgeLine: crossedAgeLine(catalogEntries),
+    spendLines: spendLines(),
+    runUrl: server && repo && runId ? `${server}/${repo}/actions/runs/${runId}` : null,
+    ...figureCounts(catalogEntries),
+  };
+  writeFileSync(summaryOut, JSON.stringify(summary, null, 2) + "\n");
+}
+
+/** A refused run persists nothing: no catalogue, no state, no pending. */
+function refuse(line: string): never {
+  console.error(`\n${line}`);
+  writeSummary("refused", line, [], readPrevCatalog().entries);
+  process.exit(1);
+}
+
 if (dry) {
   console.log("\n--dry: nothing written");
+  writeSummary("dry", null, [], readPrevCatalog().entries);
   process.exit(0);
 }
 
@@ -1335,26 +1442,21 @@ if (dry) {
 // vanished at once. Either way the run goes RED and writes nothing, because a
 // failed sweep must not be indistinguishable from a swept-and-found-nothing one.
 if (attemptsMade > 0 && httpResponses === 0) {
-  console.error(
-    `\nREFUSING TO WRITE: ${attemptsMade} routes attempted, not one fetch answered. That is this machine's network, not the providers'.`,
+  refuse(
+    `REFUSING TO WRITE: ${attemptsMade} routes attempted, not one fetch answered. That is this machine's network, not the providers'.`,
   );
-  process.exit(1);
 }
 // The same failure one layer out: the model was ASKED for and never once answered
 // (all timed out, all refused, the rung threw every time). The figures that remain
 // are the regex's, and the regex is the thing the model exists to correct - ABN
 // AMRO's betaalpas reads 2% there when the page says 1,2%.
 if (useAgent && modelCalls === 0) {
-  console.error(
-    `\nREFUSING TO WRITE: the model rung was enabled and not one of its calls came back.`,
-  );
-  process.exit(1);
+  refuse(`REFUSING TO WRITE: the model rung was enabled and not one of its calls came back.`);
 }
 if (figuresBefore > 0 && figuresFound === 0) {
-  console.error(
-    `\nREFUSING TO WRITE: the previous run held ${figuresBefore} figures and this one found none. Something broke between here and the sources; an empty catalogue is not a finding.`,
+  refuse(
+    `REFUSING TO WRITE: the previous run held ${figuresBefore} figures and this one found none. Something broke between here and the sources; an empty catalogue is not a finding.`,
   );
-  process.exit(1);
 }
 // A --only run swept a SUBSET, so `entries` is a subset. Writing it to CATALOG
 // would delete every product it did not look at — a committed artifact truncated
@@ -1365,10 +1467,11 @@ if (only) {
   // the subset did not look at; refusing to write at all was the first fix and
   // became its own trap — figures were paid for and stranded in state.json,
   // reachable only by a full sweep.
-  const total = mergeSubset(entries);
+  const { total, kept, merged } = mergeSubset(entries, guarded);
   console.log(
     `\nwrote ${STATE} and merged ${entries.length} swept product(s) into ${CATALOG} (${total} total).`,
   );
+  writeSummary("written", null, kept, merged);
   process.exit(0);
 }
 state.lastRun = today;
@@ -1379,5 +1482,6 @@ state.lastRun = today;
 // `entries` wholesale therefore deleted them. There is one merge for both paths
 // because two implementations would drift, and the one that drifted would be the
 // path nobody watches.
-const total = mergeSubset(entries);
+const { total, kept, merged } = mergeSubset(entries, guarded);
 console.log(`\nwrote ${CATALOG} (${total} products) and ${STATE}`);
+writeSummary("written", null, kept, merged);
