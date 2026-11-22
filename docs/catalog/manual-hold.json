@@ -1,0 +1,9 @@
+{
+  "holds": [
+    {
+      "key": "tria-card.fxFeePct",
+      "since": "2026-11-22",
+      "reason": "Page says 1% Visa FX fee plus 0.5%, 1.5% in total, on every non-USD purchase (the card is in USD, so euro purchases too). The model reads 1%. Needs a person to set the figure and conditions."
+    }
+  ]
+}

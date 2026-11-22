@@ -69,6 +69,10 @@ without weekly work from the owner, and one bad read must not move advice.
    his words: "use mitral or an open model if posisble".) He gave no reason;
    cost and independence from one supplier are the builder's reading.
 6. This document approved by the owner on 2026-11-21.
+7. **Mistral only; no Anthropic for the sweep.** (2026-11-22, his words: "only
+   use mistral i dont want to use athropic for this".) This replaces the Claude
+   fallback in slice 2. Model test result:
+   `docs/research/2026-11-22-catalog-model-bakeoff.md`.
 
 The owner asked why the data would ever be wrong. The answer is in this repo:
 a run once replaced ABN AMRO betaalpas 1,2% with the 2% of the credit-card row;
@@ -76,6 +80,25 @@ promo rates get read as standing rates (the Revolut Business 5,25% promo closed
 and was removed in `e48cdc31`); pages change shape; a model read is good, not
 perfect. So decision 1 is built as "live at once, when automatic checks pass".
 He agreed to that form.
+
+## Coverage contract (owner, 2026-11-22)
+
+Owner: "we've had this problem before and I want to ensure the weekly sweep gets
+all numbers". The model test showed the model is not what loses figures: of 114
+FX and interest figures, 16 documents could not be fetched, 14 pages did not
+carry the number in the fetched text, 16 reads had the right number but did not
+re-prove the conditions, 9 zero-percent figures gave the model nothing to quote,
+and in 0 cases was the number in the text and missed by every model
+(`docs/research/2026-11-22-catalog-model-bakeoff.md`).
+
+The contract: every figure in the catalogue gets a status in every weekly run —
+confirmed, changed, waiting, held, or not checked with a named cause — and the
+weekly report lists every figure that was not checked and for how many weeks in
+a row. No figure goes unchecked without the owner seeing it. A sweep cannot
+promise that every figure is confirmed every week (sites change and block); it
+promises that nothing is skipped in silence. Pass rule for slice 2: all FX and
+interest figures get a status; the confirmed share is reported with the run
+output. Slice 3 extends the same rule to fee, points and cashback.
 
 ## Goals
 
@@ -150,7 +173,7 @@ on, the model before breadth, breadth before new product shapes.
 | #   | Slice                  | Result                                                                                                           |
 | --- | ---------------------- | ---------------------------------------------------------------------------------------------------------------- |
 | 1   | Safety net             | Guards, `confirmedAt`, weekly report, age rule. Free sweep only. Built 2026-11-21 (not yet committed or merged). |
-| 2   | Model on               | Key and ceiling in the weekly job; first measured paid run.                                                      |
+| 2   | Model on               | Key and ceiling in the weekly job; first measured paid run. Built 2026-11-22 (not yet committed or merged).      |
 | 3   | All fields             | Sweep asks fee, points and cashback too; JavaScript-only pages readable.                                         |
 | 4   | Promos and broker cash | Promo shape in the data; Trading 212 interest on cash.                                                           |
 | 5   | Business products      | Audience on each product; the Revolut watch folded in.                                                           |
@@ -288,9 +311,9 @@ Carried from slice 1:
   a confirmation. It would let the free rungs keep `confirmedAt` fresh for the
   few figures they can read. Not decided.
 
-- **Which model (owner decision 5).** The sweep calls Anthropic directly today
-  (`@anthropic-ai/sdk`, tool-call replies parsed by `parseExtractReply` and
-  `parseInterestReply`). Slice 2 puts the extraction call behind one small
+- **Which model (owner decision 5).** Before slice 2 the sweep called Anthropic
+  directly (tool-call replies parsed by `parseExtractReply` and
+  `parseInterestReply`); it now calls Mistral only (see "Built" below). Slice 2 puts the extraction call behind one small
   interface with the provider chosen by environment, then runs a bake-off
   before any weekly use: the figures the catalogue already holds as covered are
   the answer key; each candidate (a Mistral model first, then an open-weight
@@ -316,6 +339,61 @@ Carried from slice 1:
   already does. Discovery search (`--search`) stays off in the weekly job; it
   is run by hand when a source is lost.
 - The workflow timeout (45 minutes) is re-checked against the model rungs.
+
+#### Built 2026-11-22 (not yet committed or merged)
+
+- Which figure a product is asked for: `sweptFieldFor` (interest for savings and investment accounts,
+  FX surcharge for credit, debit and prepaid cards). Accounts and packages are skipped until slice 3.
+- Model client: `scripts/catalog/mistralClient.ts`, Mistral chat completions with one tool, retries, a truncated
+  reply is an error, a price table, default `mistral-large-latest`. The Anthropic SDK is gone from the repo.
+  `--search` (discovery) is switched off.
+- Reader rung: `scripts/catalog/readerFetch.ts`, through `r.jina.ai` for pages plain fetch cannot read, including
+  blocked PDFs. Document of record first, one reader model call per product, a breaker after 5 consecutive
+  reader failures.
+- Confirm step: `scripts/catalog/catalogConfirm.ts`, the closed question "is the stored figure still stated?" with
+  quote rules. Used when the open question settled nothing, and as a cross-check when the open question returns a
+  covered figure that differs from the stored one.
+- Guard: an uncovered equal read from a known host confirms (model route, or same source URL); new hold reasons
+  `conflicting-read` and `change-not-cross-checked`; the cross-check fails closed.
+- Coverage: `packages/core/src/catalogCoverage.ts`, a status for every figure every run, `uncheckedSince` dates in
+  `state.json`, causes for not-checked.
+- Report: always opens for a written run, starts with "Checked this run: n of m", lists not-checked figures by
+  cause with weeks, closes last week's report issue; a refused run shows no status counts.
+- Workflow: `MISTRAL_API_KEY` on the sweep step only, `CATALOG_MAX_USD` 5, `CATALOG_MODEL`, 180-minute job limit.
+- Type check: `scripts/tsconfig.json`, run by `@lavega/catalog-sweep` `typecheck`, so root `pnpm run typecheck`
+  covers the scripts.
+- Pool: `scripts/catalog/pool.ts`, four products at a time (`CATALOG_CONCURRENCY`, 1 to 8), logs held per product
+  and printed together.
+- Answer reuse: `scripts/catalog/replyCache.ts`, `docs/catalog/model-cache.json`, staggered refresh of 7 to 28
+  days, no reuse for pending or last-run-held figures; fallback model (`mistral-medium-latest`) after a timeout or
+  a cut-off reply (a cut-off tool call included); the blackout guard counts fresh calls.
+- Workflow: Sunday 01:00 UTC; Sweep step limit 165 minutes inside the 180-minute job; rebase before push;
+  `CATALOG_DEADLINE_MIN` 150.
+- Guard rules from the final fix wave: conditions that appear at an equal value publish as conditions-only
+  (a stored condition is never dropped by a read that did not mention it); a zero is a jump both ways; a
+  conditions-only update from an archive copy older than the last confirmation is a confirm; conditions text is cut
+  to 600 characters.
+- Manual hold list: `docs/catalog/manual-hold.json`, hold reason `held-for-person` (first entry: `tria-card.fxFeePct`).
+- Soft stop: at the cost ceiling or at the deadline no new product starts, running ones finish, the run is written
+  through the guard and the unreached products are `stopped-early`; a hard stop stays for a fatal key error and for
+  1.5 times the ceiling.
+- Same-document cross-check: a change is cross-checked on the stored figure's own document; if the run did not read
+  it, the answer is unresolved and the change is held as `change-not-cross-checked`.
+- Report additions: evidence quote on Changed and Waiting lines, list of weaker confirmations, "held for N weeks"
+  (`heldSince` in `state.json`), "Passed the 12-month line this week".
+- Decisions: Mistral only (`mistral-large-latest`), no Anthropic. Headless browser not built. The weekly issue
+  always opens. Discovery search off. Accounts and packages skipped until slice 3.
+- Measured on 2026-11-22, local full runs against the live sites (123 FX and interest figures; 185 fee, points and cashback figures are not swept until slice 3; 69 products skipped because no FX or interest figure applies):
+
+| Run | Code | Answer cache | Time | Cost | Model calls | Confirmed | Changed | Waiting | Held | Not checked |
+|---|---|---|---|---|---|---|---|---|---|---|
+| 2 | Tasks 1–7 | none | 45 min | $1.77 | 208 | 66 | 20 (9 were same-value conditions texts) | 1 | 3 | 33 |
+| 3 | Tasks 1–8 | empty | 52 min | $2.18 | 244 (38 by the fallback model) | 65 | 21 | 1 | 2 | 34 |
+| 4 | Tasks 1–9 + final fixes | warm | 4.5 min | $0.14 | 22 new, 219 reused | 73 (9 conditions updated) | 10 | 1 | 2 | 37 |
+
+Run 5 (final code including Task 10, empty cache) is not usable as a measurement: the network of the machine dropped mid-run (77 of 334 fetches answered). It did show the degraded case: exit 0, 62 products reported as "could not be read", nothing in the catalogue harmed. No full run of the final code on a healthy network exists yet; the first CI run is that measurement. With Task 10 the roughly 35 products a run cannot settle are asked again every week, so a normal week is expected to cost under $1 and take about 15 to 20 minutes (estimate, not measured).
+
+None of these runs' figures are committed; the first CI run writes the catalogue.
 
 ### Slice 3 — all fields
 

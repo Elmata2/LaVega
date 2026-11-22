@@ -1,5 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { EXTRACT_TOOL, parseExtractReply, type ExtractRequest } from "./catalogExtract.js";
+import {
+  capConditions,
+  EXTRACT_TOOL,
+  MAX_CONDITIONS_CHARS,
+  parseExtractReply,
+  type ExtractRequest,
+} from "./catalogExtract.js";
 
 const SWEEP = "2026-08-18";
 
@@ -720,5 +726,24 @@ describe("documentScope", () => {
       "2026-08-19",
     );
     expect(got!.documentScope).toBe("BasisPakket Betalen");
+  });
+});
+
+describe("capConditions", () => {
+  it("leaves null and short text alone", () => {
+    expect(capConditions(null)).toBeNull();
+    expect(capConditions("alleen buiten de euro")).toBe("alleen buiten de euro");
+  });
+  it("cuts a long text at a word boundary with an ellipsis, within the cap", () => {
+    const long = Array.from({ length: 300 }, (_, i) => `woord${i}`).join(" ");
+    const out = capConditions(long)!;
+    expect(MAX_CONDITIONS_CHARS).toBe(600);
+    expect(out.length).toBeLessThanOrEqual(600);
+    expect(out.endsWith("…")).toBe(true);
+    const lastWord = out.slice(0, -1).split(" ").pop()!;
+    expect(long.split(" ")).toContain(lastWord);
+  });
+  it("a text of exactly the cap is kept", () => {
+    expect(capConditions("a".repeat(600))).toBe("a".repeat(600));
   });
 });

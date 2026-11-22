@@ -171,3 +171,110 @@ test("confirm from an archive read with no earlier confirmedAt uses checkedAt as
   const out = run(prev, [entry("p", { fxFeePct: found })]);
   expect(out.rows[0]!.fields.fxFeePct!.confirmedAt).toBe("2026-06-15");
 });
+
+test("uncovered equal read keeps stored conditions and source", () => {
+  const stored = val(0, {
+    conditions: "tot € 1.000 per maand",
+    sourceUrl: "https://www.bank.test/a",
+  });
+  const prev = [entry("p", { fxFeePct: stored })];
+  const found = val(0, {
+    conditions: null,
+    conditionsKnown: false,
+    route: "agent",
+    sourceUrl: "https://www.bank.test/b",
+    checkedAt: TODAY,
+  });
+  const out = run(prev, [entry("p", { fxFeePct: found })]);
+  expect(out.verdicts[0]!.verdict).toEqual({ kind: "confirm" });
+  expect(out.rows[0]!.fields.fxFeePct).toEqual({ ...stored, confirmedAt: TODAY });
+});
+
+test("a conflicting read does not create or keep a pending entry", () => {
+  const prev = [entry("p", { fxFeePct: val(0) })];
+  const found = val(2, { checkedAt: TODAY });
+  const out = guardRun({
+    prev,
+    rows: [entry("p", { fxFeePct: found })],
+    knownHosts: hosts,
+    pending: { "p.fxFeePct": { value: 2, seenAt: "2026-11-10" } },
+    storedChecks: new Map([["p.fxFeePct", "still-stated" as const]]),
+    today: TODAY,
+  });
+  expect(out.verdicts[0]!.verdict).toEqual({ kind: "hold", reason: "conflicting-read" });
+  expect(out.pending["p.fxFeePct"]).toBeUndefined();
+  expect(out.rows[0]!.fields.fxFeePct).toBeUndefined();
+});
+
+test("an unresolved cross-check does not create or keep a pending entry", () => {
+  const out = guardRun({
+    prev: [entry("p", { fxFeePct: val(0) })],
+    rows: [entry("p", { fxFeePct: val(2, { checkedAt: TODAY }) })],
+    knownHosts: hosts,
+    pending: { "p.fxFeePct": { value: 2, seenAt: "2026-11-10" } },
+    storedChecks: new Map([["p.fxFeePct", "unresolved" as const]]),
+    today: TODAY,
+  });
+  expect(out.verdicts[0]!.verdict).toEqual({ kind: "hold", reason: "change-not-cross-checked" });
+  expect(out.pending["p.fxFeePct"]).toBeUndefined();
+});
+
+test("text to null at the same value leaves the stored conditions in the row", () => {
+  const prev = [entry("p", { fxFeePct: val(1.4, { conditions: "max 500 per month" }) })];
+  const rows = [entry("p", { fxFeePct: val(1.4, { conditions: null, checkedAt: TODAY }) })];
+  const out = run(prev, rows);
+  expect(out.verdicts[0]!.verdict).toEqual({ kind: "confirm" });
+  expect(out.rows[0]!.fields.fxFeePct!.conditions).toBe("max 500 per month");
+});
+
+test("a manual hold clears the pending figure and keeps the stored value", () => {
+  const prev = [entry("p", { fxFeePct: val(1) })];
+  const out = guardRun({
+    prev,
+    rows: [entry("p", { fxFeePct: val(1.5, { checkedAt: TODAY }) })],
+    knownHosts: hosts,
+    pending: { "p.fxFeePct": { value: 1.5, seenAt: "2026-11-10" } },
+    manualHolds: new Set(["p.fxFeePct"]),
+    today: TODAY,
+  });
+  expect(out.verdicts[0]!.verdict).toEqual({ kind: "hold", reason: "held-for-person" });
+  expect(out.pending["p.fxFeePct"]).toBeUndefined();
+  expect(out.rows[0]!.fields.fxFeePct).toBeUndefined();
+});
+
+test("a manual hold on one key leaves other keys alone", () => {
+  const out = guardRun({
+    prev: [entry("p", { fxFeePct: val(1) })],
+    rows: [entry("p", { fxFeePct: val(1.2, { checkedAt: TODAY }) })],
+    knownHosts: hosts,
+    pending: {},
+    manualHolds: new Set(["q.fxFeePct"]),
+    today: TODAY,
+  });
+  expect(out.verdicts[0]!.verdict.kind).toBe("publish");
+});
+
+test("a conditions-only update from an archive copy older than the last confirmation is a confirm", () => {
+  const stored = val(1.4, { conditions: null, confirmedAt: "2026-10-01" });
+  const found = val(1.4, {
+    conditions: "alleen buiten de euro",
+    route: "wayback",
+    sourceUrl: "https://web.archive.org/web/20250301000000id_/https://www.bank.test/tarieven",
+    checkedAt: "2025-03-01",
+  });
+  const out = run([entry("p", { fxFeePct: stored })], [entry("p", { fxFeePct: found })]);
+  expect(out.verdicts[0]!.verdict).toEqual({ kind: "confirm" });
+  expect(out.rows[0]!.fields.fxFeePct).toEqual({ ...stored, confirmedAt: "2026-10-01" });
+});
+
+test("a conditions-only update from an archive copy newer than the last confirmation still publishes", () => {
+  const stored = val(1.4, { conditions: null, confirmedAt: "2025-01-01" });
+  const found = val(1.4, {
+    conditions: "alleen buiten de euro",
+    route: "wayback",
+    sourceUrl: "https://web.archive.org/web/20250301000000id_/https://www.bank.test/tarieven",
+    checkedAt: "2025-03-01",
+  });
+  const out = run([entry("p", { fxFeePct: stored })], [entry("p", { fxFeePct: found })]);
+  expect(out.verdicts[0]!.verdict).toMatchObject({ kind: "publish", conditionsOnly: true });
+});

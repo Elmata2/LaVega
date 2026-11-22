@@ -15,33 +15,34 @@
  *   pnpm catalog:sweep -- --only ing-betaalpas  # one, while iterating
  *   pnpm catalog:sweep -- --dry                 # report, write nothing
  *   pnpm catalog:sweep -- --no-agent            # free tiers only, no model calls
- *   pnpm catalog:sweep -- --search              # ALSO let the model go LOOKING for sources (≈$0.55 each)
- *   pnpm catalog:sweep -- --search --max-search 3   # ...at most 3 of them
- *   pnpm catalog:sweep -- --search --search-all     # ...for ANY uncovered product, not just unreachable ones
  *
- * Five rungs, tried in ladder order, first COVERED answer wins:
+ * Five rungs (the reader rung comes last), tried in ladder order, first COVERED answer wins:
  *
  *   provider-page  the provider's own HTML, plain fetch + regex        free
  *   provider-pdf   the provider's own tariff PDF, pdftotext + parser   free
  *   wayback        the provider's own page from the archive + model    a model call
  *   agent          the page or PDF we already hold + model             a model call
- *   agent          a document the model FOUND by searching + model     a search + a model call
+ *   reader         the same document through r.jina.ai + model            a model call
  *
- * The model runs HERE and only here. It is the sweep's last rung, and it is what
- * makes `conditionsKnown` true honestly: a regex reads a number, a model reading
- * the same page can also say what the number depends on. The agent was rejected
- * for the running app because it takes 40 seconds to five minutes — in a
- * scheduled offline sweep that slowness is free. It runs only when
- * ANTHROPIC_API_KEY is in the environment (the npm script reads apps/server/.env
- * if it exists), so a run without a key is the old free sweep, unchanged.
+ * The model is Mistral (MISTRAL_API_KEY, default mistral-large-latest, override with
+ * CATALOG_MODEL) and runs only here, as the last rung: a regex reads a number, a
+ * model reading the same page can also say what the number depends on, and that is
+ * what makes `conditionsKnown` true honestly. It runs only when the key is in the
+ * environment (the npm script reads apps/server/.env if it exists) and not with
+ * --no-agent, so a run without a key is the free sweep. There is no discovery
+ * search: a `foundUrl` already in state.json is still read like any other source.
  *
  * NOTE on --only: it is a plain substring match on the product id, so `--only ing`
  * also selects every *spaarrekening* (the word "rekening" ends in "ing"). Name the
  * id you actually mean.
  */
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
-import Anthropic from "@anthropic-ai/sdk";
+import { randomUUID } from "node:crypto";
+import { tmpdir } from "node:os";
+import { dirname, join, relative, resolve } from "node:path";
+import { mkdirSync } from "node:fs";
+import { AsyncLocalStorage } from "node:async_hooks";
 import {
   readIngTariffs,
   readDocumentDate,
@@ -51,13 +52,30 @@ import {
   guardRun,
   knownHostsByIssuer,
   isOlderThanMaxAge,
+  coverageForRun,
+  sweptFieldFor,
+  nextHeldSince,
+  NO_ROUTE_PREFIX,
+  type ConfirmedBy,
   type CatalogValue,
   type CatalogRoute,
   type CatalogField,
+  type FieldVerdict,
 } from "@lavega/core";
 import { runLadder, type RouteAttempt } from "./catalog/catalogRoutes.js";
 import {
+  BREAKER_LIMIT,
+  firstDocument,
+  looksLikeDocument,
+  nextBreakerState,
+  readerCandidates,
+  readThroughReader,
+  resolveDocKind,
+  type BreakerState,
+} from "./catalog/readerFetch.js";
+import {
   buildExtractPrompt,
+  capConditions,
   EXTRACT_TOOL,
   parseExtractReply,
   type ExtractedFigure,
@@ -69,7 +87,41 @@ import {
   type ExtractedRate,
 } from "./catalog/catalogInterest.js";
 import { sliceForExtraction } from "./catalog/catalogSlice.js";
+import {
+  buildConfirmPrompt,
+  CONFIRM_TOOL,
+  confirmRead,
+  sameDocument,
+  storedCheckOf,
+  type ConfirmOutcome,
+  parseConfirmReply,
+  type ConfirmReply,
+} from "./catalog/catalogConfirm.js";
 import type { RunSummary } from "./catalog/catalogReport.js";
+import { runPool, stopReason } from "./catalog/pool.js";
+import {
+  cacheKey,
+  cachedCall,
+  confirmAccepted,
+  mergeHeld,
+  openAnswerAccepted,
+  modelHealth,
+  parseCache,
+  prune,
+  type ReplyCache,
+} from "./catalog/replyCache.js";
+import {
+  callWithTool,
+  DEFAULT_CATALOG_MODEL,
+  MISTRAL_PRICES,
+  MistralCallError,
+  MistralFatalError,
+  REQUEST_CONFIG,
+  isFallbackWorthy,
+  usdFor,
+  type ModelUsage,
+  type ToolSpec,
+} from "./catalog/mistralClient.js";
 
 const UA =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36";
@@ -95,104 +147,111 @@ const matchesOnly = (id: string) => onlyList.some((t) => id.includes(t));
 const dry = args.includes("--dry");
 /** Where to leave a RunSummary for scripts/catalog-report.ts. Absent = no summary. */
 const summaryOut = args.includes("--summary-out") ? args[args.indexOf("--summary-out") + 1] : null;
-function numArg(flag: string, fallback: number): number {
-  const i = args.indexOf(flag);
-  if (i < 0) return fallback;
-  const n = Number(args[i + 1]);
-  return Number.isFinite(n) && n >= 0 ? n : fallback;
-}
-
-/** The extractor model. Opus rather than Haiku because the job is not "find the
- *  percentage" — the crude regex already does that and gets ABN AMRO's betaalpas
- *  wrong — it is "decide which row belongs to this product and whether the page
- *  settles its conditions". That is the judgement the whole rung exists for, and
- *  a weekly offline sweep is where paying for it is cheapest. */
-const EXTRACT_MODEL = process.env.CATALOG_MODEL?.trim() || "claude-opus-5";
+/** The extractor model. The 2026-11-22 model test chose mistral-large-latest; see
+ *  docs/research/2026-11-22-catalog-model-bakeoff.md. */
+const EXTRACT_MODEL = process.env.CATALOG_MODEL?.trim() || DEFAULT_CATALOG_MODEL;
 /** A HARD CEILING, in dollars, because a projection is not a promise. Mine ran
  *  2.8x low on the 81-product sweep — slicing cut the input as measured, but the
  *  fallback made 119 calls for 81 products and output tokens ran double what I
  *  assumed. An estimate that can be wrong needs a stop, not more confidence. */
 const MAX_USD = Number(process.env.CATALOG_MAX_USD ?? "0") || null;
 /** Slowness is free here, hanging is not: one wedged request must not eat the
- *  Action's 45-minute budget. Generous, because the model is allowed to think. */
-const MODEL_TIMEOUT_MS = 180_000;
+ *  sweep's time. Generous, because the model is allowed to think. */
+const MODEL_TIMEOUT_MS = 120_000;
+/** After a timeout or a cut-off reply one call goes to this faster model. Empty = no fallback. */
+const FALLBACK_MODEL = (() => {
+  const raw = process.env.CATALOG_FALLBACK_MODEL;
+  const m = raw === undefined ? "mistral-medium-latest" : raw.trim();
+  return m && m !== EXTRACT_MODEL ? m : null;
+})();
+const FALLBACK_TIMEOUT_MS = 60_000;
+/** Products read at the same time. 1 to 8, anything else means 4. The first full run
+ *  took about 4 hours one at a time; the model calls and the fetches are waits. */
+const concurrency = /^[1-8]$/.test(process.env.CATALOG_CONCURRENCY?.trim() ?? "")
+  ? Number(process.env.CATALOG_CONCURRENCY!.trim())
+  : 4;
+/** Minutes after which no new product starts (the ones running finish). 0 = off, default 150. */
+const DEADLINE_MIN = (() => {
+  const raw = process.env.CATALOG_DEADLINE_MIN?.trim();
+  if (!raw) return 150;
+  if (/^\d+$/.test(raw)) return Number(raw);
+  console.log(`CATALOG_DEADLINE_MIN="${raw}" is not a whole number of minutes: using 150.`);
+  return 150;
+})();
+/** Spend at this multiple of the ceiling, with products still running, is a hard stop. */
+const HARD_STOP_FACTOR = 1.5;
+const startedAt = Date.now();
+const minutesSinceStart = () => Math.round((Date.now() - startedAt) / 6_000) / 10;
+/** Set by the first exit path that runs. Each exit path ends in process.exit with no
+ *  await in between, so a second one cannot run; the flag makes that explicit. */
+let exiting = false;
+function claimExit(): boolean {
+  if (exiting) return false;
+  exiting = true;
+  flushOpenBuffers();
+  return true;
+}
+/** The log buffers of products still running. process.exit skips their `finally`, so
+ *  the exit path prints what they hold. */
+const openBuffers = new Set<{ product: string; lines: string[] }>();
+function flushOpenBuffers(): void {
+  for (const b of openBuffers) {
+    if (b.lines.length) console.log(`(unfinished) ${b.product}\n${b.lines.join("\n")}`);
+  }
+  openBuffers.clear();
+}
+/** Model calls sent and not yet answered. Their cost is not in the spend until they return. */
+let modelInFlight = 0;
+const modelRetries = { rateLimited: 0, serverError: 0 };
+/** Said on every exit that happens mid-run: calls still running were sent and are billed
+ *  but never counted, so the ceiling can be crossed by up to that many calls. */
+function inFlightNote(): string {
+  return modelInFlight > 0
+    ? ` Up to ${modelInFlight} model call(s) were still running and are not counted.`
+    : "";
+}
+/** One product's log lines. With concurrency above 1 they are held and printed together. */
+type Log = (line: string) => void;
 /** Above this the page is refused rather than trimmed. Silently truncating the
  *  text would hand the model a document whose tariff table may have been cut off
  *  and take its answer as if it had read the whole thing. */
 const MAX_MODEL_CHARS = 200_000;
-/** The DISCOVERY model for the search rung. Sonnet 5 rather than Opus because the
- *  job here is "find the provider's own tariff document", which is search and
- *  link judgement — the reading, where the judgement that costs us money lives,
- *  is still done by EXTRACT_MODEL against text this script fetched itself. */
-const FIND_MODEL = "claude-sonnet-5";
-/** THREE searches, not six, and the number is measured rather than chosen. One
- *  web_search round-trip against this API takes 30–60s wall-clock (timed: a single
- *  trivial search returned in 54s). At max_uses 6 the rung could not finish inside
- *  any sane ceiling — ing-creditcard and coinbase-card BOTH hit "Request timed
- *  out" at 240s, and a hand probe of the same call with a 600s ceiling timed out
- *  too. The job here is one product and one question, so three searches is the
- *  budget that fits the clock. */
-const WEB_SEARCH = { type: "web_search_20260209", name: "web_search", max_uses: 3 } as const;
-/** Longer than travel.ts's 240s, because that ceiling covers a lookup a user is
- *  (indirectly) waiting on and this one is an offline sweep where slowness is
- *  free. 3 searches × ~50s + the reading turn does not fit in 240s. */
-const FIND_TIMEOUT_MS = 300_000;
-
 /** Never printed, never written to either artifact. Absent = the free sweep. */
-const apiKey = process.env.ANTHROPIC_API_KEY?.trim() || null;
+const apiKey = process.env.MISTRAL_API_KEY?.trim() || null;
 const useAgent = !args.includes("--no-agent") && !!apiKey;
-/** DISCOVERY IS OPT-IN, and that is a price measured rather than assumed. One
- *  discovery costs ≈ $0.55, not the few cents a "search" sounds like: the search
- *  results come back into the context, and the one that completed here billed
- *  161.040 input tokens for three searches. So the default budget of 10 is ≈ $5–6
- *  a run — which is not something a routine weekly sweep should pay silently,
- *  especially as the first three live attempts produced no usable source at all
- *  (two ceilings hit, one honest "I could not find the document").
- *
- *  Reading a source discovery ALREADY found is free of search and stays on: the
- *  `foundUrl` cached in state.json is fetched and read like any other document, so
- *  a search is paid for once per product and never again. The budget buys
- *  permanent sources, not a repeated bill. */
-const useSearch = useAgent && args.includes("--search");
-const searchBudget = numArg("--max-search", 10);
-/** By default discovery is spent only where nothing readable exists — the 27
- *  products no fetch can reach. `--search-all` opens it to every product that
- *  finished uncovered, which is the deliberate "go find the tariff PDFs" campaign
- *  for the ~90 pages that state a rate and never state its cap. */
-const searchAll = args.includes("--search-all");
-let searchesUsed = 0;
+if (["--search", "--search-all", "--max-search"].some((f) => args.includes(f))) {
+  console.error("discovery search is not available on Mistral yet");
+  process.exit(2);
+}
+/** Calls sent to the model this run. A reply reused from the cache is NOT one of these. */
 let modelCalls = 0;
+/** Replies reused because the whole request was identical to one already answered. */
+let modelReused = 0;
+/** Requests sent to a model (fresh attempts, fallback calls included) and calls answered by the fallback. */
+let freshAttempts = 0;
+let modelFallbacks = 0;
+/** The product the running code belongs to, so `ask` knows whose reply it is handling. */
+const productContext = new AsyncLocalStorage<string>();
 
 /** What this run spent, per model, from the API's own usage numbers rather than a
  *  guess. Printed at the end: a rung that costs money and reports only coverage
  *  is a rung nobody can decide the cadence for. */
-type Spend = {
-  calls: number;
-  input: number;
-  output: number;
-  cacheRead: number;
-  cacheWrite: number;
-  searches: number;
-};
+type Spend = { calls: number; input: number; output: number };
 const spend = new Map<string, Spend>();
-/** Anthropic list prices per million tokens, 2026-08. Sonnet 5's introductory
- *  $2/$10 runs to 2026-08-31, so today this OVER-states the search rung slightly.
- *  An estimate that reads high is the safe direction for a budget line. */
-const PRICE: Record<string, { in: number; out: number }> = {
-  "claude-opus-5": { in: 5, out: 25 },
-  "claude-sonnet-5": { in: 3, out: 15 },
-  "claude-haiku-4-5-20251001": { in: 1, out: 5 },
-};
-const SEARCH_PRICE_PER_1000 = 10;
 
-/** Charged AFTER a call, so the ceiling can be crossed by at most one call's worth
- *  — you cannot know a reply's output tokens before you have it. */
+/** Charged AFTER a call, so the ceiling can be crossed by the call that tripped it plus
+ *  the calls already in flight (up to the concurrency) — you cannot know a reply's
+ *  output tokens before you have it, and calls in flight are billed when the process
+ *  exits but never recorded. The stop says how many there were. */
 function stopIfOverBudget(): void {
   if (!MAX_USD) return;
   const spent = spendTotalUsd();
-  if (spent < MAX_USD) return;
+  // Reaching the ceiling only stops NEW products (stopReason, used by the pool call below);
+  // the products already running may finish their calls. This is the hard stop on top of it.
+  if (spent < MAX_USD * HARD_STOP_FACTOR) return;
+  if (!claimExit()) return;
   console.error(
-    `\nSTOPPING: spend ≈ $${spent.toFixed(2)} reached the $${MAX_USD.toFixed(2)} ceiling (CATALOG_MAX_USD).`,
+    `\nSTOPPING: spend ≈ $${spent.toFixed(2)} reached ${HARD_STOP_FACTOR} × the $${MAX_USD.toFixed(2)} ceiling (CATALOG_MAX_USD) while products were still running.${inFlightNote()}`,
   );
   if (onFatal) {
     try {
@@ -201,39 +260,59 @@ function stopIfOverBudget(): void {
       console.error(`  (could not save partial results: ${(e as Error).message})`);
     }
   }
-  console.error(
-    "Products already read are kept; the rest are untouched. Raise CATALOG_MAX_USD to continue.",
+  console.error(`${keptNote()} Raise CATALOG_MAX_USD to continue.`);
+  writeEarlyRefusal(
+    `STOPPING: spend reached ${HARD_STOP_FACTOR} × the $${MAX_USD.toFixed(2)} ceiling (CATALOG_MAX_USD).${inFlightNote()}`,
   );
   process.exit(1);
 }
 
-function recordSpend(model: string, usage: Anthropic.Usage): void {
-  const s = spend.get(model) ?? {
-    calls: 0,
-    input: 0,
-    output: 0,
-    cacheRead: 0,
-    cacheWrite: 0,
-    searches: 0,
+/** What happened to the products read before an early exit. True in each case: --dry writes
+ *  nothing, a local run saved them to the catalogue files, and in CI a failed run commits nothing. */
+function keptNote(): string {
+  return dry
+    ? "--dry: nothing was written."
+    : "Products already read were saved to the local catalogue files; in CI a failed run commits nothing, so the week's work is lost there. The rest are untouched.";
+}
+
+/** The billing and budget exits happen mid-loop. The summary carries the verdicts of the
+ *  products read so far (set by onFatal); products the loop did not reach are "stopped-early". */
+function writeEarlyRefusal(reason: string): void {
+  if (!summaryOut) return;
+  const { GITHUB_SERVER_URL: server, GITHUB_REPOSITORY: repo, GITHUB_RUN_ID: runId } = process.env;
+  const summary: RunSummary = {
+    today,
+    status: "refused",
+    refusedReason: reason,
+    verdicts: earlyVerdicts,
+    kept: [],
+    failures: [],
+    crossedAgeLine: [],
+    spendLines: spendLines(),
+    runUrl: server && repo && runId ? `${server}/${repo}/actions/runs/${runId}` : null,
+    coverage: buildCoverage(earlyVerdicts, true).figures,
+    durationMinutes: minutesSinceStart(),
+    concurrency,
+    modelRetries: { ...modelRetries },
+    ...(useAgent
+      ? { modelCallsNew: modelCalls, modelCallsReused: modelReused, modelFallbacks }
+      : {}),
   };
+  writeFileSync(summaryOut, JSON.stringify(summary, null, 2) + "\n");
+}
+
+function recordSpend(model: string, usage: ModelUsage): void {
+  const s = spend.get(model) ?? { calls: 0, input: 0, output: 0 };
   s.calls++;
-  s.input += usage.input_tokens ?? 0;
-  s.output += usage.output_tokens ?? 0;
-  s.cacheRead += usage.cache_read_input_tokens ?? 0;
-  s.cacheWrite += usage.cache_creation_input_tokens ?? 0;
-  s.searches += usage.server_tool_use?.web_search_requests ?? 0;
+  s.input += usage.inputTokens;
+  s.output += usage.outputTokens;
   spend.set(model, s);
 }
 
 /** One implementation of the price arithmetic. The ceiling and the report must
  *  never be able to disagree about what has been spent. */
 function modelUsd(model: string, s: Spend): number {
-  const p = PRICE[model] ?? { in: 0, out: 0 };
-  return (
-    ((s.input + s.cacheWrite * 1.25 + s.cacheRead * 0.1) / 1e6) * p.in +
-    (s.output / 1e6) * p.out +
-    (s.searches / 1000) * SEARCH_PRICE_PER_1000
-  );
+  return usdFor(model, { inputTokens: s.input, outputTokens: s.output });
 }
 
 function spendTotalUsd(): number {
@@ -249,12 +328,11 @@ function spendLines(): string[] {
     const usd = modelUsd(model, s);
     total += usd;
     out.push(
-      `  ${model.padEnd(16)} ${String(s.calls).padStart(3)} call(s)  ${s.input + s.cacheRead + s.cacheWrite} in / ${s.output} out` +
-        `${s.searches ? ` + ${s.searches} web search(es)` : ""}  ≈ $${usd.toFixed(2)}`,
+      `  ${model.padEnd(22)} ${String(s.calls).padStart(3)} call(s)  ${s.input} in / ${s.output} out  ≈ $${usd.toFixed(2)}${MISTRAL_PRICES[model] ? "" : " (unknown model, priced at 10/10)"}`,
     );
   }
   if (out.length)
-    out.push(`  ${"total".padEnd(16)} ≈ $${total.toFixed(2)} (list prices, estimate)`);
+    out.push(`  ${"total".padEnd(22)} ≈ $${total.toFixed(2)} (list prices, estimate)`);
   return out;
 }
 
@@ -267,8 +345,18 @@ let httpResponses = 0;
 /** pdftotext exists on the sweep machine. It is deliberately NOT a runtime
  *  dependency of the server. */
 function pdfToText(bytes: ArrayBuffer): string {
-  writeFileSync("/tmp/catalog.pdf", Buffer.from(bytes));
-  return execFileSync("pdftotext", ["-layout", "/tmp/catalog.pdf", "-"], { encoding: "utf8" });
+  // One file per call: products read PDFs at the same time.
+  const file = join(tmpdir(), `catalog-${process.pid}-${randomUUID()}.pdf`);
+  try {
+    writeFileSync(file, Buffer.from(bytes));
+    return execFileSync("pdftotext", ["-layout", file, "-"], { encoding: "utf8" });
+  } finally {
+    try {
+      unlinkSync(file);
+    } catch {
+      // already gone
+    }
+  }
 }
 
 async function getPdfText(url: string): Promise<string> {
@@ -294,11 +382,17 @@ function strip(html: string): string {
  *  providers see a burst that looks like scraping. One fetch per URL per run,
  *  failures cached too so a dead host is not retried per product. */
 const pageCache = new Map<string, Promise<string>>();
+/** URLs plain fetch could not read (network error, non-200, or a body pdftotext
+ *  rejects). Only these PDFs are offered to the reader rung. */
+const plainFailed = new Set<string>();
 function readPage(url: string, kind: "html" | "pdf"): Promise<string> {
   const key = `${kind}:${url}`;
   let hit = pageCache.get(key);
   if (!hit) {
-    hit = kind === "pdf" ? getPdfText(url) : getHtmlOrPdfText(url);
+    hit = (kind === "pdf" ? getPdfText(url) : getHtmlOrPdfText(url)).catch((e) => {
+      plainFailed.add(url);
+      throw e;
+    });
     pageCache.set(key, hit);
   }
   return hit;
@@ -321,6 +415,39 @@ async function getHtmlOrPdfText(url: string): Promise<string> {
   const bytes = await res.arrayBuffer();
   if (Buffer.from(bytes.slice(0, 5)).toString() === "%PDF-") return pdfToText(bytes);
   return strip(new TextDecoder("utf-8").decode(bytes));
+}
+
+/** One reader fetch per URL per run, like pageCache. Throws with the reason so a
+ *  failed read becomes a recorded reason rather than a silent blank. */
+const readerCache = new Map<string, Promise<string>>();
+let readerBreaker: BreakerState = { consecutive: 0, open: false };
+function readViaReader(url: string): Promise<string> {
+  let hit = readerCache.get(url);
+  if (!hit) {
+    hit = readThroughReader(url).then((r) => {
+      const was = readerBreaker.open;
+      if (!r.ok) {
+        readerBreaker = nextBreakerState(
+          readerBreaker,
+          r.kind === "http" || !r.kind ? "http-error" : r.kind,
+        );
+      }
+      if (r.ok) {
+        const doc = looksLikeDocument(r.text);
+        readerBreaker = nextBreakerState(readerBreaker, doc.ok ? "success" : "not-document");
+        if (!doc.ok) throw new Error(`reader gave no document: ${doc.reason}`);
+      }
+      if (!was && readerBreaker.open) {
+        console.log(
+          `  reader: ${BREAKER_LIMIT} network failures or timeouts in a row; skipping the reader rung for the rest of this run`,
+        );
+      }
+      if (!r.ok) throw new Error(r.reason);
+      return r.text;
+    });
+    readerCache.set(url, hit);
+  }
+  return hit;
 }
 
 // ────────────────────────────────────────────────────────────── the wayback rung
@@ -353,9 +480,12 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 async function archiveFetch(url: string): Promise<Response> {
   for (let attempt = 0; ; attempt++) {
-    const gap = ARCHIVE_GAP_MS - (Date.now() - archiveLastHit);
+    // Claim the slot before waiting: with several products in flight, two callers
+    // must not both see the same gap and hit the archive together.
+    const slot = Math.max(Date.now(), archiveLastHit + ARCHIVE_GAP_MS);
+    archiveLastHit = slot;
+    const gap = slot - Date.now();
     if (gap > 0) await sleep(gap);
-    archiveLastHit = Date.now();
     let res: Response;
     try {
       res = await fetch(url, {
@@ -444,33 +574,17 @@ async function readArchived(
  *  failure, and swallowing it as one is exactly how a sweep produces a full
  *  artifact that no model ever read: every model rung fails, the free regex rungs
  *  keep returning figures, the blackout guard at the bottom sees a healthy
- *  httpResponses count, and the run commits. Measured on 2026-08-18 — a 400 "Your
- *  credit balance is too low" landed in lastReason indistinguishable from a bank's
- *  403, and the run carried on fetching for twenty minutes. Die on the FIRST one
- *  instead, before a single byte is written. */
+ *  httpResponses count, and the run commits. Die on the FIRST one instead (the
+ *  client raises MistralFatalError for 401, 402 and 403). */
 /** Set by the main loop so the fatal guard can flush what has been read so far.
  *  A function rather than a direct call because the guard lives above `entries`. */
 let onFatal: (() => void) | null = null;
+let earlyVerdicts: FieldVerdict[] = [];
 
 function abortIfKeyUnusable(e: unknown): void {
-  const status = (e as { status?: number } | null)?.status;
-  if (status !== 400 && status !== 401 && status !== 403) return;
-  const raw = String((e as Error | null)?.message ?? e);
-  const msg = raw.toLowerCase();
-  // Matched on the MESSAGE, not the status: the API answers billing failures with
-  // 400 invalid_request_error, the same status as a genuinely malformed request,
-  // and only the text separates "top up your account" from "this page was too big".
-  const fatal = [
-    "credit balance",
-    "billing",
-    "quota",
-    "authentication",
-    "invalid x-api-key",
-    "permission",
-    "disabled",
-  ];
-  if (!fatal.some((f) => msg.includes(f))) return;
-  console.error(`\nFATAL - the Anthropic key cannot be used: ${raw}`);
+  if (!(e instanceof MistralFatalError)) return;
+  if (!claimExit()) return;
+  console.error(`\nFATAL - the Mistral key cannot be used: ${e.message}`);
   // SAVE WHAT WAS ALREADY READ, then die. The first version of this guard wrote
   // NOTHING, and on 2026-08-19 that discarded 40 covered figures from 66 products
   // the model had genuinely read before the balance ran out — work already paid
@@ -483,35 +597,105 @@ function abortIfKeyUnusable(e: unknown): void {
   if (onFatal) {
     try {
       onFatal();
-    } catch (e) {
-      console.error(`  (could not save partial results: ${(e as Error).message})`);
+    } catch (err) {
+      console.error(`  (could not save partial results: ${(err as Error).message})`);
     }
   }
-  console.error(
-    "Exiting red. Top up and re-run; products already read are kept, the rest are untouched.",
-  );
+  console.error(`Exiting red. Top up and re-run. ${keptNote()}`);
+  writeEarlyRefusal(`FATAL - the Mistral key cannot be used: ${e.message}${inFlightNote()}`);
   process.exit(1);
 }
 
-/** Every model call in this script goes through here, so a new call site cannot
- *  forget the guard. */
-async function createGuarded(
-  client: Anthropic,
-  body: Anthropic.MessageCreateParamsNonStreaming,
-  options?: { timeout?: number; maxRetries?: number },
-): Promise<Anthropic.Message> {
+/** One request to one model, with the spend, the in-flight count and the key check. No cache here. */
+async function callOnce(model: string, system: string, user: string, tool: ToolSpec) {
+  freshAttempts++;
   try {
-    return await client.messages.create(body, options as never);
+    modelInFlight++;
+    let res: Awaited<ReturnType<typeof callWithTool>>;
+    try {
+      res = await callWithTool({
+        apiKey: apiKey ?? "",
+        model,
+        system,
+        user,
+        tool,
+        timeoutMs: model === EXTRACT_MODEL ? MODEL_TIMEOUT_MS : FALLBACK_TIMEOUT_MS,
+        onRetry: (status) => {
+          if (status === 429) modelRetries.rateLimited++;
+          else modelRetries.serverError++;
+        },
+      });
+    } finally {
+      modelInFlight--;
+    }
+    modelCalls++;
+    recordSpend(model, res.usage);
+    return res;
   } catch (e) {
+    // A reply that arrived but could not be parsed (often a truncated tool call)
+    // was still billed: count it and check the ceiling like a successful call.
+    if (e instanceof MistralCallError && e.usage) {
+      recordSpend(model, e.usage);
+      stopIfOverBudget();
+    }
     abortIfKeyUnusable(e);
     throw e;
   }
+}
+
+/** Every model call in this script goes through here, so a new call site cannot
+ *  forget the guard. A timeout is not retried against the same model (billed again for the
+ *  same wait); after a timeout or a cut-off reply ONE call goes to the fallback model.
+ *  The cache decision lives in cachedCall (replyCache.ts). */
+async function ask(system: string, user: string, tool: ToolSpec) {
+  const key = cacheOn
+    ? cacheKey({ model: EXTRACT_MODEL, system, user, tool, request: REQUEST_CONFIG })
+    : null;
+  try {
+    const out = await cachedCall({
+      store: {
+        get: () => replyCache,
+        set: (c) => {
+          replyCache = c;
+        },
+      },
+      key,
+      productId: productContext.getStore(),
+      pendingKeys: pendingAtStart,
+      heldKeys: heldAtStart,
+      today,
+      maxAgeDays: CACHE_DAYS,
+      primaryModel: EXTRACT_MODEL,
+      fallbackModel: FALLBACK_MODEL,
+      isFallbackWorthy,
+      call: (model) => callOnce(model, system, user, tool),
+    });
+    if (out.outcome === "reused") modelReused++;
+    if (out.fallbackUsed) modelFallbacks++;
+    // Spend is recorded. The caller decides whether the reply settled something (accept) and
+    // then calls settle, which stores an accepted reply BEFORE the budget stop is evaluated.
+    return { res: out.res, accept: out.accept };
+  } catch (e) {
+    // Spend is already recorded; name the cause so the reason does not read as a refusal.
+    if (e instanceof MistralCallError && e.message.includes("truncated")) {
+      throw new Error("model reply truncated");
+    }
+    throw e;
+  }
+}
+
+/** After the caller's accept decision: an accepted reply is stored first, so stopping here
+ *  does not lose a reply that settled something. */
+function settle(accept: () => void, accepted: boolean): void {
+  if (accepted) accept();
+  stopIfOverBudget();
 }
 
 async function askModel(
   product: string,
   sourceUrl: string,
   text: string,
+  log: Log,
 ): Promise<ExtractedFigure | null> {
   if (text.length > MAX_MODEL_CHARS) {
     throw new Error(
@@ -526,39 +710,29 @@ async function askModel(
   // figure to refused with no error to show for it.
   const cut = sliceForExtraction(text);
   if (!cut.whole) {
-    console.log(
+    log(
       `    sliced ${Math.round(text.length / 1000)}k -> ${Math.round(cut.text.length / 1000)}k chars (${cut.regions} regions)`,
     );
   }
   const req = { product, sourceUrl, text: cut.text };
   const { system, user } = buildExtractPrompt(req);
-  const client = new Anthropic({ apiKey: apiKey ?? undefined });
-  const res = await createGuarded(
-    client,
-    {
-      model: EXTRACT_MODEL,
-      max_tokens: 8192,
-      system,
-      tools: [EXTRACT_TOOL as unknown as Anthropic.Tool],
-      // Deliberately NOT a forced tool call. "This page does not state it for this
-      // product" has to remain sayable, and forcing the tool turns that answer
-      // into a fabricated one.
-      messages: [{ role: "user", content: user }],
-    },
-    // maxRetries: 0, carried over from travel.ts and then MEASURED here. The SDK
-    // retries a timeout twice by default, so a call that runs out its ceiling is
-    // billed three times and takes three times as long — one ING creditcard probe
-    // spent twelve minutes to report "Request timed out". A rung with a budget
-    // must not be able to spend it three times over on one product.
-    { timeout: MODEL_TIMEOUT_MS, maxRetries: 0 },
+  // Deliberately NOT a forced tool call (see callWithTool). "This page does not
+  // state it for this product" has to remain sayable.
+  const { res, accept } = await ask(system, user, EXTRACT_TOOL);
+  if (res.kind === "declined") {
+    settle(accept, false); // a decline settles nothing: asked again next run
+    return null; // the model declined — a real answer
+  }
+  const figure = parseExtractReply(res.input, req, today);
+  settle(
+    accept,
+    openAnswerAccepted(figure ? toValue(figure, "agent", sourceUrl, cut.text, today) : null),
   );
-  modelCalls++;
-  recordSpend(EXTRACT_MODEL, res.usage);
-  stopIfOverBudget();
-  const block = res.content.find((b) => b.type === "tool_use");
-  if (!block || block.type !== "tool_use") return null; // the model declined — a real answer
-  return parseExtractReply(block.input, req, today);
+  return figure;
 }
+
+/** The verified quote behind each value the open question produced; the report shows it on Changed and Waiting lines. */
+const valueQuotes = new WeakMap<CatalogValue, string>();
 
 /** A verified figure plus the text it came out of, turned into a catalogue value.
  *
@@ -572,14 +746,16 @@ function toValue(
   text: string,
   fallbackDate: string,
 ): CatalogValue {
-  return {
+  const v: CatalogValue = {
     value: figure.value,
     route,
     sourceUrl,
     checkedAt: readDocumentDate(text) ?? fallbackDate,
-    conditions: figure.conditions,
+    conditions: capConditions(figure.conditions),
     conditionsKnown: figure.conditionsKnown,
   };
+  valueQuotes.set(v, figure.quote);
+  return v;
 }
 
 /** A SAVINGS RATE AS A CATALOGUE FIGURE.
@@ -610,14 +786,16 @@ function rateToValue(
         ? "Opnamevoorwaarden niet vermeld."
         : null;
   const parts = [rate.conditions, promo, withdrawal].filter(Boolean);
-  return {
+  const v: CatalogValue = {
     value: rate.standardPct,
     route,
     sourceUrl,
     checkedAt: readDocumentDate(text) ?? fallbackDate,
-    conditions: parts.length ? parts.join(" ") : null,
+    conditions: capConditions(parts.length ? parts.join(" ") : null),
     conditionsKnown: rate.conditionsKnown,
   };
+  valueQuotes.set(v, rate.quote);
+  return v;
 }
 
 /** The savings question. Separate model call, separate tool, same discipline: the
@@ -627,6 +805,7 @@ async function askRateModel(
   product: string,
   sourceUrl: string,
   text: string,
+  log: Log,
 ): Promise<ExtractedRate | null> {
   if (text.length > MAX_MODEL_CHARS) {
     throw new Error(
@@ -635,294 +814,135 @@ async function askRateModel(
   }
   const cut = sliceForExtraction(text);
   if (!cut.whole) {
-    console.log(
+    log(
       `    sliced ${Math.round(text.length / 1000)}k -> ${Math.round(cut.text.length / 1000)}k chars (${cut.regions} regions)`,
     );
   }
   const req = { product, sourceUrl, text: cut.text };
   const { system, user } = buildInterestPrompt(req);
-  const client = new Anthropic({ apiKey: apiKey ?? undefined });
-  const res = await createGuarded(
-    client,
-    {
-      model: EXTRACT_MODEL,
-      max_tokens: 8192,
-      system,
-      tools: [INTEREST_TOOL as unknown as Anthropic.Tool],
-      messages: [{ role: "user", content: user }],
-    },
-    { timeout: MODEL_TIMEOUT_MS, maxRetries: 0 },
+  const { res, accept } = await ask(system, user, INTEREST_TOOL);
+  if (res.kind === "declined") {
+    settle(accept, false);
+    return null;
+  }
+  const rate = parseInterestReply(res.input, req);
+  settle(
+    accept,
+    openAnswerAccepted(rate ? rateToValue(rate, "agent", sourceUrl, cut.text, today) : null),
   );
-  modelCalls++;
-  recordSpend(EXTRACT_MODEL, res.usage);
-  stopIfOverBudget();
-  const block = res.content.find((b) => b.type === "tool_use");
-  if (!block) return null;
-  return parseInterestReply(block, req);
+  return rate;
 }
 
-// ─────────────────────────────────────────────────────────────── the search rung
-
-/** What the search rung is asked for: a URL, not a number.
- *
- *  This is the whole reason the rung is shaped in two stages. Web-search results
- *  come back encrypted — the script cannot read the pages the model read — so a
- *  figure reported straight out of a search has no receipt, and the quote check
- *  that every other model figure has to pass could not run on it. So the model is
- *  asked only to FIND the provider's own document; this script then fetches that
- *  document itself and reads it with the same verified extractor as routes 1–3.
- *  A search answer that is wrong now fails on the fetch or on the quote, instead
- *  of arriving as an unverifiable number.
- *
- *  It also attacks the actual coverage problem. Most Dutch pages state a rate and
- *  say nothing about its cap, so conditionsKnown stays false however good the
- *  extractor is; the missing half lives in the tariff PDF, and finding that PDF is
- *  a search problem. ING is the standing proof: ing.nl kills the connection, and
- *  its tariff sheet sits on assets.ing.com and fetches with no User-Agent at all. */
-const FIND_TOOL: { name: string; description: string; input_schema: object } = {
-  name: "record_source_document",
-  description:
-    "Record the URL of the document, published by the provider itself, that states this product's surcharge on a foreign-currency payment. We fetch and read this document ourselves — do not report the number here, and do not call this tool for a page you have not confirmed exists.",
-  input_schema: {
-    type: "object",
-    properties: {
-      product: {
-        type: "string",
-        description:
-          "The product you were asked about, copied back exactly. The reply is discarded if it names a different one.",
-      },
-      url: {
-        type: "string",
-        description:
-          "Absolute https URL of the provider's own page or PDF. Its own site, its own asset/CDN host, or the issuer that runs the card for it. Never a comparison site, blog, forum, news article or summary.",
-      },
-      kind: {
-        type: "string",
-        enum: ["html", "pdf"],
-        description: "Whether that URL serves HTML or a PDF.",
-      },
-      publisher: { type: "string", description: "The organisation that publishes that URL." },
-      why: {
-        type: "string",
-        description: "One sentence: what makes this the document that states the surcharge.",
-      },
-    },
-    required: ["product", "url", "kind", "publisher"],
-    additionalProperties: false,
-  },
-};
-
-function buildFindPrompt(
+/** THE CONFIRM STEP, one closed question on a document the run already holds. It fetches
+ *  nothing. Same size refusal, same slice and same `ask` wrapper as the open question, so
+ *  spend, the ceiling, truncation and a dead key behave identically. A declined or
+ *  malformed reply is a rejection, not a confirmation. */
+async function askConfirm(
   product: string,
-  issuer: string,
-  knownUrl: string | null,
-): { system: string; user: string } {
-  const system = [
-    "You are looking for ONE document: the page or PDF, published by the provider itself, that states what this",
-    "product charges as a surcharge on a foreign-currency payment — koersopslag, wisselkoersopslag,",
-    "valutakoersopslag or valutatoeslag.",
-    "",
-    `Search the web, then report the URL by calling the ${FIND_TOOL.name} tool. You are NOT being asked for the`,
-    "number. We fetch the document and read it ourselves, so a URL that does not actually contain the figure is",
-    "worse than no answer at all: it costs us a fetch and teaches us nothing.",
-    "",
-    "It must be the provider's OWN document — its own website, its own asset or CDN host, or the issuer that runs",
-    "the card for it (International Card Services publishes the terms for several Dutch banks' credit cards). A",
-    "comparison site, a blog, a forum, a news article or another model's summary is not acceptable however right",
-    "the number in it looks: we refuse figures whose conditions nobody established, and a third party cannot",
-    "establish them.",
-    "",
-    "Prefer the tariff sheet, the fee information document ('Informatiedocument betreffende de vergoedingen'), the",
-    "cardmember agreement or the terms PDF over a marketing page. Those carry the caps, tiers, packages and promo",
-    "windows the rate depends on, and the conditions are the half we are short of. A provider whose website blocks",
-    "robots usually still publishes that PDF on an unprotected host: ING's rate is on assets.ing.com, not ing.nl.",
-    "",
-    "If you cannot find such a document, do NOT call the tool — say in one sentence what you looked for and what",
-    "you found instead. An unanswered product is a fine outcome; a confidently wrong URL is not.",
-  ].join("\n");
-  const user = [
-    `Product: ${product}`,
-    `Aanbieder: ${issuer}`,
-    knownUrl
-      ? `Page we already know about (we may be unable to read it): ${knownUrl}`
-      : "We have no URL for this product at all.",
-  ].join("\n");
-  return { system, user };
-}
-
-/** Words that say what KIND of product this is, or what kind of company sells it.
- *  They are in every product name and in no useful host, so they must not be what
- *  a host is matched on — otherwise "bank" matches every bank on earth. */
-const NOT_A_BRAND = new Set([
-  "betaalpas",
-  "creditcard",
-  "card",
-  "kaart",
-  "spaarrekening",
-  "beleggingsrekening",
-  "rekening",
-  "prepaid",
-  "bank",
-  "banking",
-  "bankieren",
-  "nederland",
-  "netherlands",
-  "international",
-  "group",
-  "holding",
-  "the",
-  "van",
-  "een",
-  "and",
-  "der",
-  "nv",
-  "bv",
-  "sa",
-  "plc",
-  "ltd",
-  "gmbh",
-  "inc",
-  "com",
-  "gold",
-  "gouden",
-  "goud",
-  "platinum",
-  "premium",
-  "standard",
-  "plus",
-  "metal",
-  "classic",
-  "basis",
-  "sparen",
-  "spaar",
-  "rente",
-  "internet",
-  "direct",
-  "online",
-  "flex",
-  "vrij",
-  "pay",
-  "cash",
-  "credit",
-  "debit",
-]);
-
-/** Does this URL plausibly belong to the provider we asked about?
- *
- *  The rung's one structural weakness is that the model chooses the URL, and the
- *  cheapest wrong answer is a comparison site that has the number in a neat table.
- *  So the host must carry the brand: a label of the host equals a brand word from
- *  the product or issuer name, or contains one. Matching on host LABELS rather
- *  than the whole string is what lets "ING" (three letters) match assets.ing.com
- *  without also matching every host with "ing" somewhere in it — which is most of
- *  them, "spaarrekening" included. */
-function looksLikeProvider(
-  url: string,
-  product: string,
-  issuer: string,
-  knownUrl: string | null,
-): boolean {
-  let host: string;
-  try {
-    const u = new URL(url);
-    if (u.protocol !== "https:" && u.protocol !== "http:") return false;
-    host = u.hostname.toLowerCase();
-  } catch {
-    return false;
+  field: "fxFeePct" | "interestPct",
+  stored: CatalogValue,
+  text: string,
+  log: Log,
+): Promise<
+  | { reply: ConfirmReply; accept: () => void }
+  | { rejected: string; raw: unknown; accept: () => void }
+> {
+  if (text.length > MAX_MODEL_CHARS) {
+    throw new Error(
+      `document is ${Math.round(text.length / 1000)}k chars — refusing to send a truncated one`,
+    );
   }
-  const labels = host.split(".").map((l) => l.replace(/[^a-z0-9]/g, ""));
-  // Same registrable-looking domain as the URL we already had is always fine: a
-  // provider moving its own page is the ordinary case, not an impersonation.
-  if (knownUrl) {
-    try {
-      const known = new URL(knownUrl).hostname.toLowerCase().split(".");
-      const core = known.slice(-2).join(".");
-      if (host === core || host.endsWith(`.${core}`)) return true;
-    } catch {
-      /* a broken URL in state.json is not a reason to accept a strange host */
-    }
-  }
-  const words = `${product} ${issuer}`
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, " ")
-    .split(" ")
-    .filter((w) => w.length >= 3 && !NOT_A_BRAND.has(w));
-  // "Trade Republic" is traderepublic.com and "Trading 212" is trading212.com, so
-  // adjacent words joined are brands too.
-  const joined = words.slice(0, -1).map((w, i) => w + words[i + 1]);
-  const brands = [...new Set([...words, ...joined])];
-  return brands.some((b) => labels.some((l) => l === b || (b.length >= 4 && l.includes(b))));
-}
-
-/** Ask the model to find the provider's own document. Returns null when it
- *  declines, when the reply is about another product, or when the URL is not on a
- *  host that plausibly belongs to the provider. */
-async function findSource(
-  product: string,
-  issuer: string,
-  knownUrl: string | null,
-): Promise<{ url: string; kind: "html" | "pdf" } | null> {
-  const { system, user } = buildFindPrompt(product, issuer, knownUrl);
-  const client = new Anthropic({ apiKey: apiKey ?? undefined });
-  // Charged to the budget BEFORE the call, not after. A search that times out has
-  // already run its searches and burned its tokens; counting only the ones that
-  // came back made the expensive failures free, which is the wrong way round —
-  // ing-creditcard timed out and left the counter reading "0/10 searches".
-  searchesUsed++;
-  const res = await createGuarded(
-    client,
-    {
-      model: FIND_MODEL,
-      max_tokens: 2048,
-      system,
-      tools: [WEB_SEARCH as never, FIND_TOOL as unknown as Anthropic.Tool],
-      // AUTO, never forced — carried over from travel.ts, where it was measured:
-      // forcing the tool makes the model answer on its first turn, before it has
-      // run a single search, and it then reports whatever it can assemble without
-      // one. Forced => zero searches; auto => it searches, then answers or says
-      // it could not find the document.
-      tool_choice: { type: "auto" },
-      messages: [{ role: "user", content: user }],
-    },
-    // maxRetries: 0 for the same measured reason as askModel: the SDK's default
-    // two retries turn a four-minute ceiling into a twelve-minute one at three
-    // times the bill, which is the opposite of a cap.
-    { timeout: FIND_TIMEOUT_MS, maxRetries: 0 },
-  );
-  recordSpend(FIND_MODEL, res.usage);
-  const block = res.content.find((b) => b.type === "tool_use" && b.name === FIND_TOOL.name);
-  if (!block || block.type !== "tool_use") return null; // "I could not find it" — a real answer
-  const r = block.input as Record<string, unknown>;
-
-  // Pinned to the product asked about, the second finding travel.ts paid for: a
-  // reply is only usable if it is about the row we asked for.
-  const norm = (s: unknown) =>
-    String(s ?? "")
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, " ")
-      .trim();
-  const said = norm(r.product);
-  const asked = norm(product);
-  if (!said || (!said.includes(asked) && !asked.includes(said))) return null;
-
-  const url = typeof r.url === "string" ? r.url.trim() : "";
-  if (!url) return null;
-  if (!looksLikeProvider(url, product, issuer, knownUrl)) {
-    let host = url;
-    try {
-      host = new URL(url).hostname;
-    } catch {
-      /* an unparseable URL is refused with the string it gave us */
-    }
-    throw new Error(`found ${host}, which is not ${issuer || product}'s own host`);
-  }
-  const kind: "html" | "pdf" = r.kind === "pdf" || /\.pdf(\?|#|$)/i.test(url) ? "pdf" : "html";
-  return { url, kind };
+  const cut = sliceForExtraction(text);
+  const req = {
+    product,
+    field,
+    storedValue: stored.value,
+    storedConditions: stored.conditions,
+    text: cut.text,
+  };
+  const { system, user } = buildConfirmPrompt(req);
+  const { res, accept } = await ask(system, user, CONFIRM_TOOL);
+  if (res.kind === "declined") return { rejected: "model declined", raw: null, accept };
+  const reply = parseConfirmReply(res.input, req);
+  if (!reply) log(`    rejected reply: ${JSON.stringify(res.input).slice(0, 300)}`);
+  return reply
+    ? { reply, accept }
+    : {
+        rejected: "malformed reply, quote not in the page, or quote lacks the stored figure",
+        raw: res.input,
+        accept,
+      };
 }
 
 const state = JSON.parse(readFileSync(STATE, "utf8"));
-/** Hosts the guard trusts come from this snapshot, never from a source the search rung
- *  found during this run: a host discovered today must not vouch for itself. */
+
+// REUSE OF MODEL REPLIES. See scripts/catalog/replyCache.ts and "How a change gets published"
+// in docs/catalog/watchlist.md.
+const CACHE_PATH = process.env.CATALOG_MODEL_CACHE?.trim() || "docs/catalog/model-cache.json";
+const CACHE_DAYS = (() => {
+  const raw = process.env.CATALOG_CACHE_DAYS?.trim();
+  if (!raw) return 28;
+  if (/^(\d|[1-8]\d|90)$/.test(raw)) return Number(raw);
+  console.log(`CATALOG_CACHE_DAYS="${raw}" is not an integer from 0 to 90: using 28.`);
+  return 28;
+})();
+const CACHE_UNUSED_DAYS = 42;
+const cacheOn = !args.includes("--no-cache");
+/** A dry run writes the cache only when it was pointed at a scratch file outside the repo's catalogue folder. */
+const cacheOutsideCatalogDir = (() => {
+  const rel = relative(resolve("docs/catalog"), resolve(CACHE_PATH));
+  return rel.startsWith("..") || resolve(rel) === rel;
+})();
+let replyCache: ReplyCache = { version: 1, entries: {} };
+if (cacheOn && existsSync(CACHE_PATH)) {
+  try {
+    replyCache = parseCache(JSON.parse(readFileSync(CACHE_PATH, "utf8")));
+  } catch {
+    // an unreadable cache file is an empty cache
+  }
+}
+/** Figures waiting for a second read at the start of the run, "productId.field". */
+const pendingAtStart = new Set<string>(Object.keys(state.pending ?? {}));
+/** Figures the last persisted run held, "productId.field". */
+const heldAtStart = new Set<string>((state.heldLastRun as string[] | undefined) ?? []);
+function saveCache(): void {
+  if (!cacheOn || (dry && !cacheOutsideCatalogDir)) return;
+  try {
+    mkdirSync(dirname(resolve(CACHE_PATH)), { recursive: true });
+    writeFileSync(
+      CACHE_PATH,
+      JSON.stringify(prune(replyCache, today, CACHE_UNUSED_DAYS), null, 2) + "\n",
+    );
+  } catch (e) {
+    console.error(`  (could not save the model reply cache: ${(e as Error).message})`);
+  }
+}
+/** Hosts the guard trusts come from this snapshot: a host that appears during the run
+ *  must not vouch for itself. */
+/** Figures a person must decide, from docs/catalog/manual-hold.json: "productId.field" to the reason.
+ *  A missing or malformed file means no holds; it never stops the run. */
+const MANUAL_HOLD = "docs/catalog/manual-hold.json";
+const manualHoldReasons: Record<string, string> = (() => {
+  try {
+    const raw: unknown = JSON.parse(readFileSync(MANUAL_HOLD, "utf8"));
+    const holds = (raw as { holds?: unknown } | null)?.holds;
+    if (!Array.isArray(holds)) throw new Error('no "holds" list');
+    const out: Record<string, string> = {};
+    for (const h of holds as { key?: unknown; reason?: unknown }[]) {
+      if (typeof h?.key === "string" && h.key.includes(".")) {
+        out[h.key] = typeof h.reason === "string" ? h.reason : "";
+      }
+    }
+    return out;
+  } catch (e) {
+    console.log(
+      `manual hold list not used (${(e as Error).message}): no figure is held for a person.`,
+    );
+    return {};
+  }
+})();
+const manualHolds: ReadonlySet<string> = new Set(Object.keys(manualHoldReasons));
+if (manualHolds.size) console.log(`manual holds: ${[...manualHolds].join(", ")}`);
 const productsAtStart: typeof state.products = structuredClone(state.products);
 const ids: string[] = Object.keys(state.products).filter((id) => !only || matchesOnly(id));
 /** How many products the PREVIOUS run found any figure for — covered or not.
@@ -931,13 +951,21 @@ const ids: string[] = Object.keys(state.products).filter((id) => !only || matche
 const figuresBefore = ids.filter((id) => state.products[id].lastValue != null).length;
 let attemptsMade = 0;
 
-const entries: {
+type Entry = {
   id: string;
   product: string;
   issuer?: string;
   kind?: string;
   fields: Partial<Record<CatalogField, CatalogValue>>;
-}[] = [];
+};
+/** Products finish in any order; each lands in the slot of its place in `ids`. */
+const entrySlots: (Entry | undefined)[] = Array.from({ length: ids.length }, () => undefined);
+/** The finished products in `ids` order. Rebuilt from the slots by syncEntries. */
+const entries: Entry[] = [];
+function syncEntries(): void {
+  entries.length = 0;
+  for (const e of entrySlots) if (e) entries.push(e);
+}
 
 /** THE FIGURE A PRODUCT ANSWERS WITH, whichever question it was asked. Counting
  *  fxFeePct alone made a savings sweep report "covered 0/3" while printing three
@@ -961,6 +989,8 @@ function guard(rows: typeof entries) {
     rows,
     knownHosts: knownHostsByIssuer(productsAtStart, prev.entries),
     pending: state.pending ?? {},
+    storedChecks,
+    manualHolds,
     today,
   });
 }
@@ -971,6 +1001,7 @@ function guard(rows: typeof entries) {
 function mergeSubset(
   rows: typeof entries,
   guarded: ReturnType<typeof guard> = guard(rows),
+  counters?: Pick<ReturnType<typeof coverageForRun>, "uncheckedSince">,
 ): { total: number; kept: string[]; merged: typeof entries } {
   const prev = readPrevCatalog();
   // De samenvoeging zelf staat in packages/core/src/catalogMerge.ts: puur en
@@ -991,36 +1022,134 @@ function mergeSubset(
   }
   // Pending lives next to lastRun, and only the two write paths persist it.
   state.pending = guarded.pending;
+  // Held figures of the products this write covers are replaced; other products keep theirs.
+  const swept = new Set(rows.map((r) => r.id));
+  state.heldLastRun = mergeHeld(state.heldLastRun as string[] | undefined, swept, guarded.verdicts);
+  state.heldSince = nextHeldSince(state.heldSince ?? {}, state.heldLastRun as string[], today);
+  // The first date each figure went unchecked rides along on the two write paths only;
+  // the early exits pass none, so a refused run changes no date.
+  if (counters) state.uncheckedSince = counters.uncheckedSince;
   writeFileSync(CATALOG, JSON.stringify({ generatedAt: today, entries: merged }, null, 2) + "\n");
   writeFileSync(STATE, JSON.stringify(state, null, 2) + "\n");
+  saveCache();
   return { total: merged.length, kept, merged };
 }
 
 // From here on a billing failure keeps what has been read rather than discarding it.
 onFatal = () => {
+  syncEntries();
+  saveCache();
   if (!entries.length) {
     console.error("  (nothing had been read yet, so nothing to save)");
     return;
   }
-  const { total } = mergeSubset(entries);
+  let early: ReturnType<typeof guard> | undefined;
+  try {
+    early = guard(entries);
+    earlyVerdicts = early.verdicts;
+  } catch (e) {
+    console.error(`  (guard failed on the partial results: ${(e as Error).message})`);
+  }
   const covered = entries.filter((e) => isCovered(figureOf(e))).length;
+  if (dry) {
+    console.error(
+      `  --dry: would have saved ${entries.length} product(s) read before the failure (${covered} covered); nothing written.`,
+    );
+    return;
+  }
+  const { total } = mergeSubset(entries, early);
   console.error(
     `  SAVED ${entries.length} product(s) read before the failure (${covered} covered) into ${CATALOG} (${total} total).`,
   );
 };
+/** What the catalogue held when the run started: the confirm step asks about these figures. */
+const catalogAtStart = structuredClone(readPrevCatalog().entries);
+/** Per product the loop got to: did any document get read, and why no figure came out. */
+const reached = new Map<string, { fetched: boolean; reason: string | null }>();
+/** How each stored figure that the run read again was confirmed, keyed "productId.field". */
+const confirmedBy = new Map<string, ConfirmedBy>();
+
+/** The one question a product is asked, or null when none applies (see sweptFieldFor).
+ *  Decided from the catalogue as it was at the start of the run. */
+const fieldPlan = new Map<string, "fxFeePct" | "interestPct" | null>(
+  Object.entries(state.products).map(([id, p]) => [
+    id,
+    sweptFieldFor(
+      (p as { kind?: string }).kind,
+      new Set(
+        Object.entries(catalogAtStart.find((e) => e.id === id)?.fields ?? {})
+          .filter(([, v]) => v)
+          .map(([f]) => f as CatalogField),
+      ),
+    ),
+  ]),
+);
+/** Products on this run's list that a question applies to. */
+const sweptList = ids.filter((id) => fieldPlan.get(id));
+const skippedCount = ids.length - sweptList.length;
+
+/** The coverage contract: every catalogue figure gets a status. `early` marks a run that stopped
+ *  before the loop finished, so unreached products are "stopped-early". */
+function buildCoverage(verdicts: readonly FieldVerdict[], early: boolean) {
+  // The held-since dates as this run's write will persist them (same rule as mergeSubset).
+  const heldKeys = mergeHeld(
+    state.heldLastRun as string[] | undefined,
+    new Set(entries.map((e) => e.id)),
+    verdicts,
+  );
+  return coverageForRun({
+    heldSince: nextHeldSince(state.heldSince ?? {}, heldKeys, today),
+    entries: catalogAtStart,
+    verdicts,
+    expected: Object.entries(state.products).flatMap(([id, p]) => {
+      const field = fieldPlan.get(id);
+      return field ? [{ id, product: (p as { product: string }).product, field }] : [];
+    }),
+    sweptFields: new Set<CatalogField>(["fxFeePct", "interestPct"]),
+    watchedIds: new Set(Object.keys(state.products)),
+    sweptIds: new Set(sweptList),
+    reached,
+    stoppedEarlyIds: new Set(early ? sweptList.filter((id) => !reached.has(id)) : []),
+    uncheckedSince: state.uncheckedSince ?? {},
+    confirmedBy,
+    modelOn: useAgent,
+    today,
+    fullRun: !only,
+  });
+}
 const changes: string[] = [];
-/** Sources the search rung found this run. Worth their own block in the output:
- *  a new primary source is a permanent gain, unlike a figure, and it is the thing
- *  a reviewer should check before the next sweep trusts it without asking. */
-const discovered: string[] = [];
-for (const id of ids) {
+const changeSlots: (string | undefined)[] = Array.from({ length: ids.length }, () => undefined);
+/** The verified quote of the open question's read, per "productId.field". */
+const readQuotes = new Map<string, string>();
+/** Cross-check of the stored figure, per "productId.field", when the run read a different covered figure. */
+const storedChecks = new Map<string, "still-stated" | "gone" | "unresolved">();
+/** Full accepted quotes, up to 1000 characters, for the run summary. */
+type ConfirmQuote = { id: string; field: string; status: string; quote: string };
+const confirmQuotes: ConfirmQuote[] = [];
+const quoteSlots: (ConfirmQuote | undefined)[] = Array.from(
+  { length: ids.length },
+  () => undefined,
+);
+/** One product, start to finish. Everything it keeps for itself is declared in here;
+ *  what it shares is keyed by product id or written to its own slot (`index`). */
+async function sweepProduct(id: string, index: number, log: Log): Promise<void> {
   const p = state.products[id];
   const attempts: RouteAttempt[] = [];
+  /** Every document this run read for the product, in reading order. The confirm step
+   *  asks about one of them; `figure` marks one on which the open question returned a figure. */
+  const held: { url: string; text: string; figure: boolean; snapshotDate: string | null }[] = [];
+  const hold = (url: string, text: string, snapshotDate: string | null = null) => {
+    const d = { url, text, figure: false, snapshotDate };
+    held.push(d);
+    return d;
+  };
   // WHICH QUESTION THIS PRODUCT ANSWERS. A savings account has no foreign-currency
   // surcharge, so asking for one produced 35 guaranteed blanks every sweep and
   // made the coverage denominator dishonest. It has an interest rate instead, and
   // that is a different question with a different tool.
-  const savings = p.kind === "spaarrekening" || p.kind === "beleggingsrekening";
+  const planned = fieldPlan.get(id);
+  if (!planned) return;
+  const savings = planned === "interestPct";
 
   if (savings) {
     // Only the agent rung: a rate ladder is a table, and the regex rungs were
@@ -1028,9 +1157,9 @@ for (const id of ids) {
     const src = p.docUrl ?? p.pdfUrl ?? (p.readable === "yes" ? p.termsUrl : null);
     if (useAgent && src) {
       const kind: "pdf" | "html" = p.docUrl
-        ? p.docFetch === "jina" || p.docKind === "html"
+        ? p.docFetch === "jina"
           ? "html"
-          : "pdf"
+          : resolveDocKind({ url: p.docUrl, docKind: p.docKind })
         : p.pdfUrl
           ? "pdf"
           : "html";
@@ -1039,7 +1168,9 @@ for (const id of ids) {
         route: "agent",
         run: async () => {
           const text = await readPage(url, kind);
-          const rate = await askRateModel(p.product, src, text);
+          const doc = hold(src, text);
+          const rate = await askRateModel(p.product, src, text, log);
+          doc.figure = rate !== null;
           return rate ? rateToValue(rate, "agent", src, text, today) : null;
         },
       });
@@ -1051,6 +1182,7 @@ for (const id of ids) {
       route: "provider-pdf",
       run: async () => {
         const text = await readPage(p.pdfUrl, "pdf");
+        hold(p.pdfUrl, text);
         const figures = readIngTariffs(text);
         const f = figures.find((x) => x.field === "fxFeePct");
         if (!f) return null;
@@ -1082,7 +1214,9 @@ for (const id of ids) {
       run: async () => {
         // The cache hands back tag-stripped text with its line breaks intact (the
         // model rung needs them to see headings); this rung wants one flat line.
-        const text = (await readPage(p.termsUrl, "html")).replace(/\s+/g, " ");
+        const raw = await readPage(p.termsUrl, "html");
+        hold(p.termsUrl, raw);
+        const text = raw.replace(/\s+/g, " ");
         const m =
           /(\d{1,2})[,.](\d{1,2})\s*%[^.]{0,40}koersopslag|koersopslag[^.]{0,40}?(\d{1,2})[,.](\d{1,2})\s*%/i.exec(
             text,
@@ -1117,7 +1251,9 @@ for (const id of ids) {
       run: async () => {
         const snap = await readArchived(p.termsUrl);
         if (!snap) return null;
-        const figure = await askModel(p.product, snap.url, snap.text);
+        const doc = hold(snap.url, snap.text, snap.date);
+        const figure = await askModel(p.product, snap.url, snap.text, log);
+        doc.figure = figure !== null;
         // The snapshot's date, not today's. It is when that text was true.
         return figure ? toValue(figure, "wayback", snap.url, snap.text, snap.date) : null;
       },
@@ -1160,7 +1296,10 @@ for (const id of ids) {
           const via = p.docFetch === "jina" ? `https://r.jina.ai/${p.docUrl}` : p.docUrl;
           sources.push({
             url: via,
-            kind: p.docFetch === "jina" ? "html" : p.docKind === "html" ? "html" : "pdf",
+            kind:
+              p.docFetch === "jina"
+                ? "html"
+                : resolveDocKind({ url: p.docUrl, docKind: p.docKind }),
           });
         }
         if (p.pdfUrl) sources.push({ url: p.pdfUrl, kind: "pdf" });
@@ -1171,7 +1310,9 @@ for (const id of ids) {
           if (seenSrc.has(src.url)) continue;
           seenSrc.add(src.url);
           const text = await readPage(src.url, src.kind);
-          const figure = await askModel(p.product, src.url, text);
+          const doc = hold(src.url, text);
+          const figure = await askModel(p.product, src.url, text, log);
+          doc.figure = figure !== null;
           const value = figure ? toValue(figure, "agent", src.url, text, today) : null;
           if (value && isCovered(value)) return value;
           best = best ?? value;
@@ -1181,45 +1322,18 @@ for (const id of ids) {
     });
   }
 
-  // THE SEARCH RUNG, and the last one. Two stages: the model finds the provider's
-  // own document, then THIS script fetches it and reads it with the same verified
-  // extractor as every other rung — see findSource for why the search is not
-  // allowed to report the number itself.
-  //
-  // Where the budget goes when `--search` turns discovery on: only to products no
-  // fetch can reach, which is where the design put route 5 and is about 27 of the
-  // 124. `--search-all` opens it to every product that finished uncovered — the
-  // deliberate campaign to find the ~90 tariff PDFs that would settle the
-  // conditions the marketing pages leave open. A discovered source is written back
-  // to state.json, and reading it back needs NO search, so discovery is paid for
-  // once per product and every later sweep reads that document for free.
-  const searchable = searchAll || !!only || (p.readable !== "yes" && !p.pdfUrl);
-  // The search rung asks the FX question too, so a savings product must not reach
-  // it — it would spend a search finding a document and then ask it the wrong
-  // thing.
-  if (
-    !savings &&
-    useAgent &&
-    (p.foundUrl || (useSearch && searchable && searchesUsed < searchBudget))
-  ) {
+  // A source an earlier discovery search pinned in state.json (foundUrl) is still
+  // fetched and read like any other document. The search that found them is gone.
+  if (!savings && useAgent && p.foundUrl) {
+    const found = {
+      url: p.foundUrl as string,
+      kind: p.foundKind === "pdf" ? "pdf" : "html",
+    } as const;
     attempts.push({
       route: "agent",
       run: async () => {
-        let found: { url: string; kind: "html" | "pdf" } | null = p.foundUrl
-          ? { url: p.foundUrl, kind: p.foundKind === "pdf" ? "pdf" : "html" }
-          : null;
-        if (!found) {
-          if (searchesUsed >= searchBudget) {
-            throw new Error(`search budget spent (${searchBudget}) — raise with --max-search`);
-          }
-          found = await findSource(p.product, p.issuer ?? "", p.termsUrl ?? null);
-        }
-        if (!found) return null;
-
         // Fetch it ourselves. If the provider blocks us on this host too, the
-        // archive is tried for the discovered URL as well — the two new rungs
-        // compose, and that is how a blocked host with an archived tariff sheet
-        // still lands.
+        // archive is tried for the URL as well.
         let text: string;
         let sourceUrl = found.url;
         let fallbackDate = today;
@@ -1232,37 +1346,195 @@ for (const id of ids) {
           sourceUrl = snap.url;
           fallbackDate = snap.date;
         }
-        const figure = await askModel(p.product, sourceUrl, text);
-        if (!figure) return null;
-        // Only a source that actually produced a VERIFIED figure is remembered.
-        // Caching a URL that read as nothing would bake a dead end into the
-        // watchlist and stop the next sweep from looking again.
-        if (!p.foundUrl) {
-          state.products[id].foundUrl = found.url;
-          state.products[id].foundKind = found.kind;
-          state.products[id].foundAt = today;
-          state.products[id].foundVia = "agent-search";
-          discovered.push(`${p.product}: ${found.url} (${found.kind})`);
-        }
-        return toValue(figure, "agent", sourceUrl, text, fallbackDate);
+        const doc = hold(sourceUrl, text, sourceUrl === found.url ? null : fallbackDate);
+        const figure = await askModel(p.product, sourceUrl, text, log);
+        doc.figure = figure !== null;
+        return figure ? toValue(figure, "agent", sourceUrl, text, fallbackDate) : null;
       },
     });
   }
 
+  // THE READER RUNG. Last, so it only runs when no earlier rung covered the figure:
+  // plain fetch failed (bot block), the text was too short, or the model declined.
+  // r.jina.ai renders the page, which recovered 19 of 30 such documents on
+  // 2026-11-22. The stored sourceUrl stays the provider's own URL. Products with
+  // docFetch "jina" were already read through the reader above; not asked twice.
+  let readerRan = false;
+  if (useAgent && p.docFetch !== "jina") {
+    // Computed when the rung runs: plainFailed is only known after the earlier rungs.
+    const readerUrls = () => readerCandidates(p, plainFailed);
+    if (p.termsUrl || p.docUrl || p.foundUrl || p.pdfUrl) {
+      attempts.push({
+        route: "agent",
+        run: async () => {
+          if (readerBreaker.open) throw new Error("reader: skipped, reader unavailable this run");
+          const urls = readerUrls();
+          if (!urls.length) return null; // every PDF was read by plain fetch
+          readerRan = true;
+          // At most ONE reader model call per product: the first candidate that
+          // yields a document gets the question, whatever the model answers.
+          const doc = await firstDocument(urls, readViaReader);
+          if (doc.url === null || doc.text === null) {
+            throw new Error(`reader: ${doc.failures.join("; ")}`);
+          }
+          const held1 = hold(doc.url, doc.text);
+          try {
+            if (savings) {
+              const rate = await askRateModel(p.product, doc.url, doc.text, log);
+              held1.figure = rate !== null;
+              if (rate) return rateToValue(rate, "agent", doc.url, doc.text, today);
+            } else {
+              const figure = await askModel(p.product, doc.url, doc.text, log);
+              held1.figure = figure !== null;
+              if (figure) return toValue(figure, "agent", doc.url, doc.text, today);
+            }
+          } catch (e) {
+            throw new Error(`reader: ${e instanceof Error ? e.message : String(e)}`);
+          }
+          throw new Error("reader: model found no figure");
+        },
+      });
+    }
+  }
+
   attemptsMade += attempts.length;
-  const { value, tried, reason: ladderReason } = await runLadder(attempts);
+  const ladder = await runLadder(attempts);
+  const { tried, reason: ladderReason } = ladder;
+  let value = ladder.value;
+  const field = planned;
+  const quoteOfRead = value ? valueQuotes.get(value) : undefined;
+  if (quoteOfRead) readQuotes.set(`${id}.${field}`, quoteOfRead);
+  // THE CONFIRM STEP, two cases, both for a covered figure the catalogue already holds:
+  //  1. the ladder ended without a covered answer and without a read of the same number
+  //     (the guard turns that read into a confirm by itself): ask whether the stored figure is
+  //     still stated;
+  //  2. the ladder ended COVERED on a DIFFERENT number: ask the same question for the stored
+  //     figure. If it is still stated, the page shows both and the guard holds the new one.
+  // One call, on a document already held; it fetches nothing.
+  const stored = catalogAtStart.find((e) => e.id === id)?.fields[field];
+  const same = (a: number, b: number) => Math.round(a * 1e4) === Math.round(b * 1e4);
+  let confirmNote: string | null = null;
+  let confirmedByQuote = false;
+  const foundCovered = isCovered(value ?? undefined);
+  const differs =
+    foundCovered && !!stored && isCovered(stored) && !same(value!.value, stored.value);
+  const needsConfirm =
+    useAgent &&
+    stored &&
+    isCovered(stored) &&
+    (differs || (!foundCovered && held.length > 0 && !(value && same(value.value, stored.value))));
+  if (needsConfirm && held.length === 0) {
+    // A change that cannot be cross-checked is not passed on.
+    storedChecks.set(`${id}.${field}`, "unresolved");
+    confirmNote = "confirm: cross-check unresolved (no document to ask on) — change held";
+    log(`  confirm ${p.product}: no document to ask on`);
+  } else if (needsConfirm) {
+    // Document: the one the open question found a figure on, else the document of record
+    // (docUrl, pdfUrl, foundUrl, termsUrl) if the run read it, else the last one read.
+    const record = [p.docUrl, p.pdfUrl, p.foundUrl, p.termsUrl].filter(Boolean) as string[];
+    const bare = (u: string) => u.replace(/^https:\/\/r\.jina\.ai\//, "");
+    const ofRecord = record
+      .map((u) => held.find((d) => bare(d.url) === u))
+      .find((d) => d !== undefined);
+    // A change is cross-checked on the STORED figure's own document when the new figure came
+    // from another one and this run read the stored one; "not on the page" only means something there.
+    const foundDoc = foundCovered ? held.find((d) => d.url === value!.sourceUrl) : undefined;
+    const otherDocument = differs && !sameDocument(value!.sourceUrl, stored!.sourceUrl);
+    const storedDoc = otherDocument
+      ? held.find((d) => sameDocument(d.url, stored!.sourceUrl))
+      : undefined;
+    const doc =
+      storedDoc ?? foundDoc ?? held.findLast((d) => d.figure) ?? ofRecord ?? held[held.length - 1]!;
+    const onStoredDocument = !otherDocument || storedDoc !== undefined;
+    let line: string;
+    let status = "";
+    let quote = "";
+    let outcome: ConfirmOutcome;
+    let why = "";
+    let acceptReply = (): void => {};
+    try {
+      const res = await askConfirm(p.product, field, stored!, doc.text, log);
+      acceptReply = res.accept;
+      if ("rejected" in res) {
+        outcome = { kind: "rejected", raw: res.raw };
+        why = `reply rejected (${res.rejected})`;
+        line = `rejected: ${res.rejected}`;
+      } else {
+        outcome = { kind: "reply", reply: res.reply };
+        if (res.reply.status === "not_on_page") {
+          status = "not_on_page";
+          line = "not_on_page";
+        } else {
+          status = res.reply.status;
+          quote = res.reply.quote;
+          line =
+            res.reply.status === "changed"
+              ? `changed to ${res.reply.newValue}  "${quote.slice(0, 160)}"`
+              : `still_stated  "${quote.slice(0, 160)}"`;
+        }
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      outcome = { kind: "failed" };
+      why = `call failed (${msg})`;
+      line = `call failed: ${msg}`;
+    }
+    // The reply is kept only when it settled something (see confirmAccepted).
+    settle(
+      acceptReply,
+      confirmAccepted(outcome, differs ? { foundValue: value!.value, onStoredDocument } : null),
+    );
+    if (differs) {
+      const check = storedCheckOf(outcome, value!.value, onStoredDocument);
+      storedChecks.set(`${id}.${field}`, check);
+      confirmNote =
+        check === "still-stated"
+          ? "confirm: stored value still stated — conflicting read, held"
+          : check === "gone"
+            ? "confirm: stored value not on page, change left to the guard"
+            : !onStoredDocument
+              ? "confirm: cross-check unresolved (stored figure's own document was not read) — change held"
+              : `confirm: cross-check unresolved (${why || `reply ${status}`}) — change held`;
+    } else if (outcome.kind === "reply" && outcome.reply.status === "still_stated") {
+      confirmNote = "confirm: still stated";
+      confirmedByQuote = true;
+      // An uncovered read of the stored number: the guard confirms it only from a known host.
+      value = confirmRead({
+        storedValue: stored!.value,
+        url: doc.url,
+        snapshotDate: doc.snapshotDate,
+        today,
+      });
+    } else if (outcome.kind === "reply" && outcome.reply.status === "changed") {
+      confirmNote = `confirm: changed to ${outcome.reply.newValue} (not published)`;
+    } else if (outcome.kind === "reply") {
+      confirmNote = "confirm: not on page";
+    } else {
+      confirmNote = `confirm: ${why}`;
+    }
+    if (status) quoteSlots[index] = { id, field, status, quote: quote.slice(0, 1000) };
+    log(`  confirm ${p.product}: ${line}`);
+  }
   // The spec's honest floor is "unknown, WITH the reason named". runLadder returns
   // null for an empty attempt list, which would record a blank against a product
   // nobody has wired a route for — indistinguishable from one that was tried and
   // came back empty.
-  const reason =
-    ladderReason ??
+  const baseReason =
+    ladderReason?.replaceAll("agent: reader:", "reader:") ??
     (attempts.length
       ? null
-      : `no route wired (readable=${p.readable}, pdfUrl=${p.pdfUrl ? "yes" : "none"})`);
+      : `${NO_ROUTE_PREFIX} (readable=${p.readable}, pdfUrl=${p.pdfUrl ? "yes" : "none"})`);
+  const reason = confirmNote ? [baseReason, confirmNote].filter(Boolean).join(" · ") : baseReason;
+  if (stored && value && same(value.value, stored.value)) {
+    confirmedBy.set(
+      `${id}.${field}`,
+      confirmedByQuote ? "quote-check" : isCovered(value) ? "read-again" : "same-number",
+    );
+  }
+  reached.set(id, { fetched: held.length > 0, reason: baseReason });
   const prev = state.products[id].lastValue ?? null;
   if (value && prev !== null && prev !== value.value) {
-    changes.push(`${p.product}: ${prev} → ${value.value} (${value.route})`);
+    changeSlots[index] = `${p.product}: ${prev} → ${value.value} (${value.route})`;
   }
   state.products[id].lastChecked = today;
   state.products[id].lastValue = value ? value.value : null;
@@ -1272,18 +1544,17 @@ for (const id of ids) {
   // would throw the reason away exactly when it explains why the product is still
   // uncovered.
   state.products[id].lastReason = reason;
-  const field: "fxFeePct" | "interestPct" = savings ? "interestPct" : "fxFeePct";
   // The artifact carries the issuer and kind as well as the figure. Without them
   // it cannot be read on its own — the web app would have to bundle the 117 kB
   // state file just to learn that "ABN AMRO Direct Sparen" is ABN AMRO's, and a
   // consumer of a published catalogue should not need our working notes.
-  entries.push({
+  entrySlots[index] = {
     id,
     product: p.product,
     issuer: p.issuer,
     kind: p.kind,
     fields: value ? { [field]: value } : {},
-  });
+  };
   // The figure and its conditions are printed, not just a tick. --dry writes
   // nothing, so this console line is the ONLY artifact of a dry run, and
   // "✓ ING creditcard  provider-pdf" does not tell you WHICH number it believed —
@@ -1294,10 +1565,43 @@ for (const id of ids) {
   const shown = value
     ? `${value.value}%${value.conditions ? ` [${value.conditions}]` : ""}${isCovered(value) ? "" : `  — ${reason ?? "not covered"}`}`
     : (reason ?? "no route wired");
-  console.log(
-    `${isCovered(value ?? undefined) ? "✓" : "·"} ${p.product.slice(0, 40).padEnd(42)} ${(tried.join(">") || "-").padEnd(26)} ${shown}`,
+  log(
+    `${isCovered(value ?? undefined) ? "✓" : "·"} ${p.product.slice(0, 40).padEnd(42)} ${(tried.join(">") + (readerRan ? "+reader" : "") || "-").padEnd(26)} ${shown}`,
   );
 }
+
+/** Set when the ceiling or the deadline stopped the run from starting more products. */
+let stoppedEarlyReason: "cost ceiling" | "time limit" | null = null;
+await runPool(
+  ids,
+  concurrency,
+  async (id, index) => {
+    if (concurrency === 1) {
+      return productContext.run(id, () => sweepProduct(id, index, console.log));
+    }
+    const buffer = { product: state.products[id].product as string, lines: [] as string[] };
+    openBuffers.add(buffer);
+    try {
+      await productContext.run(id, () => sweepProduct(id, index, (l) => buffer.lines.push(l)));
+    } finally {
+      // A buffer already flushed by an exit is no longer in the set.
+      if (openBuffers.delete(buffer) && buffer.lines.length) console.log(buffer.lines.join("\n"));
+    }
+  },
+  () => {
+    const reason = stopReason(spendTotalUsd(), MAX_USD, minutesSinceStart(), DEADLINE_MIN);
+    if (reason && !stoppedEarlyReason) {
+      stoppedEarlyReason = reason;
+      console.log(
+        `\nSTOP STARTING: ${reason} reached (spend ≈ $${spendTotalUsd().toFixed(2)}, ${minutesSinceStart()} min). Products already running finish.`,
+      );
+    }
+    return !stoppedEarlyReason;
+  },
+);
+syncEntries();
+changes.push(...changeSlots.filter((c): c is string => !!c));
+confirmQuotes.push(...quoteSlots.filter((q): q is ConfirmQuote => !!q));
 
 // Coverage is per FIELD, and a sweep can now mix both kinds in one run, so the
 // two are counted separately and added rather than asked of one field.
@@ -1313,12 +1617,13 @@ const c = {
     ]),
   ) as typeof cFx.byRoute,
 };
+if (skippedCount) {
+  console.log(
+    `\n${skippedCount} products skipped: no FX or interest figure applies (account fee, points and cashback come later)`,
+  );
+}
 console.log(`\ncovered ${c.covered}/${c.total}  by route: ${JSON.stringify(c.byRoute)}`);
 if (changes.length) console.log(`\nCHANGED:\n  ${changes.join("\n  ")}`);
-if (discovered.length)
-  console.log(
-    `\nDISCOVERED SOURCES (cached in ${STATE}, free from now on):\n  ${discovered.join("\n  ")}`,
-  );
 
 const figuresFound = entries.filter((e) => figureOf(e)).length;
 // Two counts, not a ratio: one route can make several requests (the archive costs
@@ -1333,20 +1638,39 @@ console.log(
 console.log(`archive: ${waybackReads} snapshot(s) read`);
 console.log(
   useAgent
-    ? `model: ${EXTRACT_MODEL}, ${modelCalls} call(s)`
-    : `model: not run (${apiKey ? "--no-agent" : "no ANTHROPIC_API_KEY in the environment"})`,
-);
-console.log(
-  useSearch
-    ? `search: ${searchesUsed}/${searchBudget} discovery search(es)${searchAll ? " (--search-all)" : ""}`
-    : `search: not run (${!useAgent ? (apiKey ? "--no-agent" : "no ANTHROPIC_API_KEY") : "discovery is opt-in — pass --search"})`,
+    ? `model: ${EXTRACT_MODEL}, ${modelCalls} call(s)\nmodel calls: ${modelCalls} new (${freshAttempts} attempted), ${modelReused} reused from unchanged pages\nmodel fallbacks: ${modelFallbacks}${FALLBACK_MODEL ? ` (${FALLBACK_MODEL})` : " (off)"}`
+    : `model: not run (${apiKey ? "--no-agent" : "no MISTRAL_API_KEY in the environment"})`,
 );
 // What the run cost, from the API's own usage numbers. A rung that spends money
 // and reports only coverage is a rung nobody can set a cadence for.
 if (spend.size) console.log(`spend:\n${spendLines().join("\n")}`);
+console.log(`run time: ${minutesSinceStart()} minutes  ·  concurrency: ${concurrency}`);
+console.log(`model retries: 429 ×${modelRetries.rateLimited}, 5xx ×${modelRetries.serverError}`);
+
+const runWarnings: string[] = [];
+{
+  const notReached = sweptList.filter((id) => !reached.has(id)).length;
+  if (stoppedEarlyReason && notReached > 0) {
+    runWarnings.push(
+      `Stopped early (${stoppedEarlyReason}): ${notReached} products were not reached this week.`,
+    );
+  }
+}
+const health = modelHealth({
+  enabled: useAgent,
+  attempts: freshAttempts,
+  answers: modelCalls,
+  reused: modelReused,
+});
+if (health.kind === "warn") runWarnings.push(health.text);
+if (useAgent && freshAttempts === 0) {
+  runWarnings.push("No fresh model call was made this run; the model key was not exercised.");
+}
+for (const w of runWarnings) console.log(`WARNING: ${w}`);
 
 // The guard runs once, before the dry exit, so --dry shows the verdicts too.
 const guarded = guard(entries);
+const coverageResult = buildCoverage(guarded.verdicts, stoppedEarlyReason !== null);
 for (const v of guarded.verdicts) {
   if (v.verdict.kind === "confirm" || v.verdict.kind === "unjudged") continue;
   const detail =
@@ -1357,6 +1681,10 @@ for (const v of guarded.verdicts) {
           ? "after second read"
           : ""
         : `first read ${v.verdict.pending.seenAt}`;
+  if (v.verdict.kind === "publish" && v.verdict.conditionsOnly) {
+    console.log(`GUARD conditions ${v.id}.${v.field}  ${v.found.value} (conditions text updated)`);
+    continue;
+  }
   console.log(
     `GUARD ${v.verdict.kind.padEnd(7)} ${v.id}.${v.field}  ${v.before?.value ?? "—"} → ${v.found.value}${detail ? `  (${detail})` : ""}`,
   );
@@ -1391,6 +1719,23 @@ function figureCounts(
   };
 }
 
+/** The verified quote of each read behind a publish (not conditions-only) or pending verdict, cut to 300 characters; the manual-hold reasons. */
+function evidenceFields(): Pick<RunSummary, "evidenceQuotes" | "manualHoldReasons"> {
+  const quotes = Object.fromEntries(
+    guarded.verdicts.flatMap((v) => {
+      const key = `${v.id}.${v.field}`;
+      const q = readQuotes.get(key);
+      const wanted =
+        v.verdict.kind === "pending" || (v.verdict.kind === "publish" && !v.verdict.conditionsOnly);
+      return wanted && q ? [[key, q.slice(0, 300)]] : [];
+    }),
+  );
+  return {
+    ...(Object.keys(quotes).length ? { evidenceQuotes: quotes } : {}),
+    ...(manualHolds.size ? { manualHoldReasons: { ...manualHoldReasons } } : {}),
+  };
+}
+
 function writeSummary(
   status: RunSummary["status"],
   refusedReason: string | null,
@@ -1412,6 +1757,16 @@ function writeSummary(
     spendLines: spendLines(),
     runUrl: server && repo && runId ? `${server}/${repo}/actions/runs/${runId}` : null,
     ...figureCounts(catalogEntries),
+    confirmQuotes,
+    ...evidenceFields(),
+    coverage: coverageResult.figures,
+    durationMinutes: minutesSinceStart(),
+    concurrency,
+    modelRetries: { ...modelRetries },
+    ...(useAgent
+      ? { modelCallsNew: modelCalls, modelCallsReused: modelReused, modelFallbacks }
+      : {}),
+    ...(runWarnings.length ? { warnings: [...runWarnings] } : {}),
   };
   writeFileSync(summaryOut, JSON.stringify(summary, null, 2) + "\n");
 }
@@ -1424,6 +1779,7 @@ function refuse(line: string): never {
 }
 
 if (dry) {
+  saveCache();
   console.log("\n--dry: nothing written");
   writeSummary("dry", null, [], readPrevCatalog().entries);
   process.exit(0);
@@ -1450,8 +1806,10 @@ if (attemptsMade > 0 && httpResponses === 0) {
 // (all timed out, all refused, the rung threw every time). The figures that remain
 // are the regex's, and the regex is the thing the model exists to correct - ABN
 // AMRO's betaalpas reads 2% there when the page says 1,2%.
-if (useAgent && modelCalls === 0) {
-  refuse(`REFUSING TO WRITE: the model rung was enabled and not one of its calls came back.`);
+// A reused reply is an answer: a week in which every page is unchanged is a normal week. But
+// fresh calls that all fail are not hidden by it: see modelHealth. (Judged before the dry exit.)
+if (health.kind === "refuse") {
+  refuse(`REFUSING TO WRITE: ${health.text}`);
 }
 if (figuresBefore > 0 && figuresFound === 0) {
   refuse(
@@ -1467,7 +1825,7 @@ if (only) {
   // the subset did not look at; refusing to write at all was the first fix and
   // became its own trap — figures were paid for and stranded in state.json,
   // reachable only by a full sweep.
-  const { total, kept, merged } = mergeSubset(entries, guarded);
+  const { total, kept, merged } = mergeSubset(entries, guarded, coverageResult);
   console.log(
     `\nwrote ${STATE} and merged ${entries.length} swept product(s) into ${CATALOG} (${total} total).`,
   );
@@ -1482,6 +1840,6 @@ state.lastRun = today;
 // `entries` wholesale therefore deleted them. There is one merge for both paths
 // because two implementations would drift, and the one that drifted would be the
 // path nobody watches.
-const { total, kept, merged } = mergeSubset(entries, guarded);
+const { total, kept, merged } = mergeSubset(entries, guarded, coverageResult);
 console.log(`\nwrote ${CATALOG} (${total} products) and ${STATE}`);
 writeSummary("written", null, kept, merged);

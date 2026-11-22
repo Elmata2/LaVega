@@ -4,12 +4,24 @@ import type { MergeEntry } from "./catalogMerge.js";
 /** A figure that jumped and waits for a second read. seenAt = YYYY-MM-DD of first read. */
 export type PendingFigure = { value: number; seenAt: string };
 
-export type HoldReason = "out-of-range" | "unknown-host" | "comparison-route" | "bad-source-url";
+export type HoldReason =
+  | "out-of-range"
+  | "unknown-host"
+  | "comparison-route"
+  | "bad-source-url"
+  | "conflicting-read"
+  | "change-not-cross-checked"
+  | "held-for-person";
 
 export type GuardVerdict =
   | { kind: "unjudged" }
   | { kind: "confirm" }
-  | { kind: "publish"; viaPending: boolean }
+  | {
+      kind: "publish";
+      viaPending: boolean;
+      /** Same figure as stored; only its conditions text appeared or its known-ness changed. */
+      conditionsOnly?: true;
+    }
   | { kind: "pending"; pending: PendingFigure }
   | { kind: "hold"; reason: HoldReason };
 
@@ -39,11 +51,16 @@ export function isArchiveUrl(sourceUrl: string): boolean {
   return ARCHIVE.test(sourceUrl.trim());
 }
 
-/** Host of the page a figure came from. A web.archive.org snapshot and an r.jina.ai fetch proxy are unwrapped to the host of the page behind them; r.jina.ai itself is never a host. null when unparseable. */
-export function sourceHost(sourceUrl: string): string | null {
+/** The URL of the page behind a web.archive.org snapshot or an r.jina.ai fetch proxy; any other URL, trimmed, as is. */
+export function unwrapSourceUrl(sourceUrl: string): string {
   let url = sourceUrl.trim();
   url = ARCHIVE.exec(url)?.[1] ?? url;
-  url = JINA.exec(url)?.[1] ?? url;
+  return JINA.exec(url)?.[1] ?? url;
+}
+
+/** Host of the page a figure came from. A web.archive.org snapshot and an r.jina.ai fetch proxy are unwrapped to the host of the page behind them; r.jina.ai itself is never a host. null when unparseable. */
+export function sourceHost(sourceUrl: string): string | null {
+  const url = unwrapSourceUrl(sourceUrl);
   try {
     const host = new URL(url).hostname.toLowerCase();
     return host && host !== JINA_HOST ? host : null;
@@ -59,7 +76,7 @@ const DAY = /^(\d{4})-(\d{2})-(\d{2})$/;
 const MS_PER_DAY = 86_400_000;
 
 /** Whole days from `from` to `to` (YYYY-MM-DD). null when either is unparseable. Calendar arithmetic only, no clock. */
-function daysBetween(from: string, to: string): number | null {
+export function wholeDaysBetween(from: string, to: string): number | null {
   const a = DAY.exec(from);
   const b = DAY.exec(to);
   if (!a || !b) return null;
@@ -68,9 +85,10 @@ function daysBetween(from: string, to: string): number | null {
   return Number.isFinite(days) ? days : null;
 }
 
+/** Points fields with zeroIsJump: a move to zero or from zero is a jump, whatever its size. */
 function isJump(jump: Jump, current: number, found: number): boolean {
   if (jump.kind === "points") {
-    if (jump.zeroIsJump && found === 0 && current !== 0) return true;
+    if (jump.zeroIsJump && (found === 0) !== (current === 0)) return true;
     return Math.abs(found - current) > jump.max;
   }
   if (current === 0 || found === 0) return current !== found;
@@ -84,22 +102,45 @@ export function judgeField(input: {
   knownHosts: ReadonlySet<string>;
   pending: PendingFigure | undefined;
   today: string;
+  /** Answer of the cross-check on the STORED figure when the run read a different one: still on the
+   *  page (conflicting), gone from it (the change may go on), or no clear answer (change held). */
+  storedCheck?: "still-stated" | "gone" | "unresolved";
+  /** The figure is on the manual hold list: any covered read that differs from the stored one waits for a person. */
+  manualHold?: boolean;
 }): GuardVerdict {
   const { field, current, found, knownHosts, pending, today } = input;
-  if (!isCovered(found)) return { kind: "unjudged" };
+  if (!isCovered(found)) {
+    // An uncovered read of the very number we already hold, from a host the issuer is known by,
+    // re-confirms it. The stored conditions and source stay: this read proves nothing new.
+    if (
+      isCovered(current) &&
+      Number.isFinite(found.value) &&
+      round4(current!.value) === round4(found.value)
+    ) {
+      // A regex read counts only on the page the stored figure came from; the model's
+      // confirm step (route "agent") may use any document of the issuer.
+      const host = sourceHost(found.sourceUrl);
+      const trusted = found.route === "agent" || found.sourceUrl === current!.sourceUrl;
+      if (host !== null && knownHosts.has(host) && trusted) return { kind: "confirm" };
+    }
+    return { kind: "unjudged" };
+  }
 
   const baseline = isCovered(current) ? current : undefined;
-  // A value that stayed the same while its conditions appeared or vanished is a change:
-  // "unconditional" must not outlive the cap that was added. Different wording of two
-  // non-null conditions is not (model paraphrase must not churn the file).
+  // Same value: only conditions appearing (null -> text) is new information and publishes, so
+  // "unconditional" does not outlive a cap that was added. Text -> null never drops a stored
+  // condition on one read that did not mention it. Wording differences are not changes.
+  const sameValue = !!baseline && round4(baseline.value) === round4(found.value);
   if (
     baseline &&
-    round4(baseline.value) === round4(found.value) &&
+    sameValue &&
     baseline.conditionsKnown === found.conditionsKnown &&
-    (baseline.conditions === null) === (found.conditions === null)
+    (found.conditions === null || baseline.conditions !== null)
   ) {
     return { kind: "confirm" };
   }
+
+  if (input.manualHold) return { kind: "hold", reason: "held-for-person" };
 
   if (found.route === "comparison") return { kind: "hold", reason: "comparison-route" };
 
@@ -113,10 +154,18 @@ export function judgeField(input: {
   }
 
   if (!baseline) return { kind: "publish", viaPending: false };
+  if (sameValue) return { kind: "publish", viaPending: false, conditionsOnly: true };
+
+  // Both the stored and the new figure are on the page: one of the two reads is wrong,
+  // and the stored one has the longer record. Never pass the new one on as a change.
+  if (input.storedCheck === "still-stated") return { kind: "hold", reason: "conflicting-read" };
+  if (input.storedCheck === "unresolved") {
+    return { kind: "hold", reason: "change-not-cross-checked" };
+  }
 
   if (isJump(limits.jump, baseline.value, found.value)) {
     const same = pending !== undefined && round4(pending.value) === round4(found.value);
-    const days = same ? daysBetween(pending.seenAt, today) : null;
+    const days = same ? wholeDaysBetween(pending.seenAt, today) : null;
     if (same && days !== null && days >= MIN_DAYS_BETWEEN_READS)
       return { kind: "publish", viaPending: true };
     return {
