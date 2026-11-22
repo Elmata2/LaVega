@@ -24,6 +24,10 @@ export function guardRun(input: {
   rows: readonly MergeEntry[];
   knownHosts: ReadonlyMap<string, ReadonlySet<string>>;
   pending: PendingMap;
+  /** Cross-check of the stored figure, keyed "productId.field". */
+  storedChecks?: ReadonlyMap<string, "still-stated" | "gone" | "unresolved">;
+  /** Figures a person must decide, keyed "productId.field": a differing covered read is held. */
+  manualHolds?: ReadonlySet<string>;
   today: string;
 }): { rows: MergeEntry[]; verdicts: FieldVerdict[]; pending: PendingMap } {
   const { prev, knownHosts, today } = input;
@@ -39,16 +43,29 @@ export function guardRun(input: {
       if (!found) continue;
       const before = byId.get(row.id)?.fields[field];
       const key = `${row.id}.${field}`;
-      const verdict = judgeField({
+      const judged = judgeField({
         field,
         current: before,
         found,
         knownHosts: hosts,
         pending: pending[key],
         today,
+        storedCheck: input.storedChecks?.get(key),
+        manualHold: input.manualHolds?.has(key),
       });
       // An archive read was true on the snapshot date, not today.
-      const readDate = isArchiveUrl(found.sourceUrl) ? found.checkedAt : today;
+      const fromArchive = isArchiveUrl(found.sourceUrl);
+      const readDate = fromArchive ? found.checkedAt : today;
+      // New conditions text from a snapshot older than the last confirmation describes a
+      // page that may have changed since: it confirms the stored figure, it does not rewrite it.
+      const verdict: GuardVerdict =
+        judged.kind === "publish" &&
+        judged.conditionsOnly &&
+        fromArchive &&
+        before &&
+        readDate < lastConfirmed(before)
+          ? { kind: "confirm" }
+          : judged;
       verdicts.push({ id: row.id, product: row.product, field, verdict, before, found });
 
       switch (verdict.kind) {

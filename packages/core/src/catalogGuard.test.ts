@@ -157,14 +157,32 @@ test("unparseable seenAt or today stays pending and keeps seenAt", () => {
   });
 });
 
-test("same value, conditions go from null to text -> publish", () => {
+test("same value, conditions null to text publishes as conditionsOnly", () => {
   const out = judge("fxFeePct", val(0), val(0, { conditions: "max 500 per month" }));
+  expect(out).toEqual({ kind: "publish", viaPending: false, conditionsOnly: true });
+});
+
+test("same value, conditions text to null confirms and keeps the stored conditions", () => {
+  const out = judge("fxFeePct", val(0, { conditions: "max 500 per month" }), val(0));
+  expect(out).toEqual({ kind: "confirm" });
+});
+
+test("a changed value is not conditionsOnly", () => {
+  const out = judge("fxFeePct", val(1.4), val(1.5, { conditions: "cap" }));
   expect(out).toEqual({ kind: "publish", viaPending: false });
 });
 
-test("same value, text to null -> publish", () => {
-  const out = judge("fxFeePct", val(0, { conditions: "max 500 per month" }), val(0));
-  expect(out).toEqual({ kind: "publish", viaPending: false });
+test("fx fee from zero to non-zero goes pending", () => {
+  expect(judge("fxFeePct", val(0), val(1)).kind).toBe("pending");
+  expect(judge("convertFeePct", val(0), val(0.5)).kind).toBe("pending");
+});
+
+test("interest from zero to non-zero goes pending", () => {
+  expect(judge("interestPct", val(0), val(0.5)).kind).toBe("pending");
+});
+
+test("cashback from zero is not a jump by that rule", () => {
+  expect(judge("cashbackPct", val(0), val(0.5))).toEqual({ kind: "publish", viaPending: false });
 });
 
 test("same value, wording differs -> confirm", () => {
@@ -286,4 +304,158 @@ test("sourceHost reads plain and archived urls, null on rubbish", () => {
     "www.bank.test",
   );
   expect(sourceHost("not a url")).toBeNull();
+});
+
+const uncovered = (value: number, over: Partial<CatalogValue> = {}) =>
+  val(value, { conditions: null, conditionsKnown: false, ...over });
+
+test("uncovered read of the same number from a known host confirms", () => {
+  expect(judge("fxFeePct", val(1.4), uncovered(1.4))).toEqual({ kind: "confirm" });
+});
+
+test("an uncovered equal regex read from a different url is unjudged", () => {
+  const found = uncovered(1.4, {
+    route: "provider-page",
+    sourceUrl: "https://www.bank.test/other",
+  });
+  expect(judge("fxFeePct", val(1.4), found)).toEqual({ kind: "unjudged" });
+});
+
+test("an uncovered equal regex read from the stored url confirms", () => {
+  expect(judge("fxFeePct", val(1.4), uncovered(1.4, { route: "provider-page" }))).toEqual({
+    kind: "confirm",
+  });
+});
+
+test("uncovered read of the same number from an unknown host is unjudged", () => {
+  const found = uncovered(1.4, { sourceUrl: "https://other.test/x" });
+  expect(judge("fxFeePct", val(1.4), found)).toEqual({ kind: "unjudged" });
+});
+
+test("uncovered read of a different number is unjudged", () => {
+  expect(judge("fxFeePct", val(1.4), uncovered(1.5))).toEqual({ kind: "unjudged" });
+});
+
+test("uncovered equal read with a malformed source url is unjudged", () => {
+  const found = uncovered(1.4, { sourceUrl: "not a url" });
+  expect(judge("fxFeePct", val(1.4), found)).toEqual({ kind: "unjudged" });
+});
+
+test("uncovered equal read without a covered current value is unjudged", () => {
+  expect(judge("fxFeePct", undefined, uncovered(1.4))).toEqual({ kind: "unjudged" });
+  expect(judge("fxFeePct", uncovered(1.4), uncovered(1.4))).toEqual({ kind: "unjudged" });
+});
+
+test("a different covered value while the stored value is still stated is held as conflicting-read", () => {
+  const out = judgeField({
+    field: "fxFeePct",
+    current: val(0),
+    found: val(2, { checkedAt: "2026-11-22" }),
+    knownHosts: hosts,
+    pending: undefined,
+    today: "2026-11-23",
+    storedCheck: "still-stated" as const,
+  });
+  expect(out).toEqual({ kind: "hold", reason: "conflicting-read" });
+});
+
+test("without the flag the same read goes pending or publishes as before", () => {
+  expect(judge("fxFeePct", val(0), val(2)).kind).toBe("pending");
+  expect(judge("fxFeePct", val(1.4), val(1.6)).kind).toBe("publish");
+});
+
+test("conflicting-read does not hide an unknown host or an out-of-range value", () => {
+  const base = {
+    field: "fxFeePct" as const,
+    current: val(0),
+    knownHosts: hosts,
+    pending: undefined,
+    today: "2026-11-23",
+    storedCheck: "still-stated" as const,
+  };
+  expect(judgeField({ ...base, found: val(2, { sourceUrl: "https://evil.test/x" }) })).toEqual({
+    kind: "hold",
+    reason: "unknown-host",
+  });
+  expect(judgeField({ ...base, found: val(9) })).toEqual({ kind: "hold", reason: "out-of-range" });
+});
+
+const chk = (
+  found: CatalogValue,
+  storedCheck?: "still-stated" | "gone" | "unresolved",
+  cur = val(0),
+) =>
+  judgeField({
+    field: "fxFeePct",
+    current: cur,
+    found,
+    knownHosts: hosts,
+    pending: undefined,
+    today: "2026-11-23",
+    storedCheck,
+  });
+
+test("a different covered value with an unresolved cross-check is held as change-not-cross-checked", () => {
+  expect(chk(val(0.5), "unresolved")).toEqual({ kind: "hold", reason: "change-not-cross-checked" });
+  expect(chk(val(9), "unresolved")).toEqual({ kind: "hold", reason: "out-of-range" });
+});
+
+test("gone lets the guard decide (publish for a small change, pending for a large jump)", () => {
+  expect(chk(val(1.6), "gone", val(1.4)).kind).toBe("publish");
+  expect(chk(val(2), "gone", val(0)).kind).toBe("pending");
+});
+
+test("still-stated holds as conflicting-read", () => {
+  expect(chk(val(1.6), "still-stated", val(1.4))).toEqual({
+    kind: "hold",
+    reason: "conflicting-read",
+  });
+});
+
+test("no cross-check behaves as before", () => {
+  expect(chk(val(1.6), undefined, val(1.4)).kind).toBe("publish");
+  expect(chk(val(2), undefined, val(0)).kind).toBe("pending");
+});
+
+test("an equal covered value is a confirm whatever the cross-check says", () => {
+  expect(chk(val(1.4), "unresolved", val(1.4))).toEqual({ kind: "confirm" });
+});
+
+const held = (
+  found: CatalogValue,
+  cur: CatalogValue | undefined = val(1),
+  manualHold: boolean | undefined = true,
+) =>
+  judgeField({
+    field: "fxFeePct",
+    current: cur,
+    found,
+    knownHosts: hosts,
+    pending: undefined,
+    today: "2026-11-23",
+    manualHold,
+  });
+
+test("a manual hold blocks a changed value", () => {
+  expect(held(val(1.5))).toEqual({ kind: "hold", reason: "held-for-person" });
+  expect(held(val(1.5), val(1), false).kind).toBe("publish");
+});
+
+test("a manual hold blocks a conditions-only publish", () => {
+  expect(held(val(1, { conditions: "alleen buiten de euro" }))).toEqual({
+    kind: "hold",
+    reason: "held-for-person",
+  });
+});
+
+test("a manual hold lets an equal read confirm", () => {
+  expect(held(val(1))).toEqual({ kind: "confirm" });
+});
+
+test("a manual hold blocks a first figure", () => {
+  expect(held(val(1.5), undefined)).toEqual({ kind: "hold", reason: "held-for-person" });
+  expect(held(val(1.5), val(1, { conditionsKnown: false }))).toEqual({
+    kind: "hold",
+    reason: "held-for-person",
+  });
 });

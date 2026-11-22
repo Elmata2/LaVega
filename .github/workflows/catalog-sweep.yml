@@ -1,11 +1,12 @@
 name: catalog sweep
 on:
   schedule:
-    - cron: "0 5 * * 1" # Monday 05:00 UTC — terms move yearly, not daily
+    # Sunday 01:00 UTC (02:00 or 03:00 Dutch time): done before Monday, with time for a second run if the first fails
+    - cron: "0 1 * * 0"
   workflow_dispatch: # and on demand, because the first runs need watching
 # No top-level permissions: each job asks for exactly what it needs.
 permissions: {}
-# A manual dispatch racing the Monday cron would give two jobs committing and
+# A manual dispatch racing the scheduled cron would give two jobs committing and
 # pushing the same two files; the second push then fails on a branch that moved
 # under it. One at a time, and never cancel a run mid-sweep — a cancelled sweep
 # writes nothing at all (both writes are after the loop), but a cancelled COMMIT
@@ -19,10 +20,12 @@ jobs:
     permissions:
       contents: write
       issues: write
-    # The sweep's own worst case is ~80 minutes (98 routes x a 20s timeout, plus
-    # pdftotext). The default is six hours, which is a long time to hold a runner
-    # for a job that has already hung.
-    timeout-minutes: 45
+    # Four products are read at the same time (CATALOG_CONCURRENCY). Measured 45 minutes
+    # and $1.77 for a full run with an empty answer cache (2026-11-22); a normal week
+    # reuses answers and is shorter. See docs/catalog/watchlist.md.
+    # The default limit is six hours, which is a long time to hold a runner for a
+    # job that has already hung.
+    timeout-minutes: 180
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
@@ -30,14 +33,29 @@ jobs:
         with: { node-version: 22, cache: pnpm }
       - run: sudo apt-get update && sudo apt-get install -y poppler-utils # pdftotext
       - run: pnpm install --frozen-lockfile
-      - run: pnpm catalog:sweep -- --summary-out "$RUNNER_TEMP/catalog-summary.json"
+      # The only step that gets the model key.
+      - name: Sweep
+        # Shorter than the job, so a hung sweep ends as a failed STEP and the Report step still runs.
+        timeout-minutes: 165
+        env:
+          MISTRAL_API_KEY: ${{ secrets.MISTRAL_API_KEY }}
+          CATALOG_MAX_USD: "5"
+          CATALOG_MODEL: mistral-large-latest
+          CATALOG_FALLBACK_MODEL: mistral-medium-latest
+          CATALOG_CONCURRENCY: "4"
+          # No new product starts after 150 minutes; the ones running finish and the run is written.
+          CATALOG_DEADLINE_MIN: "150"
+        run: pnpm catalog:sweep -- --summary-out "$RUNNER_TEMP/catalog-summary.json"
       - name: Commit whatever changed
         id: commit
         run: |
           git config user.name  "lavega-catalog"
           git config user.email "noreply@lavega.dev"
           git add docs/catalog/catalog.json docs/catalog/state.json
+          [ -f docs/catalog/model-cache.json ] && git add docs/catalog/model-cache.json
           git diff --staged --quiet || git commit -m "chore(catalog): weekly sweep"
+          # A commit that landed during the run must not fail the push; a failed rebase fails the step.
+          git pull --rebase --autostash origin "$GITHUB_REF_NAME"
           git push
       # Always runs: a refused or crashed sweep still gets its issue.
       - name: Report

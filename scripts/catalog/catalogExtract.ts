@@ -10,7 +10,7 @@
  *
  *  This module is pure: it builds a request and parses a reply. It does not call
  *  the network and it does not know what a model is. The I/O — fetching the page,
- *  calling Anthropic, writing the artifact — lives in scripts/catalog-sweep.ts.
+ *  calling the model (Mistral), writing the artifact — lives in scripts/catalog-sweep.ts.
  *
  *  The hardest judgement in here is what SILENCE about a cap is worth, because it
  *  is the single largest block on coverage: nineteen figures read cleanly and were
@@ -532,4 +532,15 @@ export function parseExtractReply(
     capsExpressedElsewhere,
     unconditionalBasis,
   };
+}
+
+/** The longest conditions text a catalogue value carries. */
+export const MAX_CONDITIONS_CHARS = 600;
+
+/** Cuts a conditions text to the cap at a word boundary, with an ellipsis. The quote check does not see this text. */
+export function capConditions(text: string | null): string | null {
+  if (text === null || text.length <= MAX_CONDITIONS_CHARS) return text;
+  const head = text.slice(0, MAX_CONDITIONS_CHARS - 1);
+  const space = head.lastIndexOf(" ");
+  return `${(space > 0 ? head.slice(0, space) : head).trimEnd()}…`;
 }

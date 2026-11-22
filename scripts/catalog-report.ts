@@ -29,6 +29,40 @@ function loadSummary(path: string | undefined): RunSummary | null {
   }
 }
 
+const TITLE_PREFIX = "Catalogue report ";
+const SUPERSEDED = "Superseded by this week's report.";
+
+/** Open issues that carry the report label AND the workflow's own title. Nothing else is ever closed. */
+function listSupersededReports(): number[] | null {
+  try {
+    const raw: unknown = JSON.parse(
+      gh([
+        "issue",
+        "list",
+        "--label",
+        REPORT_LABEL,
+        "--state",
+        "open",
+        "--json",
+        "number,title",
+        "--limit",
+        "100",
+      ]),
+    );
+    if (!Array.isArray(raw)) return null;
+    return raw.flatMap((i: { number?: unknown; title?: unknown }) =>
+      typeof i.number === "number" &&
+      typeof i.title === "string" &&
+      i.title.startsWith(TITLE_PREFIX)
+        ? [i.number]
+        : [],
+    );
+  } catch (e) {
+    console.error(`could not list earlier reports, creating the new one anyway: ${e}`);
+    return null;
+  }
+}
+
 function runUrl(): string | null {
   const { GITHUB_SERVER_URL: server, GITHUB_REPOSITORY: repo, GITHUB_RUN_ID: runId } = process.env;
   return server && repo && runId ? `${server}/${repo}/actions/runs/${runId}` : null;
@@ -53,25 +87,33 @@ function main() {
     console.log("nothing to report");
     return;
   }
+  const old = listSupersededReports() ?? [];
   if (dry) {
+    for (const n of old) console.log(`would close #${n}`);
     console.log(`${report.title}\n\n${report.body}`);
     return;
   }
   const bodyFile = join(mkdtempSync(join(tmpdir(), "catalog-report-")), "body.md");
   writeFileSync(bodyFile, report.body);
   gh(["label", "create", REPORT_LABEL, "--force", "--description", "Weekly catalogue changes"]);
-  console.log(
-    gh([
-      "issue",
-      "create",
-      "--title",
-      report.title,
-      "--body-file",
-      bodyFile,
-      "--label",
-      REPORT_LABEL,
-    ]).trim(),
-  );
+  const created = gh([
+    "issue",
+    "create",
+    "--title",
+    report.title,
+    "--body-file",
+    bodyFile,
+    "--label",
+    REPORT_LABEL,
+  ]).trim();
+  console.log(created);
+  for (const n of old) {
+    try {
+      gh(["issue", "close", String(n), "--comment", SUPERSEDED]);
+    } catch (e) {
+      console.error(`could not close #${n}: ${e}`);
+    }
+  }
 }
 
 try {

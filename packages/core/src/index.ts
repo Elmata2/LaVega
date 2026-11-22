@@ -25,6 +25,7 @@ export * from "./travel.js";
 export * from "./bankNl.js";
 export * from "./catalog.js";
 export * from "./catalogAge.js";
+export * from "./catalogCoverage.js";
 export * from "./catalogGuard.js";
 export * from "./catalogGuardRun.js";
 export * from "./catalogMerge.js";

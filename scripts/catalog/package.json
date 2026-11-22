@@ -2,9 +2,14 @@
   "name": "@lavega/catalog-sweep",
   "private": true,
   "scripts": {
-    "test": "vitest run"
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit -p ../tsconfig.json"
   },
   "dependencies": {
     "@lavega/core": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "typescript": "^5.6.0"
   }
 }

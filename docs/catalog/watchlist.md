@@ -1536,16 +1536,120 @@ reviewable git diff instead of a silent overwrite.
 ## How a change gets published
 
 A maintainer can follow this without reading code. The code lives in `packages/core/src/catalogGuard.ts`,
-`catalogGuardRun.ts`, `catalogAge.ts` and `scripts/catalog/catalogReport.ts`.
+`catalogGuardRun.ts`, `catalogAge.ts`, `catalogCoverage.ts` and `scripts/catalog/catalogReport.ts`. The sweep is
+`scripts/catalog-sweep.ts`; its model client, reader and confirm step are in `scripts/catalog/mistralClient.ts`,
+`readerFetch.ts` and `catalogConfirm.ts`.
 
 ### The order
 
-1. **Ladder** — the sweep reads a figure from a source (`scripts/catalog-sweep.ts`).
-2. **Guard** — each field the run read is judged on its own.
-3. **Merge** — the figures that passed go through `mergeCatalogEntries`. A field the guard did not pass is
+1. **Question** — each product is asked for one figure (see "Which figure a product is asked for").
+2. **Ladder** — the sweep reads that figure from a source (`scripts/catalog-sweep.ts`), rung by rung, then the
+   confirm step and the cross-check.
+3. **Guard** — each field the run read is judged on its own.
+4. **Coverage** — every figure gets a status for this run.
+5. **Merge** — the figures that passed go through `mergeCatalogEntries`. A field the guard did not pass is
    left out, so the old figure stays.
-4. **Write** — `catalog.json` and `state.json` are written, and the workflow commits both to `master`.
-5. **Report** — one GitHub issue says what happened.
+6. **Write** — `catalog.json`, `state.json` and `model-cache.json` are written, and the workflow commits them to `master`.
+7. **Report** — one GitHub issue says what happened.
+
+### Reuse of model replies
+
+Most provider pages do not change from one week to the next. When a request to the model is byte-for-byte the one
+it already answered (same model, prompts, page text, tool with its description and schema, and request settings),
+the sweep reuses that answer: no call, no cost. The replies are kept in `docs/catalog/model-cache.json`, keyed by a
+SHA-256 of the whole request, so any change makes a new request. Refresh is staggered: an entry is asked afresh
+after 7, 14, 21 or 28 days (a quarter each, from its key; `CATALOG_CACHE_DAYS` sets the top, 0 to 90, 0 turns reuse
+off), so about a quarter of the pages are read again every week and that doubles as a check that the key works.
+An entry unused for 42 days is dropped. Reuse is NOT allowed for a product that has a figure waiting for a second
+read or that was held in the last run (`heldLastRun` in `state.json`): the second read must be independent. Only
+answers that settled something are stored: a covered figure (open question), `still_stated` with an accepted quote
+(confirm step), or a clean cross-check (`still-stated` or `gone`). A decline, an uncovered figure, `not_on_page`,
+`changed`, a rejected reply, an `unresolved` cross-check, an error, a timeout or a cut-off reply is never stored, so a
+product the run could not settle is asked again every week. The cache holds accepted answers only; delete an older
+cache file (written before this rule) once, before the next run.
+
+When the primary model times out (primary 120 s, fallback 60 s) or cuts its reply off (also inside a tool call), ONE call goes to
+`CATALOG_FALLBACK_MODEL` (default `mistral-medium-latest`, empty = off). Its answer goes through the same parsers,
+quote checks and cross-check, is cached under the primary request with the fallback's name, and is counted in the
+run log and the report.
+
+The blackout guard counts fresh calls: 3 or more fresh calls sent and none answered refuses to write, even when
+other replies were reused; 1 or 2 only put a warning in the report. A run with no fresh call at all warns that
+the key was not exercised. `--no-cache` neither reads nor writes the cache. `CATALOG_MODEL_CACHE` points to another
+file; a `--dry` run writes the cache only when that file is outside `docs/catalog/`.
+
+### Which figure a product is asked for
+
+One figure per product (`sweptFieldFor` in `catalogCoverage.ts`):
+
+- savings and investment accounts (`spaarrekening`, `beleggingsrekening`): the interest rate (`interestPct`);
+- credit cards, debit cards and prepaid cards (`creditcard`, `betaalpas`, `prepaid`): the foreign-exchange
+  surcharge (`fxFeePct`);
+- any other kind: the interest rate or the surcharge if the catalogue already holds one, else nothing.
+
+Account fees, points and cashback are not asked yet; the report lists them as "planned" (slice 3). Accounts and
+packages are skipped until then.
+
+### The rungs
+
+The first rung that gives a covered figure wins. Order:
+
+1. **Provider page** — plain fetch and a parser. Free.
+2. **Provider PDF** — `pdftotext` and a parser. Free.
+3. **Wayback** — the provider's own page from the web archive, read by the model.
+4. **Document we hold** — the page or PDF already on file for the product, read by the model.
+5. **Reader** — last. For a page plain fetch cannot read (bot block, JavaScript page, blocked PDF) the sweep asks
+   `r.jina.ai`, which renders the page and returns text. Only the provider's public URL is sent: no key, no cookies.
+   The document of record is tried first (`docUrl`, then `pdfUrl`, then `foundUrl`, then `termsUrl`). A PDF is
+   offered to the reader only if plain fetch could not read it. At most one reader model call per product. After 5
+   network failures or timeouts in a row the reader is skipped for the rest of the run. The stored source stays the
+   provider's own URL, never `r.jina.ai` for the reader rung. Products with `docFetch: "jina"` (older behaviour,
+   2 figures) are stored with their `r.jina.ai/<url>` link; the guard counts it as the host of `<url>`.
+
+Discovery search is off. A `foundUrl` already in `state.json` is still read.
+
+### The open question and the confirm step
+
+The model gets the document and an open question: what is the figure, and what are its conditions. Its answer
+counts only with a verbatim quote that is found in the fetched text. A reply that is cut off (token limit) is an
+error, not a "declined".
+
+When the open question settles nothing, and the catalogue already holds a covered figure for the product, the sweep
+asks a closed question (on the stored figure's own document when the run read it): is the stored figure still stated? The model must quote the passage.
+The quote must contain the number (a zero must be quoted as a zero, with what it is free for). If it holds, the
+figure is confirmed. A `changed` answer here is never published: only the open question can put a new value in.
+
+### The cross-check on a changed figure
+
+The cross-check is the same model on the same kind of document, not an independent reader. It fails closed:
+an error or an unclear reply never lets a change through.
+
+When the open question returns a covered figure that differs from the stored one, the sweep asks the closed
+question for the stored figure before the guard sees the change. Which document it asks on depends on where the
+stored figure came from (`sameDocument` in `catalogConfirm.ts`: archive and reader-proxy links are unwrapped, then
+the URLs must be equal apart from a trailing slash):
+
+- the new figure came from the **same document** as the stored one: ask on that document.
+- the new figure came from **another document** (for example the stored figure is from the tariff PDF and this
+  week's read fell back to the marketing page): ask on the stored figure's own document if this run read it. If
+  this run did not read it, "not on the page" proves nothing, so the answer is no clear answer.
+
+The answer:
+
+- the stored figure is **still stated** (on any document): the page shows both numbers, one read is wrong, and the
+  stored one has the longer record. The change is held as `conflicting-read`.
+- the stored figure is **gone** from its own document (or the model names the new value there): the change goes on
+  to the guard.
+- **no clear answer** (no document, bad reply, quote not in the text, or "not on the page" on a document that is
+  not the stored figure's own): the change is held as `change-not-cross-checked`. The note in `state.json` says
+  "cross-check unresolved (stored figure's own document was not read) — change held" in the last case.
+
+### The equal-number confirm rule
+
+An uncovered read (a number found, but its conditions not established) that gives the same number as the stored figure confirms it, but only from a
+host the issuer is known by, and only if it comes from the model route or from the same source URL as the stored
+figure. The old conditions and source stay: this read proves nothing new. This lets the free rungs and the quote
+check keep `confirmedAt` fresh.
 
 ### What the guard decides
 
@@ -1554,10 +1658,18 @@ The guard looks at a found figure and the figure the catalogue holds now. It giv
 - **Not covered** (no usable value): not judged, passes to the merge as before.
 - **Same value as the catalogue** (rounded to 4 decimals): _confirm_. The old figure stays and `confirmedAt` is set
   to the date of the read (today, or the snapshot date for an archive copy, see `confirmedAt` below). This holds only
-  while the conditions did not flip: if the conditions appeared (null to text) or vanished (text to null), or
-  `conditionsKnown` differs, the read is not a confirm. It goes on through the host and range checks and is
-  _published_, so the new conditions are written (a provider that adds a cap to a 0% fee must not stay "unconditional").
-  Two different wordings of non-null conditions are still a confirm, so model paraphrase does not churn the file.
+  while the conditions did not go from none to text, and `conditionsKnown` is equal. Conditions that appear
+  (null to text) are _published_ and marked `conditionsOnly`, after the host and range checks (a provider that adds
+  a cap to a 0% fee must not stay "unconditional"; never a jump). Conditions that vanish (text to null) are a
+  _confirm_ and the stored conditions stay: one read that did not mention a condition must not drop it. A
+  Two different wordings of non-null
+  conditions are a confirm, so model paraphrase does not churn the file. In the report a `conditionsOnly` figure
+  counts as confirmed and is listed in its own section, "Conditions text updated (figure unchanged)" (not under
+  "Changed", not in the title count; at most 30 lines). A conditions-only update that comes from an archive copy
+  older than the last confirmation is a confirm: the stored conditions stay and `confirmedAt` does not move back.
+  Conditions text is cut to 600 characters at a word boundary, with "…".
+- **Manual hold list** (see "Manual hold list"): for a listed figure, any covered read that differs from the stored
+  one, in value or only in conditions, or a first figure, is held as `held-for-person`. An equal read still confirms.
 - **Source is a comparison site**: held. A comparison site never changes a figure.
 - **Source host is not known for that issuer**: held. Known hosts are the hosts of the issuer's `termsUrl`,
   `pdfUrl`, `docUrl` and `foundUrl` in `state.json`, plus every host the catalogue already uses as source for that
@@ -1570,13 +1682,13 @@ The guard looks at a found figure and the figure the catalogue holds now. It giv
 
 Limits, copied from `FIELD_LIMITS` in `catalogGuard.ts`:
 
-| Field                       | Range              | Large jump                                  |
-| --------------------------- | ------------------ | ------------------------------------------- |
-| `fxFeePct`, `convertFeePct` | 0 to 5             | more than 1 point, or to 0 from non-zero    |
-| `interestPct`               | 0 to 10            | more than 1,5 points, or to 0 from non-zero |
-| `cashbackPct`               | 0 to 10            | more than 1 point                           |
-| `pointsPerEuro`             | 0 to 10            | more than double or less than half          |
-| `accountFee`                | 0 to 1000 per year | more than double or less than half          |
+| Field                       | Range              | Large jump                                   |
+| --------------------------- | ------------------ | -------------------------------------------- |
+| `fxFeePct`, `convertFeePct` | 0 to 5             | more than 1 point, or a move to or from 0    |
+| `interestPct`               | 0 to 10            | more than 1,5 points, or a move to or from 0 |
+| `cashbackPct`               | 0 to 10            | more than 1 point                            |
+| `pointsPerEuro`             | 0 to 10            | more than double or less than half           |
+| `accountFee`                | 0 to 1000 per year | more than double or less than half           |
 
 For the ratio fields (`pointsPerEuro`, `accountFee`), a move between 0 and non-zero also counts as a large jump.
 The guard judges changes only. Figures already in the catalogue are not judged again.
@@ -1599,14 +1711,45 @@ the ranges above and the report are the other defences.
 
 ### Held
 
-A held change is not published and the old figure stays. Nobody has to act on it. There are four reasons:
+A held change is not published and the old figure stays. Nobody has to act on it, except for `held-for-person`.
+There are seven reasons:
 
 - `out-of-range` — the value is outside the range for the field.
 - `unknown-host` — the figure came from a website not seen before for that issuer.
 - `comparison-route` — the figure came from a comparison site, not the provider.
 - `bad-source-url` — the source link is missing or cannot be read.
+- `conflicting-read` — the run read a different figure, but the cross-check found the stored figure still stated
+  (on the stored figure's own document, or on the document the new figure came from).
+- `change-not-cross-checked` — the run read a different figure and the cross-check gave no clear answer.
+- `held-for-person` — the figure is on the manual hold list.
 
 If a held figure is right, add the page as the product's `termsUrl` or `pdfUrl` in `state.json` and run again.
+
+`state.json` keeps `heldSince`, keyed `productId.field`: the date a figure was first held. It stays while the figure
+stays held and is removed when it is not held. The report prints "held for N weeks" on the Held lines (same week
+count as unchecked weeks: first week is 1).
+
+### Manual hold list
+
+Some figures need a person. The first case is `tria-card.fxFeePct`: the model reads 1%, but the page says "1% Visa
+foreign exchange fee, so 1.5% in total". A second identical read would publish 1. The committed file
+`docs/catalog/manual-hold.json` lists such figures:
+
+```json
+{
+  "holds": [
+    { "key": "tria-card.fxFeePct", "since": "2026-11-22", "reason": "why a person must decide" }
+  ]
+}
+```
+
+- **Add**: append an object with `key` ("productId.field"), `since` (date) and `reason` (shown in the report,
+  cut to 300 characters). Commit the file. The next run holds any differing read of that figure as `held-for-person`.
+- **Remove**: set the figure by hand in `catalog.json` (with the right conditions and source) and delete the entry.
+  Without a removal the figure stays held for good.
+- A missing or malformed file means no holds; the sweep prints one log line and goes on. The workflow only reads
+  the file; it never changes it.
+- A held-for-person product is still read fresh next run (held last run, so no reuse of model replies).
 
 ### `confirmedAt` and `checkedAt`
 
@@ -1619,22 +1762,73 @@ If a held figure is right, add the page as the product's `termsUrl` or `pdfUrl` 
   The switch that removes an old figure from the ranking (`AGE_REMOVAL_FIELDS` in `catalogAge.ts`) is empty
   today, so for now an old figure only keeps its date.
 
+### Coverage: what happened to every figure
+
+Every figure in the catalogue, and every figure the sweep expects, gets one status every run:
+
+- **confirmed** — the run read the same figure again. The report counts the weaker ways separately: a quote check
+  or a same-number read is weaker evidence than a full re-read.
+- **changed** — a new figure was published.
+- **waiting** — a large jump, waiting for a second read.
+- **held** — see "Held".
+- **not checked** — nothing was judged. The cause is one of: field not asked yet (slice 3), not on the watch list,
+  not part of this run (`--only`), model step did not run (no key or `--no-agent`) and no other route can read it,
+  no web source on file, page or document could not be read, page read but the figure could not be established,
+  no figure on file yet, run stopped before the product (cost ceiling, time limit or error).
+
+"Weeks unchecked": `state.json` keeps `uncheckedSince`, keyed `productId.field`, the date the figure first went
+unchecked. A figure that is checked drops out of the list. Weeks = whole days since that date, divided by 7 and
+rounded down, plus 1, so a figure first missed this week is "1 week". An `--only` run changes no dates.
+
 ### The weekly report issue
 
 After the commit step, the workflow runs `pnpm catalog:report`, also when the sweep failed (`if: always()`).
-The issue has the label `catalog-report`. It starts with one line, "Checked this run: N of M figures. K figures are older than 12 months." (a summary from
-an older sweep without these counts omits the line). It lists changed, waiting for a second read, held, older than
-12 months (crossed the line this week), "No figure this run", and spend.
+The issue has the label `catalog-report`.
 
-- **No issue** when the run wrote the catalogue and has nothing in changed, waiting, held or older than 12
-  months. The job log holds the summary. Failures and spend alone do not open an issue.
-- **A refused run** (the sweep printed `REFUSING TO WRITE`, or the commit or push failed) always opens an issue
-  titled "run refused, nothing published". It states the reason and lists nothing as published.
+- **A written run always opens an issue.** It starts with "Checked this run: N of M figures (confirmed, changed,
+  waiting, held)." and a line on how many confirmations were by quote check or same-number read. Then, in order:
+  Warnings, the Model calls line (in the header), Changed, Conditions text updated, Waiting for a second read,
+  Held, the list of figures confirmed by quote check or same-number read (weaker than a full re-read; at most 30
+  lines), "Passed the 12-month line this week", Not checked by cause (with weeks), "No figure this run", Spend,
+  Run time. The Changed and Waiting lines show the verified quote of the read (`Quote: "..."`, cut to 200
+  characters). A held-for-person line shows the reason from the list.
+- **It closes last week's issue.** After the new issue is created, open issues with the label and the title prefix
+  "Catalogue report " are closed with a comment. Nothing else is closed.
+- **A refused run** (the sweep printed `REFUSING TO WRITE`, or the commit or push failed) opens an issue titled
+  "run refused, nothing published". It states the reason, shows no status counts, lists nothing as published, and
+  lists the figures as not checked, with weeks (only those unchecked 2 weeks or more).
 - **A crashed run** (no summary file) opens an issue titled "run crashed, no summary written". Treat the
   catalogue as unchanged until the run log shows otherwise.
 - A dry run (`--dry`) never opens an issue: the report script prints "nothing to report".
 
 The text in the issue comes from scraped pages, so it is cleaned of markdown and mentions.
+
+### Model, key, cost, run time
+
+- Model: Mistral, `mistral-large-latest` (set `CATALOG_MODEL` to change). No other provider is called.
+- Key: `MISTRAL_API_KEY`, a repository secret, passed to the sweep step only.
+- Run time and cost: four products at a time; measured 45 minutes and $1.77 for a full run with an empty answer
+  cache (2026-11-22); a normal week reuses answers and is shorter.
+- Soft stop: `CATALOG_MAX_USD` is 5 and `CATALOG_DEADLINE_MIN` is 150 in the workflow (0 turns the deadline off).
+  When the spend reaches the ceiling or the run has gone on for the deadline, no new product starts; the products
+  already running finish, then the run is written normally through the guard (status `written`), exit 0. Products
+  never started are `stopped-early` in the coverage and the report has the warning "Stopped early (cost ceiling |
+  time limit): N products were not reached this week." A hard stop stays for a fatal key error (401, 402, 403) and
+  for spend of 1.5 times the ceiling while products still run: the run is refused (exit 1). In CI a refused or
+  crashed run commits nothing. Under `--dry` the same stop happens and nothing is written.
+- Limits: the Sweep step has its own `timeout-minutes: 165` (the job has 180), so a hung sweep ends as a failed
+  step and the Report step still files the crash report. The commit step runs `git pull --rebase --autostash`
+  before `git push`.
+- No key in the environment, or `--no-agent`: the free sweep runs, and the report says the model step did not run.
+
+### Limits
+
+- A confirmation by quote check is weaker evidence than a full re-read. The report counts it separately.
+- A systematic misread is not caught by the second-read rule (see above).
+- Three sites also block the reader: Rabobank creditcard, Revolut Plus and Revolut Standard. They may stay "could
+  not be read".
+- Discovery search is off: a lost source must be found by hand and set as `termsUrl` or `pdfUrl`.
+- Account fees, points and cashback are not asked yet.
 
 ### Dry run on your machine
 
@@ -1642,6 +1836,18 @@ The text in the issue comes from scraped pages, so it is cleaned of markdown and
 pnpm catalog:sweep -- --no-agent --dry --summary-out <path>
 pnpm catalog:report -- --summary <path> --dry
 ```
+
+A run with the model needs the key. `pnpm catalog:sweep` loads `apps/server/.env` if it exists. From another
+file, pass it to tsx, and always set a ceiling:
+
+```
+CATALOG_MAX_USD=2 pnpm exec tsx --env-file=<path to env file> scripts/catalog-sweep.ts --dry --only <id> --summary-out <path>
+```
+
+Flags: `--dry` writes nothing but the summary; `--only <text>` is a substring match on the product id (`--only ing`
+also matches every `...rekening`; name the id you mean); `--no-agent` runs the free rungs only; `--summary-out
+<path>` writes the run summary the report reads. `--search` is switched off. The report script takes `--summary
+<path>`, `--dry` (prints the issue and the issues it would close, creates nothing) and `--push-failed`.
 
 The first command reads the sources and writes nothing but the summary file. With `--dry` the summary has status
 `dry`, and the report step prints "nothing to report", because a dry run has no report. To see the text of a report, use a summary
