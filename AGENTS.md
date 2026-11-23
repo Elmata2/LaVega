@@ -97,7 +97,7 @@ External source is vendored under `repos/` as read-only reference material.
 - Read it; never import from it (`@repos/*` is not a package).
 - Never edit it. Update with
   `git subtree pull --prefix=repos/effect https://github.com/Effect-TS/effect.git main --squash`.
-- It is excluded from lint, format, search and editor tooling.
+- It is excluded from lint, format, search, CodeQL (`.github/codeql/codeql-config.yml`), and editor tooling.
 - Prefer examples in `repos/effect/ai-docs/src/` and the vendored tests over web
   search.
 

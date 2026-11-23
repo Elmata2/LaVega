@@ -20,6 +20,7 @@ const EB_AUDIENCE = "api.enablebanking.com";
 const JWT_TTL_SECONDS = 3600;
 
 export const DEFAULT_EB_BASE_URL = "https://api.enablebanking.com";
+export const DEFAULT_EB_TIMEOUT_MS = 15_000;
 
 /** apps/server — relative `privateKeyFile` paths resolve against this directory (not `process.cwd()`). */
 const SERVER_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -149,12 +150,60 @@ export async function ebJWT(config: EbClientConfig): Promise<string> {
 /** A non-2xx response from the Enable Banking API. */
 export class EnableBankingApiError extends Error {
   readonly status: number;
+  readonly retryAfterMs: number | null;
 
-  constructor(status: number, message: string) {
+  constructor(status: number, message: string, retryAfterMs: number | null = null) {
     super(message);
     this.name = "EnableBankingApiError";
     this.status = status;
+    this.retryAfterMs = retryAfterMs;
   }
+}
+
+/** An Enable Banking request that exceeded its timeout. */
+export class EnableBankingTimeoutError extends Error {
+  readonly timeoutMs: number;
+
+  constructor(timeoutMs: number, urlPath: string) {
+    super(`Enable Banking timeout after ${timeoutMs}ms (${urlPath})`);
+    this.name = "EnableBankingTimeoutError";
+    this.timeoutMs = timeoutMs;
+  }
+}
+
+export type EbRequestOptions = {
+  timeoutMs?: number;
+  now?: () => number;
+  signal?: AbortSignal;
+};
+
+/**
+ * Parse an HTTP `Retry-After` header (RFC 9110 §10.2.3) into a delay in ms.
+ * Supports both delta-seconds ("120") and HTTP-date ("Wed, 21 Oct 2015 07:28:00 GMT").
+ */
+export function parseRetryAfter(
+  header: string | null | undefined,
+  nowMs: number = Date.now(),
+): number | null {
+  if (!header) return null;
+  const trimmed = header.trim();
+  if (!trimmed) return null;
+  if (/^-?\d+$/.test(trimmed)) {
+    const seconds = Number(trimmed);
+    return Number.isFinite(seconds) && seconds >= 0 ? seconds * 1000 : null;
+  }
+  const parsedDate = Date.parse(trimmed);
+  if (!Number.isNaN(parsedDate)) {
+    return Math.max(0, parsedDate - nowMs);
+  }
+  return null;
+}
+
+const retryAfterUntilByBaseUrl = new Map<string, number>();
+
+/** Clear in-memory Retry-After cooldowns (used by tests). */
+export function resetEbRetryAfter(): void {
+  retryAfterUntilByBaseUrl.clear();
 }
 
 function extractErrorMessage(data: unknown): string | null {
@@ -173,8 +222,9 @@ function extractErrorMessage(data: unknown): string | null {
 /**
  * Call the Enable Banking API at `baseUrl + urlPath`, authenticated with a
  * freshly-signed `ebJWT`. Sends `body` as JSON when present, parses the JSON
- * response, and throws `EnableBankingApiError` with a clear message on any
- * non-2xx status.
+ * response, enforces a fetch timeout, respects `Retry-After` without hot
+ * retrying, and throws `EnableBankingApiError` / `EnableBankingTimeoutError`
+ * on failure.
  *
  * `baseUrl` defaults to the real API but is overridable via this parameter
  * or the `EB_BASE_URL` env var — so callers (and tests) can point it at a
@@ -186,16 +236,62 @@ export async function eb(
   urlPath: string,
   body?: unknown,
   baseUrl: string = process.env.EB_BASE_URL ?? DEFAULT_EB_BASE_URL,
+  options?: EbRequestOptions,
 ): Promise<unknown> {
-  const res = await fetch(`${baseUrl}${urlPath}`, {
-    method,
-    headers: {
-      Authorization: `Bearer ${await ebJWT(config)}`,
-      "Content-Type": "application/json",
-    },
-    body: body !== undefined ? JSON.stringify(body) : undefined,
-  });
-  const text = await res.text();
+  const nowFn = options?.now ?? Date.now;
+  const now = nowFn();
+  const blockedUntil = retryAfterUntilByBaseUrl.get(baseUrl);
+  if (blockedUntil !== undefined) {
+    if (blockedUntil > now) {
+      const remainingMs = blockedUntil - now;
+      throw new EnableBankingApiError(
+        429,
+        `Enable Banking 429: rate limited (retry after ${Math.ceil(remainingMs / 1000)}s)`,
+        remainingMs,
+      );
+    }
+    retryAfterUntilByBaseUrl.delete(baseUrl);
+  }
+
+  const timeoutMs = options?.timeoutMs ?? DEFAULT_EB_TIMEOUT_MS;
+  const controller = new AbortController();
+  let timedOut = false;
+  const onExternalAbort = () => controller.abort(options?.signal?.reason);
+  if (options?.signal) {
+    if (options.signal.aborted) {
+      controller.abort(options.signal.reason);
+    } else {
+      options.signal.addEventListener("abort", onExternalAbort, { once: true });
+    }
+  }
+  const timer = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, timeoutMs);
+
+  let res: Response;
+  let text: string;
+  try {
+    res = await fetch(`${baseUrl}${urlPath}`, {
+      method,
+      headers: {
+        Authorization: `Bearer ${await ebJWT(config)}`,
+        "Content-Type": "application/json",
+      },
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+      signal: controller.signal,
+    });
+    text = await res.text();
+  } catch (err) {
+    if (timedOut) {
+      throw new EnableBankingTimeoutError(timeoutMs, urlPath);
+    }
+    throw err;
+  } finally {
+    clearTimeout(timer);
+    options?.signal?.removeEventListener("abort", onExternalAbort);
+  }
+
   let data: unknown;
   try {
     data = text ? JSON.parse(text) : {};
@@ -203,8 +299,16 @@ export async function eb(
     data = { raw: text };
   }
   if (!res.ok) {
+    const retryAfterMs = parseRetryAfter(res.headers.get("retry-after"), nowFn());
+    if ((res.status === 429 || res.status === 503) && retryAfterMs !== null && retryAfterMs > 0) {
+      retryAfterUntilByBaseUrl.set(baseUrl, nowFn() + retryAfterMs);
+    }
     const message = extractErrorMessage(data) ?? text.slice(0, 400);
-    throw new EnableBankingApiError(res.status, `Enable Banking ${res.status}: ${message}`);
+    throw new EnableBankingApiError(
+      res.status,
+      `Enable Banking ${res.status}: ${message}`,
+      retryAfterMs,
+    );
   }
   return data;
 }

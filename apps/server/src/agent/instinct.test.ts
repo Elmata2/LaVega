@@ -62,6 +62,7 @@ beforeEach(async () => {
   await pglite.exec("RESET ROLE;");
   for (const t of ["events", "push_subscriptions", "mirror", "state", "settings", "whatsapp"])
     await pglite.exec(`DELETE FROM personal.agent_${t};`);
+  await pglite.exec("DELETE FROM personal.eb_daily_reads;");
   await pglite.exec("SELECT set_config('app.user_id', '', false); SET ROLE lavega_runtime;");
 });
 
@@ -365,7 +366,7 @@ const fetchedDayOf = async (user: string) => {
   await pglite.exec("RESET ROLE;");
   const rows = await pglite.query<{ fetches_day: string | null; fetches_today: number }>(
     `SELECT to_char(fetches_day, 'YYYY-MM-DD') AS fetches_day, fetches_today
-     FROM personal.agent_state WHERE user_id = '${user}'`,
+     FROM personal.eb_daily_reads WHERE user_id = '${user}'`,
   );
   await pglite.exec("SET ROLE lavega_runtime;");
   return rows.rows[0];

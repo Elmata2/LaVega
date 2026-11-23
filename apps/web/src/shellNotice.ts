@@ -12,9 +12,17 @@ import type { ImportProblem } from "@lavega/core";
  * `detail` is met opzet ONVERTAALD: het is de tekst van de server of van een
  * uitzondering, en die verzinnen we hier niet opnieuw. Hij hangt achter een
  * zin die wel vertaald is, zodat de lezer in elk geval weet WAT er misging. */
+export type BankRefreshFailureReason = "rate-limited" | "bank-down" | "unknown";
+
 export type ShellNotice =
   | { kind: "import-problem"; problem: ImportProblem }
   | { kind: "bank-link-failed"; detail: string }
+  | {
+      kind: "bank-refresh-failed";
+      aspsp: string;
+      reason: BankRefreshFailureReason;
+      retryAfterSeconds?: number;
+    }
   | { kind: "bank-linked"; accounts: number; aspsp: string; txs: number }
   | { kind: "import-failed"; detail: string }
   | { kind: "terms-lookup-failed"; detail: string }

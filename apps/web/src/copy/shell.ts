@@ -502,6 +502,15 @@ const nl: ShellCopy = {
         return nl.import.problem(n.problem);
       case "bank-link-failed":
         return `Bankkoppeling mislukt: ${n.detail}`;
+      case "bank-refresh-failed":
+        switch (n.reason) {
+          case "rate-limited":
+            return `${n.aspsp} laat even niet meer verversen — wacht even en probeer het later opnieuw.`;
+          case "bank-down":
+            return `${n.aspsp} reageert nu niet — wacht even en probeer het later opnieuw.`;
+          case "unknown":
+            return `${n.aspsp} verversen lukte niet — probeer het later opnieuw of koppel de bank opnieuw.`;
+        }
       case "bank-linked":
         return `Bank gekoppeld: ${n.accounts} rekening${n.accounts === 1 ? "" : "en"}${n.aspsp ? ` via ${n.aspsp}` : ""}, ${n.txs} transactie${n.txs === 1 ? "" : "s"}.`;
       case "import-failed":
@@ -913,6 +922,15 @@ const en: ShellCopy = {
         return en.import.problem(n.problem);
       case "bank-link-failed":
         return `Bank connection failed: ${n.detail}`;
+      case "bank-refresh-failed":
+        switch (n.reason) {
+          case "rate-limited":
+            return `${n.aspsp} is temporarily rate-limiting refreshes — wait a while and try again later.`;
+          case "bank-down":
+            return `${n.aspsp} isn't responding right now — wait a moment and try again later.`;
+          case "unknown":
+            return `Refreshing ${n.aspsp} failed — try again later or reconnect the bank.`;
+        }
       case "bank-linked":
         return `Bank connected: ${n.accounts} account${n.accounts === 1 ? "" : "s"}${n.aspsp ? ` via ${n.aspsp}` : ""}, ${n.txs} transaction${n.txs === 1 ? "" : "s"}.`;
       case "import-failed":

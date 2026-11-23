@@ -20,8 +20,17 @@ vi.mock("./eb-client.js", async () => {
   return { ...actual, eb: ebMock };
 });
 
-const { registerEbRoutes, PENDING_TTL_MS, SESSION_TTL_MS, CONSENT_DAYS, EB_REFRESH_PER_MINUTE } =
-  await import("./eb-routes.js");
+const {
+  registerEbRoutes,
+  PENDING_TTL_MS,
+  SESSION_TTL_MS,
+  CONSENT_DAYS,
+  EB_REFRESH_PER_MINUTE,
+  INITIAL_SYNC_DAYS,
+  REFRESH_SYNC_DAYS,
+  DAILY_BANK_FETCH_CAP,
+} = await import("./eb-routes.js");
+import { EnableBankingApiError, EnableBankingTimeoutError } from "./eb-client.js";
 import { createRateLimiter } from "./agent/rateLimit.js";
 import type { EbFlowStore, EbSession, PendingAuth } from "./eb-routes.js";
 
@@ -31,6 +40,7 @@ import type { EbFlowStore, EbSession, PendingAuth } from "./eb-routes.js";
 function fakeStore() {
   const pending = new Map<string, PendingAuth>();
   const sessions = new Map<string, { userId: string; payload: EbSession; createdAt: string }>();
+  const dailyReads = new Map<string, { day: string; count: number }>();
   const sweepSessionCalls: Array<{ userId: string; ttlMs: number }> = [];
   const store: EbFlowStore = {
     async startAuth(state, entry) {
@@ -71,12 +81,23 @@ function fakeStore() {
       const row = sessions.get(sessionId);
       if (row?.userId === userId) sessions.delete(sessionId);
     },
+    async takeFetchBudget(userId, today, max) {
+      if (max < 1) return false;
+      const cur = dailyReads.get(userId);
+      if (!cur || cur.day !== today) {
+        dailyReads.set(userId, { day: today, count: 1 });
+        return true;
+      }
+      if (cur.count >= max) return false;
+      cur.count += 1;
+      return true;
+    },
   };
-  return { store, pending, sessions, sweepSessionCalls };
+  return { store, pending, sessions, dailyReads, sweepSessionCalls };
 }
 
 let signedInAs: string | null = "user-123";
-const { store, pending, sessions, sweepSessionCalls } = fakeStore();
+const { store, pending, sessions, dailyReads, sweepSessionCalls } = fakeStore();
 const app = new Hono();
 /* Een ruime limiet voor de suite, zodat de VOLGORDE van de tests niet bepaalt
  * of de laatste er nog in past; de limiet zelf heeft zijn eigen test met zijn
@@ -91,6 +112,7 @@ beforeEach(() => {
   signedInAs = "user-123";
   pending.clear();
   sessions.clear();
+  dailyReads.clear();
   sweepSessionCalls.length = 0;
   ebMock.mockReset();
   loadConfigMock.mockReset();
@@ -478,12 +500,14 @@ test("a dead consent is pruned, so it is not retried on every refresh", async ()
 test("the bank's own words never reach the browser", async () => {
   await connect("sess-1", "ING");
   // Twee echte gevallen: 400 bytes van de bank, en het pad naar onze sleutel.
-  ebMock.mockRejectedValueOnce(new Error("Enable Banking 502: <html>upstream said a lot</html>"));
+  ebMock.mockRejectedValueOnce(
+    new EnableBankingApiError(502, "Enable Banking 502: <html>upstream said a lot</html>"),
+  );
   const res = await app.request("/api/eb/refresh", { method: "POST" });
   const text = await res.text();
   expect(text).not.toMatch(/upstream said a lot|<html>/);
   expect(text).not.toMatch(/\/Users\/|\.pem|BEGIN/);
-  expect(JSON.parse(text).failed).toEqual([{ aspsp: "ING", error: "unreachable" }]);
+  expect(JSON.parse(text).failed).toEqual([{ aspsp: "ING", reason: "bank-down" }]);
 });
 
 test("refresh is rate limited, because it spends the bank's quota on every press", async () => {
@@ -603,4 +627,145 @@ test("the callback ignores an echoed validUntil in the past or beyond 180 days",
 test("the bank-name match for the consent maximum ignores case and spaces", async () => {
   const { days } = await authFor([{ name: " ing ", maximum_consent_validity: 15_552_000 }]);
   expect(days).toBeGreaterThan(179.9);
+});
+
+/* ══════ #368: TYPED REASONS, WINDOW, DAILY BUDGET, STRUCTURED LOGS ══════════ */
+
+test("refresh maps 429 + Retry-After to reason 'rate-limited' and logs structured status", async () => {
+  const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+  await connect("sess-1", "ING");
+  ebMock.mockRejectedValueOnce(
+    new EnableBankingApiError(429, "Enable Banking 429: too many requests", 120_000),
+  );
+
+  const res = await app.request("/api/eb/refresh", { method: "POST" });
+  const body = (await res.json()) as {
+    failed: Array<{ aspsp: string; reason: string; retryAfterSeconds?: number }>;
+  };
+  expect(body.failed).toEqual([{ aspsp: "ING", reason: "rate-limited", retryAfterSeconds: 120 }]);
+  expect(spy).toHaveBeenCalledWith(
+    "eb refresh failed",
+    expect.objectContaining({
+      aspsp: "ING",
+      status: 429,
+      reason: "rate-limited",
+      retryAfterMs: 120_000,
+    }),
+  );
+  spy.mockRestore();
+});
+
+test("refresh maps 5xx and timeouts to reason 'bank-down' and logs structured status", async () => {
+  const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+  await connect("sess-1", "ING");
+  await connect("sess-2", "bunq");
+  ebMock.mockRejectedValueOnce(new EnableBankingApiError(503, "Enable Banking 503: maintenance"));
+  ebMock.mockRejectedValueOnce(new EnableBankingTimeoutError(15_000, "/accounts/a1/balances"));
+
+  const res = await app.request("/api/eb/refresh", { method: "POST" });
+  const body = (await res.json()) as { failed: Array<{ aspsp: string; reason: string }> };
+  expect(body.failed).toEqual([
+    { aspsp: "ING", reason: "bank-down" },
+    { aspsp: "bunq", reason: "bank-down" },
+  ]);
+  expect(spy).toHaveBeenCalledWith(
+    "eb refresh failed",
+    expect.objectContaining({ aspsp: "ING", status: 503, reason: "bank-down" }),
+  );
+  expect(spy).toHaveBeenCalledWith(
+    "eb refresh failed",
+    expect.objectContaining({ aspsp: "bunq", status: null, reason: "bank-down" }),
+  );
+  spy.mockRestore();
+});
+
+test("refresh maps 4xx (non-401/403/429) and generic errors to reason 'unknown'", async () => {
+  const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+  await connect("sess-1", "ING");
+  await connect("sess-2", "bunq");
+  ebMock.mockRejectedValueOnce(new EnableBankingApiError(400, "Enable Banking 400: bad param"));
+  ebMock.mockRejectedValueOnce(new Error("socket hang up"));
+
+  const res = await app.request("/api/eb/refresh", { method: "POST" });
+  const body = (await res.json()) as { failed: Array<{ aspsp: string; reason: string }> };
+  expect(body.failed).toEqual([
+    { aspsp: "ING", reason: "unknown" },
+    { aspsp: "bunq", reason: "unknown" },
+  ]);
+  expect(spy).toHaveBeenCalledWith(
+    "eb refresh failed",
+    expect.objectContaining({ aspsp: "ING", status: 400, reason: "unknown" }),
+  );
+  expect(spy).toHaveBeenCalledWith(
+    "eb refresh failed",
+    expect.objectContaining({ aspsp: "bunq", status: null, reason: "unknown" }),
+  );
+  spy.mockRestore();
+});
+
+test("refresh keeps 403 expired-consent handling intact", async () => {
+  await connect("sess-1", "ING");
+  ebMock.mockRejectedValueOnce(new EnableBankingApiError(403, "Enable Banking 403: consent gone"));
+
+  const res = await app.request("/api/eb/refresh", { method: "POST" });
+  const body = (await res.json()) as { expired: string[]; failed: unknown[] };
+  expect(body.expired).toEqual(["ING"]);
+  expect(body.failed).toEqual([]);
+  expect(sessions.has("sess-1")).toBe(false);
+});
+
+test("initial sync reads 365 days; subsequent refreshes read the shorter window (30-45 days)", async () => {
+  expect(INITIAL_SYNC_DAYS).toBe(365);
+  expect(REFRESH_SYNC_DAYS).toBeGreaterThanOrEqual(30);
+  expect(REFRESH_SYNC_DAYS).toBeLessThanOrEqual(45);
+
+  await connect("sess-1", "ING");
+  mockOneAccountFetch("100");
+  const initialRes = await app.request("/api/eb/accounts?session_id=sess-1");
+  expect(initialRes.status).toBe(200);
+
+  const expectedInitialDate = new Date(Date.now() - INITIAL_SYNC_DAYS * 86_400_000)
+    .toISOString()
+    .slice(0, 10);
+  const initialTxCall = ebMock.mock.calls.find((call) => String(call[2]).includes("/transactions"));
+  expect(String(initialTxCall?.[2])).toContain(`date_from=${expectedInitialDate}`);
+
+  ebMock.mockClear();
+  mockOneAccountFetch("125");
+  const refreshRes = await app.request("/api/eb/refresh", { method: "POST" });
+  expect(refreshRes.status).toBe(200);
+
+  const expectedRefreshDate = new Date(Date.now() - REFRESH_SYNC_DAYS * 86_400_000)
+    .toISOString()
+    .slice(0, 10);
+  const refreshTxCall = ebMock.mock.calls.find((call) => String(call[2]).includes("/transactions"));
+  expect(String(refreshTxCall?.[2])).toContain(`date_from=${expectedRefreshDate}`);
+});
+
+test("refresh enforces the shared daily read budget and returns rate-limited without calling the bank", async () => {
+  const spy = vi.spyOn(console, "warn").mockImplementation(() => {});
+  await connect("sess-1", "ING");
+  for (let i = 0; i < DAILY_BANK_FETCH_CAP; i++) {
+    mockOneAccountFetch(String(100 + i));
+    const res = await app.request("/api/eb/refresh", { method: "POST" });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { refreshed: unknown[]; failed: unknown[] };
+    expect(body.refreshed).toHaveLength(1);
+    expect(body.failed).toEqual([]);
+  }
+
+  ebMock.mockClear();
+  const blocked = await app.request("/api/eb/refresh", { method: "POST" });
+  expect(blocked.status).toBe(200);
+  expect(await blocked.json()).toEqual({
+    refreshed: [],
+    expired: [],
+    failed: [{ aspsp: "ING", reason: "rate-limited" }],
+  });
+  expect(ebMock).not.toHaveBeenCalled();
+  expect(spy).toHaveBeenCalledWith(
+    "eb refresh failed",
+    expect.objectContaining({ aspsp: "ING", status: 429, reason: "rate-limited" }),
+  );
+  spy.mockRestore();
 });

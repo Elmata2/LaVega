@@ -34,6 +34,53 @@ export function applyTxPatch(txs: Tx[], patch: CategorizePatch): Tx[] {
   return txs.map((t) => (by.has(t.id) ? { ...t, category: by.get(t.id)!, manual: true } : t));
 }
 
+/** What a rule editor action changes, as a PATCH rather than a replacement
+ *  list. Applied against the CURRENT rules at write time so a rule added
+ *  concurrently by a category save is never dropped. */
+export type RulePatch =
+  | { kind: "add"; rule: Rule }
+  | { kind: "update"; rule: Rule }
+  | { kind: "delete"; id: string }
+  | { kind: "move"; id: string; delta: -1 | 1 };
+
+export function applyRulePatch(rules: Rule[], patch: RulePatch): Rule[] {
+  switch (patch.kind) {
+    case "add":
+      return rules.some((r) => r.id === patch.rule.id) ? rules : [...rules, patch.rule];
+    case "update":
+      return rules.some((r) => r.id === patch.rule.id)
+        ? rules.map((r) => (r.id === patch.rule.id ? patch.rule : r))
+        : rules;
+    case "delete": {
+      const next = rules.filter((r) => r.id !== patch.id);
+      return next.length === rules.length ? rules : next;
+    }
+    case "move": {
+      const index = rules.findIndex((r) => r.id === patch.id);
+      if (index === -1) return rules;
+      const target = index + patch.delta;
+      if (target < 0 || target >= rules.length) return rules;
+      const next = [...rules];
+      const [row] = next.splice(index, 1);
+      if (row === undefined) return rules;
+      next.splice(target, 0, row);
+      return next;
+    }
+  }
+}
+
+/** Merge new or modified transactions into the CURRENT list without touching
+ *  unrelated rows (e.g. a row whose category changed while an import was
+ *  running). */
+export function applyTxUpserts(txs: Tx[], upserts: Tx[]): Tx[] {
+  if (upserts.length === 0) return txs;
+  const byId = new Map(upserts.map((t) => [t.id, t]));
+  const updated = txs.map((t) => byId.get(t.id) ?? t);
+  const have = new Set(txs.map((t) => t.id));
+  const added = upserts.filter((t) => !have.has(t.id));
+  return added.length === 0 ? updated : [...updated, ...added];
+}
+
 export function addMissingRules(rules: Rule[], add: Rule[]): Rule[] {
   const have = new Set(rules.map((r) => r.id));
   const fresh = add.filter((r) => !have.has(r.id));
@@ -94,5 +141,26 @@ export function createCategorizeSaver(io: SaverIo) {
     });
   }
 
-  return { run, enqueue };
+  function patchRules(patch: RulePatch): Promise<void> {
+    return enqueue(async () => {
+      const cur = io.getRules();
+      const next = applyRulePatch(cur, patch);
+      if (next === cur) return;
+      await io.putRules(next);
+      io.updateRules((prev) => applyRulePatch(prev, patch));
+    });
+  }
+
+  function upsertTxs<R>(build: (cur: Tx[]) => { upserts: Tx[]; result: R }): Promise<R> {
+    return enqueue(async () => {
+      const { upserts, result } = build(io.getTxs());
+      if (upserts.length > 0) {
+        await io.putTxs(upserts);
+        io.updateTxs((prev) => applyTxUpserts(prev, upserts));
+      }
+      return result;
+    });
+  }
+
+  return { run, patchRules, upsertTxs, enqueue };
 }
