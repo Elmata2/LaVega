@@ -170,5 +170,30 @@ export function createEbFlowRepository(db: Database) {
         await client.query("DELETE FROM personal.eb_sessions WHERE session_id = $1", [sessionId]);
       });
     },
+
+    /**
+     * Atomically claim one daily Enable Banking read for `userId` on `today`
+     * (YYYY-MM-DD in Europe/Amsterdam) up to `max`. Shared with the Instinct
+     * cron and WhatsApp agent via `personal.eb_daily_reads`.
+     */
+    async takeFetchBudget(userId: string, today: string, max: number): Promise<boolean> {
+      if (max < 1) return false;
+      const identity = requireUserId(userId);
+      return withTenantStatement(db, identity, async (client) => {
+        const result = await client.query(
+          `INSERT INTO personal.eb_daily_reads (user_id, fetches_today, fetches_day)
+           VALUES ($1, 1, $2::date)
+           ON CONFLICT (user_id) DO UPDATE SET
+             fetches_today = CASE WHEN personal.eb_daily_reads.fetches_day = $2::date
+               THEN personal.eb_daily_reads.fetches_today + 1 ELSE 1 END,
+             fetches_day = $2::date
+           WHERE personal.eb_daily_reads.fetches_day IS DISTINCT FROM $2::date
+              OR personal.eb_daily_reads.fetches_today < $3
+           RETURNING 1`,
+          [identity, today, max],
+        );
+        return (result.rows?.length ?? 0) > 0;
+      });
+    },
   };
 }

@@ -372,14 +372,15 @@ export function createAgentRepository(
       if (max < 1) return false;
       return withTenantStatement(db, userId, async (client) => {
         const result = await client.query(
-          `INSERT INTO personal.agent_state (user_id, fetches_today, fetches_day)
+          `INSERT INTO personal.eb_daily_reads (user_id, fetches_today, fetches_day)
            SELECT ${ME}, 1, $1::date WHERE ${ENABLED}
            ON CONFLICT (user_id) DO UPDATE SET
-             fetches_today = CASE WHEN personal.agent_state.fetches_day = $1::date
-               THEN personal.agent_state.fetches_today + 1 ELSE 1 END,
+             fetches_today = CASE WHEN personal.eb_daily_reads.fetches_day = $1::date
+               THEN personal.eb_daily_reads.fetches_today + 1 ELSE 1 END,
              fetches_day = $1::date
-           WHERE personal.agent_state.fetches_day IS DISTINCT FROM $1::date
-              OR personal.agent_state.fetches_today < $2
+           WHERE ${ENABLED}
+             AND (personal.eb_daily_reads.fetches_day IS DISTINCT FROM $1::date
+                  OR personal.eb_daily_reads.fetches_today < $2)
            RETURNING 1`,
           [today, max],
         );

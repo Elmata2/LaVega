@@ -459,6 +459,7 @@ test.each([
     await pglite.exec("RESET ROLE;");
     for (const t of ["events", "mirror", "state", "settings"])
       await pglite.exec(`DELETE FROM personal.agent_${t};`);
+    await pglite.exec("DELETE FROM personal.eb_daily_reads;");
     await pglite.exec("SELECT set_config('app.user_id', '', false); SET ROLE lavega_runtime;");
     await createAgentRepository(db, "dst").putSettings({ ...settings, sendHour });
 
@@ -501,7 +502,7 @@ test.each([
     for (; at <= Date.parse(to); at += 3_600_000) {
       // Reset the fetch counter every hour: only the day claim is under test here.
       await pglite.exec(
-        "RESET ROLE; UPDATE personal.agent_state SET fetches_today = 0; SET ROLE lavega_runtime;",
+        "RESET ROLE; UPDATE personal.eb_daily_reads SET fetches_today = 0; SET ROLE lavega_runtime;",
       );
       await runInstinctCron(request(SECRET), deps);
     }
@@ -524,6 +525,7 @@ test.each([
     await pglite.exec("RESET ROLE;");
     for (const t of ["events", "mirror", "state", "settings"])
       await pglite.exec(`DELETE FROM personal.agent_${t};`);
+    await pglite.exec("DELETE FROM personal.eb_daily_reads;");
     await pglite.exec("SELECT set_config('app.user_id', '', false); SET ROLE lavega_runtime;");
     const repo = createAgentRepository(db, "sim");
     await repo.putSettings({ ...settings, sendHour: before });
@@ -577,7 +579,7 @@ test.each([
     const claims: (string | null)[] = [];
     for (const end = at + 48 * 3_600_000; at <= end; at += 3_600_000) {
       await pglite.exec(
-        "RESET ROLE; UPDATE personal.agent_state SET fetches_today = 0; SET ROLE lavega_runtime;",
+        "RESET ROLE; UPDATE personal.eb_daily_reads SET fetches_today = 0; SET ROLE lavega_runtime;",
       );
       await runInstinctCron(request(SECRET), deps);
       claims.push((await repo.getState()).lastSentDate);

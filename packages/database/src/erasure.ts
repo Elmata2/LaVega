@@ -14,6 +14,7 @@ const USER_DATA_TABLES = [
   "personal.agent_mirror",
   "personal.agent_state",
   "personal.agent_settings",
+  "personal.eb_daily_reads",
   "personal.eb_sessions",
   "personal.eb_pending_auth",
   "personal.n8n_forwarding",

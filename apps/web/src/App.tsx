@@ -216,7 +216,7 @@ import { useAgentMirror } from "./agent/useAgentMirror.js";
 import { createFeedStore } from "./agent/feedStore.js";
 import { shellCopy } from "./copy/shell.js";
 import { importSessionCopy } from "./copy/importSession.js";
-import { type ShellNotice } from "./shellNotice.js";
+import { type BankRefreshFailureReason, type ShellNotice } from "./shellNotice.js";
 
 export type { View } from "./appRoutes";
 
@@ -1084,7 +1084,7 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
         error?: string;
         refreshed?: Array<{ aspsp: string; items: [] }>;
         expired?: string[];
-        failed?: Array<{ aspsp: string; error: string }>;
+        failed?: Array<{ aspsp: string; reason?: string; retryAfterSeconds?: number }>;
       };
       if (!res.ok || data.error) {
         setProblems([{ kind: "bank-link-failed", detail: String(data.error ?? res.status) }]);
@@ -1113,8 +1113,20 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
         });
       for (const name of data.expired ?? [])
         notices.push({ kind: "bank-consent-expired", aspsp: name });
-      for (const f of data.failed ?? [])
-        notices.push({ kind: "bank-link-failed", detail: `${f.aspsp}: ${f.error}` });
+      for (const f of data.failed ?? []) {
+        const reason: BankRefreshFailureReason =
+          f.reason === "rate-limited" || f.reason === "bank-down" || f.reason === "unknown"
+            ? f.reason
+            : "unknown";
+        notices.push({
+          kind: "bank-refresh-failed",
+          aspsp: f.aspsp,
+          reason,
+          ...(typeof f.retryAfterSeconds === "number"
+            ? { retryAfterSeconds: f.retryAfterSeconds }
+            : {}),
+        });
+      }
       if (notices.length === 0 && !silent) notices.push({ kind: "bank-nothing-to-refresh" });
       // Niets te melden en niemand die erom vroeg: de balk blijft staan zoals
       // hij stond, in plaats van leeggemaakt te worden en daarmee een eerdere

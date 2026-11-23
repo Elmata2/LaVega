@@ -5,7 +5,15 @@ import { createVerify, generateKeyPairSync } from "node:crypto";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { eb, ebJWT, EnableBankingApiError, type EbClientConfig } from "./eb-client.js";
+import {
+  eb,
+  ebJWT,
+  EnableBankingApiError,
+  EnableBankingTimeoutError,
+  parseRetryAfter,
+  resetEbRetryAfter,
+  type EbClientConfig,
+} from "./eb-client.js";
 
 function makeTestKeypair(privateKeyType: "pkcs1" | "pkcs8" = "pkcs1") {
   return generateKeyPairSync("rsa", {
@@ -87,6 +95,7 @@ describe("eb", () => {
   let config: EbClientConfig;
 
   beforeEach(() => {
+    resetEbRetryAfter();
     const { privateKey } = makeTestKeypair();
     keyDir = mkdtempSync(path.join(tmpdir(), "lavega-eb-client-"));
     const keyPath = path.join(keyDir, "test-key.pem");
@@ -159,5 +168,96 @@ describe("eb", () => {
 
     expect(data).toEqual({ items: [] });
     expect(receivedBody).toBe("");
+  });
+
+  test("aborts and throws EnableBankingTimeoutError when the upstream stalls", async () => {
+    const baseUrl = await listen((_req, _res) => {
+      // Never respond — simulate a hung upstream connection.
+    });
+
+    await expect(
+      eb(config, "GET", "/accounts/a1/balances", undefined, baseUrl, { timeoutMs: 50 }),
+    ).rejects.toBeInstanceOf(EnableBankingTimeoutError);
+  });
+
+  test("parses Retry-After delta-seconds and HTTP-date", () => {
+    const now = Date.parse("2026-11-23T12:00:00.000Z");
+    expect(parseRetryAfter("120", now)).toBe(120_000);
+    expect(parseRetryAfter("0", now)).toBe(0);
+    expect(parseRetryAfter("Mon, 23 Nov 2026 12:05:00 GMT", now)).toBe(300_000);
+    expect(parseRetryAfter("Mon, 23 Nov 2026 11:55:00 GMT", now)).toBe(0);
+    expect(parseRetryAfter("", now)).toBeNull();
+    expect(parseRetryAfter("-10", now)).toBeNull();
+    expect(parseRetryAfter("not-a-date", now)).toBeNull();
+    expect(parseRetryAfter(null, now)).toBeNull();
+  });
+
+  test("respects 429 Retry-After (delta-seconds) without hot retry and resumes after cooldown", async () => {
+    let hits = 0;
+    const baseUrl = await listen((_req, res) => {
+      hits += 1;
+      if (hits === 1) {
+        res.writeHead(429, { "Content-Type": "application/json", "Retry-After": "60" });
+        res.end(JSON.stringify({ message: "too many requests" }));
+        return;
+      }
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ ok: true }));
+    });
+
+    let clock = Date.parse("2026-11-23T12:00:00.000Z");
+    const now = () => clock;
+
+    const firstErr = await eb(config, "GET", "/accounts/a1/balances", undefined, baseUrl, {
+      now,
+    }).catch((e) => e);
+    expect(firstErr).toBeInstanceOf(EnableBankingApiError);
+    expect((firstErr as EnableBankingApiError).status).toBe(429);
+    expect((firstErr as EnableBankingApiError).retryAfterMs).toBe(60_000);
+    expect(hits).toBe(1);
+
+    // Immediate second call is blocked locally without hitting the server.
+    clock += 10_000;
+    const secondErr = await eb(config, "GET", "/accounts/a1/balances", undefined, baseUrl, {
+      now,
+    }).catch((e) => e);
+    expect(secondErr).toBeInstanceOf(EnableBankingApiError);
+    expect((secondErr as EnableBankingApiError).status).toBe(429);
+    expect((secondErr as EnableBankingApiError).retryAfterMs).toBe(50_000);
+    expect(hits).toBe(1);
+
+    // After Retry-After elapses, the call goes through.
+    clock += 50_000;
+    const data = await eb(config, "GET", "/accounts/a1/balances", undefined, baseUrl, { now });
+    expect(data).toEqual({ ok: true });
+    expect(hits).toBe(2);
+  });
+
+  test("respects 429 Retry-After with HTTP-date", async () => {
+    let hits = 0;
+    const baseUrl = await listen((_req, res) => {
+      hits += 1;
+      res.writeHead(429, {
+        "Content-Type": "application/json",
+        "Retry-After": "Mon, 23 Nov 2026 12:02:00 GMT",
+      });
+      res.end(JSON.stringify({ message: "rate limited" }));
+    });
+
+    let clock = Date.parse("2026-11-23T12:00:00.000Z");
+    const now = () => clock;
+
+    const err = await eb(config, "GET", "/accounts/a1/balances", undefined, baseUrl, { now }).catch(
+      (e) => e,
+    );
+    expect(err).toBeInstanceOf(EnableBankingApiError);
+    expect((err as EnableBankingApiError).retryAfterMs).toBe(120_000);
+    expect(hits).toBe(1);
+
+    clock += 30_000;
+    await expect(
+      eb(config, "GET", "/accounts/a1/balances", undefined, baseUrl, { now }),
+    ).rejects.toBeInstanceOf(EnableBankingApiError);
+    expect(hits).toBe(1);
   });
 });
