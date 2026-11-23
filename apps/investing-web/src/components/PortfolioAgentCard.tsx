@@ -6,7 +6,7 @@ import {
   useAgentRequests,
   type PortfolioAgentInsight,
 } from "../lib/portfolioAgents.js";
-import { Button } from "./ui/button";
+import { Button } from "@lavega/ui";
 
 export function AgentCatalogProblem({
   message,

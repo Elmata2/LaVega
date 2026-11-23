@@ -18,8 +18,8 @@
 >
 > **And one live data error this sweep did not catch:** Revolut is _not_ 0%. Its own per-plan pages
 > say 0% applies only inside a monthly limit — Standard €1.000 then **1%**, Plus €3.000 then **0,5%**.
-> LaVega currently ranks Revolut top on an unconditional 0%. See
-> `docs/superpowers/specs/2026-08-18-catalog-coverage-design.md` for the full corrections.
+> LaVega currently ranks Revolut top on an unconditional 0%. The catalogue rows
+> carry the corrected per-plan limits and dates.
 
 Sweep of **18 August 2026**. This is a watchlist, **not a price list**: it records _what products exist_,
 _where their terms live_, and _whether we can actually read them_. No rates are collected here as product

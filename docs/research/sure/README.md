@@ -12,7 +12,7 @@ Raw research notes for the Sure adoption program. They are inputs, not decisions
   Sure, integration seams, top gaps, unverified list.
 
 Consolidated result: [`../2026-11-10-sure-teardown.md`](../2026-11-10-sure-teardown.md).
-Plan: [`../../superpowers/specs/2026-11-10-sure-adoption-plan.md`](../../superpowers/specs/2026-11-10-sure-adoption-plan.md).
+Provenance ledger: [`../../provenance/sure.md`](../../provenance/sure.md).
 
 ## Scope correction (2026-11-10)
 
@@ -36,8 +36,8 @@ is still in scope (plan WS3.6).
 
 ## Attribution gate
 
-`node scripts/check-attribution.mjs` (also `pnpm run check:attribution`) is the mechanical
-check behind the provenance claims in this note and in the plan's Appendix A. It fails when a
+`node scripts/check-attribution.mjs` (also `bun run check:attribution`) is the mechanical
+check behind the provenance claims in this note and in the provenance ledger's Appendix A. It fails when a
 runtime source file with a "Ported from Sure" header has no Appendix A row, when a row points
 at a file that is missing or not ported, when a header misses the pinned commit, licence,
 independent-reimplementation wording or change date, or when `NOTICE`/this README drifts from
@@ -55,6 +55,6 @@ the pinned commit. Run it after adding or removing a ported module.
 5. Never paste real financial data (IBANs, names, counterparties, exact amounts) into this
    repo, a fixture or a commit. Scrub exports before use; keep local real-data artifacts
    gitignored. The binding rules, the keep/replace table and the gitignored paths are in
-   `docs/superpowers/specs/2026-11-10-sure-adoption-plan.md` §2.6.
+   `docs/provenance/sure.md`.
 6. Say "independent reimplementation", not "clean-room". The reuse method reads Sure's Ruby
    and tests.

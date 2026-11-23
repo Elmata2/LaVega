@@ -12,9 +12,9 @@ import {
   type StockJudgment,
   type StockResearchResult,
 } from "../lib/stockResearch.js";
-import { Button } from "./ui/button.js";
-import { Card, CardContent, CardHeader, CardTitle } from "./ui/card.js";
-import { Input } from "./ui/input.js";
+import { Button } from "@lavega/ui";
+import { Card, CardContent, CardHeader, CardTitle } from "@lavega/ui";
+import { Input } from "@lavega/ui";
 
 const LENSES: Record<string, string> = {
   warren_buffett: "Business quality & lasting value",

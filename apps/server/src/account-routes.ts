@@ -3,8 +3,8 @@ import { erasePersonalData, eraseUserData, type ErasureReport } from "@lavega/da
 import {
   credentialsArePerTenant,
   requireRuntimeDatabase,
-} from "@lavega/investing-server/src/credentialStore.js";
-import { investingTenantId } from "./investing-mount.js";
+} from "@lavega/database";
+import { investingTenantId } from "./auth.js";
 
 export type AccountRouteDependencies = {
   tenantId: (request: Request) => Promise<string | null>;

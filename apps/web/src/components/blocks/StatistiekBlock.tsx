@@ -229,7 +229,7 @@ export function customWindow(start: string, end: string): StatWindow | null {
  * zijn gelegd, staat in de regel erboven; stil vergelijken mag niet.
  *
  * Een vergelijking met het Nederlandse gemiddelde stond hier NIET tegenover: die
- * is onderzocht en afgewezen (docs/research/2026-08-20-categorie-gemiddelden.md).
+ * is onderzocht en afgewezen.
  * Het CBS deelt in naar product waar LaVega naar tegenpartij deelt, het nieuwste
  * cijfer per categorie is van 2020, en er wordt alleen een gemiddelde met een
  * betrouwbaarheidsinterval gepubliceerd — geen verdeling, dus daar valt sowieso

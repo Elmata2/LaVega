@@ -76,13 +76,13 @@ tx = {
 
 ## Stack
 
-- pnpm workspaces + workspace deps (`@lavega/*`), resolved via `moduleResolution: bundler`; no TypeScript project references
+- bun workspaces + workspace deps (`@lavega/*`), resolved via `moduleResolution: bundler`; no TypeScript project references
 - **UI:** Vite + React (`apps/web`)
 - **Server:** Hono (`apps/server`) — portable across Node/edge/cheap hosting
 - **TypeScript logic:** Effect 4 (`effect@4.0.1`) for all new code — typed errors, `Schema`, `Layer`/`Context.Service`, structured concurrency. Existing code is ported when touched, not in bulk. Effect source is vendored read-only at `repos/effect`; read `repos/effect/LLMS.md` first. See [ADR 0008](adr/0008-effect-as-typescript-standard.md).
 - **Storage:** IndexedDB adapter now → Postgres adapter later
 - **Tests:** Vitest
-- **Lint / format:** oxlint + oxfmt at repo root (Turborepo root tasks `//#lint`, `//#format`). No ESLint/Prettier. Config: `.oxlintrc.json`, `.oxfmtrc.json`. Scripts: `pnpm lint`, `pnpm lint:fix`, `pnpm format`, `pnpm format:fix`, `pnpm quality`.
+- **Lint / format:** oxlint + oxfmt at repo root (Turborepo root tasks `//#lint`, `//#format`). No ESLint/Prettier. Config: `.oxlintrc.json`, `.oxfmtrc.json`. Scripts: `bun run lint`, `bun run lint:fix`, `bun run format`, `bun run format:fix`, `bun run quality`.
 - **License:** AGPL-3.0 (open, but blocks a competitor hosting a SaaS off the code)
 
 ## Bank access
@@ -105,7 +105,7 @@ Specified in **`docs/investing/PORTFOLIO-AGENTS.md`**. Investor personas based o
 
 ## Investing stack
 
-Specified in **`docs/investing/STACK.md`** — the investing side's own stack, diverging deliberately from the personal side's in several places: `apps/investing-web` runs shadcn/ui (Tailwind + Radix) rather than hand-written CSS; the hosted tier runs on Cloudflare Workers rather than local Docker; local/self-hosted price data defaults to Yahoo Finance, an unofficial API used against its Terms of Service (see [ADR 0001](adr/0001-yahoo-finance-default-price-source.md)). Read it before touching `packages/core/investing/`, `apps/investing-web`, or `apps/investing-server`.
+Specified in **`docs/investing/STACK.md`** — the investing side's own stack, diverging deliberately from the personal side's in several places: `apps/investing-web` runs shadcn-style Tailwind components rather than hand-written CSS; the hosted tier runs on Vercel with Neon, while self-hosting runs as a local Bun/Node process; local/self-hosted price data defaults to Yahoo Finance, an unofficial API used against its Terms of Service (see [ADR 0001](adr/0001-yahoo-finance-default-price-source.md)). Read it before touching `packages/core/investing/`, `apps/investing-web`, or `apps/investing-server`.
 
 ### Investing glossary
 
@@ -119,7 +119,7 @@ Specified in **`docs/investing/STACK.md`** — the investing side's own stack, d
 - **Goal** — a target outcome the user states in conversation. It is about the whole portfolio (for example €500 per month in dividends) or about one instrument (for example trim above 15% weight). A view of what a stock is worth is part of the thesis, not a goal.
 - **Observation** — something an agent noted from a thread, so it can later say "last month you said...". It belongs to its thread.
 - **Risk tolerance** — a user profile setting with three levels: Conservative, Balanced, Aggressive. Every agent reads it before it answers. If it is not set, the agent asks once in conversation and saves the answer.
-- **Portfolio letter** — one stored letter from Charlie Munger about the whole portfolio: a verdict and at most three observations, each citing the owner's own figures. The broker-sync cron writes it when the broker snapshot changes, and the owner can ask for one with `Write letter now` on the card (see ADR 0008). The card shows the latest one; it never generates one on page load.
+- **Portfolio letter** — one stored letter from Charlie Munger about the whole portfolio: a verdict and at most three observations, each citing the owner's own figures. The broker-sync cron writes it when the broker snapshot changes, and the owner can ask for one with `Write letter now` on the card (see ADR 0016). The card shows the latest one; it never generates one on page load.
 - **Erase all data** — the account-level delete. It removes every thread, thesis, goal, observation, portfolio letter, and profile setting. It is separate from deleting one thread.
 
 ## Instinct agent glossary
@@ -128,11 +128,11 @@ Specified in **`docs/investing/STACK.md`** — the investing side's own stack, d
 
 ### Personal app glossary
 
-- **Clear personal data** — the reset on Back-up > More options. Removes the server copy of the vault, bank links, the forwarding address and the net-worth totals (`DELETE /api/account/personal-data`, confirm `RESET-PERSONAL`), then the vault database of this browser and the personal browser keys, then reloads at `/app`. Keeps the login, the vault key, the AI spend ledger and everything in Investing. Other browsers keep their own copy until cleared there. Not the same as **Erase all data** (GDPR, `DELETE /api/account/data`), which removes the login too. Design: `docs/superpowers/specs/2026-11-14-personal-data-reset-design.md`.
+- **Clear personal data** — the reset on Back-up > More options. Removes the server copy of the vault, bank links, the forwarding address and the net-worth totals (`DELETE /api/account/personal-data`, confirm `RESET-PERSONAL`), then the vault database of this browser and the personal browser keys, then reloads at `/app`. Keeps the login, the vault key, the AI spend ledger and everything in Investing. Other browsers keep their own copy until cleared there. Not the same as **Erase all data** (GDPR, `DELETE /api/account/data`), which removes the login too.
 - **Home** — the first page of the personal app (view id `overview`, route `/app`). Four fixed blocks: the chart slot (Totale positie or Cashflow), Statistieken, Je kaarten, Travel; then the add area.
 - **Widget** — an optional Home card the user switches on (Aandacht, Recente transacties, Betaalagenda, BTW, Facturen, Top uitgaven, Positie per bedrijf). None is on by default. The choice is per browser; "Standaard herstellen" clears it.
 - **Add area** — the dashed boxes at the bottom of Home, one per widget that is off (at most four). A click switches the widget on. There is no picker; the boxes and hide buttons are the only widget control.
-- **Assistant panel** — the right-hand column of the app frame, on every view at >= 1024px (a sheet from the bottom bar below that). It runs in the browser, reads the vault before every turn. Without the opt-in it makes no network call; after the one-time opt-in (per account, per browser) questions the local skills do not cover are answered by Mistral through a stateless proxy, with the tools running here in the browser (docs/superpowers/specs/2026-11-18-assistant-is-instinct-design.md).
+- **Assistant panel** — the right-hand column of the app frame, on every view at >= 1024px (a sheet from the bottom bar below that). It runs in the browser, reads the vault before every turn. Without the opt-in it makes no network call; after the one-time opt-in (per account, per browser) questions the local skills do not cover are answered by Mistral through a stateless proxy, with the tools running here in the browser.
 - **Pop-up** — a modal dialog on Home that asks the user to answer the intake questions or to connect banks. At most one per browser session; a dismissal hides it for 7 days.
 - **File-fed card** — a card no bank link reaches (American Express, the Trading 212 card; `FILE_ROUTE_BRANDS` in core) that gets its transactions from an uploaded export. Added through ONE dialog, "Kaart toevoegen via bestand" (`components/import/CardFileDialog.tsx`): choose the card, see the steps, choose files, **preview** (format, period, new vs. already-there rows, unrecognised rows; nothing written), then "Toevoegen". Reachable from each not-connected card (Rekeningen, Home cards block), the wizard's last step, Profiel > Importeren and the Home connect pop-up. The resulting account carries `source: "file"` (shown as "via bestand") and `statedCardId` (the stated card it stands in for; this clears the "not connected" card, credit and debit). Account keys: Amex = `AMEX-<last 5 digits of the Account # column>`, else the picked card (`FILE-<card id>`), else the filename; Trading 212 = ONE account, key `TRADING212-CARD` (`T212_ACCOUNT_KEY`), name "Trading 212": the card spends the cash balance, so card, deposit, withdrawal, interest and dividend rows share it, whatever the file is called; a file for the stated 212 Card ties it (`statedCardId`) even when it holds cash rows only. Accounts from earlier imports (the filename-keyed cash account; a stamped `TRADING212-CARD` card account) are folded into it on the next Trading 212 import, in the same confirmed commit (`foldTrading212` in `parsers/cardFile.ts`, which reuses `mergeAccounts`, the "samenvoegen" merge; ids are re-derived, a row held under both keys stays once, transfer pairs and valuations follow). Only accounts the card-file path made are folded: bank exactly Trading 212, `source: "file"` or a `statedCardId` (a bare `linkedAt` is not enough), no live link (`balanceFetchedAt`), no hand-typed rows, no investing/savings type, and the same entity, currency and type as the surviving account (different entities with no survivor yet: nothing folds, the preview warns). Records that point at the folded rows (transfer pairs, valuations, bill matches/rejections/series, import sessions, documents) are rewritten BEFORE the old rows and account are deleted, so a failed import is finished by importing the file again (`writeFoldReferences`, `foldRefs.ts`). Balance: the surviving account's own balance wins (never added up); a balance only the folded account had moves over with its date. The preview says "Komt in: Trading 212" and, when a fold will happen, "Je twee Trading 212-rekeningen worden samengevoegd tot één." A later real bank link for the same brand is not merged automatically (duplicates are merged by hand in Rekeningen). Issuer steps live in `apps/web/src/copy/importGuides.ts`, all marked `verified: false`; the Trading 212 action list (`T212_*` in `parsers/bankCsv.ts`) is unverified against a real export. Both stay unverified until the owner supplies real exports.
 
@@ -165,9 +165,9 @@ statement vault, import/export interop, and one agent tool registry exposed as M
 upgrades roadmap item 2: the forecast stops detecting commitments and starts managing them.
 Owner decisions 2026-11-10: the personal side ships now; the ADR 0009 boundary stays; budgets
 use envelope carry-over; investing work goes deep (basis, realised/income, tax treatment), not
-wide; phase issues are filed in `Elmata2/lavega`. Read the plan before touching those areas:
-[`docs/superpowers/specs/2026-11-10-sure-adoption-plan.md`](superpowers/specs/2026-11-10-sure-adoption-plan.md),
-teardown: [`docs/research/2026-11-10-sure-teardown.md`](research/2026-11-10-sure-teardown.md).
+wide; phase issues are filed in `Elmata2/lavega`. Read the provenance ledger and teardown before
+touching those areas: [`docs/provenance/sure.md`](provenance/sure.md) and
+[`docs/research/2026-11-10-sure-teardown.md`](research/2026-11-10-sure-teardown.md).
 
 **Program closed 2026-11-11 (#302).** Every workstream shipped; the closeout artifacts are the
 contract for anyone touching this area later:
@@ -176,7 +176,7 @@ contract for anyone touching this area later:
   NDJSON/CSV, readback-verified) and the "Draagbare export" action on Backup. The encrypted
   `.lavega` bundle stays the restore artifact; the export is the readable one. No importer and
   no cross-format dedupe promise ([ADR 0013](adr/0013-program-closeout-boundaries.md)).
-- **Attribution gate** — `pnpm run check:attribution` proves every ported module has a Sure
+- **Attribution gate** — `bun run check:attribution` proves every ported module has a Sure
   header, an Appendix A row and `NOTICE` coverage, in both directions.
 - **Metrics** — [`docs/metrics/2026-11-11-sure-program-metrics.md`](metrics/2026-11-11-sure-program-metrics.md)
   records before/after aggregates on synthetic fixtures and names the eight live-vault metrics

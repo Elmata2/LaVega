@@ -18,3 +18,9 @@ export function secretsMatch(given: string, expected: string): boolean {
   const b = createHash("sha256").update(expected, "utf8").digest();
   return timingSafeEqual(a, b);
 }
+
+export function authorizedCronRequest(request: Request): boolean {
+  const secret = process.env.CRON_SECRET?.trim();
+  if (!secret) return false;
+  return secretsMatch(request.headers.get("authorization") ?? "", `Bearer ${secret}`);
+}

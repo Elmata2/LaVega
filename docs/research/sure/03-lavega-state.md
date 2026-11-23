@@ -1,6 +1,6 @@
 # LaVega current-state audit — what exists, what is live, and where Sure-derived code can land
 
-Research note for the Sure adoption plan. Read-only audit of the LaVega checkout at
+Research note for the Sure port program. Read-only audit of the LaVega checkout at
 `914d1962b` (2026-11-10). Nothing here was verified by running a server, a test suite, a
 migration, or a network call; every claim is a code or documentation claim, and §12 lists
 what that leaves unproven. Reference product: Sure (Rails, AGPL-3.0), shallow clone at
@@ -53,7 +53,7 @@ if notices and changes travel (see §7.5).
    `effect` and there is **no `@effect/vitest` usage** — every test is plain Vitest. New
    Sure-derived modules must be Effect 4 and will set the first Effect-tested pattern.
 8. **Test ownership is a written rule.** `docs/CONTEXT.md:131-135` assigns each contract to one
-   layer; `docs/reviews/2026-10-20-test-audit.md:6-14` shows it enforced by deletion.
+   layer; the October 2026 test audit removed tests that broke the rule.
    Sure-derived tests must not replay core contracts from `apps/*`.
 9. **Several capabilities exist but are dead in the UI.** Invoices, VAT/tax, currency
    exchange, invoice forwarding, the scope switch and the entity classifier are implemented
@@ -477,7 +477,7 @@ allocation, positions, position detail, net-worth, states, agent conversation).
 - Test ownership: core = domain rules; adapters = parsers/providers/storage; servers =
   routes/tenancy/consent/security; UI = interaction only; no layer replays a lower contract;
   grep-the-source, constant-restating and mock-own-behaviour tests are removed
-  (`docs/CONTEXT.md:131-135`; example `docs/reviews/2026-10-20-test-audit.md:6-14`).
+  (`docs/CONTEXT.md:131-135`).
 
 ### 5.7 Deployment
 
@@ -598,7 +598,7 @@ description≤60 + '#' + occurrence)` (`packages/core/src/hash.ts:19-45`). The s
   - New HTTP routes/tenancy/consent → server tests.
   - UI behavior → component tests in `apps/web`/`apps/investing-web`.
   - Do not re-test a core contract from `apps/*`, do not add a mock-only test that proves the
-    mock, do not grep source strings (`docs/reviews/2026-10-20-test-audit.md:6-14`).
+    mock, do not grep source strings.
 - Existing infrastructure: Vitest everywhere, jsdom for web, `fake-indexeddb` for the vault.
 
 ### 7.8 Storage choice per feature
@@ -897,7 +897,7 @@ hard per-tenant budget slice (`STACK.md:72-90`).
   (DEPLOY records 24/24 on 2026-10-05, repo has 27 files), whether the cron ran, whether the
   n8n workflow is imported (`BACKLOG.md` says not yet) are outside the repo.
 - **Test pass/fail and real coverage**: test files counted and sampled, not executed; some
-  suites are documented as weak or partly deleted (`docs/reviews/2026-10-20-test-audit.md`).
+  suites were documented as weak or partly deleted during the October 2026 test audit.
 - **Live broker/market-data behaviour**: adapter, Yahoo and cash/risk claims come from
   `CONNECTORS.md`/`RISK.md` (2026-09/10), not re-measured.
 - **External deployments** (Chrome store, Cloudflare Worker, DNS/forwarding) and **Sure

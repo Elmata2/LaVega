@@ -2,6 +2,8 @@ import { createHash, createHmac, randomInt } from "node:crypto";
 import type { QueryResultRow } from "@neondatabase/serverless";
 import {
   encryptBlob,
+  encryptionKey,
+  isUniqueViolation,
   tryDecryptBlob,
   withTenant,
   withTenantStatement,
@@ -111,12 +113,7 @@ function dedupeSecret(): Buffer {
  */
 export function assertAgentConfig(): void {
   dedupeSecret();
-  const value = process.env.LAVEGA_ENCRYPTION_KEY;
-  if (!value) throw new Error("LAVEGA_ENCRYPTION_KEY is required");
-  const key = /^[0-9a-f]{64}$/i.test(value)
-    ? Buffer.from(value, "hex")
-    : Buffer.from(value, "base64");
-  if (key.length !== 32) throw new Error("LAVEGA_ENCRYPTION_KEY must decode to 32 bytes");
+  encryptionKey();
 }
 
 /*
@@ -657,12 +654,6 @@ export async function listAgentDueUsers(
 export async function purgeLinkAttempts(db: Database): Promise<number> {
   const result = await db.http.query("SELECT personal.agent_purge_link_attempts() AS deleted", []);
   return Number(result.rows[0]?.deleted ?? 0);
-}
-
-function isUniqueViolation(error: unknown): boolean {
-  return (
-    typeof error === "object" && error !== null && (error as { code?: unknown }).code === "23505"
-  );
 }
 
 /**

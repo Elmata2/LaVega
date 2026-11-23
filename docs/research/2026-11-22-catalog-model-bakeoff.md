@@ -1,7 +1,7 @@
 # Catalogue sweep: Mistral model test
 
-Date: 2026-11-22. Part of issue #371, slice 2. Design:
-`docs/superpowers/specs/2026-11-21-weekly-data-refresh-design.md`.
+Date: 2026-11-22. Part of issue #371, slice 2. Scope:
+`docs/catalog/watchlist.md`.
 
 ## Question
 

@@ -1,7 +1,6 @@
-/* LaVega public landing page. Ported from the approved mockup
- * (docs/superpowers/specs/2026-11-02-website-redesign-mockup.html): midnight
- * palette, Instrument Serif headlines over Geist, the cantaloupe gradient
- * only in the hero and the closing call to action.
+/* LaVega public landing page: midnight palette, Instrument Serif headlines
+ * over Geist, the cantaloupe gradient only in the hero and the closing call to
+ * action.
  *
  * Every page rule is scoped under `.lp` so it never reaches the app, and sits
  * in `@layer components` like base.css. The sign-in dialog block at the bottom

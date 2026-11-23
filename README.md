@@ -1,6 +1,6 @@
 # LaVega
 
-LaVega — local-first personal finance agent. See `docs/CONTEXT.md`.
+LaVega — local-first personal finance agent. Start with [`docs/README.md`](docs/README.md).
 
 Production deployment and the `lavega.dev` Cloudflare connection are documented
 in [DEPLOY.md](DEPLOY.md).

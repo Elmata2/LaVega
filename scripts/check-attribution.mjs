@@ -19,7 +19,7 @@ import { join, relative, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const PLAN = "docs/superpowers/specs/2026-11-10-sure-adoption-plan.md";
+const PLAN = "docs/provenance/sure.md";
 const README = "docs/research/sure/README.md";
 const NOTICE = "NOTICE";
 const SOURCE_ROOTS = ["packages", "apps"];

@@ -37,7 +37,7 @@ import { createPublicAuthLimiter } from "./authLimits.js";
 import { apiGuard, guardIsDisabled, INVESTING_API_ALIAS } from "./apiGuard.js";
 import { mcpRouteDependencies, registerMcpRoutes } from "./mcp/routes.js";
 import { sameOriginGuard } from "./sameOrigin.js";
-import { withRuntimeDatabase } from "@lavega/investing-server/src/credentialStore.js";
+import { withRuntimeDatabase } from "@lavega/database";
 import { LOCAL_TENANT_ID, localeRedirectTarget } from "@lavega/core";
 
 export const PORT = Number(process.env.PORT) || 8787;

@@ -1,6 +1,6 @@
 import { type ButtonHTMLAttributes, forwardRef } from "react";
 import { cva, type VariantProps } from "class-variance-authority";
-import { cn } from "./utils.js";
+import { cn } from "@lavega/ui";
 
 /* Extracted from `.pill`/`.pill-active` (docs/adr/0005) — the toggle-chip
  * button (bank-mode switch, category filter, "widget toevoegen"), not the

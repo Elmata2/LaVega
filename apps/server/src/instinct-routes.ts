@@ -13,9 +13,9 @@ import {
 import {
   credentialsArePerTenant,
   requireRuntimeDatabase,
-} from "@lavega/investing-server/src/credentialStore.js";
+} from "@lavega/database";
 import { consentLive, SESSION_TTL_MS, type EbSession } from "./eb-routes.js";
-import { investingTenantId } from "./investing-mount.js";
+import { investingTenantId } from "./auth.js";
 import { CONSENT_VERSION } from "./instinctConsent.js";
 import { maskPhone } from "./whatsapp/linking.js";
 

@@ -8,8 +8,8 @@ import {
 import {
   credentialsArePerTenant,
   requireRuntimeDatabase,
-} from "@lavega/investing-server/src/credentialStore.js";
-import { investingTenantId } from "./investing-mount.js";
+} from "@lavega/database";
+import { investingTenantId } from "./auth.js";
 
 /** A generous bound, matching 0019_personal_net_worth_totals.sql's CHECK: only
  *  wide enough to reject a garbage or overflowed value before it ever reaches

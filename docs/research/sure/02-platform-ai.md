@@ -5,7 +5,8 @@ Commit `562fe096d149cb4d1fb1e6d3446527572c1ec7f6` (2026-11-10). Shallow clone; s
 All citations are repo-relative under `/tmp/sure` (`path:line`). Docs claims are marked "docs"; code claims were read.
 
 Method: read `docs/CONTEXT.md`, `docs/investing/PORTFOLIO-AGENTS.md`,
-`docs/research/2026-10-26-lavega-agent-memory-design.md`, `docs/adr/0007` first; then read Sure
+`docs/adr/0007-agent-memory-in-neon.md` and `docs/adr/0014-server-reads-transactions-at-night.md`
+first; then read Sure
 models/controllers/services/jobs/docs and cross-checked the MCP tool inventory against
 `app/models/assistant/function/*.rb` (55 files, 8,367 lines). No runtime, no Rails, no bundle.
 

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Button } from "./ui/button";
+import { Button } from "@lavega/ui";
 import { GICS_SECTOR_LABELS } from "@lavega/core";
 
 type SectorKind = "stock" | "fund" | "unknown";

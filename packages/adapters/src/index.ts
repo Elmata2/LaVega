@@ -4,7 +4,6 @@ export * from "./storage/encryptedStorage.js";
 export * from "./prices/PriceStore.js";
 export * from "./prices/sharedPriceStoreCore.js";
 export * from "./crypto/vaultCrypto.js";
-export * from "./credentials/localCredentialStore.js";
 export * from "./credentials/localKeySource.js";
 export * from "./banking/BankAccessAdapter.js";
 export * from "./banking/fileImport.js";

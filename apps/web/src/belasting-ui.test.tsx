@@ -374,10 +374,10 @@ test("(a) the bookkeeping sheet reaches the BTW figure through the view's own re
 
 /* ── DE WOORDTEST ──────────────────────────────────────────────────────────
  *
- * Sectie 7 van docs/superpowers/specs/2026-08-20-belastingoptimalisatie-design.md:
- * LaVega mag zeggen wat er gebeurd is, wanneer de volgende datum valt en wat een
- * gepubliceerde regel zegt — niet wat hij ermee moet doen. Goede voornemens in
- * een comment hebben een houdbaarheidsdatum; een rode test niet.
+ * De grensregel voor belastingcopy: LaVega mag zeggen wat er gebeurd is,
+ * wanneer de volgende datum valt en wat een gepubliceerde regel zegt — niet wat
+ * hij ermee moet doen. Goede voornemens in een comment hebben een
+ * houdbaarheidsdatum; een rode test niet.
  *
  * VIER DINGEN OVER DEZE TEST, alle vier met opzet:
  *
@@ -448,8 +448,7 @@ function assertGeenVerbodenWoord(text: string, where: string) {
   const hit = FORBIDDEN.find((w) => lower.includes(w));
   expect(
     hit,
-    `verboden woord "${hit}" in ${where} — zie sectie 7 van ` +
-      "docs/superpowers/specs/2026-08-20-belastingoptimalisatie-design.md: meten of zwijgen. " +
+    `verboden woord "${hit}" in ${where} — grensregel: meten of zwijgen. ` +
       "Herkomst: apps/web/src/views/Belasting.tsx, apps/web/src/copy/optimise.ts (grens) of packages/core/src/taxpacks/.",
   ).toBeUndefined();
 }
@@ -824,8 +823,7 @@ function assertNoForbiddenWord(text: string, where: string, forbidden: readonly 
   const hit = forbidden.find((w) => lower.includes(w));
   expect(
     hit,
-    `forbidden word "${hit}" in ${where} — see section 7 of ` +
-      "docs/superpowers/specs/2026-08-20-belastingoptimalisatie-design.md: measure or stay silent.",
+    `forbidden word "${hit}" in ${where} — boundary rule: measure or stay silent.`,
   ).toBeUndefined();
 }
 

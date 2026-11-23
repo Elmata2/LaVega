@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type CSSProperties } from "react";
 import type { SectorCoverage } from "@lavega/core";
 import type { SectorState } from "../lib/sectorResource.js";
 import { EmptyState } from "./EmptyState.js";
-import { Card, CardContent, CardHeader, CardTitle } from "./ui/card.js";
+import { Card, CardContent, CardHeader, CardTitle } from "@lavega/ui";
 
 const barColors = [
   "var(--color-chart-blue)",

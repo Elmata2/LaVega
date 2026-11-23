@@ -63,15 +63,14 @@ export function upsertBalance(list: RewardsBalance[], b: RewardsBalance): Reward
  * run een bestand van een andere lane. De weerlegde core-regel
  * { name: "ING", note: "ING NL heeft geen puntenprogramma" } is inmiddels WEG —
  * rewards.ts draagt nu ING_NOTE met de echte drempels, het citaat uit de
- * voorwaarden en de bron erbij, en er staan tests op die de note tegen
- * docs/research/2026-08-20-punten-koersen.md leggen in plaats van tegen
- * zichzelf. Deze lijst en die note mogen dus samengevoegd worden; dat is
+ * voorwaarden en de bron erbij, en er staan tests op die de note tegen een
+ * vastgelegde broncapture leggen in plaats van tegen zichzelf. Deze lijst en
+ * die note mogen dus samengevoegd worden; dat is
  * opruimwerk en geen correctie meer.
  *
  * Wat we van ING weten (bron: ING's eigen pagemodel-API achter
  * ing.nl/particulier/ing-punten/zo-spaar-je-ing-punten, opgehaald 21-08-2026,
- * plus de Voorwaarden ING Punten geldig vanaf 01-10-2025 —
- * docs/research/2026-08-20-punten-koersen.md):
+ * plus de Voorwaarden ING Punten geldig vanaf 01-10-2025):
  *
  *   - Er is GEEN koers per bestede euro. ING beloont drempels: "meer dan € 100
  *     uitgeven" geeft 250 punten bij € 100 én bij € 4.000. Delen door de drempel

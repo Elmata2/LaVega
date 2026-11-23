@@ -3,7 +3,7 @@ import { useAppLocale } from "../appLocale.js";
 import { shellCopy } from "../copy/shell.js";
 import { buttonVariants } from "../components/ui/Button.js";
 import Card from "../components/ui/Card.js";
-import { cn } from "../components/ui/utils.js";
+import { cn } from "@lavega/ui";
 import StatusLine from "../components/ui/StatusLine.js";
 import type { ShellNotice } from "../shellNotice.js";
 import { useOpenCardFile } from "../components/import/CardFileContext.js";

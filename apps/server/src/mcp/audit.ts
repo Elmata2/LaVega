@@ -8,7 +8,7 @@
  */
 
 import { createMcpTokenRepository, type McpAuditEntry } from "@lavega/database";
-import { runtimeDatabase } from "@lavega/investing-server/src/credentialStore.js";
+import { runtimeDatabase } from "@lavega/database";
 
 export type McpAuditSink = (entry: McpAuditEntry) => Promise<void>;
 

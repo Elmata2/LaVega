@@ -5,8 +5,9 @@ import { parseQueue } from "./n8n";
 
 /* De regressiewacht op de factuur-workflow.
  * ─────────────────────────────────────────
- * Bron: docs/n8n/2026-08-24-workflow-diagnose.md. Die diagnose vond acht
- * bevindingen in de workflow. Ze zijn allemaal gerepareerd in de export in
+ * Bron: de workflowdiagnose van 24 augustus 2026 en de operationele gids in
+ * docs/n8n/FACTUREN.md. Die diagnose vond acht bevindingen in de workflow.
+ * Ze zijn allemaal gerepareerd in de export in
  * docs/n8n/, en tot vandaag was dat één keer met de hand nagekeken: geen enkele
  * test las docs/n8n/lavega-facturen-workflow.json, en de ophaal-webhook (methode,
  * pad, responseMode, token, origins) werd nergens in de repo genoemd. Elke

@@ -20,7 +20,7 @@ Sure, the community fork of Maybe Finance:
 - Scope: independently reimplemented TypeScript modules and adapted behavioural test fixtures.
   No Ruby source is vendored. Each derived file carries the upstream project, commit,
   AGPL-3.0 notice, the words "independently reimplemented for LaVega" and its change date.
-  The provenance ledger is docs/superpowers/specs/2026-11-10-sure-adoption-plan.md, Appendix A.
+  The provenance ledger is docs/provenance/sure.md, Appendix A.
 - Attribution: Sure is a fork of Maybe Finance. LaVega is not affiliated with or endorsed by
   Maybe Finance Inc. or the Sure maintainers. "Maybe" and "Sure" identify the upstream source
   only.

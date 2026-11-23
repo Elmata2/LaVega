@@ -1,5 +1,5 @@
 import { createAiUsageRepository, type AiUsage } from "@lavega/database";
-import { runtimeDatabase } from "@lavega/investing-server/src/credentialStore.js";
+import { runtimeDatabase } from "@lavega/database";
 import { loadBudgetConfig } from "../config.js";
 import { totalCostCents } from "./pricing.js";
 

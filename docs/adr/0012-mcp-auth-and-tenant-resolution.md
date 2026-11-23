@@ -6,7 +6,7 @@ Accepted 2026-11-10 (owner approved the MCP fast track; Phase 0 deliverable).
 
 ## Context
 
-The Sure adoption plan adds an external agent surface (WS5): a read-first `/mcp` endpoint that
+The Sure port adds an external agent surface (WS5): a read-first `/mcp` endpoint that
 lets the owner's own agents query the investing dashboard. Sure implements this as a
 JSON-RPC controller authenticated by a Doorkeeper OAuth bearer token or an env token, with one
 coarse `read_write` scope.

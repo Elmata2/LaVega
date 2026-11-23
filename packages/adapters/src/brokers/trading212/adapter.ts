@@ -1,3 +1,4 @@
+import { retryAfterMsOf } from "../../http/retryAfter.js";
 import {
   type CashBalance,
   type CashFlow,
@@ -157,15 +158,9 @@ function resetAtMs(response: Response): number | null {
 }
 
 function rateLimitWaitMs(response: Response, retry: number): number {
-  const retryAfter = response.headers.get("retry-after")?.trim();
-  if (retryAfter) {
-    const seconds = Number(retryAfter);
-    if (Number.isFinite(seconds) && seconds >= 0)
-      return Math.min(seconds * 1_000, MAX_RATE_LIMIT_WAIT_MS);
-    const timestamp = Date.parse(retryAfter);
-    if (Number.isFinite(timestamp))
-      return Math.min(Math.max(0, timestamp - Date.now()), MAX_RATE_LIMIT_WAIT_MS);
-  }
+  const retryAfterMs = retryAfterMsOf(response.headers.get("retry-after"));
+  if (retryAfterMs !== undefined) return Math.min(retryAfterMs, MAX_RATE_LIMIT_WAIT_MS);
+  if (response.headers.get("retry-after")?.trim() === "0") return 0;
   // Trading 212 does not document or send Retry-After. `x-ratelimit-reset` is the
   // only header that states when the window actually reopens; blind exponential
   // backoff tops out at 7s against a 60s window and always gives up too early.

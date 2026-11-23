@@ -13,7 +13,7 @@ The dashboard answers four questions:
 3. What does the portfolio hold now?
 4. What produced the return for one position?
 
-The app is a full-window shell with tabs in a top bar (Overview, and whichever of Positions, Net worth and Agents the owner has switched on) and a profile page for brokers, tabs and cards. See `docs/superpowers/specs/2026-09-28-investing-shell-design.md` for the shell's layout, module and widget model. Overview itself is a grid of independently hideable cards:
+The app is a full-window shell with tabs in a top bar (Overview, and whichever of Positions, Net worth and Agents the owner has switched on) and a profile page for brokers, tabs and cards. The shell's module and widget model lives in `apps/investing-web/src`; Overview itself is a grid of independently hideable cards:
 
 - A portfolio chart in EUR value mode or indexed-return mode.
 - A compact allocation donut.
@@ -238,16 +238,16 @@ lease; serial syncs are covered by these changes.
 
 ## Overview layout
 
-The chart-and-right-rail layout from the dashboard prototype ([Dashboard layout](https://github.com/Elmata2/LaVega/issues/78)) shaped the original widget choices; the investing shell (`docs/superpowers/specs/2026-09-28-investing-shell-design.md`) superseded it with an independently hideable widget grid.
+The chart-and-right-rail layout from the dashboard prototype ([Dashboard layout](https://github.com/Elmata2/LaVega/issues/78)) shaped the original widget choices; the investing shell superseded it with an independently hideable widget grid.
 
 Implementation status: refresh failures keep the last valid dashboard payload visible.
 
-Overview's card order and column placement (left/right/full-width) are owned by the widget registry described in `docs/superpowers/specs/2026-09-28-investing-shell-design.md` §3-4, not by this document. The positions table and the net-worth chart are on their own tabs and are laid out by those tabs' own pages, each full width.
+Overview's card order and column placement (left/right/full-width) are owned by the widget registry in `apps/investing-web/src`, not by this document. The positions table and the net-worth chart are on their own tabs and are laid out by those tabs' own pages, each full width.
 
 Prototype reference: [`prototype-layout-78`](https://github.com/Elmata2/LaVega/tree/prototype-layout-78).
 
 The per-tenant module and widget toggles persist in `investing.preferences.layout` (migration
-`db/migrations/0016_investing_layout.sql`). Apply it with `pnpm db:migrate` before deploying
+`db/migrations/0016_investing_layout.sql`). Apply it with `bun run db:migrate` before deploying
 this shell; without it, `GET`/`PUT /api/investing/layout` fail against that tenant's row.
 
 ## Portfolio chart modes

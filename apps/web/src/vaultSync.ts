@@ -77,8 +77,8 @@ export async function eraseServerData(locale: Locale): Promise<ErasureReport> {
 }
 
 /* ---------------------------------------------------------------------------
- * Reset personal data (docs/superpowers/specs/2026-11-14-personal-data-reset-design.md).
- * Not a GDPR erase: the login, the vault key and Investing stay. */
+ * Reset personal data. Not a GDPR erase: the login, the vault key and
+ * Investing stay. */
 
 /** Browser keys that hold personal state. Theme, widths, language, chart choice,
  *  owner name, country, region, tax country and behaviour preferences are NOT

@@ -1,4 +1,5 @@
 import type { Provider } from "../providerRouter.js";
+import { retryAfterMsOf } from "../../http/retryAfter.js";
 import type {
   IdentifierCandidate,
   IdentifierCandidateSelector,
@@ -22,16 +23,6 @@ const MAX_ATTEMPTS = 5;
 /** A Retry-After longer than this is not worth holding the key for. */
 const MAX_RETRY_AFTER_MS = 120_000;
 const OPENFIGI_KEY = partnerKey("openfigi:mapping");
-
-/** Retry-After is seconds or an HTTP date. Returns the wait in ms, or undefined. */
-function retryAfterMsOf(header: string | null, nowMs: number): number | undefined {
-  const raw = header?.trim();
-  if (!raw) return undefined;
-  const seconds = Number(raw);
-  if (Number.isFinite(seconds)) return seconds > 0 ? seconds * 1_000 : undefined;
-  const at = Date.parse(raw);
-  return Number.isFinite(at) && at > nowMs ? at - nowMs : undefined;
-}
 
 /** One OpenFIGI mapping row, copied field by field. Nothing is reconstructed:
  *  a candidate either carries a string ticker or is not a candidate. */

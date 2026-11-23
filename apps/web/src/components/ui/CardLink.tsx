@@ -1,6 +1,6 @@
 import { type ButtonHTMLAttributes, forwardRef } from "react";
 import { cva, type VariantProps } from "class-variance-authority";
-import { cn } from "./utils.js";
+import { cn } from "@lavega/ui";
 
 /* Extracted from `.card-link`/`.card-link-danger` (docs/adr/0005) — the
  * borderless "see more" / destructive-action button inside a card.

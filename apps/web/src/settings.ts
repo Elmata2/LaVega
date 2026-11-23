@@ -283,8 +283,7 @@ export function clearLegacyN8nLocalStorage(): void {
   }
 }
 
-/* --- Het doorstuuradres voor facturen (docs/superpowers/specs/
- * 2026-08-17-invoice-forwarding-address-design.md).
+/* --- Het doorstuuradres voor facturen.
  *
  * Cloudflare routeert het HELE domein als catch-all, dus een nieuw adres kost
  * geen enkele instelling ergens: het lokale deel IS de wachtrijsleutel. Daarom

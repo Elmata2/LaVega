@@ -36,16 +36,13 @@ test("isStale: true past maxDays, false within", () => {
  * misging: de oude note ("ING NL heeft geen puntenprogramma") stond er maanden,
  * werd door geen enkele test tegengesproken, en was al die tijd fout.
  *
- * Dus wordt hier het RESEARCHDOCUMENT gelezen — het verslag van de zoekronde van
- * 21 augustus 2026, met ING's eigen tabel en het citaat uit de voorwaarden erin —
- * en wordt elk cijfer in de note daartegen gehouden. Verandert de bron, dan valt
- * deze test om; verzint iemand een koers, dan ook.
+ * Dus wordt hier de vastgelegde broncapture gelezen — ING's eigen tabel en het
+ * citaat uit de voorwaarden — en wordt elk cijfer in de note daartegen gehouden.
+ * Verandert de capture, dan valt deze test om; verzint iemand een koers, dan ook.
  *
  * I/O in een test van packages/core is geen I/O in packages/core: het pakket
  * blijft puur, dit bestand leest alleen wat het moet toetsen — dezelfde
  * uitzondering die catalogArtifact.test.ts en bankNl.test.ts al maken. */
-
-const REPO = new URL("../../../", import.meta.url);
 
 /** De bron als één doorlopende regel. Markdown breekt een citaat over meerdere
  *  regels met "> " ervoor, en een zin die in het document over twee regels staat
@@ -57,7 +54,7 @@ const flat = (s: string): string =>
     .replace(/\s+/g, " ")
     .trim();
 const SOURCE = flat(
-  readFileSync(new URL("docs/research/2026-08-20-punten-koersen.md", REPO), "utf8"),
+  readFileSync(new URL("./__fixtures__/ing-points-source.md", import.meta.url), "utf8"),
 );
 
 const ING = REWARD_PROGRAMS.find((p) => p.name === "ING");

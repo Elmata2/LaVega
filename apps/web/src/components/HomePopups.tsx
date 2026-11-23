@@ -18,7 +18,7 @@ import {
   type PopupId,
 } from "../lib/popups.js";
 import Button from "./ui/Button.js";
-import Dialog from "./ui/Dialog.js";
+import { Dialog } from "@lavega/ui";
 
 export type HomePopupsProps = {
   view: View;

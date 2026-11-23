@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { createRateLimitRepository, type Database } from "@lavega/database";
-import { runtimeDatabase } from "@lavega/investing-server/src/credentialStore.js";
+import { runtimeDatabase } from "@lavega/database";
 import { createRateLimiter, type RateLimiter } from "./rateLimit.js";
 
 /*

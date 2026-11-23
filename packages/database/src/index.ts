@@ -101,7 +101,7 @@ export async function withTenantStatement<T>(
   });
 }
 
-function encryptionKey(): Buffer {
+export function encryptionKey(): Buffer {
   const value = process.env.LAVEGA_ENCRYPTION_KEY;
   if (!value) throw new Error("LAVEGA_ENCRYPTION_KEY is required");
   const key = /^[0-9a-f]{64}$/i.test(value)
@@ -1671,7 +1671,7 @@ export async function eraseUserData(
   });
 }
 
-/* The personal-side reset (docs/superpowers/specs/2026-11-14-personal-data-reset-design.md).
+/* The personal-side reset.
  * A literal list, like USER_DATA_TABLES, and deliberately SHORTER than it: no
  * investing.* table, no Better Auth table, and two personal tables stay.
  *
@@ -2196,7 +2196,7 @@ export type N8nForwardingWrite =
 /* `ON CONFLICT (user_id)` in setLocalPart's INSERT covers the primary key,
  * not local_part's own unique index — a taken local part reaches Postgres as
  * a unique-violation error instead of triggering the upsert. */
-function isUniqueViolation(err: unknown): boolean {
+export function isUniqueViolation(err: unknown): boolean {
   return (
     typeof err === "object" &&
     err !== null &&
@@ -2272,3 +2272,4 @@ export * from "./agentMemory.js";
 export * from "./rateLimit.js";
 export * from "./mcpTokens.js";
 export * from "./partnerBudget.js";
+export * from "./runtime.js";

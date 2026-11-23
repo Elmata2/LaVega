@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import type { CashFlowKind } from "@lavega/core";
 import { Switch } from "./LayoutPicker.js";
-import { Button } from "./ui/button.js";
-import { Card, CardContent, CardHeader, CardTitle } from "./ui/card.js";
+import { Button } from "@lavega/ui";
+import { Card, CardContent, CardHeader, CardTitle } from "@lavega/ui";
 import {
   afterSignChange,
   confirmCashFlowSuggestion,

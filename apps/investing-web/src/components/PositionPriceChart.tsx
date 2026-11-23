@@ -11,7 +11,7 @@ import {
 } from "recharts";
 import { EmptyState } from "./EmptyState";
 import { LineSwatch, Swatch } from "./Swatch";
-import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@lavega/ui";
 import { Segmented } from "./ui/segmented";
 import { axisTick, ChartContainer } from "./ui/chart";
 import { chartRanges, positionPointsForRange, useChartWindow } from "./useChartWindow";

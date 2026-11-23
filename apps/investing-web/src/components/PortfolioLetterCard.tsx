@@ -1,7 +1,7 @@
 import type { LetterState, LetterWriteState } from "../lib/portfolioLetter.js";
 import { shortDate } from "../lib/dates.js";
-import { Button } from "./ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
+import { Button } from "@lavega/ui";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@lavega/ui";
 
 const letterDate = new Intl.DateTimeFormat("en-GB", {
   day: "numeric",

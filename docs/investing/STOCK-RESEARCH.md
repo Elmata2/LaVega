@@ -41,4 +41,3 @@ the report expires or newer facts are needed.
 
 Verification drive: [.claude feature map](../../.claude/skills/verify-investing/features/stock-research.md).
 
-Test ownership and portable Web Crypto signing: [test audit](STOCK-RESEARCH-TEST-AUDIT.md).

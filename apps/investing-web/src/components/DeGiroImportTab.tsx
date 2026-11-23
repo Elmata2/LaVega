@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { Button } from "./ui/button.js";
+import { Button } from "@lavega/ui";
 import { DASHBOARD_REFRESH_EVENT } from "../lib/syncSession.js";
 import {
   commitDeGiroImport,

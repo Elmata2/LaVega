@@ -1,8 +1,8 @@
 import type { Hono } from "hono";
 import { loadN8nQueueConfig } from "./config.js";
 import { createN8nForwardingRepository, type N8nForwardingWrite } from "@lavega/database";
-import { runtimeDatabase } from "@lavega/investing-server/src/credentialStore.js";
-import { investingTenantId } from "./investing-mount.js";
+import { runtimeDatabase } from "@lavega/database";
+import { investingTenantId } from "./auth.js";
 
 /* The invoice-queue proxy. Moved off a direct browser-to-n8n call
  * (docs/adr/0006-invoice-queue-server-proxy.md) so a user configures nothing:

@@ -60,14 +60,20 @@ vi.mock("@lavega/investing-server/src/index.js", () => ({
   },
   createRuntimeApp: createRuntimeAppMock,
 }));
-vi.mock("./auth.js", () => ({ getAuth: getAuthMock, verifiedSession: verifiedSessionMock }));
-vi.mock("@lavega/investing-server/src/credentialStore.js", async (importOriginal) => ({
+vi.mock("./auth.js", async (importOriginal) => ({
   ...(await importOriginal<object>()),
-  runtimeDatabase: runtimeDatabaseMock,
+  getAuth: getAuthMock,
+  verifiedSession: verifiedSessionMock,
+  investingTenantId: async () => {
+    if (!getAuthMock()) return "local";
+    const session = await verifiedSessionMock();
+    return session?.user?.id ?? null;
+  },
 }));
 vi.mock("@lavega/database", async (importOriginal) => ({
   ...(await importOriginal<object>()),
   listBrokerSyncTenants: listBrokerSyncTenantsMock,
+  runtimeDatabase: runtimeDatabaseMock,
 }));
 vi.mock("@lavega/investing-server/src/standalone.js", () => ({
   createStaticFetch: createStaticFetchMock,

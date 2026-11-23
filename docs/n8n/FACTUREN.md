@@ -226,7 +226,7 @@ controleerde hem. Dat is precies waarom een verzoek zonder bijlage en zonder
 tekst maandenlang de deur uit kon.
 
 Nu staat die logica in `packages/core/src/n8n/` als gewone bestanden, met tests
-ernaast (`pnpm --filter @lavega/core test`). `pnpm run sync:n8n` schrijft ze
+ernaast (`bun --filter @lavega/core test`). `bun run sync:n8n` schrijft ze
 letterlijk in de nodes; `codeNodes.test.ts` bouwt ze opnieuw en vergelijkt, dus
 een node die uit de pas loopt laat de testsuite vallen.
 
@@ -234,7 +234,7 @@ een node die uit de pas loopt laat de testsuite vallen.
 > exporteer je de workflow terug hierheen, dan wint jouw versie en faalt die
 > test. Dat is de bedoeling — het is de enige manier waarop de twee uit elkaar
 > kunnen lopen. Wijzig liever het bestand in `packages/core/src/n8n/` en draai
-> `pnpm run sync:n8n`.
+> `bun run sync:n8n`.
 
 ## Workflow bijwerken bij een release
 
@@ -244,7 +244,7 @@ de live workflow: "Normaliseer binnengekomen mail", "Melding: zelf ophalen" en
 "Naar LaVega-vorm". Zet eerst de nieuwe web-build live, daarna de workflow.
 
 Draai vóór de release, nadat de echte Gmail-capture is toegevoegd:
-`REQUIRE_REAL_GMAIL_FIXTURE=1 pnpm --filter @lavega/core test`. De release is
+`REQUIRE_REAL_GMAIL_FIXTURE=1 bun --filter @lavega/core test`. De release is
 geblokkeerd tot die slaagt.
 
 ## Wat je moet controleren bij de eerste run

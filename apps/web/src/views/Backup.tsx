@@ -99,7 +99,7 @@ const formatDateTime = (locale: Locale, iso: string) =>
   new Date(iso).toLocaleString(locale === "nl" ? "nl-NL" : "en-GB");
 
 /**
- * Reset the personal side only (docs/superpowers/specs/2026-11-14-personal-data-reset-design.md).
+ * Reset the personal side only.
  * Whether a server exists is decided by the owner, before any click: an account
  * owner always has one (so the server call must succeed first), a device owner
  * is a local-only install. On success the page reloads at /app.

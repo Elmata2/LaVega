@@ -3,7 +3,7 @@ import { fileURLToPath } from "node:url";
 import { beforeEach, expect, test, vi } from "vitest";
 import { findAdviceLanguage } from "@lavega/core";
 import { markOnboardingSeen, onboardingSeen, showOnboarding } from "./onboarding.js";
-import { LANDING_COPY, landingCopy } from "./landingCopy.js";
+import { landingCopy } from "./landingCopy.js";
 import { shellCopy } from "./copy/shell.js";
 
 beforeEach(() => {
@@ -83,8 +83,4 @@ test("the overview prompt stays inside the information-only line", () => {
     "utf8",
   );
   expect(findAdviceLanguage(prompt, "nl")).toEqual([]);
-});
-
-test("the landing copy exports both locales", () => {
-  expect(Object.keys(LANDING_COPY).sort()).toEqual(["en", "nl"]);
 });

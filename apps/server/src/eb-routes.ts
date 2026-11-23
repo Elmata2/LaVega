@@ -3,8 +3,8 @@ import { createRateLimiter, clientIp, rateLimitKey, type RateLimiter } from "./a
 import type { Hono } from "hono";
 import { loadConfig, type EbConfig, type PsuType } from "./config.js";
 import { createEbFlowRepository } from "@lavega/database";
-import { runtimeDatabase } from "@lavega/investing-server/src/credentialStore.js";
-import { investingTenantId } from "./investing-mount.js";
+import { runtimeDatabase } from "@lavega/database";
+import { investingTenantId } from "./auth.js";
 import { eb, type EbClientConfig } from "./eb-client.js";
 
 /* Enable Banking AIS flow. The server holds the app credential (JWT signing)

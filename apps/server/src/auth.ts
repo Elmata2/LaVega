@@ -1,6 +1,6 @@
 import { betterAuth, type Auth } from "better-auth";
-import { type Database } from "@lavega/database";
-import { runtimeDatabase } from "@lavega/investing-server/src/credentialStore.js";
+import { LOCAL_TENANT_ID } from "@lavega/core";
+import { runtimeDatabase, type Database } from "@lavega/database";
 import {
   emailLocale,
   passwordChangedEmail,
@@ -169,4 +169,14 @@ export async function verifiedSession(request: Request) {
   const auth = getAuth();
   if (!auth) return null;
   return auth.api.getSession({ headers: request.headers });
+}
+
+/**
+ * Tenant a request belongs to, or `null` when unauthenticated. Without auth
+ * configured (local dev, self-hosted) there is one local tenant.
+ */
+export async function investingTenantId(request: Request): Promise<string | null> {
+  if (!getAuth()) return LOCAL_TENANT_ID;
+  const session = await verifiedSession(request);
+  return session?.user?.id ?? null;
 }

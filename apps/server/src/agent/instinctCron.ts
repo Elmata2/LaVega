@@ -8,9 +8,9 @@ import {
   purgeLinkAttempts,
   type DueUser,
 } from "@lavega/database";
-import { runtimeDatabase } from "@lavega/investing-server/src/credentialStore.js";
+import { runtimeDatabase } from "@lavega/database";
 import { SESSION_TTL_MS } from "../eb-routes.js";
-import { authorizedCronRequest } from "../investing-mount.js";
+import { authorizedCronRequest } from "../secrets.js";
 import { authBaseUrl } from "../auth.js";
 import { getRates } from "../rates.js";
 import { sendAgentEmail } from "./emailChannel.js";

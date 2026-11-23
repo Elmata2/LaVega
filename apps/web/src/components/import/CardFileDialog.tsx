@@ -19,7 +19,7 @@ import {
   type FilePreview,
 } from "../../lib/cardFileImport.js";
 import Button from "../ui/Button.js";
-import Dialog from "../ui/Dialog.js";
+import { Dialog } from "@lavega/ui";
 import StatusLine from "../ui/StatusLine.js";
 
 /* One dialog: choose the card, see how to get the file, drop files, check what

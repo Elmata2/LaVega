@@ -1,6 +1,6 @@
 import { type ButtonHTMLAttributes, forwardRef } from "react";
 import { cva, type VariantProps } from "class-variance-authority";
-import { cn } from "./utils.js";
+import { cn } from "@lavega/ui";
 
 /* Extracted from `.btn`/`.btn-primary` (docs/adr/0005) — 16 call sites shared
  * that one hand-written pair; a component keeps the single source of truth

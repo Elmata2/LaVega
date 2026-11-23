@@ -1,7 +1,7 @@
 # Sure teardown: what it is, what is worth taking, and what is not
 
-Date: 2026-11-10. Status: research complete, adoption plan in
-[`docs/superpowers/specs/2026-11-10-sure-adoption-plan.md`](../superpowers/specs/2026-11-10-sure-adoption-plan.md).
+Date: 2026-11-10. Status: research complete. Port provenance is in
+[`docs/provenance/sure.md`](../provenance/sure.md).
 
 Source: [`we-promise/sure`](https://github.com/we-promise/sure) at commit
 `562fe096d149cb4d1fb1e6d3446527572c1ec7f6` (2026-11-10), shallow clone at `/tmp/sure`,
@@ -22,7 +22,7 @@ Raw notes and full citations live in [`docs/research/sure/`](./sure/README.md):
 
 Both projects are AGPL-3.0 Rails-vs-TypeScript products with opposite deployment shapes.
 Sure is a family/household, server-rendered monolith backed by Postgres, Redis and Sidekiq.
-LaVega is a local-first pnpm monorepo with an encrypted browser vault (personal side) and a
+LaVega is a local-first bun monorepo with an encrypted browser vault (personal side) and a
 Neon-backed investing dashboard. Almost no Ruby file can be pasted into LaVega. What does
 travel is the part LaVega is thinnest on: the _semantics of money workflows_ — transfers,
 bills/occurrences, budgets, statements/evidence, rules depth, and the agent tool contract.
@@ -129,8 +129,7 @@ Condensed:
 
 Legend: **PORT** = reimplement the algorithm/logic in TypeScript/Effect, using the Ruby as
 the spec and its tests as behaviour fixtures. **CONCEPT** = take the design/contract and
-write new code. **SKIP** = do not take. Effort: S ≤ 1 day, M 2–5 days, L 1–2 weeks
-(one focused agent, as used in `plans/README.md`).
+write new code. **SKIP** = do not take. Effort: S ≤ 1 day, M 2–5 days, L 1–2 weeks.
 
 ### 4.1 Personal finance (the bulk of the value)
 
@@ -308,6 +307,5 @@ workstreams, ordered by value/risk:
    tool-loop hardening, spend governance.
 6. Interop/hardening: LaVega export, attribution, eval fixtures.
 
-Exact tasks, target files, acceptance criteria, sequencing and the decisions needed from the
-owner are in the adoption plan:
-[`docs/superpowers/specs/2026-11-10-sure-adoption-plan.md`](../superpowers/specs/2026-11-10-sure-adoption-plan.md).
+Current work and sequencing live in [`docs/BACKLOG.md`](../BACKLOG.md) and GitHub issues.
+Port attribution is recorded in [`docs/provenance/sure.md`](../provenance/sure.md).

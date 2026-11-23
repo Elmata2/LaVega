@@ -56,7 +56,7 @@ Each turn the agent gets a small fixed summary: risk tolerance and the user's go
 - Thesis identity was originally the normalized broker symbol, not a cross-broker instrument identifier, so different symbols for the same security could hold separate theses (the preview holdings include `GOOGL_US_EQ` and `ABEAd_EQ`, both with ISIN `US02079K3059`). **Resolved by the canonical instrument key in the update below (WS4.5, #297).** Holdings and trade records still keep their broker symbols; the key is the identity the agent reads by.
 - Encrypting free text rules out SQL full-text search over memory. `recall_memory` filters by agent, symbol, and date instead. Semantic recall, if it comes, needs its own decision on how encrypted text is indexed.
 - The user can list, reopen, and delete threads, and edit theses and goals. A thesis cannot be deleted on its own; erase all data removes it.
-- The data export must include threads, theses, goals, observations, and risk tolerance. It also includes portfolio letters (ADR 0008).
+- The data export must include threads, theses, goals, observations, and risk tolerance. It also includes portfolio letters (ADR 0016).
 
 ## Update: canonical instrument keys (WS4.5, #297)
 

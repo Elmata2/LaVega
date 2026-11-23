@@ -94,8 +94,8 @@ The rules for agents are in `AGENTS.md` ("TypeScript: Effect").
 - **The vendored tree is 48 MB and a maintenance duty.** It is squashed into a
   single commit, excluded from lint, format, search and editor tooling, and
   refreshed with one `git subtree pull`.
-- **`pnpm-workspace.yaml` gains `effect@4.0.1` in `minimumReleaseAgeExclude`.**
-  pnpm's supply-chain policy quarantines brand-new releases; the entry is what
+- **`bunfig.toml` gains `effect@4.0.1` in `minimumReleaseAgeExcludes`.**
+  Bun's supply-chain policy quarantines brand-new releases; the entry is what
   lets the pin install at all.
 
 ## What it costs
