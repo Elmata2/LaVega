@@ -19,6 +19,14 @@
   html:has(.lp) {
     background: #02070a;
     scroll-padding-top: 96px;
+    /* Anchor jumps travel the long page instead of teleporting; reduced motion
+     * turns this back into an instant jump below. */
+    scroll-behavior: smooth;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    html:has(.lp) {
+      scroll-behavior: auto;
+    }
   }
   body.lp-scroll {
     background: #02070a;
