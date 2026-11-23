@@ -2,8 +2,8 @@
 
 ## Status
 
-Accepted. Renumbered from the duplicate `0008-portfolio-letter.md` on
-2026-11-23; ADR 0008 remains the Effect standard.
+Accepted. Renumbered from the former duplicate `0008` slot on 2026-11-23;
+ADR 0008 remains the Effect standard.
 
 ## Decision
 

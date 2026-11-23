@@ -24,7 +24,7 @@ shape of the owner's Dutch ING data, not the data itself.
 | Forecast absolute error, 30-day checkpoint | 0.62%  | **0.01%**                                                                      | projected weekly close vs actual ledger, as % of the opening position (#290 fixture)                                    |
 | Forecast absolute error, 60-day checkpoint | 1.42%  | **0.01%**                                                                      | same                                                                                                                    |
 | Forecast absolute error, 90-day checkpoint | 2.18%  | **0.04%**                                                                      | same                                                                                                                    |
-| Internal-transfer match rate               | —      | **100%** (12/12 labelled same-day pairs auto-confirmed, 0 left as suggestions) | transfer matcher over the real-shaped vault; the plan's confirmed/(confirmed+rejected+suggested-after-30-days) analogue |
+| Internal-transfer match rate               | —      | **100%** (12/12 labelled same-day pairs auto-confirmed, 0 left as suggestions) | transfer matcher over the real-shaped vault; Sure's confirmed/(confirmed+rejected+suggested-after-30-days) analogue |
 | Uncategorized share                        | —      | **0%** (0 of 160 fixture rows)                                                 | built-in categorizer tiers over the real-shaped vault                                                                   |
 
 The uncategorized 0% is a property of the synthetic fixture: its counterparties are common

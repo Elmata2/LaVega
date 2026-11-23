@@ -276,11 +276,10 @@ nog tussen zit, met per punt de reden dat het er nog is.
 
 Twee losse dingen, en het tweede is groter dan het eerste.
 
-**a) Investing als tweede Railway-service.** `Dockerfile.investing` bestaat en is beschreven in
-`docs/investing/DOCKER.md`: één container die de dashboard en de API serveert op poort 8788, met
-`/data` als volume voor de prijs-cache en de versleutelde brokerkluis. `railway.json` bouwt vandaag
-alleen de gewone `Dockerfile`. Wat er moet gebeuren: een tweede service die op
-`Dockerfile.investing` bouwt, en daarna `VITE_INVESTING_URL` op de web-build zetten. Tot dat er
+**a) Investing als tweede Railway-service.** De repo heeft geen aparte investing-container;
+`railway.json` bouwt vandaag de gewone all-in-one service (zie `DEPLOY.md`). Een tweede service
+moet de dashboard en de API op poort 8788 serveren, met `/data` als volume voor de prijs-cache en
+de versleutelde brokerkluis. Daarna moet `VITE_INVESTING_URL` op de web-build staan. Tot dat er
 staat, verbergt `investing.ts` de link — bewust, want _"a link that refuses to connect is worse than
 no link"_ — en ziet hij de app dus niet in de navigatie.
 

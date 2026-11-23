@@ -190,9 +190,8 @@ queue rate limit, then POSTs to the owner's n8n webhook (`apps/email-worker/READ
 
 One Vercel Build Output API deployment builds personal SPA + prerendered landing +
 investing SPA under `/investing/` + content site + one bundled Hono function
-(`scripts/vercel-build.mjs:1-260`; `vercel.json` `regions: fra1`). Self-hosting uses the
-all-in-one `Dockerfile` or investing-only `Dockerfile.investing` (`docs/investing/DOCKER.md:1-40`;
-`railway.json`). Operational detail in §5.5/§5.7.
+(`scripts/vercel-build.mjs:1-260`; `vercel.json` `regions: fra1`). Railway uses the
+all-in-one Railpack service (`railway.json`; `DEPLOY.md`). Operational detail in §5.5/§5.7.
 
 ---
 
@@ -238,7 +237,7 @@ all-in-one `Dockerfile` or investing-only `Dockerfile.investing` (`docs/investin
 - Forced RLS on every table keyed on `current_setting('app.user_id')`; one `SECURITY DEFINER`
   cross-tenant function for the cron (ADR 0004:20-40; migration `0022`). Neon pools are
   request-scoped (`STACK.md:78`; `credentialStore.ts:30-60`); the local tier falls back to JSON
-  file stores when no `DATABASE_URL` (`docs/investing/DOCKER.md:20-30`).
+  file stores when no `DATABASE_URL` (`credentialStore.ts:30-60`).
 
 ### 2.3 What this means for Sure-derived modules
 

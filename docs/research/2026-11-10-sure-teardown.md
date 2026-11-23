@@ -91,7 +91,7 @@ Product shape that matters for LaVega:
 | Providers | Runtime registry + concept interfaces + per-provider adapters                        | Concept aligns with LaVega's adapter seams; connectors themselves are US/EU aggregators LaVega rejects.   |
 | AI/MCP    | Assistant function classes == MCP tools; Doorkeeper OAuth or env token               | Strong contract to copy; auth model must be stricter in LaVega.                                           |
 
-Critical invariant differences to encode in the plan:
+Critical invariant differences to encode in ported modules:
 
 1. **Direction.** Normalize to an explicit `direction: "in" | "out"` or to LaVega's existing
    negative-outflow convention inside each new module. Never copy a formula that reads
@@ -244,7 +244,7 @@ Insights > Labels > Statement Vault > Investing materializers > Assistant intern
   - header on each ported module: `Port of Sure (we-promise/sure) commit 562fe09; AGPL-3.0; rewritten for LaVega`;
   - a `NOTICE` entry naming the Sure project, commit, licence and scope of reuse;
   - fixture files adapted from Sure's tests get the same note;
-  - keep a short provenance table in the plan/phase docs.
+  - keep a short provenance table in the port ledger.
     This is engineering guidance, not legal advice; a lawyer should confirm before a commercial
     distribution.
 
