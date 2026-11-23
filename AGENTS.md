@@ -57,10 +57,12 @@ web UI, macOS daemon); `packages/*` for shared libraries and config. Root script
 `pnpm run build`, `pnpm run dev`, `pnpm run lint`, `pnpm run format`, `pnpm run test`,
 `pnpm run typecheck`. Lint = oxlint; format = oxfmt (ESLint/Prettier replacements).
 
-Git worktrees share one global pnpm store. `.githooks/post-checkout` (installed by the
-root `prepare` script via `core.hooksPath`) runs `pnpm install --frozen-lockfile
---prefer-offline` when a fresh worktree has no `node_modules`, so `git worktree add`
-provisions itself offline. Set `LAVEGA_SKIP_WORKTREE_INSTALL=1` to opt out.
+Git worktrees share one global pnpm store and one `.turbo/cache`. `.githooks/post-checkout`
+(installed by the root `prepare` script via `core.hooksPath`) symlinks `.turbo/cache` from
+the primary worktree and runs `pnpm install --frozen-lockfile --offline` (falling back to
+`--prefer-offline` only for uncached deps) when a fresh worktree has no `node_modules`.
+Set `LAVEGA_SKIP_WORKTREE_INSTALL=1` to opt out. Run `pnpm run worktree:prune` (add
+`--apply` to delete) to clean up merged agent worktrees.
 
 ### TypeScript: Effect
 

@@ -30,6 +30,7 @@
     "catalog:report": "tsx scripts/catalog-report.ts",
     "business-savings:watch": "tsx scripts/business-savings-watch.ts",
     "catalog:find-pdfs": "tsx scripts/find-tariff-pdfs.ts",
+    "worktree:prune": "node scripts/worktree-prune.mjs",
     "prepare": "git config core.hooksPath .githooks || true"
   },
   "devDependencies": {

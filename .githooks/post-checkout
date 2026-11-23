@@ -1,17 +1,31 @@
 #!/bin/sh
-# Provision a fresh git worktree so no manual `pnpm install` is needed.
+# Provision a fresh git worktree fast and offline:
+#   1. Share the primary worktree's content-addressed .turbo/cache via symlink
+#      so unchanged packages hit cache immediately.
+#   2. Install node_modules with `pnpm install --frozen-lockfile --offline`
+#      (APFS copy-on-write from the global store, zero network, preserves
+#      per-worktree @lavega/* workspace links), falling back to --prefer-offline
+#      only when a new dependency is not yet in the global store.
 #
-# Fires on `git worktree add` and on every branch switch. It only acts when
-# node_modules is missing, so switching branches in an installed tree is a
-# no-op. The pnpm store is global and shared by every worktree, so this is
-# hardlink-only and needs no network when the store is warm.
-#
+# Fires on `git worktree add` and branch switches. No-op when already set up.
 # Opt out with LAVEGA_SKIP_WORKTREE_INSTALL=1.
 
 if [ -n "$LAVEGA_SKIP_WORKTREE_INSTALL" ]; then
 	exit 0
 fi
 
+# 1. Share .turbo/cache from the primary worktree when inside a linked worktree.
+git_common_dir=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null)
+worktree_root=$(git rev-parse --show-toplevel 2>/dev/null)
+if [ -n "$git_common_dir" ] && [ -n "$worktree_root" ]; then
+	main_root=$(dirname "$git_common_dir")
+	if [ "$main_root" != "$worktree_root" ] && [ ! -e "$worktree_root/.turbo/cache" ]; then
+		mkdir -p "$main_root/.turbo/cache" "$worktree_root/.turbo"
+		ln -s "$main_root/.turbo/cache" "$worktree_root/.turbo/cache"
+	fi
+fi
+
+# 2. Provision node_modules offline when missing.
 if [ -d node_modules ]; then
 	exit 0
 fi
@@ -25,5 +39,8 @@ else
 	exit 0
 fi
 
-echo "post-checkout: provisioning node_modules ($pm install --frozen-lockfile --prefer-offline) in $(pwd)"
-$pm install --frozen-lockfile --prefer-offline
+echo "post-checkout: provisioning node_modules offline ($pm install --frozen-lockfile --offline) in $(pwd)"
+if ! $pm install --frozen-lockfile --offline; then
+	echo "post-checkout: offline install missed a package; falling back to --prefer-offline"
+	$pm install --frozen-lockfile --prefer-offline
+fi
