@@ -14,13 +14,13 @@ and update your row when done.
 
 ## Execution order & status
 
-| Plan | Title | Priority | Effort | Depends on | Status |
-|------|-------|----------|--------|------------|--------|
-| 001  | Remove the untracked conflict-copy files and restore the verification baseline | P1 | S | — | DONE (merged 71d9f07f8) |
-| 002  | Honour the sector-inference setting in the sector read | P1 | S | 001 | DONE (merged b12d5dbcd) |
-| 003  | Clamp month arithmetic so range windows stop rolling over | P1 | S | 001 | DONE (merged b0a1a30fd) |
-| 004  | Stop rebuilding chart series on every pointer move | P2 | S | 001 | DONE (merged 28be44725) |
-| 005  | Stop invalidating the dashboard on every price-sync poll | P2 | S | 001 | DONE (merged 8339027df) |
+| Plan | Title                                                                          | Priority | Effort | Depends on | Status                  |
+| ---- | ------------------------------------------------------------------------------ | -------- | ------ | ---------- | ----------------------- |
+| 001  | Remove the untracked conflict-copy files and restore the verification baseline | P1       | S      | —          | DONE (merged 71d9f07f8) |
+| 002  | Honour the sector-inference setting in the sector read                         | P1       | S      | 001        | DONE (merged b12d5dbcd) |
+| 003  | Clamp month arithmetic so range windows stop rolling over                      | P1       | S      | 001        | DONE (merged b0a1a30fd) |
+| 004  | Stop rebuilding chart series on every pointer move                             | P2       | S      | 001        | DONE (merged 28be44725) |
+| 005  | Stop invalidating the dashboard on every price-sync poll                       | P2       | S      | 001        | DONE (merged 8339027df) |
 
 Status values: TODO | IN PROGRESS | DONE | BLOCKED (with one-line reason) | REJECTED (with one-line rationale).
 
@@ -66,8 +66,8 @@ Status values: TODO | IN PROGRESS | DONE | BLOCKED (with one-line reason) | REJE
   (`apps/investing-server/src/sectorRead.ts:151`). M effort, interacts with 002.
 - CI does not run `pnpm format` or `pnpm run test:verify-investing`.
 - `docs/CONTEXT.md` / `docs/investing/STACK.md` still claim Cloudflare Workers
-  + D1 for the hosted tier; the code runs on Vercel + Neon. Also two ADR files
-  numbered `0008`.
+  - D1 for the hosted tier; the code runs on Vercel + Neon. Also two ADR files
+    numbered `0008`.
 - T212 cash-proof tolerance scales with traded volume
   (`packages/adapters/src/brokers/trading212/adapter.ts:398-402`).
 - Docker image for the self-hosted tier is never built or health-checked in CI,

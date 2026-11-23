@@ -11,7 +11,7 @@ import { createProblemReporter } from "@lavega/investing-server/src/observabilit
 import { createDashboardCache, createRuntimeApp } from "@lavega/investing-server/src/index.js";
 import { getAuth, verifiedSession } from "./auth.js";
 import { secretsMatch } from "./secrets.js";
-import { createDockerFetch } from "@lavega/investing-server/src/docker.js";
+import { createStaticFetch } from "@lavega/investing-server/src/standalone.js";
 import {
   createFileBenchmarkSelectionStore,
   runtimeBenchmarkSelectionFile,
@@ -82,7 +82,7 @@ const dashboardCache = createDashboardCache();
  * Neon's, and the runtime builds it from that request's pool. */
 const localPartnerBudget = createPartnerBudgetClient(PartnerBudget.memoryLayer);
 
-/** Built investing SPA path. Set in production Docker (`INVESTING_WEB_DIST`). */
+/** Built investing SPA path. Override in production/standalone builds (`INVESTING_WEB_DIST`). */
 export function investingDist(): string {
   return process.env.INVESTING_WEB_DIST?.trim() || defaultInvestingDist;
 }
@@ -91,7 +91,7 @@ export function investingDist(): string {
  * Whether this server answers the investing API and serves its UI.
  *
  * The default asks whether the built SPA sits next to this server, which is the
- * right question for the Docker image that ships both. It is the wrong question
+ * right question for the standalone build that ships both. It is the wrong question
  * on Vercel: there the CDN serves those files and the function never has them
  * on disk, so the check said no and `/api/investing/*` 404'd while `/investing/`
  * loaded — a dashboard with no backend. INVESTING_MOUNT answers it outright.
@@ -227,7 +227,7 @@ async function getInvestingFetch(): Promise<{
   );
   return {
     apiNamespaces,
-    fetch: createDockerFetch(runtimeApp.fetch.bind(runtimeApp), investingDist()),
+    fetch: createStaticFetch(runtimeApp.fetch.bind(runtimeApp), investingDist()),
   };
 }
 

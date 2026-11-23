@@ -32,10 +32,7 @@ export default function CardBalancesEditor({ ctx }: { ctx: PlanCtx }) {
     askPoints: ctx.saveRewards !== undefined,
     repayment: profile?.cardRepayment?.value ?? null,
   });
-  const key = JSON.stringify([
-    profile?.cardBalances?.value ?? [],
-    rows.map((r) => r.points),
-  ]);
+  const key = JSON.stringify([profile?.cardBalances?.value ?? [], rows.map((r) => r.points)]);
   return (
     <div className="mb-3" data-testid="plan-card-details">
       <h5 className="m-0 mb-1 text-[0.85rem] font-semibold">{c.editTitle}</h5>

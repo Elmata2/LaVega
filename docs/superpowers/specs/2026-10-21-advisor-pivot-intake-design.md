@@ -32,6 +32,7 @@ This document covers the first two steps: (A) archive what no longer fits,
 ## 2. Goals, non-goals, anti-goals
 
 Goals
+
 - A1. Business-only features disappear from the product for every user, with
   code and user data kept so they can return.
 - B1. An intake a beginner finishes in about 10 minutes, that ends with one
@@ -40,12 +41,14 @@ Goals
 - B3. The user can see and edit everything LaVega believes about them.
 
 Non-goals (separate specs, later)
+
 - The personal plan itself (the seven answers as one report).
 - Any change to the investing app: it stays as is, and there is no beginner view.
 - Subscription cancellation drafts, savings-rate alerts, points extension work.
 - An LLM-led conversational intake.
 
 Anti-goals (would make this a failure even if it works)
+
 - Any sentence that recommends a specific financial instrument, or a
   percentage split, to this user. See section 6.
 - An AI model producing or changing a number the user sees.
@@ -57,6 +60,7 @@ Anti-goals (would make this a failure even if it works)
 ## 3. Part A: archive the business side
 
 Archived (hidden for all users, code stays on master, vault data untouched):
+
 - Facturen (view, widget, invoice import, AI invoice extraction UI)
 - Invoice forwarding: the Koppelingen invoice-address card and the forwarding
   guide
@@ -68,6 +72,7 @@ Archived (hidden for all users, code stays on master, vault data untouched):
 - Valuta (owner's call accepted: it mainly served business payments abroad)
 
 Behaviour:
+
 - A stored module or widget choice that names an archived id is ignored, not
   an error. A deep link to an archived route lands on Overzicht.
 - One switch in code (not per-user settings) archives the set, so bringing a
@@ -108,16 +113,17 @@ Without data, every block-1 card becomes a question with a range answer
 Each card says "We think …", shows the evidence (the transactions it is based
 on, expandable), and has Confirm / Correct / Not mine.
 
-| Card | Derived from (existing core where it exists) |
-|---|---|
-| Income streams: each source, monthly amount, regular or irregular | incoming recurring streams (`detectScheduleStreams`, sign +), plus irregular incoming totals per counterparty |
-| Housing cost: rent or mortgage | `housing.ts` proposals |
-| Fixed costs and subscriptions (housing line, recurring outgoing streams, subscriptions; definition in 4.7) | `detectSubscriptions`, outgoing schedule streams, the housing proposal |
-| Visible debts: DUO, loans, credit card balances | recurring outgoing to known lenders; DUO is already recognised |
-| Savings and buffer | account balances by account type |
-| Cards and points | existing card and Punten data |
+| Card                                                                                                       | Derived from (existing core where it exists)                                                                  |
+| ---------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| Income streams: each source, monthly amount, regular or irregular                                          | incoming recurring streams (`detectScheduleStreams`, sign +), plus irregular incoming totals per counterparty |
+| Housing cost: rent or mortgage                                                                             | `housing.ts` proposals                                                                                        |
+| Fixed costs and subscriptions (housing line, recurring outgoing streams, subscriptions; definition in 4.7) | `detectSubscriptions`, outgoing schedule streams, the housing proposal                                        |
+| Visible debts: DUO, loans, credit card balances                                                            | recurring outgoing to known lenders; DUO is already recognised                                                |
+| Savings and buffer                                                                                         | account balances by account type                                                                              |
+| Cards and points                                                                                           | existing card and Punten data                                                                                 |
 
 Inference rules:
+
 - A stream needs at least three occurrences before it is proposed (the same
   bar the detectors use now).
 - Children are never inferred from the absence of a signal. A child benefit
@@ -211,12 +217,12 @@ source, at }`.
 **Vault sections.** Four sections, each with its own merge strategy (built in
 the intake plan, Task 2):
 
-| Section | Holds | Merge across devices |
-|---|---|---|
-| `profile` | the profile record above, plus the intake state | newest write wins; the last 10 versions are kept inside the section |
-| `plan` | `PlanPreferences` plus 13 monthly plan snapshots | `PlanPreferences` newest write wins; snapshots keyed by month |
-| `learning` | concept state (the AI spec) | newest write wins per concept id |
-| `events` | append-only events with unique ids: `ExplanationEvent`, `OutcomeEvent`, `PlanEvent` | union by id; counters are derived from the log, never stored |
+| Section    | Holds                                                                               | Merge across devices                                                |
+| ---------- | ----------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
+| `profile`  | the profile record above, plus the intake state                                     | newest write wins; the last 10 versions are kept inside the section |
+| `plan`     | `PlanPreferences` plus 13 monthly plan snapshots                                    | `PlanPreferences` newest write wins; snapshots keyed by month       |
+| `learning` | concept state (the AI spec)                                                         | newest write wins per concept id                                    |
+| `events`   | append-only events with unique ids: `ExplanationEvent`, `OutcomeEvent`, `PlanEvent` | union by id; counters are derived from the log, never stored        |
 
 This spec builds the `profile` section and the section scaffolding; the other
 three are filled by the plan and the AI layer.
@@ -241,6 +247,7 @@ Source: AFM innovative services guidance and ESMA 2023 briefing, via the
 research agent; a lawyer confirms before launch.
 
 Allowed:
+
 - Calculations on the user's own numbers ("after fixed costs and your buffer
   you have €640 a month left").
 - General explanation (what an index fund is, what costs do over 18 years).
@@ -261,6 +268,7 @@ advice into information (AFM fined Rodeler despite one).
 Grey, kept out until a lawyer rules: "people with your profile usually …".
 
 Also required before launch:
+
 - A DPIA (the Dutch AP lists profiling and financial situation).
 - No special-category data in the intake (health, religion, etc.).
 - UNVERIFIED and to check: EU AI Act Annex III coverage of investment
@@ -310,9 +318,9 @@ Also required before launch:
    - one-off amounts are included; the range shows their effect;
    - irregular income is included as it fell in each month;
    - foreign-currency amounts follow the existing euro-conversion setting.
-   Shown: the middle value as the headline, the lowest and highest of the
-   three months as the range. Fewer than three full months: the card says so
-   and uses what exists, never extrapolates.
+     Shown: the middle value as the headline, the lowest and highest of the
+     three months as the range. Fewer than three full months: the card says so
+     and uses what exists, never extrapolates.
 3. **Capacity is a 1–5 score in code**, from four inputs each scored 0–2 and
    summed then mapped: buffer in months of fixed costs (<1, 1–3, >3), room
    (negative, 0–10% of income, >10%), debt payments as share of income (>30%,

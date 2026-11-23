@@ -32,10 +32,10 @@ into the next month instead of clamping.
 Concrete wrong windows (evaluated at the planned commit):
 
 | latest data date | range | produced start | intended start |
-|---|---|---|---|
-| 2026-03-31 | 1M | 2026-03-03 | 2026-02-28 |
-| 2026-05-31 | 6M | 2025-12-01 | 2025-11-30 |
-| 2024-03-31 | 1Y | 2024-03-02 | 2023-03-31 |
+| ---------------- | ----- | -------------- | -------------- |
+| 2026-03-31       | 1M    | 2026-03-03     | 2026-02-28     |
+| 2026-05-31       | 6M    | 2025-12-01     | 2025-11-30     |
+| 2024-03-31       | 1Y    | 2024-03-02     | 2023-03-31     |
 
 The visible damage: on and after a month-end trading day, the 1M/6M/1Y charts
 and the risk numbers cover a window one to three days short or long — silently,
@@ -74,9 +74,9 @@ export function filterPortfolioValueRange<T extends { date: string }>(
 The only production consumer is `packages/core/src/investing/dashboard.ts:435-437`:
 
 ```ts
-  const portfolio = Object.fromEntries(
-    PORTFOLIO_RANGES.map((range) => [range, filterPortfolioValueRange(portfolioValues, range)]),
-  ) as Record<PortfolioRange, PortfolioValuePoint[]>;
+const portfolio = Object.fromEntries(
+  PORTFOLIO_RANGES.map((range) => [range, filterPortfolioValueRange(portfolioValues, range)]),
+) as Record<PortfolioRange, PortfolioValuePoint[]>;
 ```
 
 `PORTFOLIO_RANGES` (`dashboard.ts:37-43`) is `["1M", "6M", "1Y", "YTD", "All"]`.
@@ -109,21 +109,23 @@ arithmetic; tests are `vitest` `test(...)`/`test.each(...)` at top level.
 
 ## Commands you will need
 
-| Purpose | Command | Expected on success |
-|---------|---------|---------------------|
-| Core typecheck | `pnpm --filter @lavega/core typecheck` | exit 0 |
-| Targeted tests | `pnpm --filter @lavega/core exec vitest run src/investing/portfolio.test.ts` | all pass |
-| Core tests | `pnpm --filter @lavega/core test` | exit 0 |
-| Investing server tests | `pnpm --filter @lavega/investing-server test` | exit 0 (dashboard builds on this helper) |
-| Full typecheck (after 001) | `pnpm typecheck` | exit 0 |
+| Purpose                    | Command                                                                      | Expected on success                      |
+| -------------------------- | ---------------------------------------------------------------------------- | ---------------------------------------- |
+| Core typecheck             | `pnpm --filter @lavega/core typecheck`                                       | exit 0                                   |
+| Targeted tests             | `pnpm --filter @lavega/core exec vitest run src/investing/portfolio.test.ts` | all pass                                 |
+| Core tests                 | `pnpm --filter @lavega/core test`                                            | exit 0                                   |
+| Investing server tests     | `pnpm --filter @lavega/investing-server test`                                | exit 0 (dashboard builds on this helper) |
+| Full typecheck (after 001) | `pnpm typecheck`                                                             | exit 0                                   |
 
 ## Scope
 
 **In scope** (the only files you may modify):
+
 - `packages/core/src/investing/portfolio.ts`
 - `packages/core/src/investing/portfolio.test.ts`
 
 **Out of scope** (do NOT touch, even though they look related):
+
 - `packages/core/src/investing/dashboard.ts` — the consumer is correct; only the
   helper changes. `PORTFOLIO_RANGES` must not change.
 - `packages/core/src/investing/risk.ts` — it consumes the filtered series; no change.
@@ -154,18 +156,11 @@ test.each([
   ["2024-03-31", "1Y", "2023-03-31"],
   ["2024-02-29", "1Y", "2023-02-28"],
 ] as const)("clamps %s minus %s to %s", (latest, range, expectedStart) => {
-  const points = [
-    point("2000-01-01", 1),
-    point(latest, 2),
-  ];
+  const points = [point("2000-01-01", 1), point(latest, 2)];
   expect(filterPortfolioValueRange(points, range).map(({ date }) => date)).toEqual([latest]);
   // The start date is observable through the filter boundary: a point placed
   // on the expected start must be kept, and one day earlier dropped.
-  const boundary = [
-    point("1999-01-01", 1),
-    point(expectedStart, 2),
-    point(latest, 3),
-  ];
+  const boundary = [point("1999-01-01", 1), point(expectedStart, 2), point(latest, 3)];
   expect(filterPortfolioValueRange(boundary, range).map(({ date }) => date)).toEqual([
     expectedStart,
     latest,

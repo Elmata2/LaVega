@@ -27,12 +27,14 @@ Not an owner decision: Midnight stays the default theme. This is the call of the
 ## 3. Goals, non-goals, anti-goals
 
 Goals
+
 - Rail, sidebar, main in a full-viewport frame; only inner regions scroll.
 - Account sidebar usable at a glance (balances per bank group), keyboard-operable, collapsible, resizable.
 - Two themes, switchable, no flash on load, both pass the contrast script.
 - Phone layout with bottom bar and drawer.
 
 Non-goals (this spec)
+
 - Right-hand assistant panel. The AssistantPanel stays inline on Overzicht. Moving it is a separate spec. The shell must not reserve space for it.
   Superseded 14 Nov 2026: `2026-11-13-home-assistant-popups-design.md` adds the right-hand assistant panel as a fourth shell region.
 - Account detail page, date-grouped transaction rows, bulk bar, Drawer primitive (report steps 5+).
@@ -43,6 +45,7 @@ Non-goals (this spec)
 - Changing the intake wizard layout, landing page, or any copy that calls LaVega an adviser. The "not financial advice" footer stays.
 
 Anti-goals (must not happen)
+
 - Sure's colours, resting shadows, or English labels in the product.
 - Any server-side storage of UI prefs (ADR 0009).
 - Colour as the only carrier of meaning in the monochrome theme.
@@ -76,6 +79,7 @@ Anti-goals (must not happen)
 The frame is `height: 100dvh`, `display: flex`, no outer margin, no radius, no shadow. Body background is `--bg`. `--gutter`, `--frame-gap` and `--r-lg` (frame radius) are retired in step 10 after a grep shows no other user; if `--r-lg` is used by dialogs, keep it and drop only the frame use.
 
 ### 5.1 Rail (replaces `NavBar` top bar)
+
 - Width 72px, fixed. `--surface` ground, 1px `--line` on the right edge. Not resizable.
 - Top: brand mark (the existing dot plus a short "LaVega" wordmark is too wide; use the existing dot only, with `aria-label="LaVega"`; builder-facing default, not owner-approved).
 - Items: icon (20px) over a 12px label, centred, 56px tall, 44px minimum hit area. Active item: `--surface-2` fill, 3x20 indicator bar on the left edge in `--ink`, `aria-current="page"`. Never coral (DESIGN.md rule), never a theme-specific hue.
@@ -85,6 +89,7 @@ The frame is `height: 100dvh`, `display: flex`, no outer margin, no radius, no s
 - Separate scope switch (`SHOW_SCOPE_SWITCH`) is archived and stays in `TopBar`, unchanged.
 
 ### 5.2 Account sidebar (new `AccountSidebar`)
+
 - Default 296px, min 240, max 440. Collapsible to 0. Drag handle on its right edge; double-click on the handle resets to default. Main always keeps at least 480px; the hook clamps the sidebar to `viewport - 72 - 480`.
 - Content, top to bottom:
   1. "Jouw plan" row: only when `planUnlocked` (same predicate as the rail). Icon, label, links to the plan view, active state when on it. This is the owner-required second entry point.
@@ -97,13 +102,15 @@ The frame is `height: 100dvh`, `display: flex`, no outer margin, no radius, no s
 - Shown on every shell view including Profiel. Hidden in the intake wizard and the vault gate (they render outside the shell today; keep it so).
 
 ### 5.3 Main
+
 - Top bar sticky inside main: 56px, bottom hairline. Left: sidebar toggle (icon button) and the page title (serif title stays, but 1.75rem, one line, truncates). Right: existing actions (`+ Widget` on views that have it). The eyebrow line goes away.
 - Content: fluid, no max-width. Horizontal gutters 32px at >= 1280, 24px at 1024-1279, 16px below 1024. Vertical padding 24px.
 - Cards and modules unchanged in look. Module headers are not restyled in this spec.
 
 ### 5.4 Breakpoints and responsive behaviour
+
 - One new shell breakpoint at 1024px (`lg`).
-- >= 1280: rail + sidebar open (or per stored state) + main.
+- > = 1280: rail + sidebar open (or per stored state) + main.
 - 1024-1279: first visit with no stored state starts with the sidebar collapsed, so main keeps room. A stored choice always wins.
 - < 1024: no rail, no inline sidebar. A sticky top bar (48px): left menu button (opens the drawer), centre brand, right Profiel avatar. A fixed bottom tab bar (56px plus safe-area inset) with the first four nav items (Overzicht, Optimalisatie, Rekeningen, Jouw plan when unlocked). If more modules are enabled, the last slot is "Meer", which opens the drawer scrolled to a list of the remaining modules. Main gets bottom padding equal to the bar so nothing hides under it.
 - Drawer: the account sidebar content in a left sheet, `min(88vw, 360px)`, scrim `--scrim`, closes on scrim tap, Escape, and navigation. At < 1024 it also lists all enabled modules at the top (the rail is gone).
@@ -112,6 +119,7 @@ The frame is `height: 100dvh`, `display: flex`, no outer margin, no radius, no s
 - Content grids: the module grid switches columns on viewport width (`styles/modules.css:175` 2 columns at <=1200px; `:184` 1 column at <=900px). The span and height classes carry the same breakpoints as Tailwind variants `[@media(max-width:1200px)]:` and `[@media(max-width:900px)]:` in `src/module-grid.ts`; `styles/views.css:35` and `styles/charts.css:478` use `[@media(max-width:900px)]` too. The test is `src/module-grid.test.tsx` (not `.ts`; the comment at `modules.css:220` repeats the wrong name), and it resolves styles through `src/test-support/resolveStyle.ts`. With a rail and sidebar taking up to 368px, the same viewport width gives a much narrower main, so 3 columns appear too early. Convert these to container queries measured on main. Thresholds are offset by today's shell chrome so the old shell switches at the same viewport widths: 1136 (3 to 2 columns, 1200 - 64) and 868 (to 1 column, 900 - 32). Measured: `.shell` is full viewport width (`margin: var(--frame-gap) auto` gives top and bottom gap only) and `.content` pads 32px per side, 16px at <= 900px. One threshold cannot be exact on both sides of the 900px padding change; viewports 901-932 get 1 column where the old rule gave 2. Revisit both numbers when the rail and sidebar land, because main then measures itself. Put `container-type: inline-size` on a new inner wrapper inside the scrolling main, not on the scroll element itself, and not on an ancestor of fixed or sticky chrome (a size-containment ancestor changes how they lay out). Files: `modules.css`, `module-grid.ts`, `views.css`, `charts.css`, `test-support/resolveStyle.ts` (must understand `@container`), `module-grid.test.tsx`, the main wrapper in `App.tsx`. This is the main hidden cost of the layout change and ships as its own early diff with no flag (step 2); with the old shell the wrapper is narrower than the viewport, so the thresholds carry the offsets above.
 
 ### 5.5 Navigation set and order
+
 - Default set (`DEFAULT_MODULES`, stored value `null`): Overzicht, Optimalisatie, Rekeningen, Jouw plan (locked until `intakeBlocksDone >= 1`, unchanged logic in `withoutLockedModules`).
 - Order in rail, picker and bottom bar (registry order): Overzicht, Optimalisatie, Rekeningen, Jouw plan, then optional modules in their current relative order (Transacties, Verplichtingen, Forecast, Punten, others). This changes the registry: Jouw plan moves from first to after Rekeningen, and Optimalisatie moves before Rekeningen.
 - Owner to confirm: the order Overzicht, Optimalisatie, Rekeningen (today the app shows Rekeningen first), and Jouw plan last. Both follow the owner's wording but are not tested against a user.
@@ -125,33 +133,34 @@ Every colour token in `:root` is overridden explicitly, so nothing leaks from mi
 
 ### 6.1 Token set (starting values; the contrast script is the judge)
 
-| Token | Midnight | Mono | Notes |
-|---|---|---|---|
-| `--gutter` | #02070a | #ffffff | retired with the frame; keep until grep is clean |
-| `--bg` | #02070a | #ffffff | |
-| `--surface` | #0d171d | #f5f5f5 | cards, rail |
-| `--surface-2` | #16222a | #ebebeb | inset fills, active nav |
-| `--ink` | #ffffff | #000000 | 21:1 on bg |
-| `--ink-soft` | #e3e9ec | #262626 | |
-| `--on-ink` | #02070a | #ffffff | |
-| `--muted` | #a9b4bb | #595959 | 7.0 / 6.4 / 5.9 on bg / surface / surface-2 |
-| `--line` | rgba(255,255,255,.12) | rgba(0,0,0,.12) | hairline, decorative |
-| `--accent` | #0297de | #000000 | links, active, focus. Links are underlined in mono (colour cannot carry "link") |
-| `--accent-soft` | blue 16% | rgba(0,0,0,.06) | |
-| `--cta` / `--on-cta` | #fc734d / #02070a | #000000 / #ffffff | the single filled action: a black pill with white label. DESIGN.md's "One Action Rule" holds, with black as the action colour |
-| `--pos` | #5fd38d | #000000 | see 6.2 |
-| `--neg` | #ff8f8f | #404040 | 10.4:1 on bg; distinguished by sign and icon, see 6.2 |
-| `--warn` | #f2b84b | #262626 | paired with a warning icon and dashed border |
-| `--pos-tint` / `--neg-tint` | derived | derived (keep `color-mix`) | grey tints; meaning is in the glyph |
-| `--chart-blue` / `-purple` / `-teal` | blues etc. | #000000 / #4d4d4d / #737373 | non-text, must reach 3:1 on bg, surface AND surface-2 (#737373: 4.7 / 4.3 / 4.0:1 expected; script is the judge) |
-| `--slice-1..8`, `--slice-rest` | colours | an 8-step grey ramp, #1a1a1a to #b0b0b0, `--slice-rest` lightest | informational only in the script; the 6.2 labels rule is the requirement |
-| `--card-face-1..4`, `--card-text` | brand-ish darks | #1f1f1f, #2b2b2b, #383838, #454545; text #ffffff | bank logos get `filter: grayscale(1)` in mono |
-| `--scrim` | rgba(2,7,10,.72) | rgba(0,0,0,.4) | |
-| `--shadow-float` | dark | rgba(0,0,0,.14) soft | floating layers only |
+| Token                                | Midnight              | Mono                                                             | Notes                                                                                                                         |
+| ------------------------------------ | --------------------- | ---------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `--gutter`                           | #02070a               | #ffffff                                                          | retired with the frame; keep until grep is clean                                                                              |
+| `--bg`                               | #02070a               | #ffffff                                                          |                                                                                                                               |
+| `--surface`                          | #0d171d               | #f5f5f5                                                          | cards, rail                                                                                                                   |
+| `--surface-2`                        | #16222a               | #ebebeb                                                          | inset fills, active nav                                                                                                       |
+| `--ink`                              | #ffffff               | #000000                                                          | 21:1 on bg                                                                                                                    |
+| `--ink-soft`                         | #e3e9ec               | #262626                                                          |                                                                                                                               |
+| `--on-ink`                           | #02070a               | #ffffff                                                          |                                                                                                                               |
+| `--muted`                            | #a9b4bb               | #595959                                                          | 7.0 / 6.4 / 5.9 on bg / surface / surface-2                                                                                   |
+| `--line`                             | rgba(255,255,255,.12) | rgba(0,0,0,.12)                                                  | hairline, decorative                                                                                                          |
+| `--accent`                           | #0297de               | #000000                                                          | links, active, focus. Links are underlined in mono (colour cannot carry "link")                                               |
+| `--accent-soft`                      | blue 16%              | rgba(0,0,0,.06)                                                  |                                                                                                                               |
+| `--cta` / `--on-cta`                 | #fc734d / #02070a     | #000000 / #ffffff                                                | the single filled action: a black pill with white label. DESIGN.md's "One Action Rule" holds, with black as the action colour |
+| `--pos`                              | #5fd38d               | #000000                                                          | see 6.2                                                                                                                       |
+| `--neg`                              | #ff8f8f               | #404040                                                          | 10.4:1 on bg; distinguished by sign and icon, see 6.2                                                                         |
+| `--warn`                             | #f2b84b               | #262626                                                          | paired with a warning icon and dashed border                                                                                  |
+| `--pos-tint` / `--neg-tint`          | derived               | derived (keep `color-mix`)                                       | grey tints; meaning is in the glyph                                                                                           |
+| `--chart-blue` / `-purple` / `-teal` | blues etc.            | #000000 / #4d4d4d / #737373                                      | non-text, must reach 3:1 on bg, surface AND surface-2 (#737373: 4.7 / 4.3 / 4.0:1 expected; script is the judge)              |
+| `--slice-1..8`, `--slice-rest`       | colours               | an 8-step grey ramp, #1a1a1a to #b0b0b0, `--slice-rest` lightest | informational only in the script; the 6.2 labels rule is the requirement                                                      |
+| `--card-face-1..4`, `--card-text`    | brand-ish darks       | #1f1f1f, #2b2b2b, #383838, #454545; text #ffffff                 | bank logos get `filter: grayscale(1)` in mono                                                                                 |
+| `--scrim`                            | rgba(2,7,10,.72)      | rgba(0,0,0,.4)                                                   |                                                                                                                               |
+| `--shadow-float`                     | dark                  | rgba(0,0,0,.14) soft                                             | floating layers only                                                                                                          |
 
 The existing `:root[data-theme="light"]` block stays untouched (see section 9, finding 3).
 
 ### 6.2 Behaviour rules in black and white
+
 - Positive and negative amounts: always carry an explicit sign ("+ €120,00" / "- €120,00" with a real minus) and keep the existing arrow/icon where one exists. Negative amounts are `--neg` (dark grey) and positive `--pos` (black), a difference no one is asked to perceive. Builder audits every place that colours an amount and adds the glyph where it is missing. This audit is part of step 4, not optional.
 - Delta pills: tint plus sign. Problem/warning status lines: dashed border plus icon for warning, solid border plus icon for problem; never tint alone.
 - CTA: black pill, white label, hover `--ink-soft`. Secondary stays outline. Selected segmented option: black pill with white text (same shape as midnight's white pill).
@@ -161,7 +170,9 @@ The existing `:root[data-theme="light"]` block stays untouched (see section 9, f
 - Third-party content (bank logos) is greyscaled in mono. Landing page stays midnight in both themes (see 7).
 
 ### 6.3 Contrast script
+
 Today the script (`apps/web/scripts/check-midnight-contrast.mjs`) is run by hand: it is in no `package.json` script and no CI step (the root only has `check:attribution`). Extend it:
+
 1. Add a `mono` theme read from `:root[data-theme="mono"]`. Merge over midnight like `light` does, then fail if any 6-digit-hex colour token defined in `:root` is not defined in the mono block (allow-list: none). This catches the silent-inheritance bug the light block has today (it omits `card-face-1..4` and `card-text`, checked by diff). Limit: the script reads only `#rrggbb` tokens. `--line`, `--accent-soft`, `--pos-tint`, `--neg-tint`, `--scrim` and `--shadow-float` (rgba, `color-mix`) are not covered; the table in 6.1 is their only guard.
 2. Text pairs at 4.5:1 for all themes: ink, muted, accent, pos, neg, warn on bg, surface, surface-2; on-cta/cta; on-ink/ink; on-ink/accent; card-text on each card face. Remove `chart-blue`, `chart-purple`, `chart-teal` from this list: today they ARE checked here at 4.5:1 (`check-midnight-contrast.mjs:33`), so #737373-class greys would fail it, and the old claim that they were never checked was wrong.
 3. New non-text list at 3:1 for all three themes: chart-blue/purple/teal against bg, surface AND surface-2; accent (focus ring) against bg and surface. If midnight or light fail the new 3:1 list, fix the token in that theme in the same diff, or record it as a known gap in the script header.
@@ -222,30 +233,35 @@ Common verification for every step: `pnpm --filter @lavega/web typecheck`, `pnpm
 While `SHELL_V2` exists (steps 6 to 9b) both shells are tested: the flag-off path keeps its existing tests green, and each new test runs with the flag on. Old-shell CSS is not edited before 9c.
 
 ### Step 1: Foundations (S, low)
+
 - Do: `NOTICE` sentence for layout inspiration (the current Sure paragraph covers logic and fixtures only; add that the app shell layout is an independent reimplementation inspired by Sure's layout, no code or class strings copied, non-affiliation stated). Move the 2 hex literals in `styles/wizard.css` (`:386`, `:397`) into tokens. Nothing else: no gutter or title CSS (old-shell CSS), no DESIGN.md frame edit (step 9c).
 - Files: `NOTICE`, `styles/wizard.css`, `styles/tokens.css`.
 - Verify: unit tests; `pnpm run check:attribution` passes, output in `step-1/attribution.txt`; midnight wizard screenshots before/after in `step-1/`.
 - Rollback: revert; no data or storage change.
 
 ### Step 2: Module grid to container queries, no flag (M, med)
+
 - Do: the change in 5.4. Wrapper with `container-type: inline-size` inside main; 1136 / 868 thresholds (old 1200 / 900 minus shell chrome, see 5.4) measured on the wrapper; convert `modules.css:175,184`, the variants in `module-grid.ts`, `views.css:35`, `charts.css:478`; teach `test-support/resolveStyle.ts` `@container`; update `module-grid.test.tsx` to pin the new rules.
 - Files: as listed in 5.4.
 - Verify: `module-grid.test.tsx` passes against class names read off mounted elements; browser check at 1440, 1200, 900, 390 in the old shell: columns are 3 / 2 / 1 / 1 exactly where they were before. Evidence: `step-2/columns-before-after.txt` (computed `grid-template-columns` per width, before and after).
 - Rollback: revert the commit.
 
 ### Step 3: Monochrome tokens + contrast script (M, low)
+
 - Do: the `mono` block (6.1), the extended script and its vitest (6.3), `lib/theme.ts` (pure read/validate/apply), `public/theme-init.js`, the `index.html` tag, a test that runs the real init file. Landing forced to midnight. No switch UI: verify by setting `localStorage["lavega.theme"]="mono"`.
 - Files: `styles/tokens.css`, `scripts/check-midnight-contrast.mjs`, new `src/contrast-script.test.ts`, new `src/lib/theme.ts` (+test), `public/theme-init.js`, `index.html`, landing wrapper.
 - Verify: `node apps/web/scripts/check-midnight-contrast.mjs` exits 0 with mono rows printed, output in `step-3/contrast.txt`; `contrast-script.test.ts` green; theme unit tests (invalid, missing, blocked storage); `Globe.test.tsx` passes (mono block after light); screenshots of Overzicht, Rekeningen, Optimalisatie, wizard, vault gate in mono at 3 widths in `step-3/`; landing unchanged (same dir).
 - Rollback: delete the mono block and init script; stored `lavega.theme` is then ignored.
 
 ### Step 4: Theme switch in Profiel (S, low)
+
 - Do: "Weergave" card, copy nl/en, cross-tab listener, `useTheme` hook.
 - Files: `views/Profiel.tsx`, `copy/shell.ts`, new `hooks/useTheme.ts`, `Profiel.test.tsx`.
 - Verify: tests that selecting persists, blocked storage still switches in memory, a `storage` event updates the attribute; browser reload check (`step-4/reload.txt`: attribute value before and after reload); screenshot of both options selected.
 - Rollback: remove card; step 3 still works via storage.
 
 ### Step 5: Black-and-white audit, bounded (three diffs, each S-M, low)
+
 - 5.0 (inventory, no code, first): grep `--pos`, `--neg`, `--warn`, `--slice-`, `text-pos`, `text-neg`, `bg-pos`, `bg-neg` across `apps/web/src`; write the hit list, grouped as chart / amount / status, into the PR description and `step-5/inventory.txt`. Sub-steps 5a to 5c may only touch files on that list; a file found later is added to the list with a one-line note.
 - 5a Charts: legends or direct labels for charts above 3 series, 2px `--bg` separators, bank-logo `grayscale(1)` in mono. Verify: component tests that each such chart renders a legend or labels; mono screenshots in `step-5/charts/`.
 - 5b Amounts: explicit sign and glyph wherever an amount is coloured. Verify: component tests that rendered text carries `+` or a real minus; a browser script lists every element whose computed colour comes from `--pos` or `--neg` and whose text has no sign; expected list empty, output in `step-5/amounts-unsigned.txt`.
@@ -254,42 +270,49 @@ While `SHELL_V2` exists (steps 6 to 9b) both shells are tested: the flag-off pat
 - Browser colour emulation to greyscale is not used as a check (not available everywhere); the DOM-level checks above replace it.
 
 ### Step 6: Shell regions + `useSidebar`, behind `SHELL_V2` (M, med)
+
 - Do: new `styles/shell.css` with its own class names (`shell2-*`), a new `components/Shell.tsx` with the full-width frame, rail placeholder, sidebar slot and main, and `useSidebar` (clamp, persistence, blocked storage). `SHELL_V2` is a module constant in `archive.ts` style, default false until 9c; with it off the old shell renders and no old CSS is changed. `App.tsx` gets only the wrapper switch.
 - Files: `App.tsx` (switch only), new `styles/shell.css`, new `components/Shell.tsx`, new `hooks/useSidebar.ts` (+test).
 - Verify: `useSidebar` tests (clamp to 240/440 and the 480 main rule, garbage storage, blocked storage, reset, collapsed-state persistence); browser check, flag on and off, at 3 widths, no horizontal page scroll at 390 (`step-6/scrollwidth.txt`: `scrollWidth` vs `clientWidth` per width); old-shell tests unchanged and green.
 - Rollback: flag off; delete `shell.css` and `Shell.tsx`.
 
 ### Step 7: Registry reorder (S, low)
+
 - Do: the order change in 5.5 and nothing else. It also reorders the old shell's nav; accepted, noted in the PR.
 - Files: `components/moduleRegistry.tsx`, `ModulePicker.test.tsx`, `archive.test.ts`, `NavBar.test.tsx`, `shell.english.test.tsx`.
 - Verify: the tests from section 8 (a legacy list with `plan` first and `forecast` renders in the new order with the same members; `null` gives the four-item default; garbage JSON behaves as `null`).
 - Rollback: one-commit revert.
 
 ### Step 8: Rail + mobile bottom bar (M-L, med)
+
 - Do: `Rail` under the flag, bottom bar and sticky top bar at < 1024 (5.4), skip link, the a11y of section 10. Rail or bottom bar is chosen by a `matchMedia` hook so one `<nav>` exists at a time.
 - Files: new `components/Rail.tsx`, new `components/BottomBar.tsx`, new `hooks/useMediaQuery.ts` (+test), `Shell.tsx`, `copy/shell.ts`, tests. `NavBar.tsx` stays untouched until 9c.
 - Verify: tests with a mocked `matchMedia`: exactly one `<nav>` rendered per breakpoint; `aria-current="page"` on the active item; bottom bar holds exactly the three core items plus Jouw plan when unlocked, and "Meer" only when other modules are enabled. Browser: keyboard walk (`step-8/tab-order.txt`: ordered descriptions of `document.activeElement` for 15 Tab presses; expected skip link, rail items, sidebar, main); accessibility-tree dump per width showing one navigation landmark (`step-8/landmarks-<width>.txt`); screenshots of the rail with 4 items and with all optional modules on (overflow), both themes.
 - Rollback: flag off.
 
 ### Step 9a: Account sidebar, inline (M, med)
+
 - Do: `AccountSidebar` (5.2) at >= 1024 inside `Shell`: "Jouw plan" row, tabs, groups, empty state, resize handle with its keyboard rules, collapse toggle. Lift `onSelectAccount` (`App.tsx:2453`) into a named handler shared with Rekeningen. No drawer yet.
 - Files: new `components/AccountSidebar.tsx`, `App.tsx`, `styles/shell.css`, `copy/shell.ts`, tests.
 - Verify: component tests for tabs (`accountIsLiability` split), groups, plan row only when unlocked, empty state, click calls the shared handler (filters Transacties), separator keyboard behaviour; network check that no new request appears (`step-9a/network.txt`: request list before and after opening the sidebar, expected identical); screenshots on a synthetic vault with several banks, a debt, and an empty vault.
 - Rollback: remove the component; flag still off.
 
 ### Step 9b: Drawer, "Meer", phone layout (M, med)
+
 - Do: shell-local drawer (not the general Drawer primitive of report step 5) with the account content and the module list at < 1024; "Meer" slot opens the drawer on the module list; scrim; focus handling.
 - Files: new `components/ShellDrawer.tsx`, `BottomBar.tsx`, `Shell.tsx`, `styles/shell.css`, `copy/shell.ts`, tests.
 - Verify: jsdom tests for what jsdom can show: opening moves focus into the drawer, Escape closes, scrim tap closes, navigation closes, focus returns to the opener, siblings get `inert`, "Meer" lists exactly the enabled modules not in the bar. Focus trap in a real browser: with the drawer open press Tab 20 times and Shift+Tab 20 times and assert `document.activeElement` stays inside the drawer each time (`step-9b/focus-trap.txt`). Screenshots at 390 with the drawer open, both themes.
 - Rollback: remove the drawer; sidebar and rail stay.
 
 ### Step 9c: Flip the flag, delete the old shell (M, med)
+
 - Do: set `SHELL_V2` true and then delete it, `NavBar.tsx`, the old-shell-only parts of `TopBar` (it keeps the archived scope switch, `SHOW_SCOPE_SWITCH`), `.shell`, `.shell-body`, `.appbar*`, `.navrail`, `.nav-item` and the old-bar media queries (900 / 620 in `base.css`). Update `DESIGN.md:54,99,107,144,147` (frame wording and frontmatter `rounded.frame`). May be a follow-up PR if reviewers want the flag to live one release.
 - Files: `App.tsx`, `archive.ts`, `components/NavBar.tsx`, `components/TopBar.tsx`, `styles/base.css`, `DESIGN.md`, old-shell tests.
 - Verify: full test run; grep shows no `navrail`, `appbar` or `SHELL_V2` left (`step-9c/grep.txt`); screenshots both themes at 3 widths.
 - Rollback: revert the PR (the flag is gone, so revert is the only route).
 
 ### Step 10: Docs and cleanup (S)
+
 - Do: final `DESIGN.md` sections "Personal app shell" and "Monochrome theme" with the real values; retire `--gutter`, `--frame-gap` and the frame use of `--r-lg`; update handoff notes (AGENTS.md says docs stay current).
 - Verify: grep shows no remaining use (`step-10/grep.txt`); full test run.
 
@@ -303,6 +326,7 @@ Out of this spec, in order: assistant to the right panel (fix the undefined clas
 - Whether `SHELL_V2` is a constant or a build-time define.
 
 Settled calls (builder-facing default, not owner-approved; change with a one-line PR note):
+
 - Brand mark: the dot only, `aria-label="LaVega"`.
 - Slice ramp: informational lines in the script, not failing; labels rule is the requirement.
 - Sidebar account click with Transacties off: navigates to Transacties anyway; not added to the rail.

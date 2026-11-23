@@ -2,7 +2,7 @@
  *
  * Zelfde patroon als bundle-catalog.ts: opgehaald tijdens een sweep, hier
  * neergelegd, in de browser wordt er niets opgehaald. Draaien:
- * `pnpm --filter @lavega/extension bundle:points`.
+ * `bun --filter @lavega/extension bundle:points`.
  *
  * ── WAAROM DIT BESTAND ZO KLEIN IS, EN WAAROM DAT GOED NIEUWS IS ────────────
  *

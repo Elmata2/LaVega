@@ -1,22 +1,21 @@
 {
   "$schema": "https://railway.com/railway.schema.json",
   "build": {
-    "builder": "DOCKERFILE",
-    "dockerfilePath": "Dockerfile",
+    "builder": "RAILPACK",
+    "buildCommand": "VITE_INVESTING_BASE=/investing/ VITE_INVESTING_URL=/investing bun run build && LAVEGA_EXPECT_INVESTING_BASE=/investing/ bun --filter @lavega/investing-web verify:base",
     "watchPatterns": [
       "apps/**",
       "packages/**",
       "docs/catalog/**",
-      "Dockerfile",
       "package.json",
-      "pnpm-lock.yaml",
-      "pnpm-workspace.yaml",
+      "bun.lock",
+      "bunfig.toml",
       "turbo.json",
       "railway.json"
     ]
   },
   "deploy": {
-    "startCommand": "pnpm start",
+    "startCommand": "NODE_ENV=production bun run start",
     "healthcheckPath": "/health",
     "healthcheckTimeout": 100,
     "restartPolicyType": "ON_FAILURE",

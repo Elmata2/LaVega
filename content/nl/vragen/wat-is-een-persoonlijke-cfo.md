@@ -7,10 +7,20 @@ status: published
 author: alexander
 updated: 2026-10-26
 sources:
-  - { title: "LaVega: wat de app doet en niet doet (productpagina)", url: "https://www.lavega.dev/", accessed: 2026-10-26 }
+  - {
+      title: "LaVega: wat de app doet en niet doet (productpagina)",
+      url: "https://www.lavega.dev/",
+      accessed: 2026-10-26,
+    }
 faq:
-  - { q: "Is een persoonlijke CFO een echte persoon?", a: "Soms wel, bijvoorbeeld bij vermogende gezinnen die een family office hebben. Meestal bedoelen mensen met 'persoonlijke CFO' een manier van kijken naar je geld, vaak ondersteund door software die overzicht en cijfers levert." }
-  - { q: "Kan software mijn persoonlijke CFO zijn?", a: "Software kan het rekenwerk en het overzicht leveren: saldo's, terugkerende kosten en een voorspelling. Keuzes over je geld blijven van jou, of van een erkend adviseur als je persoonlijke begeleiding wilt." }
+  - {
+      q: "Is een persoonlijke CFO een echte persoon?",
+      a: "Soms wel, bijvoorbeeld bij vermogende gezinnen die een family office hebben. Meestal bedoelen mensen met 'persoonlijke CFO' een manier van kijken naar je geld, vaak ondersteund door software die overzicht en cijfers levert.",
+    }
+  - {
+      q: "Kan software mijn persoonlijke CFO zijn?",
+      a: "Software kan het rekenwerk en het overzicht leveren: saldo's, terugkerende kosten en een voorspelling. Keuzes over je geld blijven van jou, of van een erkend adviseur als je persoonlijke begeleiding wilt.",
+    }
 ---
 
 ## Wat doet een CFO bij een bedrijf?

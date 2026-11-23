@@ -1,4 +1,4 @@
-/* De tweede helft van `pnpm build`. tsc heeft dan de .js-bestanden in dist/
+/* De tweede helft van `bun run build`. tsc heeft dan de .js-bestanden in dist/
  * gezet; hier komt alles bij wat geen TypeScript is, en daarna wordt er
  * GECONTROLEERD of er iets in dist staat dat Chrome kan laden.
  *
@@ -32,7 +32,7 @@
  * pas naar boven op het moment dat een gebruiker een vinkje aanzet en Chrome
  * het verzoek weigert — met een melding die niets over de oorzaak zegt.
  *
- * Draaien gebeurt via `pnpm build`; los kan met `node scripts/copy-static.mjs`,
+ * Draaien gebeurt via `bun run build`; los kan met `node scripts/copy-static.mjs`,
  * maar dan moet tsc er al overheen zijn geweest. */
 
 import {
@@ -65,7 +65,7 @@ function eis(voorwaarde, bericht) {
 if (!existsSync(join(DIST, "background.js"))) {
   console.error(
     "[copy-static] dist/background.js ontbreekt. Draai eerst `tsc -p tsconfig.build.json`,\n" +
-      "              of gebruik `pnpm build` dat allebei doet.",
+      "              of gebruik `bun run build` dat allebei doet.",
   );
   process.exit(1);
 }

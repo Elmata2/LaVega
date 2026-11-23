@@ -102,7 +102,14 @@ async function render() {
     vi.fn(async () => new Response(null, { status: 401 })),
   );
   await act(async () => {
-    root!.render(<Backup storage={storageDouble()} asOf="2026-11-11" owner={{ kind: "device" }} onRestored={() => {}} />);
+    root!.render(
+      <Backup
+        storage={storageDouble()}
+        asOf="2026-11-11"
+        owner={{ kind: "device" }}
+        onRestored={() => {}}
+      />,
+    );
   });
   return container;
 }

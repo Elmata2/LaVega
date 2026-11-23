@@ -4,7 +4,7 @@
  * `browse` binary that records its arguments. Nothing here reaches a real
  * deploy, broker or browser.
  *
- *   pnpm test:verify-investing
+ *   bun run test:verify-investing
  *   (or: node --test .claude/skills/verify-investing/control-investing.test.mjs)
  */
 import { execFile } from "node:child_process";

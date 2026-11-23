@@ -2,9 +2,7 @@ import { describe, expect, test } from "vitest";
 import { RISK_SCALE, scoreTolerance, toleranceBucket } from "./riskScale.js";
 
 const answerWith = (n: number, pick: (i: number) => number): Record<string, string> =>
-  Object.fromEntries(
-    RISK_SCALE.items.slice(0, n).map((it, i) => [it.id, it.options[pick(i)]!.id]),
-  );
+  Object.fromEntries(RISK_SCALE.items.slice(0, n).map((it, i) => [it.id, it.options[pick(i)]!.id]));
 
 describe("RISK_SCALE", () => {
   test("shape: 5 items, 4 options, points 1..5", () => {

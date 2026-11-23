@@ -52,16 +52,16 @@ See `docs/agents/domain.md`.
 
 ### Monorepo
 
-[Turborepo](https://turbo.build) + pnpm workspaces. `apps/*` for deployables (MCP server,
+[Turborepo](https://turbo.build) + bun workspaces. `apps/*` for deployables (MCP server,
 web UI, macOS daemon); `packages/*` for shared libraries and config. Root scripts:
-`pnpm run build`, `pnpm run dev`, `pnpm run lint`, `pnpm run format`, `pnpm run test`,
-`pnpm run typecheck`. Lint = oxlint; format = oxfmt (ESLint/Prettier replacements).
+`bun run build`, `bun run dev`, `bun run lint`, `bun run format`, `bun run test`,
+`bun run typecheck`. Lint = oxlint; format = oxfmt (ESLint/Prettier replacements).
 
-Git worktrees share one global pnpm store and one `.turbo/cache`. `.githooks/post-checkout`
+Git worktrees share one global bun install cache and one `.turbo/cache`. `.githooks/post-checkout`
 (installed by the root `prepare` script via `core.hooksPath`) symlinks `.turbo/cache` from
-the primary worktree and runs `pnpm install --frozen-lockfile --offline` (falling back to
+the primary worktree and runs `bun install --frozen-lockfile --offline` (falling back to
 `--prefer-offline` only for uncached deps) when a fresh worktree has no `node_modules`.
-Set `LAVEGA_SKIP_WORKTREE_INSTALL=1` to opt out. Run `pnpm run worktree:prune` (add
+Set `LAVEGA_SKIP_WORKTREE_INSTALL=1` to opt out. Run `bun run worktree:prune` (add
 `--apply` to delete) to clean up merged agent worktrees.
 
 ### TypeScript: Effect

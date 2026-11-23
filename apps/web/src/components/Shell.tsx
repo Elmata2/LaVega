@@ -153,9 +153,8 @@ export function Shell({
   const assistantWidth = assistantDrag ?? fit.assistantWidth;
   const dragging = dragWidth !== null || assistantDrag !== null;
 
-  /* `inert` is not in React 18's types; an empty string renders the attribute. */
-  const inertProps = (open ? {} : { inert: "" }) as Record<string, string>;
-  const assistantInert = (assistantShown ? {} : { inert: "" }) as Record<string, string>;
+  const inertProps = open ? {} : { inert: true };
+  const assistantInert = assistantShown ? {} : { inert: true };
   const assistantToggleRef = useRef<HTMLButtonElement>(null);
   /* Where focus goes once the toggle's state change has rendered. A new object
    * per toggle, so the effect runs on each one and not on other renders. */
@@ -233,7 +232,7 @@ export function Shell({
   useEffect(() => {
     onOverlayChange?.(overlayOpen);
   }, [overlayOpen, onOverlayChange]);
-  const behind = (overlayOpen ? { inert: "" } : {}) as Record<string, string>;
+  const behind = overlayOpen ? { inert: true } : {};
   const style = {
     "--shell2-sidebar-w": `${shownWidth}px`,
     "--shell2-assistant-w": `${assistantWidth}px`,

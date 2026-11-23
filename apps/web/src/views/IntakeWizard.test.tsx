@@ -316,9 +316,9 @@ test("count 0 shows nothingNew and still finishes", async () => {
 
 test("without the dialog there is no upload button, only Later", () => {
   const { c } = mount(fromScreen("summary"), undefined, false, null);
-  expect([...c.querySelectorAll("button")].some((b) => b.textContent === "Upload bank statement")).toBe(
-    false,
-  );
+  expect(
+    [...c.querySelectorAll("button")].some((b) => b.textContent === "Upload bank statement"),
+  ).toBe(false);
 });
 
 test("reopening a half-done store resumes at the saved screen", () => {

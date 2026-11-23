@@ -9,14 +9,14 @@ read is `GET /api/auth/get-session`, which `whoami` calls.
 Mounted origin `https://www.lavega.dev`. Investing shell is `/investing/`. Without a session
 the app lands on `/investing/sign-in`.
 
-| Route              | Heading an agent can read                                                                                                                                                       |
-| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `/sign-in`         | `Sign in`. Fields `Email address` and `Password`. Link `Forgot password?`.                                                                                                      |
-| `/sign-up`         | `Create your account`. Success navigates to `/check-email`.                                                                                                                     |
-| `/check-email`     | `Check your email`. Button `Resend confirmation email`.                                                                                                                         |
-| `/email-confirmed` | With `?error=`, heading `Confirmation link did not work` and link `Request another link`. Without an error, a session goes to `/` and no session goes to `/sign-in?verified=1`. |
-| `/forgot-password` | `Reset your password`. Button `Send reset link` (`Sending…` while pending). |
-| `/reset-password` | With a token: `Choose a new password`, then `Password changed`. Without a valid token the heading stays `Choose a new password`. Alert: `Reset link is invalid or expired. Request a new link.` Link: `Request another link`. |
+| Route              | Heading an agent can read                                                                                                                                                                                                     |
+| ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `/sign-in`         | `Sign in`. Fields `Email address` and `Password`. Link `Forgot password?`.                                                                                                                                                    |
+| `/sign-up`         | `Create your account`. Success navigates to `/check-email`.                                                                                                                                                                   |
+| `/check-email`     | `Check your email`. Button `Resend confirmation email`.                                                                                                                                                                       |
+| `/email-confirmed` | With `?error=`, heading `Confirmation link did not work` and link `Request another link`. Without an error, a session goes to `/` and no session goes to `/sign-in?verified=1`.                                               |
+| `/forgot-password` | `Reset your password`. Button `Send reset link` (`Sending…` while pending).                                                                                                                                                   |
+| `/reset-password`  | With a token: `Choose a new password`, then `Password changed`. Without a valid token the heading stays `Choose a new password`. Alert: `Reset link is invalid or expired. Request a new link.` Link: `Request another link`. |
 
 `/sign-in?verified=1` (the no-session landing from `/email-confirmed`) also shows
 `Email confirmed. Sign in to continue.`
@@ -103,12 +103,12 @@ share one better-auth account, so every mail below serves both apps. All come fr
 `apps/server/src/authEmail.ts`, in Dutch or English: the `lavega_locale` cookie decides,
 then `Accept-Language`.
 
-| Trigger                                  | Subject (en)                          | Link goes to                                   |
-| ---------------------------------------- | ------------------------------------- | ---------------------------------------------- |
-| Sign-up, or sign-in while unconfirmed    | `Confirm your LaVega email address`   | the `callbackURL` the app sent                 |
-| `Forgot password`                        | `Reset your LaVega password`          | the `redirectTo` the app sent, plus `?token=`  |
-| Reset completed                          | `Your LaVega password was changed`    | site root                                      |
-| Address confirmed                        | `Welcome to LaVega`                   | site root                                      |
+| Trigger                               | Subject (en)                        | Link goes to                                  |
+| ------------------------------------- | ----------------------------------- | --------------------------------------------- |
+| Sign-up, or sign-in while unconfirmed | `Confirm your LaVega email address` | the `callbackURL` the app sent                |
+| `Forgot password`                     | `Reset your LaVega password`        | the `redirectTo` the app sent, plus `?token=` |
+| Reset completed                       | `Your LaVega password was changed`  | site root                                     |
+| Address confirmed                     | `Welcome to LaVega`                 | site root                                     |
 
 The last two never fail the action that sent them. A Resend outage only logs
 `Auth notice email was not sent`.

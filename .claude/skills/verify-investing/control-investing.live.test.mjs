@@ -8,8 +8,8 @@
  * Uses its own state directory, so it never moves the pin or cookie jar an
  * agent is using.
  *
- *   pnpm run test:verify-investing:live
- *   LAVEGA_PREVIEW_URL=https://<deploy>.vercel.app pnpm run test:verify-investing:live
+ *   bun run test:verify-investing:live
+ *   LAVEGA_PREVIEW_URL=https://<deploy>.vercel.app bun run test:verify-investing:live
  */
 import { execFile } from "node:child_process";
 import { copyFileSync, existsSync, mkdtempSync, rmSync } from "node:fs";

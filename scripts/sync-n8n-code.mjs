@@ -2,8 +2,8 @@
 /* Schrijf de geteste logica uit packages/core/src/n8n/ in de Code-nodes van
  * docs/n8n/lavega-invoices.json.
  *
- *   pnpm run sync:n8n           schrijft de JSON bij
- *   pnpm run sync:n8n --check   zegt alleen of hij bij is (exit 1 zo niet)
+ *   bun run sync:n8n           schrijft de JSON bij
+ *   bun run sync:n8n --check   zegt alleen of hij bij is (exit 1 zo niet)
  *
  * De test packages/core/src/n8n/codeNodes.test.ts doet hetzelfde en faalt als
  * de JSON achterloopt, dus vergeten kan niet ongemerkt.
@@ -53,7 +53,7 @@ if (changed.length === 0) {
 
 if (check) {
   console.error(
-    `n8n-code loopt achter op de bron: ${changed.join(", ")}. Draai \`pnpm run sync:n8n\`.`,
+    `n8n-code loopt achter op de bron: ${changed.join(", ")}. Draai \`bun run sync:n8n\`.`,
   );
   process.exit(1);
 }

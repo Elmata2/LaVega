@@ -7,12 +7,29 @@ status: published
 author: alexander
 updated: 2026-10-26
 sources:
-  - { title: "Nibud: BufferBerekenaar", url: "https://www.nibud.nl/tools/een-financiele-buffer/", accessed: 2026-10-26 }
-  - { title: "Nibud: Sparen, zo pak je het aan", url: "https://www.nibud.nl/onderwerpen/sparen/sparen-zo-pak-je-het-aan/", accessed: 2026-10-26 }
+  - {
+      title: "Nibud: BufferBerekenaar",
+      url: "https://www.nibud.nl/tools/een-financiele-buffer/",
+      accessed: 2026-10-26,
+    }
+  - {
+      title: "Nibud: Sparen, zo pak je het aan",
+      url: "https://www.nibud.nl/onderwerpen/sparen/sparen-zo-pak-je-het-aan/",
+      accessed: 2026-10-26,
+    }
 faq:
-  - { q: "Hoeveel buffer heb je nodig volgens het Nibud?", a: "Het Nibud schrijft dat dit per huishouden verschilt. De BufferBerekenaar van het Nibud rekent een persoonlijke buffer uit op basis van de huishoudsituatie." }
-  - { q: "Wat is de richtlijn van tien procent?", a: "Het Nibud noemt tien procent van het maandinkomen als richtlijn om een buffer op te bouwen en op peil te houden. Het Nibud noemt dit zelf een richtlijn, geen vast bedrag." }
-  - { q: "Waar is een buffer voor bedoeld?", a: "Volgens het Nibud om onverwachte, grotere en noodzakelijke uitgaven direct te kunnen betalen. Geld achter de hand voor dalend of wisselend inkomen is een aparte vraag." }
+  - {
+      q: "Hoeveel buffer heb je nodig volgens het Nibud?",
+      a: "Het Nibud schrijft dat dit per huishouden verschilt. De BufferBerekenaar van het Nibud rekent een persoonlijke buffer uit op basis van de huishoudsituatie.",
+    }
+  - {
+      q: "Wat is de richtlijn van tien procent?",
+      a: "Het Nibud noemt tien procent van het maandinkomen als richtlijn om een buffer op te bouwen en op peil te houden. Het Nibud noemt dit zelf een richtlijn, geen vast bedrag.",
+    }
+  - {
+      q: "Waar is een buffer voor bedoeld?",
+      a: "Volgens het Nibud om onverwachte, grotere en noodzakelijke uitgaven direct te kunnen betalen. Geld achter de hand voor dalend of wisselend inkomen is een aparte vraag.",
+    }
 ---
 
 ## Het korte antwoord

@@ -20,7 +20,7 @@ src/
   replyMime.ts         een antwoordmail in elkaar zetten                         PUUR
   types.d.ts           de vier velden en drie methodes van Cloudflare die we gebruiken
   cloudflare-email.d.ts  de ambient declaratie van `cloudflare:email`
-test/                  vitest; `pnpm --filter @lavega/email-worker test`
+test/                  vitest; `bun --filter @lavega/email-worker test`
 wrangler.toml
 ```
 
@@ -36,7 +36,7 @@ en de n8n-adapter eronder.
 `@cloudflare/workers-types` in `package.json`: er loopt niets mee in een pad dat
 een factuur draagt, en er is niets dat tussen twee deploys stil van gedrag
 verandert. De prijs is `src/types.d.ts` (met de hand getypt) en het feit dat je
-wrangler per keer ophaalt met `pnpm dlx wrangler@4`. Base64, quoted-printable en
+wrangler per keer ophaalt met `bunx wrangler@4`. Base64, quoted-printable en
 RFC 2047 staan daarom als gewone functies in `parseMail.ts`.
 
 `tsconfig.json` typecheckt alleen `src/`. De testbestanden importeren `vitest` en

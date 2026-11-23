@@ -7,13 +7,34 @@ status: published
 author: alexander
 updated: 2026-10-26
 sources:
-  - { title: "Belastingdienst: How the box 3 income on your 2026 provisional assessment is calculated (in Dutch)", url: "https://www.belastingdienst.nl/wps/wcm/connect/nl/box-3/content/berekening-box-3-inkomen-2026", accessed: 2026-10-26 }
-  - { title: "Belastingdienst: Everything about the recovery of your box 3 income (in Dutch)", url: "https://www.belastingdienst.nl/wps/wcm/connect/nl/box-3/box-3", accessed: 2026-10-26 }
-  - { title: "Rijksoverheid: Timeline of the Actual Return Box 3 Act (in Dutch)", url: "https://www.rijksoverheid.nl/themas/werk/inkomstenbelasting/plannen-werkelijk-rendement-box-3/tijdlijn-werkelijk-rendement-box-3", accessed: 2026-10-26 }
+  - {
+      title: "Belastingdienst: How the box 3 income on your 2026 provisional assessment is calculated (in Dutch)",
+      url: "https://www.belastingdienst.nl/wps/wcm/connect/nl/box-3/content/berekening-box-3-inkomen-2026",
+      accessed: 2026-10-26,
+    }
+  - {
+      title: "Belastingdienst: Everything about the recovery of your box 3 income (in Dutch)",
+      url: "https://www.belastingdienst.nl/wps/wcm/connect/nl/box-3/box-3",
+      accessed: 2026-10-26,
+    }
+  - {
+      title: "Rijksoverheid: Timeline of the Actual Return Box 3 Act (in Dutch)",
+      url: "https://www.rijksoverheid.nl/themas/werk/inkomstenbelasting/plannen-werkelijk-rendement-box-3/tijdlijn-werkelijk-rendement-box-3",
+      accessed: 2026-10-26,
+    }
 faq:
-  - { q: "What is the tax-free allowance in box 3 for 2026?", a: "According to the Belastingdienst, 59,357 euro per person and 118,714 euro for fiscal partners together." }
-  - { q: "What is the box 3 tax rate in 2026?", a: "36 percent, applied to the benefit from savings and investments as the Belastingdienst describes it." }
-  - { q: "Will box 3 tax actual returns?", a: "That is the aim from 1 January 2028. The Tweede Kamer (House of Representatives) passed the bill on 12 February 2026. In the latest entry on the Rijksoverheid timeline, 19 June 2026, that bill remains the basis for box 3 from 2028." }
+  - {
+      q: "What is the tax-free allowance in box 3 for 2026?",
+      a: "According to the Belastingdienst, 59,357 euro per person and 118,714 euro for fiscal partners together.",
+    }
+  - {
+      q: "What is the box 3 tax rate in 2026?",
+      a: "36 percent, applied to the benefit from savings and investments as the Belastingdienst describes it.",
+    }
+  - {
+      q: "Will box 3 tax actual returns?",
+      a: "That is the aim from 1 January 2028. The Tweede Kamer (House of Representatives) passed the bill on 12 February 2026. In the latest entry on the Rijksoverheid timeline, 19 June 2026, that bill remains the basis for box 3 from 2028.",
+    }
 ---
 
 ## What is box 3?
@@ -22,17 +43,17 @@ If you live in the Netherlands, your income tax return has three "boxes". Box 3 
 
 Below is how it works in 2026, as the Dutch tax authority (Belastingdienst) describes it. We checked the figures on 26 October 2026. The percentages for bank balances and debts are still provisional.
 
-Dutch sources use Dutch terms. The ones you will meet: *heffingsvrij vermogen* (tax-free allowance), *fiscale partner* (fiscal partner), *aangifte* (tax return), *peildatum* (reference date).
+Dutch sources use Dutch terms. The ones you will meet: _heffingsvrij vermogen_ (tax-free allowance), _fiscale partner_ (fiscal partner), _aangifte_ (tax return), _peildatum_ (reference date).
 
 ## The figures for 2026
 
-| Item | 2026 |
-| --- | --- |
-| Deemed return on bank balances | 1.28% (provisional) |
-| Deemed return on investments and other assets | 6.00% (fixed) |
-| Deemed return on debts | 2.70% (provisional) |
-| Tax-free allowance | 59,357 euro per person, 118,714 euro for fiscal partners |
-| Rate | 36% |
+| Item                                          | 2026                                                     |
+| --------------------------------------------- | -------------------------------------------------------- |
+| Deemed return on bank balances                | 1.28% (provisional)                                      |
+| Deemed return on investments and other assets | 6.00% (fixed)                                            |
+| Deemed return on debts                        | 2.70% (provisional)                                      |
+| Tax-free allowance                            | 59,357 euro per person, 118,714 euro for fiscal partners |
+| Rate                                          | 36%                                                      |
 
 According to the Belastingdienst, the final percentages for bank balances and debts are set in early 2027 and apply to the final 2026 income tax assessment.
 
@@ -63,7 +84,7 @@ If your return base is below the tax-free allowance, the savings and investment 
 
 ## What if your real return differs?
 
-The deemed return is an average, not a measurement of your own return. The Belastingdienst writes that you can report your actual return. For 2025 you do that in the 2025 return. For 2017 to 2024 there is a separate form, the *Opgaaf werkelijk rendement*. Whether and how this works for 2026 we could not establish; see the Belastingdienst.
+The deemed return is an average, not a measurement of your own return. The Belastingdienst writes that you can report your actual return. For 2025 you do that in the 2025 return. For 2017 to 2024 there is a separate form, the _Opgaaf werkelijk rendement_. Whether and how this works for 2026 we could not establish; see the Belastingdienst.
 
 ## The planned move to actual returns
 

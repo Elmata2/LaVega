@@ -48,7 +48,11 @@ const cv = (value: number, extra: Record<string, unknown> = {}) => ({
   conditionsKnown: true,
   ...extra,
 });
-const card = (id: string, fee: number, o: { ppe?: number; fx?: number; cb?: number } = {}): CatalogueEntryLike =>
+const card = (
+  id: string,
+  fee: number,
+  o: { ppe?: number; fx?: number; cb?: number } = {},
+): CatalogueEntryLike =>
   ({
     id,
     product: id.toUpperCase(),
@@ -119,13 +123,14 @@ const FACTS = [
     updatedAt: "2026-08-18",
   }),
 ];
-const offer = (id: string, kind: string, pct: number): CatalogueEntryLike => ({
-  id,
-  product: id.toUpperCase(),
-  issuer: "Testbank N.V.",
-  kind,
-  fields: { cashbackPct: cv(pct) },
-} as CatalogueEntryLike);
+const offer = (id: string, kind: string, pct: number): CatalogueEntryLike =>
+  ({
+    id,
+    product: id.toUpperCase(),
+    issuer: "Testbank N.V.",
+    kind,
+    fields: { cashbackPct: cv(pct) },
+  }) as CatalogueEntryLike;
 
 type Props = Parameters<typeof Optimalisatie>[0];
 const mount = (over: Partial<Props> = {}): HTMLElement => {
@@ -410,9 +415,16 @@ test("a credit card is not the baseline of the cashback answer: the gain rests o
   act(() => root!.unmount());
   el!.remove();
   const accounts = [...debitOnly, CREDIT_ACC];
-  const both = mount({ entries, accounts, own: ownAccounts(accounts), txs: [...debitTxs, ...ccTxs] });
+  const both = mount({
+    entries,
+    accounts,
+    own: ownAccounts(accounts),
+    txs: [...debitTxs, ...ccTxs],
+  });
   expect(cashbackAnswer(both)).toBe(answerAlone);
-  expect(both.querySelector('section[aria-label="Cashback"]')!.textContent).not.toContain("Creditcard");
+  expect(both.querySelector('section[aria-label="Cashback"]')!.textContent).not.toContain(
+    "Creditcard",
+  );
 });
 
 test("two credit cards held: no 'Betaal met X in plaats van Y' between them", () => {
@@ -420,8 +432,22 @@ test("two credit cards held: no 'Betaal met X in plaats van Y' between them", ()
   const b = acc({ key: "cc2", bank: "ABN AMRO", name: "ABN Creditcard", type: "Creditcard" });
   const accounts = [a, b];
   const f = [
-    makeFact({ agent: TRAVEL_AGENT, subject: "ING creditcard", key: "cashbackPct", value: "0", source: "agent", updatedAt: "2026-08-18" }),
-    makeFact({ agent: TRAVEL_AGENT, subject: "ABN AMRO creditcard", key: "cashbackPct", value: "2", source: "agent", updatedAt: "2026-08-18" }),
+    makeFact({
+      agent: TRAVEL_AGENT,
+      subject: "ING creditcard",
+      key: "cashbackPct",
+      value: "0",
+      source: "agent",
+      updatedAt: "2026-08-18",
+    }),
+    makeFact({
+      agent: TRAVEL_AGENT,
+      subject: "ABN AMRO creditcard",
+      key: "cashbackPct",
+      value: "2",
+      source: "agent",
+      updatedAt: "2026-08-18",
+    }),
   ];
   const c = mount({
     accounts,

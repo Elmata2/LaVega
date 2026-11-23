@@ -6,9 +6,8 @@
  * entry is a plain cross-document <a> and all it needs is an origin, or a path.
  *
  * It used to need nothing at all, because the origin was hardcoded to
- * http://127.0.0.1:8790 — the port scripts/rebuild-investing-orbstack.sh
- * publishes on a developer machine. On lavega.dev that link opened a browser
- * error page. The URL is configuration. Production Docker bakes
+ * http://127.0.0.1:8790 — a local standalone port. On lavega.dev that link opened a browser
+ * error page. The URL is configuration. Production Railpack bakes
  * `VITE_INVESTING_URL=/investing` on the all-in-one deploy; override with a full
  * origin when investing runs on its own host. `investingReachable` remains for
  * optional liveness checks — read its doc comment before trusting it, because
@@ -21,9 +20,9 @@ export type InvestingEnv = { VITE_INVESTING_URL?: string; DEV?: boolean };
  *  - `VITE_INVESTING_URL` set to an origin (`https://investing.lavega.dev`) or
  *    a same-origin path (`/beleggen`) — that, minus any trailing slash.
  *  - set but blank — off; the link is not rendered at all.
- *  - unset, dev — the local container from rebuild-investing-orbstack.sh.
+ *  - unset, dev — the local standalone server port (default dev fallback).
  *  - unset, production — `/investing` on this origin (served by the all-in-one
- *    Docker image when `INVESTING_MOUNT` is on). */
+ *    build when `INVESTING_MOUNT` is on). */
 export function resolveInvestingUrl(env: InvestingEnv): string | null {
   const configured = env.VITE_INVESTING_URL;
   if (configured !== undefined) {

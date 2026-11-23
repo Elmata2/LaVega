@@ -15,7 +15,7 @@
 - Work in a new worktree on branch `feat/catalog-safety-net` cut from `origin/master`. The main checkout holds unrelated staged work; do not touch it.
 - **Never commit or push.** Each task ends by staging its files (`git add`). The owner commits.
 - Rules that stay: "unknown is never zero"; "a field a run did not measure is not refuted"; a run that could not do its work must not make the catalogue worse.
-- The guard judges *changes* only. No figure already in `docs/catalog/catalog.json` may be removed or altered by this slice except to gain `confirmedAt`.
+- The guard judges _changes_ only. No figure already in `docs/catalog/catalog.json` may be removed or altered by this slice except to gain `confirmedAt`.
 - Schema changes are additive optional fields. Server (`apps/server/src/catalogFile.ts`), web (`apps/web/src/catalogue-rates.ts`) and extension (`apps/extension/scripts/bundle-catalog.ts`) must read a file with and without them.
 - New modules are pure: no clock, no I/O; `today` is an input as `YYYY-MM-DD` (same pattern as `scripts/catalog/businessSavingsWatch.ts`). No `Date.now` / `new Date()` in new modules.
 - The 12-month removal is OFF for every field in this slice.
@@ -33,16 +33,16 @@
 
 ## File Structure
 
-| File | Responsibility |
-|------|----------------|
-| `packages/core/src/catalog.ts` (modify) | `confirmedAt?: string` on `CatalogValue` |
-| `packages/core/src/catalogGuard.ts` (create) | per-field verdict, known hosts, limits |
-| `packages/core/src/catalogGuardRun.ts` (create) | verdicts for a whole run → merge rows + pending |
-| `packages/core/src/catalogAge.ts` (create) | last-confirmed date, 12-month test, per-field switch |
-| `packages/core/src/index.ts` (modify) | export the three |
-| `scripts/catalog/catalogReport.ts` (create) | run summary → issue title and body |
-| `scripts/catalog-report.ts` (create) | read summary file, open issue through `gh` |
-| `scripts/catalog-sweep.ts` (modify) | call guard run, persist pending, write summary |
+| File                                                                           | Responsibility                                       |
+| ------------------------------------------------------------------------------ | ---------------------------------------------------- |
+| `packages/core/src/catalog.ts` (modify)                                        | `confirmedAt?: string` on `CatalogValue`             |
+| `packages/core/src/catalogGuard.ts` (create)                                   | per-field verdict, known hosts, limits               |
+| `packages/core/src/catalogGuardRun.ts` (create)                                | verdicts for a whole run → merge rows + pending      |
+| `packages/core/src/catalogAge.ts` (create)                                     | last-confirmed date, 12-month test, per-field switch |
+| `packages/core/src/index.ts` (modify)                                          | export the three                                     |
+| `scripts/catalog/catalogReport.ts` (create)                                    | run summary → issue title and body                   |
+| `scripts/catalog-report.ts` (create)                                           | read summary file, open issue through `gh`           |
+| `scripts/catalog-sweep.ts` (modify)                                            | call guard run, persist pending, write summary       |
 | `.github/workflows/catalog-sweep.yml`, `railway.json`, `package.json` (modify) | permissions, report step, deploy trigger, npm script |
 
 ---
@@ -50,6 +50,7 @@
 ### Task 1: Publish guard
 
 **Files:**
+
 - Create: `packages/core/src/catalogGuard.ts`
 - Test: `packages/core/src/catalogGuard.test.ts`
 - Modify: `packages/core/src/catalog.ts` (add `confirmedAt?: string` to `CatalogValue`, doc comment: "last date a run read this same value from the source; `checkedAt` stays the date the source states"), `packages/core/src/index.ts`
@@ -62,16 +63,23 @@ export type PendingFigure = { value: number; seenAt: string }; // seenAt = YYYY-
 export type HoldReason = "out-of-range" | "unknown-host" | "comparison-route" | "bad-source-url";
 
 export type GuardVerdict =
-  | { kind: "unjudged" }                         // found is not covered: merge decides, as today
-  | { kind: "confirm" }                          // same value as current covered figure
+  | { kind: "unjudged" } // found is not covered: merge decides, as today
+  | { kind: "confirm" } // same value as current covered figure
   | { kind: "publish"; viaPending: boolean }
-  | { kind: "pending"; pending: PendingFigure }  // large jump, waits for a second read
+  | { kind: "pending"; pending: PendingFigure } // large jump, waits for a second read
   | { kind: "hold"; reason: HoldReason };
 
-export const FIELD_LIMITS: Readonly<Record<CatalogField, {
-  min: number; max: number;
-  jump: { kind: "points"; max: number; zeroIsJump: boolean } | { kind: "ratio"; factor: number };
-}>>;
+export const FIELD_LIMITS: Readonly<
+  Record<
+    CatalogField,
+    {
+      min: number;
+      max: number;
+      jump:
+        { kind: "points"; max: number; zeroIsJump: boolean } | { kind: "ratio"; factor: number };
+    }
+  >
+>;
 
 export function judgeField(input: {
   field: CatalogField;
@@ -86,22 +94,33 @@ export function judgeField(input: {
 export function sourceHost(sourceUrl: string): string | null;
 
 export function knownHostsByIssuer(
-  products: Readonly<Record<string, { issuer?: string; termsUrl?: string | null; pdfUrl?: string | null; foundUrl?: string | null }>>,
+  products: Readonly<
+    Record<
+      string,
+      {
+        issuer?: string;
+        termsUrl?: string | null;
+        pdfUrl?: string | null;
+        foundUrl?: string | null;
+      }
+    >
+  >,
   entries: readonly MergeEntry[],
 ): Map<string, Set<string>>;
 ```
 
 `FIELD_LIMITS` values (from the spec table):
 
-| Field | min–max | jump |
-|-------|---------|------|
-| `fxFeePct`, `convertFeePct` | 0–5 | points 1, zeroIsJump true |
-| `interestPct` | 0–10 | points 1.5, zeroIsJump true |
-| `cashbackPct` | 0–10 | points 1, zeroIsJump false |
-| `pointsPerEuro` | 0–10 | ratio 2 |
-| `accountFee` | 0–1000 | ratio 2 |
+| Field                       | min–max | jump                        |
+| --------------------------- | ------- | --------------------------- |
+| `fxFeePct`, `convertFeePct` | 0–5     | points 1, zeroIsJump true   |
+| `interestPct`               | 0–10    | points 1.5, zeroIsJump true |
+| `cashbackPct`               | 0–10    | points 1, zeroIsJump false  |
+| `pointsPerEuro`             | 0–10    | ratio 2                     |
+| `accountFee`                | 0–1000  | ratio 2                     |
 
 Decision order inside `judgeField` (the tests pin it):
+
 1. `found` not covered → `unjudged`.
 2. `current` covered and values equal after rounding to 4 decimals → `confirm` (checked before the host and range rules: an existing figure is never re-judged).
 3. `found.route === "comparison"` → hold `comparison-route`.
@@ -117,26 +136,26 @@ Decision order inside `judgeField` (the tests pin it):
 
 ```ts
 // helpers: val(value, over?) → covered CatalogValue on https://www.bank.test/tarieven ; hosts = new Set(["www.bank.test"])
-"uncovered found is unjudged"                     // conditionsKnown:false → {kind:"unjudged"}
-"same value confirms"                             // current 1.4, found 1.4000000001 → confirm
-"same value confirms even from an unknown host"   // found on other.test, equal value → confirm
-"small change publishes"                          // fxFeePct 1.4 → 1.5 → {kind:"publish", viaPending:false}
-"comparison route is held"                        // route:"comparison", 1.4 → 1.5 → hold comparison-route
-"unknown host is held"                            // sourceUrl https://vergelijk.test/x → hold unknown-host
-"archive snapshot of a known host passes"         // https://web.archive.org/web/20260101000000/https://www.bank.test/t → publish
-"malformed source url is held, not thrown"        // sourceUrl "not a url" → hold bad-source-url
-"out of range is held"                            // interestPct found 25 → hold out-of-range; fxFeePct -1 → same
-"first figure publishes without a jump test"      // current undefined, interestPct 4.25 → publish
-"large jump goes pending"                         // interestPct 2 → 4, no pending, today 2026-11-23 → pending {value:4, seenAt:"2026-11-23"}
-"exactly at the limit is not a jump"              // interestPct 2 → 3.5 → publish
-"drop to zero is a jump for fx and interest"      // fxFeePct 1.4 → 0 → pending ; cashbackPct 0.5 → 0 → publish
-"second equal read in a later run publishes"      // pending {4,"2026-11-23"}, today "2026-11-30" → publish viaPending:true
-"second read on the same day stays pending"       // pending {4,"2026-11-23"}, today "2026-11-23" → pending, seenAt unchanged
-"second read with another value restarts pending" // pending {4,"2026-11-23"}, found 4.5, today "2026-11-30" → pending {4.5,"2026-11-30"}
-"ratio jump"                                      // accountFee 24 → 60 → pending ; 24 → 40 → publish ; 24 → 10 → pending
-"zero baseline on a ratio field is a jump"        // accountFee 0 → 24 → pending ; pointsPerEuro 0 → 1 → pending
-"knownHostsByIssuer gathers state urls and catalogue sources per issuer"
-"sourceHost reads plain and archived urls, null on rubbish"
+"uncovered found is unjudged"; // conditionsKnown:false → {kind:"unjudged"}
+"same value confirms"; // current 1.4, found 1.4000000001 → confirm
+"same value confirms even from an unknown host"; // found on other.test, equal value → confirm
+"small change publishes"; // fxFeePct 1.4 → 1.5 → {kind:"publish", viaPending:false}
+"comparison route is held"; // route:"comparison", 1.4 → 1.5 → hold comparison-route
+"unknown host is held"; // sourceUrl https://vergelijk.test/x → hold unknown-host
+"archive snapshot of a known host passes"; // https://web.archive.org/web/20260101000000/https://www.bank.test/t → publish
+"malformed source url is held, not thrown"; // sourceUrl "not a url" → hold bad-source-url
+"out of range is held"; // interestPct found 25 → hold out-of-range; fxFeePct -1 → same
+"first figure publishes without a jump test"; // current undefined, interestPct 4.25 → publish
+"large jump goes pending"; // interestPct 2 → 4, no pending, today 2026-11-23 → pending {value:4, seenAt:"2026-11-23"}
+"exactly at the limit is not a jump"; // interestPct 2 → 3.5 → publish
+"drop to zero is a jump for fx and interest"; // fxFeePct 1.4 → 0 → pending ; cashbackPct 0.5 → 0 → publish
+"second equal read in a later run publishes"; // pending {4,"2026-11-23"}, today "2026-11-30" → publish viaPending:true
+"second read on the same day stays pending"; // pending {4,"2026-11-23"}, today "2026-11-23" → pending, seenAt unchanged
+"second read with another value restarts pending"; // pending {4,"2026-11-23"}, found 4.5, today "2026-11-30" → pending {4.5,"2026-11-30"}
+"ratio jump"; // accountFee 24 → 60 → pending ; 24 → 40 → publish ; 24 → 10 → pending
+"zero baseline on a ratio field is a jump"; // accountFee 0 → 24 → pending ; pointsPerEuro 0 → 1 → pending
+"knownHostsByIssuer gathers state urls and catalogue sources per issuer";
+"sourceHost reads plain and archived urls, null on rubbish";
 ```
 
 - [ ] **Step 2:** Run `pnpm --filter @lavega/core test -- catalogGuard` → FAIL (module missing).
@@ -147,6 +166,7 @@ Decision order inside `judgeField` (the tests pin it):
 ### Task 2: Run-level guard and age
 
 **Files:**
+
 - Create: `packages/core/src/catalogGuardRun.ts`, `packages/core/src/catalogAge.ts`
 - Test: `packages/core/src/catalogGuardRun.test.ts`, `packages/core/src/catalogAge.test.ts`
 - Modify: `packages/core/src/index.ts`, `packages/core/src/catalogRates.ts`
@@ -158,10 +178,12 @@ Decision order inside `judgeField` (the tests pin it):
 ```ts
 // catalogGuardRun.ts
 export type FieldVerdict = {
-  id: string; product: string; field: CatalogField;
+  id: string;
+  product: string;
+  field: CatalogField;
   verdict: GuardVerdict;
-  before: CatalogValue | undefined;   // what the catalogue held
-  found: CatalogValue;                // what the run read
+  before: CatalogValue | undefined; // what the catalogue held
+  found: CatalogValue; // what the run read
 };
 export type PendingMap = Record<string, PendingFigure>; // key "productId.field"
 
@@ -177,15 +199,20 @@ export function guardRun(input: {
 export const MAX_FIGURE_AGE_MONTHS = 12;
 /** Fields for which an aged-out figure leaves the ranking. Empty in slice 1 (spec: staged). */
 export const AGE_REMOVAL_FIELDS: ReadonlySet<CatalogField>;
-export function lastConfirmed(v: CatalogValue): string;                 // confirmedAt ?? checkedAt
+export function lastConfirmed(v: CatalogValue): string; // confirmedAt ?? checkedAt
 export function isOlderThanMaxAge(v: CatalogValue, today: string): boolean; // calendar months, >= 12
-export function isAgedOut(field: CatalogField, v: CatalogValue, today: string,
-  enabled?: ReadonlySet<CatalogField>): boolean;                        // default enabled = AGE_REMOVAL_FIELDS
+export function isAgedOut(
+  field: CatalogField,
+  v: CatalogValue,
+  today: string,
+  enabled?: ReadonlySet<CatalogField>,
+): boolean; // default enabled = AGE_REMOVAL_FIELDS
 ```
 
 What `guardRun` does with each verdict for a row's field:
+
 - `unjudged` → field passed through unchanged (existing merge rule decides).
-- `confirm` → field = the *previous* value with `confirmedAt: today` (previous `conditions`, `sourceUrl`, `checkedAt` kept, so weekly model wording does not churn the file).
+- `confirm` → field = the _previous_ value with `confirmedAt: today` (previous `conditions`, `sourceUrl`, `checkedAt` kept, so weekly model wording does not churn the file).
 - `publish` → field = found value with `confirmedAt: today`.
 - `pending`, `hold` → field omitted from the row (merge then keeps the old value by its "not measured" rule).
 - Returned `pending`: starts from the input map; an entry is set on `pending`, deleted on `publish`, `confirm` and `hold` for that key; keys the run did not measure are kept.
@@ -197,24 +224,24 @@ What `guardRun` does with each verdict for a row's field:
 
 ```ts
 // catalogGuardRun.test.ts
-"confirm keeps the old value and stamps confirmedAt"       // prev 1.4 (checkedAt 2026-06-15, conditions "A"); found 1.4 conditions "B" → row field value 1.4, conditions "A", checkedAt "2026-06-15", confirmedAt today
-"publish writes the found value with confirmedAt"
-"hold omits the field and merge keeps the old value"       // feed result.rows to mergeCatalogEntries → old value still there, no confirmedAt added
-"pending omits the field and records productId.field"
-"publish via pending clears the pending key"
-"hold clears a pending key for that field"
-"pending for a product this run did not sweep is kept"
-"unjudged field passes through untouched"
-"every measured field yields one FieldVerdict with before and found"
-"a row left with no fields is still returned"
-"hosts are looked up by the row's issuer, falling back to its id"
+"confirm keeps the old value and stamps confirmedAt"; // prev 1.4 (checkedAt 2026-06-15, conditions "A"); found 1.4 conditions "B" → row field value 1.4, conditions "A", checkedAt "2026-06-15", confirmedAt today
+"publish writes the found value with confirmedAt";
+"hold omits the field and merge keeps the old value"; // feed result.rows to mergeCatalogEntries → old value still there, no confirmedAt added
+"pending omits the field and records productId.field";
+"publish via pending clears the pending key";
+"hold clears a pending key for that field";
+"pending for a product this run did not sweep is kept";
+"unjudged field passes through untouched";
+"every measured field yields one FieldVerdict with before and found";
+"a row left with no fields is still returned";
+"hosts are looked up by the row's issuer, falling back to its id";
 
 // catalogAge.test.ts
-"lastConfirmed prefers confirmedAt, falls back to checkedAt"
-"isOlderThanMaxAge: 2025-11-21 vs today 2026-11-21 is true; 2025-11-22 is false"
-"isAgedOut is false for every field with the default switch"   // AGE_REMOVAL_FIELDS.size === 0
-"isAgedOut is true for an old figure when its field is enabled"
-"malformed date counts as old"                                 // checkedAt "" or "2023" → isOlderThanMaxAge true
+"lastConfirmed prefers confirmedAt, falls back to checkedAt";
+"isOlderThanMaxAge: 2025-11-21 vs today 2026-11-21 is true; 2025-11-22 is false";
+"isAgedOut is false for every field with the default switch"; // AGE_REMOVAL_FIELDS.size === 0
+"isAgedOut is true for an old figure when its field is enabled";
+"malformed date counts as old"; // checkedAt "" or "2023" → isOlderThanMaxAge true
 ```
 
 - [ ] **Step 2:** `pnpm --filter @lavega/core test -- catalogGuardRun catalogAge` → FAIL.
@@ -225,6 +252,7 @@ What `guardRun` does with each verdict for a row's field:
 ### Task 3: Report builder
 
 **Files:**
+
 - Create: `scripts/catalog/catalogReport.ts`
 - Test: `scripts/catalog/catalogReport.test.ts`
 
@@ -236,9 +264,9 @@ What `guardRun` does with each verdict for a row's field:
 export type RunSummary = {
   today: string;
   status: "written" | "refused" | "dry";
-  refusedReason: string | null;        // the REFUSING TO WRITE line, when refused
+  refusedReason: string | null; // the REFUSING TO WRITE line, when refused
   verdicts: FieldVerdict[];
-  kept: string[];                       // from mergeCatalogEntries
+  kept: string[]; // from mergeCatalogEntries
   failures: { product: string; reason: string }[]; // products with no figure this run
   crossedAgeLine: { product: string; field: string; lastConfirmed: string }[];
   spendLines: string[];
@@ -249,10 +277,14 @@ export const REPORT_LABEL = "catalog-report";
 /** null = nothing to report this week. */
 export function buildReport(summary: RunSummary): { title: string; body: string } | null;
 /** For a run that left no summary file at all. */
-export function buildCrashReport(today: string, runUrl: string | null): { title: string; body: string };
+export function buildCrashReport(
+  today: string,
+  runUrl: string | null,
+): { title: string; body: string };
 ```
 
 Report rules:
+
 - Title: `Catalogue report <today>: <n> changed, <m> held`; for a refused run `Catalogue report <today>: run refused, nothing published`.
 - Sections in this order, each omitted when empty: **Changed** (product, field, old → new, route, source link; mark "after second read" when `viaPending`), **Waiting for a second read** (pending), **Held back** (with reason in plain words), **Older than 12 months** (`crossedAgeLine`), **Not reachable** (`failures`, capped at 30 lines plus "and N more"), **Spend**.
 - Returns `null` when status is `written` and Changed, Waiting, Held and Older-than-12-months are all empty (failures alone do not open an issue; they are the weekly normal for the free sweep).
@@ -268,12 +300,14 @@ Report rules:
 ### Task 4: Wire the sweep, the report script and the workflow
 
 **Files:**
+
 - Modify: `scripts/catalog-sweep.ts` (`mergeSubset` near line 946; the dry exit and the three `REFUSING TO WRITE` exits near lines 1322–1360), `package.json`, `.github/workflows/catalog-sweep.yml`, `railway.json`
 - Create: `scripts/catalog-report.ts`
 
 **Interfaces — Consumes:** `guardRun`, `knownHostsByIssuer`, `isOlderThanMaxAge` (core); `RunSummary`, `buildReport`, `buildCrashReport`, `REPORT_LABEL` (Task 3).
 
 Sweep changes:
+
 - New flag `--summary-out <path>`. When given, the sweep writes a `RunSummary` JSON there on every exit path it controls: `dry`, each `REFUSING TO WRITE` exit (`status: "refused"`, `refusedReason` = the printed line), and the two write paths. `runUrl` comes from `GITHUB_SERVER_URL`/`GITHUB_REPOSITORY`/`GITHUB_RUN_ID` when set.
 - The guard runs once, before the dry exit, so `--dry` prints the verdicts too: `const guarded = guardRun({ prev, rows: entries, knownHosts: knownHostsByIssuer(state.products, prev), pending: state.pending ?? {}, today })`. One console line per verdict that is not `confirm` or `unjudged`.
 - `mergeSubset` passes `guarded.rows` to `mergeCatalogEntries` instead of the raw rows and sets `state.pending = guarded.pending` before writing `state.json`. `pending` lives at the top level of `state.json` next to `lastRun`.
@@ -299,6 +333,7 @@ Workflow (`sweep` job): permissions `contents: write` and `issues: write`; the s
 ### Task 5: Docs and handoff
 
 **Files:**
+
 - Modify: `docs/catalog/watchlist.md` (section "How a change gets published": guard rules, pending, the report issue, `confirmedAt`), `docs/superpowers/specs/2026-11-21-weekly-data-refresh-design.md` (mark slice 1 built; correct anything the build proved wrong)
 
 - [ ] **Step 1:** Update both docs.

@@ -137,7 +137,7 @@ test("a figure whose conditions were never established is still refused after th
 });
 
 test("the default path resolves to the committed catalogue, from either working directory", () => {
-  // WEB_DIST's trick: derive from this FILE, not from cwd. `pnpm --filter` runs
+  // WEB_DIST's trick: derive from this FILE, not from cwd. `bun --filter` runs
   // in the package dir and Railway runs from the repo root, and a relative path
   // would silently find nothing in one of them.
   expect(CATALOG_FILE.endsWith("/docs/catalog/catalog.json")).toBe(true);

@@ -2,7 +2,7 @@
  *
  * DIT BESTAND DRAAIT OP DRIE PLEKKEN — het is de bron van de Code-nodes
  * "Naar LaVega-vorm" en "Melding: zelf ophalen" in
- * docs/n8n/lavega-invoices.json. `pnpm run sync:n8n` kopieert het daarin.
+ * docs/n8n/lavega-invoices.json. `bun run sync:n8n` kopieert het daarin.
  * Geen TypeScript-syntax, alleen JSDoc.
  *
  * Twee soorten uitkomst, en het verschil is de hele veiligheid van deze

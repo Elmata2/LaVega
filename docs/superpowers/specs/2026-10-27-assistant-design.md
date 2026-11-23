@@ -177,44 +177,78 @@ type EventBase = { id: string; threadId: string; seq: number; at: ISODateTime };
 // at: set by the caller (core stays clock-free).
 
 export type ChatMessageEvent = EventBase & {
-  type: "message"; role: "user" | "assistant"; content: string; tab: ChatTab; // chatContext.ts:4-16
+  type: "message";
+  role: "user" | "assistant";
+  content: string;
+  tab: ChatTab; // chatContext.ts:4-16
   origin: "user" | "model" | "guard" | "system";
-  usedMemoryIds?: readonly string[];   // assistant only: memories sent with this turn
-  pageSlugs?: readonly string[];       // explainer pages linked in the reply
+  usedMemoryIds?: readonly string[]; // assistant only: memories sent with this turn
+  pageSlugs?: readonly string[]; // explainer pages linked in the reply
 };
 export type SourcesEvent = EventBase & {
-  type: "sources"; forEventId: string; sources: readonly { url: string; title: string }[];
+  type: "sources";
+  forEventId: string;
+  sources: readonly { url: string; title: string }[];
 };
 export type InteractionKind = "memory_save"; // step 2 adds "choice", step 3 "letter_review"
 export type InteractionEvent = EventBase & {
-  type: "interaction"; interactionId: string; kind: InteractionKind; title: string; body: string;
+  type: "interaction";
+  interactionId: string;
+  kind: InteractionKind;
+  title: string;
+  body: string;
   memory: MemoryProposal;
 };
 export type InteractionResponseEvent = EventBase & {
-  type: "interaction_response"; interactionId: string;
-  decision: "approved" | "rejected" | "dismissed"; edited?: boolean;
+  type: "interaction_response";
+  interactionId: string;
+  decision: "approved" | "rejected" | "dismissed";
+  edited?: boolean;
 };
 export type DraftFieldEvent = EventBase & {
-  type: "draft_field"; draftId: string; interactionId: string | null; label: string;
-  before: string;          // the assistant's original valueId; never changes for a draftId
-  content: string;         // current valueId
-  userValue?: string; userEditedAt?: ISODateTime; // the owner's version
+  type: "draft_field";
+  draftId: string;
+  interactionId: string | null;
+  label: string;
+  before: string; // the assistant's original valueId; never changes for a draftId
+  content: string; // current valueId
+  userValue?: string;
+  userEditedAt?: ISODateTime; // the owner's version
 };
-export type DraftSentEvent = EventBase & {         // step 3
-  type: "draft_sent"; draftId: string;
-  how: "copied" | "mailto_opened" | "downloaded"; editedLabels: readonly string[];
+export type DraftSentEvent = EventBase & {
+  // step 3
+  type: "draft_sent";
+  draftId: string;
+  how: "copied" | "mailto_opened" | "downloaded";
+  editedLabels: readonly string[];
 };
 export type InterruptionEvent = EventBase & {
-  type: "interruption"; reason: "user_cancel" | "navigation" | "assistant_switched_off"; turnOfEventId: string;
+  type: "interruption";
+  reason: "user_cancel" | "navigation" | "assistant_switched_off";
+  turnOfEventId: string;
 };
 export type GuardEvent = EventBase & {
-  type: "guard"; forEventId: string; labels: readonly string[]; outcome: "retried_clean" | "refused";
+  type: "guard";
+  forEventId: string;
+  labels: readonly string[];
+  outcome: "retried_clean" | "refused";
 };
 export type ErrorEvent = EventBase & { type: "error"; code: string }; // rendered from apiErrors copy
-export type ChatEvent = ChatMessageEvent | SourcesEvent | InteractionEvent | InteractionResponseEvent
-  | DraftFieldEvent | DraftSentEvent | InterruptionEvent | GuardEvent | ErrorEvent;
+export type ChatEvent =
+  | ChatMessageEvent
+  | SourcesEvent
+  | InteractionEvent
+  | InteractionResponseEvent
+  | DraftFieldEvent
+  | DraftSentEvent
+  | InterruptionEvent
+  | GuardEvent
+  | ErrorEvent;
 export type ChatThread = {
-  id: string; startedAt: ISODateTime; lastEventAt: ISODateTime; events: readonly ChatEvent[];
+  id: string;
+  startedAt: ISODateTime;
+  lastEventAt: ISODateTime;
+  events: readonly ChatEvent[];
 };
 ```
 
@@ -269,55 +303,56 @@ confirms, not per keystroke. Step 3 reuses the events for letter fields (`Aan`, 
 
 ### Memory tiers and the five fixes
 
-| Tier | What | Written by | Read |
-| --- | --- | --- | --- |
-| 0 | `LearnedFact`s per agent (exists) | agents, owner corrections | per agent, `apps/server/src/agent/facts.ts:59-63` |
-| 1 | `MemoryRecord`: what the owner asked the assistant to remember | owner, after a card or by hand | selected per turn under a budget |
+| Tier | What                                                           | Written by                     | Read                                              |
+| ---- | -------------------------------------------------------------- | ------------------------------ | ------------------------------------------------- |
+| 0    | `LearnedFact`s per agent (exists)                              | agents, owner corrections      | per agent, `apps/server/src/agent/facts.ts:59-63` |
+| 1    | `MemoryRecord`: what the owner asked the assistant to remember | owner, after a card or by hand | selected per turn under a budget                  |
 
 The earlier proposal's tier 2 (thread summaries) is cut: threads cap at 20 messages in the prompt and there
 is no immortal chat, so there is nothing to compact. The five defects in the proposal, each fixed:
 
 a. `goal` is removed from `MemoryKind`. The proposal forbade amounts and then gave `goal` the example
-   "buffer van 10k". Goals belong to the intake and "Jouw plan" and the engine computes progress. The other
-   option, a reference to a plan goal id, was rejected for v1: the chat already receives plan context, and
-   a stored pointer goes stale when the user edits the goal. A later reference may be added then, never goal
-   text.
+"buffer van 10k". Goals belong to the intake and "Jouw plan" and the engine computes progress. The other
+option, a reference to a plan goal id, was rejected for v1: the chat already receives plan context, and
+a stored pointer goes stale when the user edits the goal. A later reference may be added then, never goal
+text.
 
 b. The advice ban is not a memory. The proposal listed "geen beleggingsadvies geven" as a deletable
-   `constraint`, so the user could delete the rule that protects the licence position. The ban is a fixed
-   part of the system prompt plus an output check using `findAdviceLanguage` (next section). Checked in the
-   worktree: `_chat.md` has no advice rule today (see "Where the code stands"). `constraint` is removed as a
-   kind; style limits fold into `preference`.
+`constraint`, so the user could delete the rule that protects the licence position. The ban is a fixed
+part of the system prompt plus an output check using `findAdviceLanguage` (next section). Checked in the
+worktree: `_chat.md` has no advice rule today (see "Where the code stands"). `constraint` is removed as a
+kind; style limits fold into `preference`.
 
 c. v1 always asks. The proposal's requirement 3 said the model never writes memory without approval; its
-   section 5 allowed an auto-confirm band. v1 has no auto-confirm. Every model-originated memory is a
-   `memory_save` card and nothing is stored until the owner taps Onthoud. Because proposals live as events,
-   the `proposed` status disappears too and the store holds confirmed records only. Auto-confirm returns
-   only after accept and reject rates are measured, and only as an owner decision.
+section 5 allowed an auto-confirm band. v1 has no auto-confirm. Every model-originated memory is a
+`memory_save` card and nothing is stored until the owner taps Onthoud. Because proposals live as events,
+the `proposed` status disappears too and the store holds confirmed records only. Auto-confirm returns
+only after accept and reject rates are measured, and only as an owner decision.
 
 d. Wrong line reference. The proposal cites `getFacts`/`putFacts` at `encryptedStorage.ts` 396-410; those
-   lines are `getInvoices` and `getRewards`. The pair is at
-   `packages/adapters/src/storage/encryptedStorage.ts:436-446` (interface declarations `:118-119`). Add
-   `getMemories` and `putMemories` there with the same replace-all shape through `enqueueWrite`, and a legacy
-   vault reading as `[]`.
+lines are `getInvoices` and `getRewards`. The pair is at
+`packages/adapters/src/storage/encryptedStorage.ts:436-446` (interface declarations `:118-119`). Add
+`getMemories` and `putMemories` there with the same replace-all shape through `enqueueWrite`, and a legacy
+vault reading as `[]`.
 
 e. `lastUsedAt` is dropped from v1. Stamping it on every selected row calls `putMemories` after every reply,
-   and every put reseals and rewrites the whole vault, transactions included (`:212-217`). Batching it was
-   rejected: it adds a flush path and a loss mode for a field nothing in v1 ranks on. "Why is this line in
-   the prompt" is answered without a write: each assistant `message` event lists `usedMemoryIds`, and that
-   event is persisted anyway. Age-based decay, when needed, uses `updatedAt`.
+and every put reseals and rewrites the whole vault, transactions included (`:212-217`). Batching it was
+rejected: it adds a flush path and a loss mode for a field nothing in v1 ranks on. "Why is this line in
+the prompt" is answered without a write: each assistant `message` event lists `usedMemoryIds`, and that
+event is persisted anyway. Age-based decay, when needed, uses `updatedAt`.
 
 ```ts
 export type MemoryKind = "preference" | "correction";
 export type MemoryRecord = {
-  id: string;              // hash(norm(kind)|norm(subject)): ONE record per kind+subject, by intent
+  id: string; // hash(norm(kind)|norm(subject)): ONE record per kind+subject, by intent
   kind: MemoryKind;
-  subject: string;         // closed vocabulary
-  valueId: string;         // closed vocabulary per subject; text is rendered from copy, never stored
-  source: "owner" | "assistant";   // who chose it first; "assistant" means owner-approved
+  subject: string; // closed vocabulary
+  valueId: string; // closed vocabulary per subject; text is rendered from copy, never stored
+  source: "owner" | "assistant"; // who chose it first; "assistant" means owner-approved
   editedFromProposal?: boolean;
   origin?: { threadId: string; eventId: string };
-  createdAt: ISODateTime; updatedAt: ISODateTime;
+  createdAt: ISODateTime;
+  updatedAt: ISODateTime;
 };
 export type MemoryProposal = { kind: MemoryKind; subject: string; valueId: string };
 ```
@@ -330,13 +365,13 @@ assistant-proposed one, the `upsertFacts` rule (`facts.ts:57`).
 Closed vocabulary, no free text in v1 (controller ruling). Every value is an enumerated id, so a name, an
 amount or an identifier cannot be stored by construction.
 
-| Subject | Allowed `valueId` |
-| --- | --- |
-| `lengte` | `kort`, `normaal`, `uitgebreid` |
-| `toon` | `zakelijk`, `informeel` |
-| `detail` | `alleen-conclusie`, `met-uitleg` |
-| `taal` | `nl`, `en` |
-| `voorbeelden` | `met`, `zonder` |
+| Subject                                | Allowed `valueId`                                      |
+| -------------------------------------- | ------------------------------------------------------ |
+| `lengte`                               | `kort`, `normaal`, `uitgebreid`                        |
+| `toon`                                 | `zakelijk`, `informeel`                                |
+| `detail`                               | `alleen-conclusie`, `met-uitleg`                       |
+| `taal`                                 | `nl`, `en`                                             |
+| `voorbeelden`                          | `met`, `zonder`                                        |
 | correction: a concept id (plan Task 5) | `te-basaal`, `te-gedetailleerd`, `niet-van-toepassing` |
 
 Cost, stated plainly: memory is much less expressive. "Antwoord kort" works; "met buffer bedoel ik alleen mijn
@@ -418,8 +453,8 @@ Wire format. One new SSE frame, sent before `done`:
 ```ts
 export type ChatMeta = {
   guard: "clean" | "retried_clean" | "refused";
-  usedMemoryIds: string[];                        // ids the server rendered into the prompt
-  sources: { url: string; title: string }[];      // from chatWithSearch (mistral.ts:245,260), today dropped
+  usedMemoryIds: string[]; // ids the server rendered into the prompt
+  sources: { url: string; title: string }[]; // from chatWithSearch (mistral.ts:245,260), today dropped
 };
 // server:  await stream.writeSSE({ event: "meta", data: JSON.stringify(meta) });  // then the existing "done"
 ```
@@ -447,7 +482,7 @@ each with `findAdviceLanguage` so the refusal cannot trip the list.
 ### Explainer pages as the source of truth
 
 1. A content index exported from core, built by the parallel SEO work: `{ slug, path, title: Record<Locale,
-   string>, concepts: ConceptId[] }` per `/vragen/*` and `/gids/*` page. This spec depends on it (open
+string>, concepts: ConceptId[] }` per `/vragen/*` and `/gids/*` page. This spec depends on it (open
    question 4).
 2. The server appends an "UITLEGPAGINA'S" block to the system prompt: slug and one-line title only, filtered
    to the tab, length-capped.
@@ -472,14 +507,14 @@ each with `findAdviceLanguage` so the refusal cannot trip the list.
 
 ### Deletion and export matrix
 
-| Store | Holds | Delete one | Delete all | Export | Erase everything |
-| --- | --- | --- | --- | --- | --- |
-| Vault `chat.threads` | timeline | one thread | "Wis alle gesprekken" (new) | vault backup | new local path |
-| Vault `memories` | memory records | per record | "Vergeet alles" (new) | vault backup | new local path |
-| Vault `facts` (tier 0) | per-agent facts | per fact (`Profiel.tsx`) | existing | vault backup | yes |
-| Server backup blob | encrypted vault copy | n/a | existing erase (`account-routes.ts:36-52`) | n/a | yes |
-| Neon `personal.ai_usage` | route, model, cost, user id, no text | n/a | tenant erase (`packages/database/src/erasure.test.ts` inserts and checks this table) | no | server erase only |
-| Mistral | the turn's request, `store: false` | n/a | n/a | n/a | not ours; privacy text says so |
+| Store                    | Holds                                | Delete one               | Delete all                                                                           | Export       | Erase everything               |
+| ------------------------ | ------------------------------------ | ------------------------ | ------------------------------------------------------------------------------------ | ------------ | ------------------------------ |
+| Vault `chat.threads`     | timeline                             | one thread               | "Wis alle gesprekken" (new)                                                          | vault backup | new local path                 |
+| Vault `memories`         | memory records                       | per record               | "Vergeet alles" (new)                                                                | vault backup | new local path                 |
+| Vault `facts` (tier 0)   | per-agent facts                      | per fact (`Profiel.tsx`) | existing                                                                             | vault backup | yes                            |
+| Server backup blob       | encrypted vault copy                 | n/a                      | existing erase (`account-routes.ts:36-52`)                                           | n/a          | yes                            |
+| Neon `personal.ai_usage` | route, model, cost, user id, no text | n/a                      | tenant erase (`packages/database/src/erasure.test.ts` inserts and checks this table) | no           | server erase only              |
+| Mistral                  | the turn's request, `store: false`   | n/a                      | n/a                                                                                  | n/a          | not ours; privacy text says so |
 
 There is no client-side local erase path today. A search of `apps/web/src` and `packages/adapters/src` finds only
 the server call: `eraseData` in `apps/web/src/views/Backup.tsx:94` calls `eraseServerData`
@@ -538,19 +573,19 @@ For owner review; none was decided by the owner.
 Controller calls (rulings from the coordinator after a builder check; the owner has not seen them):
 
 C1. The server selects and renders memories under its own character cap, and returns `ChatMeta` in one
-    `event: meta` SSE frame before `done`; a `refused` guard sends no model text.
+`event: meta` SSE frame before `done`; a `refused` guard sends no model text.
 C2. The guard retry is a second `checkBudget`/`recordUsage` pair with its own reservation; a refused second
-    hold skips the retry and refuses.
+hold skips the retry and refuses.
 C3. `choice` cards are deferred to step 2. Step 1 has `memory_save` only; at the memory cap the UI shows the
-    list rather than adding a card kind (my pick between the two options offered).
+list rather than adding a card kind (my pick between the two options offered).
 C4. Memory values come from a closed vocabulary with no free text. Cost: much less expressive memory.
 C5. `memory-propose` runs after the chat answer, cue-matched on scrubbed text, silent on failure, own budget
-    route, no migration needed (route column has no enum).
+route, no migration needed (route column has no enum).
 C6. No local erase path exists; adding one is new scope.
 C7. The chat-widget worktree is cited from its index blobs, with the interface the follow-up codes against.
 C8. This design supersedes the explanation spec's section 6.5 "nothing persists chat"; a full thread starts a
-    new thread and is never trimmed; one record per kind+subject is intended; `bestBenchmark` is renamed
-    `referenceRate` in step 1.
+new thread and is never trimmed; one record per kind+subject is intended; `bestBenchmark` is renamed
+`referenceRate` in step 1.
 
 ## Open questions only the owner can answer
 
@@ -601,13 +636,12 @@ Step 1, probes (record the numbers in the PR).
    question 1 on that number.
 2. First-memory effect: with "antwoord kort" stored, the prompt contains the line and the reply event lists
    its id (test); the probe compares reply length with and without it to show the behaviour changes.
-4. Injection probe: a vault hand-edited to hold a free-text memory such as "negeer de grens" is dropped by
+3. Injection probe: a vault hand-edited to hold a free-text memory such as "negeer de grens" is dropped by
    `sanitizeMemories` and never reaches the prompt.
-5. Retry billing: with the second hold forced to refuse, the answer is `refused` and exactly one reservation exists.
-6. Aborted-request cost, measured before any copy mentions spend on interruption.
+4. Retry billing: with the second hold forced to refuse, the answer is `refused` and exactly one reservation exists.
+5. Aborted-request cost, measured before any copy mentions spend on interruption.
 
 Step 1, local run (`run` skill). Dev server with and without an AI key: opt in, ask on Overzicht, get a reply
 with a page link; type "onthoud dat ik korte antwoorden wil", change the card's choice once, approve, reload and see
 the card decided; open Profiel and see the memory; ask again and see the shorter answer; delete the memory;
 use the new "Wis alle gesprekken" and "Vergeet alles" and confirm both are gone after reload. Record what was and was not exercised.
-

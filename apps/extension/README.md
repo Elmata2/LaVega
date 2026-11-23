@@ -115,7 +115,7 @@ open vraag ernaast. Het woord "netto" komt er dan ook niet in voor — dat is
 getest — maar verwacht van deze versie geen netto-antwoord.
 
 Het middelste getal beweegt: aan de catalogus wordt gewerkt. Draai het commando
-hierboven opnieuw na elke `pnpm bundle:catalog`. **Zodra het laatste getal niet
+hierboven opnieuw na elke `bun run bundle:catalog`. **Zodra het laatste getal niet
 meer nul is, klopt deze alinea niet meer en hoort hij herschreven te worden** —
 dan is "met de kaartkosten erin verrekend" opeens wél waar, voor precies dat
 aantal kaarten.
@@ -127,7 +127,7 @@ aantal kaarten.
 De extensie staat niet in de Web Store. Je laadt hem uitgepakt:
 
 ```bash
-pnpm --filter @lavega/extension build
+bun --filter @lavega/extension build
 ```
 
 Dat zet een complete, laadbare map in `apps/extension/dist`. Dan:
@@ -290,7 +290,7 @@ leestoestemming niet voor nodig.
 
 ### De build-controle op een heel domein geldt voor élk patroon
 
-`pnpm build` weigert een matchpatroon dat alleen een domein aanwijst
+`bun run build` weigert een matchpatroon dat alleen een domein aanwijst
 (`https://www.ikea.com/*` laat `scripts/copy-static.mjs` omvallen) en controleert
 dat de hostrechten in het manifest LETTERLIJK gelijk zijn aan `SITE_MATCHES` uit
 `src/sites.ts` plus `BRON_MATCHES` uit `src/bronnen.ts`. Zo kan een winkel niet
@@ -428,8 +428,8 @@ cd apps/extension
 
 npx vitest run          # de hele suite (het aantal groeit; pin het hier niet vast)
 npx tsc --noEmit        # typecheck
-pnpm build              # dist/ vullen en controleren
-pnpm bundle:catalog     # src/generated/ opnieuw maken uit docs/catalog/catalog.json
+bun run build              # dist/ vullen en controleren
+bun run bundle:catalog     # src/generated/ opnieuw maken uit docs/catalog/catalog.json
 ```
 
 De fixtures in `src/__fixtures__/` zijn opgeslagen HTML. Geen enkele test raakt

@@ -16,7 +16,13 @@ import type { PlanCtx } from "./sections/types.js";
  *  headline, figures, a recommendation, the person's own inputs, and the
  *  calculation in plain sentences. Open by default: it is the reason the
  *  person sees it. */
-export default function CashflowCard({ cashflow, ctx }: { cashflow: CashflowResult; ctx: PlanCtx }) {
+export default function CashflowCard({
+  cashflow,
+  ctx,
+}: {
+  cashflow: CashflowResult;
+  ctx: PlanCtx;
+}) {
   const { locale, fmt } = useSectionCopy();
   const copy = cashflowCopy[locale];
   const f = cashflow.figures;
@@ -77,7 +83,11 @@ export default function CashflowCard({ cashflow, ctx }: { cashflow: CashflowResu
                 {
                   key: "range",
                   label: copy.labels.clientRange,
-                  value: copy.clientRange(fmt.eur(c.minCents), fmt.eur(c.medianCents), fmt.eur(c.maxCents)),
+                  value: copy.clientRange(
+                    fmt.eur(c.minCents),
+                    fmt.eur(c.medianCents),
+                    fmt.eur(c.maxCents),
+                  ),
                 },
                 {
                   key: "empty",
@@ -113,7 +123,10 @@ export default function CashflowCard({ cashflow, ctx }: { cashflow: CashflowResu
                   value:
                     fw === null
                       ? null
-                      : copy.lowest(fmt.eur(fw.typical.lowest.cents), fmt.monthLabel(fw.typical.lowest.month)),
+                      : copy.lowest(
+                          fmt.eur(fw.typical.lowest.cents),
+                          fmt.monthLabel(fw.typical.lowest.month),
+                        ),
                 },
                 {
                   key: "low-quiet",
@@ -121,12 +134,18 @@ export default function CashflowCard({ cashflow, ctx }: { cashflow: CashflowResu
                   value:
                     fw === null
                       ? null
-                      : copy.lowest(fmt.eur(fw.quiet.lowest.cents), fmt.monthLabel(fw.quiet.lowest.month)),
+                      : copy.lowest(
+                          fmt.eur(fw.quiet.lowest.cents),
+                          fmt.monthLabel(fw.quiet.lowest.month),
+                        ),
                 },
               ]}
             />
             {f.startSource === "stated" && (
-              <p className="m-0 mb-1 text-muted text-[0.85rem]" data-testid="plan-cashflow-start-stated">
+              <p
+                className="m-0 mb-1 text-muted text-[0.85rem]"
+                data-testid="plan-cashflow-start-stated"
+              >
                 {copy.labels.startStated}
               </p>
             )}
@@ -161,13 +180,19 @@ export default function CashflowCard({ cashflow, ctx }: { cashflow: CashflowResu
                       bufferLine,
                       t.cents === null
                         ? adv.taxNeedsPct
-                        : adv.tax(fmt.eur(t.cents), `${fmt.plain(t.pct ?? 0)}%`, vat.chargesVat !== null),
+                        : adv.tax(
+                            fmt.eur(t.cents),
+                            `${fmt.plain(t.pct ?? 0)}%`,
+                            vat.chargesVat !== null,
+                          ),
                       vat.chargesVat === true && vat.cents !== null && vat.deadline !== null
                         ? adv.vat(fmt.eur(vat.cents), fmt.date(vat.deadline), eur(vat.periodCents))
                         : vat.chargesVat === null
                           ? adv.vatUnknown
                           : null,
-                      f.setAside.leftCents === null ? null : adv.left(eur(f.setAside.leftCents) ?? ""),
+                      f.setAside.leftCents === null
+                        ? null
+                        : adv.left(eur(f.setAside.leftCents) ?? ""),
                     ]
               }
             />
@@ -184,7 +209,9 @@ export default function CashflowCard({ cashflow, ctx }: { cashflow: CashflowResu
               hint={copy.inputs.taxHint}
               stored={t.pct === null ? "" : String(t.pct)}
               parse={(text) => parseNumber(text, { min: 0, max: 60, maxDecimals: 1 })}
-              onSave={(pct) => ctx.plan.setPreference({ incomeTaxSetAsidePct: { pct, at: ctx.asOf } })}
+              onSave={(pct) =>
+                ctx.plan.setPreference({ incomeTaxSetAsidePct: { pct, at: ctx.asOf } })
+              }
               onClear={() => ctx.plan.setPreference({ incomeTaxSetAsidePct: null })}
             />
           </div>,
@@ -193,9 +220,14 @@ export default function CashflowCard({ cashflow, ctx }: { cashflow: CashflowResu
         {part(
           "howCalculated",
           <div>
-            <ul className="m-0 grid list-none gap-1 p-0 text-[0.9rem]" data-testid="plan-cashflow-calc">
+            <ul
+              className="m-0 grid list-none gap-1 p-0 text-[0.9rem]"
+              data-testid="plan-cashflow-calc"
+            >
               {cashflow.calc.map((step, i) => (
-                <li key={`${step.id}-${i}`}>{copy.howCalculated[step.id as keyof typeof copy.howCalculated](step, fmt)}</li>
+                <li key={`${step.id}-${i}`}>
+                  {copy.howCalculated[step.id as keyof typeof copy.howCalculated](step, fmt)}
+                </li>
               ))}
             </ul>
             {c.paymentList.length > 0 && (
@@ -203,7 +235,9 @@ export default function CashflowCard({ cashflow, ctx }: { cashflow: CashflowResu
                 <p className="m-0 mb-1 text-[0.9rem]">{copy.labels.payments}</p>
                 <ul className="m-0 grid list-none gap-1 p-0 text-[0.9rem]">
                   {c.paymentList.map((p, k) => (
-                    <li key={`${p.date}-${k}`}>{copy.payment(fmt.date(p.date), p.counterparty, fmt.eur(p.cents))}</li>
+                    <li key={`${p.date}-${k}`}>
+                      {copy.payment(fmt.date(p.date), p.counterparty, fmt.eur(p.cents))}
+                    </li>
                   ))}
                 </ul>
               </div>
@@ -215,8 +249,13 @@ export default function CashflowCard({ cashflow, ctx }: { cashflow: CashflowResu
           "sources",
           <Sources
             lines={[
-              copy.sources.bufferRule(PLAN_THRESHOLDS.cashflow.bufferBaseMonths, PLAN_THRESHOLDS.cashflow.bufferMaxMonths),
-              vat.chargesVat === true ? copy.sources.vat(vat.ratePct, fmt.date(vat.rulesAsOf), frequency) : null,
+              copy.sources.bufferRule(
+                PLAN_THRESHOLDS.cashflow.bufferBaseMonths,
+                PLAN_THRESHOLDS.cashflow.bufferMaxMonths,
+              ),
+              vat.chargesVat === true
+                ? copy.sources.vat(vat.ratePct, fmt.date(vat.rulesAsOf), frequency)
+                : null,
               copy.sources.tax,
               copy.sources.notAdvice,
             ]}
@@ -265,7 +304,12 @@ function VatChoice({ ctx }: { ctx: PlanCtx }) {
     }
   };
   return (
-    <div className="mb-3" role="group" aria-label={copy.inputs.vatLabel} data-testid="plan-cashflow-vat-choice">
+    <div
+      className="mb-3"
+      role="group"
+      aria-label={copy.inputs.vatLabel}
+      data-testid="plan-cashflow-vat-choice"
+    >
       <p className="m-0 mb-1">{copy.inputs.vatLabel}</p>
       <div className="flex gap-3">
         <Button data-testid="plan-cashflow-vat-yes" onClick={() => void pick(true)}>

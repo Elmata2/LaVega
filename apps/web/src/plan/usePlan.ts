@@ -252,7 +252,8 @@ export function usePlan(i: UsePlanInput): UsePlan {
       touchesPlan: boolean,
     ): Promise<void> => {
       const owner = storage;
-      if (readOnly) return Promise.reject(new Error("the plan is read-only here; nothing was saved"));
+      if (readOnly)
+        return Promise.reject(new Error("the plan is read-only here; nothing was saved"));
       const p = queue.current.then(async () => {
         const at = await nowIso();
         if (current.current !== owner) throw new Error("the vault changed; the write was dropped");

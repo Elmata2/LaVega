@@ -77,14 +77,14 @@ messages are conventional commits (`fix(investing): …`, `test(investing): …`
 
 ## Commands you will need
 
-| Purpose | Command | Expected on success |
-|---------|---------|---------------------|
-| Full typecheck | `pnpm typecheck` | exit 0, "Tasks: N successful" |
-| Lint | `pnpm lint` | exit 0, "Found 0 warnings and 0 errors" |
-| Investing server tests | `pnpm --filter @lavega/investing-server test` | exit 0 |
-| Investing web tests | `pnpm --filter @lavega/investing-web test` | exit 0 |
-| Core tests | `pnpm --filter @lavega/core test` | exit 0 |
-| Clone files left | `git status --porcelain -uall \| grep -cE ' 2(\.|$)'` | `0` |
+| Purpose                | Command                                          | Expected on success                     |
+| ---------------------- | ------------------------------------------------ | --------------------------------------- |
+| Full typecheck         | `pnpm typecheck`                                 | exit 0, "Tasks: N successful"           |
+| Lint                   | `pnpm lint`                                      | exit 0, "Found 0 warnings and 0 errors" |
+| Investing server tests | `pnpm --filter @lavega/investing-server test`    | exit 0                                  |
+| Investing web tests    | `pnpm --filter @lavega/investing-web test`       | exit 0                                  |
+| Core tests             | `pnpm --filter @lavega/core test`                | exit 0                                  |
+| Clone files left       | `git status --porcelain -uall \| grep -cE ' 2(\. | $)'`                                    | `0` |
 
 Cold typecheck on a clean tree is ~1 minute; expect up to 5 minutes on the
 first run after deletion.
@@ -92,10 +92,12 @@ first run after deletion.
 ## Scope
 
 **In scope** (the only files you may modify):
+
 - delete: the untracked `* 2.*` and `* 2` files listed by step 1's inventory
 - `.gitignore` (add the guard patterns in step 7)
 
 **Out of scope** (do NOT touch):
+
 - `repos/**` — vendored read-only reference; excluded from the inventory anyway.
 - `.gstack/**` — gitignored runtime logs; deleting them is not part of this plan.
 - `node_modules/`, `dist/`, `.turbo/`, `.vercel/`, `.lavega/` — build/runtime state.
@@ -236,6 +238,7 @@ pnpm lint
 and all clone paths (`* 2.*` and `* 2`) must be gone from the output.
 
 If the output still shows errors, read them:
+
 - errors that name a ` 2.` path → a copy was missed; re-run step 1 and delete it.
 - errors that name no ` 2.` path → STOP and report; they are pre-existing and
   out of scope for this plan.

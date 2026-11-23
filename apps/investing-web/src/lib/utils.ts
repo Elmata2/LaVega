@@ -1,9 +1,4 @@
-import { clsx, type ClassValue } from "clsx";
-import { twMerge } from "tailwind-merge";
-
-export function cn(...inputs: ClassValue[]) {
-  return twMerge(clsx(inputs));
-}
+export { cn } from "@lavega/ui/utils";
 
 /** "1 instrument", "3 instruments". */
 export function count(n: number, singular: string, plural = `${singular}s`): string {

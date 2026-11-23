@@ -18,7 +18,7 @@ export default defineConfig({
   // Production all-in-one deploy serves this app under `/investing/` on lavega.dev.
   //
   // The name has to keep the `VITE_` prefix, and that is not cosmetic. The root
-  // Dockerfile builds through `pnpm build` -> `turbo run build`, and turbo 2.x
+  // Production Railpack builds through `bun run build` -> `turbo run build`, and turbo 2.x
   // defaults to envMode "strict": a task only sees the variables turbo.json
   // declares. This repo's turbo.json declares none, so an unprefixed variable
   // (this used to be `INVESTING_WEB_BASE`) was silently removed from the build's

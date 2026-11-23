@@ -368,15 +368,13 @@ test("SectionCard renders a passed explanation slot instead of the template one,
   ]);
 });
 
-
 /** The text the advice-language scan reads: the card recommendation block and the
  *  footer are left out, since the owner allowed recommendations there (27 Oct 2026). */
 const scanText = (c: HTMLElement, locale: "nl" | "en"): string => {
   const clone = c.cloneNode(true) as HTMLElement;
   clone.querySelectorAll("[data-testid='plan-card-advice']").forEach((n) => n.remove());
   let text = clone.textContent ?? "";
-  for (const l of [locale])
-    text = text.replace(planShellCopy[l].footer.notice, "");
+  for (const l of [locale]) text = text.replace(planShellCopy[l].footer.notice, "");
   return text;
 };
 

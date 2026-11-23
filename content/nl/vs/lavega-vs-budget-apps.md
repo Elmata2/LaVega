@@ -7,11 +7,25 @@ status: published
 author: alexander
 updated: 2026-10-26
 sources:
-  - { title: "bunq: budgeting-functies", url: "https://www.bunq.com/nl-nl/features/budgeting", accessed: 2026-10-26 }
-  - { title: "LaVega: productomschrijving en veelgestelde vragen", url: "https://www.lavega.dev/", accessed: 2026-10-26 }
+  - {
+      title: "bunq: budgeting-functies",
+      url: "https://www.bunq.com/nl-nl/features/budgeting",
+      accessed: 2026-10-26,
+    }
+  - {
+      title: "LaVega: productomschrijving en veelgestelde vragen",
+      url: "https://www.lavega.dev/",
+      accessed: 2026-10-26,
+    }
 faq:
-  - { q: "Wat is het verschil tussen een budget-app en LaVega?", a: "Budgetfuncties van een bank werken meestal binnen die bank, met potjes, limieten en meldingen. LaVega bundelt rekeningen bij elke bank en beleggingen alleen-lezen in één overzicht en voorspelt de kaspositie. Het geeft informatie, geen advies." }
-  - { q: "Kan LaVega betalingen doen?", a: "Nee. LaVega leest alleen mee en heeft geen functie om betalingen te doen of orders te plaatsen." }
+  - {
+      q: "Wat is het verschil tussen een budget-app en LaVega?",
+      a: "Budgetfuncties van een bank werken meestal binnen die bank, met potjes, limieten en meldingen. LaVega bundelt rekeningen bij elke bank en beleggingen alleen-lezen in één overzicht en voorspelt de kaspositie. Het geeft informatie, geen advies.",
+    }
+  - {
+      q: "Kan LaVega betalingen doen?",
+      a: "Nee. LaVega leest alleen mee en heeft geen functie om betalingen te doen of orders te plaatsen.",
+    }
 ---
 
 "Budget-app" is een brede term. Sommige apps zijn onderdeel van een bank, andere staan los van je bank en lezen mee. Deze pagina beschrijft neutraal wat de budgetfuncties van bunq doen, wat LaVega doet en waar het verschil zit. Het is geen beoordeling en er is geen ranglijst.
@@ -55,13 +69,13 @@ LaVega is in testfase; er is nog geen prijs gepubliceerd.
 
 ## Waar ze verschillen
 
-| | Budgetfuncties van een bank (bunq) | LaVega |
-| --- | --- | --- |
-| Werkt over | Rekeningen binnen de bank, plus gekoppelde externe rekeningen | Rekeningen bij elke bank en gekoppelde brokers |
-| Geld verplaatsen | Ja, het is een bankrekening | Nee, alleen lezen |
-| Budgetpotjes en limieten | Ja, volgens bunq | Niet beschreven op lavega.dev |
-| Forecast van de kaspositie | Niet genoemd op de budgetpagina | Ja, volgens lavega.dev |
-| Beleggingen in het overzicht | Niet genoemd op de budgetpagina | Trading 212 en Interactive Brokers |
+|                              | Budgetfuncties van een bank (bunq)                            | LaVega                                         |
+| ---------------------------- | ------------------------------------------------------------- | ---------------------------------------------- |
+| Werkt over                   | Rekeningen binnen de bank, plus gekoppelde externe rekeningen | Rekeningen bij elke bank en gekoppelde brokers |
+| Geld verplaatsen             | Ja, het is een bankrekening                                   | Nee, alleen lezen                              |
+| Budgetpotjes en limieten     | Ja, volgens bunq                                              | Niet beschreven op lavega.dev                  |
+| Forecast van de kaspositie   | Niet genoemd op de budgetpagina                               | Ja, volgens lavega.dev                         |
+| Beleggingen in het overzicht | Niet genoemd op de budgetpagina                               | Trading 212 en Interactive Brokers             |
 
 "Niet genoemd" betekent alleen dat het niet op de bekeken pagina stond, niet dat de functie niet bestaat.
 

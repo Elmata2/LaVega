@@ -1,10 +1,5 @@
 import { expect, test } from "vitest";
-import {
-  FactSheetError,
-  PLAN_ENGINE_VERSION,
-  bucketOf,
-  buildFactSheet,
-} from "./factsheet.js";
+import { FactSheetError, PLAN_ENGINE_VERSION, bucketOf, buildFactSheet } from "./factsheet.js";
 import type { PlanFact } from "./types.js";
 
 test("bucketOf boundaries: cents 0, 24999/25000, negative; months 0.99/1/3/6", () => {
@@ -89,34 +84,19 @@ test("count: negative or non-integer is not exact", () => {
   expect(bucketOf("count", 0)).toBe("0");
 });
 
-const sheet = (facts: PlanFact[]) =>
-  buildFactSheet(facts, { locale: "nl", asOf: "2026-10-24" });
+const sheet = (facts: PlanFact[]) => buildFactSheet(facts, { locale: "nl", asOf: "2026-10-24" });
 
 test("buildFactSheet rejects a factId built from a merchant name or IBAN", () => {
-  expect(() =>
-    sheet([fact({ factId: "subscriptions.increase.Netflix" })]),
-  ).toThrow(FactSheetError);
-  expect(() => sheet([fact({ factId: "cards.NL91ABNA0417164300" })])).toThrow(
-    FactSheetError,
-  );
-  expect(() => sheet([fact({ factId: "albert heijn" })])).toThrow(
-    FactSheetError,
-  );
-  expect(() =>
-    sheet([fact({ factId: "subscriptions:increase:k9x" })]),
-  ).not.toThrow();
+  expect(() => sheet([fact({ factId: "subscriptions.increase.Netflix" })])).toThrow(FactSheetError);
+  expect(() => sheet([fact({ factId: "cards.NL91ABNA0417164300" })])).toThrow(FactSheetError);
+  expect(() => sheet([fact({ factId: "albert heijn" })])).toThrow(FactSheetError);
+  expect(() => sheet([fact({ factId: "subscriptions:increase:k9x" })])).not.toThrow();
 });
 
 test("buildFactSheet allows a string exact only for unit date", () => {
-  expect(() => sheet([fact({ exact: "Albert Heijn" })])).toThrow(
-    FactSheetError,
-  );
-  expect(() => sheet([fact({ exact: "Albert Heijn", unit: "date" })])).toThrow(
-    FactSheetError,
-  );
-  expect(() =>
-    sheet([fact({ exact: "2027-06-01", unit: "date" })]),
-  ).not.toThrow();
+  expect(() => sheet([fact({ exact: "Albert Heijn" })])).toThrow(FactSheetError);
+  expect(() => sheet([fact({ exact: "Albert Heijn", unit: "date" })])).toThrow(FactSheetError);
+  expect(() => sheet([fact({ exact: "2027-06-01", unit: "date" })])).not.toThrow();
 });
 
 test("buildFactSheet rejects a duplicate factId", () => {

@@ -101,11 +101,7 @@ function SubRowView({ row, ctx, group }: { row: SubRow; ctx: PlanCtx; group: Sub
         </Button>
       </div>
       {failed && (
-        <StatusLine
-          tone="problem"
-          role="alert"
-          className="m-0 text-[0.85rem]"
-        >
+        <StatusLine tone="problem" role="alert" className="m-0 text-[0.85rem]">
           {a.saveFailed}
         </StatusLine>
       )}

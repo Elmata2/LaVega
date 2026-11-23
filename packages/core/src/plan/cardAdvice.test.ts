@@ -87,7 +87,11 @@ describe("net yearly value per catalogue card", () => {
     expect(a.state).toBe("ok");
     expect(a.spend.annualCents).toBe(1_200_000);
     expect(a.spend.annualForeignCents).toBe(120_000);
-    expect(find(a, "free-card")).toMatchObject({ feeCents: 0, fxCostCents: 2_400, netCents: -2_400 });
+    expect(find(a, "free-card")).toMatchObject({
+      feeCents: 0,
+      fxCostCents: 2_400,
+      netCents: -2_400,
+    });
     expect(find(a, "cheap-card")).toMatchObject({
       feeCents: 3_000,
       fxCostCents: 0,
@@ -227,14 +231,17 @@ describe("stated spend when history is short", () => {
     expect(a.spend.annualForeignCents).toBe(0);
     for (const o of [...a.options, ...a.notComparable])
       expect(o.fxCostCents === null || o.fxCostCents === 0).toBe(true);
-    const nums = JSON.stringify(a, (_k, v) => (typeof v === "number" && !Number.isFinite(v) ? "BAD" : v));
+    const nums = JSON.stringify(a, (_k, v) =>
+      typeof v === "number" && !Number.isFinite(v) ? "BAD" : v,
+    );
     expect(nums).not.toContain("BAD");
   });
 
   test("a foreign share outside 0..1 or not finite is clamped", () => {
     const at = (foreignShare: number) =>
-      computeCardAdvice(input({ spend: SHORT, statedSpend: { annualCents: 1_000_000, foreignShare } }))
-        .spend.annualForeignCents;
+      computeCardAdvice(
+        input({ spend: SHORT, statedSpend: { annualCents: 1_000_000, foreignShare } }),
+      ).spend.annualForeignCents;
     expect(at(2)).toBe(1_000_000);
     expect(at(-1)).toBe(0);
     expect(at(Number.NaN)).toBe(0);
@@ -273,7 +280,9 @@ describe("verdict against the current cards", () => {
   test("no card held: the baseline is zero; recommend only when a card nets enough", () => {
     expect(computeCardAdvice(input()).baseline).toEqual({ kind: "no-card", netCents: 0 });
     expect(computeCardAdvice(input()).verdict).toMatchObject({ kind: "switch", gainCents: 9_600 });
-    const none = computeCardAdvice(input({ catalogue: CAT.filter((e) => e.id !== "cashback-card") }));
+    const none = computeCardAdvice(
+      input({ catalogue: CAT.filter((e) => e.id !== "cashback-card") }),
+    );
     expect(none.verdict).toEqual({ kind: "no-card-worth-it" });
   });
 
@@ -373,7 +382,11 @@ describe("interest on a revolving balance", () => {
 
   test("unknown buffer: no payoff is invented", () => {
     const [x] = computeCardAdvice(input({ cardBalances: bal(300_000, 15), buffer: null })).interest;
-    expect(x).toMatchObject({ surplusCents: null, payoffCents: 0, recommendation: "unknown-buffer" });
+    expect(x).toMatchObject({
+      surplusCents: null,
+      payoffCents: 0,
+      recommendation: "unknown-buffer",
+    });
   });
 
   test("no rate: never guessed; the cost of one percentage point is shown", () => {
@@ -437,7 +450,12 @@ describe("points balances", () => {
       updatedAt: "2026-10-20",
     });
     const [p] = computeCardAdvice(input({ rewards: [r] })).points;
-    expect(p).toMatchObject({ valuation: null, valueCents: null, expiresOn: null, expiresSoon: false });
+    expect(p).toMatchObject({
+      valuation: null,
+      valueCents: null,
+      expiresOn: null,
+      expiresSoon: false,
+    });
   });
 
   test("own examples give a low-median-high range", () => {
@@ -484,7 +502,11 @@ describe("review fixes", () => {
   });
 
   test("M1: the savings above the buffer are spent once, highest rate first", () => {
-    const buffer = { liquidSavingsCents: 1_000_000, fixedCostsMonthlyCents: 100_000, targetMonths: 3 }; // surplus 700.000
+    const buffer = {
+      liquidSavingsCents: 1_000_000,
+      fixedCostsMonthlyCents: 100_000,
+      targetMonths: 3,
+    }; // surplus 700.000
     const a = computeCardAdvice(
       input({
         cardBalances: [bal("cheap-card", 500_000, 14), bal("free-card", 500_000, 15)],
@@ -510,7 +532,11 @@ describe("review fixes", () => {
   });
 
   test("M1: a card at or below the savings rate and a card without a rate take none of the pot", () => {
-    const buffer = { liquidSavingsCents: 1_000_000, fixedCostsMonthlyCents: 100_000, targetMonths: 3 };
+    const buffer = {
+      liquidSavingsCents: 1_000_000,
+      fixedCostsMonthlyCents: 100_000,
+      targetMonths: 3,
+    };
     const a = computeCardAdvice(
       input({
         cardBalances: [
@@ -537,7 +563,11 @@ describe("review fixes", () => {
           rates: [RATE],
         }),
       ).interest;
-      expect(x).toMatchObject({ surplusCents: null, payoffCents: 0, recommendation: "unknown-buffer" });
+      expect(x).toMatchObject({
+        surplusCents: null,
+        payoffCents: 0,
+        recommendation: "unknown-buffer",
+      });
     }
   });
 
@@ -553,9 +583,7 @@ describe("review fixes", () => {
     expect(held).toMatchObject({ comparable: false, reasons: ["points-unvalued"], netCents: null });
     expect(a.baseline).toEqual({
       kind: "unknown",
-      blockers: [
-        { name: "FLYING-BLUE-AMERICAN-EXPRESS-GOLD-CARD", reasons: ["points-unvalued"] },
-      ],
+      blockers: [{ name: "FLYING-BLUE-AMERICAN-EXPRESS-GOLD-CARD", reasons: ["points-unvalued"] }],
     });
     expect(a.verdict).toEqual({ kind: "unknown-baseline" });
   });
@@ -576,7 +604,12 @@ describe("review fixes", () => {
     ); // EUR 2.400 a year, under EUR 3.000
     const blue = low.options.find((o) => o.cardId === "american-express-blue-card")!;
     expect(blue.feeCents).toBe(3_500);
-    expect(blue.feeNote).toEqual({ kind: "min-spend", thresholdCents: 300_000, otherwiseCents: 3_500, met: false });
+    expect(blue.feeNote).toEqual({
+      kind: "min-spend",
+      thresholdCents: 300_000,
+      otherwiseCents: 3_500,
+      met: false,
+    });
     expect(low.options[0]!.cardId).toBe("knab-like"); // EUR 28 beats EUR 35
     const high = computeCardAdvice(
       input({ catalogue: cat, spend: { ...SPEND, windowCents: 150_000, foreignCents: 0 } }),
@@ -591,8 +624,14 @@ describe("review fixes", () => {
     const cat = [entry("rabobank-creditcard", { fee: [2, "maand"], fx: 0, ppe: 0 })];
     const notHeld = computeCardAdvice(input({ catalogue: cat })).options[0]!;
     expect(notHeld.feeCents).toBe(2_400 + 4_140);
-    expect(notHeld.feeNote).toEqual({ kind: "package", name: "Rabo Standaard", yearlyCents: 4_140, applied: true });
-    const held = computeCardAdvice(input({ catalogue: cat, heldIds: ["rabobank-creditcard"] })).options[0]!;
+    expect(notHeld.feeNote).toEqual({
+      kind: "package",
+      name: "Rabo Standaard",
+      yearlyCents: 4_140,
+      applied: true,
+    });
+    const held = computeCardAdvice(input({ catalogue: cat, heldIds: ["rabobank-creditcard"] }))
+      .options[0]!;
     expect(held.feeCents).toBe(2_400);
     expect(held.feeNote).toMatchObject({ applied: false });
   });
@@ -625,8 +664,12 @@ describe("carriesCardDebt", () => {
   });
   test("false when unanswered or paid in full, and a zero balance is no debt", () => {
     expect(carriesCardDebt({ cardRepayment: null, cardBalances: [] })).toBe(false);
-    expect(carriesCardDebt({ cardRepayment: "full", cardBalances: [{ ...owed, paysInFull: true }] })).toBe(false);
-    expect(carriesCardDebt({ cardRepayment: "full", cardBalances: [{ ...owed, balanceCents: 0 }] })).toBe(false);
+    expect(
+      carriesCardDebt({ cardRepayment: "full", cardBalances: [{ ...owed, paysInFull: true }] }),
+    ).toBe(false);
+    expect(
+      carriesCardDebt({ cardRepayment: "full", cardBalances: [{ ...owed, balanceCents: 0 }] }),
+    ).toBe(false);
   });
 });
 
@@ -646,7 +689,10 @@ describe("real catalogue", () => {
       }),
     );
     const amex = entries.filter(
-      (e) => e.kind === "creditcard" && /american-express/.test(e.id) && !/business|corporate/.test(e.id),
+      (e) =>
+        e.kind === "creditcard" &&
+        /american-express/.test(e.id) &&
+        !/business|corporate/.test(e.id),
     );
     expect(amex).toHaveLength(8);
     for (const e of amex) {
@@ -656,7 +702,10 @@ describe("real catalogue", () => {
       expect(o?.reasons, e.id).not.toContain("cashback-unknown");
     }
     for (const id of ["american-express-blue-card", "american-express-gold-card"])
-      expect(a.options.find((o) => o.cardId === id), id).toBeDefined();
+      expect(
+        a.options.find((o) => o.cardId === id),
+        id,
+      ).toBeDefined();
   });
 
   test("golden: the evidence example (Amex Blue +41,08, Gold -157,84) and the switch verdict", () => {
@@ -696,13 +745,20 @@ describe("real catalogue", () => {
             input({
               catalogue: cat,
               heldIds,
-              spend: { windowCents: annual / 2, months: 6, foreignCents: annual / 20, excludedForeignCount: 0 },
+              spend: {
+                windowCents: annual / 2,
+                months: 6,
+                foreignCents: annual / 20,
+                excludedForeignCount: 0,
+              },
             }),
           );
           if (a.verdict.kind !== "switch") continue;
           switches++;
           const p = a.verdict.parts;
-          expect(p.pointsCents + p.cashbackCents + p.feeCents + p.fxCents).toBe(a.verdict.gainCents);
+          expect(p.pointsCents + p.cashbackCents + p.feeCents + p.fxCents).toBe(
+            a.verdict.gainCents,
+          );
           for (const v of [p.pointsCents, p.cashbackCents, p.feeCents, p.fxCents])
             expect(Number.isInteger(v)).toBe(true);
         }
@@ -731,13 +787,24 @@ describe("cashback has three states", () => {
     computeCardAdvice(
       input({
         catalogue: [
-          entry(id, { fee: [0, "jaar"], fx: 0, ppe: 0, issuer, ...(cb === undefined ? {} : { cb }) }),
+          entry(id, {
+            fee: [0, "jaar"],
+            fx: 0,
+            ppe: 0,
+            issuer,
+            ...(cb === undefined ? {} : { cb }),
+          }),
         ],
       }),
     );
   test("cashback: a covered 0 is measured and the card stays ranked", () => {
     const o = find(one("zero-cb", "Foo Bank", 0), "zero-cb");
-    expect(o).toMatchObject({ cashbackTier: "measured", cashbackPct: 0, cashbackCents: 0, comparable: true });
+    expect(o).toMatchObject({
+      cashbackTier: "measured",
+      cashbackPct: 0,
+      cashbackCents: 0,
+      comparable: true,
+    });
     expect(o?.sources.some((s) => s.field === "cashback")).toBe(true);
   });
   test("cashback: an ordinary Dutch issuer with no figure gets the assumed zero", () => {
@@ -752,7 +819,12 @@ describe("cashback has three states", () => {
     const a = one("mystery", "Foo Bank");
     expect(a.options.map((o) => o.cardId)).not.toContain("mystery");
     const o = a.notComparable.find((x) => x.cardId === "mystery");
-    expect(o).toMatchObject({ cashbackTier: "unknown", cashbackPct: null, cashbackCents: null, netCents: null });
+    expect(o).toMatchObject({
+      cashbackTier: "unknown",
+      cashbackPct: null,
+      cashbackCents: null,
+      netCents: null,
+    });
     expect(o?.reasons).toContain("cashback-unknown");
   });
 });
@@ -868,7 +940,12 @@ describe("ING credit cards in the committed catalogue", () => {
   test("every ING credit card row in the ING Punten earn table states 0 points per euro with a source", () => {
     for (const id of ING_IDS) {
       const row = entries.find((e) => e.id === id);
-      const f = (row!.fields as Record<string, { value: number; sourceUrl: string; checkedAt: string; conditionsKnown: boolean }>).pointsPerEuro;
+      const f = (
+        row!.fields as Record<
+          string,
+          { value: number; sourceUrl: string; checkedAt: string; conditionsKnown: boolean }
+        >
+      ).pointsPerEuro;
       expect(f, id).toBeDefined();
       expect(f.value).toBe(0);
       expect(f.conditionsKnown).toBe(true);

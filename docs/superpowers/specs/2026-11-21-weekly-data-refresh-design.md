@@ -385,11 +385,11 @@ Carried from slice 1:
   always opens. Discovery search off. Accounts and packages skipped until slice 3.
 - Measured on 2026-11-22, local full runs against the live sites (123 FX and interest figures; 185 fee, points and cashback figures are not swept until slice 3; 69 products skipped because no FX or interest figure applies):
 
-| Run | Code | Answer cache | Time | Cost | Model calls | Confirmed | Changed | Waiting | Held | Not checked |
-|---|---|---|---|---|---|---|---|---|---|---|
-| 2 | Tasks 1–7 | none | 45 min | $1.77 | 208 | 66 | 20 (9 were same-value conditions texts) | 1 | 3 | 33 |
-| 3 | Tasks 1–8 | empty | 52 min | $2.18 | 244 (38 by the fallback model) | 65 | 21 | 1 | 2 | 34 |
-| 4 | Tasks 1–9 + final fixes | warm | 4.5 min | $0.14 | 22 new, 219 reused | 73 (9 conditions updated) | 10 | 1 | 2 | 37 |
+| Run | Code                    | Answer cache | Time    | Cost  | Model calls                    | Confirmed                 | Changed                                 | Waiting | Held | Not checked |
+| --- | ----------------------- | ------------ | ------- | ----- | ------------------------------ | ------------------------- | --------------------------------------- | ------- | ---- | ----------- |
+| 2   | Tasks 1–7               | none         | 45 min  | $1.77 | 208                            | 66                        | 20 (9 were same-value conditions texts) | 1       | 3    | 33          |
+| 3   | Tasks 1–8               | empty        | 52 min  | $2.18 | 244 (38 by the fallback model) | 65                        | 21                                      | 1       | 2    | 34          |
+| 4   | Tasks 1–9 + final fixes | warm         | 4.5 min | $0.14 | 22 new, 219 reused             | 73 (9 conditions updated) | 10                                      | 1       | 2    | 37          |
 
 Run 5 (final code including Task 10, empty cache) is not usable as a measurement: the network of the machine dropped mid-run (77 of 334 fetches answered). It did show the degraded case: exit 0, 62 products reported as "could not be read", nothing in the catalogue harmed. No full run of the final code on a healthy network exists yet; the first CI run is that measurement. With Task 10 the roughly 35 products a run cannot settle are asked again every week, so a normal week is expected to cost under $1 and take about 15 to 20 minutes (estimate, not measured).
 

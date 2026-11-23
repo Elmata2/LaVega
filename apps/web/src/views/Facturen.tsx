@@ -1040,10 +1040,7 @@ export default function Facturen({
             </>
           )}
           {pending.length > 0 && (
-            <StatusLine
-              tone="warning"
-              className="cell-sub"
-            >
+            <StatusLine tone="warning" className="cell-sub">
               {c.forms.auto.pendingWarning(pending.length)}
             </StatusLine>
           )}
@@ -1067,9 +1064,7 @@ export default function Facturen({
               if (file) handleFile(file);
             }}
           >
-            <span className="font-body text-[1.15rem] text-ink">
-              {c.forms.drop.dropzoneTitle}
-            </span>
+            <span className="font-body text-[1.15rem] text-ink">{c.forms.drop.dropzoneTitle}</span>
             <span className="text-[0.8rem] max-w-[34ch]">{c.forms.drop.dropzoneSub}</span>
             {/* No `accept` filter for the non-PDF formats, same rationale as
                 Import.tsx: format is sniffed from content, not extension. */}
@@ -1297,10 +1292,7 @@ export default function Facturen({
                     hem zelf" een opdracht zonder reden — en de reden is het
                     enige waarmee hij kan beoordelen of hij hem wíl boeken. */}
                 {p.waitReason && (
-                  <StatusLine
-                    tone="warning"
-                    className="cell-sub"
-                  >
+                  <StatusLine tone="warning" className="cell-sub">
                     {c.queue.waitReason(p.waitReason)}
                   </StatusLine>
                 )}
@@ -1416,10 +1408,7 @@ export default function Facturen({
                 {!p.currency && <p className="cell-sub">{c.queue.missingCurrencyNote}</p>}
                 {p.vat === "" && <p className="cell-sub">{c.queue.missingVatNote}</p>}
                 {rowErrors[p.messageId] && (
-                  <StatusLine
-                    tone="problem"
-                    className="cell-sub"
-                  >
+                  <StatusLine tone="problem" className="cell-sub">
                     {rowErrors[p.messageId]}
                   </StatusLine>
                 )}

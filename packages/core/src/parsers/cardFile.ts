@@ -67,8 +67,9 @@ export function stampCardFile(
   const lead =
     target === null
       ? null
-      : ([...parsed.accounts].sort((a, b) => (counts.get(b.key) ?? 0) - (counts.get(a.key) ?? 0))[0] ??
-        null);
+      : ([...parsed.accounts].sort(
+          (a, b) => (counts.get(b.key) ?? 0) - (counts.get(a.key) ?? 0),
+        )[0] ?? null);
   return parsed.accounts.map((a) => {
     const bare = a.name === a.key && target !== null;
     // The lead takes the card's name; a further Amex card in the same file gets it

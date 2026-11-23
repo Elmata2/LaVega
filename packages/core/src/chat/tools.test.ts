@@ -471,7 +471,12 @@ describe("subscriptions, monthly_totals, upcoming_bills, plan_summary", () => {
         month: {
           status: "on-track",
           statusReason: { key: "room-ok" },
-          figures: { room: { kind: "unknown" }, incomeMiddleCents: null, fixedCents: null, savingsRate: null },
+          figures: {
+            room: { kind: "unknown" },
+            incomeMiddleCents: null,
+            fixedCents: null,
+            savingsRate: null,
+          },
         },
         buffer: {
           status: "attention",

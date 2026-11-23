@@ -85,7 +85,8 @@ export function useSectors(
     const controller = new AbortController();
     void fetchSectors(controller.signal)
       .then((data) => {
-        if (!controller.signal.aborted) setState({ key: requestKey, result: { status: "ready", data } });
+        if (!controller.signal.aborted)
+          setState({ key: requestKey, result: { status: "ready", data } });
       })
       .catch((reason: unknown) => {
         if (controller.signal.aborted || isAbortError(reason)) return;

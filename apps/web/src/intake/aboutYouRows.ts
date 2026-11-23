@@ -263,12 +263,17 @@ function cardBalanceRows(p: AdvisorProfile, ctx: RowContext): Row[] {
   return f.value.map((b) => ({
     key: `cardBalances:${b.cardId}`,
     section: "cardBalances" as const,
-    detail: cardLabel(b.cardId, ctx.c.values.otherCard) === b.cardId ? ctx.c.values.otherCard : cardLabel(b.cardId, ctx.c.values.otherCard),
+    detail:
+      cardLabel(b.cardId, ctx.c.values.otherCard) === b.cardId
+        ? ctx.c.values.otherCard
+        : cardLabel(b.cardId, ctx.c.values.otherCard),
     value: join(
       eur(ctx, b.balanceCents),
       b.paysInFull
         ? ctx.c.values.cardPaidInFull
-        : ctx.c.values.cardRevolving(b.ratePct === undefined ? null : `${String(b.ratePct).replace(".", ",")}%`),
+        : ctx.c.values.cardRevolving(
+            b.ratePct === undefined ? null : `${String(b.ratePct).replace(".", ",")}%`,
+          ),
     ),
     source: f.source,
     at: f.at,

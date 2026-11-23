@@ -14,7 +14,7 @@ needs an extra explicit acknowledgement.
   `GET /api/investing/cash-flow-rules` the rules. No route creates a suggestion: they come from
   a broker sync's unknown-type problems.
 - **Seeded local fixture:** start the mounted app with a cash-flow store file, e.g.
-  `INVESTING_MOUNT=1 INVESTING_CASH_FLOW_STORE_FILE=/tmp/cash-flow.json pnpm --filter @lavega/server dev`
+  `INVESTING_MOUNT=1 INVESTING_CASH_FLOW_STORE_FILE=/tmp/cash-flow.json bun --filter @lavega/server dev`
   with `{ "enabled": true, "rules": [], "suggestions": [ …pending rows… ] }`. A pending row with
   a positive amount and a `withdrawal` kind is the sign-change case.
 - **Drive:** open the profile page, scroll the panel into view. A pending row shows the raw

@@ -33,14 +33,21 @@
 **Files:** Modify `packages/core/src/plan/subs.ts` (and, if the series→merchant mapping lives there, `packages/core/src/subscriptions.ts`); Test `packages/core/src/plan/subs.test.ts`; plan copy for the new figure/explanation in `apps/web/src/copy/plan/*` (both locales).
 
 **Interfaces — Produces:**
+
 ```ts
 export const FIXED_COST_CATEGORIES: ReadonlySet<string>; // "Wonen & energie", "Verzekeringen", "Belastingen & overheid"
-export const FIXED_COST_MERCHANTS: readonly string[];    // health insurers + childcare words, lower-case match fragments
+export const FIXED_COST_MERCHANTS: readonly string[]; // health insurers + childcare words, lower-case match fragments
 // SubsFigures gains:
-excludedFixedCosts: { name: string; monthlyCents: number }[];
+excludedFixedCosts: {
+  name: string;
+  monthlyCents: number;
+}
+[];
 ```
+
 plus a new flat id `"sub_fixed_excluded"` (count) added to `SUBS_FLAT_IDS` with labels in both locales (the change log labels every flat id; follow how existing ids are labelled).
 Rule: a detected series is excluded when `categorize(tx, rules, own)` of its transactions yields a category in `FIXED_COST_CATEGORIES`, or its counterparty matches `FIXED_COST_MERCHANTS` (at least: zilveren kruis, cz, vgz, menzis, ditzo, dsw, zorgverzekering, kinderopvang, gastouder, bso). Use the same categorize inputs the spending section uses.
+
 - [ ] Tests first: `excludes energy, water, health insurance, home insurance and childcare` (Vattenfall, Vitens, Zilveren Kruis, Centraal Beheer, Kinderopvang Het Zonnetje) and `keeps Netflix, Spotify, Basic-Fit, Ziggo, Simyo`; `user category rule excludes a series`; `excluded list carries name and monthly amount`; totals exclude them.
 - [ ] Run `cd packages/core && npx vitest run src/plan` — FAIL → implement → PASS; update any existing test that assumed a fixed cost was a subscription and name it in the report.
 - [ ] Web: SubscriptionsSection shows "N vaste lasten zijn hier niet meegeteld: name, name, …" (NL) / "N fixed costs are not counted here: …" (EN) when the list is non-empty; test in `apps/web/src/plan/sections/sections.test.tsx`.
@@ -50,12 +57,35 @@ Rule: a detected series is excluded when `categorize(tx, rules, own)` of its tra
 **Files:** Create `apps/web/src/plan/statedCards.ts` (+ test); Modify `apps/web/src/plan/sections/CardsSection.tsx`, plan copy (NL+EN); Test `sections.test.tsx`.
 
 **Interfaces — Produces:**
+
 ```ts
-export type CardFact = { value: number; checkedAt: string; sourceUrl: string; conditions?: string } | null; // null = niet bekend
-export type StatedCardRow = { id: string; name: string; kind: "credit" | "debit"; yearlyFee: CardFact; fxFeePct: CardFact; pointsPerEuro: CardFact };
-export function statedCardRows(credit: readonly string[], debit: readonly string[], heldCatalogueIds: ReadonlySet<string>, otherLabels: { credit: string; debit: string }, unknownLabel: string): StatedCardRow[];
-export function yearlyFeeTotal(rows: readonly StatedCardRow[]): { totalCents: number; unknownCount: number };
+export type CardFact = {
+  value: number;
+  checkedAt: string;
+  sourceUrl: string;
+  conditions?: string;
+} | null; // null = niet bekend
+export type StatedCardRow = {
+  id: string;
+  name: string;
+  kind: "credit" | "debit";
+  yearlyFee: CardFact;
+  fxFeePct: CardFact;
+  pointsPerEuro: CardFact;
+};
+export function statedCardRows(
+  credit: readonly string[],
+  debit: readonly string[],
+  heldCatalogueIds: ReadonlySet<string>,
+  otherLabels: { credit: string; debit: string },
+  unknownLabel: string,
+): StatedCardRow[];
+export function yearlyFeeTotal(rows: readonly StatedCardRow[]): {
+  totalCents: number;
+  unknownCount: number;
+};
 ```
+
 - Facts from `docs/catalog/catalog.json` fields `accountFee` (yearly, euros → cents), `fxFeePct`, `pointsPerEuro`; a field fails → `null`. `"other"` → name from `otherLabels`, all facts null. Ids missing from the catalogue → name `unknownLabel` ("Onbekende kaart" / "Unknown card").
 - `heldCatalogueIds`: catalogue ids that the existing `entryFor` in `apps/web/src/plan/heldCards.ts` resolves for the user's held card accounts (export what is needed); rows with those ids are dropped.
 - CardsSection: a "Jouw kaarten" block (groups "Creditcards" / "Betaalpassen") above the existing content; per card: name, Jaarlijkse kosten, Opslag buitenlandse valuta, Punten per euro (credit; debit only when known), each with "gecontroleerd op <date>" and a "bron" link, `conditions` in small print; then the fee total line ("Samen €X per jaar aan kaartkosten" + "N kaarten zonder bekende kosten tellen niet mee" when >0). Stated cards come from `ctx.profile.store?.current.statedCards` / `statedDebitCards`.
@@ -67,6 +97,7 @@ export function yearlyFeeTotal(rows: readonly StatedCardRow[]): { totalCents: nu
 **Files:** Create `apps/web/src/plan/FromAnswers.tsx` (+ test); Modify `apps/web/src/views/Plan.tsx` (mount under the header, above "Wat LaVega weet"), `apps/web/src/plan/sections/MonthSection.tsx`, `BufferSection.tsx`, plan copy (NL+EN).
 
 **Interfaces — Consumes:** profile `household`, `children`, `work`, `statedRanges` (income/spend), and the Month section's figures for the middle month (income and spending excluding own transfers — read the figure ids MonthSection already uses; do not recompute).
+
 - Block content per spec part 1 and settled item 2: household line (Alleen / Samen, children with birth years, work chips); two rows "Netto inkomen per maand" and "Uitgaven per maand": "opgegeven" value (exact or band, labelled "voor jullie samen" when Samen) and "gemeten op je gekoppelde rekeningen" value with its month, or "Nog geen rekeningen gekoppeld of geïmporteerd" with a link to Profiel's import when no bank data. Each row has a "Wijzig" link to About you. No comparison sentence.
 - Work notes (spec part 3) as one paragraph each inside MonthSection (freelance|business) and BufferSection (freelance|business|jobseeking), using the existing section note styling.
 - [ ] Tests first: `no bank data shows stated only` (Review Focus 1); `band shows as range with household label`; `measured shows the middle month value and month`; `freelance note in Je maand`; `jobseeking note in Buffer only`; `employed shows no notes`; advice-language scan over the block and notes.

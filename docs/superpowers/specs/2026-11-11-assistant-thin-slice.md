@@ -36,11 +36,11 @@ memory-propose call, advice guard, explainer links). Those stay carried.
      be stored by construction. It never writes on its own: it creates an
      approval event and waits.
 3. **An approval is an event**: `{id, tool, payload, decision, decidedAt,
-   createdAt}`. Decisions are `approved | rejected | dismissed`; the latest
+createdAt}`. Decisions are `approved | rejected | dismissed`; the latest
    event per id wins, so undo is another decision. Ids are client-generated and
    double as the idempotency key.
 4. **One additive vault section, one save per decision.** `assistant?: {
-   approvals, memories }` in `VaultData`, read/written through
+approvals, memories }` in `VaultData`, read/written through
    `getAssistant`/`putAssistant` (replace-all, like `facts`). A legacy vault
    decrypts without it and reads the empty state. Approving a valid
    `remember_preference` writes its memory in the SAME save as the decision, so a

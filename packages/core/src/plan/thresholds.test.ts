@@ -1,8 +1,5 @@
 import { expect, test } from "vitest";
-import {
-  subscriptionPriceIncreases,
-  type Subscription,
-} from "../subscriptions.js";
+import { subscriptionPriceIncreases, type Subscription } from "../subscriptions.js";
 import { PLAN_THRESHOLDS } from "./thresholds.js";
 
 test("subscription thresholds equal subscriptionPriceIncreases' constants", () => {
@@ -12,12 +9,8 @@ test("subscription thresholds equal subscriptionPriceIncreases' constants", () =
     lastAmountCents: 1050,
   } as Subscription;
   expect(subscriptionPriceIncreases([sub])).toHaveLength(1);
-  expect(
-    subscriptionPriceIncreases([{ ...sub, lastAmountCents: 1049 }]),
-  ).toHaveLength(0);
-  expect(
-    subscriptionPriceIncreases([{ ...sub, changePct: 0.0299 }]),
-  ).toHaveLength(0);
+  expect(subscriptionPriceIncreases([{ ...sub, lastAmountCents: 1049 }])).toHaveLength(0);
+  expect(subscriptionPriceIncreases([{ ...sub, changePct: 0.0299 }])).toHaveLength(0);
   expect(PLAN_THRESHOLDS.subscriptions).toMatchObject({
     increasePctMin: 0.03,
     increaseCentsMin: 50,

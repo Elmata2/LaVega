@@ -186,7 +186,7 @@ export default function Plan({
         <StatusLine
           tone="problem"
           role="alert"
-          
+
           data-testid="plan-error-state"
         >
           {shell.errors.state}
@@ -196,7 +196,7 @@ export default function Plan({
         <StatusLine
           tone="problem"
           role="alert"
-          
+
           data-testid="plan-error-write"
         >
           {shell.errors.write}
@@ -235,7 +235,7 @@ export default function Plan({
           <StatusLine
             tone="problem"
             role="alert"
-            
+
             data-testid="plan-error-recompute"
           >
             {shell.errors.recompute}

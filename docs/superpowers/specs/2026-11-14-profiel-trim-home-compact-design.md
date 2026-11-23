@@ -26,7 +26,7 @@ the wizard, the Instinct agent and the card functionality get their turn:
   3. **Importeren**: the existing bank import card, unchanged.
   4. **Back-up**: a simpler card (section 4.4).
   5. **Uitloggen**: exactly one sign-out control on the page.
-  The build stamp stays as the last line.
+     The build stamp stays as the last line.
 
 ## 3. Non-goals and anti-goals
 
@@ -60,18 +60,18 @@ The landing page keeps its serif headlines; its own logo is out of scope.
 
 ### 4.3 Profiel: what goes
 
-| Card today | Decision |
-|---|---|
-| Modules | Removed from Profiel. A stored module choice stays honoured. |
-| Widgets op Home (with "Standaard herstellen") | Removed. Home's add boxes and hide buttons are the only control. |
-| Land en regio | Moves into Algemeen. The two explanatory paragraphs shrink to one short line. |
-| Delen met LaVega Investing | Removed from Profiel. The stored value and the default do not change (call 3). 2026-11-14: the card stays visible for anyone who already opted in (or has a delete pending), so the choice can still be seen and revoked. |
-| Vreemde valuta | Leaves Profiel. It becomes a small pop-up on Rekeningen (4.5). |
-| Bestand met eigen kolommen | Hidden behind a flag in `archive.ts`. |
-| Documenten | Hidden behind a flag in `archive.ts`. |
-| Cashback corrigeren | Hidden behind a flag in `archive.ts`. Later: a pop-up. |
-| Over jou | Becomes a secondary link in the Jouw plan card. |
-| Account + Uitloggen (two cards, two buttons) | One e-mail line in Algemeen, one sign-out control at the bottom. |
+| Card today                                    | Decision                                                                                                                                                                                                                  |
+| --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Modules                                       | Removed from Profiel. A stored module choice stays honoured.                                                                                                                                                              |
+| Widgets op Home (with "Standaard herstellen") | Removed. Home's add boxes and hide buttons are the only control.                                                                                                                                                          |
+| Land en regio                                 | Moves into Algemeen. The two explanatory paragraphs shrink to one short line.                                                                                                                                             |
+| Delen met LaVega Investing                    | Removed from Profiel. The stored value and the default do not change (call 3). 2026-11-14: the card stays visible for anyone who already opted in (or has a delete pending), so the choice can still be seen and revoked. |
+| Vreemde valuta                                | Leaves Profiel. It becomes a small pop-up on Rekeningen (4.5).                                                                                                                                                            |
+| Bestand met eigen kolommen                    | Hidden behind a flag in `archive.ts`.                                                                                                                                                                                     |
+| Documenten                                    | Hidden behind a flag in `archive.ts`.                                                                                                                                                                                     |
+| Cashback corrigeren                           | Hidden behind a flag in `archive.ts`. Later: a pop-up.                                                                                                                                                                    |
+| Over jou                                      | Becomes a secondary link in the Jouw plan card.                                                                                                                                                                           |
+| Account + Uitloggen (two cards, two buttons)  | One e-mail line in Algemeen, one sign-out control at the bottom.                                                                                                                                                          |
 
 Any entry point elsewhere that led to a removed card (for example "Widget toevoegen" that scrolls
 to the Modules card, `focusModules`) is removed or pointed at the Home add area. No dead link.

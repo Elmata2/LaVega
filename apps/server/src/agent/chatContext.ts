@@ -69,7 +69,9 @@ export function sanitizeChatContext(tab: string, raw: unknown): Record<string, u
     // Scrubbed too as defence in depth, and omitted when it says nothing.
     if (Object.hasOwn(r, "profile") && r.profile !== null && typeof r.profile === "object") {
       const p = sanitizeProfileSummary(r.profile);
-      const empty = Object.values(p).every((v) => v === null || (Array.isArray(v) && v.length === 0));
+      const empty = Object.values(p).every(
+        (v) => v === null || (Array.isArray(v) && v.length === 0),
+      );
       if (!empty) out.profile = scrubPersonalValuesDeep(p);
     }
   }

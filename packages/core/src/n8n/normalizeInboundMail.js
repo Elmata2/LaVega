@@ -2,7 +2,7 @@
  *
  * DIT BESTAND DRAAIT OP TWEE PLEKKEN. Het is, samen met
  * normalizeGmailMessage.js, de bron van de Code-node "Normaliseer binnengekomen
- * mail" in docs/n8n/lavega-invoices.json: `pnpm run sync:n8n` plakt beide
+ * mail" in docs/n8n/lavega-invoices.json: `bun run sync:n8n` plakt beide
  * bestanden achter elkaar in die node. Daarom staat er geen TypeScript-syntax
  * in — types staan in JSDoc — en daarom worden de `import`-regels hieronder bij
  * het genereren wéggehaald: in n8n staat de inhoud van

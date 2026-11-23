@@ -159,26 +159,45 @@ test("ROUND1_NEW lists the eight new screens", () => {
 test("isAnswered follows the field each screen writes", () => {
   const e = emptyProfile();
   for (const id of screensFor(e)) expect(isAnswered(e, id)).toBe(false);
-  const f = <T,>(value: T) => ({ value, source: "stated" as const, at: AS_OF });
+  const f = <T>(value: T) => ({ value, source: "stated" as const, at: AS_OF });
   const mk = (extra: Record<string, unknown>) => new AdvisorProfile({ ...e, ...extra });
   expect(isAnswered(mk({ household: f({ kind: "alone" }) }), "household")).toBe(true);
   expect(isAnswered(mk({ household: f({ kind: "alone" }) }), "money-sharing")).toBe(false);
-  expect(isAnswered(mk({ household: f({ kind: "together", moneySharing: "shared" }) }), "money-sharing")).toBe(true);
+  expect(
+    isAnswered(mk({ household: f({ kind: "together", moneySharing: "shared" }) }), "money-sharing"),
+  ).toBe(true);
   expect(isAnswered(mk({ work: f(["employed"]) }), "work")).toBe(true);
   expect(isAnswered(mk({ chargesVat: f(false) }), "vat")).toBe(true);
   expect(isAnswered(mk({ children: f([]) }), "children")).toBe(true);
   expect(isAnswered(mk({ children: f([]) }), "child-years")).toBe(false);
-  expect(isAnswered(mk({ children: f([{ id: "c1", birthYear: 2015 }]) }), "child-years")).toBe(true);
+  expect(isAnswered(mk({ children: f([{ id: "c1", birthYear: 2015 }]) }), "child-years")).toBe(
+    true,
+  );
   const range = { lowCents: 1, highCents: 2 };
   expect(isAnswered(mk({ statedRanges: f({ income: range }) }), "income")).toBe(true);
   expect(isAnswered(mk({ statedRanges: f({ income: range }) }), "spend")).toBe(false);
   expect(isAnswered(mk({ statedCards: f(["other"]) }), "cards")).toBe(true);
   expect(isAnswered(answerCards(e, false, AS_OF), "cards")).toBe(true);
   expect(isAnswered(mk({ intake: { ...e.intake, noUserDebts: true } }), "debts")).toBe(true);
-  expect(isAnswered(mk({ intake: { ...e.intake, noUserDebts: true } }), "debt-details")).toBe(false);
-  const wizardDebt = { id: WIZARD_DEBT, lender: "x", monthlyCents: 100, source: "stated" as const, at: AS_OF };
+  expect(isAnswered(mk({ intake: { ...e.intake, noUserDebts: true } }), "debt-details")).toBe(
+    false,
+  );
+  const wizardDebt = {
+    id: WIZARD_DEBT,
+    lender: "x",
+    monthlyCents: 100,
+    source: "stated" as const,
+    at: AS_OF,
+  };
   expect(isAnswered(mk({ debts: [wizardDebt] }), "debts")).toBe(true);
-  expect(isAnswered(mk({ debts: [{ id: WIZARD_DEBT, lender: "x", monthlyCents: 100, source: "stated", at: AS_OF }] }), "debt-details")).toBe(true);
+  expect(
+    isAnswered(
+      mk({
+        debts: [{ id: WIZARD_DEBT, lender: "x", monthlyCents: 100, source: "stated", at: AS_OF }],
+      }),
+      "debt-details",
+    ),
+  ).toBe(true);
   const goal = (id: string) => ({
     id,
     purpose: "Huis",
@@ -191,8 +210,17 @@ test("isAnswered follows the field each screen writes", () => {
   expect(isAnswered(applyGoals(e, [goal(WIZARD_GOAL)], AS_OF), "goal")).toBe(true);
   expect(isAnswered(applyGoals(e, [goal("other")], AS_OF), "goal")).toBe(false);
   expect(isAnswered(mk({ buffer: f({ months: 3 }) }), "buffer")).toBe(true);
-  expect(isAnswered(mk({ knowledge: f({ correct: 0, of: 0, investedBefore: false }) }), "invested")).toBe(true);
-  expect(isAnswered(mk({ risk: { answers: { [RISK_SCALE.items[0]!.id]: "x" }, scaleId: RISK_SCALE.id, at: AS_OF } }), firstRisk as ScreenId)).toBe(true);
+  expect(
+    isAnswered(mk({ knowledge: f({ correct: 0, of: 0, investedBefore: false }) }), "invested"),
+  ).toBe(true);
+  expect(
+    isAnswered(
+      mk({
+        risk: { answers: { [RISK_SCALE.items[0]!.id]: "x" }, scaleId: RISK_SCALE.id, at: AS_OF },
+      }),
+      firstRisk as ScreenId,
+    ),
+  ).toBe(true);
   expect(isAnswered(mk({ birthYear: f(1990) }), "birth-year")).toBe(true);
   expect(isAnswered(mk({ priorities: f(["save-more"]) }), "priorities")).toBe(true);
   expect(isAnswered(mk({ foreignSpend: f("never") }), "foreign-spend")).toBe(true);
@@ -288,7 +316,8 @@ test("after the new questions comes the summary, not the risk block", () => {
 });
 
 test("new screens belong to their sections", () => {
-  for (const id of ["work", "debit-cards", "cards", "money-sharing", "foreign-spend"] as const) expect(sectionOf(id)).toBe("about");
+  for (const id of ["work", "debit-cards", "cards", "money-sharing", "foreign-spend"] as const)
+    expect(sectionOf(id)).toBe("about");
   expect(sectionOf("upload")).toBe("finish");
   expect(sectionOf("priorities")).toBe("risk");
 });
@@ -312,12 +341,18 @@ test("resume after Ja on children opens child-years", () => {
 });
 
 test("resume after Ja on debts opens debt-details", () => {
-  expect(resumeScreen(markDone(answeredNew(answerDebts(emptyProfile(), true)), "debts"))).toBe("debt-details");
-  expect(resumeScreen(markDone(answeredNew(answerDebts(emptyProfile(), false)), "debts"))).toBe("buffer");
+  expect(resumeScreen(markDone(answeredNew(answerDebts(emptyProfile(), true)), "debts"))).toBe(
+    "debt-details",
+  );
+  expect(resumeScreen(markDone(answeredNew(answerDebts(emptyProfile(), false)), "debts"))).toBe(
+    "buffer",
+  );
 });
 
 test("resume after Nee on children skips child-years", () => {
-  expect(resumeScreen(markDone(answeredNew(answerNoChildren(emptyProfile(), AS_OF)), "children"))).toBe("income");
+  expect(
+    resumeScreen(markDone(answeredNew(answerNoChildren(emptyProfile(), AS_OF)), "children")),
+  ).toBe("income");
 });
 
 test("a lastScreen absent from screensFor moves on to the next present screen", () => {
@@ -332,13 +367,29 @@ test("resume after the last screen is done", () => {
 });
 
 test("answering Nee after Ja clears children, keeps goals", () => {
-  let p = applyChildren(emptyProfile(), [
-    { id: "c1", birthYear: 2015 },
-    { id: "c2", birthYear: 2018 },
-  ], AS_OF);
-  p = applyGoals(p, [
-    { id: "g1", purpose: "Huis", kind: "general", targetCents: 5_000_000, targetDate: "2030-01-01", priority: "important", accountRefs: [] },
-  ], AS_OF);
+  let p = applyChildren(
+    emptyProfile(),
+    [
+      { id: "c1", birthYear: 2015 },
+      { id: "c2", birthYear: 2018 },
+    ],
+    AS_OF,
+  );
+  p = applyGoals(
+    p,
+    [
+      {
+        id: "g1",
+        purpose: "Huis",
+        kind: "general",
+        targetCents: 5_000_000,
+        targetDate: "2030-01-01",
+        priority: "important",
+        accountRefs: [],
+      },
+    ],
+    AS_OF,
+  );
   const out = answerNoChildren(p, AS_OF);
   expect(out.children?.value).toEqual([]);
   expect(out.goals).toHaveLength(1);
@@ -384,7 +435,10 @@ test("reopenRisk resumes at the first risk screen", () => {
 });
 
 test("Nee then Ja opens child-years", () => {
-  const p = markDone(answeredNew(answerHasChildren(answerNoChildren(emptyProfile(), AS_OF))), "children");
+  const p = markDone(
+    answeredNew(answerHasChildren(answerNoChildren(emptyProfile(), AS_OF))),
+    "children",
+  );
   expect(screensFor(p)).toContain("child-years");
   expect(resumeScreen(p)).toBe("child-years");
   const kept = applyChildren(emptyProfile(), [{ id: "c1", birthYear: 2015 }], AS_OF);
@@ -402,7 +456,10 @@ test("debit-cards sits right after banks and before cards, always present", () =
 
 test("legacy lastScreen has-cards resumes at cards; legacy savings at banks", () => {
   const legacy = (last: string) =>
-    new AdvisorProfile({ ...answeredNew(emptyProfile()), intake: { ...emptyProfile().intake, lastScreen: last } });
+    new AdvisorProfile({
+      ...answeredNew(emptyProfile()),
+      intake: { ...emptyProfile().intake, lastScreen: last },
+    });
   expect(resumeScreen(legacy("has-cards"))).toBe("cards");
   expect(resumeScreen(legacy("savings"))).toBe("banks");
 });
@@ -465,7 +522,9 @@ test("card-balances is answered when every stated credit card has an entry, or n
   expect(isAnswered(two, "card-balances")).toBe(false);
   const one = applyCardBalances(two, [entry("a")], AS_OF);
   expect(isAnswered(one, "card-balances")).toBe(false);
-  expect(isAnswered(applyCardBalances(two, [entry("a"), entry("b")], AS_OF), "card-balances")).toBe(true);
+  expect(isAnswered(applyCardBalances(two, [entry("a"), entry("b")], AS_OF), "card-balances")).toBe(
+    true,
+  );
   expect(isAnswered(applyStatedCards(one, ["c"], AS_OF), "card-balances")).toBe(false);
 });
 
@@ -521,7 +580,10 @@ test("round 2 not due before any transaction", () => {
 test("round 2 due after first transaction", () => {
   expect(round2Due(finished(), true)).toBe(true);
   expect(round2Due(withBlocks(2), true)).toBe(false);
-  const done = new AdvisorProfile({ ...finished(), intake: { ...finished().intake, round2Done: true } });
+  const done = new AdvisorProfile({
+    ...finished(),
+    intake: { ...finished().intake, round2Done: true },
+  });
   expect(round2Due(done, true)).toBe(false);
 });
 

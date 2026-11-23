@@ -1,12 +1,12 @@
 # Instinct privacy gap check (verified)
 
-| | |
-|---|---|
-| **What this is** | A check of the Instinct privacy text and consent wording against the code. Not legal advice. Not a legal sign-off. |
-| **Blocker** | GitHub issue #348 stays open until a lawyer answers the "Ask a lawyer" list. |
-| **Reviewed at** | `master`, commit `f39527e27`, 18 Nov 2026. Consent v3 and the push/reset fixes landed in `10ffbffa3` while this review was being written; this version reflects them. Line numbers move; re-check after edits. |
-| **Supersedes** | The 18 Nov 2026 comment by the cofounder. Section 2 lists what that comment got wrong or stale. |
-| **Legend** | **V** = verified in code at `file:line`. **NV** = not verifiable from this repository. **Mismatch** = the text promises something the code does not do. |
+|                  |                                                                                                                                                                                                                |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **What this is** | A check of the Instinct privacy text and consent wording against the code. Not legal advice. Not a legal sign-off.                                                                                             |
+| **Blocker**      | GitHub issue #348 stays open until a lawyer answers the "Ask a lawyer" list.                                                                                                                                   |
+| **Reviewed at**  | `master`, commit `f39527e27`, 18 Nov 2026. Consent v3 and the push/reset fixes landed in `10ffbffa3` while this review was being written; this version reflects them. Line numbers move; re-check after edits. |
+| **Supersedes**   | The 18 Nov 2026 comment by the cofounder. Section 2 lists what that comment got wrong or stale.                                                                                                                |
+| **Legend**       | **V** = verified in code at `file:line`. **NV** = not verifiable from this repository. **Mismatch** = the text promises something the code does not do.                                                        |
 
 ## 1. Bottom line
 
@@ -26,104 +26,104 @@ The age statement (16+) is still not enforced anywhere.
 
 ### Corrections to the comment
 
-| # | Original claim | Verified state | Effect |
-|---|---|---|---|
-| 1 | The personal-data reset breaks the policy promise that "agent-geschiedenis" is deleted. | True at `955972d17`, fixed in `10ffbffa3`: `PERSONAL_RESET_TABLES` now includes the seven agent tables (`packages/database/src/index.ts:1683-1698`) and a test covers it (`packages/database/src/personal-reset.test.ts:24-31`). | Resolved. |
-| 2 | An uncommitted worktree change moves the cron to one run at 07:00 UTC and ignores the chosen hour. | The change is now **committed**: one Vercel cron at `0 7 * * *` (`scripts/vercel-build.mjs:312-319`), `FULL_DAY_HOUR = 23`, `FULL_DAY_RETRY_HOURS = 23` (`instinctCron.ts:31-32`). The text was changed with it: "elke ochtend", "tussen 08:00 en 10:00", no time picker (`copy/instinct.ts:91-98`, `AgentSettings.tsx:563`). | No mismatch. `sendHour` is still stored and sent but ignored; dead config to clean up. |
-| 3 | Neon processes data in the US, as the policy says. | Neon project `lavega` is `aws-eu-central-1`, proxy `c-5.eu-central-1.aws.neon.tech` (`neonctl projects list`, 18 Nov 2026). | Policy still wrong. Confirm the production project. |
-| 4 | Resend region unknown. | Resend documents that "all account data, including email metadata, logs, and API records, is stored in the United States regardless of the sending region you select." | Add Resend to the US transfer list. |
-| 5 | Merchant names and amounts reach a lock screen. | Fixed: push sends a fixed generic text (`GENERIC`, `pushChannel.ts:15-19, 39`). Only e-mail and WhatsApp carry the detail, and the policy says so. | Resolved. |
-| 6 | The consent screen has no privacy-policy link. | Fixed: link at `AgentSettings.tsx:411-415`, copy `copy/instinct.ts:93`. | Resolved. |
-| 7 | The consent sentence does not describe the mirror, merchant data, recipients or unattended read. | Fixed in v3: the sentence names the mirror, counterparty/amount/date, the channels, the unattended read and the generic push (`instinctConsent.ts:5-9`). | Mostly resolved. One checkbox still covers all channels; lawyer question. |
-| 8 | Retention is missing for mirror, settings, push subscription and phone number. | Fixed in the policy: "Hoe lang" now states it (`legal.ts:96`). | Resolved in text. |
+| #   | Original claim                                                                                     | Verified state                                                                                                                                                                                                                                                                                                                | Effect                                                                                 |
+| --- | -------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| 1   | The personal-data reset breaks the policy promise that "agent-geschiedenis" is deleted.            | True at `955972d17`, fixed in `10ffbffa3`: `PERSONAL_RESET_TABLES` now includes the seven agent tables (`packages/database/src/index.ts:1683-1698`) and a test covers it (`packages/database/src/personal-reset.test.ts:24-31`).                                                                                              | Resolved.                                                                              |
+| 2   | An uncommitted worktree change moves the cron to one run at 07:00 UTC and ignores the chosen hour. | The change is now **committed**: one Vercel cron at `0 7 * * *` (`scripts/vercel-build.mjs:312-319`), `FULL_DAY_HOUR = 23`, `FULL_DAY_RETRY_HOURS = 23` (`instinctCron.ts:31-32`). The text was changed with it: "elke ochtend", "tussen 08:00 en 10:00", no time picker (`copy/instinct.ts:91-98`, `AgentSettings.tsx:563`). | No mismatch. `sendHour` is still stored and sent but ignored; dead config to clean up. |
+| 3   | Neon processes data in the US, as the policy says.                                                 | Neon project `lavega` is `aws-eu-central-1`, proxy `c-5.eu-central-1.aws.neon.tech` (`neonctl projects list`, 18 Nov 2026).                                                                                                                                                                                                   | Policy still wrong. Confirm the production project.                                    |
+| 4   | Resend region unknown.                                                                             | Resend documents that "all account data, including email metadata, logs, and API records, is stored in the United States regardless of the sending region you select."                                                                                                                                                        | Add Resend to the US transfer list.                                                    |
+| 5   | Merchant names and amounts reach a lock screen.                                                    | Fixed: push sends a fixed generic text (`GENERIC`, `pushChannel.ts:15-19, 39`). Only e-mail and WhatsApp carry the detail, and the policy says so.                                                                                                                                                                            | Resolved.                                                                              |
+| 6   | The consent screen has no privacy-policy link.                                                     | Fixed: link at `AgentSettings.tsx:411-415`, copy `copy/instinct.ts:93`.                                                                                                                                                                                                                                                       | Resolved.                                                                              |
+| 7   | The consent sentence does not describe the mirror, merchant data, recipients or unattended read.   | Fixed in v3: the sentence names the mirror, counterparty/amount/date, the channels, the unattended read and the generic push (`instinctConsent.ts:5-9`).                                                                                                                                                                      | Mostly resolved. One checkbox still covers all channels; lawyer question.              |
+| 8   | Retention is missing for mirror, settings, push subscription and phone number.                     | Fixed in the policy: "Hoe lang" now states it (`legal.ts:96`).                                                                                                                                                                                                                                                                | Resolved in text.                                                                      |
 
 ### Verified facts added to the comment
 
-| # | Fact | Where |
-|---|---|---|
-| 9 | `web-push@4.0.0` encrypts the payload. The push service sees endpoint, timing, size and our IP only. | `apps/server/package.json:31`; `pushChannel.ts:39` |
-| 10 | The sent-key list carries merchant and amount: `${merchant}|out|${lastAmountCents}`, reused as a renewal key, pruned after 30 days. | `packages/core/src/subscriptions.ts:1796`; `candidates.ts:151`; `tips.ts:20` |
-| 11 | WhatsApp step 1 also sends today's date and the category names. | `apps/server/src/whatsapp/reply.ts:270-275` |
-| 12 | Full erase deletes the login. | `packages/database/src/index.ts:1648-1667` |
-| 13 | The 90-day purge runs after each user's run, and the daily listing now covers all enabled users. A time-budget skip rotates the start order, so a user can exceed 90 days by a day. | `instinctCron.ts:126-153` |
+| #   | Fact                                                                                                                                                                                | Where                                              |
+| --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------- |
+| 9   | `web-push@4.0.0` encrypts the payload. The push service sees endpoint, timing, size and our IP only.                                                                                | `apps/server/package.json:31`; `pushChannel.ts:39` |
+| 10  | The sent-key list carries merchant and amount: `${merchant}                                                                                                                         | out                                                | ${lastAmountCents}`, reused as a renewal key, pruned after 30 days. | `packages/core/src/subscriptions.ts:1796`; `candidates.ts:151`; `tips.ts:20` |
+| 11  | WhatsApp step 1 also sends today's date and the category names.                                                                                                                     | `apps/server/src/whatsapp/reply.ts:270-275`        |
+| 12  | Full erase deletes the login.                                                                                                                                                       | `packages/database/src/index.ts:1648-1667`         |
+| 13  | The 90-day purge runs after each user's run, and the daily listing now covers all enabled users. A time-budget skip rotates the start order, so a user can exceed 90 days by a day. | `instinctCron.ts:126-153`                          |
 
 ## 3. Claim audit at `706d0b05b`
 
 ### Consent sentence
 
-| # | Claim (nl) | Code | Verdict |
-|---|---|---|---|
-| 1 | "LaVega leest elke ochtend je transacties en saldi van de laatste 90 dagen bij je bank, zonder dat jij erbij bent, om hoogstens één melding per dag te maken." | One Vercel cron at 07:00 UTC; `UNATTENDED_DAYS = 90`; one claim per Amsterdam date (`instinct.ts:87`); one candidate per run. | Match. |
-| 2 | "Die transacties en saldi bewaren we niet." | Transactions are never stored; the session row stores the account list, not transactions. | Match for transactions. |
-| 3 | "Wel bewaren we je instellingen, een kopie van je categorieregels en naderende deadlines … en de meldingen zelf, 90 dagen." | Settings, mirror and events (`agent_settings`, `agent_mirror`, `agent_events`); `EVENT_RETENTION_DAYS = 90`. | Match. The mirror stores user-typed rule text, VAT labels and the card name. |
-| 4 | "Een melding kan de naam van een tegenpartij, een bedrag en een datum noemen en komt via de kanalen die jij kiest…" | Renewal copy uses the counterparty and amount (`copy.ts:63-67`); channels are chosen separately. | Match. |
-| 5 | "Een pushmelding zegt alleen dat er een bericht is." | `GENERIC` title/body; no name, amount or date (`pushChannel.ts:15-19, 39`). | Match. |
-| 6 | "Je kunt dit op elk moment uitzetten; dan verwijderen we alles." | `deleteAll()` removes the seven agent tables (`instinct-routes.ts:223-226`; `agent.ts:618-626`). | Match, except delivered copies, which the policy excludes. |
+| #   | Claim (nl)                                                                                                                                                     | Code                                                                                                                          | Verdict                                                                      |
+| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| 1   | "LaVega leest elke ochtend je transacties en saldi van de laatste 90 dagen bij je bank, zonder dat jij erbij bent, om hoogstens één melding per dag te maken." | One Vercel cron at 07:00 UTC; `UNATTENDED_DAYS = 90`; one claim per Amsterdam date (`instinct.ts:87`); one candidate per run. | Match.                                                                       |
+| 2   | "Die transacties en saldi bewaren we niet."                                                                                                                    | Transactions are never stored; the session row stores the account list, not transactions.                                     | Match for transactions.                                                      |
+| 3   | "Wel bewaren we je instellingen, een kopie van je categorieregels en naderende deadlines … en de meldingen zelf, 90 dagen."                                    | Settings, mirror and events (`agent_settings`, `agent_mirror`, `agent_events`); `EVENT_RETENTION_DAYS = 90`.                  | Match. The mirror stores user-typed rule text, VAT labels and the card name. |
+| 4   | "Een melding kan de naam van een tegenpartij, een bedrag en een datum noemen en komt via de kanalen die jij kiest…"                                            | Renewal copy uses the counterparty and amount (`copy.ts:63-67`); channels are chosen separately.                              | Match.                                                                       |
+| 5   | "Een pushmelding zegt alleen dat er een bericht is."                                                                                                           | `GENERIC` title/body; no name, amount or date (`pushChannel.ts:15-19, 39`).                                                   | Match.                                                                       |
+| 6   | "Je kunt dit op elk moment uitzetten; dan verwijderen we alles."                                                                                               | `deleteAll()` removes the seven agent tables (`instinct-routes.ts:223-226`; `agent.ts:618-626`).                              | Match, except delivered copies, which the policy excludes.                   |
 
 ### Policy bullets
 
-| # | Claim (nl) | Code | Verdict |
-|---|---|---|---|
-| 7 | "één keer per dag, in de ochtend (tussen 08:00 en 10:00 Nederlandse tijd)" | 07:00 UTC = 08:00 CET / 09:00 CEST. `FULL_DAY_*` makes every stored `send_hour` due. | Match. A long Vercel delay could pass 10:00, but the run is one shot. |
-| 8 | "Mislukt een poging, dan proberen we het de volgende dag opnieuw." | A failed run releases the day claim; the next cron run is the next day. | Match. |
-| 9 | "zeven dagen voordat je bankkoppeling verloopt één herinnering" | `REMINDER_DAYS = 7`, `instinct.ts:33, 143-146`. | Match. |
-| 10 | "Stel je via WhatsApp een vraag … hoogstens 3 keer per dag." | `WHATSAPP_FETCH_CAP = 3`, `reply.ts:291`. | Match. |
-| 11 | "De transacties, saldi en rekeningnummers blijven alleen in het werkgeheugen…" | `eb_sessions.payload_blob` stores the bank session with `accounts: Array<Record>` (`eb-routes.ts:20-27, 293`), sealed, TTL 181 days. | **Mismatch** for account numbers. |
-| 12 | "een korte lijst van wat we je al meldden, 30 dagen" | `sent_keys_blob`, pruned after 30 days (`tips.ts:20`). | Match; keys can carry merchant and amount. |
-| 13 | "Je instelling, de kopie … pushabonnement en WhatsApp-nummer bewaren we tot je uitzet, ontkoppelt of je account verwijdert." | No TTL on those rows; `deleteAll` and `unlink` clear them. | Match. |
-| 14 | "Je vragen via WhatsApp bewaren we zoals je ze typte, dus zonder het filter." | Inbound text stored raw (`webhook.ts:224-233`). | Match. |
-| 15 | Filter list: IBAN, e-mail, NL phone, BSN that passes the elfproef, amounts with € or EUR in front; other text goes along. | `scrubPersonalValues` (`categorize.ts:154-162`). | Match. |
-| 16 | "Vragen … gaan naar Mistral (EU)" | `https://api.mistral.ai/v1` (`mistral.ts:5`). | Endpoint match; EU processing and retention are NV. |
-| 17 | "Mistral schrijft zelf niets dat naar jou wordt gestuurd." | Model returns indices; `composeAnswer`/`guardAnswer` build from fixed phrases (`reply.ts:352-364`). | Match. |
-| 18 | "Uitzetten … verwijdert … de kopie van je regels en deadlines op onze server…" | `deleteAll` removes `agent_mirror` and the rest. | Match. |
-| 19 | "de pushdienst … krijgt een generieke tekst zonder namen of bedragen" | `pushChannel.ts:15-19, 39`. | Match. |
-| 20 | "Jouw controle … agent-geschiedenis" | Full erase deletes all seven agent tables (`index.ts:1556-1563`). | Match for "Servergegevens verwijderen". |
-| 21 | "Je account zelf (je inlog) verwijderen we op verzoek — stuur een bericht." | The same erase route deletes `public."user"` and auth rows (`index.ts:1648-1667`). | **Mismatch.** |
-| 22 | "LaVega is bedoeld voor mensen van 16 jaar en ouder." | No age field or check in `SignUpForm.tsx`. | Statement only. |
-| 23 | "Vercel, Neon, Meta en OpenRouter … DPF of SCC … TypeSafe en PostHog hangt af van de configuratie." | `vercel.json:3` = `fra1`; Neon = `aws-eu-central-1`; PostHog host is an env var (`posthog.ts:4-5`). Resend and push services missing. | **Wrong and incomplete.** |
+| #   | Claim (nl)                                                                                                                   | Code                                                                                                                                  | Verdict                                                               |
+| --- | ---------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| 7   | "één keer per dag, in de ochtend (tussen 08:00 en 10:00 Nederlandse tijd)"                                                   | 07:00 UTC = 08:00 CET / 09:00 CEST. `FULL_DAY_*` makes every stored `send_hour` due.                                                  | Match. A long Vercel delay could pass 10:00, but the run is one shot. |
+| 8   | "Mislukt een poging, dan proberen we het de volgende dag opnieuw."                                                           | A failed run releases the day claim; the next cron run is the next day.                                                               | Match.                                                                |
+| 9   | "zeven dagen voordat je bankkoppeling verloopt één herinnering"                                                              | `REMINDER_DAYS = 7`, `instinct.ts:33, 143-146`.                                                                                       | Match.                                                                |
+| 10  | "Stel je via WhatsApp een vraag … hoogstens 3 keer per dag."                                                                 | `WHATSAPP_FETCH_CAP = 3`, `reply.ts:291`.                                                                                             | Match.                                                                |
+| 11  | "De transacties, saldi en rekeningnummers blijven alleen in het werkgeheugen…"                                               | `eb_sessions.payload_blob` stores the bank session with `accounts: Array<Record>` (`eb-routes.ts:20-27, 293`), sealed, TTL 181 days.  | **Mismatch** for account numbers.                                     |
+| 12  | "een korte lijst van wat we je al meldden, 30 dagen"                                                                         | `sent_keys_blob`, pruned after 30 days (`tips.ts:20`).                                                                                | Match; keys can carry merchant and amount.                            |
+| 13  | "Je instelling, de kopie … pushabonnement en WhatsApp-nummer bewaren we tot je uitzet, ontkoppelt of je account verwijdert." | No TTL on those rows; `deleteAll` and `unlink` clear them.                                                                            | Match.                                                                |
+| 14  | "Je vragen via WhatsApp bewaren we zoals je ze typte, dus zonder het filter."                                                | Inbound text stored raw (`webhook.ts:224-233`).                                                                                       | Match.                                                                |
+| 15  | Filter list: IBAN, e-mail, NL phone, BSN that passes the elfproef, amounts with € or EUR in front; other text goes along.    | `scrubPersonalValues` (`categorize.ts:154-162`).                                                                                      | Match.                                                                |
+| 16  | "Vragen … gaan naar Mistral (EU)"                                                                                            | `https://api.mistral.ai/v1` (`mistral.ts:5`).                                                                                         | Endpoint match; EU processing and retention are NV.                   |
+| 17  | "Mistral schrijft zelf niets dat naar jou wordt gestuurd."                                                                   | Model returns indices; `composeAnswer`/`guardAnswer` build from fixed phrases (`reply.ts:352-364`).                                   | Match.                                                                |
+| 18  | "Uitzetten … verwijdert … de kopie van je regels en deadlines op onze server…"                                               | `deleteAll` removes `agent_mirror` and the rest.                                                                                      | Match.                                                                |
+| 19  | "de pushdienst … krijgt een generieke tekst zonder namen of bedragen"                                                        | `pushChannel.ts:15-19, 39`.                                                                                                           | Match.                                                                |
+| 20  | "Jouw controle … agent-geschiedenis"                                                                                         | Full erase deletes all seven agent tables (`index.ts:1556-1563`).                                                                     | Match for "Servergegevens verwijderen".                               |
+| 21  | "Je account zelf (je inlog) verwijderen we op verzoek — stuur een bericht."                                                  | The same erase route deletes `public."user"` and auth rows (`index.ts:1648-1667`).                                                    | **Mismatch.**                                                         |
+| 22  | "LaVega is bedoeld voor mensen van 16 jaar en ouder."                                                                        | No age field or check in `SignUpForm.tsx`.                                                                                            | Statement only.                                                       |
+| 23  | "Vercel, Neon, Meta en OpenRouter … DPF of SCC … TypeSafe en PostHog hangt af van de configuratie."                          | `vercel.json:3` = `fra1`; Neon = `aws-eu-central-1`; PostHog host is an env var (`posthog.ts:4-5`). Resend and push services missing. | **Wrong and incomplete.**                                             |
 
 ### Other checks
 
-| # | Check | Result |
-|---|---|---|
-| 24 | Personal reset deletes agent data | Fixed (`index.ts:1683-1698`; test `personal-reset.test.ts:24-31`). |
-| 25 | PostHog receives no Instinct data | No Instinct capture in web or server. WhatsApp passes no observability context (`aiObservability.ts:57-65`; `reply.ts:229-235`). |
-| 26 | GitHub Actions sees no user data | Workflow is manual only and prints counters. The route logs `userId` on failure (`instinctCron.ts:149`). |
-| 27 | Turning off removes the server mirror | `deleteAll` includes `agent_mirror`. |
-| 28 | Service worker registers before opt-in | `Root.tsx:44-47`; no permission, no cache, no storage (`sw.js`). |
+| #   | Check                                  | Result                                                                                                                           |
+| --- | -------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| 24  | Personal reset deletes agent data      | Fixed (`index.ts:1683-1698`; test `personal-reset.test.ts:24-31`).                                                               |
+| 25  | PostHog receives no Instinct data      | No Instinct capture in web or server. WhatsApp passes no observability context (`aiObservability.ts:57-65`; `reply.ts:229-235`). |
+| 26  | GitHub Actions sees no user data       | Workflow is manual only and prints counters. The route logs `userId` on failure (`instinctCron.ts:149`).                         |
+| 27  | Turning off removes the server mirror  | `deleteAll` includes `agent_mirror`.                                                                                             |
+| 28  | Service worker registers before opt-in | `Root.tsx:44-47`; no permission, no cache, no storage (`sw.js`).                                                                 |
 
 ## 4. Article 13 checklist
 
-| Item | Status | Where / why |
-|---|---|---|
-| Controller identity and contact (13(1)(a)) | Missing | "LaVega is de verwerkingsverantwoordelijke… Contact: alexander.steunenberg@gmail.com" (`legal.ts:135`). No legal form, Chamber of Commerce number or address. |
-| DPO (13(1)(b)) | Not stated | Lawyer decides whether one is required. |
-| Purposes (13(1)(c)) | Present | The daily-message section describes the purpose; the lawful-basis table names the processing. |
-| Lawful basis per purpose | Present | `legal.ts:137-141`: consent for the daily message, contract for account and backup, legitimate interest for logs. Balancing test not stated. |
-| Recipients named (13(1)(e)) | Mostly | Enable Banking, Resend, Meta, Mistral, Vercel, Neon, PostHog, Sentry. Push services named in the Instinct bullet. Roles (processor or controller) not stated. |
-| Transfers and safeguard (13(1)(f)) | Partial and partly wrong | Neon is EU, not US. Resend and the push services are missing. "Hangt af van de configuratie" is not an answer (`legal.ts:154`). |
-| Retention (13(2)(a)) | Present for Instinct | 90 days for messages; settings, mirror, push subscription and phone number until off, unlink or delete (`legal.ts:96`). No automatic expiry for an abandoned opt-in. |
-| Rights and how to exercise them (13(2)(b)) | Present, incomplete | `legal.ts:165` lists the rights; no procedure and no one-month deadline. |
-| Withdraw consent (13(2)(c)) | Present | "door de functie uit te zetten" (`legal.ts:140`). |
-| Complaint to the AP (13(2)(d)) | Present | `legal.ts:165`. |
-| Is providing data required (13(2)(e)) | Missing | Not said that Instinct is optional or that a bank link is required. |
-| Automated decisions / profiling (13(2)(f)) | Missing | The card offer evaluates spending (art. 4(4) profiling) but has no legal or similarly significant effect, so art. 22 probably does not apply. A one-line statement is safer. Lawyer decides. |
-| Source of data (art. 14) | Present | "via Enable Banking, alleen om te lezen". |
-| Info at the point of collection | Present | Consent screen links to `/privacy` (`AgentSettings.tsx:411-415`). |
+| Item                                       | Status                   | Where / why                                                                                                                                                                                  |
+| ------------------------------------------ | ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Controller identity and contact (13(1)(a)) | Missing                  | "LaVega is de verwerkingsverantwoordelijke… Contact: alexander.steunenberg@gmail.com" (`legal.ts:135`). No legal form, Chamber of Commerce number or address.                                |
+| DPO (13(1)(b))                             | Not stated               | Lawyer decides whether one is required.                                                                                                                                                      |
+| Purposes (13(1)(c))                        | Present                  | The daily-message section describes the purpose; the lawful-basis table names the processing.                                                                                                |
+| Lawful basis per purpose                   | Present                  | `legal.ts:137-141`: consent for the daily message, contract for account and backup, legitimate interest for logs. Balancing test not stated.                                                 |
+| Recipients named (13(1)(e))                | Mostly                   | Enable Banking, Resend, Meta, Mistral, Vercel, Neon, PostHog, Sentry. Push services named in the Instinct bullet. Roles (processor or controller) not stated.                                |
+| Transfers and safeguard (13(1)(f))         | Partial and partly wrong | Neon is EU, not US. Resend and the push services are missing. "Hangt af van de configuratie" is not an answer (`legal.ts:154`).                                                              |
+| Retention (13(2)(a))                       | Present for Instinct     | 90 days for messages; settings, mirror, push subscription and phone number until off, unlink or delete (`legal.ts:96`). No automatic expiry for an abandoned opt-in.                         |
+| Rights and how to exercise them (13(2)(b)) | Present, incomplete      | `legal.ts:165` lists the rights; no procedure and no one-month deadline.                                                                                                                     |
+| Withdraw consent (13(2)(c))                | Present                  | "door de functie uit te zetten" (`legal.ts:140`).                                                                                                                                            |
+| Complaint to the AP (13(2)(d))             | Present                  | `legal.ts:165`.                                                                                                                                                                              |
+| Is providing data required (13(2)(e))      | Missing                  | Not said that Instinct is optional or that a bank link is required.                                                                                                                          |
+| Automated decisions / profiling (13(2)(f)) | Missing                  | The card offer evaluates spending (art. 4(4) profiling) but has no legal or similarly significant effect, so art. 22 probably does not apply. A one-line statement is safer. Lawyer decides. |
+| Source of data (art. 14)                   | Present                  | "via Enable Banking, alleen om te lezen".                                                                                                                                                    |
+| Info at the point of collection            | Present                  | Consent screen links to `/privacy` (`AgentSettings.tsx:411-415`).                                                                                                                            |
 
 ## 5. Consent quality (art. 7)
 
-| Criterion | Fact | Assessment |
-|---|---|---|
-| Not pre-ticked | `useState(false)` for both consents (`AgentSettings.tsx:87-94`). The feed box is checked and disabled (`:439`). | OK (V). |
-| Unambiguous act | Checkbox plus "Zet aan"; the server rejects a mismatching version (`instinct-routes.ts:228-229`). | OK (V). |
-| Informed | v3 names the mirror, merchant data, channels, unattended read and generic push; the screen links the policy. Processor names and regions sit in the policy only. | Adequate; lawyer decides. |
-| Specific and granular | One checkbox covers feed, the server bank read, mirror, e-mail, push and the WhatsApp read. Channels have separate boxes; the e-mail address and push permission are separate acts; WhatsApp has its own AI checkbox (`AgentSettings.tsx:513-520`). | Moderate. Lawyer decides whether one consent for the daily message is enough. |
-| Separate from other terms | Own block in settings; sign-up terms are separate. | OK. |
-| As easy to withdraw | Turn-off is two clicks and deletes everything (`AgentSettings.tsx:372-397`). WhatsApp AI consent is withdrawn only by unlinking. | OK (V). |
-| Versioned and logged | `consent_text_version = 2026-11-v3`, `consented_at`, `ai_consent_at` stored. Not stored: the text itself, IP or user agent. Deleted on turn-off. | Partial. Lawyer decides whether a longer proof is needed. |
-| Re-consent on change | A version mismatch skips the cron and the WhatsApp answer; the UI shows "Opnieuw toestemming nodig" (`AgentSettings.tsx:225`). A privacy-text change triggers nothing. | OK for the consent sentence only. |
-| Push permission order | `togglePush` asks the browser for permission when the push box is ticked, before the consent box must be ticked (`AgentSettings.tsx:231-250`). The subscription is created only after save. | Minor. |
+| Criterion                 | Fact                                                                                                                                                                                                                                                | Assessment                                                                    |
+| ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| Not pre-ticked            | `useState(false)` for both consents (`AgentSettings.tsx:87-94`). The feed box is checked and disabled (`:439`).                                                                                                                                     | OK (V).                                                                       |
+| Unambiguous act           | Checkbox plus "Zet aan"; the server rejects a mismatching version (`instinct-routes.ts:228-229`).                                                                                                                                                   | OK (V).                                                                       |
+| Informed                  | v3 names the mirror, merchant data, channels, unattended read and generic push; the screen links the policy. Processor names and regions sit in the policy only.                                                                                    | Adequate; lawyer decides.                                                     |
+| Specific and granular     | One checkbox covers feed, the server bank read, mirror, e-mail, push and the WhatsApp read. Channels have separate boxes; the e-mail address and push permission are separate acts; WhatsApp has its own AI checkbox (`AgentSettings.tsx:513-520`). | Moderate. Lawyer decides whether one consent for the daily message is enough. |
+| Separate from other terms | Own block in settings; sign-up terms are separate.                                                                                                                                                                                                  | OK.                                                                           |
+| As easy to withdraw       | Turn-off is two clicks and deletes everything (`AgentSettings.tsx:372-397`). WhatsApp AI consent is withdrawn only by unlinking.                                                                                                                    | OK (V).                                                                       |
+| Versioned and logged      | `consent_text_version = 2026-11-v3`, `consented_at`, `ai_consent_at` stored. Not stored: the text itself, IP or user agent. Deleted on turn-off.                                                                                                    | Partial. Lawyer decides whether a longer proof is needed.                     |
+| Re-consent on change      | A version mismatch skips the cron and the WhatsApp answer; the UI shows "Opnieuw toestemming nodig" (`AgentSettings.tsx:225`). A privacy-text change triggers nothing.                                                                              | OK for the consent sentence only.                                             |
+| Push permission order     | `togglePush` asks the browser for permission when the push box is ticked, before the consent box must be ticked (`AgentSettings.tsx:231-250`). The subscription is created only after save.                                                         | Minor.                                                                        |
 
 ## 6. Push and the service worker
 
@@ -136,28 +136,28 @@ The age statement (16+) is still not enforced anywhere.
 
 ## 7. Must fix before real users are opted in
 
-| # | Fact | Where | Smallest change |
-|---|---|---|---|
-| 1 | The bank session stores the raw account list; the text says account numbers stay in memory. | `eb-routes.ts:20-27, 68, 293`; `legal.ts:94` | Verify one production response, then say: the bank link (session and account list, including account numbers) is stored sealed until the bank consent ends, at most 181 days. |
-| 2 | The controller is "LaVega" with no entity, address or Chamber of Commerce number; the privacy contact is a Gmail address. | `legal.ts:15, 135` | Fill the `[NOG INVULLEN]` fields in section 10. |
-| 3 | Transfers: Resend and the push services are missing; Neon is listed as US but the project is in Frankfurt; "hangt af van de configuratie" is not an answer. | `legal.ts:130, 154` | Owner confirms regions and agreements, then a text change. |
-| 4 | No statement on whether providing data is required, or on profiling. | `legal.ts:144-165` | Two sentences. |
-| 5 | No procedure or deadline for exercising rights. | `legal.ts:165` | One sentence: mail the privacy address, answer within a month. |
-| 6 | The policy says the login is deleted only on request by e-mail, but `/api/account/data` deletes it. | `legal.ts:164`; `index.ts:1648-1667` | Text change, or change the route. |
+| #   | Fact                                                                                                                                                        | Where                                        | Smallest change                                                                                                                                                               |
+| --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | The bank session stores the raw account list; the text says account numbers stay in memory.                                                                 | `eb-routes.ts:20-27, 68, 293`; `legal.ts:94` | Verify one production response, then say: the bank link (session and account list, including account numbers) is stored sealed until the bank consent ends, at most 181 days. |
+| 2   | The controller is "LaVega" with no entity, address or Chamber of Commerce number; the privacy contact is a Gmail address.                                   | `legal.ts:15, 135`                           | Fill the `[NOG INVULLEN]` fields in section 10.                                                                                                                               |
+| 3   | Transfers: Resend and the push services are missing; Neon is listed as US but the project is in Frankfurt; "hangt af van de configuratie" is not an answer. | `legal.ts:130, 154`                          | Owner confirms regions and agreements, then a text change.                                                                                                                    |
+| 4   | No statement on whether providing data is required, or on profiling.                                                                                        | `legal.ts:144-165`                           | Two sentences.                                                                                                                                                                |
+| 5   | No procedure or deadline for exercising rights.                                                                                                             | `legal.ts:165`                               | One sentence: mail the privacy address, answer within a month.                                                                                                                |
+| 6   | The policy says the login is deleted only on request by e-mail, but `/api/account/data` deletes it.                                                         | `legal.ts:164`; `index.ts:1648-1667`         | Text change, or change the route.                                                                                                                                             |
 
 ## 8. Should fix
 
-| # | Fact | Smallest change |
-|---|---|---|
-| 7 | No age gate; the text says 16+. | Add a sign-up statement or checkbox, or soften the text. |
-| 8 | `sendHour` is still stored and sent, but ignored; the UI silently sends `DEFAULT_HOUR = 8`. | Remove the field from the API and settings, or comment it as reserved. |
-| 9 | The worker registers before opt-in. | One condition in `Root.tsx:46`. |
-| 10 | The consent record is deleted on turn-off; the consent text is not stored with it. | Optional minimal log. Lawyer decides. |
-| 11 | A user skipped for the 300 s budget can exceed 90 days by a day; the start order rotates. | Accept, or run a global purge by `created_at`. |
-| 12 | `userId` appears in Vercel logs on failure. | Short retention on Hobby; accept or hash the id. |
-| 13 | `mistral.ts:181` logs up to 2000 characters of an unexpected response. For Instinct that is an index JSON. | Optional hardening. |
-| 14 | The push service metadata (timing, size, server IP) is not described. | One clause in "Wie erbij betrokken is". |
-| 15 | ADR 0014 and `channel.ts:34-48` prune a stale WhatsApp link only when a daily send is attempted on that channel. | Docs note. |
+| #   | Fact                                                                                                             | Smallest change                                                        |
+| --- | ---------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| 7   | No age gate; the text says 16+.                                                                                  | Add a sign-up statement or checkbox, or soften the text.               |
+| 8   | `sendHour` is still stored and sent, but ignored; the UI silently sends `DEFAULT_HOUR = 8`.                      | Remove the field from the API and settings, or comment it as reserved. |
+| 9   | The worker registers before opt-in.                                                                              | One condition in `Root.tsx:46`.                                        |
+| 10  | The consent record is deleted on turn-off; the consent text is not stored with it.                               | Optional minimal log. Lawyer decides.                                  |
+| 11  | A user skipped for the 300 s budget can exceed 90 days by a day; the start order rotates.                        | Accept, or run a global purge by `created_at`.                         |
+| 12  | `userId` appears in Vercel logs on failure.                                                                      | Short retention on Hobby; accept or hash the id.                       |
+| 13  | `mistral.ts:181` logs up to 2000 characters of an unexpected response. For Instinct that is an index JSON.       | Optional hardening.                                                    |
+| 14  | The push service metadata (timing, size, server IP) is not described.                                            | One clause in "Wie erbij betrokken is".                                |
+| 15  | ADR 0014 and `channel.ts:34-48` prune a stale WhatsApp link only when a daily send is attempted on that channel. | Docs note.                                                             |
 
 ## 9. Ask a lawyer
 

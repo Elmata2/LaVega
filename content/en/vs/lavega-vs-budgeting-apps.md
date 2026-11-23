@@ -7,11 +7,25 @@ status: published
 author: alexander
 updated: 2026-10-26
 sources:
-  - { title: "bunq: budgeting features", url: "https://www.bunq.com/nl-nl/features/budgeting", accessed: 2026-10-26 }
-  - { title: "LaVega: product description and FAQ", url: "https://www.lavega.dev/en", accessed: 2026-10-26 }
+  - {
+      title: "bunq: budgeting features",
+      url: "https://www.bunq.com/nl-nl/features/budgeting",
+      accessed: 2026-10-26,
+    }
+  - {
+      title: "LaVega: product description and FAQ",
+      url: "https://www.lavega.dev/en",
+      accessed: 2026-10-26,
+    }
 faq:
-  - { q: "What is the difference between a budgeting app and LaVega?", a: "A bank's budgeting features usually work inside that bank, with pots, limits and alerts. LaVega brings accounts at any bank and investments into one read-only view and forecasts your cash position. It gives information, not advice." }
-  - { q: "Can LaVega make payments?", a: "No. LaVega only reads along and has no function to make payments or place orders." }
+  - {
+      q: "What is the difference between a budgeting app and LaVega?",
+      a: "A bank's budgeting features usually work inside that bank, with pots, limits and alerts. LaVega brings accounts at any bank and investments into one read-only view and forecasts your cash position. It gives information, not advice.",
+    }
+  - {
+      q: "Can LaVega make payments?",
+      a: "No. LaVega only reads along and has no function to make payments or place orders.",
+    }
 ---
 
 "Budgeting app" is a broad term. Some are part of a bank, others sit outside your bank and read along. This page describes neutrally what bunq's budgeting features do, what LaVega does and where they differ. It is not an assessment and there is no ranking.
@@ -55,13 +69,13 @@ LaVega is in beta; no price has been published yet.
 
 ## Where they differ
 
-| | A bank's budgeting features (bunq) | LaVega |
-| --- | --- | --- |
-| Works across | Accounts within the bank, plus linked external accounts | Accounts at any bank and linked brokers |
-| Moving money | Yes, it is a bank account | No, read-only |
-| Budget pots and limits | Yes, according to bunq | Not described on lavega.dev |
-| Cash position forecast | Not mentioned on the budgeting page | Yes, according to lavega.dev |
-| Investments in the overview | Not mentioned on the budgeting page | Trading 212 and Interactive Brokers |
+|                             | A bank's budgeting features (bunq)                      | LaVega                                  |
+| --------------------------- | ------------------------------------------------------- | --------------------------------------- |
+| Works across                | Accounts within the bank, plus linked external accounts | Accounts at any bank and linked brokers |
+| Moving money                | Yes, it is a bank account                               | No, read-only                           |
+| Budget pots and limits      | Yes, according to bunq                                  | Not described on lavega.dev             |
+| Cash position forecast      | Not mentioned on the budgeting page                     | Yes, according to lavega.dev            |
+| Investments in the overview | Not mentioned on the budgeting page                     | Trading 212 and Interactive Brokers     |
 
 "Not mentioned" only means it was not on the page we read, not that the feature does not exist.
 

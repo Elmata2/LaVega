@@ -5,8 +5,8 @@
   "type": "module",
   "main": "src/index.ts",
   "scripts": {
-    "dev": "tsx watch --env-file-if-exists=.env src/docker.ts",
-    "start:docker": "tsx --env-file-if-exists=.env src/docker.ts",
+    "dev": "tsx watch --env-file-if-exists=.env src/standalone.ts",
+    "start:standalone": "tsx --env-file-if-exists=.env src/standalone.ts",
     "build": "tsc -p .",
     "typecheck": "node ../../scripts/typecheck.mjs",
     "test": "vitest run"

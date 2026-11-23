@@ -11,6 +11,7 @@
 **Spec:** `docs/superpowers/specs/2026-10-22-ai-explanation-and-learning-design.md` (binding; read it and `AGENTS.md` first). Bound by `2026-10-21-advisor-pivot-intake-design.md` 4.7 and 6. Depends on `docs/superpowers/plans/2026-10-22-advisor-intake.md` (being implemented) and `docs/superpowers/specs/2026-10-22-personal-plan-design.md`.
 
 **Assumptions about code that does not exist yet (verify first, adapt only at the named seam):**
+
 - A1. Intake Task 2 has landed: `AdvisorProfile` (with `experience`, `knowledge`), `VaultSection`, `getSection(name)` / `putSection(name, value)` / `appendEvents(events)` on `VaultStorage`, `mergeEvents`, and `packages/core/src/advice/language.ts` exporting `ADVICE_LANGUAGE` and `findAdviceLanguage(text, locale): string[]`.
 - A2. The plan step (`docs/superpowers/plans/2026-10-23-personal-plan.md`, runs before this plan) owns the FactSheet. FIXED NAMES, do not rename or redefine: file `packages/core/src/plan/factsheet.ts` exporting `FactSheet { id, taskType: "plan" | "digest" | "note", locale, engineVersion, generatedAt, hash, facts: FactSheetFact[] }`, `FactSheetFact { factId, section: SectionId | null, exact, bucket, unit, polarity, trend?, range?, mustMention, derivedFrom? }`, `PLAN_ENGINE_VERSION`, `bucketOf`, `buildFactSheet(facts, { locale, asOf, taskType? })`; `Polarity`, `SectionId`, `PlanFact`, `FigureUnit` from `packages/core/src/plan/types.ts`; the whole-plan entry point `computePlan(input: PlanInput): PlanResult` with `PlanResult.facts` and `PlanResult.factSheet(locale, taskType = "plan")` (a digest or note sheet is the same facts with another `taskType`); `PlanSnapshot.markers` and `topChanges(...)` from `plan/compute.ts` and `plan/changes.ts`; `PlanEvent` (kinds `subscription-decision`, `usage-log`). This plan has no `buildPlanFactSheet` and no second FactSheet or Polarity type.
 - A3. The plan step ships template prose per section as `copy/plan/<section>.ts` (`explain.simple` / `explain.detailed`, already-formatted strings) and a `SectionCard` with an `explanation` slot (plan Task 11). Task 7 reuses those for `taskType: "plan"` and adds its own templates, keyed by fact id, only for the digest and the note. Task 8 fills the slot; it edits no figure code.
@@ -57,21 +58,24 @@ Inputs the spec implies that no happy path exercises (each pinned by a test in t
 ## File Structure
 
 Core, new folders `packages/core/src/explain/` and `packages/core/src/learning/` (exported from `packages/core/src/index.ts`):
+
 - `explain/types.ts` ReadingLevel, TaskType, Sentence, ExplanationOutput. `explain/projection.ts` ProfileProjection and its builder. `explain/fill.ts` placeholder fill. `explain/validators.ts` all deterministic validators. `explain/thresholds.ts` the single table (lengths, readability, level rules).
 - `learning/concepts.ts` concept map. `learning/bkt.ts`. `learning/state.ts` ConceptState, LearningRecord. `learning/schedule.ts` due/triggers/caps. `learning/feedback.ts` feedback reducer. `learning/events.ts` ExplanationEvent, OutcomeEvent.
-Server (`apps/server/src/agent/`): `explain.ts` (sanitiser + pipeline), `explainJudge.ts`, prompts `_base.md` (rewrite), `_explain.md`, `explain-digest.md`, `explain-plan.md`, `explain-note.md`, `explain-judge.md`.
-Web: `apps/web/src/explain/` (orchestrator, client glue), `apps/web/src/copy/explain.ts`, `apps/web/src/copy/concepts.ts`, `apps/web/src/components/blocks/ExplanationBlock.tsx`, `apps/web/src/components/blocks/ConceptNote.tsx`, `apps/web/src/views/LearningSection.tsx`.
-Eval: `packages/core/src/explain/golden/` (fixtures), `scripts/explain-eval.ts`, `scripts/explain-review.ts`, `data/explain-training/approved.jsonl`.
+  Server (`apps/server/src/agent/`): `explain.ts` (sanitiser + pipeline), `explainJudge.ts`, prompts `_base.md` (rewrite), `_explain.md`, `explain-digest.md`, `explain-plan.md`, `explain-note.md`, `explain-judge.md`.
+  Web: `apps/web/src/explain/` (orchestrator, client glue), `apps/web/src/copy/explain.ts`, `apps/web/src/copy/concepts.ts`, `apps/web/src/components/blocks/ExplanationBlock.tsx`, `apps/web/src/components/blocks/ConceptNote.tsx`, `apps/web/src/views/LearningSection.tsx`.
+  Eval: `packages/core/src/explain/golden/` (fixtures), `scripts/explain-eval.ts`, `scripts/explain-review.ts`, `data/explain-training/approved.jsonl`.
 
 ---
 
 ### Task 1: Explain types, ProfileProjection, placeholder fill
 
 **Files:**
+
 - Create: `packages/core/src/explain/types.ts`, `projection.ts`, `fill.ts`, `thresholds.ts`, `explain.test.ts`
 - Modify: `packages/core/src/index.ts` (export)
 
 **Interfaces:**
+
 - Consumes (A2): `FactSheet`, `FactSheetFact` from `packages/core/src/plan/factsheet.ts`; `Polarity` from `plan/types.ts` (NOT redefined here); `Locale` from core; intake `AdvisorProfile["experience"]`.
 - Produces:
   - `type ReadingLevel = "basic" | "intermediate" | "advanced"`; `type TaskType = "digest" | "plan" | "note"`; `type SentenceKind = "fact" | "explanation" | "option_tradeoff" | "next_step_generic"`
@@ -82,7 +86,7 @@ Eval: `packages/core/src/explain/golden/` (fixtures), `scripts/explain-eval.ts`,
   - `readingLevelFromExperience(e: "beginner" | "some" | "experienced"): ReadingLevel`
   - `allowedPlaceholders(p: Pick<ProfileProjection, "facts">): ReadonlySet<string>`: `{{factId}}`, plus `{{factId.low}}`, `{{factId.expected}}`, `{{factId.high}}` when `hasRange`.
   - `type Formatter = (fact: FactSheetFact, part: "exact" | "low" | "expected" | "high", locale: Locale) => string`
-  - `fillPlaceholders(sentences: readonly Sentence[], sheet: FactSheet, format: Formatter): Effect<string[], UnfilledPlaceholderError>` (returns one string per sentence, same order; callers group by section with `sectionOfSentence(sentence, sheet): SectionId | null` = the `section` of its first `factId`, since the model returns sentences by fact id, not by section` (TaggedError; any placeholder left after fill, or any `{{` / `}}` remaining, fails).
+  - `fillPlaceholders(sentences: readonly Sentence[], sheet: FactSheet, format: Formatter): Effect<string[], UnfilledPlaceholderError>` (returns one string per sentence, same order; callers group by section with `sectionOfSentence(sentence, sheet): SectionId | null` = the `section` of its first `factId`, since the model returns sentences by fact id, not by section`(TaggedError; any placeholder left after fill, or any`{{` / `}}` remaining, fails).
   - `thresholds.ts`: ONE table `EXPLAIN_THRESHOLDS` (word-count bounds per task type: digest 80-120, plan 150-250, note 15-40 [note bounds are my decision, spec silent]; per-level max words per sentence and max share of uncommon words).
 
 - [ ] **Step 1: Write failing tests**
@@ -105,10 +109,12 @@ test("ExplanationOutput rejects kind 'recommendation' and extra keys", ...)
 ### Task 2: Deterministic validators (spec 4.3 items 1-7)
 
 **Files:**
+
 - Create: `packages/core/src/explain/validators.ts`, `validators.test.ts`
 - Modify: `packages/core/src/advice/language.ts` (intake Task 2; add the spec 4.3 item 6 patterns not yet in the one list: `allocate N%`, a percentage next to `aandelen|equities|ETF`, "beleg in", "je zou ... moeten kopen/beleggen", "I recommend", "you should buy/invest/sell"; keep ONE list) and its test
 
 **Interfaces:**
+
 - Consumes: Task 1 types; `findAdviceLanguage(text, locale)` (A1).
 - Produces:
   - `type FailureCode = "schema" | "placeholder_unknown" | "stray_number" | "must_mention_missing" | "polarity_mismatch" | "advice_language" | "readability" | "length"`
@@ -142,11 +148,13 @@ test("validateExplanation returns every failure at once for a multi-fault output
 ### Task 3: Prompts: `_base.md` rewrite and explain prompt files
 
 **Files:**
+
 - Modify: `apps/server/src/agent/prompts/_base.md` (whole file; today it describes "een ondernemer met meerdere vennootschappen", Dutch-only, mentions BV's); `apps/server/src/agent/prompts.ts:58-68` (add loader); `apps/server/src/agent/prompts.test.ts`
 - Create: `prompts/_explain.md` (advice-line constitution, style guide, output schema, placeholder rules, the three levels, natural frequencies and ranges, calm tone), `prompts/explain-digest.md`, `explain-plan.md`, `explain-note.md`, `explain-judge.md`
 - Verify unchanged: `scripts/vercel-build.mjs:99-102` already copies the whole `prompts` dir and asserts files shipped (no change expected; confirm the new files ship)
 
 **Interfaces:**
+
 - Consumes: `composePrompt` (`prompts.ts:34`), `loadAgentPrompt` (`prompts.ts:66`; its regex `^[a-z-]+$` admits `explain-digest`).
 - Produces: `loadExplainPrompt(taskType: "digest" | "plan" | "note"): string` = `composePrompt("_base.md", "_explain.md", "explain-<taskType>.md")`; `loadJudgePrompt(): string` = `composePrompt("explain-judge.md")` (judge does not need the charter); `explainPromptVersion(taskType): string` = stable short hash (core `hash()`) of the composed text, used as `contentVersion` and `prompt_cache_key` suffix.
 
@@ -172,10 +180,12 @@ test("the explain prompts contain no digits except inside the schema example (no
 ### Task 4: Server explain pipeline and route
 
 **Files:**
+
 - Create: `apps/server/src/agent/explain.ts`, `explain.test.ts`, `explainJudge.ts`
 - Modify: `apps/server/src/agent/provider.ts:2-7` (optional `temperature?: number`, `promptCacheKey?: string` on `complete`); `apps/server/src/agent/mistral.ts:125-141` (send `temperature` and `prompt_cache_key` when given; `mistral.test.ts` body assertion); `packages/database/src/index.ts:~1528` (the `AiUsage["route"]` union; add `"explain"` to the `AiUsage["route"]` union; no SQL change: `db/migrations/0005_ai_usage.sql:38` only checks non-blank, confirm `packages/database/src/migrations.test.ts` stays green); `apps/server/src/agent/budget.ts:110-117` (`WORST_CASE_CENTS.explain`, sized for generation + one retry + judge, start at 8 and justify in a comment); `apps/server/src/agent-routes.ts` (Deps `~:35-45`, import list `~:13-22`, handler after `/api/agent/categorize` ending `~:472`)
 
 **Interfaces:**
+
 - Consumes: Task 1-3 (`ProfileProjection`, `validateExplanation`, `loadExplainPrompt`, `loadJudgePrompt`, `explainPromptVersion`), `createMistralProvider(apiKey, model, obs)` (`mistral.ts:114`), `createAiObservationContext`, `MISTRAL_SMALL`.
 - Produces:
   - `sanitizeExplainInput(raw: unknown): ProfileProjection` throws `ValidationError("explain-…", …)` (`validationError.ts`). Field by field from named keys only (pattern: `categorize.ts:26-47`, `facts.ts:26-49`). Allowlists: `locale` in nl|en; `taskType`; `readingLevel`; each fact: `factId` matches `^[a-z_]{1,40}(:[a-z0-9-]{1,36})?$`, `bucket` matches `^[a-z0-9_<>=.,:+\-– ]{1,32}$` and contains no sequence of 9 or more digits, `unit`, `polarity`, `trend` in closed sets, `mustMention`/`hasRange` booleans; max 60 facts, max 12 `conceptIds` that exist in the concept map (unknown ids dropped), `topChanges` filtered to sent fact ids, max 3. Rejects an empty `facts`.
@@ -210,10 +220,12 @@ test("mistral body carries prompt_cache_key and temperature 0 for the judge; cat
 ### Task 5: Concept map, ConceptState, BKT, intake seeding
 
 **Files:**
+
 - Create: `packages/core/src/learning/concepts.ts`, `state.ts`, `bkt.ts`, `learning.test.ts`, `apps/web/src/copy/concepts.ts` (NL+EN titles, one-line definitions, check-item text; joins `copy/parity.test.ts`)
 - Modify: `packages/core/src/index.ts`
 
 **Interfaces:**
+
 - Consumes: intake `AdvisorProfile` (`experience`, `knowledge`); Effect Schema.
 - Produces:
   - `type ConceptId` (string union of the shipped ids). Target list (about 25): buffer, room, fixed_costs, compound_growth, costs_and_ter, diversification, risk_and_return, inflation, box3, gift_exemption, points_value, subscription_cost_per_use, goal_gap, debt_interest, interest_rate, and the rest the owner authors. **The implementer seeds exactly 8** (buffer, room, fixed_costs, subscription_cost_per_use, goal_gap, inflation, compound_growth, risk_and_return) with draft content; the other ids are listed in `PLANNED_CONCEPT_IDS` and not selectable.
@@ -248,10 +260,12 @@ test("every conceptId in the plan step's copy/plan/*.education is in CONCEPTS or
 ### Task 6: Scheduling, feedback reducer, events, learning persistence
 
 **Files:**
+
 - Create: `packages/core/src/learning/schedule.ts`, `feedback.ts`, `events.ts`, `record.ts`, `rewardSpec.ts`, `schedule.test.ts`, `feedback.test.ts`, `events.test.ts`
 - Modify: `packages/core/src/advisor/vaultSections.ts` (intake Task 2: replace the `learning` placeholder type with `LearningRecord` and its merge; if the generic merge there already handles per-id newest-wins, only register the type), `packages/adapters/src/storage/encryptedStorage.test.ts`
 
 **Interfaces:**
+
 - Consumes: Task 5 (`ConceptState`, `updateMastery`, `masteryWord`, `CONCEPTS`), Task 1 types, intake `getSection/putSection/appendEvents`, `mergeEvents`.
 - Produces:
   - `REWARD_SPEC` in `packages/core/src/learning/rewardSpec.ts` (spec 7: versioned const, `version`, `rewardTerms` (buffer months trend, room realised vs shown, goal progress vs own schedule, subscriptions cancelled within 14 days of an insight, micro-check correctness), `guardrails` (overdraft/late-fee incidents, opt-outs and muted topics, stress feedback, comprehension), `BANNED_ACTIONS` (instrument names, amounts, exploration on debt or high-risk topics), `forbiddenRewardTerms` = sessions, time in app, streaks, notification response). A test asserts no forbidden term appears in `rewardTerms`. The owner and the lawyer review this file (spec 8). Stage 0 only logs; nothing enforces a guardrail breach yet (flagged in gaps).
@@ -293,10 +307,12 @@ test("countersFromLog derives from the log; there is no stored counter field in 
 ### Task 7: Browser orchestrator, templates, API client
 
 **Files:**
+
 - Create: `apps/web/src/explain/orchestrate.ts`, `orchestrate.test.ts`, `snapshot.ts`, `apps/web/src/copy/explain.ts` (template fallback prose per fact id and per task type in B1 NL and EN, refusal text, AI disclosure label, control labels, "AFM register" link text), `apps/web/src/copy/explain.test.ts`
 - Modify: `apps/web/src/api.ts` (add `explainRequest` beside `categorizeTxs`, `api.ts:68-80`, same error handling via `apiErrorMessageIn`); `apps/web/src/copy/apiErrors.ts` (codes `explain-*`, `ai-budget-*` already exist; add new codes from Task 4 and Task 10); `apps/web/src/copy/parity.test.ts`
 
 **Interfaces:**
+
 - Consumes: Tasks 1, 2, 4 (route), 5, 6; `AdvisorProfile.experience`; `getSection/putSection/appendEvents`; `copy/money.ts` for formatting and the euro-conversion setting; A2/A3 templates.
 - Produces:
   - `explainRequest(p: ProfileProjection): Promise<ExplainOutcome>` in `api.ts` (POST `${API_BASE}/api/agent/explain`; non-OK throws like `categorizeTxs`).
@@ -333,10 +349,12 @@ test("refusal copy contains the AFM register link and passes the advice scan", .
 ### Task 8: ExplanationBlock UI, feedback controls, contextual note, micro-check
 
 **Files:**
+
 - Create: `apps/web/src/components/blocks/ExplanationBlock.tsx`, `ExplanationBlock.test.tsx`, `ConceptNote.tsx`, `ConceptNote.test.tsx`
 - Modify: `apps/web/src/views/Overzicht.tsx` (digest card; intake Task 8 also edits this file, merge by adding a sibling block only); `apps/web/src/plan/sections/*Section.tsx` from the plan step (pass `ExplanationBlock` as the `explanation` slot of `SectionCard`, plan Task 11; no other plan file changes, A3; the plan's template switch maps simpler -> basic and more detail -> one level up); `apps/web/src/copy/explain.ts`
 
 **Interfaces:**
+
 - Consumes: Task 7 `requestExplanation`, `ExplanationResult`; Task 6 `applyFeedback`, `planNote`, `buildExplanationEvent`, `FeedbackResponse`.
 - Produces: `ExplanationBlock` props `{ sheet: FactSheet; taskType: TaskType; ... }` (record, profile, locale from context hooks the plan view already uses) rendering: lines, the AI disclosure label beside AI text only (template text says nothing about AI), buttons `helped`, `didn't`, `simpler`, `more detail`, `too long`, `stop this topic`. Each tap: appends a follow-up `ExplanationEvent` response (new event with `linkedTo` is NOT in the spec schema, so one event per shown item is updated by appending a second event of the same `contentVersion` with `response` set; derived views take the latest per `eventId` group; state this in a code comment and test it), calls `applyFeedback`, `putSection("learning", …)`. "simpler" and "more detail" regenerate once at one level down or up via `oneShot`. `ConceptNote` props `{ decision: Extract<NoteDecision, { show: true }>; ... }`: one-line note from `copy/concepts.ts` (static, no AI call in stage 0; the `note` task type exists in the pipeline but this task wires only the static note, flagged below), with `dismiss` and `stop this topic`, and one optional check item (3 options, correct answer + misconception message) from reviewed concepts only; answering applies the `check` observation and writes `microCheck`. Global off switch lives in `LearningSection` (Task 9), read here.
 - No motion beyond a restrained fade; check `emil-design-eng` / `animate` before writing any CSS transition (AGENTS.md).
@@ -362,10 +380,12 @@ test("renders NL and EN; no raw '{{' ever in the DOM, even when the call mock re
 ### Task 9: "What LaVega knows" learning section
 
 **Files:**
+
 - Create: `apps/web/src/views/LearningSection.tsx`, `LearningSection.test.tsx`
 - Modify: `apps/web/src/views/AboutYou.tsx` (intake Task 7: render `LearningSection` below the field table; AboutYou props gain `learning: LearningRecord | null; log: readonly ExplanationEvent[]; onSaveLearning(next: LearningRecord): Promise<void>; onResetLearning(scope: { conceptId?: ConceptId }): Promise<void>`), `apps/web/src/copy/intake.ts` (`aboutYou.learning` tree) or `copy/explain.ts`
 
 **Interfaces:**
+
 - Consumes: `LearningRecord`, `masteryWord`, `countersFromLog`, `CONCEPTS`, `LearningRecord.lastProjection`.
 - Produces: per concept row: title, mastery in words (new to you / getting there / known), last shown, reading level for that concept, muted state with "unmute"; actions: edit level, reset one concept, mute; "reset all learning" one action; global notes switch; a field-by-field view of `lastProjection.projection` (the exact object last sent, plus its `sentAt`; none sent yet -> says so). Reset deletes records (`putSection` with the concept key absent, and removal of the events for that concept is NOT done: events are append-only; resetting learning writes a `learning_reset` marker event? Decision: do not delete events, because the spec says reset deletes "the records" of concept state and the events log is the append-only audit; owner to confirm, see gaps).
 
@@ -390,10 +410,12 @@ test("NL and EN", ...)
 ### Task 10: Chat guard (advice blocklist + web sources) without touching the web-search path
 
 **Files:**
+
 - Modify: `apps/server/src/agent/chat.ts:52-65` (today `res.sources` is discarded and `yield full` sends raw text); `apps/server/src/agent-routes.ts` chat route (`~:311-404`; the `for await (const chunk of chat(...))` loop and the `catch`); `apps/web/src/api.ts:131-196` (`dispatchSseRecord`, `streamChat`: new `sources` event handler, `ChatStreamHandlers.onSources?`); `apps/web/src/chat-sse.test.ts`; `apps/web/src/copy/apiErrors.ts` (code `chat-advice-blocked` -> localised refusal)
 - Test: `apps/server/src/agent/chat.test.ts`, `apps/server/src/agent-routes` chat tests
 
 **Interfaces:**
+
 - Consumes: `findAdviceLanguage(text, locale)` (A1/Task 2), Task 7 refusal copy.
 - Produces: `screenChatText(text: string): { ok: true } | { ok: false; hits: string[] }` in `apps/server/src/agent/chat.ts` (checks NL and EN, the chat has no locale); `runChat` yields the text and then a second yield of sources is NOT used (generator type stays `AsyncGenerator<string>`); instead `runChat` takes an optional `onSources?: (s: { url: string; title: string }[]) => void`, called with `res.sources`. Route: on `screenChatText` failure it writes the SSE error `chat-advice-blocked` (reuse `writeSseError`) instead of the text; otherwise writes `event: sources` with JSON when sources exist, then `done`. Web: `onSources` handler and a "Source" line under the reply from `copy` (rendered by the chat widget when it is re-mounted; App.tsx:377 notes it is not rendered today, so the visible part is verified in a handler test and in Task 8's manual run notes). Chat remains outside G1: no number rule, no placeholders, no FactSheet, no new task type.
 - Blocked chat output is dropped, never logged with its text.
@@ -418,10 +440,12 @@ test("apiErrors maps chat-advice-blocked in NL and EN", ...)
 ### Task 11: Golden set, eval harness, review loop, approved-example training file
 
 **Files:**
+
 - Create: `packages/core/src/explain/golden/` (fixtures JSON + `index.ts`), `packages/core/src/explain/golden/recorded/` (recorded model outputs), `packages/core/src/explain/golden.test.ts`, `scripts/explain-eval.ts`, `scripts/explain-review.ts`, `scripts/explain-training-status.ts`, `data/explain-training/approved.jsonl` (empty), `packages/core/src/explain/training.ts` + `training.test.ts`, `apps/server/src/agent/prompts/explain-exemplars.md` (empty, owner-curated; Task 3 loader includes it only when non-empty)
 - Modify: root `package.json` scripts: `eval:explain`, `review:explain`, `training:status`; `Task 3 loader` (include exemplars); CI config only to add `pnpm --filter @lavega/core test` coverage if golden tests are not already picked up (confirm)
 
 **Interfaces:**
+
 - Consumes: A2 `computePlan(...).factSheet(locale, taskType)` (golden FactSheets are generated from the plan step's engine on invented `PlanInput` fixtures, every value invented), Tasks 1-4, 7.
 - Produces:
   - `GoldenCase = { id: string /*"golden:<profile>:<locale>:<level>"*/; synthetic: true; sheet: FactSheet; projection: ProfileProjection; expectMustMention: string[]; expectPolarity: Record<string, Polarity>; forbidden: string[] /*regex sources*/ }` and `goldenCases(): GoldenCase[]`: 7 profiles (freelancer with irregular income, couple with a mortgage, negative room, zero data, high buffer, several currencies, student) x NL/EN x 3 levels = 42 cases (inside the spec's 30-60). `pnpm eval:explain --regen` rebuilds sheets and expectations from the engine; without it the committed JSON is used and a test fails if the committed expectations differ from a regen (the engine changed).

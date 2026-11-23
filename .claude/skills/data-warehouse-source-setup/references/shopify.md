@@ -33,10 +33,10 @@ To sync Shopify data:
 7.  Give your app a name and click **Create**.
 8.  You will be redirected to a screen for releasing a new version of your app. Here, you need to:
 9.  Set the app URL. Use the default value `https://shopify.dev/apps/default-app-home`.
-10.  Choose the app scopes. We recommend selecting all read options for the simplest setup, but only `read_orders` is required to sync core order data. See [scope requirements](#scope-requirements) for details.
-11.  Click **Release** and fill in the optional release details.
-12.  Go to **Home** in the Dev Dashboard and click **Install app** to install the app in your store.
-13.  Go to **Settings** in the Dev Dashboard and note your `Client ID` and `Secret` for later.
+10. Choose the app scopes. We recommend selecting all read options for the simplest setup, but only `read_orders` is required to sync core order data. See [scope requirements](#scope-requirements) for details.
+11. Click **Release** and fill in the optional release details.
+12. Go to **Home** in the Dev Dashboard and click **Install app** to install the app in your store.
+13. Go to **Settings** in the Dev Dashboard and note your `Client ID` and `Secret` for later.
 
 For more information about creating apps in Dev Dashboard see [the Shopify docs](https://shopify.dev/docs/apps/build/dev-dashboard/create-apps-using-dev-dashboard).
 
@@ -45,7 +45,7 @@ For more information about creating apps in Dev Dashboard see [the Shopify docs]
 1.  Go to the [data pipelines page](https://app.posthog.com/data-management/sources), and select the **Sources** tab.
 2.  Click the **\+ New source** button and select Shopify by clicking the **\+ Create** button.
 3.  Fill in your Shopify **Store ID** – enter your store subdomain (the `my-store` part of `my-store.myshopify.com`) or paste your full store URL. Also fill in the **Client ID** and **Secret** from above.
-4.  *Optional:* Add a prefix to your table names.
+4.  _Optional:_ Add a prefix to your table names.
 5.  Click **Next**.
 6.  Select the Shopify objects you want to sync, and make any sync configuration changes you need.
 7.  Click **Import**.
@@ -54,35 +54,35 @@ After these setup steps, your Shopify data will be automatically synced to the P
 
 ## Configuration
 
-| Option | Description |
-| --- | --- |
-| `Store id` **Type:** text **Required:** True | Your store subdomain — the `my-store` in `my-store.myshopify.com`. Pasting the full store URL works too. |
-| `Authentication method` **Type:** select **Required:** True |  |
+| Option                                                      | Description                                                                                              |
+| ----------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| `Store id` **Type:** text **Required:** True                | Your store subdomain — the `my-store` in `my-store.myshopify.com`. Pasting the full store URL works too. |
+| `Authentication method` **Type:** select **Required:** True |                                                                                                          |
 
 ## Scope requirements
 
 The `read_orders` scope is sufficient to sync core order data. However, some fields in the orders table require additional scopes:
 
-| Field | Required scope (any one) |
-| --- | --- |
+| Field               | Required scope (any one)                                                                                                 |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------ |
 | `fulfillmentOrders` | `read_merchant_managed_fulfillment_orders`, `read_third_party_fulfillment_orders`, or `read_assigned_fulfillment_orders` |
-| `paymentTerms` | `read_payment_terms` |
+| `paymentTerms`      | `read_payment_terms`                                                                                                     |
 
 > **Note:** If your token doesn't have these additional scopes, the orders sync still succeeds — those fields are simply omitted from the synced data. You don't need to grant extra permissions for data you don't need.
 
 ## Supported tables
 
-| Table | Description | Sync method | Incremental field | Primary key |
-| --- | --- | --- | --- | --- |
-| `abandonedCheckouts` | A checkout a customer started but did not complete, leaving items in their cart. | Incremental, Full refresh | createdAt | — |
-| `articles` | A blog post (article) published to one of the shop's online store blogs. | Incremental, Full refresh | updatedAt | — |
-| `blogs` | A blog on the shop's online store that groups together articles. | Full refresh | — | — |
-| `catalogs` | A catalog that maps a set of products and prices to a market, company location, or app. | Full refresh | — | — |
-| `collections` | A grouping of products that can be displayed and merchandised together in the store. | Incremental, Full refresh | updatedAt | — |
-| `customers` | A customer of the shop, holding contact details and order history. | Incremental, Full refresh | updatedAt | — |
-| `discountCodes` | A discount and its application rules — a code or automatic discount applied at checkout. | Incremental, Full refresh | updatedAt | — |
-| `orders` | A customer's completed request to purchase one or more products from the shop. | Incremental, Full refresh | updatedAt | — |
-| `products` | A product the shop sells, grouping its variants, media, and selling details. | Incremental, Full refresh | updatedAt | — |
+| Table                | Description                                                                              | Sync method               | Incremental field | Primary key |
+| -------------------- | ---------------------------------------------------------------------------------------- | ------------------------- | ----------------- | ----------- |
+| `abandonedCheckouts` | A checkout a customer started but did not complete, leaving items in their cart.         | Incremental, Full refresh | createdAt         | —           |
+| `articles`           | A blog post (article) published to one of the shop's online store blogs.                 | Incremental, Full refresh | updatedAt         | —           |
+| `blogs`              | A blog on the shop's online store that groups together articles.                         | Full refresh              | —                 | —           |
+| `catalogs`           | A catalog that maps a set of products and prices to a market, company location, or app.  | Full refresh              | —                 | —           |
+| `collections`        | A grouping of products that can be displayed and merchandised together in the store.     | Incremental, Full refresh | updatedAt         | —           |
+| `customers`          | A customer of the shop, holding contact details and order history.                       | Incremental, Full refresh | updatedAt         | —           |
+| `discountCodes`      | A discount and its application rules — a code or automatic discount applied at checkout. | Incremental, Full refresh | updatedAt         | —           |
+| `orders`             | A customer's completed request to purchase one or more products from the shop.           | Incremental, Full refresh | updatedAt         | —           |
+| `products`           | A product the shop sells, grouping its variants, media, and selling details.             | Incremental, Full refresh | updatedAt         | —           |
 
 ### Still have questions?
 

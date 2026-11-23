@@ -7,10 +7,20 @@ status: published
 author: alexander
 updated: 2026-10-26
 sources:
-  - { title: "LaVega: what the app does and does not do (product page)", url: "https://www.lavega.dev/en", accessed: 2026-10-26 }
+  - {
+      title: "LaVega: what the app does and does not do (product page)",
+      url: "https://www.lavega.dev/en",
+      accessed: 2026-10-26,
+    }
 faq:
-  - { q: "Is a personal CFO a real person?", a: "Sometimes, for example for wealthy families with a family office. Most of the time the phrase means a way of looking at your money, often supported by software that provides the overview and the numbers." }
-  - { q: "Can software be my personal CFO?", a: "Software can do the number work and the overview: balances, recurring costs and a forecast. Choices about your money stay with you, or with a licensed adviser if you want personal guidance." }
+  - {
+      q: "Is a personal CFO a real person?",
+      a: "Sometimes, for example for wealthy families with a family office. Most of the time the phrase means a way of looking at your money, often supported by software that provides the overview and the numbers.",
+    }
+  - {
+      q: "Can software be my personal CFO?",
+      a: "Software can do the number work and the overview: balances, recurring costs and a forecast. Choices about your money stay with you, or with a licensed adviser if you want personal guidance.",
+    }
 ---
 
 ## What does a CFO do at a company?

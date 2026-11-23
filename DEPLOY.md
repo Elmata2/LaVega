@@ -14,11 +14,11 @@ failed with `column "credential_generation" does not exist` for weeks. The
 ledger replaces remembering with checking.
 
 ```
-pnpm db:migrate           # apply everything pending
-pnpm db:migrate:check     # exit 1 if a migration is unapplied — run before a deploy
-pnpm db:migrate:status    # how far this database is
-pnpm db:migrate:baseline  # record every file as applied, executing none
-pnpm db:migrate:adopt     # run every file, then record them — for an unknown database
+bun run db:migrate           # apply everything pending
+bun run db:migrate:check     # exit 1 if a migration is unapplied — run before a deploy
+bun run db:migrate:status    # how far this database is
+bun run db:migrate:baseline  # record every file as applied, executing none
+bun run db:migrate:adopt     # run every file, then record them — for an unknown database
 ```
 
 `baseline` is for a database you know is current. `adopt` is for one you do not:
@@ -31,7 +31,7 @@ tables it reads:
 ```
 MIGRATION_DATABASE_URL=$(neonctl connection-string main \
   --project-id royal-surf-52181032 --role-name lavega_owner --database-name lavega) \
-  pnpm db:migrate
+  bun run db:migrate
 ```
 
 `MIGRATION_DATABASE_URL` is read first; `DATABASE_URL` only when it is unset, so
@@ -57,17 +57,17 @@ The build reads the ledger with `DATABASE_URL` (the `lavega_runtime` role, which
 anything, because a rolled-back deploy must not leave the schema ahead of the
 code. A build with no `DATABASE_URL` skips the check and says so.
 
-So the order for a schema change is: merge, `pnpm db:migrate`, then deploy. Out
+So the order for a schema change is: merge, `bun run db:migrate`, then deploy. Out
 of order, the deploy fails closed rather than half-working.
 
 Production (`main`) and preview branches that predate the runner are baselined
 already. A **new** database — a fresh Neon branch, a self-host — runs
-`pnpm db:migrate` from empty instead; `baseline` on an empty database is
+`bun run db:migrate` from empty instead; `baseline` on an empty database is
 refused.
 
 Both long-lived branches were at the head of `db/migrations` on 2026-10-05
-(`24/24 applied`, `pnpm db:migrate:check` exits 0 on each); `0024` has been added
-since, so run `pnpm db:migrate:check` for the current state. The project is
+(`24/24 applied`, `bun run db:migrate:check` exits 0 on each); `0024` has been added
+since, so run `bun run db:migrate:check` for the current state. The project is
 `royal-surf-52181032`; `main` is `br-fragrant-cake-b1ylflhu` and `preview` is
 `br-orange-tree-b1b7kdwm`.
 
@@ -132,8 +132,8 @@ ledger disagreeing with the directory; removing them is a manual `DELETE` from
   there are no sessions to verify, so a deployment with those unset refuses every
   non-public API call. That is deliberate: a flag defaulting to open would
   reproduce the hole the guard exists to close. A run that genuinely has no
-  authentication — `pnpm dev`, or a single-user self-host — opens it explicitly
-  with `LAVEGA_ALLOW_UNAUTHENTICATED=1`. `pnpm dev` already sets it; `pnpm start`
+  authentication — `bun run dev`, or a single-user self-host — opens it explicitly
+  with `LAVEGA_ALLOW_UNAUTHENTICATED=1`. `bun run dev` already sets it; `bun run start`
   deliberately does not. **A hosted deployment refuses the flag outright**
   (`NODE_ENV=production`, or Vercel's `VERCEL_ENV`/`VERCEL`), so a value left in
   a platform's environment UI cannot publish the vault (security review
@@ -253,7 +253,7 @@ Dutch company and the Dutch text is the operative one.
 
 ## Investing dashboard (same deploy)
 
-The production `Dockerfile` also builds `apps/investing-web` and mounts it on the
+The Railway Railpack build (`railway.json`) also builds `apps/investing-web` and mounts it on the
 personal server:
 
 - UI: `https://lavega.dev/investing/`
@@ -300,12 +300,12 @@ drains those runs lives outside the request chain:
 
 ## Environments
 
-|                | Production                           | Preview                               | Local                                                |
-| -------------- | ------------------------------------ | ------------------------------------- | ---------------------------------------------------- |
-| Neon branch    | `main` (`br-fragrant-cake-b1ylflhu`) | `preview` (`br-orange-tree-b1b7kdwm`) | none                                                 |
-| Stores         | Neon                                 | Neon                                  | files on disk                                        |
-| Authentication | on                                   | on                                    | off                                                  |
-| `/api/*` guard | on                                   | on                                    | off (`LAVEGA_ALLOW_UNAUTHENTICATED=1` in `pnpm dev`) |
+|                | Production                           | Preview                               | Local                                                   |
+| -------------- | ------------------------------------ | ------------------------------------- | ------------------------------------------------------- |
+| Neon branch    | `main` (`br-fragrant-cake-b1ylflhu`) | `preview` (`br-orange-tree-b1b7kdwm`) | none                                                    |
+| Stores         | Neon                                 | Neon                                  | files on disk                                           |
+| Authentication | on                                   | on                                    | off                                                     |
+| `/api/*` guard | on                                   | on                                    | off (`LAVEGA_ALLOW_UNAUTHENTICATED=1` in `bun run dev`) |
 
 Preview has its own `BETTER_AUTH_SECRET` and `LAVEGA_ENCRYPTION_KEY`, not
 production's: a leaked preview key must not open production data. It shares one
@@ -317,7 +317,7 @@ Every preview gets a new hostname, so no fixed value could name it; the server
 reads `VERCEL_URL` instead (`apps/server/src/auth.ts`).
 
 The Development scope is deliberately empty. Without `DATABASE_URL` the app uses
-its file stores and authentication is off, which is what `pnpm dev` should do —
+its file stores and authentication is off, which is what `bun run dev` should do —
 pointing every developer's machine at the shared preview branch would let one
 person's local experiment land in someone else's preview. To exercise auth
 locally, create your own Neon branch and put its connection string, a
@@ -406,7 +406,7 @@ locally, create your own Neon branch and put its connection string, a
   `onError` (flushed before the function returns) and is forwarded to the
   browser bundles of `apps/web` and `apps/investing-web` as `VITE_SENTRY_DSN` at
   build time by `scripts/vercel-build.mjs` — set `VITE_SENTRY_DSN` directly only
-  to override, or for a Docker/local build with no integration. `SENTRY_ORG`,
+  to override, or for a standalone/local build with no integration. `SENTRY_ORG`,
   `SENTRY_PROJECT` and `SENTRY_AUTH_TOKEN` enable source-map upload; when all
   three are present the maps are emitted hidden, uploaded, then deleted from
   `dist` so the served bundle never exposes original source. All of it is
@@ -452,7 +452,7 @@ Still open for the owner, in this order:
    superuser): 0040 and 0041 refuse to apply otherwise, because their lookup
    functions run as the owner and must see past forced row-level security. If
    the SQL editor says "Failed transaction", run `ROLLBACK;` first. Then
-   `pnpm db:migrate:check`.
+   `bun run db:migrate:check`.
 3. **Set the env vars** on Vercel (Production and Preview):
    - `AGENT_DEDUPE_HMAC_KEY` — 64 hex characters (`openssl rand -hex 32`).
    - `AGENT_PHONE_HMAC_KEY` — 64 hex characters (`openssl rand -hex 32`).
@@ -551,12 +551,12 @@ the app still works with file imports. Never commit the `.pem` — use the env v
 ## Local production test
 
 ```
-pnpm build      # builds apps/web/dist
-pnpm start      # Hono serves web + API on http://localhost:8787
+bun run build      # builds apps/web/dist
+bun run start      # Hono serves web + API on http://localhost:8787
 ```
 
-`pnpm start` runs production semantics, so without `DATABASE_URL` +
+`bun run start` runs production semantics, so without `DATABASE_URL` +
 `BETTER_AUTH_SECRET` in `apps/server/.env` the API answers `401` — that is the
 guard working, not a broken build. Prefix with `LAVEGA_ALLOW_UNAUTHENTICATED=1`
 to test the build without auth.
-(For day-to-day dev keep using `pnpm dev` + `pnpm dev:server`.)
+(For day-to-day dev keep using `bun run dev`.)

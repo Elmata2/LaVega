@@ -3,7 +3,7 @@
  * control-investing — drive the LaVega investing app for verification.
  *
  * Two targets, one API surface:
- *   local  standalone @lavega/investing-server (apps/investing-server/src/docker.ts).
+ *   local  standalone @lavega/investing-server (apps/investing-server/src/standalone.ts).
  *          Single tenant, no auth, own port and own data files. Safe to drive.
  *   prod   https://www.lavega.dev — @lavega/server mounts the same investing app
  *          behind a better-auth session, so every /api call needs a cookie.
@@ -673,23 +673,23 @@ async function startLocal({ port, dataDir }) {
   if (!existsSync(distDir)) {
     fail(
       "apps/investing-web/dist is missing — the SPA has not been built",
-      "run: pnpm --filter @lavega/investing-web build",
+      "run: bun --filter @lavega/investing-web build",
       { code: "spa-not-built", exitCode: 1 },
     );
   }
 
-  /* Run tsx directly rather than through `pnpm --filter`: pnpm's deps-status
-   * check wants a TTY to confirm a modules purge and aborts without one. */
+  /* Run tsx directly rather than through `bun --filter` to avoid extra wrapper
+   * process overhead around the detached server child. */
   const tsx = join(repoRoot, "node_modules/.bin/tsx");
   if (!existsSync(tsx))
-    fail("node_modules/.bin/tsx is missing", "run: pnpm install", {
+    fail("node_modules/.bin/tsx is missing", "run: bun install", {
       code: "deps-missing",
       exitCode: 1,
     });
 
   writeFileSync(logFile, "");
   const logFd = openSync(logFile, "a");
-  const child = spawn(tsx, ["apps/investing-server/src/docker.ts"], {
+  const child = spawn(tsx, ["apps/investing-server/src/standalone.ts"], {
     cwd: repoRoot,
     detached: true,
     /* File stdio, not a pipe: `up` exits after /health, and a pipe then

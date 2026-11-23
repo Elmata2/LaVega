@@ -7,7 +7,7 @@ description: Drive the LaVega investing dashboard (https://www.lavega.dev/invest
 
 The investing side is one API served two ways.
 
-- **Standalone** — `apps/investing-server/src/docker.ts` serves `/health`, `/api/*` and the
+- **Standalone** — `apps/investing-server/src/standalone.ts` serves `/health`, `/api/*` and the
   built SPA from `apps/investing-web/dist`. Single tenant (`local`), no auth, state in JSON
   files. This is what `control-investing.mjs up` starts, and it is where you verify logic.
 - **Mounted** — `apps/server/src/index.ts` forwards `/api/investing/*`, `/api/brokers/*`,
@@ -47,7 +47,7 @@ child on the first Trading 212 diagnostic log.
 Needs `apps/investing-web/dist` to exist. If it does not:
 
 ```bash
-pnpm --filter @lavega/investing-web build
+bun --filter @lavega/investing-web build
 ```
 
 Teardown, at the end of every run including failed ones: [Cleanup](#cleanup).
@@ -91,12 +91,12 @@ node .claude/skills/verify-investing/control-investing.mjs help --json   # the w
   gate: name the behavior or regression, confirm existing coverage does not already own it,
   and do not add test-only production seams. Skip or rewrite anything that matches its junk
   patterns. There are two suites:
-  - `pnpm run test:verify-investing` tests the CLI itself: parsing, errors, `--dry-run` and
+  - `bun run test:verify-investing` tests the CLI itself: parsing, errors, `--dry-run` and
     the prod guard. It runs against a stub HTTP server and fake `browse` and `vercel`
     binaries, so it is fast and offline, and it can exercise writes such as `prices purge
 --yes` without deleting real data. Run it after any change to the CLI, and add a test
     for each new command or flag only when `test-audit` says it earns its place.
-  - `pnpm run test:verify-investing:live` runs the CLI against the real newest preview deploy
+  - `bun run test:verify-investing:live` runs the CLI against the real newest preview deploy
     with the preview test user. It proves that real data reaches the API and the rendered
     page. It only reads; every write in it runs with `--dry-run`. It skips only when neither a readable `auth.preview.json` nor
     `LAVEGA_VERIFY_EMAIL` + `LAVEGA_VERIFY_PASSWORD` is already available.
@@ -368,7 +368,7 @@ real tenant. Prefer it over prod for anything that writes.
   login never replaces the prod session. `doctor --target preview` fails `credentialsFile`
   only when the pull fails, the process env pair is unset, no readable file exists, and
   there is no session. A local `doctor` pass does not satisfy this check.
-  `pnpm run test:verify-investing:live` skips only when neither a readable
+  `bun run test:verify-investing:live` skips only when neither a readable
   `auth.preview.json` nor the process env pair is already available. `login` still pulls
   when you run it yourself. `login` answering 403 means the test user's email is not
   confirmed (see `features/auth-session.md`, Gotchas); it is not a wrong password.

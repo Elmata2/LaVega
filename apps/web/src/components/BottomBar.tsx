@@ -9,11 +9,7 @@ import { shellCopy } from "../copy/shell.js";
  * sits behind "Meer". Both openers take their drawer state from Shell. */
 
 /** Registry order decides the sequence. */
-export const BAR_IDS: ReadonlySet<ModuleId> = new Set([
-  "overview",
-  "optimalisatie",
-  "accounts",
-]);
+export const BAR_IDS: ReadonlySet<ModuleId> = new Set(["overview", "optimalisatie", "accounts"]);
 
 export function PhoneTopBar({
   view,
@@ -86,11 +82,7 @@ export function BottomBar({
   const items = modules.filter((m) => BAR_IDS.has(m.id));
   const hasMore = modules.some((m) => !BAR_IDS.has(m.id));
   return (
-    <nav
-      className="shell2-bottombar"
-      aria-label={c.nav.ariaLabel}
-      {...((behind ? { inert: "" } : {}) as Record<string, string>)}
-    >
+    <nav className="shell2-bottombar" aria-label={c.nav.ariaLabel} inert={behind}>
       {items.map((m) => (
         <a
           key={m.id}

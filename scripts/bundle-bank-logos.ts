@@ -1,10 +1,10 @@
 /**
  * Bundel de banklogo's — tijdens een sweep, nooit tijdens runtime.
  *
- *   pnpm exec tsx scripts/bundle-bank-logos.ts
- *   pnpm exec tsx scripts/bundle-bank-logos.ts --dry            # rapporteer, schrijf niets
- *   pnpm exec tsx scripts/bundle-bank-logos.ts --only ing,knab  # één of een paar
- *   pnpm exec tsx scripts/bundle-bank-logos.ts --all            # ook merken die (nog) geen rekeningnaam zijn
+ *   bunx tsx scripts/bundle-bank-logos.ts
+ *   bunx tsx scripts/bundle-bank-logos.ts --dry            # rapporteer, schrijf niets
+ *   bunx tsx scripts/bundle-bank-logos.ts --only ing,knab  # één of een paar
+ *   bunx tsx scripts/bundle-bank-logos.ts --all            # ook merken die (nog) geen rekeningnaam zijn
  *
  * WAAROM DIT BUITEN DE APP LOOPT. Het bezwaar tegen banklogo's was nooit "geen
  * plaatjes", het was "niets ophalen tijdens runtime": een logo-request vertelt

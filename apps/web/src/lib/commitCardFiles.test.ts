@@ -50,36 +50,66 @@ function fake(failOn: "putAccounts" | "putTxs" | null, seed?: { accounts: Accoun
 
 test("success stores and returns the stored state and the added count", async () => {
   const f = fake(null);
-  const r = await commitToStorage(f.store, { accounts: [], txs: [] }, files, "2026-11-16", async () => {});
+  const r = await commitToStorage(
+    f.store,
+    { accounts: [], txs: [] },
+    files,
+    "2026-11-16",
+    async () => {},
+  );
   expect(r).toMatchObject({ ok: true, count: 1 });
   expect(f.written().txs).toHaveLength(1);
 });
 
 test("a failure before anything is written is not partial", async () => {
   const f = fake("putAccounts");
-  const r = await commitToStorage(f.store, { accounts: [], txs: [] }, files, "2026-11-16", async () => {});
+  const r = await commitToStorage(
+    f.store,
+    { accounts: [], txs: [] },
+    files,
+    "2026-11-16",
+    async () => {},
+  );
   expect(r).toMatchObject({ ok: false, partial: false });
 });
 
 test("a failure after accounts were written is partial and returns the re-read state", async () => {
   const f = fake("putTxs");
-  const r = await commitToStorage(f.store, { accounts: [], txs: [] }, files, "2026-11-16", async () => {});
+  const r = await commitToStorage(
+    f.store,
+    { accounts: [], txs: [] },
+    files,
+    "2026-11-16",
+    async () => {},
+  );
   expect(r).toMatchObject({ ok: false, partial: true });
   if (!r.ok) expect(r.accounts).toHaveLength(1);
 });
 
 test("a failing follow-up step after the rows are in is partial too", async () => {
   const f = fake(null);
-  const r = await commitToStorage(f.store, { accounts: [], txs: [] }, files, "2026-11-16", async () => {
-    throw new Error("bills");
-  });
+  const r = await commitToStorage(
+    f.store,
+    { accounts: [], txs: [] },
+    files,
+    "2026-11-16",
+    async () => {
+      throw new Error("bills");
+    },
+  );
   expect(r).toMatchObject({ ok: false, partial: true });
   if (!r.ok) expect(r.txs).toHaveLength(1);
 });
 
 test("the result names the accounts this import wrote, as stored", async () => {
   const f = fake(null);
-  const r = await commitToStorage(f.store, { accounts: [], txs: [] }, files, "2026-11-16", async () => {});
+  const r = await commitToStorage(
+    f.store,
+    { accounts: [], txs: [] },
+    files,
+    "2026-11-16",
+    async () => {},
+  );
   if (!r.ok) throw new Error("expected ok");
   expect(r.written.map((a) => a.key)).toEqual(["AMEX-11111"]);
   expect(r.written[0]!.balance).toBeNull();
@@ -92,33 +122,67 @@ Card debit,2026-01-02 10:00:00,EUR,-2.00,Shop B
 Deposit,2026-01-04 10:00:00,EUR,100.00,
 Interest on cash,2026-01-05 10:00:00,EUR,0.50,`;
 const OLD = "from_2026-10-01_to_2026-11-16_MTc5NDg1MD";
-const base = { iban: "", entity: "P", currency: "EUR", bank: "Trading 212", linkedAt: "2026-11-02", source: "file" as const };
+const base = {
+  iban: "",
+  entity: "P",
+  currency: "EUR",
+  bank: "Trading 212",
+  linkedAt: "2026-11-02",
+  source: "file" as const,
+};
 
 test("Trading 212 migration: stored vault ends with one account, no duplicate rows, old account and ids gone", async () => {
   const parsed = parseBankFile("x.csv", T212_FILE);
   const mk = (accountKey: string, descs: string[]) =>
     parsed.txs.filter((t) => descs.includes(t.description)).map((t) => ({ ...t, accountKey }));
-  const seedTxs = ingest([], [...mk("TRADING212-CARD", ["Card debit"]), ...mk(OLD, ["Deposit", "Interest on cash"])]);
+  const seedTxs = ingest(
+    [],
+    [...mk("TRADING212-CARD", ["Card debit"]), ...mk(OLD, ["Deposit", "Interest on cash"])],
+  );
   const seed = {
     accounts: [
-      { ...base, key: "TRADING212-CARD", name: "Trading 212 Card", balance: 250, balanceDate: "2026-11-01", statedCardId: "212-card" },
+      {
+        ...base,
+        key: "TRADING212-CARD",
+        name: "Trading 212 Card",
+        balance: 250,
+        balanceDate: "2026-11-01",
+        statedCardId: "212-card",
+      },
       { ...base, key: OLD, name: OLD, balance: null },
     ] as Account[],
     txs: seedTxs,
   };
   const f = fake(null, seed);
-  const input = [{ result: parsed, target: { cardId: "212-card", label: "212 Card", brand: "trading-212" }, link: true }];
+  const input = [
+    {
+      result: parsed,
+      target: { cardId: "212-card", label: "212 Card", brand: "trading-212" },
+      link: true,
+    },
+  ];
   const r = await commitToStorage(f.store, seed, input, "2026-11-16", async () => {});
   if (!r.ok) throw new Error("expected ok");
   expect(r.count).toBe(0);
   expect(r.folds).toEqual([{ survivorKey: "TRADING212-CARD", duplicateKey: OLD }]);
   const stored = f.written();
   expect(stored.accounts).toHaveLength(1);
-  expect(stored.accounts[0]).toMatchObject({ key: "TRADING212-CARD", name: "Trading 212", balance: 250, statedCardId: "212-card" });
+  expect(stored.accounts[0]).toMatchObject({
+    key: "TRADING212-CARD",
+    name: "Trading 212",
+    balance: 250,
+    statedCardId: "212-card",
+  });
   expect(stored.txs).toHaveLength(4);
   expect(new Set(stored.txs.map((t) => t.accountKey))).toEqual(new Set(["TRADING212-CARD"]));
   // the same file again, and a later file under another name, change nothing / add rows to the same account
-  const again = await commitToStorage(f.store, { accounts: stored.accounts, txs: stored.txs }, input, "2026-11-16", async () => {});
+  const again = await commitToStorage(
+    f.store,
+    { accounts: stored.accounts, txs: stored.txs },
+    input,
+    "2026-11-16",
+    async () => {},
+  );
   expect(again).toMatchObject({ ok: true, count: 0, folds: [] });
   expect(f.written().accounts).toHaveLength(1);
 });
@@ -142,27 +206,69 @@ function world() {
   const parsed = parseBankFile("x.csv", T212_FILE);
   const mk = (accountKey: string, descs: string[]) =>
     parsed.txs.filter((t) => descs.includes(t.description)).map((t) => ({ ...t, accountKey }));
-  const txs = ingest([], [...mk("TRADING212-CARD", ["Card debit"]), ...mk(OLD, ["Deposit", "Interest on cash"])]);
+  const txs = ingest(
+    [],
+    [...mk("TRADING212-CARD", ["Card debit"]), ...mk(OLD, ["Deposit", "Interest on cash"])],
+  );
   const deposit = txs.find((t) => t.description === "Deposit")!;
   const card = txs.find((t) => t.description === "Card debit")!;
   const db = {
     accounts: [
-      { ...base, key: "TRADING212-CARD", name: "Trading 212 Card", balance: 250, balanceDate: "2026-11-01", statedCardId: "212-card" },
+      {
+        ...base,
+        key: "TRADING212-CARD",
+        name: "Trading 212 Card",
+        balance: 250,
+        balanceDate: "2026-11-01",
+        statedCardId: "212-card",
+      },
       { ...base, key: OLD, name: OLD, balance: null },
     ] as Account[],
     txs,
     transfers: [
-      { id: transferPairId(card.id, deposit.id), outflowTxId: card.id, inflowTxId: deposit.id, status: "confirmed", kind: "funds_movement", amountCents: 100, currency: "EUR", createdAt: "x" },
+      {
+        id: transferPairId(card.id, deposit.id),
+        outflowTxId: card.id,
+        inflowTxId: deposit.id,
+        status: "confirmed",
+        kind: "funds_movement",
+        amountCents: 100,
+        currency: "EUR",
+        createdAt: "x",
+      },
     ] as TransferPair[],
     valuations: [
-      { id: `${OLD}|2026-01-04`, accountKey: OLD, date: "2026-01-04", amountCents: 100, currency: "EUR", kind: "reconciliation", source: "manual", recordedAt: "x" },
+      {
+        id: `${OLD}|2026-01-04`,
+        accountKey: OLD,
+        date: "2026-01-04",
+        amountCents: 100,
+        currency: "EUR",
+        kind: "reconciliation",
+        source: "manual",
+        recordedAt: "x",
+      },
     ] as unknown as Valuation[],
     decisions: {
       ...EMPTY_BILL_DECISIONS,
-      matches: [{ id: billMatchId("occ", deposit.id), occurrenceId: "occ", billId: "b", txId: deposit.id, amountCents: 1, currency: "EUR", source: "user", confidence: 1, decidedAt: "x" }],
+      matches: [
+        {
+          id: billMatchId("occ", deposit.id),
+          occurrenceId: "occ",
+          billId: "b",
+          txId: deposit.id,
+          amountCents: 1,
+          currency: "EUR",
+          source: "user",
+          confidence: 1,
+          decidedAt: "x",
+        },
+      ],
     } as BillDecisions,
     sessions: [{ id: "s1", accountKey: OLD, txIds: [deposit.id] }] as unknown as ImportSession[],
-    documents: [{ id: "d1", accountKey: OLD, suggestedAccountKey: null, txIds: [deposit.id] }] as unknown as VaultDocument[],
+    documents: [
+      { id: "d1", accountKey: OLD, suggestedAccountKey: null, txIds: [deposit.id] },
+    ] as unknown as VaultDocument[],
   };
   return { db, deposit };
 }
@@ -231,15 +337,28 @@ const refsOf = (s: ReturnType<typeof fakeDb>["state"]): FoldRefsState => ({
 
 async function runImport(f: ReturnType<typeof fakeDb>) {
   const parsed = parseBankFile("x.csv", T212_FILE);
-  const input = [{ result: parsed, target: { cardId: "212-card", label: "212 Card", brand: "trading-212" }, link: true }];
-  let refs = refsOf(f.state);
-  return commitToStorage(f.store, { accounts: f.state.accounts, txs: f.state.txs }, input, "2026-11-16", async () => {}, {
-    state: refs,
-    store: f.refStore,
-    onWritten: (n) => {
-      refs = n;
+  const input = [
+    {
+      result: parsed,
+      target: { cardId: "212-card", label: "212 Card", brand: "trading-212" },
+      link: true,
     },
-  });
+  ];
+  let refs = refsOf(f.state);
+  return commitToStorage(
+    f.store,
+    { accounts: f.state.accounts, txs: f.state.txs },
+    input,
+    "2026-11-16",
+    async () => {},
+    {
+      state: refs,
+      store: f.refStore,
+      onWritten: (n) => {
+        refs = n;
+      },
+    },
+  );
 }
 
 function expectHealed(s: ReturnType<typeof fakeDb>["state"]) {
@@ -267,14 +386,17 @@ test("a clean fold writes records first, then deletes, and ends healed", async (
   expectHealed(f.state);
 });
 
-test.each(STEPS)("a failure at %s returns partial, never throws, and the same import afterwards heals", async (step) => {
-  const w = world();
-  const f = fakeDb(w.db, step);
-  const first = await runImport(f);
-  expect(first).toMatchObject({ ok: false, partial: step !== "putAccounts" });
-  // the failure is gone; the second identical import runs against what is stored
-  const retry = fakeDb({ ...f.state }, null);
-  const second = await runImport(retry);
-  expect(second).toMatchObject({ ok: true });
-  expectHealed(retry.state);
-});
+test.each(STEPS)(
+  "a failure at %s returns partial, never throws, and the same import afterwards heals",
+  async (step) => {
+    const w = world();
+    const f = fakeDb(w.db, step);
+    const first = await runImport(f);
+    expect(first).toMatchObject({ ok: false, partial: step !== "putAccounts" });
+    // the failure is gone; the second identical import runs against what is stored
+    const retry = fakeDb({ ...f.state }, null);
+    const second = await runImport(retry);
+    expect(second).toMatchObject({ ok: true });
+    expectHealed(retry.state);
+  },
+);

@@ -34,6 +34,7 @@
 **Files:** Modify `packages/core/src/advisor/profile.ts` (AdvisorProfile class + intake struct), `packages/core/src/advisor/vaultSections.ts` (`profileUpdatedAt`); Test `profile.test.ts`, `vaultSections.test.ts`.
 
 **Interfaces — Produces:**
+
 ```ts
 export const WorkKind = Schema.Literals(["employed","freelance","business","student","jobseeking","retired","other"]);
 // AdvisorProfile gains:
@@ -42,6 +43,7 @@ statedCards: Schema.optionalKey(Field(Schema.Array(Schema.String))), // catalogu
 // intake gains:
 noCards: Schema.optionalKey(Schema.Boolean),
 ```
+
 - [ ] Tests: `decodes a profile without work/statedCards`; `round-trips work and statedCards`; `profileUpdatedAt sees work and statedCards` (a later `at` on either wins).
 - [ ] Run `cd packages/core && npx vitest run src/advisor` — FAIL, implement, PASS; `npx tsc -p . --noEmit` clean. `git add -N` new files only.
 
@@ -50,6 +52,7 @@ noCards: Schema.optionalKey(Schema.Boolean),
 **Files:** Modify `apps/web/src/intake/wizard/screens.ts`; Test `screens.test.ts`.
 
 **Interfaces — Produces:** `ScreenId` gains `"work" | "has-cards" | "cards" | "upload"`. Canonical order: household, **work**, children, child-years, income, spend, housing, savings, **has-cards**, **cards**, goal, debts, debt-details, buffer, risk…, invested, **upload**. `sectionOf("work"|"has-cards"|"cards") = "about"`, `sectionOf("upload") = "risk"`. `cards` is present unless `p.intake.noCards === true`. New `export function answerCards(p: AdvisorProfile, has: boolean): AdvisorProfile` — false sets `noCards: true` and removes `statedCards`; true removes `noCards`. `markDone` milestones unchanged (blocksDone 3 still at "invested"). `resumeScreen` unchanged in rule; with no `lastScreen` and blocksDone 3 it stays `"done"`.
+
 - [ ] Tests: `screensFor default has 21 screens` (17 + work, has-cards, cards, upload; assert via RISK_SCALE length); `Nee on cards drops the cards screen`; `finished old profile stays done`; `round-1 finisher resumes at upload` (lastScreen "invested" → "upload"); `markDone upload then resume is done`.
 - [ ] Run `cd apps/web && npx vitest run src/intake/wizard/screens.test.ts` — FAIL → implement → PASS.
 
@@ -58,6 +61,7 @@ noCards: Schema.optionalKey(Schema.Boolean),
 **Files:** Modify `apps/web/src/copy/wizard.ts`, `wizard.test.ts`.
 
 **Interfaces — Produces:** in `WizardCopy`: `questions.work`, `questions.hasCards`, `questions.cards`, `questions.upload`; `workKinds: Record<WorkKind, string>` (labels from Global Constraints); `spendUnknown` "Weet ik niet"; `spendExact` "Toch een bedrag invullen"; `spendBands: [string, string, string, string, string]` (labels from Global Constraints, same in both household variants); `cardSearch` "Zoek je kaart"; `otherCard` "Een andere kaart"; `upload: { button, later, toPlan, imported: (n: number) => string, failed }`. NL questions: work "Wat voor werk doe je?"; hasCards alone "Heb je een creditcard?" / together "Hebben jullie een creditcard?"; cards "Welke creditcards heb je?" / "Welke creditcards hebben jullie?"; upload "Wil je je bankafschrift toevoegen?"; upload.button "Bankafschrift uploaden", later "Later", toPlan "Naar je plan", imported `${n} transacties toegevoegd`, failed "Dit bestand konden we niet lezen.". EN = plain translation.
+
 - [ ] Extend the parity and advice-language tests to the new keys; FAIL → implement → PASS (`npx vitest run src/copy`).
 
 ### Task 4: Work screen, multi-select tiles, spend bands
@@ -65,6 +69,7 @@ noCards: Schema.optionalKey(Schema.Boolean),
 **Files:** Create `apps/web/src/intake/wizard/MultiTiles.tsx`; Modify `apps/web/src/intake/wizard/screenViews.tsx`, `apps/web/src/views/IntakeWizard.tsx`, `apps/web/src/styles/wizard.css`; Test `apps/web/src/views/IntakeWizard.test.tsx`, `apps/web/src/intake/wizard/controls.test.tsx`.
 
 **Interfaces — Produces:** `MultiTiles<T extends string>({ label, options, selected: readonly T[], onToggle: (v: T) => void })` — a group of `role="checkbox"` buttons with `aria-checked`, selected styled like ChoiceTiles' selected tile. Work screen: MultiTiles + "Verder" (disabled until ≥1), saves `work` Field via a new applier `applyWork(p, kinds, asOf)` in `intake/state.ts`. Spend screen: "Weet ik niet" link toggles to five band tiles (ChoiceTiles, tap saves `applyStatedRange(p,"spend",band,asOf)` + markDone and advances) with a "Toch een bedrag invullen" link back; pre-selects the band whose low/high equal the stored range; when the stored range is zero-width it opens in exact mode.
+
 - [ ] Tests: `work requires one pick and saves all picks`; `spend band saves its range and advances`; `band then exact amount replaces the range` (and the reverse); `MultiTiles toggles aria-checked`.
 - [ ] FAIL → implement → PASS (`npx vitest run src/views/IntakeWizard.test.tsx src/intake/wizard`); oxlint clean.
 
@@ -73,6 +78,7 @@ noCards: Schema.optionalKey(Schema.Boolean),
 **Files:** Create `apps/web/src/intake/wizard/cardOptions.ts`; Modify `screenViews.tsx`, `IntakeWizard.tsx`, `intake/state.ts` (`applyStatedCards(p, ids, asOf)`), `apps/web/src/plan/sections/CardsSection.tsx`, `apps/web/src/intake/aboutYouRows.ts` (+ About you copy for the `work` and `statedCards` rows); Test `IntakeWizard.test.tsx`, `cardOptions.test.ts`, `plan/sections/sections.test.tsx`, `views/AboutYou.test.tsx`.
 
 **Interfaces — Produces:** `cardOptions(): { id: string; label: string }[]` from `docs/catalog/catalog.json` per Global Constraints (import the JSON like `catalogue-rates.ts` does). has-cards: Ja → `answerCards(p,true)`; Nee → `answerCards(p,false)`. cards screen: search input filters the list case-insensitively on label; MultiTiles; "Verder" disabled until ≥1; saves `applyStatedCards`. CardsSection: when the plan has no held card accounts and `statedCards` is non-empty, it lists the stated card names (catalogue label, "Een andere kaart" for `other`) above its existing missing-data note. About you: rows for work and cards, removable like other stated rows, with NL/EN labels.
+
 - [ ] Tests: `cardOptions excludes business and corporate cards`; `search narrows the list`; `cards saves the picked ids`; `Nee after picks clears statedCards`; `CardsSection lists stated cards when no card account`; `About you shows work and cards rows`.
 - [ ] FAIL → implement → PASS (`npx vitest run src/views src/intake src/plan/sections`).
 
@@ -81,6 +87,7 @@ noCards: Schema.optionalKey(Schema.Boolean),
 **Files:** Modify `IntakeWizard.tsx` (new prop), `screenViews.tsx`, `apps/web/src/App.tsx` (pass the import), `wizard.css`; Test `IntakeWizard.test.tsx`.
 
 **Interfaces — Consumes:** App's `handleImport(file: File)` (App.tsx ~1268) — make it resolve with the number of imported transactions and reject (or resolve with a failure) when the file cannot be read, without changing its existing callers' behaviour. **Produces:** `IntakeWizardProps.onImport: (file: File) => Promise<{ ok: true; count: number } | { ok: false }>`. Upload screen: a visually styled button wrapping a hidden `<input type="file">` (accept the same types Import.tsx accepts); on ok shows `imported(count)` and a "Naar je plan" button that does `markDone("upload")` then `onFinish`; on failure shows `failed` in `role="alert"` and stays; "Later" does `markDone("upload")` then `onFinish`.
+
 - [ ] Tests: `Later finishes and marks upload done`; `successful import shows the count then finishes`; `failed import stays on upload`.
 - [ ] FAIL → implement → PASS; then the full gate from the worktree root: `npx pnpm test`, `npx pnpm typecheck --force`, `npx pnpm lint`.
 

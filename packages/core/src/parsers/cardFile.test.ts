@@ -137,7 +137,11 @@ Card debit,2026-01-16 12:30:00,,c2,EUR,-2.00`;
 const ASOF = "2026-11-16";
 const AMEX_TARGET = { cardId: "amex-1", label: "American Express Card", brand: "amex" };
 const T212_TARGET = { cardId: "212-card", label: "212 Card", brand: "trading-212" };
-const file = (csv: string, name = "f.csv", target: CardFileInput["target"] = null): CardFileInput => ({
+const file = (
+  csv: string,
+  name = "f.csv",
+  target: CardFileInput["target"] = null,
+): CardFileInput => ({
   result: parseBankFile(name, csv),
   target,
   link: target !== null,
@@ -180,7 +184,14 @@ test("an Amex account keyed from the filename takes the new file's rows: re-impo
     accounts: old.accounts.map((a) => ({ ...a, linkedAt: "2026-01-01" })),
     txs: ingest([], old.txs),
   };
-  const f = file(AMEX_NOACC.replace("Card Member,Amount", "Card Member,Account #,Amount").replace("A TESTER,10.00", "A TESTER,-77777,10.00"), "x.csv", AMEX_TARGET);
+  const f = file(
+    AMEX_NOACC.replace("Card Member,Amount", "Card Member,Account #,Amount").replace(
+      "A TESTER,10.00",
+      "A TESTER,-77777,10.00",
+    ),
+    "x.csv",
+    AMEX_TARGET,
+  );
   const [asked] = planCardFiles(held, [f], ASOF);
   expect(asked!.question).not.toBeNull(); // a legacy account: the user must say it is the same card
   const yes = { ...f, sameCard: true };
@@ -192,12 +203,20 @@ test("an Amex account keyed from the filename takes the new file's rows: re-impo
 });
 
 test("several existing Amex accounts: match by digits, else say it could not be matched", () => {
-  const mk = (key: string) => ({ ...parseBankFile("a.csv", AMEX_NOACC, { accountHint: key }).accounts[0]!, bank: "American Express", linkedAt: "2026-01-01" });
+  const mk = (key: string) => ({
+    ...parseBankFile("a.csv", AMEX_NOACC, { accountHint: key }).accounts[0]!,
+    bank: "American Express",
+    linkedAt: "2026-01-01",
+  });
   const held = { accounts: [mk("AMEX-11111"), mk("AMEX-22222")], txs: [] };
   const hit = planCardFiles(held, [file(A, "a.csv", AMEX_TARGET)], ASOF)[0]!;
   expect(hit.accountKeys).toEqual(["AMEX-11111"]);
   expect(hit.unmatchedExisting).toBe(false);
-  const other = planCardFiles(held, [file(A.replaceAll("-11111", "-99999"), "a.csv", AMEX_TARGET)], ASOF)[0]!;
+  const other = planCardFiles(
+    held,
+    [file(A.replaceAll("-11111", "-99999"), "a.csv", AMEX_TARGET)],
+    ASOF,
+  )[0]!;
   expect(other.accountKeys).toEqual(["AMEX-99999"]);
   expect(other.unmatchedExisting).toBe(true);
 });
@@ -229,7 +248,11 @@ test("rows with an unreadable amount are counted, and (12,34) / € 12,34 read",
 
 test("stampCardFile: file marker on all, card link on one; merge keeps it on a plain re-import", () => {
   const parsed = parseBankFile("x.csv", AMEX_NOACC, { accountHint: cardFileHintKey("amex-1") });
-  const [acc] = stampCardFile(parsed, { cardId: "amex-1", label: "American Express Card", brand: "amex" });
+  const [acc] = stampCardFile(parsed, {
+    cardId: "amex-1",
+    label: "American Express Card",
+    brand: "amex",
+  });
   expect(acc).toMatchObject({
     source: "file",
     statedCardId: "amex-1",
@@ -246,9 +269,18 @@ test("stampCardFile: file marker on all, card link on one; merge keeps it on a p
 
 test("stampCardFile: T212 has one account and it is tied to the card", () => {
   const parsed = parseBankFile("t.csv", T212);
-  const out = stampCardFile(parsed, { cardId: "212-card", label: "212 Card", brand: "trading-212" });
+  const out = stampCardFile(parsed, {
+    cardId: "212-card",
+    label: "212 Card",
+    brand: "trading-212",
+  });
   expect(out).toHaveLength(1);
-  expect(out[0]).toMatchObject({ key: T212_ACCOUNT_KEY, statedCardId: "212-card", source: "file", name: "Trading 212" });
+  expect(out[0]).toMatchObject({
+    key: T212_ACCOUNT_KEY,
+    statedCardId: "212-card",
+    source: "file",
+    name: "Trading 212",
+  });
 });
 
 test("PDF gets its own problem", () => {
@@ -264,8 +296,25 @@ test("Trading 212 with a picked card: card and cash rows share the one account",
 });
 
 test("a live bank link on a file-fed key clears the file flag but keeps the stated card; a plain file re-import keeps both", () => {
-  const prev = { key: "NL01INGB0001", iban: "NL01INGB0001", name: "ING", bank: "ING", entity: "P", currency: "EUR", balance: null, source: "file" as const, statedCardId: "ing-betaalpas", linkedAt: "2026-01-01" };
-  const live = { ...prev, source: undefined, statedCardId: undefined, balance: 10, balanceFetchedAt: "2026-02-02" };
+  const prev = {
+    key: "NL01INGB0001",
+    iban: "NL01INGB0001",
+    name: "ING",
+    bank: "ING",
+    entity: "P",
+    currency: "EUR",
+    balance: null,
+    source: "file" as const,
+    statedCardId: "ing-betaalpas",
+    linkedAt: "2026-01-01",
+  };
+  const live = {
+    ...prev,
+    source: undefined,
+    statedCardId: undefined,
+    balance: 10,
+    balanceFetchedAt: "2026-02-02",
+  };
   delete (live as Record<string, unknown>).source;
   delete (live as Record<string, unknown>).statedCardId;
   const [afterLive] = mergeImportedAccounts([prev], [live]);
@@ -280,7 +329,11 @@ test("a live bank link on a file-fed key clears the file flag but keeps the stat
 });
 
 /* --- Round 3: never merge a card into an existing account without evidence. --- */
-const GOLD = { cardId: "american-express-gold-card", label: "American Express Gold Card", brand: "amex" };
+const GOLD = {
+  cardId: "american-express-gold-card",
+  label: "American Express Gold Card",
+  brand: "amex",
+};
 const PLAT = "american-express-platinum";
 const amexAcc = (key: string, over: Record<string, unknown> = {}) =>
   ({
@@ -297,7 +350,11 @@ const amexAcc = (key: string, over: Record<string, unknown> = {}) =>
   }) as Account;
 const GOLD_COL = `Date,Description,Card Member,Account #,Amount,Appears on Your Statement As,Extended Details
 03/05/2026,GOLD ONE,A,-44444,10.00,GOLD ONE,x`;
-const goldInput = (csv: string, extra: Partial<CardFileInput> = {}, hint?: string): CardFileInput => ({
+const goldInput = (
+  csv: string,
+  extra: Partial<CardFileInput> = {},
+  hint?: string,
+): CardFileInput => ({
   result: parseBankFile("g.csv", csv, hint ? { accountHint: hint } : {}),
   target: GOLD,
   link: true,
@@ -306,7 +363,10 @@ const goldInput = (csv: string, extra: Partial<CardFileInput> = {}, hint?: strin
 const plat = amexAcc("AMEX-2026", { statedCardId: PLAT, name: "American Express Platinum" });
 
 test("a different, stamped card is never merged into: two accounts, Platinum's stamp untouched", () => {
-  for (const [csv, hint] of [[GOLD_COL, undefined], [AMEX_NOACC, "FILE-american-express-gold-card"]] as const) {
+  for (const [csv, hint] of [
+    [GOLD_COL, undefined],
+    [AMEX_NOACC, "FILE-american-express-gold-card"],
+  ] as const) {
     const held = { accounts: [plat], txs: [] };
     const f = goldInput(csv, {}, hint);
     const [plan] = planCardFiles(held, [f], ASOF);
@@ -323,10 +383,17 @@ test("the same card (same statedCardId) re-keys onto its account: 0 added", () =
   const first = applyCardFiles({ accounts: [], txs: [] }, [goldInput(GOLD_COL)], ASOF);
   // Its account was keyed from the filename in an older vault.
   const old = { ...first.accounts[0]!, key: "AMEX-2026" };
-  const txs = ingest([], first.txs.map(({ id: _i, ...t }) => ({ ...t, accountKey: "AMEX-2026" })));
+  const txs = ingest(
+    [],
+    first.txs.map(({ id: _i, ...t }) => ({ ...t, accountKey: "AMEX-2026" })),
+  );
   const f = goldInput(GOLD_COL);
   const [plan] = planCardFiles({ accounts: [old], txs }, [f], ASOF);
-  expect(plan).toMatchObject({ newCount: 0, accountKeys: ["AMEX-2026"], destination: { existing: true } });
+  expect(plan).toMatchObject({
+    newCount: 0,
+    accountKeys: ["AMEX-2026"],
+    destination: { existing: true },
+  });
 });
 
 test("a legacy unstamped file account: a question, then both answers", () => {
@@ -342,7 +409,11 @@ test("a legacy unstamped file account: a question, then both answers", () => {
   expect(no.accounts[0]).toMatchObject({ key: "AMEX-44444", statedCardId: GOLD.cardId });
   expect(no.accounts).toHaveLength(1);
   // Generic path (no card): same question.
-  const generic: CardFileInput = { result: parseBankFile("g.csv", GOLD_COL), target: null, link: false };
+  const generic: CardFileInput = {
+    result: parseBankFile("g.csv", GOLD_COL),
+    target: null,
+    link: false,
+  };
   expect(planCardFiles(held, [generic], ASOF)[0]!.question).not.toBeNull();
 });
 
@@ -357,7 +428,9 @@ test("manual and live Amex accounts are never candidates", () => {
 test("a filename year is not card evidence; digits must match exactly", () => {
   const yearKey = amexAcc("AMEX-2026", { statedCardId: PLAT });
   const col = GOLD_COL.replace("-44444", "-12026");
-  expect(planCardFiles({ accounts: [yearKey], txs: [] }, [goldInput(col)], ASOF)[0]!.accountKeys).toEqual(["AMEX-12026"]);
+  expect(
+    planCardFiles({ accounts: [yearKey], txs: [] }, [goldInput(col)], ASOF)[0]!.accountKeys,
+  ).toEqual(["AMEX-12026"]);
   const odd = amexAcc("AMEX-123456-X", { source: undefined });
   const col2 = GOLD_COL.replace("-44444", "-23456");
   const [p2] = planCardFiles({ accounts: [odd], txs: [] }, [goldInput(col2)], ASOF);

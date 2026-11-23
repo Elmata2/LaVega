@@ -30,7 +30,7 @@ The teardown (`docs/research/2026-11-10-sure-teardown.md`) established that:
    personal-vault promise, and add a second Postgres/Redis/Sidekiq stack with no Dutch model.
 4. LaVega's existing return/risk stack must not be replaced by Sure's weaker one.
 
-Sorting requires a decision on *how* Sure is used, not only *what* is taken.
+Sorting requires a decision on _how_ Sure is used, not only _what_ is taken.
 
 ## Decision
 
@@ -81,13 +81,13 @@ Negative / accepted costs:
 
 ## Alternatives rejected
 
-| Alternative | Why rejected |
-|---|---|
-| Run Sure as a local sidecar and integrate | Second runtime and source of truth; breaks the encrypted-vault promise; no Dutch tax/catalogue/invoice model; duplicates auth, backup and erasure. |
-| Fork Sure as the personal app | Rewrites the product away from LaVega's privacy, Dutch and design constraints; abandons the existing forecast/investing work. |
-| Copy Ruby verbatim into a `vendor/` tree | Nothing runs it; adds a dead dependency and a large AGPL surface without portability benefit. |
-| Wait for Sure upstream to expose an API and use it remotely | Violates local-first/privacy, requires hosting credentials and personal data off-machine. |
-| Take nothing | Leaves the highest-value personal gaps (transfers, bills, budgets, evidence) and the agent contract unaddressed. |
+| Alternative                                                 | Why rejected                                                                                                                                       |
+| ----------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Run Sure as a local sidecar and integrate                   | Second runtime and source of truth; breaks the encrypted-vault promise; no Dutch tax/catalogue/invoice model; duplicates auth, backup and erasure. |
+| Fork Sure as the personal app                               | Rewrites the product away from LaVega's privacy, Dutch and design constraints; abandons the existing forecast/investing work.                      |
+| Copy Ruby verbatim into a `vendor/` tree                    | Nothing runs it; adds a dead dependency and a large AGPL surface without portability benefit.                                                      |
+| Wait for Sure upstream to expose an API and use it remotely | Violates local-first/privacy, requires hosting credentials and personal data off-machine.                                                          |
+| Take nothing                                                | Leaves the highest-value personal gaps (transfers, bills, budgets, evidence) and the agent contract unaddressed.                                   |
 
 ## Follow-ups
 

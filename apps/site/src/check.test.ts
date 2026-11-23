@@ -156,7 +156,7 @@ describe("cli", () => {
       mkdirSync(dirname(join(dir, rel)), { recursive: true });
       writeFileSync(join(dir, rel), text);
     }
-    return spawnSync("pnpm", ["exec", "tsx", "src/cli-check.ts", dir], {
+    return spawnSync("bun", ["run", "tsx", "src/cli-check.ts", dir], {
       cwd: join(__dirname, ".."),
       encoding: "utf8",
     });

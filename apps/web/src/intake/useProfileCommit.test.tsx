@@ -6,9 +6,7 @@ import { emptyProfile, type AdvisorProfileStore } from "@lavega/core";
 import { applyBuffer, applyHousehold } from "./state";
 import { useProfileCommit, type ProfileCommit } from "./useProfileCommit";
 
-(
-  globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }
-).IS_REACT_ACT_ENVIRONMENT = true;
+(globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 const AS_OF = "2026-10-23";
 const NOW = "2026-10-23T10:00:00Z";
@@ -57,9 +55,7 @@ test("overlapping saves are serialised: a failing first save does not discard th
   let first = true;
   let second = true;
   await act(async () => {
-    const a = hook.current!.update((p) =>
-      applyHousehold(p, { kind: "together" }, AS_OF),
-    );
+    const a = hook.current!.update((p) => applyHousehold(p, { kind: "together" }, AS_OF));
     const b = hook.current!.update((p) => applyBuffer(p, 6, AS_OF));
     first = await a;
     second = await b;
@@ -71,9 +67,7 @@ test("overlapping saves are serialised: a failing first save does not discard th
   expect(hook.current!.store.current.buffer?.value.months).toBe(6);
 
   await act(async () => {
-    await hook.current!.update((p) =>
-      applyHousehold(p, { kind: "alone" }, AS_OF),
-    );
+    await hook.current!.update((p) => applyHousehold(p, { kind: "alone" }, AS_OF));
   });
   const after = persisted.at(-1)!;
   expect(after.current.buffer?.value.months).toBe(6);

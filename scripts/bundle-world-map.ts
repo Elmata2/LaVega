@@ -1,9 +1,9 @@
 /**
  * Bundel de wereldkaart en de valuta per land — tijdens een sweep, nooit tijdens runtime.
  *
- *   pnpm exec tsx scripts/bundle-world-map.ts
- *   pnpm exec tsx scripts/bundle-world-map.ts --dry            # rapporteer, schrijf niets
- *   pnpm exec tsx scripts/bundle-world-map.ts --eps 0.5        # grover vereenvoudigen (kleiner bestand)
+ *   bunx tsx scripts/bundle-world-map.ts
+ *   bunx tsx scripts/bundle-world-map.ts --dry            # rapporteer, schrijf niets
+ *   bunx tsx scripts/bundle-world-map.ts --eps 0.5        # grover vereenvoudigen (kleiner bestand)
  *
  * WAAROM DIT BUITEN DE APP LOOPT. Dezelfde reden als de banklogo's
  * (scripts/bundle-bank-logos.ts), één trap erger: een kaarttile vertelt de
@@ -1432,8 +1432,8 @@ Panama kennen wij de USD-koers wel en de PAB-koers niet.
 ## Verversen
 
 \`\`\`
-pnpm exec tsx scripts/bundle-world-map.ts --dry   # kijken
-pnpm exec tsx scripts/bundle-world-map.ts         # schrijven
+bunx tsx scripts/bundle-world-map.ts --dry   # kijken
+bunx tsx scripts/bundle-world-map.ts         # schrijven
 \`\`\`
 
 Valt een bron weg, dan pakt het script de volgende in de ketting en zet hij dat

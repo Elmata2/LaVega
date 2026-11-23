@@ -1,7 +1,7 @@
 /* Bouw het verzoek aan Claude uit één genormaliseerd bericht.
  *
  * DIT BESTAND DRAAIT OP TWEE PLEKKEN — het is de bron van de Code-node
- * "Bouw Claude-verzoek" in docs/n8n/lavega-invoices.json. `pnpm run sync:n8n`
+ * "Bouw Claude-verzoek" in docs/n8n/lavega-invoices.json. `bun run sync:n8n`
  * kopieert het daarin. Geen TypeScript-syntax, alleen JSDoc.
  *
  * Het verzoek wordt HIER opgebouwd en niet in een expressie op de HTTP-node:

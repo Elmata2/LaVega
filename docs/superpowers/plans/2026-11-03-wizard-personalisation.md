@@ -39,10 +39,12 @@
 ### Task 1: Profile schema
 
 **Files:**
+
 - Modify: `packages/core/src/advisor/profile.ts`
 - Test: `packages/core/src/advisor/profile.test.ts` (create if absent)
 
 **Interfaces:**
+
 - Produces (all exported, `Schema.Literals` + `type X = Schema.Schema.Type<…>`):
   `MoneySharing = "shared"|"separate"|"mixed"`; `IncomeRegularity = "fixed"|"varies"`; `CardRepayment = "full"|"sometimes"|"rarely"`;
   `SpendArea = "groceries"|"travel"|"online"|"fuel"|"eating-out"|"other"`; `ForeignSpend = "often"|"sometimes"|"never"`;
@@ -62,10 +64,12 @@
 ### Task 2: apply* writers
 
 **Files:**
+
 - Modify: `apps/web/src/intake/state.ts`
 - Test: `apps/web/src/intake/state.test.ts`
 
 **Interfaces:**
+
 - Consumes: Task 1 types.
 - Produces, each `(p: AdvisorProfile, value, asOf: string) => AdvisorProfile` in the `applyChargesVat` pattern:
   `applyMoneySharing(p, v: MoneySharing, asOf)` (writes `household.value.moneySharing`, keeps `kind`); `applyBirthYear(p, year: number, asOf)`; `applyIncomeRegularity`; `applyStatedBanks(p, ids: readonly string[], asOf)`; `applyCardRepayment`; `applySpendMix(p, areas: readonly SpendArea[], asOf)` (keeps at most 3, input order); `applyForeignSpend`; `applyPriorities`; `applyCutTargets`; `applyCheckInCadence`; `applyConfidence(p, n: 1|2|3|4, asOf)`; `applyStatedPrograms`; `applyPointsGoal`; `applyFlightsPerYear`.
@@ -81,10 +85,12 @@
 ### Task 3: Screen list, order and conditions
 
 **Files:**
+
 - Modify: `apps/web/src/intake/wizard/screens.ts`
 - Test: `apps/web/src/intake/wizard/screens.test.ts`
 
 **Interfaces:**
+
 - `ScreenId` adds `"money-sharing"|"birth-year"|"income-regularity"|"banks"|"card-repayment"|"spend-mix"|"foreign-spend"|"priorities"|"summary"`; removes `"has-cards"`.
 - `ABOUT` order: household, money-sharing, birth-year, work, vat, income-regularity, children, child-years, income, spend, housing, savings, banks, debit-cards, cards, card-repayment, spend-mix, foreign-spend.
 - `canonical()`: `[...ABOUT, ...GOALS, ...riskScreens(), "invested", "priorities", "summary", "upload"]`.
@@ -102,10 +108,12 @@
 ### Task 4: Copy
 
 **Files:**
+
 - Modify: `apps/web/src/copy/wizard.ts`, `apps/web/src/copy/intake.ts`
 - Test: existing `apps/web/src/copy/wizard.test.ts`, `parity.test.ts`
 
 **Interfaces:**
+
 - `WizardCopy.questions` adds `moneySharing, birthYear, incomeRegularity, banks, cardRepayment, spendMix, foreignSpend, priorities, summary: string` and round 2 `cutTargets, checkInCadence, confidence, programs, pointsGoal, flights: string`.
 - Option label records: `moneySharing: Record<MoneySharing,string>`, `incomeRegularity`, `cardRepayment`, `spendAreas: Record<SpendArea,string>`, `foreignSpend`, `priorities: Record<Priority,string>`, `cutTargets: Record<CutTarget,string>`, `checkInCadence`, `confidence: Record<1|2|3|4,string>`, `pointsGoal`, `flights: Record<FlightsPerYear,string>`, `bankNames: Record<string,string>` (brand id to display name, plus `other`), `noneCard: string`, `summaryEdit: string` ("Wijzig"/"Change"), `spendMixHint: string` ("Kies er maximaal 3"/"Pick up to 3").
 - NL question copy (exact): moneySharing "Delen jullie je geld?"; birthYear "In welk jaar ben je geboren?"; incomeRegularity "Is je inkomen elke maand gelijk?"; banks "Bij welke banken zit je?"; cardRepayment "Betaal je je creditcard elke maand helemaal af?"; spendMix "Waar gaat het meeste geld naartoe?"; foreignSpend "Betaal je weleens in het buitenland of in een andere valuta?"; priorities "Waar wil je dat LaVega je mee helpt?"; summary "Dit weet LaVega nu over je". EN equivalents in the same plain register.
@@ -119,10 +127,12 @@
 ### Task 5: New round 1 screens in the wizard
 
 **Files:**
+
 - Modify: `apps/web/src/intake/wizard/screenViews.tsx`, `apps/web/src/views/IntakeWizard.tsx`
 - Test: `apps/web/src/views/IntakeWizard.test.tsx`
 
 **Interfaces:**
+
 - Consumes: Tasks 2-4.
 - Produces in screenViews.tsx: `MultiScreen<T extends string>(p: Busy & { copy; label; options: {value:T;label:string}[]; initial: readonly T[]; max?: number; allowEmpty?: boolean; hint?: string; onSubmit: (v: T[]) => void })` (WorkScreen becomes a thin use of it; when `max` is reached unpicked tiles are disabled); `BirthYearScreen(p: Busy & { copy; label; initial: number|null; currentYear: number; onSubmit: (y: number) => void })` (valid range `currentYear-100 .. currentYear-16`).
 - Cards screen: the credit `CardsScreen` gets a `noneLabel` tile; picking it calls `answerCards(p, false, asOf)`, picking cards calls `answerCards(p, true, asOf)` then `applyStatedCards`.
@@ -139,11 +149,13 @@
 ### Task 6: Summary screen
 
 **Files:**
+
 - Create: `apps/web/src/intake/wizard/SummaryScreen.tsx`
 - Modify: `apps/web/src/views/IntakeWizard.tsx`
 - Test: `apps/web/src/intake/wizard/SummaryScreen.test.tsx`
 
 **Interfaces:**
+
 - Consumes: `aboutYouRows` builders (apps/web/src/intake/aboutYouRows.ts) for line text; `isAnswered` (Task 3).
 - `SummaryScreen(p: Busy & { copy; rows: { screen: ScreenId; label: string; value: string }[]; onEdit: (s: ScreenId) => void; onSubmit: () => void })`. One line per answered screen, each with a `copy.summaryEdit` button calling `onEdit`. Verder calls `onSubmit`.
 - IntakeWizard: `onEdit` sets the screen; after Verder on that screen the wizard returns to `"summary"` (track `returnTo: ScreenId | null` in wizard state).
@@ -157,10 +169,12 @@
 ### Task 7: Income regularity defaults and buffer preselect
 
 **Files:**
+
 - Modify: `apps/web/src/views/IntakeWizard.tsx`; plan copy for the cash-flow note (`apps/web/src/plan/sections/MonthSection.tsx` or the `workNoteFor` helper in `apps/web/src/plan/FromAnswers.tsx`)
 - Test: `apps/web/src/views/IntakeWizard.test.tsx`, the section's test
 
 **Interfaces:**
+
 - income-regularity screen `initial`: stored value, else `"varies"` when `isSelfEmployed(p)`, else null.
 - buffer screen `initial`: stored months, else `"6"` when `incomeRegularity.value === "varies"`, else null.
 - Month section shows a note when `PlanProfile.incomeRegularity` is "varies" (same mechanism as the freelance work note). Runs after Task 10, which adds the field.
@@ -173,6 +187,7 @@
 ### Task 8: About you rows
 
 **Files:**
+
 - Modify: `apps/web/src/intake/aboutYouRows.ts`
 - Test: its test file (`aboutYouRows.test.ts`)
 
@@ -185,11 +200,13 @@
 ### Task 9: Connect-for-the-full-picture checklist
 
 **Files:**
+
 - Create: `packages/core/src/plan/connectChecklist.ts`, `apps/web/src/components/blocks/ConnectChecklist.tsx`
 - Modify: brand prefix tables become importable (export `brandOfCardId(id: string, kind: CardKind): CardBrand | null` from `apps/web/src/intake/wizard/cardOptions.ts`); mount the block in `apps/web/src/views/Overzicht.tsx` and in the Your plan view
 - Test: `packages/core/src/plan/connectChecklist.test.ts`, `ConnectChecklist.test.tsx`
 
 **Interfaces:**
+
 - `BANK_ALIASES: Record<string, readonly string[]>` (brand id to lower-case name fragments, e.g. `abn: ["abn amro"]`, `ing: ["ing"]` matched as a whole word, `amex: ["american express","amex"]`, `ics: ["international card services","ics"]`, `sns-asn-regio: ["sns","asn","regiobank"]`).
 - `connectChecklist(i: { statedBanks: readonly string[]; impliedBanks: readonly string[]; accounts: readonly { bank: string; linkedAt?: string }[] }): { brand: string; connected: boolean }[]`: union of stated and implied brands, "other" excluded, stable order; `connected` only when some account with `linkedAt` has a `bank` matching an alias.
 - Block shows nothing when every brand is connected or the list is empty; each unconnected brand links to the Koppelingen view.
@@ -201,10 +218,12 @@
 ### Task 10: Plan profile fields and card comparison
 
 **Files:**
+
 - Modify: `packages/core/src/plan/profileView.ts`, `packages/core/src/plan/factsheet.ts` (`PLAN_ENGINE_VERSION = "plan-3"`), `packages/core/src/plan/cards.ts`, `apps/web/src/plan/heldCards.ts`, `apps/web/src/plan/usePlan.ts`, `apps/web/src/plan/sections/CardsSection.tsx`
 - Test: `profileView.test.ts`, `cards.test.ts`, `heldCards.test.ts`
 
 **Interfaces:**
+
 - `PlanProfile` adds `moneySharing: MoneySharing|null; birthYear: number|null; incomeRegularity: IncomeRegularity|null; cardRepayment: CardRepayment|null; spendMix: SpendArea[]; foreignSpend: ForeignSpend|null; priorities: Priority[]; pointsGoal: PointsGoal|null`; all included in `profileHash`.
 - `buildHeldCards` gains `statedCreditIds: readonly string[]`: each catalogue id not already held via bank data becomes a `HeldCardInput` with `accountKey: "stated:<id>"`, facts from the catalogue entry; `"other"` is skipped.
 - `computeCards`: candidates include stated cards, valued on stated spend (`spendStatedRange` midpoint) when there is no cardable spend history; foreign share = 0.15 / 0.05 / 0 for often / sometimes / never, one step up when `spendMix` contains "travel"; points valued per `pointsGoal` (cashback-preferring users: points value 0); when `cardRepayment` is "sometimes" or "rarely", a new `interest` figure (yearly interest at the catalogue `interestPct` on one month of stated spend) leads the section and ranking is by lowest `interestPct` first.
@@ -216,6 +235,7 @@
 ### Task 11: Investing line and experience
 
 **Files:**
+
 - Modify: `apps/web/src/plan/sections/GoalsSection.tsx` and its copy
 - Test: `GoalsSection.test.tsx`
 
@@ -239,6 +259,7 @@
 **Files:** Modify `apps/web/src/intake/wizard/screens.ts` (`resumeScreen`), `apps/web/src/components/blocks/IntakeInviteCard.tsx` (`inviteState`), copy. Test: `screens.test.ts`, `IntakeInviteCard.test.tsx`.
 
 **Interfaces:**
+
 - `pendingNewQuestions(p: AdvisorProfile): ScreenId[]` = `ROUND1_NEW` filtered by `screensFor(p)` and `!isAnswered`.
 - `resumeScreen`: when `blocksDone >= 3` and `pendingNewQuestions(p)` is non-empty, return its first item; after the last pending one the wizard goes to "summary" then exits (no upload, no risk).
 - `inviteState` returns a new `kind: "new-questions"` with the count; card copy "Een paar nieuwe vragen" / "A few new questions".
@@ -251,6 +272,7 @@
 **Files:** Modify screens.ts (round 2 ids `"cut-targets"|"check-in"|"confidence"|"programs"|"points-goal"|"flights"` in a separate `ROUND2` list, not in `canonical()`), IntakeWizard.tsx (a `round: 1 | 2` prop), IntakeInviteCard.tsx, Overzicht.tsx. Test: screens, IntakeWizard, invite tests.
 
 **Interfaces:**
+
 - `round2Due(p: AdvisorProfile, hasTransactions: boolean): boolean` = `blocksDone >= 3 && hasTransactions && p.intake.round2Done !== true`.
 - Round 2 runs `ROUND2` then sets `intake.round2Done = true`; programs options come from `REWARD_PROGRAMS` (packages/core/src/rewards.ts), multi, `allowEmpty: true`.
 - Invite copy "3 vragen zodat LaVega je kan coachen" / "3 questions so LaVega can coach you".
@@ -272,6 +294,7 @@
 **Files:** Modify `apps/web/src/agent/tabContext.ts` (`TabState` gains `profileSummary`), `apps/server/src/agent/chatContext.ts` (`ALLOW` for every tab gains `"profile"`), the caller that builds `TabState`. Test: `apps/web/src/agent/tabContext.test.ts`, `apps/server/src/agent/chatContext.test.ts`, `redaction.test.ts`.
 
 **Interfaces:**
+
 - `profileSummaryOf(p: AdvisorProfile): { priorities: Priority[]; cutTargets: CutTarget[]; checkInCadence: CheckInCadence|null; confidence: 1|2|3|4|null; household: "alone"|"together"|null; moneySharing: MoneySharing|null; incomeRegularity: IncomeRegularity|null; spendMix: SpendArea[]; cardRepayment: CardRepayment|null; pointsGoal: PointsGoal|null }`. Only enum values. No birthYear, banks, cards, amounts, names.
 - Server allowlist accepts `profile` only with exactly these keys and enum values (anything else dropped).
 

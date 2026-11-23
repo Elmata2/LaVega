@@ -243,8 +243,8 @@ Panama kennen wij de USD-koers wel en de PAB-koers niet.
 ## Verversen
 
 ```
-pnpm exec tsx scripts/bundle-world-map.ts --dry   # kijken
-pnpm exec tsx scripts/bundle-world-map.ts         # schrijven
+bunx tsx scripts/bundle-world-map.ts --dry   # kijken
+bunx tsx scripts/bundle-world-map.ts         # schrijven
 ```
 
 Valt een bron weg, dan pakt het script de volgende in de ketting en zet hij dat

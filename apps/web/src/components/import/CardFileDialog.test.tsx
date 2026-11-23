@@ -196,7 +196,9 @@ test("overlapping files: first previews 2 new, second 1 new", async () => {
   mount();
   await feed("a.csv", AMEX_A);
   await feed("b.csv", AMEX_B);
-  const cards = [...dialog().querySelectorAll('[data-testid="file-preview"]')].map((e) => e.textContent!);
+  const cards = [...dialog().querySelectorAll('[data-testid="file-preview"]')].map(
+    (e) => e.textContent!,
+  );
   expect(cards[0]).toContain("2 nieuwe transacties");
   expect(cards[1]).toContain("1 nieuwe transactie");
   expect(cards[1]).not.toContain("1 nieuwe transacties");
@@ -216,8 +218,12 @@ test("an .xls shows the clear message and no raw error", async () => {
   await feed("old.xls", "x", "application/vnd.ms-excel");
   const t = dialog().querySelector('[data-testid="file-preview"]')!.textContent!;
   expect(t).toContain("Dit is een oud Excel-bestand (.xls). Kies CSV of .xlsx.");
-  expect(dialog().querySelector<HTMLInputElement>('input[type="file"]')!.accept).not.toContain(".xls,");
-  expect(dialog().querySelector<HTMLInputElement>('input[type="file"]')!.accept).not.toContain(".xml");
+  expect(dialog().querySelector<HTMLInputElement>('input[type="file"]')!.accept).not.toContain(
+    ".xls,",
+  );
+  expect(dialog().querySelector<HTMLInputElement>('input[type="file"]')!.accept).not.toContain(
+    ".xml",
+  );
 });
 
 test("Escape, the cross and the backdrop do nothing while the write runs", async () => {
@@ -274,7 +280,11 @@ test("the steps stay visible and collapse into a disclosure once a file is chose
 });
 
 test("small screens get the phone note under the steps; the steps are never hidden", () => {
-  vi.stubGlobal("matchMedia", () => ({ matches: true, addEventListener() {}, removeEventListener() {} }));
+  vi.stubGlobal("matchMedia", () => ({
+    matches: true,
+    addEventListener() {},
+    removeEventListener() {},
+  }));
   try {
     mount();
     expect(dialog().querySelectorAll('[data-testid="guide-steps"] li')).toHaveLength(4);
@@ -309,14 +319,20 @@ test("a legacy account: the question blocks Toevoegen until answered, both answe
   mount({ accounts: [legacyAmex] });
   await feed("a.csv", AMEX_A);
   const q = () => dialog().querySelector('[data-testid="same-card-question"]');
-  expect(q()!.textContent).toContain("Je hebt al een American Express-rekening: AMEX-2026. Is dit dezelfde kaart?");
+  expect(q()!.textContent).toContain(
+    "Je hebt al een American Express-rekening: AMEX-2026. Is dit dezelfde kaart?",
+  );
   expect(button("Toevoegen").disabled).toBe(true);
   // While the question is open there are no misleading counts.
-  expect(dialog().querySelector('[data-testid="file-preview"]')!.textContent).not.toContain("Niets nieuws");
+  expect(dialog().querySelector('[data-testid="file-preview"]')!.textContent).not.toContain(
+    "Niets nieuws",
+  );
   act(() => button("Ja, voeg toe aan AMEX-2026").click());
   expect(q()).toBeNull();
   expect(button("Toevoegen").disabled).toBe(false);
-  expect(dialog().querySelector('[data-testid="destination"]')!.textContent).toBe("Komt in: AMEX-2026");
+  expect(dialog().querySelector('[data-testid="destination"]')!.textContent).toBe(
+    "Komt in: AMEX-2026",
+  );
 });
 
 test("answering no imports as a separate account", async () => {
@@ -359,10 +375,22 @@ Card debit,2026-01-01 10:00:00,EUR,-1.00,Shop A
 Deposit,2026-01-04 10:00:00,EUR,100.00,`;
 
 test("Trading 212: the preview names the one account and says a fold will happen only when it will", async () => {
-  const old = { key: "FILE-NAME", iban: "", name: "FILE-NAME", bank: "Trading 212", entity: "P", currency: "EUR", balance: null, source: "file" as const, linkedAt: "2026-11-01" };
+  const old = {
+    key: "FILE-NAME",
+    iban: "",
+    name: "FILE-NAME",
+    bank: "Trading 212",
+    entity: "P",
+    currency: "EUR",
+    balance: null,
+    source: "file" as const,
+    linkedAt: "2026-11-01",
+  };
   const { onCommit } = mount({ card: T212, accounts: [old] });
   await feed("t212.csv", T212_FILE);
-  expect(dialog().querySelector('[data-testid="destination"]')!.textContent).toBe("Komt in: Trading 212");
+  expect(dialog().querySelector('[data-testid="destination"]')!.textContent).toBe(
+    "Komt in: Trading 212",
+  );
   expect(dialog().textContent).toContain("Je Trading 212-rekeningen worden samengevoegd tot één.");
   expect(onCommit).not.toHaveBeenCalled(); // nothing happens before Toevoegen
 });
@@ -370,12 +398,24 @@ test("Trading 212: the preview names the one account and says a fold will happen
 test("Trading 212: no fold line when there is nothing to fold", async () => {
   mount({ card: T212, accounts: [] });
   await feed("t212.csv", T212_FILE);
-  expect(dialog().querySelector('[data-testid="destination"]')!.textContent).toBe("Nieuwe rekening: Trading 212");
+  expect(dialog().querySelector('[data-testid="destination"]')!.textContent).toBe(
+    "Nieuwe rekening: Trading 212",
+  );
   expect(dialog().textContent).not.toContain("samengevoegd");
 });
 
 test("Trading 212: accounts in different entities are not merged and the preview says so", async () => {
-  const mkOld = (key: string, entity: string) => ({ key, iban: "", name: key, bank: "Trading 212", entity, currency: "EUR", balance: null, source: "file" as const, linkedAt: "2026-11-01" });
+  const mkOld = (key: string, entity: string) => ({
+    key,
+    iban: "",
+    name: key,
+    bank: "Trading 212",
+    entity,
+    currency: "EUR",
+    balance: null,
+    source: "file" as const,
+    linkedAt: "2026-11-01",
+  });
   mount({ card: T212, accounts: [mkOld("A", "P"), mkOld("B", "BV")] });
   await feed("t212.csv", T212_FILE);
   expect(dialog().textContent).toContain("horen bij verschillende profielen");
@@ -383,15 +423,33 @@ test("Trading 212: accounts in different entities are not merged and the preview
 });
 
 test("a failed import that included a fold tells the user to import the file again", async () => {
-  const old = { key: "FILE-NAME", iban: "", name: "FILE-NAME", bank: "Trading 212", entity: "P", currency: "EUR", balance: null, source: "file" as const, linkedAt: "2026-11-01" };
-  mount({ card: T212, accounts: [old], onCommit: vi.fn(async () => ({ ok: false as const, partial: true })) });
+  const old = {
+    key: "FILE-NAME",
+    iban: "",
+    name: "FILE-NAME",
+    bank: "Trading 212",
+    entity: "P",
+    currency: "EUR",
+    balance: null,
+    source: "file" as const,
+    linkedAt: "2026-11-01",
+  };
+  mount({
+    card: T212,
+    accounts: [old],
+    onCommit: vi.fn(async () => ({ ok: false as const, partial: true })),
+  });
   await feed("t212.csv", T212_FILE);
   await act(async () => button("Toevoegen").click());
   expect(dialog().textContent).toContain("Importeer het bestand opnieuw om het af te maken.");
 });
 
 test("a failed import without a fold keeps the general partial message", async () => {
-  mount({ card: T212, accounts: [], onCommit: vi.fn(async () => ({ ok: false as const, partial: true })) });
+  mount({
+    card: T212,
+    accounts: [],
+    onCommit: vi.fn(async () => ({ ok: false as const, partial: true })),
+  });
   await feed("t212.csv", T212_FILE);
   await act(async () => button("Toevoegen").click());
   expect(dialog().textContent).toContain("Controleer je rekeningen");

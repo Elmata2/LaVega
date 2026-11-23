@@ -43,10 +43,11 @@
 ## File Structure
 
 Core, new folder `packages/core/src/plan/` (exported via `export * from "./plan/index.js"` added to `packages/core/src/index.ts`, after the line `export * from "./spendPercentile.js";` (find by text; currently line 47)):
+
 - `types.ts` shared section types; `thresholds.ts` `PLAN_THRESHOLDS`; `profileView.ts` the one adapter over the intake profile; `preferences.ts` `PlanPreferences`, `PlanSnapshot`, `PlanEvent` schemas and event-derived state; `factsheet.ts` FactSheet schema, bucketing, hash.
 - `scenarios.ts` compound maths and the public table.
 - `month.ts`, `buffer.ts`, `debts.ts`, `spending.ts`, `subs.ts`, `cards.ts`, `goals.ts` one per section; `publicFacts.ts` pending fact ids and the study template; `compute.ts` `computePlan`; `changes.ts` snapshot diff, triggers, refresh policy; `index.ts`.
-Web:
+  Web:
 - `apps/web/src/views/Plan.tsx` (+ `plan/` folder `PlanHeader.tsx`, `BackboneStrip.tsx`, `ChangeLog.tsx`, `SectionCard.tsx`, one `*Section.tsx` per section, `ScenarioTable.tsx`); `apps/web/src/plan/usePlan.ts` (state, persistence, refresh); `apps/web/src/plan/heldCards.ts` (builds `HeldCardInput[]` from accounts, facts, catalogue).
 - `apps/web/src/copy/plan/{shell,month,buffer,debts,spending,subscriptions,cards,goals,wording}.ts`.
 
@@ -55,11 +56,13 @@ Web:
 ### Task 1: Plan types, thresholds, profile adapter, preferences, events, FactSheet schema
 
 **Files:**
+
 - Create: `packages/core/src/plan/types.ts`, `thresholds.ts`, `profileView.ts`, `preferences.ts`, `factsheet.ts`, `index.ts` and a `.test.ts` for `thresholds`, `preferences`, `factsheet`, `profileView`
 - Modify: `packages/core/src/index.ts` (add the export line after `export * from "./spendPercentile.js";`, currently line 47)
 - Reuse: `hash()` from `packages/core/src/hash.ts:3`; intake `mergeEvents`, `PublicFact`
 
 **Interfaces:**
+
 - Consumes: intake `AdvisorProfile`, `Goal`, `Debt`, `Field`, `mergeEvents` (event envelope `{ id, kind, at }`).
 - Produces (`types.ts`):
   - `SECTION_IDS = ["month","buffer","debts","spending","subscriptions","cards","goals"] as const`; `type SectionId`
@@ -123,10 +126,12 @@ test("goal 'since' is the Field.at of the goal", ...)
 ### Task 2: Scenario module (`scenarios.ts`)
 
 **Files:**
+
 - Create: `packages/core/src/plan/scenarios.ts`, `scenarios.test.ts`
 - Modify: `packages/core/src/plan/index.ts`
 
 **Interfaces:**
+
 - Consumes: `PLAN_THRESHOLDS.scenarioRates`.
 - Produces:
   - `SCENARIO_ASSUMPTIONS = { compounding: "monthly", contributions: "month-end", return: "constant", tax: "none", inflation: "none" } as const` (printed beside every table)
@@ -160,6 +165,7 @@ test("saved grows at the stated rate in the required-saving formula", ...)
 test("lossIllustration: 30% of 1_000_000 = 300_000 = 4.7 months of 64_000 room (rounded to 0.1); room <= 0 -> monthsOfRoom null", ...)
 test("module contains no tax or inflation parameter (no export named *tax* / *inflation*)", ...)
 ```
+
 The literals above were computed with `node -e` during planning; the implementer re-derives them independently before trusting them and records the check in a test comment. The 0% `8334` is `ceil(8333.33)`.
 
 - [ ] **Step 2: Run** `pnpm --filter @lavega/core test -- plan/scenarios` Expected: FAIL.
@@ -173,11 +179,13 @@ The literals above were computed with `node -e` during planning; the implementer
 ### Task 3: Sections 1 and 2: Your month and Buffer
 
 **Files:**
+
 - Create: `packages/core/src/plan/month.ts`, `month.test.ts`, `buffer.ts`, `buffer.test.ts`
 - Modify: `packages/core/src/plan/index.ts`
 - Reuse (read before use): `computeRoom`/`roomFromStated` (intake Task 4), `proposeFixedCosts`, `personalView`, `historyCoverage` (intake Task 3), `bufferMonths` (intake Task 5), `categorize`, `ownAccountNamed` (`views.ts:149`, returns the matched identifier string, not an account; resolve it to an account through `own.byKey` / `Account.iban`), `accountTypeKind` (`balance.ts:78`), `isEurCurrency` (`model.ts:115`), `withCurrentBalances` (`balance.ts:100`)
 
 **Interfaces:**
+
 - Consumes: Task 1 types; `PlanInput`.
 - Produces:
   - `export type MonthFigures = { room: RoomResult; incomeMiddleCents: number | null; fixedCents: number | null; fixedShare: number | null; variableCents: number | null; variableShare: number | null; savingsRate: number | null; savingsMovedCents: number | null; habits: ("pay-yourself-first" | "automatic-transfer" | "annual-review")[]; nibudGuidanceFactId: "nibud-save-10pct" }`
@@ -187,6 +195,7 @@ The literals above were computed with `node -e` during planning; the implementer
   - `fixedCostsMonthlyCentsOf(i: PlanInput): { cents: number | null; lines: { id: string; cents: number }[] }` exported from `month.ts` (the one definition: housing plus recurring outgoing plus subscriptions via `proposeFixedCosts`, minus fingerprints in `profile.removed`; a confirmed/stated `profile.fixedCostsMonthlyCents` wins when present)
 
 Rules to implement (spec 6, 7, 5):
+
 - Room: call `computeRoom` unchanged; `roomFromStated` when no transactions but `profile.incomeStatedRange` and `spendStatedRange` exist. Median month = `middleCents`; low/high from the result. Status: `on-track` when `middleCents >= 0.10 * incomeMiddle` and no month negative; `attention` when below, or any of the three months negative; `not-enough-data` when `historyCoverage(...).days < 60` and no stated ranges. Reasons per `STATUS_REASON_KEYS`.
 - Fixed vs variable: fixed = `fixedCostsMonthlyCentsOf`; variable = median-month outgoing minus fixed, floored at 0 with a `calc` step noting the floor; shares over `incomeMiddleCents`, null when income <= 0. State in `calc` that this is a split by detection, not a category taxonomy.
 - Savings rate: (money moved to the user's own savings accounts plus room) over net income, averaged over the same three months; "moved" = outgoing txs categorised `"Eigen overboeking"` whose matched own identifier resolves to an account with `accountTypeKind === "savings"` in personal scope. No shortfall amount is ever computed; no "could invest" figure exists. The Nibud 10% line is the `PublicFact` id `nibud-save-10pct` (hidden until verified, Task 7).
@@ -223,11 +232,13 @@ test("negative middle room: fact room_month polarity negative and mustMention tr
 ### Task 4: Sections 3 and 4: Debts and Spending per category
 
 **Files:**
+
 - Create: `packages/core/src/plan/debts.ts`, `debts.test.ts`, `spending.ts`, `spending.test.ts`
 - Modify: `packages/core/src/plan/index.ts`
 - Reuse: `proposeDebts` (intake Task 3), `keptRate`/`bestRate`/`resolveAccountRate` (`interest.ts:245, 256, 478`), `RATES_AS_OF` (`interest.ts:154`), `categorySpendPercentiles`, `MIN_HISTORY_PERIODS`, `SpendRow` (`spendPercentile.ts:52, 70, 240`), `categorize`, `toEur` (`fx.ts:119`)
 
 **Interfaces:**
+
 - Produces:
   - `DebtRow = { id: string; lender: string; balanceCents: number | null; ratePct: number | null; rateSource: "stated" | "detected" | null; monthlyCents: number; interestPerYearCents: number | null; payoffMonths: number | null; payoffDate: string | null; withExtra: { extraCents: number; payoffMonths: number | null; monthsEarlier: number | null; interestSavedCents: number | null } | null; kind: "consumer" | "duo" | "other" }`
   - `DebtFigures = { rows: DebtRow[]; totalInterestPerYearCents: number | null; savingsRatePct: number | null; bestFreeRate: { ratePct: number; bank: string; product: string; asOf: string; sourceKey: "catalogue" | "comparison" | "bundled" } | null; invisibleDebtNotice: true }`
@@ -240,6 +251,7 @@ test("negative middle room: fact room_month polarity negative and mustMention tr
   - `computeSpending(i: PlanInput): SectionResult<SpendingFigures>`
 
 Rules (spec 8, 9):
+
 - Debts per row: interest per year = `round(balance * ratePct / 100)`; payoff at the current payment via `amortise`; `withExtra` from `preferences.extraDebtPayment[id]` (default none: `null`). A debt without a rate is listed with no cost, `missing: debt-rate` (action `enter-figure`), and is NEVER assigned one. Savings rate beside it = the user's own kept rate (`resolveAccountRate` → `keptRate` basis) shown only if known; best free-access rate from `bestRate(rates, true)` with its date and provenance. No "expensive" label from any threshold. DUO rows get `kind: "duo"` and carry no rule text (DUO rules are UNVERIFIED, spec 15.6). Status (precedence: not-enough-data first): any debt without a rate -> `not-enough-data` (`debt-rate-missing`) only when no stated rate exists for it; otherwise any debt with payments -> `attention` (`debt-payments`); no visible or stated debt -> `on-track` (`no-debt`). `invisibleDebtNotice: true` always (absence is never "debt-free"). Decision to flag: spec table rows overlap for "a debt without a rate"; this precedence resolves it.
 - Spending: `months` = number of full calendar months of history (via `months.ts`). `percentile` comes from `categorySpendPercentiles` fed with `SpendRow[]` built from `spendHistory`, only when `months >= 6` else `percentile: null` with reason `te-weinig-geschiedenis` (kind passthrough; copy renders). Last month / 3-month average / 12-month median per category; trend6 numbers. Limits from `preferences.categoryLimits`. `overLimitMonths` = consecutive most-recent months above limit. Status: `not-enough-data` under 6 months (plain monthly totals still computed); `attention` when any category has `overLimitMonths >= 2`; else `on-track` (`within-limits` if limits exist, `no-limits` otherwise). Comparison is only ever against the user's own history.
 - Facts: `debt_interest_year:<debtId>` (negative polarity? NO: neutral; interest is a fact, not a judgement), `debt_payoff_months:<debtId>`, `debt_extra_saving:<debtId>`, `savings_rate_pct`, `spend_last_month:<category>`, `spend_median12:<category>`, `spend_trend:<category>` (trend direction), `spend_over_limit:<category>` (negative, mustMention false).
@@ -273,11 +285,13 @@ test("12-month median with only 7 months present uses the 7 and says so (calc), 
 ### Task 5: Section 5: Subscriptions
 
 **Files:**
+
 - Create: `packages/core/src/plan/subs.ts`, `subs.test.ts`
 - Modify: `packages/core/src/plan/index.ts`
 - Reuse: `detectSubscriptions` (`subscriptions.ts:1529`), `subscriptionPriceIncreases` (`:1678`), `subscriptionOverlaps` (`:1706`), `subscriptionCoverage` (`:1328`), `Subscription` (`:10`, fields `key`, `merchant`, `function`, `monthlyCents`, `firstAmountCents`, `lastAmountCents`, `changePct`, `occurrences`, `lastDate`, `skippedCycles`); `subscriptionStateOf` (Task 1). Intake Task 3 adds `txIds: string[]` to `Subscription` (member transaction ids); this task needs it. If it is not there yet, stop and report; do not re-derive membership by key.
 
 **Interfaces:**
+
 - Produces:
   - `priceChange(sub: Subscription, txs: readonly Tx[]): { changeDate: string; fromCents: number; toCents: number } | null` new code: the first charge at the new price, from `sub.txIds` sorted by date; null when the stream never changed price at the existing thresholds
   - `SubRow = { key: string; name: string; function: string; monthlyCents: number; yearlyCents: number; monthsActive: number; priceChange: { changeDate: string; fromCents: number; toCents: number; changePct: number } | null; overlapGroup: string | null; overlapCombinedMonthlyCents: number | null; skippedCycles: number; usage: "unknown" | { loggedMonths: number; lastLoggedMonth: string; costPerUseCents: number }; decision: "keep" | "review" | "cancel" | null; facts: ("price-up" | "overlap" | "no-use-logged" | "missed-payment")[] }`
@@ -314,12 +328,14 @@ test("no row text key exists for 'best'/'recommended' (rows carry only facts[] k
 ### Task 6: Section 6: Cards and points
 
 **Files:**
+
 - Create: `packages/core/src/plan/cards.ts`, `cards.test.ts`, `packages/core/src/plan/__fixtures__/cardCases.json`
 - Create (read-only consumer of the shared fixture): `apps/extension/src/rankAgreement.test.ts`
 - Modify: `packages/core/src/plan/index.ts`
 - Reuse: `netBenefit`, `holdingCostOfProduct`, `rankByNetBenefit`, `Benefit`, `NetBenefit` (`netBenefit.ts:236, 131, 353`), `HeldCashback`, `cashbackPctOf` (`assumedCashback.ts:306, 344`), `ProductFee`, `productFeesById` (`accountCosts.ts:146, 390`), `RewardsBalance`, `isStale` (`rewards.ts:8, 32`), `CatalogField` (`catalog.ts` ~11-17: `fxFeePct`, `convertFeePct`, `cashbackPct`, `pointsPerEuro`, `interestPct`, `accountFee`). Source to port: `apps/extension/src/rank.ts` `rankCheckout` (`:1272`) and its row semantics (`Row`, `Basis` at `:1008-1054`); `rank.ts` stays untouched.
 
 **Interfaces:**
+
 - Consumes: `HeldCardInput` (Task 1 `types.ts`), `spendHistory`-style categorised spend (Task 4), `preferences.redemptionExamples`, `preferences.pointsExpiry`.
 - Produces:
   - `CardCriteriaRow = { cardKey: string; name: string; held: boolean; annualFee: { cents: number | null; known: boolean; asOf: string | null; sourceUrl: string | null }; cashbackPct: { value: number | null; tier: "measured" | "assumed" | "unknown"; asOf: string | null; sourceUrl: string | null }; fxFeePct: …same shape; pointsPerEuro: …same shape; earnByCategory: "unknown"; pointsExpiry: string | null; transferRatio: "unknown"; insurance: "unknown" }` ("unknown" columns are typed placeholders: `CatalogField` in `catalog.ts` has no such fields, UNVERIFIED sources per spec 15.4)
@@ -348,6 +364,7 @@ test("shared fixture: netForCard agrees with the fixture's expected value for ea
 // apps/extension/src/rankAgreement.test.ts
 test("rankCheckout resultCents equals the plan's expected net for each shared fixture case (held card: opbrengst basis; not-held: netto basis; horizon 12 months)", ...)
 ```
+
 Extension note: `apps/extension/package.json` does not depend on `@lavega/core` (UNVERIFIED beyond the `grep`), so the extension test reads `packages/core/src/plan/__fixtures__/cardCases.json` by relative path with `node:fs` and does NOT import core. Its expected values are in the JSON (computed by the core test), so the two sides agree through data. Where the two intentionally differ (a held card's fee is excluded from the extension's one-purchase sum but counted in the plan's annual view) the fixture marks that case `agree: false` with the reason; the test asserts only agreeing cases. Do not edit `rank.ts`.
 
 - [ ] **Step 2: Run** `pnpm --filter @lavega/core test -- plan/cards` and `pnpm --filter @lavega/extension test -- rankAgreement` Expected: FAIL.
@@ -361,11 +378,13 @@ Extension note: `apps/extension/package.json` does not depend on `@lavega/core` 
 ### Task 7: Section 7: Investing and goals, public facts, study template
 
 **Files:**
+
 - Create: `packages/core/src/plan/goals.ts`, `goals.test.ts`, `publicFacts.ts`, `publicFacts.test.ts`
 - Modify: `packages/core/src/plan/index.ts`
 - Reuse: `requiredMonthlyCents`, `goalScenarioRows`, `lossIllustration` (Task 2); `scoreCapacity`, `capacityInputs`, `capacityToleranceFlag`, `toleranceBucket` (intake Task 5); `computeBuffer`/`computeMonth` results; `monthsBetween` (intake `months.ts`); `PublicFact`, `assertShowable` (intake Task 2); `withCurrentBalances` (`balance.ts:100`)
 
 **Interfaces:**
+
 - Produces:
   - `GoalRow = { goalId: string; purpose: string; kind: "general" | "child"; childId: string | null; yearsLeft: number | null; targetCents: number; savedCents: number; savedSource: "linked" | "stated"; linkedAccountCount: number; brokerRefsNotCounted: number; fundedPct: number | null; requiredMonthly: { rate: number; cents: number | null }[]; plannedMonthlyCents: number | null; gapCents: number; scheduleCents: number | null; behind: boolean | null; toTargetByDate: string | null }`
   - `UnallocatedLine = { kind: "computed"; lowCents: number; highCents: number; deductions: { bufferTopUpMonthlyCents: number; goalsMonthlyCents: number }; roomLowCents: number; roomHighCents: number } | { kind: "stopped"; missing: ("room" | "buffer-top-up" | "goal-monthly")[] }`
@@ -409,10 +428,12 @@ test("loss illustration uses the user's goal total, null without goals", ...)
 ### Task 8: Orchestrator, FactSheet assembly, snapshots, triggers, change log
 
 **Files:**
+
 - Create: `packages/core/src/plan/compute.ts`, `compute.test.ts`, `changes.ts`, `changes.test.ts`
 - Modify: `packages/core/src/plan/index.ts`
 
 **Interfaces:**
+
 - Consumes: Tasks 1-7.
 - Produces:
   - `PlanResult = { asOf: string; thresholdsVersion: string; sections: { month: SectionResult<MonthFigures>; buffer: …; debts: …; spending: …; subscriptions: …; cards: …; goals: … }; facts: PlanFact[]; factSheet: (locale: "nl"|"en", taskType?: "plan" | "digest" | "note") => FactSheet; markers: PlanMarkers; backbone: { buffer: FigureValue | null; debtInterestPerYear: FigureValue | null; goalsGap: FigureValue | null; investingUnallocated: { low: FigureValue; high: FigureValue } | null }; freshness: { bankDataTo: string | null; profileConfirmedAt: string | null } }` (the backbone carries only facts from the user's own sections; no field says which step is next or ranks steps)
@@ -452,11 +473,13 @@ test("topChanges returns at most 3, largest relative move first", ...)
 ### Task 9: Copy: NL and EN template text, wording tables, empty states
 
 **Files:**
+
 - Create: `apps/web/src/copy/plan/shell.ts`, `month.ts`, `buffer.ts`, `debts.ts`, `spending.ts`, `subscriptions.ts`, `cards.ts`, `goals.ts`, `wording.ts`, `apps/web/src/copy/plan/plan.test.ts`
 - Modify: `apps/web/src/copy/parity.test.ts` (import list at lines 1-6 and the module list it iterates; add each plan copy export), `apps/web/src/copy/shell.ts` (`topBar.viewTitles` at NL ~276 and EN ~632 plus the `Record<View,string>` type at ~47; `nav.moduleLabels` at NL ~298 and EN ~654 plus the type at ~55: add `plan`, "Jouw plan" / "Your plan")
 - Reuse: `findAdviceLanguage` (`packages/core/src/advice/language.ts`); formatting helpers `formatEuroIn`, `localeTag` (`apps/web/src/format.ts`); pattern of `apps/web/src/copy/optimise.ts` (function-valued entries take ALREADY-FORMATTED strings, `Record<Locale, T>` export)
 
 **Interfaces:**
+
 - Consumes: `StatusReasonKey`, `MissingKind`, `MissingAction`, `PlanStatus`, `SectionId`, `PlanChange['reason']['key']` (core).
 - Produces:
   - `PlanFmt = { eur(cents: number): string; eurRange(low: number, high: number): string; months(n: number): string; pct(ratio: number): string; date(iso: string): string; monthLabel(iso: string): string }` (built in web from `formatEuroIn`/`localeTag`)
@@ -493,6 +516,7 @@ test("nl and en trees have identical key paths (copy/parity.test.ts includes the
 Reviewable alone: no section UI. Ends with a route that renders the invitation or a bare list of `PlanResult` statuses behind the Task 11 component (a stub `Plan` returning `null` is replaced in Task 11).
 
 **Files:**
+
 - Create: `apps/web/src/plan/usePlan.ts`, `usePlan.test.ts`, `apps/web/src/plan/heldCards.ts`, `heldCards.test.ts`, `apps/web/src/views/Plan.tsx` (stub exporting the final props type; Task 11 fills it)
 - Modify (anchors; line numbers are pre-intake):
   - `apps/web/src/appRoutes.ts`: `type View` union (lines 7-20) add `"plan"`; `VIEW_BY_SEGMENT` (lines ~25-39) add `plan: "plan"`. Tests in `appRoutes.test.ts` (pattern at its lines 14-27).
@@ -502,6 +526,7 @@ Reviewable alone: no section UI. Ends with a route that renders the invitation o
 - Reuse: `useAppLocale` (`appLocale.ts`), `MOVED_CATEGORIES` (`components/blocks/statistics.ts:88`) for `movedCategories`, `heldCashbackOf`/`factEntry`/`productOf`/`getCashbackAssumptionEnabled` exactly as `Optimalisatie.tsx:~885-925`, `productFeesById(CATALOGUE_ENTRIES)` (`catalogue-rates.ts`), `getFxConversionMode` (App.tsx import at ~line 84).
 
 **Interfaces:**
+
 - Consumes: `computePlan`, `snapshotOf`, `diffSnapshots`, `detectTriggers`, `refreshDecision`, `addSnapshot`, `decodePlanSection`, `subscriptionStateOf`, `planProfileOf`, `PlanPreferences`, `PlanEvent` (core); intake `AdvisorProfileStore`, `getSection/putSection/appendEvents`.
 - Produces:
   - `buildHeldCards(i: { accounts: Account[]; facts: readonly LearnedFact[]; entries: readonly CatalogueEntryLike[]; rewards: RewardsBalance[]; assumptionOn: boolean }): HeldCardInput[]` (web-only; mirrors the Optimalisatie derivation; the only place the web layer touches `heldCashbackOf`)
@@ -537,11 +562,13 @@ test("buildHeldCards equals the Optimalisatie derivation for the same fixture; n
 ### Task 11: Web view shell: header, backbone, change log, card frame, invitation, scenario table
 
 **Files:**
+
 - Create: `apps/web/src/views/Plan.test.tsx`, `apps/web/src/plan/{PlanHeader,BackboneStrip,ChangeLog,SectionCard,ScenarioTable}.tsx`
 - Modify: `apps/web/src/views/Plan.tsx` (replace the Task 10 stub)
 - Reuse: `Card`, `Badge`, `Button`, `CardLink` (`apps/web/src/components/ui/`), `formatEuroIn`/`localeTag` (`format.ts`)
 
 **Interfaces:**
+
 - Consumes: Task 10 `usePlan`, Task 9 `planShellCopy`.
 - Produces:
   - `SectionCard` props `{ section: SectionId; result: SectionResult<unknown>; children: { figures: ReactNode; assumptions: ReactNode; explanation?: ReactNode; howCalculated: ReactNode; sources: ReactNode } }`. The expanded order is fixed by the component: figures, assumptions, explanation, how-we-calculated, sources. SEAM FOR THE AI LAYER: `explanation` is a slot. When the caller passes none, `SectionCard` renders `TemplateExplanation` (simple/detailed switch from `copy/plan/<section>.explain`, helped/didn't buttons, no AI disclosure). The AI layer passes its `ExplanationBlock` in this slot from the section components and changes nothing else.
@@ -574,10 +601,12 @@ test("<script> in a debt lender name or subscription name renders as literal tex
 ### Task 12: Web section bodies: seven section components with editable assumptions
 
 **Files:**
+
 - Create: `apps/web/src/plan/sections/{Month,Buffer,Debts,Spending,Subscriptions,Cards,Goals}Section.tsx`, `apps/web/src/plan/sections/sections.test.tsx`
 - Modify: `apps/web/src/views/Plan.tsx` (mount each section body in its `SectionCard`)
 
 **Interfaces:**
+
 - Consumes: Task 11 `SectionCard`, Task 10 `usePlan` (`setPreference`, `appendPlanEvent`), section figures from `PlanResult`, section copy (Task 9).
 - Produces: per section, the figures, the user's editable assumptions (category limit, extra debt payment, buffer top-up months, redemption examples, points expiry, `nibudBufferResult`, study-template figures, goal "saved so far" and "planned monthly") and the "how we calculated this" list from `calc`. Specifics: Subscriptions rows show Keep/Review/Cancel as UNSELECTED buttons (state only from the log) and a "used this month" button appending a `UsageLog`; Cards criteria table sorts by name by default, header click sorts by that column, no highlight class; Goals section lets the user link bank accounts to a goal (`accountRefs`, saved through the intake profile save path as a confirmed `Goal` edit), shows the scenario table via `ScenarioTable` and the single general Learn card; the typed provider comparison for children's accounts is NOT rendered (pending fact `child-provider-values`).
 
@@ -617,6 +646,7 @@ test("copy scan on the rendered seeded fixture in NL and EN: findAdviceLanguage 
 ## Self-Review (done against the spec)
 
 Spec coverage:
+
 - Section 1 intent / P1: Tasks 3-7 (seven sections), Tasks 10-12 (one page, fixed order). P2 every number pure + "how we calculated this": `calc` in Tasks 3-7, rendered in Task 10. P3 status table: Task 1 `PLAN_THRESHOLDS`, Tasks 3-7. P4 monthly recompute, triggers, change log: Task 8 core, Task 10 hook. P5 complete with template text: Task 9. P6 no bank data: Review Focus 1, `missing` in every section.
 - Section 4 page structure: header, backbone, changes, cards, footer, explanation controls: Tasks 11-12 (`explainControls` copy in Task 9). Nav first item for finished intake: Task 10; pre-intake invitation: Task 11.
 - Section 5 personal scope (Global Constraints, Task 3-7 via `personalView`), engine signature (Task 1 `PlanInput`, an object, not positional: flagged), FactSheet + polarity + mustMention (Tasks 1, 3-8), one-AI-call (not built; `factSheet(locale)` and `topChanges` are the hooks), wording tables (Task 9 `wording.ts`), one advice list (Global Constraints, Task 9 tests), statuses and the buffer/capacity separation (Tasks 1, 3, 7), empty states (every task + Task 9), copy rules (Task 9).
@@ -625,6 +655,7 @@ Spec coverage:
 - Section 17 builder choices recorded: noise bound absolute (Task 1), cards default closed (Task 11), card function in core (Task 6), module layout (File Structure).
 
 Gaps and decisions for the owner to check:
+
 1. Debts status table overlaps (a debt without a rate is both "attention" and "not-enough-data"); plan picks `not-enough-data` when no stated rate exists. Buffer and goals need a target/goal; same precedence rule (not-enough-data first).
 2. Cards "card in use" and the 10% margin are underspecified; plan uses largest actual spend as "in use" and compares counterfactual annual nets (`other > inUse + 10% of |inUse|`).
 3. Scenario maths: monthly rate = (gross - cost)/12 nominal, end of month. Spec says "monthly compounding"; effective vs nominal not stated.

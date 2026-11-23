@@ -108,7 +108,8 @@ const nl: CardsCopy = {
     insurance: "Verzekering",
     netValue: "Nettowaarde",
   },
-  sortNote: "Deze tabel toont alleen je eigen kaarten, op naam. Elke kolom is te sorteren. De kaartvergelijking staat hierboven.",
+  sortNote:
+    "Deze tabel toont alleen je eigen kaarten, op naam. Elke kolom is te sorteren. De kaartvergelijking staat hierboven.",
   tier: {
     measured: "uit een bron met datum",
     assumed: "aangenomen: een gewone kaart zonder cashback",
@@ -168,8 +169,8 @@ const nl: CardsCopy = {
       : net.pointsValueRange !== null && net.pointsValueRange.highCents === 0
         ? `Bij jouw eigen uitgaven levert ${name} ${fmt.count(net.pointsEarned)} punten op. Je koos cashback boven punten, dus de punten tellen voor ${fmt.eur(0)}.`
         : net.pointsValueRange === null
-        ? `Bij jouw eigen uitgaven levert ${name} ${fmt.count(net.pointsEarned)} punten op. Zonder eigen inwisselvoorbeelden is er geen waarde in euro berekend.`
-        : `Bij jouw eigen uitgaven levert ${name} ${fmt.count(net.pointsEarned)} punten op, met een waarde van ${fmt.eurRange(net.pointsValueRange.lowCents, net.pointsValueRange.highCents)} volgens je eigen inwisselvoorbeelden.`,
+          ? `Bij jouw eigen uitgaven levert ${name} ${fmt.count(net.pointsEarned)} punten op. Zonder eigen inwisselvoorbeelden is er geen waarde in euro berekend.`
+          : `Bij jouw eigen uitgaven levert ${name} ${fmt.count(net.pointsEarned)} punten op, met een waarde van ${fmt.eurRange(net.pointsValueRange.lowCents, net.pointsValueRange.highCents)} volgens je eigen inwisselvoorbeelden.`,
   balanceLine: (points, expiresOn, stale, fmt) =>
     `${fmt.count(points)} punten${expiresOn === null ? "" : `; deze verlopen op ${fmt.date(expiresOn)}`}${stale ? "; het saldo is al een tijd niet bijgewerkt" : ""}.`,
   breakEvenLine: (name, annualSpendCents, fmt) =>
@@ -274,7 +275,8 @@ const en: CardsCopy = {
     insurance: "Insurance",
     netValue: "Net value",
   },
-  sortNote: "This table shows only your own cards, by name. Every column can be sorted. The card comparison is above.",
+  sortNote:
+    "This table shows only your own cards, by name. Every column can be sorted. The card comparison is above.",
   tier: {
     measured: "from a dated source",
     assumed: "assumed: an ordinary card with no cashback",
@@ -334,8 +336,8 @@ const en: CardsCopy = {
       : net.pointsValueRange !== null && net.pointsValueRange.highCents === 0
         ? `At your own spend, ${name} earns ${fmt.count(net.pointsEarned)} points. You chose cashback over points, so the points count for ${fmt.eur(0)}.`
         : net.pointsValueRange === null
-        ? `At your own spend, ${name} earns ${fmt.count(net.pointsEarned)} points. Without redemption examples of your own, no euro value has been calculated.`
-        : `At your own spend, ${name} earns ${fmt.count(net.pointsEarned)} points, worth ${fmt.eurRange(net.pointsValueRange.lowCents, net.pointsValueRange.highCents)} by your own redemption examples.`,
+          ? `At your own spend, ${name} earns ${fmt.count(net.pointsEarned)} points. Without redemption examples of your own, no euro value has been calculated.`
+          : `At your own spend, ${name} earns ${fmt.count(net.pointsEarned)} points, worth ${fmt.eurRange(net.pointsValueRange.lowCents, net.pointsValueRange.highCents)} by your own redemption examples.`,
   balanceLine: (points, expiresOn, stale, fmt) =>
     `${fmt.count(points)} points${expiresOn === null ? "" : `; these expire on ${fmt.date(expiresOn)}`}${stale ? "; the balance has not been updated for a while" : ""}.`,
   breakEvenLine: (name, annualSpendCents, fmt) =>

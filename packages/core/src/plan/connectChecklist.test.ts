@@ -10,7 +10,11 @@ test("ING card implies ING", () => {
 });
 
 test("a stated and an implied brand are listed once, in stable order", () => {
-  const r = connectChecklist({ ...none, statedBanks: ["abn", "ing"], impliedBanks: ["ing", "amex"] });
+  const r = connectChecklist({
+    ...none,
+    statedBanks: ["abn", "ing"],
+    impliedBanks: ["ing", "amex"],
+  });
   expect(r.map((x) => x.brand)).toEqual(["abn", "ing", "amex"]);
 });
 
@@ -41,7 +45,9 @@ test("ING does not match 'Leasing'", () => {
 });
 
 test("other is never listed", () => {
-  expect(connectChecklist({ ...none, statedBanks: ["other"], impliedBanks: ["other-brand"] })).toEqual([]);
+  expect(
+    connectChecklist({ ...none, statedBanks: ["other"], impliedBanks: ["other-brand"] }),
+  ).toEqual([]);
 });
 
 test("aliases match multi-word names", () => {
@@ -57,7 +63,11 @@ test("aliases match multi-word names", () => {
 });
 
 test("brands with no bank-link path are never listed", () => {
-  const r = connectChecklist({ ...none, statedBanks: ["crypto", "nexo", "ing"], impliedBanks: ["crypto"] });
+  const r = connectChecklist({
+    ...none,
+    statedBanks: ["crypto", "nexo", "ing"],
+    impliedBanks: ["crypto"],
+  });
   expect(r.map((x) => x.brand)).toEqual(["ing"]);
 });
 

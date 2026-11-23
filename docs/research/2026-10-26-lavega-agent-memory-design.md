@@ -28,10 +28,10 @@ refuse the invisible half. Four requirements follow, in priority order:
 
 Two stores already exist and the split rule falls out of how they are read:
 
-| Store | Holds | Read when | Decided by |
-| --- | --- | --- | --- |
-| **Vault** (browser, AES-GCM, ADR 0009) | Personal and cross-agent memory: preferences, constraints, goals, corrections, thread summaries | Only when a prompt is built; travels with the request exactly as `facts` does today | this proposal |
-| **Neon `investing.*`** (ADR 0007) | Portfolio records a server feature reads on a schedule: thesis, goal, observation, thread transcript | Turn summary, letters, snapshot jobs | accepted, unchanged |
+| Store                                  | Holds                                                                                                | Read when                                                                           | Decided by          |
+| -------------------------------------- | ---------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- | ------------------- |
+| **Vault** (browser, AES-GCM, ADR 0009) | Personal and cross-agent memory: preferences, constraints, goals, corrections, thread summaries      | Only when a prompt is built; travels with the request exactly as `facts` does today | this proposal       |
+| **Neon `investing.*`** (ADR 0007)      | Portfolio records a server feature reads on a schedule: thesis, goal, observation, thread transcript | Turn summary, letters, snapshot jobs                                                | accepted, unchanged |
 
 Rule: **if a server feature must read it while the user is offline, it goes to
 Neon; if it only shapes a prompt, it stays in the vault.** The personal-finance
@@ -45,11 +45,11 @@ at lines 396–410; a legacy vault without the field must still decrypt).
 
 ## 3. Three tiers, replacing one flat list
 
-| Tier | Name | Shape | Written by | Shown to model |
-| --- | --- | --- | --- | --- |
-| 0 | **Facts** (exists) | `{agent, subject, key, value, source}` | agent refresh + owner correction | Always, all of the agent's namespace, char-capped at 60 |
-| 1 | **Memories** (new) | one sentence + scope + kind | proposal accepted by owner | Selected per turn under a budget |
-| 2 | **Thread summaries** (new) | rolling summary of one thread | system, on overflow | Only for the thread being continued |
+| Tier | Name                       | Shape                                  | Written by                       | Shown to model                                          |
+| ---- | -------------------------- | -------------------------------------- | -------------------------------- | ------------------------------------------------------- |
+| 0    | **Facts** (exists)         | `{agent, subject, key, value, source}` | agent refresh + owner correction | Always, all of the agent's namespace, char-capped at 60 |
+| 1    | **Memories** (new)         | one sentence + scope + kind            | proposal accepted by owner       | Selected per turn under a budget                        |
+| 2    | **Thread summaries** (new) | rolling summary of one thread          | system, on overflow              | Only for the thread being continued                     |
 
 Tier 0 stays exactly as it is. Tier 1 is the Instinct-shaped memory, made visible.
 Tier 2 is the compaction that Instinct hides; here it is a row the user can read.
@@ -58,26 +58,26 @@ Tier 2 is the compaction that Instinct hides; here it is a row the user can read
 
 ```ts
 export type MemoryKind =
-  | "preference"   // "antwoord kort", "geen Engels gebruiken"
-  | "constraint"   // "geen beleggingsadvies geven"
-  | "goal"         // "eind dit jaar 10k buffer"
-  | "correction"   // "de ING pas is een creditcard, niet betaalpas"
-  | "entity"       // public brand/product only, same shape rule as facts
-  | "episode";     // "verhuisde in maart naar Berlijn" — has a TTL
+  | "preference" // "antwoord kort", "geen Engels gebruiken"
+  | "constraint" // "geen beleggingsadvies geven"
+  | "goal" // "eind dit jaar 10k buffer"
+  | "correction" // "de ING pas is een creditcard, niet betaalpas"
+  | "entity" // public brand/product only, same shape rule as facts
+  | "episode"; // "verhuisde in maart naar Berlijn" — has a TTL
 
 export type MemoryRecord = {
-  id: string;              // hash(norm(scope)|norm(kind)|norm(subject)) — stable upsert
-  scope: string;           // "global" | agent id ("chat" | "travel" | ...)
+  id: string; // hash(norm(scope)|norm(kind)|norm(subject)) — stable upsert
+  scope: string; // "global" | agent id ("chat" | "travel" | ...)
   kind: MemoryKind;
-  subject: string;         // closed vocabulary, or a public brand
-  value: string;           // <= 280 chars, one sentence, no amounts
+  subject: string; // closed vocabulary, or a public brand
+  value: string; // <= 280 chars, one sentence, no amounts
   source: "user" | "agent";
   status: "proposed" | "confirmed" | "expired";
-  pinned?: boolean;        // owner said "always remember this"
-  createdAt: string;       // ISO date, set by caller (core stays clock-free, like facts.ts)
+  pinned?: boolean; // owner said "always remember this"
+  createdAt: string; // ISO date, set by caller (core stays clock-free, like facts.ts)
   updatedAt: string;
-  lastUsedAt?: string;     // drives decay, and answers "why is this here"
-  expiresAt?: string;      // required for "episode", absent otherwise
+  lastUsedAt?: string; // drives decay, and answers "why is this here"
+  expiresAt?: string; // required for "episode", absent otherwise
 };
 ```
 
@@ -113,7 +113,7 @@ Deterministic selection. No embeddings, no vector store — ADR 0007 already def
 that until keyword lookup fails, and finance memory is small.
 
 ```ts
-selectMemories(all, { scope, message, budgetChars, now })
+selectMemories(all, { scope, message, budgetChars, now });
 ```
 
 1. Keep `status: "confirmed"` and not expired, where `scope` is `"global"` or the
@@ -121,7 +121,7 @@ selectMemories(all, { scope, message, budgetChars, now })
 2. Always include every `constraint` and every `global` `preference` — small,
    bounded, and the ones a model must not contradict.
 3. Rank the rest: `scopeMatch > pinned > keyword overlap with the current message >
-   recency`, where keyword overlap is normalized token intersection, not fuzzy
+recency`, where keyword overlap is normalized token intersection, not fuzzy
    similarity.
 4. Take items until the char budget (start at 1200 chars, measure) is reached.
 5. Stamp `lastUsedAt` on the selected rows.
@@ -157,13 +157,13 @@ by the route.
 
 Every path is a real operation, not a promise:
 
-| Action | Scope |
-| --- | --- |
-| Delete one | by `id` |
-| Delete all for one agent | `scope === agent` |
-| Delete all learned by the model | `source === "agent"` |
-| Delete everything | empty `memories[]` |
-| Export | included in the vault backup, beside `facts` |
+| Action                          | Scope                                        |
+| ------------------------------- | -------------------------------------------- |
+| Delete one                      | by `id`                                      |
+| Delete all for one agent        | `scope === agent`                            |
+| Delete all learned by the model | `source === "agent"`                         |
+| Delete everything               | empty `memories[]`                           |
+| Export                          | included in the vault backup, beside `facts` |
 
 "Erase all data" must enumerate memories explicitly. Instinct's gap is that its
 user-initiated deletions do not cover memory; ours must not repeat it.

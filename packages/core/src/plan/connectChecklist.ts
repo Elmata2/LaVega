@@ -79,7 +79,8 @@ export function connectChecklist(i: ConnectChecklistInput): ConnectItem[] {
   // stamped (`linkedAt` set, never a live link) counts.
   const filed = i.accounts.filter(
     (a) =>
-      a.statedCardId !== undefined || (a.linkedAt !== undefined && a.balanceFetchedAt === undefined),
+      a.statedCardId !== undefined ||
+      (a.linkedAt !== undefined && a.balanceFetchedAt === undefined),
   );
   return [
     ...brands.map((brand) => ({
@@ -89,9 +90,10 @@ export function connectChecklist(i: ConnectChecklistInput): ConnectItem[] {
     })),
     ...fileBrands.map((brand) => ({
       brand,
-      connected: (brand === "amex" ? filed : filed.filter((a) => a.statedCardId !== undefined)).some(
-        (a) => bankMatchesBrand(a.bank, brand),
-      ),
+      connected: (brand === "amex"
+        ? filed
+        : filed.filter((a) => a.statedCardId !== undefined)
+      ).some((a) => bankMatchesBrand(a.bank, brand)),
       route: "file" as const,
     })),
   ];

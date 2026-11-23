@@ -43,8 +43,8 @@ Most browser applications should use the default exported singleton and call `po
 ### Examples
 
 ```ts
-const instance = new PostHog()
-instance.init('<ph_project_api_key>', { api_host: 'https://us.i.posthog.com' })
+const instance = new PostHog();
+instance.init("<ph_project_api_key>", { api_host: "https://us.i.posthog.com" });
 ```
 
 ---
@@ -62,7 +62,7 @@ Clear HMAC-based identity verification, reverting to anonymous mode.
 ### Examples
 
 ```ts
-posthog.clearIdentity()
+posthog.clearIdentity();
 ```
 
 ---
@@ -80,6 +80,7 @@ This can be used to check if the user has explicitly opted in or out of data cap
 ### Returns
 
 **Union of:**
+
 - `'granted'`
 - `'denied'`
 - `'pending'`
@@ -87,13 +88,13 @@ This can be used to check if the user has explicitly opted in or out of data cap
 ### Examples
 
 ```ts
-const consentStatus = posthog.get_explicit_consent_status()
+const consentStatus = posthog.get_explicit_consent_status();
 if (consentStatus === "granted") {
-    // user has explicitly opted in
+  // user has explicitly opted in
 } else if (consentStatus === "denied") {
-    // user has explicitly opted out
-} else if (consentStatus === "pending"){
-    // user has not made a choice, show consent banner
+  // user has explicitly opted out
+} else if (consentStatus === "pending") {
+  // user has not made a choice, show consent banner
 }
 ```
 
@@ -158,7 +159,7 @@ push() keeps the standard async-array-push behavior around after the lib is load
 ### Examples
 
 ```ts
-posthog.push(['register', { a: 'b' }]);
+posthog.push(["register", { a: "b" }]);
 ```
 
 ---
@@ -185,7 +186,7 @@ When set, products like conversations use server-verified identity (distinct_id 
 ### Examples
 
 ```ts
-posthog.setIdentity('user_123', 'a1b2c3d4e5f6...')
+posthog.setIdentity("user_123", "a1b2c3d4e5f6...");
 ```
 
 ---
@@ -210,9 +211,9 @@ Add a breadcrumb-like step that will be attached to the next captured exception.
 ### Examples
 
 ```ts
-posthog.addExceptionStep('Checkout button clicked', {
-  checkout_id: 'ch_123',
-})
+posthog.addExceptionStep("Checkout button clicked", {
+  checkout_id: "ch_123",
+});
 ```
 
 ---
@@ -231,6 +232,7 @@ Capture a caught exception manually
 ### Returns
 
 **Union of:**
+
 - `CaptureResult`
 - `undefined`
 
@@ -243,7 +245,7 @@ Capture a caught exception manually
 try {
   // something that might throw
 } catch (error) {
-  posthog.captureException(error)
+  posthog.captureException(error);
 }
 ```
 
@@ -280,7 +282,7 @@ turns exception autocapture on, and updates the config option `capture_exception
 
 ```ts
 // Start with default exception autocapture rules. No-op if already enabled
-posthog.startExceptionAutocapture()
+posthog.startExceptionAutocapture();
 ```
 
 #### Start and override controls
@@ -291,8 +293,8 @@ posthog.startExceptionAutocapture({
   // you don't have to send all of these (unincluded values will use the default)
   capture_unhandled_errors: true || false,
   capture_unhandled_rejections: true || false,
-  capture_console_errors: true || false
-})
+  capture_console_errors: true || false,
+});
 ```
 
 ---
@@ -311,7 +313,7 @@ turns exception autocapture off by updating the config option `capture_exception
 
 ```ts
 // Stop capturing exceptions automatically
-posthog.stopExceptionAutocapture()
+posthog.stopExceptionAutocapture();
 ```
 
 ---
@@ -336,6 +338,7 @@ PostHog will use this to link two distinct_ids going forward (not retroactively)
 ### Returns
 
 **Union of:**
+
 - `CaptureResult`
 - `void`
 - `number`
@@ -346,14 +349,14 @@ PostHog will use this to link two distinct_ids going forward (not retroactively)
 
 ```ts
 // link anonymous user to account on signup
-posthog.alias('user_12345')
+posthog.alias("user_12345");
 ```
 
 #### explicit alias with original ID
 
 ```ts
 // explicit alias with original ID
-posthog.alias('user_12345', 'anonymous_abc123')
+posthog.alias("user_12345", "anonymous_abc123");
 ```
 
 ---
@@ -371,7 +374,7 @@ Creates a person profile for the current user, if they don't already have one an
 ### Examples
 
 ```ts
-posthog.createPersonProfile()
+posthog.createPersonProfile();
 ```
 
 ---
@@ -396,20 +399,20 @@ This is either the auto-generated ID or the ID set via `identify()`. The distinc
 
 ```ts
 // get the current user ID
-const userId = posthog.get_distinct_id()
-console.log('Current user:', userId)
+const userId = posthog.get_distinct_id();
+console.log("Current user:", userId);
 ```
 
 #### use in loaded callback
 
 ```ts
 // use in loaded callback
-posthog.init('token', {
-    loaded: (posthog) => {
-        const id = posthog.get_distinct_id()
-        // use the ID
-    }
-})
+posthog.init("token", {
+  loaded: (posthog) => {
+    const id = posthog.get_distinct_id();
+    // use the ID
+  },
+});
 ```
 
 ---
@@ -431,6 +434,7 @@ get_property() can only be called after the PostHog library has finished loading
 ### Returns
 
 **Union of:**
+
 - `Property`
 - `undefined`
 
@@ -438,10 +442,10 @@ get_property() can only be called after the PostHog library has finished loading
 
 ```ts
 // grab value for '$user_id' after the posthog library has loaded
-posthog.init('<YOUR PROJECT TOKEN>', {
-    loaded: function(posthog) {
-        user_id = posthog.get_property('$user_id');
-    }
+posthog.init("<YOUR PROJECT TOKEN>", {
+  loaded: function (posthog) {
+    user_id = posthog.get_property("$user_id");
+  },
 });
 ```
 
@@ -483,6 +487,7 @@ This is based on browser-level `sessionStorage`, NOT the PostHog session. getSes
 ### Returns
 
 **Union of:**
+
 - `Property`
 - `undefined`
 
@@ -490,10 +495,10 @@ This is based on browser-level `sessionStorage`, NOT the PostHog session. getSes
 
 ```ts
 // grab value for 'user_id' after the posthog library has loaded
-posthog.init('YOUR PROJECT TOKEN', {
-    loaded: function(posthog) {
-        user_id = posthog.getSessionProperty('user_id');
-    }
+posthog.init("YOUR PROJECT TOKEN", {
+  loaded: function (posthog) {
+    user_id = posthog.getSessionProperty("user_id");
+  },
 });
 ```
 
@@ -525,18 +530,18 @@ Groups allow you to analyze users collectively (e.g., by organization, team, or 
 
 ```ts
 // associate user with an organization
-posthog.group('organization', 'org_12345', {
-    name: 'Acme Corp',
-    plan: 'enterprise'
-})
+posthog.group("organization", "org_12345", {
+  name: "Acme Corp",
+  plan: "enterprise",
+});
 ```
 
 #### associate with multiple group types
 
 ```ts
 // associate with multiple group types
-posthog.group('organization', 'org_12345')
-posthog.group('team', 'team_67890')
+posthog.group("organization", "org_12345");
+posthog.group("team", "team_67890");
 ```
 
 ---
@@ -567,27 +572,28 @@ By default, PostHog assigns each user a randomly generated `distinct_id`. Use th
 
 ```ts
 // basic identification
-posthog.identify('user_12345')
+posthog.identify("user_12345");
 ```
 
 #### identify with user properties
 
 ```ts
 // identify with user properties
-posthog.identify('user_12345', {
-    email: 'user@example.com',
-    plan: 'premium'
-})
+posthog.identify("user_12345", {
+  email: "user@example.com",
+  plan: "premium",
+});
 ```
 
 #### identify with set and set_once properties
 
 ```ts
 // identify with set and set_once properties
-posthog.identify('user_12345',
-    { last_login: new Date() },  // updates every time
-    { signup_date: new Date() }  // sets only once
-)
+posthog.identify(
+  "user_12345",
+  { last_login: new Date() }, // updates every time
+  { signup_date: new Date() }, // sets only once
+);
 ```
 
 ---
@@ -622,7 +628,7 @@ posthog.onSessionId(function(sessionId, windowId) { // do something })
 Resets all user data and starts a fresh session.
 ⚠️ **Warning**: Only call this when a user logs out. Calling at the wrong time can cause split sessions.
 This clears: - Session ID and super properties - User identification (sets new random distinct_id) - Cached data and consent settings
-⚠️ **Warning**: because consent is cleared, `reset()` returns the instance to the default consent state. With `opt_out_capturing_by_default` that default is opted out, so calling `reset()` *after* `opt_in_capturing()` silently stops capturing. Always `reset()` first, then opt in.
+⚠️ **Warning**: because consent is cleared, `reset()` returns the instance to the default consent state. With `opt_out_capturing_by_default` that default is opted out, so calling `reset()` _after_ `opt_in_capturing()` silently stops capturing. Always `reset()` first, then opt in.
 
 ### Parameters
 
@@ -639,8 +645,8 @@ This clears: - Session ID and super properties - User identification (sets new r
 ```ts
 // reset on user logout
 function logout() {
-    posthog.reset()
-    // redirect to login page
+  posthog.reset();
+  // redirect to login page
 }
 ```
 
@@ -648,7 +654,7 @@ function logout() {
 
 ```ts
 // reset and generate new device ID
-posthog.reset(true)  // also resets device_id
+posthog.reset(true); // also resets device_id
 ```
 
 #### reset with a custom anonymous ID and bootstrapped feature flags
@@ -656,20 +662,20 @@ posthog.reset(true)  // also resets device_id
 ```ts
 // reset with a custom anonymous ID and bootstrapped feature flags
 posthog.reset({
-    bootstrap: {
-        distinctID: myAnonymousID,
-        isIdentifiedID: false,
-        featureFlags: { 'my-flag': true },
-    }
-})
+  bootstrap: {
+    distinctID: myAnonymousID,
+    isIdentifiedID: false,
+    featureFlags: { "my-flag": true },
+  },
+});
 ```
 
 #### with opt_out_capturing_by_default, reset() before opting in, never after
 
 ```ts
 // with opt_out_capturing_by_default, reset() before opting in, never after
-posthog.reset()
-posthog.opt_in_capturing()
+posthog.reset();
+posthog.opt_in_capturing();
 ```
 
 ---
@@ -687,7 +693,7 @@ Resets only the group properties of the user currently logged in. Learn more abo
 ### Examples
 
 ```ts
-posthog.resetGroups()
+posthog.resetGroups();
 ```
 
 ---
@@ -707,10 +713,10 @@ This is useful for using in a cohort your internal/test filters for your posthog
 
 ```ts
 // Manually mark as test user
-posthog.setInternalOrTestUser()
+posthog.setInternalOrTestUser();
 
 // Or use internal_or_test_user_hostname config for automatic detection
-posthog.init('token', { internal_or_test_user_hostname: 'localhost' })
+posthog.init("token", { internal_or_test_user_hostname: "localhost" });
 ```
 
 ---
@@ -741,9 +747,9 @@ Updates user properties that are stored with the person profile in PostHog. If `
 ```ts
 // set user properties
 posthog.setPersonProperties({
-    email: 'user@example.com',
-    plan: 'premium'
-})
+  email: "user@example.com",
+  plan: "premium",
+});
 ```
 
 #### set properties
@@ -751,9 +757,9 @@ posthog.setPersonProperties({
 ```ts
 // set properties
 posthog.setPersonProperties(
-    { name: 'Max Hedgehog' },  // $set properties
-    { initial_url: '/blog' }   // $set_once properties
-)
+  { name: "Max Hedgehog" }, // $set properties
+  { initial_url: "/blog" }, // $set_once properties
+);
 ```
 
 ---
@@ -766,7 +772,7 @@ Removes properties from the person profile associated with the current `distinct
 
 **Notes:**
 
-Deletes the given person properties from the person profile in PostHog. This is the counterpart to  — instead of hand-passing `$unset` inside a `capture()` call, you can remove properties with a dedicated method. If `person_profiles` is set to `never`, this call is ignored.
+Deletes the given person properties from the person profile in PostHog. This is the counterpart to — instead of hand-passing `$unset` inside a `capture()` call, you can remove properties with a dedicated method. If `person_profiles` is set to `never`, this call is ignored.
 `$fbc` and `$fbp` read by the SDK are unset for this call only. `save_campaign_params: false` stops the reads.
 
 ### Parameters
@@ -783,14 +789,14 @@ Deletes the given person properties from the person profile in PostHog. This is 
 
 ```ts
 // remove a single property
-posthog.unsetPersonProperties('plan')
+posthog.unsetPersonProperties("plan");
 ```
 
 #### remove multiple properties
 
 ```ts
 // remove multiple properties
-posthog.unsetPersonProperties(['plan', 'email'])
+posthog.unsetPersonProperties(["plan", "email"]);
 ```
 
 ---
@@ -833,6 +839,7 @@ Checks the feature flags associated with this Survey to see if the survey can be
 ### Returns
 
 **Union of:**
+
 - `SurveyRenderReason`
 - `null`
 
@@ -864,14 +871,14 @@ Checks the feature flags associated with this Survey to see if the survey can be
 
 ```ts
 posthog.canRenderSurveyAsync(surveyId).then((result) => {
-    if (result.visible) {
-        // Survey can be rendered
-        console.log('Survey can be rendered')
-    } else {
-        // Survey cannot be rendered
-        console.log('Survey cannot be rendered:', result.disabledReason)
-    }
-})
+  if (result.visible) {
+    // Survey can be rendered
+    console.log("Survey can be rendered");
+  } else {
+    // Survey cannot be rendered
+    console.log("Survey cannot be rendered:", result.disabledReason);
+  }
+});
 ```
 
 ---
@@ -897,30 +904,30 @@ Display a survey programmatically as either a popover or inline element.
 
 ```ts
 // Display as popover (respects all conditions defined in the dashboard)
-posthog.displaySurvey('survey-id-123')
+posthog.displaySurvey("survey-id-123");
 ```
 
 #### Display inline in a specific element
 
 ```ts
 // Display inline in a specific element
-posthog.displaySurvey('survey-id-123', {
+posthog.displaySurvey("survey-id-123", {
   displayType: DisplaySurveyType.Inline,
   ignoreConditions: false,
   ignoreDelay: false,
-  selector: '#survey-container'
-})
+  selector: "#survey-container",
+});
 ```
 
 #### Force display ignoring conditions and delays
 
 ```ts
 // Force display ignoring conditions and delays
-posthog.displaySurvey('survey-id-123', {
+posthog.displaySurvey("survey-id-123", {
   displayType: DisplaySurveyType.Popover,
   ignoreConditions: true,
-  ignoreDelay: true
-})
+  ignoreDelay: true,
+});
 ```
 
 ---
@@ -944,8 +951,8 @@ Get surveys that should be enabled for the current user. See [fetching surveys d
 
 ```ts
 posthog.getActiveMatchingSurveys((surveys) => {
-     // do something
-})
+  // do something
+});
 ```
 
 ---
@@ -972,7 +979,7 @@ function callback(surveys, context) {
   // do something
 }
 
-posthog.getSurveys(callback, false)
+posthog.getSurveys(callback, false);
 ```
 
 ---
@@ -982,7 +989,7 @@ posthog.getSurveys(callback, false)
 **Release Tag:** public
 
 Register an event listener that runs when surveys are loaded.
-Callback parameters: - surveys: Survey[]: An array containing all survey objects fetched from PostHog using the getSurveys method - context:  isLoaded: boolean, error?: string : An object indicating if the surveys were loaded successfully
+Callback parameters: - surveys: Survey[]: An array containing all survey objects fetched from PostHog using the getSurveys method - context: isLoaded: boolean, error?: string : An object indicating if the surveys were loaded successfully
 
 ### Parameters
 
@@ -1019,7 +1026,7 @@ This takes a survey ID and an HTML selector to render an unstyled survey.
 ### Examples
 
 ```ts
-posthog.renderSurvey(coolSurveyID, '#survey-container')
+posthog.renderSurvey(coolSurveyID, "#survey-container");
 ```
 
 ---
@@ -1045,6 +1052,7 @@ You can capture arbitrary object-like values as events. [Learn about capture bes
 ### Returns
 
 **Union of:**
+
 - `CaptureResult`
 - `undefined`
 
@@ -1052,10 +1060,10 @@ You can capture arbitrary object-like values as events. [Learn about capture bes
 
 ```ts
 // basic event capture
-posthog.capture('cta-button-clicked', {
-    button_name: 'Get Started',
-    page: 'homepage'
-})
+posthog.capture("cta-button-clicked", {
+  button_name: "Get Started",
+  page: "homepage",
+});
 ```
 
 ---
@@ -1079,21 +1087,21 @@ Available events: - `eventCaptured`: Emitted immediately before trying to send a
 
 ### Examples
 
-#### 
+####
 
 ```ts
-posthog.on('eventCaptured', (event) => {
-  console.log(event)
-})
+posthog.on("eventCaptured", (event) => {
+  console.log(event);
+});
 ```
 
 #### Track when feature flags are reloading to show a loading state
 
 ```ts
 // Track when feature flags are reloading to show a loading state
-posthog.on('featureFlagsReloading', () => {
-  console.log('Feature flags are being reloaded...')
-})
+posthog.on("featureFlagsReloading", () => {
+  console.log("Feature flags are being reloaded...");
+});
 ```
 
 ---
@@ -1123,9 +1131,9 @@ Session super properties are automatically added to all events during the curren
 ```ts
 // register session-specific properties
 posthog.register_for_session({
-    current_page_type: 'checkout',
-    ab_test_variant: 'control'
-})
+  current_page_type: "checkout",
+  ab_test_variant: "control",
+});
 ```
 
 #### register properties for user flow tracking
@@ -1133,10 +1141,10 @@ posthog.register_for_session({
 ```ts
 // register properties for user flow tracking
 posthog.register_for_session({
-    selected_plan: 'pro',
-    completed_steps: 3,
-    flow_id: 'signup_flow_v2'
-})
+  selected_plan: "pro",
+  completed_steps: 3,
+  flow_id: "signup_flow_v2",
+});
 ```
 
 ---
@@ -1168,9 +1176,9 @@ Unlike `register()`, this method will not overwrite existing super properties. U
 ```ts
 // register once-only properties
 posthog.register_once({
-    first_login_date: new Date().toISOString(),
-    initial_referrer: document.referrer
-})
+  first_login_date: new Date().toISOString(),
+  initial_referrer: document.referrer,
+});
 ```
 
 #### override existing value if it matches default
@@ -1178,9 +1186,9 @@ posthog.register_once({
 ```ts
 // override existing value if it matches default
 posthog.register_once(
-    { user_type: 'premium' },
-    'unknown'  // overwrite if current value is 'unknown'
-)
+  { user_type: "premium" },
+  "unknown", // overwrite if current value is 'unknown'
+);
 ```
 
 ---
@@ -1210,7 +1218,7 @@ Super properties are stored in persistence and automatically added to every even
 
 ```ts
 // register a single property
-posthog.register({ plan: 'premium' })
+posthog.register({ plan: "premium" });
 ```
 
 #### register multiple properties
@@ -1218,17 +1226,17 @@ posthog.register({ plan: 'premium' })
 ```ts
 // register multiple properties
 posthog.register({
-    email: 'user@example.com',
-    account_type: 'business',
-    signup_date: '2023-01-15'
-})
+  email: "user@example.com",
+  account_type: "business",
+  signup_date: "2023-01-15",
+});
 ```
 
 #### register with custom expiration
 
 ```ts
 // register with custom expiration
-posthog.register({ campaign: 'summer_sale' }, 7) // expires in 7 days
+posthog.register({ campaign: "summer_sale" }, 7); // expires in 7 days
 ```
 
 ---
@@ -1255,7 +1263,7 @@ This will stop the property from being automatically included in future events f
 
 ```ts
 // remove a session property
-posthog.unregister_for_session('current_flow')
+posthog.unregister_for_session("current_flow");
 ```
 
 ---
@@ -1282,7 +1290,7 @@ This will stop the property from being automatically included in future events. 
 
 ```ts
 // remove a super property
-posthog.unregister('plan_type')
+posthog.unregister("plan_type");
 ```
 
 ---
@@ -1307,10 +1315,10 @@ Capture a log entry and send it to the PostHog logs endpoint.
 
 ```ts
 posthog.captureLog({
-  body: 'checkout completed',
-  level: 'info',
-  attributes: { order_id: 'ord_789', amount_cents: 4999 },
-})
+  body: "checkout completed",
+  level: "info",
+  attributes: { order_id: "ord_789", amount_cents: 4999 },
+});
 ```
 
 ---
@@ -1405,7 +1413,7 @@ Returns the current consent status for event tracking and data persistence.
 
 ```ts
 if (posthog.has_opted_in_capturing()) {
-    // show analytics features
+  // show analytics features
 }
 ```
 
@@ -1429,7 +1437,7 @@ Returns the current consent status for event tracking and data persistence.
 
 ```ts
 if (posthog.has_opted_out_capturing()) {
-    // disable analytics features
+  // disable analytics features
 }
 ```
 
@@ -1469,9 +1477,9 @@ Enables event tracking and data persistence (cookies/localStorage) for this Post
 ### Parameters
 
 - **`options?`** (`{
-        captureEventName?: EventName | null | false; /** event name to be used for capturing the opt-in action */
-        captureProperties?: Properties; /** set of properties to be captured along with the opt-in action */
-    }`) - A dictionary of opt-in options.
+    captureEventName?: EventName | null | false; /** event name to be used for capturing the opt-in action */
+    captureProperties?: Properties; /** set of properties to be captured along with the opt-in action */
+}`) - A dictionary of opt-in options.
 
 ### Returns
 
@@ -1483,7 +1491,7 @@ Enables event tracking and data persistence (cookies/localStorage) for this Post
 
 ```ts
 // simple opt-in
-posthog.opt_in_capturing()
+posthog.opt_in_capturing();
 ```
 
 #### opt-in with custom event and properties
@@ -1491,9 +1499,9 @@ posthog.opt_in_capturing()
 ```ts
 // opt-in with custom event and properties
 posthog.opt_in_capturing({
-    captureEventName: 'Privacy Accepted',
-    captureProperties: { source: 'banner' }
-})
+  captureEventName: "Privacy Accepted",
+  captureProperties: { source: "banner" },
+});
 ```
 
 #### opt-in without capturing event
@@ -1501,8 +1509,8 @@ posthog.opt_in_capturing({
 ```ts
 // opt-in without capturing event
 posthog.opt_in_capturing({
-    captureEventName: false
-})
+  captureEventName: false,
+});
 ```
 
 ---
@@ -1525,7 +1533,7 @@ Disables event tracking and data persistence (cookies/localStorage) for this Pos
 
 ```ts
 // opt user out (e.g., on privacy settings page)
-posthog.opt_out_capturing()
+posthog.opt_out_capturing();
 ```
 
 ---
@@ -1556,14 +1564,14 @@ Debug mode logs all PostHog calls to the browser console for troubleshooting. Ca
 
 ```ts
 // enable debug mode
-posthog.debug(true)
+posthog.debug(true);
 ```
 
 #### disable debug mode
 
 ```ts
 // disable debug mode
-posthog.debug(false)
+posthog.debug(false);
 ```
 
 ---
@@ -1577,6 +1585,7 @@ Returns the current page view ID.
 ### Returns
 
 **Union of:**
+
 - `string`
 - `undefined`
 
@@ -1615,17 +1624,17 @@ All new instances are added to the main posthog object as sub properties (such a
 
 ```ts
 // basic initialization
-posthog.init('<ph_project_api_key>', {
-    api_host: '<ph_client_api_host>'
-})
+posthog.init("<ph_project_api_key>", {
+  api_host: "<ph_client_api_host>",
+});
 ```
 
 #### multiple instances
 
 ```ts
 // multiple instances
-posthog.init('<ph_project_api_key>', {}, 'project1')
-posthog.init('<ph_project_api_key>', {}, 'project2')
+posthog.init("<ph_project_api_key>", {}, "project1");
+posthog.init("<ph_project_api_key>", {}, "project2");
 ```
 
 ---
@@ -1664,9 +1673,9 @@ Returns the Replay url for the current session.
 ### Parameters
 
 - **`options?`** (`{
-        withTimestamp?: boolean;
-        timestampLookBack?: number;
-    }`) - Options for the URL.
+    withTimestamp?: boolean;
+    timestampLookBack?: number;
+}`) - Options for the URL.
 
 ### Returns
 
@@ -1678,14 +1687,14 @@ Returns the Replay url for the current session.
 
 ```ts
 // basic usage
-posthog.get_session_replay_url()
+posthog.get_session_replay_url();
 ```
 
 #### timestamp
 
 ```ts
 // timestamp
-posthog.get_session_replay_url({ withTimestamp: true })
+posthog.get_session_replay_url({ withTimestamp: true });
 ```
 
 #### timestamp and lookback
@@ -1694,8 +1703,8 @@ posthog.get_session_replay_url({ withTimestamp: true })
 // timestamp and lookback
 posthog.get_session_replay_url({
   withTimestamp: true,
-  timestampLookBack: 30 // look back 30 seconds
-})
+  timestampLookBack: 30, // look back 30 seconds
+});
 ```
 
 ---
@@ -1715,7 +1724,7 @@ returns a boolean indicating whether session recording is currently running
 ```ts
 // Stop session recording if it's running
 if (posthog.sessionRecordingStarted()) {
-  posthog.stopSessionRecording()
+  posthog.stopSessionRecording();
 }
 ```
 
@@ -1730,11 +1739,11 @@ turns session recording on, and updates the config option `disable_session_recor
 ### Parameters
 
 - **`override?`** (`{
-        sampling?: boolean;
-        linked_flag?: boolean;
-        url_trigger?: true;
-        event_trigger?: true;
-    } | true`) - optional boolean to override the default sampling behavior - ensures the next session recording to start will not be skipped by sampling or linked_flag config. `true` is shorthand for  sampling: true, linked_flag: true
+    sampling?: boolean;
+    linked_flag?: boolean;
+    url_trigger?: true;
+    event_trigger?: true;
+} | true`) - optional boolean to override the default sampling behavior - ensures the next session recording to start will not be skipped by sampling or linked_flag config. `true` is shorthand for sampling: true, linked_flag: true
 
 ### Returns
 
@@ -1746,7 +1755,7 @@ turns session recording on, and updates the config option `disable_session_recor
 
 ```ts
 // Start and ignore controls
-posthog.startSessionRecording(true)
+posthog.startSessionRecording(true);
 ```
 
 #### Start and override controls
@@ -1758,8 +1767,8 @@ posthog.startSessionRecording({
   sampling: true || false,
   linked_flag: true || false,
   url_trigger: true || false,
-  event_trigger: true || false
-})
+  event_trigger: true || false,
+});
 ```
 
 ---
@@ -1778,7 +1787,7 @@ turns session recording off, and updates the config option disable_session_recor
 
 ```ts
 // Stop session recording
-posthog.stopSessionRecording()
+posthog.stopSessionRecording();
 ```
 
 ---
@@ -1804,36 +1813,36 @@ Get the list of early access features. To check enrollment status, use `isFeatur
 ### Examples
 
 ```ts
-const posthog = usePostHog()
-const activeFlags = useActiveFeatureFlags()
+const posthog = usePostHog();
+const activeFlags = useActiveFeatureFlags();
 
-const [activeBetas, setActiveBetas] = useState([])
-const [inactiveBetas, setInactiveBetas] = useState([])
-const [comingSoonFeatures, setComingSoonFeatures] = useState([])
+const [activeBetas, setActiveBetas] = useState([]);
+const [inactiveBetas, setInactiveBetas] = useState([]);
+const [comingSoonFeatures, setComingSoonFeatures] = useState([]);
 
 useEffect(() => {
-  posthog.getEarlyAccessFeatures((features) => {
-    // Filter features by stage
-    const betaFeatures = features.filter(feature => feature.stage === 'beta')
-    const conceptFeatures = features.filter(feature => feature.stage === 'concept')
+  posthog.getEarlyAccessFeatures(
+    (features) => {
+      // Filter features by stage
+      const betaFeatures = features.filter((feature) => feature.stage === "beta");
+      const conceptFeatures = features.filter((feature) => feature.stage === "concept");
 
-    setComingSoonFeatures(conceptFeatures)
+      setComingSoonFeatures(conceptFeatures);
 
-    if (!activeFlags || activeFlags.length === 0) {
-      setInactiveBetas(betaFeatures)
-      return
-    }
+      if (!activeFlags || activeFlags.length === 0) {
+        setInactiveBetas(betaFeatures);
+        return;
+      }
 
-    const activeBetas = betaFeatures.filter(
-            beta => activeFlags.includes(beta.flagKey)
-        );
-    const inactiveBetas = betaFeatures.filter(
-            beta => !activeFlags.includes(beta.flagKey)
-        );
-    setActiveBetas(activeBetas)
-    setInactiveBetas(inactiveBetas)
-  }, true, ['concept', 'beta'])
-}, [activeFlags])
+      const activeBetas = betaFeatures.filter((beta) => activeFlags.includes(beta.flagKey));
+      const inactiveBetas = betaFeatures.filter((beta) => !activeFlags.includes(beta.flagKey));
+      setActiveBetas(activeBetas);
+      setInactiveBetas(inactiveBetas);
+    },
+    true,
+    ["concept", "beta"],
+  );
+}, [activeFlags]);
 ```
 
 ---
@@ -1856,6 +1865,7 @@ Returns the feature flag value which can be a boolean, string, or undefined. Sup
 ### Returns
 
 **Union of:**
+
 - `boolean`
 - `string`
 - `undefined`
@@ -1866,8 +1876,8 @@ Returns the feature flag value which can be a boolean, string, or undefined. Sup
 
 ```ts
 // check boolean flag
-if (posthog.getFeatureFlag('new-feature')) {
-    // show new feature
+if (posthog.getFeatureFlag("new-feature")) {
+  // show new feature
 }
 ```
 
@@ -1875,9 +1885,9 @@ if (posthog.getFeatureFlag('new-feature')) {
 
 ```ts
 // check multivariate flag
-const variant = posthog.getFeatureFlag('button-color')
-if (variant === 'red') {
-    // show red button
+const variant = posthog.getFeatureFlag("button-color");
+if (variant === "red") {
+  // show red button
 }
 ```
 
@@ -1900,10 +1910,10 @@ Get feature flag payload value matching key for user (supports multivariate flag
 ### Examples
 
 ```ts
-const betaFeature = posthog.getFeatureFlagResult('beta-feature')
-if (betaFeature?.variant === 'some-value') {
-     const someValue = betaFeature?.payload
-     // do something
+const betaFeature = posthog.getFeatureFlagResult("beta-feature");
+if (betaFeature?.variant === "some-value") {
+  const someValue = betaFeature?.payload;
+  // do something
 }
 ```
 
@@ -1925,17 +1935,18 @@ By default, this method emits the `$feature_flag_called` event.
 ### Returns
 
 **Union of:**
+
 - `FeatureFlagResult`
 - `undefined`
 
 ### Examples
 
-#### 
+####
 
 ```ts
-const result = posthog.getFeatureFlagResult('my-flag')
+const result = posthog.getFeatureFlagResult("my-flag");
 if (result?.enabled) {
-    console.log('Flag is enabled with payload:', result.payload)
+  console.log("Flag is enabled with payload:", result.payload);
 }
 ```
 
@@ -1943,9 +1954,9 @@ if (result?.enabled) {
 
 ```ts
 // multivariate flag
-const result = posthog.getFeatureFlagResult('button-color')
-if (result?.variant === 'red') {
-    showRedButton(result.payload)
+const result = posthog.getFeatureFlagResult("button-color");
+if (result?.variant === "red") {
+  showRedButton(result.payload);
 }
 ```
 
@@ -1965,8 +1976,8 @@ Returns `true` or `false` when the flag has an evaluation value. A `false` resul
 
 - **`key`** (`string`) - Key of the feature flag.
 - **`options`** (`IsFeatureEnabledOptions & {
-        defaultValue: boolean;
-    }`) - Optional lookup settings. If `{ send_event: false }`, we won't send a `$feature_flag_called` event to PostHog. If `{ fresh: true }`, we won't return cached values from localStorage - only values loaded from the server. If `{ defaultValue: false }`, we return that value instead of undefined when the flag has no value.
+    defaultValue: boolean;
+}`) - Optional lookup settings. If `{ send_event: false }`, we won't send a `$feature_flag_called` event to PostHog. If `{ fresh: true }`, we won't return cached values from localStorage - only values loaded from the server. If `{ defaultValue: false }`, we return that value instead of undefined when the flag has no value.
 
 ### Returns
 
@@ -1978,8 +1989,8 @@ Returns `true` or `false` when the flag has an evaluation value. A `false` resul
 
 ```ts
 // simple feature flag check
-if (posthog.isFeatureEnabled('new-checkout')) {
-    showNewCheckout()
+if (posthog.isFeatureEnabled("new-checkout")) {
+  showNewCheckout();
 }
 ```
 
@@ -1987,8 +1998,8 @@ if (posthog.isFeatureEnabled('new-checkout')) {
 
 ```ts
 // disable event tracking
-if (posthog.isFeatureEnabled('feature', { send_event: false })) {
-    // flag checked without sending $feature_flag_called event
+if (posthog.isFeatureEnabled("feature", { send_event: false })) {
+  // flag checked without sending $feature_flag_called event
 }
 ```
 
@@ -2011,9 +2022,9 @@ Register an event listener that runs when feature flags become available or when
 ### Examples
 
 ```ts
-posthog.onFeatureFlags(function(featureFlags, featureFlagsVariants, { errorsLoading }) {
-    // do something
-})
+posthog.onFeatureFlags(function (featureFlags, featureFlagsVariants, { errorsLoading }) {
+  // do something
+});
 ```
 
 ---
@@ -2031,7 +2042,7 @@ Feature flag values are cached. If something has changed with your user and you'
 ### Examples
 
 ```ts
-posthog.reloadFeatureFlags()
+posthog.reloadFeatureFlags();
 ```
 
 ---
@@ -2053,7 +2064,7 @@ Resets the group properties for feature flags.
 ### Examples
 
 ```ts
-posthog.resetGroupPropertiesForFlags()
+posthog.resetGroupPropertiesForFlags();
 ```
 
 ---
@@ -2074,17 +2085,17 @@ Resets the person properties for feature flags.
 
 ### Examples
 
-#### 
+####
 
 ```ts
-posthog.resetPersonPropertiesForFlags()
+posthog.resetPersonPropertiesForFlags();
 ```
 
 #### Reset properties without reloading
 
 ```ts
 // Reset properties without reloading
-posthog.resetPersonPropertiesForFlags(false)
+posthog.resetPersonPropertiesForFlags(false);
 ```
 
 ---
@@ -2098,8 +2109,8 @@ Set override group properties for feature flags. This is used when dealing with 
 ### Parameters
 
 - **`properties`** (`{
-        [type: string]: Properties;
-    }`) - The properties to override, the key of which is the group type.
+    [type: string]: Properties;
+}`) - The properties to override, the key of which is the group type.
 - **`reloadFeatureFlags?`** (`boolean`) - Whether to reload feature flags.
 
 ### Returns
@@ -2112,14 +2123,14 @@ Set override group properties for feature flags. This is used when dealing with 
 
 ```ts
 // Set properties with reload
-posthog.setGroupPropertiesForFlags({'organization': { name: 'CYZ', employees: '11' } })
+posthog.setGroupPropertiesForFlags({ organization: { name: "CYZ", employees: "11" } });
 ```
 
 #### Set properties without reload
 
 ```ts
 // Set properties without reload
-posthog.setGroupPropertiesForFlags({'organization': { name: 'CYZ', employees: '11' } }, false)
+posthog.setGroupPropertiesForFlags({ organization: { name: "CYZ", employees: "11" } }, false);
 ```
 
 ---
@@ -2145,14 +2156,14 @@ Sometimes, you might want to evaluate feature flags using properties that haven'
 
 ```ts
 // Set properties
-posthog.setPersonPropertiesForFlags({'property1': 'value', property2: 'value2'})
+posthog.setPersonPropertiesForFlags({ property1: "value", property2: "value2" });
 ```
 
 #### Set properties without reloading
 
 ```ts
 // Set properties without reloading
-posthog.setPersonPropertiesForFlags({'property1': 'value', property2: 'value2'}, false)
+posthog.setPersonPropertiesForFlags({ property1: "value", property2: "value2" }, false);
 ```
 
 ---
@@ -2177,39 +2188,22 @@ Opt the user in or out of an early access feature. [Learn more in the docs](/doc
 
 ```ts
 const toggleBeta = (betaKey) => {
-  if (activeBetas.some(
-    beta => beta.flagKey === betaKey
-  )) {
-    posthog.updateEarlyAccessFeatureEnrollment(
-      betaKey,
-      false
-    )
-    setActiveBetas(
-      prevActiveBetas => prevActiveBetas.filter(
-        item => item.flagKey !== betaKey
-      )
-    );
-    return
+  if (activeBetas.some((beta) => beta.flagKey === betaKey)) {
+    posthog.updateEarlyAccessFeatureEnrollment(betaKey, false);
+    setActiveBetas((prevActiveBetas) => prevActiveBetas.filter((item) => item.flagKey !== betaKey));
+    return;
   }
 
-  posthog.updateEarlyAccessFeatureEnrollment(
-    betaKey,
-    true
-  )
-  setInactiveBetas(
-    prevInactiveBetas => prevInactiveBetas.filter(
-      item => item.flagKey !== betaKey
-    )
+  posthog.updateEarlyAccessFeatureEnrollment(betaKey, true);
+  setInactiveBetas((prevInactiveBetas) =>
+    prevInactiveBetas.filter((item) => item.flagKey !== betaKey),
   );
-}
+};
 
 const registerInterest = (featureKey) => {
-  posthog.updateEarlyAccessFeatureEnrollment(
-    featureKey,
-    true
-  )
+  posthog.updateEarlyAccessFeatureEnrollment(featureKey, true);
   // Update UI to show user has registered
-}
+};
 ```
 
 ---
@@ -2226,8 +2220,8 @@ This is useful when you have feature flag values from an external source (e.g., 
 - **`flags`** (`Record<string, boolean | string>`) - An object mapping flag keys to their values (boolean or string variant)
 - **`payloads?`** (`Record<string, JsonType>`) - Optional object mapping flag keys to their JSON payloads
 - **`options?`** (`{
-        merge?: boolean;
-    }`) - Optional settings. Use `{ merge: true }` to merge with existing flags instead of replacing.
+    merge?: boolean;
+}`) - Optional settings. Use `{ merge: true }` to merge with existing flags instead of replacing.
 
 ### Returns
 
@@ -2238,22 +2232,15 @@ This is useful when you have feature flag values from an external source (e.g., 
 ```ts
 // Replace all flags with server-evaluated values
 posthog.updateFlags({
-  'my-flag': true,
-  'my-experiment': 'variant-a'
-})
+  "my-flag": true,
+  "my-experiment": "variant-a",
+});
 
 // Merge with existing flags (update only specified flags)
-posthog.updateFlags(
-  { 'my-flag': true },
-  undefined,
-  { merge: true }
-)
+posthog.updateFlags({ "my-flag": true }, undefined, { merge: true });
 
 // With payloads
-posthog.updateFlags(
-  { 'my-flag': true },
-  { 'my-flag': { some: 'data' } }
-)
+posthog.updateFlags({ "my-flag": true }, { "my-flag": { some: "data" } });
 ```
 
 ---
@@ -2308,7 +2295,7 @@ It is safe to call in isomorphic teardown code (for example a Nuxt/Next module t
 
 ```ts
 // symmetric teardown that runs on both server and client
-await posthog.shutdown()
+await posthog.shutdown();
 ```
 
 ---

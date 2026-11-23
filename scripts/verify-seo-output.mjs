@@ -20,7 +20,7 @@ const read = (rel) => readFileSync(join(staticDir, rel), "utf8");
 const has = (rel) => existsSync(join(staticDir, rel));
 
 /* The hero line comes from the module the pre-render self-check uses (the SSR
- * bundle `pnpm --filter @lavega/web prerender` leaves in dist-ssr), so the
+ * bundle `bun --filter @lavega/web prerender` leaves in dist-ssr), so the
  * expected text cannot drift from landingCopy.ts. */
 const { heroFirstLine, faqQuestions } = await import(
   new URL("../apps/web/dist-ssr/prerender.js", import.meta.url).href

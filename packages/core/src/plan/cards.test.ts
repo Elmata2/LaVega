@@ -30,11 +30,7 @@ const acct = (key: string, o: Partial<Account> = {}) =>
   mkAccount(key, { balance: 0, balanceDate: "2026-10-20", ...o });
 
 /** One spend per month on the account, `perMonthCents` each, 12 full months. */
-const spendOn = (
-  key: string,
-  perMonthCents: number,
-  o: Partial<Tx> = {},
-): Tx[] =>
+const spendOn = (key: string, perMonthCents: number, o: Partial<Tx> = {}): Tx[] =>
   MONTHS.flatMap((m) => [
     mkTx("Start", `${m}-01`, 1, { accountKey: key, category: "Salaris" }),
     mkTx("Shop", `${m}-15`, -perMonthCents / 100, {
@@ -44,10 +40,7 @@ const spendOn = (
     }),
   ]);
 
-const fee = (
-  centsPerYear: number,
-  billedPer: "jaar" | "maand" = "jaar",
-): ProductFee =>
+const fee = (centsPerYear: number, billedPer: "jaar" | "maand" = "jaar"): ProductFee =>
   ({
     productId: "p",
     product: "Kaart",
@@ -125,28 +118,16 @@ describe("netForCard", () => {
   });
 
   test("cashback unknown -> net unknown (no netCents), never 0; assumed 0% -> shown as assumed, net = minus the fee", () => {
-    const u = netForCard(
-      card("A", { cashback: unknownCb, fee: fee(5000) }),
-      600_000,
-      12,
-    );
+    const u = netForCard(card("A", { cashback: unknownCb, fee: fee(5000) }), 600_000, 12);
     expect(u.net).toBeNull();
     expect(u.netCents).toBeNull();
     expect(u.earnedCents).toBeNull();
     expect(u.cashbackTier).toBe("unknown");
-    const a = netForCard(
-      card("A", { cashback: assumed0, fee: fee(5000) }),
-      600_000,
-      12,
-    );
+    const a = netForCard(card("A", { cashback: assumed0, fee: fee(5000) }), 600_000, 12);
     expect(a.cashbackTier).toBe("assumed");
     expect(a.earnedCents).toBe(0);
     expect(a.net).toMatchObject({ kind: "no-recommendation", netCents: -5000 });
-    const off = netForCard(
-      card("A", { cashback: { tier: "uitgezet" } }),
-      600_000,
-      12,
-    );
+    const off = netForCard(card("A", { cashback: { tier: "uitgezet" } }), 600_000, 12);
     expect(off.cashbackTier).toBe("unknown");
     expect(off.netCents).toBeNull();
   });
@@ -176,10 +157,7 @@ describe("netForCard", () => {
       const n = netForCard(
         card("A", {
           cashback: measured(c.cashbackPct),
-          fee: fee(
-            c.feeCentsPerYear,
-            (c as { feeBilledPer?: "maand" | "jaar" }).feeBilledPer,
-          ),
+          fee: fee(c.feeCentsPerYear, (c as { feeBilledPer?: "maand" | "jaar" }).feeBilledPer),
         }),
         c.amountCents,
         c.horizonMonths,
@@ -208,15 +186,11 @@ describe("computeCards", () => {
     const none = run();
     expect(none.status).toBe("not-enough-data");
     expect(none.statusReason.key).toBe("no-card-data");
-    expect(none.missing).toContainEqual(
-      expect.objectContaining({ kind: "cards" }),
-    );
+    expect(none.missing).toContainEqual(expect.objectContaining({ kind: "cards" }));
     const noSpend = run({ cards: [card("A")] });
     expect(noSpend.status).toBe("not-enough-data");
     expect(noSpend.statusReason.key).toBe("no-cardable-spend");
-    expect(noSpend.missing).toContainEqual(
-      expect.objectContaining({ kind: "cardable-spend" }),
-    );
+    expect(noSpend.missing).toContainEqual(expect.objectContaining({ kind: "cardable-spend" }));
     expect(noSpend.figures.cardableSpendCents).toBe(0);
     expect(noSpend.figures.criteria).toHaveLength(1);
   });
@@ -269,8 +243,12 @@ describe("computeCards", () => {
       txs: spendOn("A", 10_000),
       catalogue: [
         {
-          id: "other", product: "Other card", bank: "X",
-          fields: { cashbackPct: { value: 2, checkedAt: "2026-10-01", sourceUrl: "https://x.example" } },
+          id: "other",
+          product: "Other card",
+          bank: "X",
+          fields: {
+            cashbackPct: { value: 2, checkedAt: "2026-10-01", sourceUrl: "https://x.example" },
+          },
         } as never,
       ],
     });
@@ -285,11 +263,17 @@ describe("computeCards", () => {
       ...spendOn("CC", 45_000),
       ...MONTHS.flatMap((m) => [
         mkTx("Landlord", `${m}-02`, -1500, { accountKey: "C1", category: "Wonen & energie" }),
-        mkTx("Belastingdienst", `${m}-03`, -300, { accountKey: "C1", category: "Belastingen & overheid" }),
+        mkTx("Belastingdienst", `${m}-03`, -300, {
+          accountKey: "C1",
+          category: "Belastingen & overheid",
+        }),
         mkTx("Zorg", `${m}-04`, -120, { accountKey: "C1", category: "Verzekeringen" }),
         mkTx("Own", `${m}-05`, -200, { accountKey: "C1", category: "Sparen & beleggen" }),
         mkTx("ATM", `${m}-06`, -50, { accountKey: "C1", category: "Geldopname" }),
-        mkTx("Santander Consumer Finance", `${m}-07`, -250, { accountKey: "C1", category: "Boodschappen" }),
+        mkTx("Santander Consumer Finance", `${m}-07`, -250, {
+          accountKey: "C1",
+          category: "Boodschappen",
+        }),
       ]),
     ];
     const r = run({
@@ -316,27 +300,30 @@ describe("computeCards", () => {
     const CC = acct("CC");
     const txs = [
       ...spendOn("CC", c.amountCents / 12),
-      ...MONTHS.map((m) => mkTx("Landlord", `${m}-02`, -c.notCardablePerMonthCents / 100, { accountKey: "C1", category: "Wonen & energie" })),
+      ...MONTHS.map((m) =>
+        mkTx("Landlord", `${m}-02`, -c.notCardablePerMonthCents / 100, {
+          accountKey: "C1",
+          category: "Wonen & energie",
+        }),
+      ),
     ];
-    const r = run({ accounts: [CUR, CC], cards: [card("CC", { cashback: measured(c.cashbackPct) })], txs });
+    const r = run({
+      accounts: [CUR, CC],
+      cards: [card("CC", { cashback: measured(c.cashbackPct) })],
+      txs,
+    });
     expect(r.figures.cardableSpendCents).toBe(c.amountCents);
     expect(r.figures.nets[0]!.netCents).toBe(c.expectedNetCents);
   });
 
   test("unknown net of another card never triggers attention; unknown in-use net -> not-enough-data", () => {
     const r = run({
-      cards: [
-        card("A", { cashback: measured(1) }),
-        card("B", { cashback: unknownCb }),
-      ],
+      cards: [card("A", { cashback: measured(1) }), card("B", { cashback: unknownCb })],
       txs: spendOn("A", 10_000),
     });
     expect(r.status).toBe("on-track");
     const u = run({
-      cards: [
-        card("A", { cashback: unknownCb }),
-        card("B", { cashback: measured(5) }),
-      ],
+      cards: [card("A", { cashback: unknownCb }), card("B", { cashback: measured(5) })],
       txs: spendOn("A", 10_000),
     });
     expect(u.status).toBe("not-enough-data");
@@ -349,18 +336,10 @@ describe("computeCards", () => {
       card("A", { label: "Alfa" }),
       card("B", { label: "Mid" }),
     ];
-    const txs = [
-      ...spendOn("A", 5000),
-      ...spendOn("B", 5000),
-      ...spendOn("C", 5000),
-    ];
+    const txs = [...spendOn("A", 5000), ...spendOn("B", 5000), ...spendOn("C", 5000)];
     const a = run({ cards, txs });
     const b = run({ cards: [...cards].reverse(), txs: [...txs].reverse() });
-    expect(a.figures.criteria.map((c) => c.name)).toEqual([
-      "Alfa",
-      "Mid",
-      "Zeta",
-    ]);
+    expect(a.figures.criteria.map((c) => c.name)).toEqual(["Alfa", "Mid", "Zeta"]);
     expect(JSON.stringify(b)).toBe(JSON.stringify(a));
     const keys = new Set<string>();
     const walk = (v: unknown): void => {
@@ -372,9 +351,7 @@ describe("computeCards", () => {
         }
     };
     walk(a);
-    expect(
-      [...keys].filter((k) => /rank|score|best|recommend|highlight/i.test(k)),
-    ).toEqual([]);
+    expect([...keys].filter((k) => /rank|score|best|recommend|highlight/i.test(k))).toEqual([]);
   });
 
   test("criteria rows: unknown columns are typed placeholders, tiers mapped, annual fee unknown is null", () => {
@@ -434,16 +411,10 @@ describe("computeCards", () => {
     });
     const prefs = {
       ...emptyPlanPreferences(),
-      redemptionExamples: [
-        ex("1", 10_000, 4000),
-        ex("2", 10_000, 10_000),
-        ex("3", 10_000, 7000),
-      ],
+      redemptionExamples: [ex("1", 10_000, 4000), ex("2", 10_000, 10_000), ex("3", 10_000, 7000)],
     };
     const r = run({
-      cards: [
-        card("A", { programId: "avios", pointsPerEuro: 1, provenance: PROV }),
-      ],
+      cards: [card("A", { programId: "avios", pointsPerEuro: 1, provenance: PROV })],
       txs: spendOn("A", 10_000),
       rewards: [
         makeRewardsBalance({
@@ -468,9 +439,7 @@ describe("computeCards", () => {
       highCents: 1200,
     });
     const none = run({
-      cards: [
-        card("A", { programId: "avios", pointsPerEuro: 1, provenance: PROV }),
-      ],
+      cards: [card("A", { programId: "avios", pointsPerEuro: 1, provenance: PROV })],
       txs: spendOn("A", 10_000),
       rewards: [
         makeRewardsBalance({
@@ -496,9 +465,7 @@ describe("computeCards", () => {
       ],
       txs: spendOn("A", 10_000),
     });
-    const be = Object.fromEntries(
-      r.figures.breakEven.map((b) => [b.cardKey, b.annualSpendCents]),
-    );
+    const be = Object.fromEntries(r.figures.breakEven.map((b) => [b.cardKey, b.annualSpendCents]));
     expect(be).toEqual({ A: 800_000, B: null, C: null, D: null });
   });
 
@@ -533,15 +500,9 @@ describe("computeCards", () => {
     });
     const far = r.facts.find((f) => f.factId === "points_expiry:flying")!;
     expect(far.mustMention).toBe(false);
-    expect(r.figures.balances.find((b) => b.programId === "avios")!.stale).toBe(
-      true,
-    );
-    expect(
-      r.figures.balances.find((b) => b.programId === "flying")!.stale,
-    ).toBe(false);
-    expect(
-      r.figures.balances.find((b) => b.programId === "avios")!.expiresOn,
-    ).toBe("2026-12-01");
+    expect(r.figures.balances.find((b) => b.programId === "avios")!.stale).toBe(true);
+    expect(r.figures.balances.find((b) => b.programId === "flying")!.stale).toBe(false);
+    expect(r.figures.balances.find((b) => b.programId === "avios")!.expiresOn).toBe("2026-12-01");
   });
 
   test("foreign-currency card spend excluded and counted; business-entity card excluded", () => {
@@ -567,9 +528,10 @@ describe("computeCards", () => {
     });
     expect(r.figures.cardableSpendCents).toBe(120_000);
     expect(r.figures.criteria.map((c) => c.cardKey)).toEqual(["A"]);
-    expect(
-      r.calc.find((c) => c.id === "cardable-spend")!.inputs["foreign_excluded"],
-    ).toEqual({ unit: "count", value: 1 });
+    expect(r.calc.find((c) => c.id === "cardable-spend")!.inputs["foreign_excluded"]).toEqual({
+      unit: "count",
+      value: 1,
+    });
   });
 
   test("facts: ids hash the card key (IBAN), no raw key; calc ids are all declared; integer cents", () => {
@@ -599,15 +561,11 @@ describe("computeCards", () => {
       expect(f.factId).not.toContain(iban.toLowerCase());
     }
     expect(r.facts.some((f) => f.factId.startsWith("card_net:"))).toBe(true);
-    expect(r.facts.some((f) => f.factId.startsWith("card_break_even:"))).toBe(
-      true,
-    );
+    expect(r.facts.some((f) => f.factId.startsWith("card_break_even:"))).toBe(true);
     expect(JSON.stringify(r)).not.toMatch(/NaN|Infinity/);
-    for (const s of r.calc)
-      expect((CARDS_CALC_IDS as readonly string[]).includes(s.id)).toBe(true);
+    for (const s of r.calc) expect((CARDS_CALC_IDS as readonly string[]).includes(s.id)).toBe(true);
     for (const f of Object.values(r.flat))
-      if (f.unit === "cents" && f.value !== null)
-        expect(Number.isInteger(f.value)).toBe(true);
+      if (f.unit === "cents" && f.value !== null) expect(Number.isInteger(f.value)).toBe(true);
     const sheet = buildFactSheet(r.facts, { locale: "nl", asOf: AS_OF });
     expect(JSON.stringify(sheet)).not.toContain(iban);
   });
@@ -664,14 +622,10 @@ describe("computeCards", () => {
       });
     const without = mk(false);
     expect(without.figures.nets[0]!.pointsEarned).toBeNull();
-    expect(
-      without.facts.some((f) => f.factId.startsWith("card_points_year")),
-    ).toBe(false);
+    expect(without.facts.some((f) => f.factId.startsWith("card_points_year"))).toBe(false);
     const withP = mk(true);
     expect(withP.figures.nets[0]!.pointsEarned).toBe(1200);
-    expect(
-      withP.facts.some((f) => f.factId.startsWith("card_points_year")),
-    ).toBe(true);
+    expect(withP.facts.some((f) => f.factId.startsWith("card_points_year"))).toBe(true);
   });
 
   test("I4: unknown in-use net uses in-use-card-unknown", () => {
@@ -715,12 +669,8 @@ describe("computeCards", () => {
       r.facts.find((f) => f.factId === id)!.exact;
     const one = mk("Alfa", "Zeta");
     const two = mk("Zeta", "Alfa");
-    expect(exact(one, "card_points_year:avios")).toBe(
-      exact(two, "card_points_year:avios"),
-    );
-    expect(exact(one, "card_points_year:avios-2")).toBe(
-      exact(two, "card_points_year:avios-2"),
-    );
+    expect(exact(one, "card_points_year:avios")).toBe(exact(two, "card_points_year:avios"));
+    expect(exact(one, "card_points_year:avios-2")).toBe(exact(two, "card_points_year:avios-2"));
   });
 
   test("AS_OF is the clock: nothing reads the real date", () => {
@@ -736,10 +686,7 @@ describe("computeCards", () => {
       cards: HeldCardInput[],
       profile: Partial<PlanInput["profile"]> = {},
       extra: Partial<PlanInput> = {},
-    ) =>
-      computeCards(
-        planInput({ heldCards: cards, profile: { ...SPEND, ...profile }, ...extra }),
-      );
+    ) => computeCards(planInput({ heldCards: cards, profile: { ...SPEND, ...profile }, ...extra }));
 
     test("stated card with no bank data is ranked", () => {
       const r = runStated([
@@ -785,8 +732,10 @@ describe("computeCards", () => {
 
     test("often foreign spend adds fx fees", () => {
       const cards = [stated("a", { cashback: measured(1), fee: fee(0), fxFeePct: 2 })];
-      const share = (foreignSpend: PlanInput["profile"]["foreignSpend"], mix: PlanInput["profile"]["spendMix"] = []) =>
-        runStated(cards, { foreignSpend, spendMix: mix }).figures.nets[0]!;
+      const share = (
+        foreignSpend: PlanInput["profile"]["foreignSpend"],
+        mix: PlanInput["profile"]["spendMix"] = [],
+      ) => runStated(cards, { foreignSpend, spendMix: mix }).figures.nets[0]!;
       // 600_000 * 15% * 2% = 1800
       expect(share("often")).toMatchObject({ fxFeeCents: 1800, netCents: 4200 });
       // 5%: 600_000 * 5% * 2% = 600
@@ -802,17 +751,15 @@ describe("computeCards", () => {
     });
 
     test("net and netCents agree after the fx fee", () => {
-      const n = runStated(
-        [stated("a", { cashback: measured(1), fee: fee(0), fxFeePct: 2 })],
-        { foreignSpend: "often" },
-      ).figures.nets[0]!;
+      const n = runStated([stated("a", { cashback: measured(1), fee: fee(0), fxFeePct: 2 })], {
+        foreignSpend: "often",
+      }).figures.nets[0]!;
       expect(n.netCents).toBe(4200);
       expect(n.net).toMatchObject({ kind: "net", netCents: 4200, costCents: 1800 });
       // fx larger than the cashback: the sign flips and the kind with it
-      const loss = runStated(
-        [stated("a", { cashback: measured(0.1), fee: fee(0), fxFeePct: 2 })],
-        { foreignSpend: "often" },
-      ).figures.nets[0]!;
+      const loss = runStated([stated("a", { cashback: measured(0.1), fee: fee(0), fxFeePct: 2 })], {
+        foreignSpend: "often",
+      }).figures.nets[0]!;
       expect(loss.netCents).toBe(600 - 1800);
       expect(loss.net).toMatchObject({ kind: "no-recommendation", netCents: -1200 });
     });
@@ -842,11 +789,7 @@ describe("computeCards", () => {
 
     test("revolver ranks by interest and shows the interest figure", () => {
       const r = runStated(
-        [
-          stated("x", { interestPct: 20 }),
-          stated("y", { interestPct: 15 }),
-          stated("z"),
-        ],
+        [stated("x", { interestPct: 20 }), stated("y", { interestPct: 15 }), stated("z")],
         { cardRepayment: "rarely" },
       );
       expect(r.figures.interest).toEqual({
@@ -858,7 +801,9 @@ describe("computeCards", () => {
         ],
       });
       expect(r.figures.nets.map((n) => n.cardKey)).toEqual(["stated:y", "stated:x", "stated:z"]);
-      const sometimes = runStated([stated("x", { interestPct: 20 })], { cardRepayment: "sometimes" });
+      const sometimes = runStated([stated("x", { interestPct: 20 })], {
+        cardRepayment: "sometimes",
+      });
       expect(sometimes.figures.interest?.cards[0]?.yearlyCents).toBe(10_000);
       for (const full of ["full", null] as const)
         expect(
@@ -875,9 +820,7 @@ describe("computeCards", () => {
         at: "2026-09-01",
       };
       const prefs = { ...emptyPlanPreferences(), redemptionExamples: [ex] };
-      const cards = [
-        stated("a", { programId: "avios", pointsPerEuro: 1, provenance: PROV }),
-      ];
+      const cards = [stated("a", { programId: "avios", pointsPerEuro: 1, provenance: PROV })];
       const valued = (pointsGoal: PlanInput["profile"]["pointsGoal"]) =>
         runStated(cards, { pointsGoal }, { preferences: prefs }).figures.nets[0]!;
       expect(valued("cashback")).toMatchObject({
@@ -897,15 +840,31 @@ describe("computeCards", () => {
       expect(r.figures.interest).toBeUndefined();
       expect(Object.keys(r.figures).sort()).toEqual(
         [
-          "advice", "balances", "breakEven", "cardInUseKey", "cardableSpendCents", "criteria",
-          "excludedForeignCount", "months", "nets", "notCardableSpendCents", "sharedCases",
+          "advice",
+          "balances",
+          "breakEven",
+          "cardInUseKey",
+          "cardableSpendCents",
+          "criteria",
+          "excludedForeignCount",
+          "months",
+          "nets",
+          "notCardableSpendCents",
+          "sharedCases",
         ].sort(),
       );
       expect(r.figures.nets[0]).toEqual({
-        cardKey: "A", name: "A", programId: null, spendCents: 120_000, earnedCents: 1200,
-        feeShareCents: 1200, cashbackTier: "measured",
+        cardKey: "A",
+        name: "A",
+        programId: null,
+        spendCents: 120_000,
+        earnedCents: 1200,
+        feeShareCents: 1200,
+        cashbackTier: "measured",
         net: expect.objectContaining({ kind: "no-recommendation", netCents: 0 }),
-        netCents: 0, pointsEarned: null, pointsValueRange: null,
+        netCents: 0,
+        pointsEarned: null,
+        pointsValueRange: null,
       });
     });
   });
@@ -927,13 +886,23 @@ describe("computeCards: advice", () => {
       id: "gold",
       product: "Gold",
       kind: "creditcard",
-      fields: { accountFee: cv(20, { period: "maand" }), fxFeePct: cv(2.5), pointsPerEuro: cv(0), cashbackPct: cv(0) },
+      fields: {
+        accountFee: cv(20, { period: "maand" }),
+        fxFeePct: cv(2.5),
+        pointsPerEuro: cv(0),
+        cashbackPct: cv(0),
+      },
     },
     {
       id: "free",
       product: "Free",
       kind: "creditcard",
-      fields: { accountFee: cv(0, { period: "jaar" }), fxFeePct: cv(2), pointsPerEuro: cv(0), cashbackPct: cv(0) },
+      fields: {
+        accountFee: cv(0, { period: "jaar" }),
+        fxFeePct: cv(2),
+        pointsPerEuro: cv(0),
+        cashbackPct: cv(0),
+      },
     },
   ] as never;
   const cur = acct("CUR");

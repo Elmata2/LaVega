@@ -1,5 +1,11 @@
 import { expect, test } from "vitest";
-import { applyCardFiles, balanceAskKind, parseBankFile, signedBalanceFor, type Account } from "./index.js";
+import {
+  applyCardFiles,
+  balanceAskKind,
+  parseBankFile,
+  signedBalanceFor,
+  type Account,
+} from "./index.js";
 
 /* Accounts come from the REAL parse + stamp path, never hand-built. */
 const AMEX = `Date,Description,Card Member,Account #,Amount,Appears on Your Statement As,Extended Details
@@ -10,15 +16,27 @@ Card debit,2026-01-15 12:30:00,,,,,c1,EUR,-12.40,Cafe Test,Restaurants`;
 const ING = `"Datum";"Naam / Omschrijving";"Rekening";"Tegenrekening";"Code";"Af Bij";"Bedrag (EUR)";"Mutatiesoort";"Mededelingen"
 "20260102";"Albert Heijn";"NL01INGB0001";"";"BA";"Af";"12,34";"Betaalautomaat";"x"`;
 
-const written = (csv: string, name: string, target: Parameters<typeof applyCardFiles>[1][0]["target"]) =>
+const written = (
+  csv: string,
+  name: string,
+  target: Parameters<typeof applyCardFiles>[1][0]["target"],
+) =>
   applyCardFiles(
     { accounts: [], txs: [] },
     [{ result: parseBankFile(name, csv), target, link: target !== null }],
     "2026-11-16",
   ).accounts;
 
-const amex = written(AMEX, "a.csv", { cardId: "american-express-gold-card", label: "American Express Gold Card", brand: "amex" })[0]!;
-const t212 = written(T212, "trading212.csv", { cardId: "212-card", label: "212 Card", brand: "trading-212" });
+const amex = written(AMEX, "a.csv", {
+  cardId: "american-express-gold-card",
+  label: "American Express Gold Card",
+  brand: "amex",
+})[0]!;
+const t212 = written(T212, "trading212.csv", {
+  cardId: "212-card",
+  label: "212 Card",
+  brand: "trading-212",
+});
 const t212Card = t212.find((a) => a.key === "TRADING212-CARD")!;
 const ing = written(ING, "ing.csv", null)[0]!;
 

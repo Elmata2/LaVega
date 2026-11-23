@@ -53,16 +53,17 @@ numeric. Foreign-currency spend (converted by the existing FX mode) is totalled 
 can be computed; in "separate" mode it is excluded and counted, as elsewhere.
 
 D3 Net yearly value of a catalogue card = points value + cashback - yearly fee - FX cost.
- - fee: `readAccountFee` per year (known or card is not comparable);
- - FX cost: foreign annual spend x `fxFeePct` (needed only when the user has foreign spend);
- - points: annual spend in euro x `pointsPerEuro` (must be covered, 0 counts as known) x value per point. The
-   value per point is the user's own redemption examples (median; low/high shown), else the one sourced
-   reference rate we have (Membership Rewards 1.000 punten = EUR 3, Amex NL, read 21 Aug 2026, "Betalen met
-   Punten" only), else unknown: then points are NOT valued, the card stays comparable and is flagged
-   "puntenwaarde niet meegeteld" on every row that earns points;
- - cashback: only when the catalogue has a covered `cashbackPct`; absence is "niet meegerekend", never 0 shown
-   as a fact.
- Business/corporate cards are not in the universe (a consumer is not offered one); stated in the calculation.
+
+- fee: `readAccountFee` per year (known or card is not comparable);
+- FX cost: foreign annual spend x `fxFeePct` (needed only when the user has foreign spend);
+- points: annual spend in euro x `pointsPerEuro` (must be covered, 0 counts as known) x value per point. The
+  value per point is the user's own redemption examples (median; low/high shown), else the one sourced
+  reference rate we have (Membership Rewards 1.000 punten = EUR 3, Amex NL, read 21 Aug 2026, "Betalen met
+  Punten" only), else unknown: then points are NOT valued, the card stays comparable and is flagged
+  "puntenwaarde niet meegeteld" on every row that earns points;
+- cashback: only when the catalogue has a covered `cashbackPct`; absence is "niet meegerekend", never 0 shown
+  as a fact.
+  Business/corporate cards are not in the universe (a consumer is not offered one); stated in the calculation.
 
 D4 Recommendation rule. Baseline = best comparable net among the user's current credit cards (stated + cards in
 bank data with a catalogue match); no cards at all = 0 (not paying for a card). A better card is recommended when

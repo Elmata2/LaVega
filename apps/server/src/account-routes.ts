@@ -75,7 +75,10 @@ export function registerAccountRoutes(app: Hono, dependencies: AccountRouteDepen
      * deleting would hit an account the person did not look at. The value only
      * GATES; the tenant that is deleted is still the session's, never this. */
     if (body.expectedOwner !== tenantId) {
-      return c.json({ problems: ["Het account in deze sessie is een ander account"], code: "owner-changed" }, 409);
+      return c.json(
+        { problems: ["Het account in deze sessie is een ander account"], code: "owner-changed" },
+        409,
+      );
     }
 
     return c.json({ erased: await dependencies.resetPersonal(tenantId) });

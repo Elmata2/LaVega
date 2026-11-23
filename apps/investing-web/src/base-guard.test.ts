@@ -88,9 +88,9 @@ test("an HTML file with nothing to check fails instead of passing vacuously", ()
   );
 });
 
-/* The deploy gate. `pnpm --filter @lavega/investing-web verify:base` runs this
- * file with LAVEGA_EXPECT_INVESTING_BASE set to the path the image serves the
- * app under; the root Dockerfile runs it after the build. The expectation is
+/* The deploy gate. `bun --filter @lavega/investing-web verify:base` runs this
+ * file with LAVEGA_EXPECT_INVESTING_BASE set to the path the deploy serves the
+ * app under; `railway.json` runs it after the build. The expectation is
  * passed in deliberately rather than read back from VITE_INVESTING_BASE: the
  * original bug WAS that variable going missing, and a check that reads the same
  * missing variable would have agreed with the broken build. */

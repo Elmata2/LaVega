@@ -36,11 +36,13 @@
 ### Task 1: Content model and loader
 
 **Files:**
+
 - Create: `apps/site/package.json` (`@lavega/site`, `type: module`, scripts `test: vitest run`, `typecheck: tsc --noEmit`, `check`, `build`, `preview` added in later tasks), `apps/site/tsconfig.json` (extends `../../tsconfig.base.json`)
 - Create: `apps/site/src/content.ts`, `apps/site/src/content.test.ts`
 - Modify: root `package.json` (add the Markdown and YAML libraries as devDependencies), `pnpm-lock.yaml`
 
 **Interfaces:**
+
 - Produces:
   - `type Locale = "nl" | "en"`, `type Family = "vragen" | "gids" | "vs" | "seizoen" | "over" | "onderzoek"`
   - `type Source = { title: string; url: string; accessed: string }`
@@ -59,10 +61,12 @@
 ### Task 2: Content check
 
 **Files:**
+
 - Create: `apps/site/src/check.ts`, `apps/site/src/check.test.ts`, `apps/site/src/cli-check.ts`
 - Modify: `apps/site/package.json` (`"check": "tsx src/cli-check.ts ../../content"`)
 
 **Interfaces:**
+
 - Consumes: `Page`, `loadPages`, `counterpart` (Task 1); `findAdviceLanguage(text, locale): string[]`.
 - Produces: `type Finding = { file: string; rule: string; detail: string }`; `checkPages(pages: Page[]): Finding[]`; CLI exits 1 if any finding is on a `published` page, prints draft findings as warnings, exits 0 otherwise.
 
@@ -77,10 +81,12 @@ Rules, one `rule` id each: `advice` (findAdviceLanguage on title, description, b
 ### Task 3: Page renderer
 
 **Files:**
+
 - Create: `apps/site/src/render.ts`, `apps/site/src/jsonld.ts`, `apps/site/src/render.test.ts`, `apps/site/src/site.css`
 - Copy design tokens from `apps/web/src/styles/tokens.css` into `site.css` (read only, do not import across packages).
 
 **Interfaces:**
+
 - Consumes: Task 1 types and helpers.
 - Produces:
   - `renderPage(p: Page, all: Page[], opts: { origin: string; draft: boolean }): string` (full HTML document)
@@ -99,9 +105,11 @@ Template per spec §2: `<html lang>`, title, meta description, canonical (`origi
 ### Task 4: robots.txt, sitemap.xml, llms.txt
 
 **Files:**
+
 - Create: `apps/site/src/seoFiles.ts`, `apps/site/src/seoFiles.test.ts`, `apps/site/src/facts.ts`
 
 **Interfaces:**
+
 - Consumes: Task 1.
 - Produces: `robotsTxt(origin: string): string`; `sitemapXml(pages: Page[], origin: string): string` (includes `/`, `/en`, every hub with ≥1 page, every page; `lastmod` = `updated`; `xhtml:link` alternates when counterpart published); `llmsTxt(pages: Page[], facts: SiteFacts, origin: string): string`; `type SiteFacts` and `SITE_FACTS` in `facts.ts` (name, one-paragraph summary nl+en, does / does-not lists, "information, not advice", read-only bank data, local-first encryption, languages, `notToBeConfusedWith: string[]`, `price: string | null` = null, `sameAs: string[]` = []).
 
@@ -114,10 +122,12 @@ robots.txt exact groups: `User-agent: *` then named groups GPTBot, OAI-SearchBot
 ### Task 5: Site build and local preview
 
 **Files:**
+
 - Create: `apps/site/src/build.ts`, `apps/site/src/cli-build.ts`, `apps/site/src/build.test.ts`
 - Modify: `apps/site/package.json` (`"build": "tsx src/cli-build.ts --out dist"`, `"preview": "tsx src/cli-build.ts --out dist-preview --drafts --serve"`), `.gitignore` (`apps/site/dist`, `apps/site/dist-preview`)
 
 **Interfaces:**
+
 - Consumes: Tasks 1-4.
 - Produces: `buildSite(opts: { contentDir: string; outDir: string; drafts: boolean; origin: string }): Promise<{ overrides: Record<string, { path: string; contentType: string }> }>`. Writes `<url>.html` files (e.g. `vragen/x.html`, `en/questions/x.html`, hub `vragen.html`), `site.css`, `robots.txt`, `sitemap.xml`, `llms.txt`, and copies `apps/site/assets/**` (Task 7) to the out dir. `overrides` maps `"vragen/x.html"` → `{ path: "vragen/x", contentType: "text/html; charset=utf-8" }`. Runs `checkPages` first and throws on a published finding. `--serve` starts a `node:http` static server on port 4321 resolving `/x` → `x.html`.
 
@@ -128,10 +138,12 @@ robots.txt exact groups: `User-agent: *` then named groups GPTBot, OAI-SearchBot
 ### Task 6: Landing pre-render
 
 **Files:**
+
 - Create: `apps/web/src/prerender.tsx` (SSR entry), `apps/web/src/seoHead.ts`, `apps/web/src/seoHead.test.ts`, `apps/web/scripts/prerender-landing.mjs`
 - Modify: `apps/web/package.json` (script `"prerender": "vite build --ssr src/prerender.tsx --outDir dist-ssr && node scripts/prerender-landing.mjs"`), `.gitignore` (`apps/web/dist-ssr`)
 
 **Interfaces:**
+
 - Consumes: `landingCopy` (`apps/web/src/landingCopy.ts`), `hreflangLinks(origin)` (`apps/web/src/locale.ts:74`), `Landing` default export.
 - Produces: `renderLanding(locale: Locale): string` (markup via `renderToString`), `landingHead(locale: Locale, origin: string): string` (title, description, canonical, hreflang links each with `data-lavega-hreflang`, OG/Twitter, JSON-LD Organization + WebSite + SoftwareApplication without offers/rating + FAQPage from `landingCopy[locale].faq.items`, all through a `safeJsonLd` equal to Task 3's). `prerender-landing.mjs` loads `dist-ssr/prerender.js` inside a jsdom window whose URL is the locale's path, reads `dist/index.html`, replaces `<title>LaVega</title>` with `landingHead`, fills `<div id="root">` with the markup, writes `dist/index.html` (nl) and `dist/en/index.html` (en, `<html lang="en">`).
 
@@ -143,9 +155,11 @@ robots.txt exact groups: `User-agent: *` then named groups GPTBot, OAI-SearchBot
 ### Task 7: Brand assets and OG cards
 
 **Files:**
+
 - Create: `apps/site/scripts/make-images.mjs`, `apps/site/scripts/og-card.html`, outputs `apps/site/assets/brand/wordmark.png` (white wordmark on the landing dark colour, ~600px wide), `apps/site/assets/og/og-nl.png`, `apps/site/assets/og/og-en.png` (1200×630)
 
 **Interfaces:**
+
 - Consumes: `LaVega_wordmark_hires_white.png` (repo root), landing design tokens.
 - Produces: the three PNG paths above, referenced by Tasks 3 and 6 as `/brand/wordmark.png` and `/og/og-<locale>.png`.
 
@@ -157,10 +171,12 @@ robots.txt exact groups: `User-agent: *` then named groups GPTBot, OAI-SearchBot
 ### Task 8: Vercel build integration and output check
 
 **Files:**
+
 - Modify: `scripts/vercel-build.mjs` (add `@lavega/site` to `TYPECHECKED`; after the web build run `pnpm --filter @lavega/web prerender`; run `buildSite` with `outDir = ${staticDir}`, `drafts: false`; write returned `overrides` into `config.json`; change `/en` and `/en/` routes at lines 336-337 to `dest: "/en/index.html"`; add `X-Robots-Tag: noindex` header routes with `continue: true` for `/app(.*)` and `/investing(.*)`)
 - Create: `scripts/verify-seo-output.mjs`
 
 **Interfaces:**
+
 - Consumes: Tasks 5 and 6.
 - Produces: `node scripts/verify-seo-output.mjs <outputDir>` exits 0 only when: `static/index.html` has a Dutch title ≠ `LaVega` and the nl hero text; `static/en/index.html` has the en hero text; `robots.txt`, `sitemap.xml`, `llms.txt` exist; every override target exists; every generated html file has exactly one `<h1>`, a canonical and parseable JSON-LD; no html file in output contains `DRAFT`; `config.json` routes for `/en` point at `/en/index.html`.
 

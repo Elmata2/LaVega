@@ -1,7 +1,7 @@
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, expect, test, vi } from "vitest";
-import { createDockerFetch } from "./docker.js";
+import { createStaticFetch } from "./standalone.js";
 
 const temporaryDirectories: string[] = [];
 afterEach(async () => {
@@ -13,7 +13,9 @@ afterEach(async () => {
 });
 
 async function fixture() {
-  const directory = await mkdtemp(join(process.env.TMPDIR ?? "/tmp", "lavega-investing-docker-"));
+  const directory = await mkdtemp(
+    join(process.env.TMPDIR ?? "/tmp", "lavega-investing-standalone-"),
+  );
   temporaryDirectories.push(directory);
   await mkdir(join(directory, "assets"));
   await writeFile(join(directory, "index.html"), "<html>dashboard</html>");
@@ -21,7 +23,7 @@ async function fixture() {
   return directory;
 }
 
-test("Docker fetch serves SPA, assets, and forwards API requests", async () => {
+test("Static fetch serves SPA, assets, and forwards API requests", async () => {
   const root = await fixture();
   const apiFetch = vi.fn(
     async () =>
@@ -29,7 +31,7 @@ test("Docker fetch serves SPA, assets, and forwards API requests", async () => {
         headers: { "content-type": "application/json" },
       }),
   );
-  const fetch = createDockerFetch(apiFetch, root);
+  const fetch = createStaticFetch(apiFetch, root);
 
   expect(await (await fetch(new Request("http://localhost/"))).text()).toContain("dashboard");
   expect(
@@ -40,9 +42,9 @@ test("Docker fetch serves SPA, assets, and forwards API requests", async () => {
   expect(apiFetch).toHaveBeenCalledOnce();
 });
 
-test("Docker fetch rejects traversal and serves SPA for missing client routes", async () => {
+test("Static fetch rejects traversal and serves SPA for missing client routes", async () => {
   const root = await fixture();
-  const fetch = createDockerFetch(vi.fn(), root);
+  const fetch = createStaticFetch(vi.fn(), root);
 
   expect((await fetch(new Request("http://localhost/%2e%2e%2fsecret"))).status).toBe(404);
   expect(await (await fetch(new Request("http://localhost/unknown-route"))).text()).toContain(

@@ -172,6 +172,7 @@ listable and deletable by the user, and "erase everything" covers it.
 ## Settled after the builder check and research (10 Nov)
 
 Owner answers:
+
 - Phases 1 and 2 are built now. **Phase 3 (cancelling) waits for a lawyer**:
   the authorisation wording, whether providers accept a gemachtigde, and ACM
   rules for paid cancellation services (clear that LaVega acts as
@@ -184,6 +185,7 @@ Owner answers:
   "Ja", only when the provider catalogue says that provider needs it.
 
 My calls:
+
 - **Send time**: the user picks a daily time (default 08:00, Europe/Amsterdam);
   an hourly cron sends to users whose send hour is the current hour or one of
   the 2 hours before it (`RETRY_HOURS`, counted round the clock, so it can pass
@@ -233,7 +235,6 @@ My calls:
   RLS pattern used for vaults; message text and conversation events encrypted
   at rest following the ADR 0007 pattern.
 
-
 ## As built (11 Nov 2026)
 
 Source of truth is the code; this section records where it ended up.
@@ -245,23 +246,23 @@ All `/api/agent/*` routes below are behind a session, send
 a required key is missing (checked on every request, never at boot). They are
 registered only when a runtime database is configured.
 
-| Method and path                           | What it does                                                         |
-| ----------------------------------------- | -------------------------------------------------------------------- |
-| `GET /api/agent/settings`                 | Settings, `bankConnected`, `consentVersion`, public VAPID key.        |
-| `PUT /api/agent/settings`                 | Turn on (needs the current consent version and a live bank) or off (off deletes all agent state). |
-| `PUT /api/agent/mirror`                   | Store the mirror (rules, due dates, card offer). 409 while the agent is off. |
-| `DELETE /api/agent/mirror`                | Empty the mirror.                                                    |
-| `POST /api/agent/push`                    | Store one push subscription. 409 `agent-off` while the agent is off.  |
-| `DELETE /api/agent/push`                  | Remove one subscription by endpoint.                                 |
+| Method and path                           | What it does                                                                                                                                                                                     |
+| ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `GET /api/agent/settings`                 | Settings, `bankConnected`, `consentVersion`, public VAPID key.                                                                                                                                   |
+| `PUT /api/agent/settings`                 | Turn on (needs the current consent version and a live bank) or off (off deletes all agent state).                                                                                                |
+| `PUT /api/agent/mirror`                   | Store the mirror (rules, due dates, card offer). 409 while the agent is off.                                                                                                                     |
+| `DELETE /api/agent/mirror`                | Empty the mirror.                                                                                                                                                                                |
+| `POST /api/agent/push`                    | Store one push subscription. 409 `agent-off` while the agent is off.                                                                                                                             |
+| `DELETE /api/agent/push`                  | Remove one subscription by endpoint.                                                                                                                                                             |
 | `POST /api/agent/whatsapp/link-code`      | Body `{"aiConsent":true}` required, else 400 `ai-consent-required`. Create a one-time link code (15 minutes) and return it with the display number. Also 409 `agent-off` while the agent is off. |
-| `GET /api/agent/whatsapp`                 | Link status, masked phone (last two digits), link time.              |
-| `DELETE /api/agent/whatsapp`              | Unlink.                                                              |
-| `GET /api/agent/feed`                     | Events, newest first. Query: `channel`, `limit` (1 to 100), `before` cursor. |
-| `DELETE /api/agent/events/:id`            | Delete one event.                                                    |
-| `DELETE /api/agent/conversation/:channel` | Delete all events of one channel.                                    |
-| `GET /api/cron/instinct`                  | The hourly cron route (triggered at minute 7 by GitHub Actions). Public in `apiGuard`, guarded by `CRON_SECRET` as a bearer token. Registered even without a database. |
-| `GET /api/whatsapp/webhook`               | Meta handshake: echoes `hub.challenge` only when `hub.mode` is `subscribe`, `hub.verify_token` matches and the challenge is non-empty, else 403. |
-| `POST /api/whatsapp/webhook`              | Inbound messages. Public in `apiGuard`, trusted only by the Meta signature. |
+| `GET /api/agent/whatsapp`                 | Link status, masked phone (last two digits), link time.                                                                                                                                          |
+| `DELETE /api/agent/whatsapp`              | Unlink.                                                                                                                                                                                          |
+| `GET /api/agent/feed`                     | Events, newest first. Query: `channel`, `limit` (1 to 100), `before` cursor.                                                                                                                     |
+| `DELETE /api/agent/events/:id`            | Delete one event.                                                                                                                                                                                |
+| `DELETE /api/agent/conversation/:channel` | Delete all events of one channel.                                                                                                                                                                |
+| `GET /api/cron/instinct`                  | The hourly cron route (triggered at minute 7 by GitHub Actions). Public in `apiGuard`, guarded by `CRON_SECRET` as a bearer token. Registered even without a database.                           |
+| `GET /api/whatsapp/webhook`               | Meta handshake: echoes `hub.challenge` only when `hub.mode` is `subscribe`, `hub.verify_token` matches and the challenge is non-empty, else 403.                                                 |
+| `POST /api/whatsapp/webhook`              | Inbound messages. Public in `apiGuard`, trusted only by the Meta signature.                                                                                                                      |
 
 ### Webhook behaviour
 
@@ -372,6 +373,7 @@ the event name, error name and status only.
 ## Open at spec time (status 11 Nov 2026)
 
 Still open:
+
 - WhatsApp Business costs per conversation in NL and template approval time
   (to be looked up, not guessed).
 - Legal: review of the privacy statement for choice A (section "Dagelijkse

@@ -37,31 +37,34 @@
 ### Task 1: Dialog primitive and pop-up rules
 
 **Files:**
+
 - Create: `components/ui/Dialog.tsx`, `components/ui/Dialog.test.tsx`
 - Create: `lib/popups.ts`, `lib/popups.test.ts`
 - Modify: `styles/modules.css` (dialog rules beside `.guide-dialog`, same transition values, new class `ui-dialog`)
 
 **Interfaces — Produces:**
+
 ```ts
 // components/ui/Dialog.tsx
 export type DialogProps = {
   open: boolean;
-  onClose: () => void;          // Escape, backdrop click, close button
-  title: string;                // rendered <h2>, wired with aria-labelledby
+  onClose: () => void; // Escape, backdrop click, close button
+  title: string; // rendered <h2>, wired with aria-labelledby
   closeLabel: string;
-  children: ReactNode;          // body
-  actions?: ReactNode;          // footer buttons
+  children: ReactNode; // body
+  actions?: ReactNode; // footer buttons
   initialFocusRef?: RefObject<HTMLElement | null>;
 };
 export default function Dialog(props: DialogProps): JSX.Element;
 
 // lib/popups.ts
-export type PopupId = "intake:intake" | "intake:new-questions" | "intake:round2" | "intake:risk" | "connect";
-export type Dismissed = Partial<Record<PopupId, string>>;   // ISO timestamps
+export type PopupId =
+  "intake:intake" | "intake:new-questions" | "intake:round2" | "intake:risk" | "connect";
+export type Dismissed = Partial<Record<PopupId, string>>; // ISO timestamps
 export const POPUP_SNOOZE_DAYS = 7;
 export function isSnoozed(dismissedAt: string | undefined, now: string): boolean;
 export function nextPopup(input: {
-  view: string;                       // only "overview" can show one
+  view: string; // only "overview" can show one
   inviteKind: "intake" | "new-questions" | "round2" | "risk" | null;
   unconnectedCount: number;
   dismissed: Dismissed;
@@ -69,11 +72,11 @@ export function nextPopup(input: {
   blocked: boolean;
   now: string;
 }): PopupId | null;
-export function readDismissed(): Dismissed;                 // lavega.popups, {} on any failure
+export function readDismissed(): Dismissed; // lavega.popups, {} on any failure
 export function writeDismissed(id: PopupId, now: string): void;
-export function wasShownThisSession(): boolean;             // sessionStorage lavega.popupShown, in-memory fallback
+export function wasShownThisSession(): boolean; // sessionStorage lavega.popupShown, in-memory fallback
 export function markShownThisSession(): void;
-export function forgetPopupMemory(): void;                  // tests only
+export function forgetPopupMemory(): void; // tests only
 ```
 
 - [ ] **Step 1: failing tests for `lib/popups.ts`.** Cases, each one `it`:
@@ -95,26 +98,38 @@ export function forgetPopupMemory(): void;                  // tests only
 ### Task 2: Intake and connect pop-ups
 
 **Files:**
+
 - Create: `intake/inviteState.ts` (move `inviteState`, `InviteState`, `ResumeAt` out of `components/blocks/IntakeInviteCard.tsx`), `intake/unconnectedBrands.ts` (export the function now private in `components/blocks/ConnectChecklist.tsx`)
 - Create: `components/HomePopups.tsx`, `components/HomePopups.test.tsx`
 - Delete: `components/blocks/IntakeInviteCard.tsx`, `components/blocks/ConnectChecklist.tsx` and their tests (move the `inviteState` and brand-list tests to the new files)
 - Modify: `views/Overzicht.tsx` (remove both widgets), `App.tsx` (mount `HomePopups`), `views/Plan.tsx` and `views/Profiel.tsx` (import path, `hasTransactions`, "Ga verder"), `components/moduleRegistry.tsx` (remove ids `intake-invite`, `connect-checklist`), `copy/intake.ts` (`later`, `connect.cta` nl/en), `copy/shell.ts` (remove the two widget texts)
 
 **Interfaces:**
+
 - Consumes: `Dialog`, `nextPopup`, `readDismissed`, `writeDismissed`, `wasShownThisSession`, `markShownThisSession` (Task 1).
 - Produces:
+
 ```ts
 // intake/inviteState.ts — signature unchanged
-export function inviteState(store: AdvisorProfileStore | null, asOf: string, hasTransactions?: boolean): InviteState | null;
-export function inviteKindOf(state: InviteState | null): "intake" | "new-questions" | "round2" | "risk" | null; // "risk" when kind "intake" && riskDue
+export function inviteState(
+  store: AdvisorProfileStore | null,
+  asOf: string,
+  hasTransactions?: boolean,
+): InviteState | null;
+export function inviteKindOf(
+  state: InviteState | null,
+): "intake" | "new-questions" | "round2" | "risk" | null; // "risk" when kind "intake" && riskDue
 // intake/unconnectedBrands.ts
-export function unconnectedBrands(store: AdvisorProfileStore | null, accounts: readonly Pick<Account, "bank" | "linkedAt">[]): string[];
+export function unconnectedBrands(
+  store: AdvisorProfileStore | null,
+  accounts: readonly Pick<Account, "bank" | "linkedAt">[],
+): string[];
 // components/HomePopups.tsx
 export type HomePopupsProps = {
   view: View;
   blocked: boolean;
   store: AdvisorProfileStore | null;
-  profileReady: boolean;            // false while the profile is loading or errored: nothing opens
+  profileReady: boolean; // false while the profile is loading or errored: nothing opens
   asOf: string;
   hasTransactions: boolean;
   accounts: readonly Pick<Account, "bank" | "linkedAt">[];
@@ -146,10 +161,12 @@ export function HomePopups(props: HomePopupsProps): JSX.Element | null;
 ### Task 3: Assistant column at >= 1024px
 
 **Files:**
+
 - Create: `lib/assistantPanel.ts`, `lib/assistantPanel.test.ts`, `hooks/useAssistantPanel.ts`, `hooks/useAssistantPanel.test.tsx`
 - Modify: `components/Shell.tsx` + `Shell.test.tsx`, `components/SidebarResizeHandle.tsx` (optional `edge?: "right" | "left"`, default `"right"`; `"left"` inverts the drag delta and arrow keys), `assistant/AssistantPanel.tsx` + test, `styles/shell.css`, `copy/shell.ts` (`frame.assistantLabel/assistantOpen/assistantClose`), `copy/assistant.ts` (chips, `close`), `App.tsx`, `views/Overzicht.tsx`
 
 **Interfaces — Produces:**
+
 ```ts
 // lib/assistantPanel.ts
 export const ASSISTANT_KEY = "lavega.assistantPanel";
@@ -176,6 +193,7 @@ assistant?: ReactNode;   // absent = no toggle, no region
 // AssistantPanel: new props
 export type AssistantPanelProps = { storage: VaultStorage; asOf: string; variant: "panel" | "card"; onClose?: () => void; active?: boolean };
 ```
+
 `useSidebar` must expose its raw stored prefs for `fitPanels`; add `prefs: SidebarPrefs` to `SidebarApi` without changing existing fields. Existing sidebar tests pass unchanged.
 
 - [ ] **Step 1: failing tests for `fitPanels`** (rail 84, main >= 480):
@@ -197,10 +215,12 @@ export type AssistantPanelProps = { storage: VaultStorage; asOf: string; variant
 ### Task 4: Assistant on the phone
 
 **Files:**
+
 - Create: `components/AssistantSheet.tsx`, `components/AssistantSheet.test.tsx`
 - Modify: `components/BottomBar.tsx` + test, `components/Shell.tsx` + test, `views/Overzicht.tsx` (drop `storage` and the inline card completely), `App.tsx`, `styles/shell.css`, `copy/shell.ts` (`frame.assistant`)
 
 **Interfaces:**
+
 - Consumes: Shell's `assistant` node and `onOverlayChange` (Tasks 2, 3).
 - Produces: `BottomBar` gets `onOpenAssistant?: () => void` and `assistantExpanded?: boolean`; `AssistantSheet({ open, onClose, title, closeLabel, children })`.
 
@@ -212,25 +232,38 @@ export type AssistantPanelProps = { storage: VaultStorage; asOf: string; variant
 ### Task 5: Home page
 
 **Files:**
+
 - Create: `lib/homeLayout.ts`, `lib/homeLayout.test.ts`, `lib/homeChart.ts`, `lib/homeChart.test.ts`, `components/blocks/ChartSlot.tsx`, `components/blocks/ChartSlot.test.tsx`
 - Delete: `components/blocks/RoomCard.tsx` + test
 - Modify: `views/Overzicht.tsx`, `components/moduleRegistry.tsx` + tests, `components/blocks/RecenteTransactiesBlock.tsx`, `components/blocks/TopUitgavenBlock.tsx`, `components/blocks/StatistiekBlock.tsx` (initial view `"verdeling"`), `components/ModulePicker.tsx` + `views/Profiel.tsx` (reset button), `copy/shell.ts`, `copy/intake.ts` (drop `home.room` keys that are now unused)
 
 **Interfaces — Produces:**
+
 ```ts
 // moduleRegistry.tsx
-export type WidgetId = "aandacht" | "positie" | "recente-transacties" | "betaalagenda" | "btw-stand" | "facturen-open" | "top-uitgaven";
+export type WidgetId =
+  | "aandacht"
+  | "positie"
+  | "recente-transacties"
+  | "betaalagenda"
+  | "btw-stand"
+  | "facturen-open"
+  | "top-uitgaven";
 // WIDGETS order = page order: aandacht, positie, recente-transacties, betaalagenda, btw-stand, facturen-open, top-uitgaven. No entry has defaultOn: true.
-export function resetWidgets(): void;      // removes lavega.overviewWidgets, notifies listeners
+export function resetWidgets(): void; // removes lavega.overviewWidgets, notifies listeners
 // lib/homeLayout.ts
 export type HomeSpans = Partial<Record<WidgetId | "chart", 1 | 2 | 3>>;
 export function homeSpans(enabled: readonly WidgetId[]): HomeSpans;
 // lib/homeChart.ts
 export type HomeChart = "position" | "cashflow";
-export function readHomeChart(): HomeChart;          // default "position"
+export function readHomeChart(): HomeChart; // default "position"
 export function writeHomeChart(value: HomeChart): void;
 // components/blocks/ChartSlot.tsx
-export default function ChartSlot(props: { span: 2 | 3; saldo: SaldoBlockProps; cashflow: CashflowBlockProps }): JSX.Element;
+export default function ChartSlot(props: {
+  span: 2 | 3;
+  saldo: SaldoBlockProps;
+  cashflow: CashflowBlockProps;
+}): JSX.Element;
 ```
 
 - [ ] **Step 1: failing tests for `homeSpans`.** For every subset of the six optional ids (all except `aandacht`, which is always 3): walking the page order chart, positie, recente-transacties, betaalagenda, btw-stand, facturen-open, top-uitgaven, the spans of enabled entries pack into rows that each sum to exactly 3. Fixed cases: `[]` -> `{chart: 3}`; `["positie"]` -> chart 2, positie 1; `["recente-transacties","betaalagenda"]` -> 2 and 1; `["recente-transacties"]` -> 3; `["btw-stand","facturen-open"]` -> 2 and 1; `["betaalagenda","top-uitgaven"]` -> a pair that sums to 3 (2 + 1).
@@ -247,10 +280,12 @@ export default function ChartSlot(props: { span: 2 | 3; saldo: SaldoBlockProps; 
 ### Task 6: Add area and hide control
 
 **Files:**
+
 - Create: `components/HomeAddArea.tsx`, `components/HomeAddArea.test.tsx`, `components/WidgetHideButton.tsx`
 - Modify: `views/Overzicht.tsx`, the widget-gated blocks (`AandachtBlock`, `PositieBlock`, `RecenteTransactiesBlock`, `BetaalschemaBlock`, `BtwWidget`, `FacturenWidget`, `TopUitgavenBlock`: pass `menu={<WidgetHideButton id=... />}` to `Module`), `components/Module.tsx` (heading gets `tabIndex={-1}` and a `data-widget` attribute when given an optional `widgetId`), `styles/modules.css`, `copy/shell.ts` (`home.addHeading`, `home.allWidgets`, `home.added(label)`, `home.hide(label)`)
 
 **Interfaces:**
+
 - Consumes: `WIDGETS`, `useOverviewWidgets`, `toggleWidget`, `isArchivedWidget`, `homeSpans` (Task 5).
 - Produces: `HomeAddArea({ onOpenPicker }: { onOpenPicker: () => void })`; `WidgetHideButton({ id }: { id: WidgetId })`.
 

@@ -88,6 +88,7 @@ The complete, ordered checklist is "Owner actions for the Instinct agent" in `DE
 ### Task 1: ADR 0014 (choice A) and ADR 0004 amendment
 
 **Files:**
+
 - Create: `docs/adr/0014-server-reads-transactions-at-night.md`
 - Modify: `docs/adr/0004-neon-data-boundaries.md` (Status paragraph and "One cross-tenant read")
 
@@ -101,10 +102,12 @@ The complete, ordered checklist is "Owner actions for the Instinct agent" in `DE
 ### Task 2: Migration 0039, agent tables with forced RLS
 
 **Files:**
+
 - Create: `db/migrations/0039_instinct_agent.sql`
 - Test: `packages/database/src/agentTables.test.ts`
 
 **Interfaces:** Produces tables (all `personal`, `user_id TEXT NOT NULL`, composite keys leading with `user_id`, `ENABLE`+`FORCE` RLS, policy `FOR ALL TO PUBLIC USING/WITH CHECK (user_id = NULLIF(current_setting('app.user_id', true), ''))`, grants SELECT/INSERT/UPDATE/DELETE to `lavega_runtime`, owner check block copied from 0024):
+
 - `agent_settings(user_id PK, enabled BOOL, channels_blob BYTEA, send_hour SMALLINT 0-23 DEFAULT 8, locale TEXT 'nl'|'en', consent_text_version TEXT, consented_at TIMESTAMPTZ, email_blob BYTEA, updated_at)`
 - `agent_state(user_id PK, last_sent_date DATE, sent_keys_blob BYTEA, last_tip_date DATE, expiry_reminded_for TEXT, expiry_paused_noted BOOL, fetches_today SMALLINT, fetches_day DATE)`
 - `agent_mirror(user_id PK, payload_blob BYTEA, updated_at)` (rules, dueDates, cardOffer; no amounts besides the card gain)
@@ -129,25 +132,61 @@ The complete, ordered checklist is "Owner actions for the Instinct agent" in `DE
 ### Task 3: Agent repository (settings, state, mirror, push subscriptions)
 
 **Files:**
+
 - Create: `packages/database/src/agent.ts`; modify `packages/database/src/index.ts` (`export * from "./agent.js"`)
 - Test: `packages/database/src/agent.test.ts`
 
 **Interfaces:**
+
 ```ts
 export type AgentChannel = "feed" | "push" | "email" | "whatsapp";
-export type AgentSettings = { enabled: boolean; channels: AgentChannel[]; sendHour: number; locale: "nl" | "en"; email: string | null; consentVersion: string; consentedAt: string };
-export type AgentState = { lastSentDate: string | null; sentKeys: { key: string; date: string }[]; lastTipDate: string | null; expiryRemindedFor: string | null; expiryPausedNoted: boolean };
-export type AgentMirror = { rules: Rule[]; dueDates: { kind: "vat" | "other"; label: string; date: string }[]; cardOffer: { name: string; yearlyGainCents: number; computedAt: string } | null };
-export function createAgentRepository(db: Database, userId: string | undefined | null): {
-  getSettings(): Promise<AgentSettings | null>; putSettings(s: AgentSettings): Promise<void>;
-  getState(): Promise<AgentState>; claimDay(today: string): Promise<boolean>; releaseDay(today: string): Promise<void>; putState(patch: Partial<AgentState>): Promise<void>;
+export type AgentSettings = {
+  enabled: boolean;
+  channels: AgentChannel[];
+  sendHour: number;
+  locale: "nl" | "en";
+  email: string | null;
+  consentVersion: string;
+  consentedAt: string;
+};
+export type AgentState = {
+  lastSentDate: string | null;
+  sentKeys: { key: string; date: string }[];
+  lastTipDate: string | null;
+  expiryRemindedFor: string | null;
+  expiryPausedNoted: boolean;
+};
+export type AgentMirror = {
+  rules: Rule[];
+  dueDates: { kind: "vat" | "other"; label: string; date: string }[];
+  cardOffer: { name: string; yearlyGainCents: number; computedAt: string } | null;
+};
+export function createAgentRepository(
+  db: Database,
+  userId: string | undefined | null,
+): {
+  getSettings(): Promise<AgentSettings | null>;
+  putSettings(s: AgentSettings): Promise<void>;
+  getState(): Promise<AgentState>;
+  claimDay(today: string): Promise<boolean>;
+  releaseDay(today: string): Promise<void>;
+  putState(patch: Partial<AgentState>): Promise<void>;
   takeFetchBudget(today: string, max: number): Promise<boolean>;
-  getMirror(): Promise<AgentMirror | null>; putMirror(m: AgentMirror): Promise<void>;
-  putPush(sub: PushSubscriptionJSON): Promise<void>; listPush(): Promise<PushSubscriptionJSON[]>; deletePush(endpoint: string): Promise<void>;
+  getMirror(): Promise<AgentMirror | null>;
+  putMirror(m: AgentMirror): Promise<void>;
+  putPush(sub: PushSubscriptionJSON): Promise<void>;
+  listPush(): Promise<PushSubscriptionJSON[]>;
+  deletePush(endpoint: string): Promise<void>;
   deleteAll(): Promise<void>; // settings, state, mirror, push subs AND events (turn-off)
 };
-export async function listAgentDueUsers(db: Database, hour: number, retryHours: number, today: string): Promise<string[]>; // calls personal.list_agent_due_users
+export async function listAgentDueUsers(
+  db: Database,
+  hour: number,
+  retryHours: number,
+  today: string,
+): Promise<string[]>; // calls personal.list_agent_due_users
 ```
+
 `claimDay` is `UPDATE agent_state SET last_sent_date = $1 WHERE user_id = current_setting('app.user_id') AND last_sent_date IS DISTINCT FROM $1 RETURNING 1` after an upsert of the row; true only for the first caller.
 
 - [ ] Failing test: round-trip settings (blob not plaintext: raw column does not contain the email string); `claimDay("2026-11-11")` twice via two parallel calls returns exactly one `true`; `releaseDay` makes the next claim true; `takeFetchBudget(today, 3)` true x3 then false, resets next day; `deleteAll()` leaves zero rows in all five tables for that user and does not touch user B.
@@ -159,10 +198,12 @@ export async function listAgentDueUsers(db: Database, hour: number, retryHours: 
 ### Task 4: Event repository and erasure coverage
 
 **Files:**
+
 - Modify: `packages/database/src/agent.ts`, `packages/database/src/index.ts` (`USER_DATA_TABLES`)
 - Test: `packages/database/src/agent.test.ts` (events), `packages/database/src/erasure.test.ts` (extend)
 
 **Interfaces:**
+
 ```ts
 export type AgentEventType = "message" | "approval_request" | "approval_response" | "action" | "action_result" | "error";
 export type AgentEvent = { id: string; channel: AgentChannel; type: AgentEventType; body: { text: string; meta?: Record<string, string | number> }; createdAt: string };
@@ -184,23 +225,62 @@ export const EVENT_RETENTION_DAYS = 90;
 ### Task 5: Core `dailyMessage` candidate generators
 
 **Files:**
+
 - Create: `packages/core/src/instinct/types.ts`, `packages/core/src/instinct/candidates.ts`; modify `packages/core/src/index.ts` (export)
 - Test: `packages/core/src/instinct/candidates.test.ts`
 
 **Interfaces:**
+
 ```ts
 export type CandidateKind = "deadline" | "better-offer" | "spending" | "tip";
 export type Candidate =
-  | { kind: "spending"; key: string; figures: { yesterdayCents: number; lastWeekdayCents: number; diffCents: number; weekday: number } }
-  | { kind: "deadline"; key: string; figures: { what: "renewal" | "vat" | "other"; name: string; dueDate: string; daysAway: number; amountCents: number | null } }
+  | {
+      kind: "spending";
+      key: string;
+      figures: {
+        yesterdayCents: number;
+        lastWeekdayCents: number;
+        diffCents: number;
+        weekday: number;
+      };
+    }
+  | {
+      kind: "deadline";
+      key: string;
+      figures: {
+        what: "renewal" | "vat" | "other";
+        name: string;
+        dueDate: string;
+        daysAway: number;
+        amountCents: number | null;
+      };
+    }
   | { kind: "tip"; key: string; figures: { tipId: string } }
-  | { kind: "better-offer"; key: string; figures: { what: "card" | "rate"; name: string; yearlyGainCents: number } };
-export const SPEND_MIN_DIFF_CENTS = 2000, SPEND_MIN_DIFF_RATIO = 0.25, DEADLINE_DAYS = 7, OFFER_MIN_YEARLY_CENTS = 5000;
-export type DailyInput = { today: string; txs: Tx[]; accounts: Account[]; rules: Rule[]; mirror: AgentMirror; balances: { accountKey: string; cents: number }[]; rates: readonly RateBenchmark[]; answers: TipAnswers; state: { sentKeys: {key:string;date:string}[]; lastTipDate: string | null } };
+  | {
+      kind: "better-offer";
+      key: string;
+      figures: { what: "card" | "rate"; name: string; yearlyGainCents: number };
+    };
+export const SPEND_MIN_DIFF_CENTS = 2000,
+  SPEND_MIN_DIFF_RATIO = 0.25,
+  DEADLINE_DAYS = 7,
+  OFFER_MIN_YEARLY_CENTS = 5000;
+export type DailyInput = {
+  today: string;
+  txs: Tx[];
+  accounts: Account[];
+  rules: Rule[];
+  mirror: AgentMirror;
+  balances: { accountKey: string; cents: number }[];
+  rates: readonly RateBenchmark[];
+  answers: TipAnswers;
+  state: { sentKeys: { key: string; date: string }[]; lastTipDate: string | null };
+};
 export function spendingCandidate(i: DailyInput): Candidate | null;
 export function deadlineCandidates(i: DailyInput): Candidate[];
 export function offerCandidates(i: DailyInput): Candidate[];
 ```
+
 Algorithm notes: yesterday = `today - 1`; compare outgoing spend on that date with the same weekday 7 days earlier, EUR only (`isEurCurrency`), excluding own transfers via `categorize(tx, rules, ownAccounts(accounts)) === "Eigen overboeking"`; emit only if `abs(diff) >= SPEND_MIN_DIFF_CENTS` and `abs(diff)/lastWeekday >= SPEND_MIN_DIFF_RATIO` (or lastWeekday is 0 and spend >= 2x min). Deadlines: `detectSubscriptions(txs, {asOf})` next charge = `lastDate + cadenceDays`, within 0..7 days; plus `mirror.dueDates` in the same window; amount only for renewals. Rate offer: for the largest EUR savings account (`accountType` savings), gain = balance x (`bestRate(rates)` - `detectInterestRate`) per year, emit if >= OFFER_MIN_YEARLY_CENTS; card offer from `mirror.cardOffer` if `yearlyGainCents >= OFFER_MIN_YEARLY_CENTS` and `computedAt` within 90 days.
 
 - [ ] Failing tests: Tuesday EUR 84 vs prior Tuesday EUR 44 gives `spending` with `diffCents: 4000`; EUR 10 difference gives null; own transfer is excluded; HUF spend ignored; Netflix monthly charge due in 5 days gives `deadline` `daysAway: 5`, due in 9 gives none; VAT mirror date in 3 days gives deadline with `amountCents: null`; EUR 20,000 savings at 1.0% vs best 3.0% gives `yearlyGainCents: 40000`; EUR 100 at +1% (EUR 1/yr) gives none; card snapshot EUR 49 none, EUR 50 emitted.
@@ -212,17 +292,27 @@ Algorithm notes: yesterday = `today - 1`; compare outgoing spend on that date wi
 ### Task 6: Tip library and `dailyMessage` ranking with no-repeat
 
 **Files:**
+
 - Create: `packages/core/src/instinct/tips.ts`, `packages/core/src/instinct/dailyMessage.ts`
 - Test: `packages/core/src/instinct/tips.test.ts`, `packages/core/src/instinct/dailyMessage.test.ts`
 
 **Interfaces:**
+
 ```ts
-export type Tip = { id: string; when: (a: TipAnswers, i: DailyInput) => boolean; reviewedAt: string; reviewedBy: string; source: string };
+export type Tip = {
+  id: string;
+  when: (a: TipAnswers, i: DailyInput) => boolean;
+  reviewedAt: string;
+  reviewedBy: string;
+  source: string;
+};
 export type TipAnswers = Record<string, never>; // phase 1: tips key on DailyInput only; intake answers are not mirrored
 export const TIPS: readonly Tip[];
-export const TIP_COOLDOWN_DAYS = 3, REPEAT_WINDOW_DAYS = 30;
+export const TIP_COOLDOWN_DAYS = 3,
+  REPEAT_WINDOW_DAYS = 30;
 export function dailyMessage(input: DailyInput): Candidate | null;
 ```
+
 Ranking: deadline (soonest first) > better-offer (largest gain) > spending > tip. Skip any candidate whose `key` is in `state.sentKeys` within `REPEAT_WINDOW_DAYS`. A tip needs `today - lastTipDate >= TIP_COOLDOWN_DAYS`. Candidate keys: `deadline:<name>:<date>`, `offer:<what>:<name>:<yyyy-mm>`, `spending:<date>`, `tip:<id>`.
 
 - [ ] Failing tests: `TIPS` each has non-empty `id`, `reviewedAt`, `reviewedBy`, `source`, unique ids, and a NL+EN render entry exists in the copy module (checked in Task 8's parity test); with a deadline and a spending candidate present the deadline wins; same deadline key sent yesterday gives the next candidate; nothing worth saying returns null; tip suppressed inside cooldown; determinism (same input twice gives equal output).
@@ -234,16 +324,19 @@ Ranking: deadline (soonest first) > better-offer (largest gain) > spending > tip
 ### Task 7: Message rendering (NL/EN copy)
 
 **Files:**
+
 - Create: `apps/web/src/copy/instinct.ts` (consumed by web UI), `packages/core/src/instinct/render.ts`
 - Test: `packages/core/src/instinct/render.test.ts`; extend `apps/web/src/copy/parity.test.ts` if it enumerates copy modules
 
 **Interfaces:**
+
 ```ts
 export type RenderedMessage = { title: string; short: string; long: string }; // short = push/WhatsApp, long = email/feed
 export function renderCandidate(c: Candidate, locale: "nl" | "en"): RenderedMessage;
 export function renderConsentReminder(locale: "nl" | "en"): RenderedMessage; // "Koppel je bank opnieuw"
 export function renderPausedNotice(locale: "nl" | "en"): RenderedMessage;
 ```
+
 Templates live in `packages/core/src/instinct/copy.ts` (typed-complete for both locales; `tipId` -> text map keyed exhaustively by `TIPS` ids). Money via `formatEuroCents`-style helper already in core/format (use existing; if none in core, add a 6-line one here).
 
 - [ ] Failing tests: spending NL equals "Je gaf gisteren EUR 84 uit, EUR 40 meer dan vorige dinsdag." (exact currency format per existing money helper); EN has no Dutch words; every tip id has both locales (compile-time `Record<TipId, ...>` plus runtime assert); no template interpolates anything but `figures`.
@@ -253,6 +346,7 @@ Templates live in `packages/core/src/instinct/copy.ts` (typed-complete for both 
 ### Task 8: Enable Banking consent maximum
 
 **Files:**
+
 - Modify: `apps/server/src/eb-routes.ts` (`/api/eb/auth`, `/callback`)
 - Test: `apps/server/src/eb-routes.test.ts`
 
@@ -267,17 +361,32 @@ Templates live in `packages/core/src/instinct/copy.ts` (typed-complete for both 
 ### Task 9: Unattended fetch (90 days, no PSU headers)
 
 **Files:**
+
 - Create: `apps/server/src/agent/unattendedFetch.ts`
 - Modify: `apps/server/src/eb-routes.ts` (export `fetchSessionItems` with a `days` parameter, default 365)
 - Test: `apps/server/src/agent/unattendedFetch.test.ts`
 
 **Interfaces:**
+
 ```ts
 export type FetchOutcome =
-  | { status: "ok"; txs: Tx[]; accounts: Account[]; balances: { accountKey: string; cents: number }[]; consentExpiresAt: number }
-  | { status: "no-bank" } | { status: "expired"; bank: string } | { status: "refused" };
-export async function fetchForAgent(userSessions: { sessionId: string; payload: EbSession; createdAt: string }[], now: number, deps?: { eb?: typeof eb }): Promise<FetchOutcome>;
+  | {
+      status: "ok";
+      txs: Tx[];
+      accounts: Account[];
+      balances: { accountKey: string; cents: number }[];
+      consentExpiresAt: number;
+    }
+  | { status: "no-bank" }
+  | { status: "expired"; bank: string }
+  | { status: "refused" };
+export async function fetchForAgent(
+  userSessions: { sessionId: string; payload: EbSession; createdAt: string }[],
+  now: number,
+  deps?: { eb?: typeof eb },
+): Promise<FetchOutcome>;
 ```
+
 Maps raw items through `mapEbTransaction`/`mapEbAccount` from `@lavega/adapters`. `refused` covers 429/5xx/other errors (silent skip); `expired` is a 401/403 or a lapsed `consentLive` (NOT silent: feeds the reminder/paused logic).
 
 - [ ] Failing tests: request URLs use `date_from` 90 days back (not 365); the recorded request headers contain no header starting `psu-` (case-insensitive); 429 gives `refused`; 401 gives `expired`; no sessions gives `no-bank`; a lapsed consent gives `expired` without calling the bank.
@@ -287,19 +396,42 @@ Maps raw items through `mapEbTransaction`/`mapEbAccount` from `@lavega/adapters`
 ### Task 10: Migration 0040 and the due-user listing; per-user orchestrator
 
 **Files:**
+
 - Create: `db/migrations/0040_agent_due_users.sql`, `apps/server/src/agent/instinct.ts`
 - Test: `packages/database/src/agentTables.test.ts` (function), `apps/server/src/agent/instinct.test.ts`
 
 **Interfaces:**
+
 ```sql
 personal.list_agent_due_users(local_hour int, retry_hours int, local_date date) RETURNS TABLE (tenant_id text)
 -- SECURITY DEFINER, search_path pinned, REVOKE FROM PUBLIC, GRANT EXECUTE to lavega_runtime;
 -- enabled AND send_hour <= local_hour <= send_hour+retry_hours AND last_sent_date IS DISTINCT FROM local_date; refuse to apply without BYPASSRLS (copy 0022).
 ```
+
 ```ts
-export type InstinctDeps = { db: Database; now: () => Date; fetchSessions: (userId: string) => Promise<EbSessionRow[]>; catalogue: CatalogueEntryLike[]; rates: RateBenchmark[]; send: Record<AgentChannel, (userId: string, msg: RenderedMessage, s: AgentSettings, eventId: string) => Promise<"sent" | "failed">>; fetchOutcome?: typeof fetchForAgent };
-export async function runForUser(deps: InstinctDeps, userId: string): Promise<"sent" | "none" | "skipped" | "paused" | "reminded">;
+export type InstinctDeps = {
+  db: Database;
+  now: () => Date;
+  fetchSessions: (userId: string) => Promise<EbSessionRow[]>;
+  catalogue: CatalogueEntryLike[];
+  rates: RateBenchmark[];
+  send: Record<
+    AgentChannel,
+    (
+      userId: string,
+      msg: RenderedMessage,
+      s: AgentSettings,
+      eventId: string,
+    ) => Promise<"sent" | "failed">
+  >;
+  fetchOutcome?: typeof fetchForAgent;
+};
+export async function runForUser(
+  deps: InstinctDeps,
+  userId: string,
+): Promise<"sent" | "none" | "skipped" | "paused" | "reminded">;
 ```
+
 Flow: claim the day (`claimDay`); `fetchForAgent`; `refused`/`no-bank` releases claim and returns `skipped`; `expired` sends the paused notice once (`expiryPausedNoted`) and returns `paused`; ok: if consent expires within 7 days and `expiryRemindedFor !== expiresAt` send the reminder (this counts as the day's message) and return `reminded`; else `dailyMessage`; null releases the claim and returns `none`; otherwise render, send per channel, `appendEvent` with `dedupeKey = "daily:"+date`, `putState` (sentKeys, lastTipDate). If every channel failed, `releaseDay`. After use the function holds no reference to `txs` (scoped inside one inner function so they are out of scope on return).
 
 - [ ] Failing tests: due-users function returns only opted-in users at 08:00 and again at 10:00, not at 11:00, not after a send; two users, user B never listed when disabled. Orchestrator with fake deps: **sentinel test**: txs contain counterparty `SENTINEL-ZORGVERZEKERAAR`; collect every `putState`, `appendEvent`, `console.*`, channel `send` argument and any prompt string; assert none contains the sentinel nor an IBAN-shaped string; refused fetch leaves state unclaimed and sends nothing; expiry reminder fires once at 7 days; a failed send on all channels releases the claim; sentKeys prevents the same deadline tomorrow.
@@ -309,6 +441,7 @@ Flow: claim the day (`claimDay`); `fetchForAgent`; `refused`/`no-bank` releases 
 ### Task 11: Hourly cron route and its trigger (as built: GitHub workflow, no Vercel cron entry)
 
 **Files:**
+
 - Create: `apps/server/src/agent/instinctCron.ts`
 - Modify: `apps/server/src/index.ts` (`app.get("/api/cron/instinct", ...)`), `apps/server/src/apiGuard.ts` (`PUBLIC_API_PATHS` add `/api/cron/instinct`), `scripts/vercel-build.mjs` (crons add `{ path: "/api/cron/instinct", schedule: "0 * * * *" }`)
 - Test: `apps/server/src/agent/instinctCron.test.ts`, `apps/server/src/apiGuard.test.ts`
@@ -323,6 +456,7 @@ Flow: claim the day (`claimDay`); `fetchForAgent`; `refused`/`no-bank` releases 
 ### Task 12: Email channel
 
 **Files:**
+
 - Create: `apps/server/src/agent/emailChannel.ts`
 - Test: `apps/server/src/agent/emailChannel.test.ts`
 
@@ -335,14 +469,22 @@ Flow: claim the day (`claimDay`); `fetchForAgent`; `refused`/`no-bank` releases 
 ### Task 13: Web push channel (server) and service worker
 
 **Files:**
+
 - Create: `apps/server/src/agent/pushChannel.ts`, `apps/web/public/sw.js`
 - Modify: `apps/server/package.json` (`web-push`), `apps/web/src/main.tsx` (register after sign-in only)
 - Test: `apps/server/src/agent/pushChannel.test.ts`, `apps/web/src/swRegistration.test.ts`
 
 **Interfaces:**
+
 ```ts
-export async function sendPush(userId: string, msg: RenderedMessage, repo: ReturnType<typeof createAgentRepository>, deps?: { webpush?: typeof import("web-push") }): Promise<"sent" | "failed">;
+export async function sendPush(
+  userId: string,
+  msg: RenderedMessage,
+  repo: ReturnType<typeof createAgentRepository>,
+  deps?: { webpush?: typeof import("web-push") },
+): Promise<"sent" | "failed">;
 ```
+
 Payload is `{ title, body: msg.short, url: "/app" }`. A 404 or 410 from the push service calls `repo.deletePush(endpoint)`. `sw.js` handles `push` (showNotification) and `notificationclick` (focus or open `/app`); it caches nothing. CSP already allows `workerSrc 'self'`.
 
 - [ ] Failing tests: one subscription gets one `sendNotification`; 410 deletes that subscription and still returns `sent` if another succeeded; no subscription returns `failed`; VAPID vars missing returns `failed`; registration helper is not called when signed out and does not request notification permission by itself.
@@ -352,11 +494,13 @@ Payload is `{ title, body: msg.short, url: "/app" }`. A 404 or 410 from the push
 ### Task 14: Agent routes (settings, mirror, push subscribe, feed, events) and privacy text
 
 **Files:**
+
 - Create: `apps/server/src/instinct-routes.ts`
 - Modify: `apps/server/src/index.ts` (register behind the same database condition as vault routes), `apps/server/src/legal.ts` (privacy statement), `apps/server/src/legal.test.ts`
 - Test: `apps/server/src/instinct-routes.test.ts`
 
 **Interfaces:** all session-guarded via `tenantId`; bodies validated at the boundary (zod/Effect Schema as in neighbours):
+
 - `GET /api/agent/settings` returns settings + `bankConnected: boolean`
 - `PUT /api/agent/settings` body `{ enabled, channels, sendHour, locale, email, consentVersion }`; 409 `bank-required` when enabling with no live EB session; stamps `consentedAt`; turning `enabled` false calls `repo.deleteAll()`
 - `PUT /api/agent/mirror` body `AgentMirror` (rejects when not enabled; rejects any field named amount/iban beyond `cardOffer.yearlyGainCents`); `DELETE` clears
@@ -371,14 +515,24 @@ Payload is `{ title, body: msg.short, url: "/app" }`. A 404 or 410 from the push
 ### Task 15: Browser mirror of rules, due dates and card snapshot
 
 **Files:**
+
 - Create: `apps/web/src/agent/mirror.ts`
 - Modify: `apps/web/src/App.tsx` (call after `saveRules` and after plan computation, only when agent enabled)
 - Test: `apps/web/src/agent/mirror.test.ts`
 
 **Interfaces:**
+
 ```ts
-export function buildMirror(i: { rules: Rule[]; flows: ScheduledFlow[]; plan: PlanResult | null; now: Date }): AgentMirror; // strips amounts: dueDates from flows with status expected/confirmed and future dueDate; cardOffer from plan cards best net gain
-export function createMirrorSync(api: { put(m: AgentMirror): Promise<void> }, enabled: () => boolean): { push(m: AgentMirror): void }; // debounced 2 s, skips identical payloads, never runs when disabled
+export function buildMirror(i: {
+  rules: Rule[];
+  flows: ScheduledFlow[];
+  plan: PlanResult | null;
+  now: Date;
+}): AgentMirror; // strips amounts: dueDates from flows with status expected/confirmed and future dueDate; cardOffer from plan cards best net gain
+export function createMirrorSync(
+  api: { put(m: AgentMirror): Promise<void> },
+  enabled: () => boolean,
+): { push(m: AgentMirror): void }; // debounced 2 s, skips identical payloads, never runs when disabled
 ```
 
 - [ ] Failing tests: `buildMirror` output serialises without any `amountCents` of flows or any counterparty; paid or cancelled flows are excluded; debounce collapses 5 rule edits into 1 PUT; disabled makes zero calls.
@@ -388,6 +542,7 @@ export function createMirrorSync(api: { put(m: AgentMirror): Promise<void> }, en
 ### Task 16: Consent and settings UI, feed view, erase wording
 
 **Files:**
+
 - Create: `apps/web/src/views/AgentSettings.tsx`, `apps/web/src/views/AgentFeed.tsx`
 - Modify: `apps/web/src/views/Profiel.tsx` (mount section), `apps/web/src/copy/instinct.ts`, `apps/web/src/api.ts` (client functions)
 - Test: `apps/web/src/views/AgentSettings.test.tsx`, `apps/web/src/views/AgentFeed.test.tsx`
@@ -405,11 +560,13 @@ export function createMirrorSync(api: { put(m: AgentMirror): Promise<void> }, en
 ### Task 17: Migration 0041 and repository for WhatsApp links and codes
 
 **Files:**
+
 - Create: `db/migrations/0041_whatsapp_links.sql`
 - Modify: `packages/database/src/agent.ts`, `packages/database/src/index.ts` (`USER_DATA_TABLES`)
 - Test: `packages/database/src/agentTables.test.ts`, `packages/database/src/erasure.test.ts`
 
 **Interfaces:**
+
 - `personal.agent_whatsapp(user_id PK, phone_hash TEXT UNIQUE NOT NULL, phone_blob BYTEA, linked_at, last_inbound_at TIMESTAMPTZ)`; `personal.agent_link_codes(user_id PK, code_hash TEXT NOT NULL, expires_at TIMESTAMPTZ)`; both forced RLS plus runtime grants.
 - `personal.agent_user_for_phone(phone_hash text) RETURNS text` and `personal.agent_consume_link_code(code_hash text, phone_hash text, phone_blob bytea) RETURNS text` (both `SECURITY DEFINER`, pinned search_path, EXECUTE to `lavega_runtime`, return only a user id; consume is one statement that deletes the code, rejects expired, and inserts the link, so a code works once).
 - Repo additions: `createLinkCode(): Promise<{ code: string; expiresAt: string }>` (format `LV-` + 8 (as built; planned 6) chars from an unambiguous alphabet, 15 minutes, stores HMAC only), `getLink()`, `unlink()`, `touchInbound(userId, at)`; free functions `userForPhone(db, phoneHash)`, `consumeLinkCode(db, codeHash, phoneHash, phoneBlob)`; helper `phoneHash(e164: string): string` = HMAC-SHA256 with `AGENT_PHONE_HMAC_KEY`.
@@ -422,18 +579,42 @@ export function createMirrorSync(api: { put(m: AgentMirror): Promise<void> }, en
 ### Task 18: WhatsApp client and signed webhook
 
 **Files:**
+
 - Create: `apps/server/src/whatsapp/client.ts`, `apps/server/src/whatsapp/webhook.ts`
 - Modify: `apps/server/src/index.ts` (register), `apps/server/src/apiGuard.ts` (`/api/whatsapp/webhook` public; it carries its own signature)
 - Test: `apps/server/src/whatsapp/client.test.ts`, `apps/server/src/whatsapp/webhook.test.ts`
 
 **Interfaces:**
+
 ```ts
 export function verifySignature(rawBody: string, header: string | null, appSecret: string): boolean; // constant-time compare of "sha256=" HMAC
-export type Inbound = { wamid: string; from: string; at: number; kind: "text"; text: string } | { wamid: string; from: string; at: number; kind: "button"; buttonId: string } | { kind: "ignored" };
+export type Inbound =
+  | { wamid: string; from: string; at: number; kind: "text"; text: string }
+  | { wamid: string; from: string; at: number; kind: "button"; buttonId: string }
+  | { kind: "ignored" };
 export function parseInbound(payload: unknown): Inbound[];
-export type WhatsAppClient = { sendTemplate(to: string, name: string, lang: "nl" | "en", vars: string[]): Promise<{ wamid: string }>; sendText(to: string, text: string, windowOpenAt: number | null, now: number): Promise<{ wamid: string }>; sendButtons(to: string, text: string, buttons: { id: string; title: string }[]): Promise<{ wamid: string }> };
+export type WhatsAppClient = {
+  sendTemplate(
+    to: string,
+    name: string,
+    lang: "nl" | "en",
+    vars: string[],
+  ): Promise<{ wamid: string }>;
+  sendText(
+    to: string,
+    text: string,
+    windowOpenAt: number | null,
+    now: number,
+  ): Promise<{ wamid: string }>;
+  sendButtons(
+    to: string,
+    text: string,
+    buttons: { id: string; title: string }[],
+  ): Promise<{ wamid: string }>;
+};
 export function createWhatsAppClient(env, fetchImpl): WhatsAppClient;
 ```
+
 Routes: `GET /api/whatsapp/webhook` answers the `hub.challenge` only when `hub.verify_token` matches; `POST` reads the raw body ONCE, verifies the signature before parsing, returns 200 quickly, dedupes by `wamid` (`appendEvent` dedupeKey `wa:<wamid>`).
 
 - [ ] Failing tests: valid signature accepted, one flipped byte rejected, missing header rejected, and a rejected request triggers zero repository calls; challenge echoed only with the right token; `sendText` with `windowOpenAt` null or older than 24 h throws `WindowClosedError` and never calls `fetch`; `sendTemplate` posts template name, language and only the given variables; replayed `wamid` handled once.
@@ -443,6 +624,7 @@ Routes: `GET /api/whatsapp/webhook` answers the `hub.challenge` only when `hub.v
 ### Task 19: Number linking
 
 **Files:**
+
 - Create: `apps/server/src/whatsapp/linking.ts`
 - Modify: `apps/server/src/instinct-routes.ts` (`POST /api/agent/whatsapp/link-code`, `GET /api/agent/whatsapp`, `DELETE /api/agent/whatsapp`), `apps/server/src/whatsapp/webhook.ts`
 - Test: `apps/server/src/whatsapp/linking.test.ts`
@@ -456,6 +638,7 @@ Routes: `GET /api/whatsapp/webhook` answers the `hub.challenge` only when `hub.v
 ### Task 20: WhatsApp as a proactive channel (template) and settings UI
 
 **Files:**
+
 - Create: `apps/server/src/whatsapp/channel.ts`
 - Modify: `apps/server/src/agent/instinctCron.ts` (add to `send`), `apps/web/src/views/AgentSettings.tsx`, `apps/web/src/copy/instinct.ts`
 - Test: `apps/server/src/whatsapp/channel.test.ts`, extend `AgentSettings.test.tsx`
@@ -469,16 +652,25 @@ Routes: `GET /api/whatsapp/webhook` answers the `hub.challenge` only when `hub.v
 ### Task 21: Read-only tools for answers
 
 **Files:**
+
 - Create: `packages/core/src/instinct/tools.ts`
 - Test: `packages/core/src/instinct/tools.test.ts`
 
 **Interfaces:**
+
 ```ts
-export type ToolCall = { tool: "spending_on_day"; date: string } | { tool: "spending_in_range"; from: string; to: string; category?: string } | { tool: "compare_weekday"; date: string } | { tool: "upcoming_charges"; days: number } | { tool: "top_categories"; from: string; to: string } | { tool: "unknown" };
+export type ToolCall =
+  | { tool: "spending_on_day"; date: string }
+  | { tool: "spending_in_range"; from: string; to: string; category?: string }
+  | { tool: "compare_weekday"; date: string }
+  | { tool: "upcoming_charges"; days: number }
+  | { tool: "top_categories"; from: string; to: string }
+  | { tool: "unknown" };
 export type ToolResult = { figures: Record<string, number | string>; facts: string[] }; // facts are template-rendered sentences built from figures
 export function runTool(call: ToolCall, i: DailyInput): ToolResult;
 export function parseToolCall(raw: unknown): ToolCall; // boundary validation: unknown shapes become { tool: "unknown" }; dates must be real ISO dates within the 90-day window; days 1..31
 ```
+
 There is no write tool; `propose_cancellation` is not built (phase 3). The `ToolCall` union is closed so adding one later forces the handler to be updated (exhaustive switch).
 
 - [ ] Failing tests: `spending_on_day` equals manual sum; range outside 90 days clamps and reports `coveredFrom`; `compare_weekday` matches Task 5; own transfers excluded; malformed or injected input (`{"tool":"drop"}`, SQL-ish strings) becomes `unknown`; function is pure (same input, same output, no mutation of `i.txs`).
@@ -488,16 +680,34 @@ There is no write tool; `propose_cancellation` is not built (phase 3). The `Tool
 ### Task 22: Two-way handler with redaction boundary and number guard
 
 **Files:**
+
 - Create: `apps/server/src/whatsapp/reply.ts`, `apps/server/src/agent/numberGuard.ts`; add `apps/server/src/agent/prompts/_instinct.md` and its entry in `vercel-build.mjs` shipped-prompt assertion (lavega_runtime_data_files)
 - Modify: `apps/server/src/whatsapp/webhook.ts`
 - Test: `apps/server/src/agent/numberGuard.test.ts`, `apps/server/src/whatsapp/reply.test.ts`
 
 **Interfaces:**
+
 ```ts
 export function numbersIn(text: string): number[]; // normalises "1.234,50", "EUR 84", "40", percentages
-export function guardAnswer(answer: string, allowed: ToolResult[], asked: string): { ok: true } | { ok: false; unknown: number[] };
-export async function answerInbound(deps: { repo; fetchOutcome; llm: LlmProvider; budget: typeof checkBudget; client: WhatsAppClient; now: () => number }, userId: string, text: string): Promise<"answered" | "fallback" | "no-data" | "rate-limited" | "window-closed">;
+export function guardAnswer(
+  answer: string,
+  allowed: ToolResult[],
+  asked: string,
+): { ok: true } | { ok: false; unknown: number[] };
+export async function answerInbound(
+  deps: {
+    repo;
+    fetchOutcome;
+    llm: LlmProvider;
+    budget: typeof checkBudget;
+    client: WhatsAppClient;
+    now: () => number;
+  },
+  userId: string,
+  text: string,
+): Promise<"answered" | "fallback" | "no-data" | "rate-limited" | "window-closed">;
 ```
+
 Flow as first planned (superseded, see "As built"): rate limit (per user 20 messages/hour, reuse `createRateLimiter`) -> `takeFetchBudget(today, 3)`; exhausted -> fixed reply "Ik kan nu niet bij je bank, probeer het morgen of open de app." -> budget gate (`checkBudget("instinct-reply", userId)`) -> step 1 `llm.complete` with ONLY `scrubPersonalValues(text)` asking for a JSON `ToolCall` -> `parseToolCall` -> fetch via `fetchForAgent` -> `runTool` -> step 2 `llm.complete` receives ONLY `ToolResult.facts` + the scrubbed question, never transactions -> `guardAnswer`; on `ok:false` (or model error) send the template-rendered `facts` joined instead (`fallback`) -> `sendText` (needs window; the inbound just opened it) -> `appendEvent` for the inbound and outbound with dedupe keys, `recordUsage`.
 
 - [ ] Failing tests: guard accepts "EUR 84" when facts contain 8400 cents, rejects an invented "EUR 90", ignores years and dates equal to those in facts, handles NL decimal comma; handler: sentinel counterparty and IBAN never appear in either prompt; model returns an invented amount -> fallback facts are sent, not the model text; fetch budget exhausted -> fixed reply and zero bank calls; unlinked sender never reaches the handler; model throws -> fallback; budget refused -> fixed reply; inbound and outbound both stored as events.
@@ -507,6 +717,7 @@ Flow as first planned (superseded, see "As built"): rate limit (per user 20 mess
 ### Task 23: Conversation retention, window state and approval scaffolding
 
 **Files:**
+
 - Modify: `apps/server/src/whatsapp/webhook.ts`, `apps/server/src/agent/instinctCron.ts` (purge already scheduled in Task 11; add `touchInbound`), `apps/web/src/views/AgentFeed.tsx` (WhatsApp conversation list with per-event delete, "verwijder gesprek")
 - Test: `apps/server/src/whatsapp/webhook.test.ts`, `apps/web/src/views/AgentFeed.test.tsx`
 
@@ -519,6 +730,7 @@ Flow as first planned (superseded, see "As built"): rate limit (per user 20 mess
 ### Task 24: End-to-end verification and erase-everything check
 
 **Files:**
+
 - Test: `apps/server/src/agent/instinct.e2e.test.ts` (PGlite repository, fake EB/Resend/push/WhatsApp), extend `packages/database/src/erasure.test.ts`
 
 - [ ] Failing test: enable agent for user A with all four channels and a linked number, run `runInstinctCron` twice in one hour (one send per channel), post a signed inbound question (answered with computed figures), then `DELETE /api/account/data`: every `personal.agent_*` table has zero rows for A, B's rows untouched, report lists all seven agent tables.

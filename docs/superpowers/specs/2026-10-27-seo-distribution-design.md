@@ -113,28 +113,28 @@ every FAQ question appear in the served file.
 Source: `content/<locale>/<family>/<slug>.md`, Markdown with YAML front matter:
 
 ```yaml
-id: personal-cfo          # shared by the nl and en versions of one page
-family: vragen            # vragen | gids | vs | seizoen | over | onderzoek
+id: personal-cfo # shared by the nl and en versions of one page
+family: vragen # vragen | gids | vs | seizoen | over | onderzoek
 title: Wat is een persoonlijke CFO?
 description: 50-160 characters
-status: draft             # draft | published
+status: draft # draft | published
 author: alexander
 updated: 2026-10-27
 sources:
   - { title: "...", url: "https://...", accessed: 2026-10-27 }
-faq:                      # optional, becomes FAQPage JSON-LD
+faq: # optional, becomes FAQPage JSON-LD
   - { q: "...", a: "..." }
 ```
 
 URL scheme, Dutch slugs for Dutch pages and English slugs for English pages:
 
-| Family | nl | en |
-| --- | --- | --- |
-| Questions | `/vragen/<slug>` | `/en/questions/<slug>` |
-| Guides | `/gids/<slug>` | `/en/guides/<slug>` |
-| Comparisons | `/vs/<slug>` | `/en/vs/<slug>` |
-| Seasonal | `/seizoen/<slug>` | `/en/seasonal/<slug>` |
-| Author | `/over/<slug>` | `/en/about/<slug>` |
+| Family      | nl                | en                     |
+| ----------- | ----------------- | ---------------------- |
+| Questions   | `/vragen/<slug>`  | `/en/questions/<slug>` |
+| Guides      | `/gids/<slug>`    | `/en/guides/<slug>`    |
+| Comparisons | `/vs/<slug>`      | `/en/vs/<slug>`        |
+| Seasonal    | `/seizoen/<slug>` | `/en/seasonal/<slug>`  |
+| Author      | `/over/<slug>`    | `/en/about/<slug>`     |
 
 Each family gets a hub page (`/vragen`, `/en/questions`, …) listing its
 published pages.
@@ -223,18 +223,18 @@ before switching it to `published`; the check is the floor.
 
 ### 7. First content batch (drafts, both languages)
 
-| id | Family | nl | en |
-| --- | --- | --- | --- |
-| personal-cfo | vragen | Wat is een persoonlijke CFO? | What is a personal CFO? |
-| ai-finance-assistant | vragen | Wat doet een AI financieel assistent? | What does an AI personal finance assistant do? |
-| emergency-buffer | vragen | Hoeveel spaargeld is normaal als buffer? | How big should an emergency buffer be in the Netherlands? |
-| box-3 | vragen | Hoe werkt box 3? | How does box 3 work? |
-| saving-for-a-child | vragen | Sparen voor je kind: welke mogelijkheden zijn er? | Saving for your child in the Netherlands: the options |
-| subscriptions | gids | Abonnementen opschonen in vier stappen | How to clean up your subscriptions |
-| tax-return | seizoen | Checklist belastingaangifte 2026 | Dutch tax return checklist for 2026 |
-| vs-excel | vs | LaVega vs Excel | LaVega vs a spreadsheet |
-| vs-budget-apps | vs | LaVega vs budget-apps | LaVega vs budgeting apps |
-| alexander | over | Over Alexander Steunenberg | About Alexander Steunenberg |
+| id                   | Family  | nl                                                | en                                                        |
+| -------------------- | ------- | ------------------------------------------------- | --------------------------------------------------------- |
+| personal-cfo         | vragen  | Wat is een persoonlijke CFO?                      | What is a personal CFO?                                   |
+| ai-finance-assistant | vragen  | Wat doet een AI financieel assistent?             | What does an AI personal finance assistant do?            |
+| emergency-buffer     | vragen  | Hoeveel spaargeld is normaal als buffer?          | How big should an emergency buffer be in the Netherlands? |
+| box-3                | vragen  | Hoe werkt box 3?                                  | How does box 3 work?                                      |
+| saving-for-a-child   | vragen  | Sparen voor je kind: welke mogelijkheden zijn er? | Saving for your child in the Netherlands: the options     |
+| subscriptions        | gids    | Abonnementen opschonen in vier stappen            | How to clean up your subscriptions                        |
+| tax-return           | seizoen | Checklist belastingaangifte 2026                  | Dutch tax return checklist for 2026                       |
+| vs-excel             | vs      | LaVega vs Excel                                   | LaVega vs a spreadsheet                                   |
+| vs-budget-apps       | vs      | LaVega vs budget-apps                             | LaVega vs budgeting apps                                  |
+| alexander            | over    | Over Alexander Steunenberg                        | About Alexander Steunenberg                               |
 
 Rules for the writer: Dutch is written for Dutch readers, English for expats
 in the Netherlands (not a translation); every tax figure and every competitor

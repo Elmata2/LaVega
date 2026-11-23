@@ -6,12 +6,12 @@
   "types": "src/index.ts",
   "exports": {
     ".": "./src/index.ts",
-    "./src/prices/priceStore.contract.js": "./src/prices/priceStore.contract.ts",
-    "./src/brokers/brokerSyncLease.contract.js": "./src/brokers/brokerSyncLease.contract.ts",
-    "./src/partnerBudget/partnerBudget.contract.js": "./src/partnerBudget/partnerBudget.contract.ts",
-    "./src/partnerBudget/fakes.js": "./src/partnerBudget/fakes.ts",
-    "./credentials/localKeySource": "./src/credentials/localKeySource.ts",
-    "./src/prices/sharedPriceStore.contract.js": "./src/prices/sharedPriceStore.contract.ts"
+    "./prices/priceStore.contract": "./src/prices/priceStore.contract.ts",
+    "./prices/sharedPriceStore.contract": "./src/prices/sharedPriceStore.contract.ts",
+    "./brokers/brokerSyncLease.contract": "./src/brokers/brokerSyncLease.contract.ts",
+    "./partnerBudget/partnerBudget.contract": "./src/partnerBudget/partnerBudget.contract.ts",
+    "./partnerBudget/fakes": "./src/partnerBudget/fakes.ts",
+    "./credentials/localKeySource": "./src/credentials/localKeySource.ts"
   },
   "scripts": {
     "typecheck": "node ../../scripts/typecheck.mjs",

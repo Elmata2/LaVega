@@ -23,7 +23,7 @@
  * saldo en heeft niets te maken met de vraag welke kaart je nu aantikt. Die
  * hoort in de Optimalisatie-tab en niet hier.
  *
- * Draaien: pnpm --filter @lavega/extension bundle:catalog
+ * Draaien: bun --filter @lavega/extension bundle:catalog
  */
 
 import { readFileSync, writeFileSync } from "node:fs";

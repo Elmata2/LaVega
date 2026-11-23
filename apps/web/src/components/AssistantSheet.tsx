@@ -50,10 +50,7 @@ export function AssistantSheet({
   }, [open, onClose]);
 
   return (
-    <div
-      className={`shell2-sheet-root${open ? " shell2-sheet-open" : ""}`}
-      {...((open ? {} : { inert: "" }) as Record<string, string>)}
-    >
+    <div className={`shell2-sheet-root${open ? " shell2-sheet-open" : ""}`} inert={!open}>
       <div className="shell2-scrim" onClick={onClose} aria-hidden="true" />
       <div
         ref={panelRef}

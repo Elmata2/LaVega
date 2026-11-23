@@ -23,7 +23,15 @@ const PLAN = "docs/superpowers/specs/2026-11-10-sure-adoption-plan.md";
 const README = "docs/research/sure/README.md";
 const NOTICE = "NOTICE";
 const SOURCE_ROOTS = ["packages", "apps"];
-const SKIP_DIRS = new Set(["node_modules", "dist", "dist-ssr", "vendor", ".next", "build", "coverage"]);
+const SKIP_DIRS = new Set([
+  "node_modules",
+  "dist",
+  "dist-ssr",
+  "vendor",
+  ".next",
+  "build",
+  "coverage",
+]);
 
 const failures = [];
 const fail = (message) => failures.push(message);
@@ -34,7 +42,11 @@ function walk(dir, out = []) {
     const path = join(dir, entry);
     const stat = statSync(path);
     if (stat.isDirectory()) walk(path, out);
-    else if (/\.(ts|tsx)$/.test(entry) && !entry.includes(".test.") && !path.includes("__fixtures__")) {
+    else if (
+      /\.(ts|tsx)$/.test(entry) &&
+      !entry.includes(".test.") &&
+      !path.includes("__fixtures__")
+    ) {
       out.push(relative(ROOT, path));
     }
   }
@@ -110,7 +122,8 @@ for (const file of portedFiles) {
   if (!ledgerPaths.has(file)) fail(`${file}: ported file has no Appendix A row`);
 }
 for (const path of ledgerPaths) {
-  if (!portedFiles.includes(path)) fail(`ledger row points at a file without a Sure header: ${path}`);
+  if (!portedFiles.includes(path))
+    fail(`ledger row points at a file without a Sure header: ${path}`);
 }
 
 const notice = readFileSync(join(ROOT, NOTICE), "utf8");

@@ -16,8 +16,8 @@ query browserSessionBootstrapQuery {
 
 # mutation ClientTelemetryEvent  (app-eNF866Ec.js)
 mutation ClientTelemetryEvent($events: [ClientTelemetryEventInput!]!) {
-        ingestClientTelemetryEvents(events: $events)
-    }
+  ingestClientTelemetryEvents(events: $events)
+}
 
 # query EmailCollectStepPollQuery  (OnboardingPage-CMRiXp54.js)
 query EmailCollectStepPollQuery {
@@ -30,9 +30,7 @@ query EmailCollectStepPollQuery {
 }
 
 # query FeedbackStatusPageQuery  (FeedbackStatusPage-CcTkuulS.js)
-query FeedbackStatusPageQuery(
-  $id: ID!
-) {
+query FeedbackStatusPageQuery($id: ID!) {
   myUserFeedback(id: $id) {
     id
     content
@@ -48,19 +46,14 @@ query FeedbackStatusPageQuery(
 }
 
 # query NativePasskeyPageChallengeQuery  (NativePasskeyPage-6rdYPfb7.js)
-query NativePasskeyPageChallengeQuery(
-  $id: String!
-) {
+query NativePasskeyPageChallengeQuery($id: String!) {
   nativePasskeyChallenge(id: $id) {
     optionsJson
   }
 }
 
 # mutation NativePasskeyPageFinishMutation  (NativePasskeyPage-6rdYPfb7.js)
-mutation NativePasskeyPageFinishMutation(
-  $id: String!
-  $responseJson: String!
-) {
+mutation NativePasskeyPageFinishMutation($id: String!, $responseJson: String!) {
   finishNativePasskeyLogin(id: $id, responseJson: $responseJson) {
     callbackUrl
   }
@@ -86,16 +79,16 @@ mutation OnboardingGoogleConnectStepStartMutation(
 
 # mutation PageViewTelemetry  (app-eNF866Ec.js)
 mutation PageViewTelemetry($events: [ClientTelemetryEventInput!]!) {
-        ingestClientTelemetryEvents(events: $events)
-    }
+  ingestClientTelemetryEvents(events: $events)
+}
 
 # mutation UpdateDraftField  (AgentChatPage-CmhyiyT0.js)
 mutation UpdateDraftField($chatId: ID!, $eventId: ID!, $value: String!) {
-        updateDraftField(chatId: $chatId, eventId: $eventId, value: $value) {
-            content
-            userValue
-        }
-    }
+  updateDraftField(chatId: $chatId, eventId: $eventId, value: $value) {
+    content
+    userValue
+  }
+}
 
 # mutation useAgentChatGetOrCreateMutation  (AgentChatPage-CmhyiyT0.js)
 mutation useAgentChatGetOrCreateMutation {
@@ -109,9 +102,7 @@ mutation useAgentChatGetOrCreateMutation {
 }
 
 # mutation useAgentChatSendPersistentChatMessageMutation  (AgentChatPage-CmhyiyT0.js)
-mutation useAgentChatSendPersistentChatMessageMutation(
-  $input: SendPersistentChatMessageInput!
-) {
+mutation useAgentChatSendPersistentChatMessageMutation($input: SendPersistentChatMessageInput!) {
   sendPersistentChatMessage(input: $input) {
     chatId
     wakeId
@@ -120,11 +111,7 @@ mutation useAgentChatSendPersistentChatMessageMutation(
 }
 
 # mutation useAgentChatUpdateDraftFieldMutation  (AgentChatPage-CmhyiyT0.js)
-mutation useAgentChatUpdateDraftFieldMutation(
-  $chatId: ID!
-  $eventId: ID!
-  $value: String!
-) {
+mutation useAgentChatUpdateDraftFieldMutation($chatId: ID!, $eventId: ID!, $value: String!) {
   updateDraftField(chatId: $chatId, eventId: $eventId, value: $value) {
     content
     userValue
@@ -146,9 +133,7 @@ query useAgentContactQuery {
 }
 
 # query useAgentMailAddressAvailabilityQuery  (WorkspacePage-BBbe7afQ.js)
-query useAgentMailAddressAvailabilityQuery(
-  $localPart: String!
-) {
+query useAgentMailAddressAvailabilityQuery($localPart: String!) {
   agentMailAddressAvailability(localPart: $localPart) {
     address
     valid
@@ -159,9 +144,7 @@ query useAgentMailAddressAvailabilityQuery(
 }
 
 # mutation useAgentMailAddressChangeMutation  (WorkspacePage-BBbe7afQ.js)
-mutation useAgentMailAddressChangeMutation(
-  $localPart: String!
-) {
+mutation useAgentMailAddressChangeMutation($localPart: String!) {
   changeAgentMailAddress(localPart: $localPart) {
     address
     previousAddress
@@ -170,9 +153,7 @@ mutation useAgentMailAddressChangeMutation(
 }
 
 # mutation useAgentMailEnabledMutation  (WorkspacePage-BBbe7afQ.js)
-mutation useAgentMailEnabledMutation(
-  $enabled: Boolean!
-) {
+mutation useAgentMailEnabledMutation($enabled: Boolean!) {
   setAgentMailEnabled(enabled: $enabled) {
     smsPhoneNumber
     voicePhoneNumber
@@ -222,9 +203,7 @@ mutation useBrowserPasskeyLoginBeginDirectMutation {
 }
 
 # mutation useBrowserPasskeyLoginCompleteWaitMutation  (AuthFlow-DLlEgwlc.js)
-mutation useBrowserPasskeyLoginCompleteWaitMutation(
-  $id: String!
-) {
+mutation useBrowserPasskeyLoginCompleteWaitMutation($id: String!) {
   browserCompletePasskeyRecoveryWait(id: $id) {
     __typename
     ... on BrowserSession {
@@ -249,7 +228,12 @@ mutation useBrowserPasskeyLoginFinishDirectMutation(
   $timezone: String!
   $inviteToken: String
 ) {
-  browserFinishDirectPasskeyLogin(id: $id, responseJson: $responseJson, timezone: $timezone, inviteToken: $inviteToken) {
+  browserFinishDirectPasskeyLogin(
+    id: $id
+    responseJson: $responseJson
+    timezone: $timezone
+    inviteToken: $inviteToken
+  ) {
     __typename
     ... on BrowserSession {
       user {
@@ -267,10 +251,7 @@ mutation useBrowserPasskeyLoginFinishDirectMutation(
 }
 
 # mutation useBrowserPasskeyLoginMutation  (AuthFlow-DLlEgwlc.js)
-mutation useBrowserPasskeyLoginMutation(
-  $id: String!
-  $responseJson: String!
-) {
+mutation useBrowserPasskeyLoginMutation($id: String!, $responseJson: String!) {
   browserFinishPasskeyLogin(id: $id, responseJson: $responseJson) {
     __typename
     ... on BrowserSession {
@@ -289,10 +270,7 @@ mutation useBrowserPasskeyLoginMutation(
 }
 
 # mutation useBrowserPasskeyLoginRecoverMutation  (AuthFlow-DLlEgwlc.js)
-mutation useBrowserPasskeyLoginRecoverMutation(
-  $id: String!
-  $recoveryCode: String!
-) {
+mutation useBrowserPasskeyLoginRecoverMutation($id: String!, $recoveryCode: String!) {
   browserRecoverPasskeyLogin(id: $id, recoveryCode: $recoveryCode) {
     __typename
     ... on BrowserSession {
@@ -311,9 +289,7 @@ mutation useBrowserPasskeyLoginRecoverMutation(
 }
 
 # mutation useBrowserPasskeyLoginStartWaitMutation  (AuthFlow-DLlEgwlc.js)
-mutation useBrowserPasskeyLoginStartWaitMutation(
-  $id: String!
-) {
+mutation useBrowserPasskeyLoginStartWaitMutation($id: String!) {
   startPasskeyRecoveryWait(id: $id) {
     endsAt
     ready
@@ -330,7 +306,15 @@ mutation useBrowserVerifySmsOtpMutation(
   $inviteToken: String
   $websiteVisitId: String
 ) {
-  browserVerifySmsOtp(phoneNumber: $phoneNumber, code: $code, bindingToken: $bindingToken, timezone: $timezone, name: $name, inviteToken: $inviteToken, websiteVisitId: $websiteVisitId) {
+  browserVerifySmsOtp(
+    phoneNumber: $phoneNumber
+    code: $code
+    bindingToken: $bindingToken
+    timezone: $timezone
+    name: $name
+    inviteToken: $inviteToken
+    websiteVisitId: $websiteVisitId
+  ) {
     __typename
     ... on BrowserSession {
       user {
@@ -372,12 +356,7 @@ query useChannelChoiceLayoutQuery {
 }
 
 # query useChatHistoryQuery  (AgentChatPage-CmhyiyT0.js)
-query useChatHistoryQuery(
-  $chatId: ID!
-  $source: ChatSource
-  $limit: Int
-  $cursor: String
-) {
+query useChatHistoryQuery($chatId: ID!, $source: ChatSource, $limit: Int, $cursor: String) {
   chat(chatId: $chatId) {
     source
     status
@@ -480,16 +459,12 @@ query useChatHistoryQuery(
 }
 
 # mutation useCliLoginRequestApproveProductMutation  (ProductCliAuthPage-C0GVmRcw.js)
-mutation useCliLoginRequestApproveProductMutation(
-  $code: String!
-) {
+mutation useCliLoginRequestApproveProductMutation($code: String!) {
   approveProductCliLogin(code: $code)
 }
 
 # query useCliLoginRequestProductQuery  (ProductCliAuthPage-C0GVmRcw.js)
-query useCliLoginRequestProductQuery(
-  $code: String!
-) {
+query useCliLoginRequestProductQuery($code: String!) {
   productCliLoginRequest(code: $code) {
     host
     requestedAt
@@ -506,7 +481,12 @@ mutation useConnectWhatsAppChannelMutation(
   $bindingToken: String!
   $signupToken: String
 ) {
-  connectWhatsAppChannel(phoneNumber: $phoneNumber, code: $code, bindingToken: $bindingToken, signupToken: $signupToken) {
+  connectWhatsAppChannel(
+    phoneNumber: $phoneNumber
+    code: $code
+    bindingToken: $bindingToken
+    signupToken: $signupToken
+  ) {
     userId
     phoneNumber
   }
@@ -543,17 +523,12 @@ query useDevicesQuery {
 }
 
 # mutation useDevicesRemoveMutation  (WorkspacePage-BBbe7afQ.js)
-mutation useDevicesRemoveMutation(
-  $deviceId: ID!
-) {
+mutation useDevicesRemoveMutation($deviceId: ID!) {
   removeDevice(deviceId: $deviceId)
 }
 
 # mutation useDevicesRenameMutation  (WorkspacePage-BBbe7afQ.js)
-mutation useDevicesRenameMutation(
-  $deviceId: ID!
-  $name: String!
-) {
+mutation useDevicesRenameMutation($deviceId: ID!, $name: String!) {
   renameDevice(deviceId: $deviceId, name: $name) {
     id
     name
@@ -561,9 +536,7 @@ mutation useDevicesRenameMutation(
 }
 
 # mutation useGenerateReferralLinkMutation  (app-eNF866Ec.js)
-mutation useGenerateReferralLinkMutation(
-  $name: String
-) {
+mutation useGenerateReferralLinkMutation($name: String) {
   generateReferralLink(name: $name) {
     id
     url
@@ -589,16 +562,12 @@ query useGoogleDataDeletionsQuery {
 }
 
 # query useGranolaConnectRequestMcpAuthUrlQuery  (GranolaConnectPage-BQNKerNX.js)
-query useGranolaConnectRequestMcpAuthUrlQuery(
-  $token: String!
-) {
+query useGranolaConnectRequestMcpAuthUrlQuery($token: String!) {
   granolaMcpAuthUrl(token: $token)
 }
 
 # query useGranolaConnectRequestQuery  (GranolaConnectPage-BQNKerNX.js)
-query useGranolaConnectRequestQuery(
-  $token: String!
-) {
+query useGranolaConnectRequestQuery($token: String!) {
   granolaConnectRequest(token: $token) {
     status
     boundUserDisplay
@@ -606,9 +575,7 @@ query useGranolaConnectRequestQuery(
 }
 
 # query useGroupTrustQuery  (GroupTrustPage-CSX_XuK9.js)
-query useGroupTrustQuery(
-  $id: ID!
-) {
+query useGroupTrustQuery($id: ID!) {
   agentToAgentSettings {
     enabled
   }
@@ -632,10 +599,7 @@ query useGroupTrustQuery(
 }
 
 # mutation useGroupTrustRequestMutation  (GroupTrustPage-CSX_XuK9.js)
-mutation useGroupTrustRequestMutation(
-  $id: ID!
-  $generation: Int!
-) {
+mutation useGroupTrustRequestMutation($id: ID!, $generation: Int!) {
   requestGroupTrust(id: $id, generation: $generation) {
     id
     generation
@@ -644,20 +608,14 @@ mutation useGroupTrustRequestMutation(
 }
 
 # mutation useIcloudEmailLinkMutation  (LinkIcloudPage-B6Iwu7Qz.js)
-mutation useIcloudEmailLinkMutation(
-  $emailProofToken: String!
-  $replace: Boolean
-) {
+mutation useIcloudEmailLinkMutation($emailProofToken: String!, $replace: Boolean) {
   linkIcloudEmail(emailProofToken: $emailProofToken, replace: $replace) {
     icloudEmail
   }
 }
 
 # mutation useIcloudEmailLinkRequestMutation  (LinkIcloudPage-B6Iwu7Qz.js)
-mutation useIcloudEmailLinkRequestMutation(
-  $emailHandle: String!
-  $turnstileToken: String
-) {
+mutation useIcloudEmailLinkRequestMutation($emailHandle: String!, $turnstileToken: String) {
   requestIcloudEmailOtp(emailHandle: $emailHandle, turnstileToken: $turnstileToken) {
     bindingToken
     resendAfterSeconds
@@ -684,9 +642,7 @@ query useIcloudLinkAccountQuery {
 }
 
 # mutation useIMessageLocalConnectionConnectMutation  (WorkspacePage-BBbe7afQ.js)
-mutation useIMessageLocalConnectionConnectMutation(
-  $deviceId: ID
-) {
+mutation useIMessageLocalConnectionConnectMutation($deviceId: ID) {
   imessageLocalConnect(deviceId: $deviceId) {
     userId
     connectedAt
@@ -711,9 +667,7 @@ query useIMessageLocalConnectionQuery {
 }
 
 # mutation useIMessageLocalConnectionSetPreferredDeviceMutation  (WorkspacePage-BBbe7afQ.js)
-mutation useIMessageLocalConnectionSetPreferredDeviceMutation(
-  $deviceId: ID
-) {
+mutation useIMessageLocalConnectionSetPreferredDeviceMutation($deviceId: ID) {
   imessageLocalSetPreferredDevice(deviceId: $deviceId) {
     userId
     connectedAt
@@ -723,17 +677,12 @@ mutation useIMessageLocalConnectionSetPreferredDeviceMutation(
 }
 
 # query useIntegrationAuthConnectAuthUrlQuery  (ConnectPage-ClRYfFxh.js)
-query useIntegrationAuthConnectAuthUrlQuery(
-  $token: String!
-  $openedFrom: String
-) {
+query useIntegrationAuthConnectAuthUrlQuery($token: String!, $openedFrom: String) {
   integrationAuthUrl(token: $token, openedFrom: $openedFrom)
 }
 
 # query useIntegrationAuthConnectValidateTokenQuery  (ConnectPage-ClRYfFxh.js)
-query useIntegrationAuthConnectValidateTokenQuery(
-  $token: String!
-) {
+query useIntegrationAuthConnectValidateTokenQuery($token: String!) {
   validateIntegrationAuthToken(token: $token) {
     status
     connectAvailability {
@@ -749,9 +698,7 @@ query useIntegrationAuthConnectValidateTokenQuery(
 }
 
 # query useIntegrationConnectAvailabilityQuery  (WorkspacePage-BBbe7afQ.js)
-query useIntegrationConnectAvailabilityQuery(
-  $integrationId: String!
-) {
+query useIntegrationConnectAvailabilityQuery($integrationId: String!) {
   integrationConnectAvailability(integrationId: $integrationId) {
     status
     message
@@ -805,16 +752,12 @@ query useLocalBrowserDevicePickerQuery {
 }
 
 # mutation useLocalBrowserDevicePickerReleaseMutation  (WorkspacePage-BBbe7afQ.js)
-mutation useLocalBrowserDevicePickerReleaseMutation(
-  $deviceId: ID!
-) {
+mutation useLocalBrowserDevicePickerReleaseMutation($deviceId: ID!) {
   releaseLocalBrowserDevice(deviceId: $deviceId)
 }
 
 # mutation useLocalBrowserDevicePickerSetMutation  (WorkspacePage-BBbe7afQ.js)
-mutation useLocalBrowserDevicePickerSetMutation(
-  $deviceId: ID
-) {
+mutation useLocalBrowserDevicePickerSetMutation($deviceId: ID) {
   setLocalBrowserDevice(deviceId: $deviceId) {
     preferences {
       localBrowserDeviceId
@@ -860,10 +803,7 @@ fragment useMyReferralLinks_standing on MyReferralLinks {
 }
 
 # mutation useOnePasswordCompleteMutation  (useOnePassword-jTIXdo0H.js)
-mutation useOnePasswordCompleteMutation(
-  $state: String!
-  $code: String!
-) {
+mutation useOnePasswordCompleteMutation($state: String!, $code: String!) {
   completeOnePasswordConnect(state: $state, code: $code) {
     status
     doneUrl
@@ -876,18 +816,12 @@ mutation useOnePasswordDisconnectMutation {
 }
 
 # mutation useOnePasswordSaveKeyMutation  (useOnePassword-jTIXdo0H.js)
-mutation useOnePasswordSaveKeyMutation(
-  $state: String!
-  $integrationKey: String!
-) {
+mutation useOnePasswordSaveKeyMutation($state: String!, $integrationKey: String!) {
   saveOnePasswordIntegrationKey(state: $state, integrationKey: $integrationKey)
 }
 
 # mutation useOnePasswordStartMutation  (useOnePassword-jTIXdo0H.js)
-mutation useOnePasswordStartMutation(
-  $request: String
-  $openedFrom: String
-) {
+mutation useOnePasswordStartMutation($request: String, $openedFrom: String) {
   startOnePasswordConnect(request: $request, openedFrom: $openedFrom)
 }
 
@@ -940,9 +874,7 @@ mutation usePasskeysCancelRecoveryWaitMutation {
 }
 
 # mutation usePasskeysConfirmRegistrationMutation  (PasskeyRecoveryCodes-BmjvVitX.js)
-mutation usePasskeysConfirmRegistrationMutation(
-  $activationId: String!
-) {
+mutation usePasskeysConfirmRegistrationMutation($activationId: String!) {
   confirmPasskeyRegistration(activationId: $activationId) {
     enabled
     enrollmentAvailable
@@ -961,10 +893,7 @@ mutation usePasskeysConfirmRegistrationMutation(
 }
 
 # mutation usePasskeysFinishAdditionMutation  (PasskeyRecoveryCodes-BmjvVitX.js)
-mutation usePasskeysFinishAdditionMutation(
-  $id: String!
-  $responseJson: String!
-) {
+mutation usePasskeysFinishAdditionMutation($id: String!, $responseJson: String!) {
   finishPasskeyAddition(id: $id, responseJson: $responseJson) {
     enabled
     enrollmentAvailable
@@ -983,11 +912,7 @@ mutation usePasskeysFinishAdditionMutation(
 }
 
 # mutation usePasskeysFinishDisableMutation  (PasskeyRecoveryCodes-BmjvVitX.js)
-mutation usePasskeysFinishDisableMutation(
-  $id: String!
-  $responseJson: String!
-  $passkeyId: ID
-) {
+mutation usePasskeysFinishDisableMutation($id: String!, $responseJson: String!, $passkeyId: ID) {
   finishDisablePasskey(id: $id, responseJson: $responseJson, passkeyId: $passkeyId) {
     enabled
     enrollmentAvailable
@@ -1006,10 +931,7 @@ mutation usePasskeysFinishDisableMutation(
 }
 
 # mutation usePasskeysFinishRegistrationMutation  (PasskeyRecoveryCodes-BmjvVitX.js)
-mutation usePasskeysFinishRegistrationMutation(
-  $id: String!
-  $responseJson: String!
-) {
+mutation usePasskeysFinishRegistrationMutation($id: String!, $responseJson: String!) {
   finishPasskeyRegistration(id: $id, responseJson: $responseJson) {
     activationId
     recoveryCodes
@@ -1017,10 +939,7 @@ mutation usePasskeysFinishRegistrationMutation(
 }
 
 # mutation usePasskeysRenameMutation  (PasskeyRecoveryCodes-BmjvVitX.js)
-mutation usePasskeysRenameMutation(
-  $passkeyId: ID!
-  $name: String!
-) {
+mutation usePasskeysRenameMutation($passkeyId: ID!, $name: String!) {
   renamePasskey(passkeyId: $passkeyId, name: $name) {
     enabled
     enrollmentAvailable
@@ -1058,10 +977,7 @@ query usePasskeysStatusQuery {
 }
 
 # mutation usePasskeysVerifyAdditionMutation  (PasskeyRecoveryCodes-BmjvVitX.js)
-mutation usePasskeysVerifyAdditionMutation(
-  $id: String!
-  $responseJson: String!
-) {
+mutation usePasskeysVerifyAdditionMutation($id: String!, $responseJson: String!) {
   verifyPasskeyAddition(id: $id, responseJson: $responseJson) {
     id
     optionsJson
@@ -1069,9 +985,7 @@ mutation usePasskeysVerifyAdditionMutation(
 }
 
 # mutation useRedeemTextSignupMutation  (TextOnboardingPage-BWjsh3vf.js)
-mutation useRedeemTextSignupMutation(
-  $token: String!
-) {
+mutation useRedeemTextSignupMutation($token: String!) {
   redeemTextSignup(token: $token) {
     userId
     phoneNumber
@@ -1094,7 +1008,14 @@ mutation useRequestSmsOtpMutation(
   $preferSms: Boolean!
   $preferredChannel: SmsOtpDeliveryChannel
 ) {
-  requestSmsOtp(phoneNumber: $phoneNumber, marketingConsent: $marketingConsent, consentCopyVersion: $consentCopyVersion, turnstileToken: $turnstileToken, preferSms: $preferSms, preferredChannel: $preferredChannel) {
+  requestSmsOtp(
+    phoneNumber: $phoneNumber
+    marketingConsent: $marketingConsent
+    consentCopyVersion: $consentCopyVersion
+    turnstileToken: $turnstileToken
+    preferSms: $preferSms
+    preferredChannel: $preferredChannel
+  ) {
     bindingToken
     deliveryChannel
     resendAfterSeconds
@@ -1125,9 +1046,7 @@ mutation useResetOwnSecurityTestAccountMutation {
 }
 
 # query useResolveInviteLinkQuery  (InvitePage-CuCpmfj7.js)
-query useResolveInviteLinkQuery(
-  $token: String!
-) {
+query useResolveInviteLinkQuery($token: String!) {
   resolveInviteLink(token: $token) {
     state
     referrerName
@@ -1140,9 +1059,7 @@ mutation useRevalidateAccessMutation {
 }
 
 # mutation useRevokeInviteLinkMutation  (AppLayout-OszrBAfc.js)
-mutation useRevokeInviteLinkMutation(
-  $id: ID!
-) {
+mutation useRevokeInviteLinkMutation($id: ID!) {
   revokeInviteLink(id: $id) {
     ...useMyReferralLinks_standing
   }
@@ -1171,9 +1088,7 @@ query useSecurityTestAccountQuery {
 }
 
 # mutation useSetNameMutation  (SettingsPage-Et2fAfzA.js)
-mutation useSetNameMutation(
-  $name: String!
-) {
+mutation useSetNameMutation($name: String!) {
   setName(name: $name) {
     id
     name
@@ -1181,9 +1096,7 @@ mutation useSetNameMutation(
 }
 
 # mutation useSetOnboardingStepMutation  (useSetOnboardingStep-DsyOYFlR.js)
-mutation useSetOnboardingStepMutation(
-  $step: String
-) {
+mutation useSetOnboardingStepMutation($step: String) {
   setOnboardingStep(step: $step) {
     id
     onboardingStep
@@ -1201,9 +1114,7 @@ query useSmsMarketingConsentCopyQuery {
 }
 
 # query useSmsSignInContextQuery  (app-eNF866Ec.js)
-query useSmsSignInContextQuery(
-  $token: String!
-) {
+query useSmsSignInContextQuery($token: String!) {
   smsSignInContext(token: $token) {
     phoneNumber
     emailHandle
@@ -1241,18 +1152,14 @@ mutation useSubmitSignupProfileMutation(
 }
 
 # mutation useSyncBrowserTimezoneMutation  (TextOnboardingPage-BWjsh3vf.js)
-mutation useSyncBrowserTimezoneMutation(
-  $timezone: Timezone!
-) {
+mutation useSyncBrowserTimezoneMutation($timezone: Timezone!) {
   setTimezone(timezone: $timezone) {
     id
   }
 }
 
 # mutation useTrainingDataPreferenceMutation  (SettingsPage-Et2fAfzA.js)
-mutation useTrainingDataPreferenceMutation(
-  $optOut: Boolean!
-) {
+mutation useTrainingDataPreferenceMutation($optOut: Boolean!) {
   setTrainingDataOptOut(optOut: $optOut) {
     id
   }
@@ -1271,18 +1178,12 @@ query useTrainingDataPreferenceQuery {
 }
 
 # mutation useTrustedNetworkBlocksBlockMutation  (useTrustedNetworkBlocks-BSPwiryb.js)
-mutation useTrustedNetworkBlocksBlockMutation(
-  $id: ID!
-  $generation: Int!
-) {
+mutation useTrustedNetworkBlocksBlockMutation($id: ID!, $generation: Int!) {
   blockTrustedNetworkPerson(id: $id, generation: $generation)
 }
 
 # mutation useTrustedNetworkBlocksUnblockMutation  (useTrustedNetworkBlocks-BSPwiryb.js)
-mutation useTrustedNetworkBlocksUnblockMutation(
-  $id: ID!
-  $decisionGeneration: String!
-) {
+mutation useTrustedNetworkBlocksUnblockMutation($id: ID!, $decisionGeneration: String!) {
   unblockTrustedNetworkPerson(id: $id, decisionGeneration: $decisionGeneration)
 }
 
@@ -1294,9 +1195,7 @@ query useTrustedNetworkJoinLinkMineQuery {
 }
 
 # query useTrustedNetworkJoinLinkQuery  (useTrustedNetworkJoinLink-CTMZEonZ.js)
-query useTrustedNetworkJoinLinkQuery(
-  $token: String!
-) {
+query useTrustedNetworkJoinLinkQuery($token: String!) {
   resolveTrustedNetworkJoinLink(token: $token) {
     state
     ownerName
@@ -1306,9 +1205,7 @@ query useTrustedNetworkJoinLinkQuery(
 }
 
 # mutation useTrustedNetworkJoinLinkRequestMutation  (useTrustedNetworkJoinLink-CTMZEonZ.js)
-mutation useTrustedNetworkJoinLinkRequestMutation(
-  $token: String!
-) {
+mutation useTrustedNetworkJoinLinkRequestMutation($token: String!) {
   requestTrustedNetworkJoin(token: $token) {
     outcome
     requestedByMe
@@ -1324,10 +1221,7 @@ mutation useTrustedNetworkJoinLinkResetMutation {
 }
 
 # mutation useTrustedNetworkRequestAcceptMutation  (GroupChatMembers-DVwodGky.js)
-mutation useTrustedNetworkRequestAcceptMutation(
-  $id: ID!
-  $generation: Int!
-) {
+mutation useTrustedNetworkRequestAcceptMutation($id: ID!, $generation: Int!) {
   acceptTrustedNetworkRequest(id: $id, generation: $generation) {
     id
     generation
@@ -1345,10 +1239,7 @@ mutation useTrustedNetworkRequestAcceptMutation(
 }
 
 # mutation useTrustedNetworkRequestDeclineMutation  (GroupChatMembers-DVwodGky.js)
-mutation useTrustedNetworkRequestDeclineMutation(
-  $id: ID!
-  $generation: Int!
-) {
+mutation useTrustedNetworkRequestDeclineMutation($id: ID!, $generation: Int!) {
   declineTrustedNetworkRequest(id: $id, generation: $generation) {
     id
     generation
@@ -1366,9 +1257,7 @@ mutation useTrustedNetworkRequestDeclineMutation(
 }
 
 # query useTrustedNetworkRequestQuery  (GroupChatMembers-DVwodGky.js)
-query useTrustedNetworkRequestQuery(
-  $id: ID!
-) {
+query useTrustedNetworkRequestQuery($id: ID!) {
   agentToAgentSettings {
     enabled
   }
@@ -1459,27 +1348,19 @@ query useTrustedNetworksQuery(
 }
 
 # mutation useTrustedNetworksRemoveMutation  (GroupChatMembers-DVwodGky.js)
-mutation useTrustedNetworksRemoveMutation(
-  $id: ID!
-  $generation: Int!
-) {
+mutation useTrustedNetworksRemoveMutation($id: ID!, $generation: Int!) {
   removeTrustedNetworkContact(id: $id, generation: $generation)
 }
 
 # mutation useTrustedNetworksSettingsMutation  (GroupChatMembers-DVwodGky.js)
-mutation useTrustedNetworksSettingsMutation(
-  $enabled: Boolean!
-) {
+mutation useTrustedNetworksSettingsMutation($enabled: Boolean!) {
   setAgentToAgentEnabled(enabled: $enabled) {
     enabled
   }
 }
 
 # mutation useVaultApprovalRequestDecideMutation  (VaultApprovalPage-B9W5nDRR.js)
-mutation useVaultApprovalRequestDecideMutation(
-  $token: String!
-  $decision: VaultApprovalDecision!
-) {
+mutation useVaultApprovalRequestDecideMutation($token: String!, $decision: VaultApprovalDecision!) {
   decideVaultApprovalRequest(token: $token, decision: $decision) {
     decision
     scope
@@ -1491,9 +1372,7 @@ mutation useVaultApprovalRequestDecideMutation(
 }
 
 # query useVaultApprovalRequestQuery  (VaultApprovalPage-B9W5nDRR.js)
-query useVaultApprovalRequestQuery(
-  $token: String!
-) {
+query useVaultApprovalRequestQuery($token: String!) {
   vaultApprovalRequest(token: $token) {
     status
     scope
@@ -1510,17 +1389,12 @@ query useVaultApprovalRequestQuery(
 }
 
 # mutation useVaultDeleteMutation  (vaultSubfieldInputs-B4fVyb8L.js)
-mutation useVaultDeleteMutation(
-  $kind: String!
-  $name: String!
-) {
+mutation useVaultDeleteMutation($kind: String!, $name: String!) {
   deleteVaultEntry(kind: $kind, name: $name)
 }
 
 # query useVaultFillRequestQuery  (VaultLinkScreens-DTyUM6ns.js)
-query useVaultFillRequestQuery(
-  $token: String!
-) {
+query useVaultFillRequestQuery($token: String!) {
   vaultFillRequest(token: $token) {
     status
     kind
@@ -1552,7 +1426,13 @@ mutation useVaultFillRequestSubmitMutation(
   $removeSites: [String!]
   $sandboxAccess: Boolean
 ) {
-  submitVaultFillRequest(token: $token, fields: $fields, addSites: $addSites, removeSites: $removeSites, sandboxAccess: $sandboxAccess) {
+  submitVaultFillRequest(
+    token: $token
+    fields: $fields
+    addSites: $addSites
+    removeSites: $removeSites
+    sandboxAccess: $sandboxAccess
+  ) {
     kind
     name
     vaultUrl
@@ -1561,11 +1441,7 @@ mutation useVaultFillRequestSubmitMutation(
 }
 
 # mutation useVaultLoadSubfieldMutation  (vaultSubfieldInputs-B4fVyb8L.js)
-mutation useVaultLoadSubfieldMutation(
-  $kind: String!
-  $name: String!
-  $key: String!
-) {
+mutation useVaultLoadSubfieldMutation($kind: String!, $name: String!, $key: String!) {
   revealVaultSubfieldValue(kind: $kind, name: $name, key: $key)
 }
 
@@ -1595,10 +1471,7 @@ query useVaultQuery {
 }
 
 # mutation useVaultShareRequestConfirmMutation  (VaultShareConfirmPage-2mQIWI01.js)
-mutation useVaultShareRequestConfirmMutation(
-  $token: String!
-  $ttl: VaultShareTTL!
-) {
+mutation useVaultShareRequestConfirmMutation($token: String!, $ttl: VaultShareTTL!) {
   confirmVaultShareRequest(token: $token, ttl: $ttl) {
     share {
       name
@@ -1614,16 +1487,12 @@ mutation useVaultShareRequestConfirmMutation(
 }
 
 # mutation useVaultShareRequestDeclineMutation  (VaultShareConfirmPage-2mQIWI01.js)
-mutation useVaultShareRequestDeclineMutation(
-  $token: String!
-) {
+mutation useVaultShareRequestDeclineMutation($token: String!) {
   declineVaultShareRequest(token: $token)
 }
 
 # query useVaultShareRequestQuery  (VaultShareConfirmPage-2mQIWI01.js)
-query useVaultShareRequestQuery(
-  $token: String!
-) {
+query useVaultShareRequestQuery($token: String!) {
   vaultShareRequest(token: $token) {
     status
     boundUserDisplay
@@ -1641,9 +1510,7 @@ query useVaultShareRequestQuery(
 }
 
 # mutation useVaultSharesEndMutation  (VaultPage-CoHtSWTy.js)
-mutation useVaultSharesEndMutation(
-  $id: ID!
-) {
+mutation useVaultSharesEndMutation($id: ID!) {
   endVaultShare(id: $id)
 }
 
@@ -1678,18 +1545,12 @@ query useVaultSharesHeldQuery {
 }
 
 # mutation useVaultSharesRemoveMutation  (VaultPage-CoHtSWTy.js)
-mutation useVaultSharesRemoveMutation(
-  $id: ID!
-) {
+mutation useVaultSharesRemoveMutation($id: ID!) {
   removeSharedVaultItem(id: $id)
 }
 
 # mutation useVaultSharesShareMutation  (VaultPage-CoHtSWTy.js)
-mutation useVaultSharesShareMutation(
-  $name: String!
-  $linkId: ID!
-  $ttl: VaultShareTTL!
-) {
+mutation useVaultSharesShareMutation($name: String!, $linkId: ID!, $ttl: VaultShareTTL!) {
   shareVaultEntry(name: $name, linkId: $linkId, ttl: $ttl) {
     id
   }
@@ -1705,9 +1566,7 @@ query useVaultSharesTargetsQuery {
 }
 
 # mutation useVaultUpsertMutation  (vaultSubfieldInputs-B4fVyb8L.js)
-mutation useVaultUpsertMutation(
-  $input: VaultUpsertInput!
-) {
+mutation useVaultUpsertMutation($input: VaultUpsertInput!) {
   upsertVaultEntry(input: $input) {
     kind
     name
@@ -1741,16 +1600,12 @@ mutation useWorkspaceConnectionsGithubDisconnectMutation {
 }
 
 # mutation useWorkspaceConnectionsGoogleWorkspaceDisconnectConnectionMutation  (WorkspacePage-BBbe7afQ.js)
-mutation useWorkspaceConnectionsGoogleWorkspaceDisconnectConnectionMutation(
-  $connectionId: ID!
-) {
+mutation useWorkspaceConnectionsGoogleWorkspaceDisconnectConnectionMutation($connectionId: ID!) {
   googleWorkspaceDisconnectConnection(connectionId: $connectionId)
 }
 
 # mutation useWorkspaceConnectionsGoogleWorkspaceSelectConnectionMutation  (WorkspacePage-BBbe7afQ.js)
-mutation useWorkspaceConnectionsGoogleWorkspaceSelectConnectionMutation(
-  $connectionId: ID!
-) {
+mutation useWorkspaceConnectionsGoogleWorkspaceSelectConnectionMutation($connectionId: ID!) {
   googleWorkspaceSelectConnection(connectionId: $connectionId) {
     id
   }
@@ -1762,48 +1617,36 @@ mutation useWorkspaceConnectionsGranolaDisconnectMutation {
 }
 
 # mutation useWorkspaceConnectionsLinearDisconnectConnectionMutation  (WorkspacePage-BBbe7afQ.js)
-mutation useWorkspaceConnectionsLinearDisconnectConnectionMutation(
-  $connectionId: ID!
-) {
+mutation useWorkspaceConnectionsLinearDisconnectConnectionMutation($connectionId: ID!) {
   linearDisconnectConnection(connectionId: $connectionId)
 }
 
 # mutation useWorkspaceConnectionsLinearSelectConnectionMutation  (WorkspacePage-BBbe7afQ.js)
-mutation useWorkspaceConnectionsLinearSelectConnectionMutation(
-  $connectionId: ID!
-) {
+mutation useWorkspaceConnectionsLinearSelectConnectionMutation($connectionId: ID!) {
   linearSelectConnection(connectionId: $connectionId) {
     id
   }
 }
 
 # mutation useWorkspaceConnectionsNotionDisconnectConnectionMutation  (WorkspacePage-BBbe7afQ.js)
-mutation useWorkspaceConnectionsNotionDisconnectConnectionMutation(
-  $connectionId: ID!
-) {
+mutation useWorkspaceConnectionsNotionDisconnectConnectionMutation($connectionId: ID!) {
   notionDisconnectConnection(connectionId: $connectionId)
 }
 
 # mutation useWorkspaceConnectionsNotionSelectConnectionMutation  (WorkspacePage-BBbe7afQ.js)
-mutation useWorkspaceConnectionsNotionSelectConnectionMutation(
-  $connectionId: ID!
-) {
+mutation useWorkspaceConnectionsNotionSelectConnectionMutation($connectionId: ID!) {
   notionSelectConnection(connectionId: $connectionId) {
     id
   }
 }
 
 # mutation useWorkspaceConnectionsOutlookDisconnectConnectionMutation  (WorkspacePage-BBbe7afQ.js)
-mutation useWorkspaceConnectionsOutlookDisconnectConnectionMutation(
-  $connectionId: ID!
-) {
+mutation useWorkspaceConnectionsOutlookDisconnectConnectionMutation($connectionId: ID!) {
   outlookDisconnectConnection(connectionId: $connectionId)
 }
 
 # mutation useWorkspaceConnectionsOutlookSelectConnectionMutation  (WorkspacePage-BBbe7afQ.js)
-mutation useWorkspaceConnectionsOutlookSelectConnectionMutation(
-  $connectionId: ID!
-) {
+mutation useWorkspaceConnectionsOutlookSelectConnectionMutation($connectionId: ID!) {
   outlookSelectConnection(connectionId: $connectionId) {
     id
   }
@@ -1914,9 +1757,7 @@ mutation useWorkspaceConnectionsStartGranolaConnectMutation {
 }
 
 # mutation useWorkspaceConnectionsStartWebConnectMutation  (WorkspacePage-BBbe7afQ.js)
-mutation useWorkspaceConnectionsStartWebConnectMutation(
-  $integrationId: String!
-) {
+mutation useWorkspaceConnectionsStartWebConnectMutation($integrationId: String!) {
   startWebConnect(integrationId: $integrationId) {
     url
   }
@@ -1934,5 +1775,5 @@ mutation useWorkspaceConnectionsWhoopDisconnectMutation {
 
 # mutation WebTelemetry  (app-eNF866Ec.js)
 mutation WebTelemetry($events: [ClientTelemetryEventInput!]!) {
-        ingestClientTelemetryEvents(events: $events)
-    }
+  ingestClientTelemetryEvents(events: $events)
+}

@@ -19,7 +19,7 @@
  *   2. A CONTRACT SNAPSHOT pins every tool's name, scope, description and input
  *      schema digest. Changing a description or schema is a prompt/tool change
  *      and must be reviewed: the test fails until the snapshot is regenerated
- *      with `pnpm agent:evals --update-contract`.
+ *      with `bun run agent:evals --update-contract`.
  *
  * No network, no model, no clock: a fixture supplies the data source and the
  * harness plays the model. That also means it is deterministic in CI.
@@ -222,7 +222,7 @@ export function contractSnapshot(tools: readonly AgentToolDefinition[]): Contrac
 
 /**
  * Human-readable drift lines between the live registry and a committed
- * snapshot. Used by the test and by `pnpm agent:evals`; empty means no drift.
+ * snapshot. Used by the test and by `bun run agent:evals`; empty means no drift.
  */
 export function contractDrift(
   tools: readonly AgentToolDefinition[],

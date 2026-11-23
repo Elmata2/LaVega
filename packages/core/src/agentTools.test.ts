@@ -54,8 +54,9 @@ test("a tool hidden by the filter is also refused by name at dispatch", () => {
   expect(findAgentTool(readOnly, "apply_rule")).toBeUndefined();
   // The preview tool is hidden unless the caller opted in.
   expect(findAgentTool(readOnly, "preview_rule")).toBeUndefined();
-  expect(findAgentTool(buildAgentTools(registry, { scopes: ["read"], preview: true }), "preview_rule"))
-    .toBeDefined();
+  expect(
+    findAgentTool(buildAgentTools(registry, { scopes: ["read"], preview: true }), "preview_rule"),
+  ).toBeDefined();
 });
 
 test("preview tools are also refused by name for a caller without the flag", () => {

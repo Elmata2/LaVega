@@ -8,7 +8,12 @@ import type { CardTarget } from "../../lib/cardFileImport";
 
 (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
-const AMEX: CardTarget = { id: "american-express-platinum", name: "American Express Platinum", brand: "amex", kind: "credit" };
+const AMEX: CardTarget = {
+  id: "american-express-platinum",
+  name: "American Express Platinum",
+  brand: "amex",
+  kind: "credit",
+};
 const CSV = `Date,Description,Card Member,Account #,Amount,Appears on Your Statement As,Extended Details
 03/05/2026,SHOP ONE,A TESTER,-11111,10.00,SHOP ONE,x`;
 
@@ -25,7 +30,12 @@ const acc = (over: Partial<Account>): Account => ({
   balance: null,
   ...over,
 });
-const CARD_T212 = acc({ key: "TRADING212-CARD", name: "Trading 212", bank: "Trading 212", statedCardId: "212-card" });
+const CARD_T212 = acc({
+  key: "TRADING212-CARD",
+  name: "Trading 212",
+  bank: "Trading 212",
+  statedCardId: "212-card",
+});
 
 let root: Root | null = null;
 let el: HTMLElement | null = null;
@@ -39,7 +49,11 @@ afterEach(() => {
   el = null;
 });
 
-function mount(written: Account[], over: Partial<CardFileDialogProps> = {}, card: CardTarget | null = AMEX) {
+function mount(
+  written: Account[],
+  over: Partial<CardFileDialogProps> = {},
+  card: CardTarget | null = AMEX,
+) {
   const onSaveBalance = vi.fn(async (..._a: unknown[]) => {});
   const onCommit = vi.fn(async (..._a: unknown[]) => ({ ok: true as const, count: 1, written }));
   el = document.createElement("div");
@@ -72,7 +86,10 @@ const button = (label: string) =>
 async function importFile(csv = CSV, add = "Toevoegen") {
   const input = dialog().querySelector<HTMLInputElement>('input[type="file"]')!;
   await act(async () => {
-    Object.defineProperty(input, "files", { value: [new File([csv], "a.csv")], configurable: true });
+    Object.defineProperty(input, "files", {
+      value: [new File([csv], "a.csv")],
+      configurable: true,
+    });
     input.dispatchEvent(new Event("change", { bubbles: true }));
   });
   await act(async () => {
@@ -80,7 +97,8 @@ async function importFile(csv = CSV, add = "Toevoegen") {
   });
   await act(async () => button(add).click());
 }
-const field = (n = 0) => dialog().querySelectorAll<HTMLInputElement>('[data-testid="balance-input"]')[n]!;
+const field = (n = 0) =>
+  dialog().querySelectorAll<HTMLInputElement>('[data-testid="balance-input"]')[n]!;
 function type(input: HTMLInputElement, value: string) {
   const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
   act(() => {
@@ -93,7 +111,9 @@ test("a credit card without a balance gets the owed-amount field, focused, with 
   mount([acc({})]);
   await importFile();
   expect(dialog().textContent).toContain("Openstaand bedrag op je kaart");
-  expect(dialog().textContent).toContain("Te vinden in de Amex-app of op je laatste afschrift. Laat leeg als je het niet weet.");
+  expect(dialog().textContent).toContain(
+    "Te vinden in de Amex-app of op je laatste afschrift. Laat leeg als je het niet weet.",
+  );
   expect(dialog().textContent).toContain("per vandaag");
   expect(document.activeElement).toBe(field());
   expect(field().getAttribute("aria-label") ?? dialog().querySelector("label")).toBeTruthy();
@@ -176,7 +196,9 @@ test("a rejected write shows an alert, keeps the value, shows no success line an
   await importFile();
   type(field(), "250");
   await act(async () => button("Opslaan").click());
-  expect(dialog().querySelector('[role="alert"]')!.textContent).toBe("Opslaan lukte niet. Probeer het opnieuw.");
+  expect(dialog().querySelector('[role="alert"]')!.textContent).toBe(
+    "Opslaan lukte niet. Probeer het opnieuw.",
+  );
   expect(field().value).toBe("250");
   expect(dialog().textContent).not.toContain("Saldo opgeslagen");
   expect(button("Opslaan").disabled).toBe(false);
@@ -191,7 +213,10 @@ test("the label kind matches the stored sign for every kind of account", async (
   const cases: [Account, string][] = [
     [acc({}), "Openstaand bedrag op je kaart"],
     [CARD_T212, "Saldo op je kaart nu"],
-    [acc({ key: "NL01INGB0001", name: "Betaalrekening", bank: "ING" }), "Saldo van Betaalrekening nu"],
+    [
+      acc({ key: "NL01INGB0001", name: "Betaalrekening", bank: "ING" }),
+      "Saldo van Betaalrekening nu",
+    ],
   ];
   for (const [account, label] of cases) {
     if (root) act(() => root!.unmount());

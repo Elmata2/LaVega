@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { expect, test, vi } from "vitest";
 import { createMemoryBrokerSyncStateStore } from "@lavega/adapters";
 import { createFileCredentialStore } from "./fileCredentialStore.js";
-import { createImmediatePartnerBudget } from "@lavega/adapters/src/partnerBudget/fakes.js";
+import { createImmediatePartnerBudget } from "@lavega/adapters/partnerBudget/fakes";
 import { createRuntimeBrokerDataCache, createRuntimeBrokerSync } from "./index.js";
 
 test("resumed broker history survives final pages, file reload, and a later full replacement", async () => {

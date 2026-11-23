@@ -35,6 +35,7 @@ Note for the builder: Sure's home has **no** four add boxes. That part is LaVega
 ## 3. Goals, non-goals, anti-goals
 
 Goals
+
 - A new user's Home shows four fixed blocks and the add area, in one calm column.
 - Adding or hiding a block takes one click on Home and never leaves a hole in the grid.
 - The assistant is one click away on every view at >= 1024px, keeps its conversation across views, and never makes main narrower than 480px.
@@ -42,6 +43,7 @@ Goals
 - Zero bytes leave the browser for an assistant turn (unchanged from the thin slice).
 
 Non-goals (this spec)
+
 - Drag to reorder, per-card collapse, width/height presets, a "customize" mode, a period picker above the page. Sure has these; LaVega does not get them in this round.
 - New assistant capabilities: no model call, no new tools, no server route (for this change; superseded for the chat by docs/superpowers/specs/2026-11-18-assistant-is-instinct-design.md). Only the mounting and the look change.
 - The Profiel rework (a later session) and any change to Optimalisatie, Rekeningen or the intake wizard itself.
@@ -49,6 +51,7 @@ Non-goals (this spec)
 - Changing what any data block computes.
 
 Anti-goals (must not happen)
+
 - A pop-up on any view other than Home, more than one pop-up in a browser session, or a pop-up that cannot be closed with Escape.
 - A pop-up that hides a problem banner or opens over the vault gate, the wizard or another dialog.
 - The assistant answering from a vault snapshot that is older than the last import.
@@ -68,6 +71,7 @@ Anti-goals (must not happen)
 ## 5. Home
 
 ### 5.1 Name
+
 `shellCopy.*.topBar.viewTitles.overview`, the rail/bottom-bar/drawer label and the module-picker texts that say "overzicht"/"overview" become "Home" in both locales. The view id `overview`, the route `/app` and the storage key `lavega.overviewWidgets` do not change.
 
 ### 5.2 Default page, top to bottom
@@ -95,16 +99,20 @@ Gone from the page: `AssistantPanel` (section 6), `IntakeInviteWidget` and `Conn
 "Outflows chart" (owner 6) is read as the donut that already exists inside Statistieken (`StatView` "verdeling"), not a new card. Statistieken therefore opens on "verdeling" instead of "categorie". See open question 1.
 
 ### 5.3 The chart slot
+
 Cashflow stops being a card of its own: it exists on Home only inside this slot. Top uitgaven (a category list) is a separate opt-in widget and is not the "outflows chart".
 
 One module, `span 3`, `height tall`, with a two-option segmented control in the module header: "Totale positie" | "Cashflow". It renders the body of the existing `SaldoBlock` or `CashflowBlock`; nothing in either calculation changes.
+
 - Preference: `lavega.homeChart` = `"position" | "cashflow"`, default `"position"` (owner 7). Unknown or unreadable value = default.
 - The control is a radio group (native inputs, arrow keys). Switching swaps the body with no animation.
 - The module title follows the choice. Footer links of the shown block stay.
 - When the widget "Positie per bedrijf" is on (only possible while business is not archived), the slot is `span 2` and that card sits beside it, as today.
 
 ### 5.4 Widgets and the add area
+
 Registry (`components/moduleRegistry.tsx`):
+
 - Remove ids `intake-invite`, `room-card`, `connect-checklist`. Stored lists that still hold them are cleaned by `normaliseWidgets` (unknown ids are dropped today).
 - Add ids `recente-transacties` and `top-uitgaven`, with label, one-line `what` and a preview thumb like the others. Both blocks become widget-gated like `BetaalschemaWidget`.
 - `defaultOn` becomes `false` for `betaalagenda` and `btw-stand`. After this change no widget is on by default. The long comments in the registry that explain the old defaults are rewritten to the new rule: "Home starts with the four fixed blocks; every widget is a choice".
@@ -116,6 +124,7 @@ Order on the page when widgets are on: Aandacht, chart slot (+ Positie per bedri
 No holes: a pure function `homeSpans(enabledIds) -> Record<id, 1 | 2 | 3>` decides the span of every optional card from which neighbours are on. Rules: a row always sums to 3; pairs keep today's proportions (Recente 2 + Betaalagenda 1; BTW 2 + Facturen 1); a card with no partner takes 3. It replaces the three ad-hoc span expressions now in `Overzicht.tsx`. Unit test over every on/off combination of the optional ids: every row sums to 3.
 
 Add area (`HomeAddArea`, new, last child of the grid, `span 3`):
+
 - A heading "Voeg toe aan Home" / "Add to Home" and up to four dashed-outline boxes in an inner grid: 4 columns, 2 at a container width <= 900px, 1 at <= 520px.
 - Each box is one widget that is off and not archived, in registry order: label, the registry's one-line `what`, a "+" mark. The whole box is one `<button>`.
 - Click: the widget turns on through `setEnabledWidgets`, the box is replaced by the next off widget, and focus moves to the new card's heading. A polite live region says "<label> toegevoegd".
@@ -126,11 +135,13 @@ Add area (`HomeAddArea`, new, last child of the grid, `span 3`):
 Hide control: every widget-gated card gets one icon button in its module header, label "Verberg <label>" / "Hide <label>", visible on hover and on focus, always visible on touch. It turns the widget off; focus moves to the add area heading. The box that reappears in the add area is the undo; there is no confirm step and no toast. The four fixed blocks have no hide control.
 
 ### 5.5 Empty vault
+
 With no accounts the fixed blocks show their existing empty states. The add area still renders. The sidebar's "add account" row already covers the first action; no new placeholder.
 
 ## 6. Assistant panel
 
 ### 6.1 Frame, >= 1024px
+
 `Shell` gets a fourth region after main in source order:
 
 ```
@@ -147,10 +158,13 @@ rail 84 | account sidebar 240..440 | main (>= 480) | assistant 320..520
 - The module grid already measures its own container (`CONTENT_CONTAINER_CLASS`), so it follows the narrower main without new breakpoints. Verify at 1440 with both panels open: main is 680 and Home is one column.
 
 ### 6.2 Phone, < 1024px
+
 No column. The bottom bar gets a fourth item "Assistent" (after Rekeningen, before "Meer"). It is a button, not a link: it opens the assistant in a full-height sheet from the right, built on the `ShellDrawer` mechanics (modal dialog semantics, focus trap, Escape, scrim, page behind `inert`, focus back to the opener). It is not a view and has no route. See open question 3: this is a fourth bar item, which the owner's "no new items in the default nav" rule may or may not cover.
 
 ### 6.3 Content
+
 `AssistantPanel` keeps its logic (`routeAssistantIntent`, the three tools, approval events, one `putAssistant` save per decision) and its copy. Layout becomes a column:
+
 - Header: title "Assistent", a close button (same action as the toggle).
 - Log: scrolls, newest at the bottom, `aria-live="polite"` as today. The open approval card stays inline in the log.
 - Empty state (no messages yet): the existing intro line and three sample chips, one per tool: spending this month, account balances, "onthoud dat ik korte antwoorden wil". A chip click submits that text.
@@ -160,17 +174,21 @@ No column. The bottom bar gets a fourth item "Assistent" (after Rekeningen, befo
 - The panel currently uses utility classes that `styles/*.css` does not define (`border-border`, `bg-card`, `rounded-tile`, `rounded-chip`, `bg-secondary/30`, `text-muted-foreground`; grep finds no definition). Check in the browser whether they resolve; restyle the panel on the app's tokens either way.
 
 ### 6.4 Fresh data
+
 Today the panel reads the vault once on mount and lives only as long as Overzicht. In the frame it lives for the whole session, so a one-time snapshot goes stale after an import or a bank sync. Required: the snapshot is read again **before every turn** (`getAccounts`, `getTxs`, `getRules`), and the assistant state (`getAssistant`) is read again when the panel opens. A test imports a transaction after the panel mounted and asserts that the next spending answer includes it.
 
 ### 6.5 What moves in the code
+
 `Overzicht` loses the `storage` prop and the `AssistantPanel` import (the assistant is its only use of `storage`; the widget store is `localStorage`). `Shell` renders the toggle in its own top bar, next to the sidebar toggle's counterpart on the right, and gets no `storage` today. `App.tsx` passes `storage` and `asOf` to `Shell` (or passes the panel as a node, like `sidebar`). `docs/superpowers/specs/2026-11-11-assistant-thin-slice.md` decision 7 ("one card at the top of Overzicht") gets a dated amendment line that points here.
 
 ## 7. Pop-ups
 
 ### 7.1 One dialog primitive
+
 New `components/ui/Dialog.tsx` on the native `<dialog>` with `showModal()`, the pattern already used by `views/ForwardingGuide.tsx` and the landing sign-in dialog: always mounted, state drives `showModal()`/`close()`, a click on the backdrop closes, Escape closes, focus returns to the element that had it. Width `min(92vw, 480px)`. Title is the dialog's accessible name (`aria-labelledby`). A visible close button. Moving ForwardingGuide onto the primitive is allowed and not required.
 
 ### 7.2 Which pop-up, when
+
 A pure function decides: `nextPopup({view, invite, unconnectedBrands, dismissed, shownThisSession, now, blocked}) -> "intake" | "connect" | null`.
 
 - Only when `view === "overview"`, the vault is open, the profile has been read (`intake` prop present), and `blocked` is false. The wizard is its own view (`intake`), so no pop-up can open during it. `blocked` is true in exactly these states: `problems.length > 0` in `App.tsx` (the warning banner), the empty-scope line shows (`scopedAccounts.length === 0 && accounts.length > 0`), the phone drawer or the assistant sheet is open, or another `<dialog>` is open. When a blocked state ends on Home, the pop-up may open then.
@@ -186,11 +204,13 @@ A pure function decides: `nextPopup({view, invite, unconnectedBrands, dismissed,
 Correction 14 Nov 2026: `blocked` does not check for another `<dialog>`. In `App.tsx` it is true for exactly three conditions: `problems.length > 0`, the empty-scope line, and the phone drawer or assistant sheet being open (`overlayOpen`). The "or another `<dialog>` is open" clause above is not implemented.
 
 ### 7.3 Intake pop-up
+
 Same texts as the card (`intakeCopy.home.invite`: title, intro, `resumed`, `riskDue`, the two count lines). Primary button "Begin" or "Ga verder" with exactly the card's behaviour, including the `reopenRisk` save before the wizard opens for the risk review and `onOpenRound2` for round 2. Secondary button "Later". `IntakeInviteCard.tsx` is reduced to the exported `inviteState` (moved to `intake/`) and the card component is deleted with its widget wrapper.
 
 The quiet, permanent way in is the plan card at the top of Profiel. It currently always says "Begin" while locked; it now uses `inviteState` too and says "Ga verder" for a half-done wizard. This closes the open minor from PR #332.
 
 ### 7.4 Connect pop-up
+
 Title `intakeCopy.home.connect.title`. Body: the list of banks not connected yet, one line each (`connect.line`), with one primary button "Koppelen" that goes to Rekeningen and closes the dialog, and "Later". The per-row links of the old card become that one button. The permanent surface for the same fact is the Kaarten block, which already marks cards that are not connected. `ConnectChecklist.tsx` is deleted except for the exported brand function.
 
 Correction 14 Nov 2026: the Jouw plan page (`views/Plan.tsx`) also used it, so a plain `ConnectChecklist` component stays in `components/blocks/ConnectChecklist.tsx` for that page. Only its Home widget wrapper and the widget id `connect-checklist` are gone.
@@ -231,7 +251,6 @@ Steps 1-2, 3-4 and 5-6 are three independent lanes after step 1 and may run in p
 ## 11. Left to the builder
 
 Settled after the builder check (a second agent read this spec against the code, 13 Nov): the exact `blocked` states, when the session mark is written, where `hasTransactions` comes from, Cashflow as slot-only, and the `storage` plumbing. All five are calls of the writing session, not of the owner.
-
 
 - Whether `lavega.sidebar` and `lavega.assistantPanel` share one generic panel-prefs module. Allowed only if the existing sidebar tests pass unchanged.
 - File and component names not given here; the exact icon drawings; the exact Dutch and English wording of new strings (keep them short, no "adviseur").

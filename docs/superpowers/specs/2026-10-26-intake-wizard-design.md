@@ -33,6 +33,7 @@ Success: a new user taps through about 15 short screens in a couple of minutes a
 One screen each, in this order. Section label above the question in small caps.
 
 **Over jou**
+
 1. Woon je alleen of samen? (Alleen / Samen) → `applyHousehold`
 2. Heb je kinderen? (Ja / Nee). If Ja: one screen with a birth-year field per child and an "add child" control → `applyChildren`
 3. Hoeveel houd je netto over per maand? (one amount) → `applyStatedRange` income
@@ -48,8 +49,7 @@ One screen each, in this order. Section label above the question in small caps.
 
 **Risico**
 
-10-14. The five existing risk items (`loss-20`, `gain-vs-loss`, `sleep`, the "friend sells" item, the horizon item), copy unchanged. A tap on an option saves it and advances; no "Verder" button on these screens → `applyRiskAnswers`
-15. Heb je al eens belegd? (existing experience item) → `applyKnowledge` for that item only
+10-14. The five existing risk items (`loss-20`, `gain-vs-loss`, `sleep`, the "friend sells" item, the horizon item), copy unchanged. A tap on an option saves it and advances; no "Verder" button on these screens → `applyRiskAnswers` 15. Heb je al eens belegd? (existing experience item) → `applyKnowledge` for that item only
 
 The question wording above is the owner's intent; the existing NL/EN copy in `copy/intake.ts` may be reused or shortened, and every string goes through the copy modules (NL + EN, typed-complete, per the i18n boundary).
 

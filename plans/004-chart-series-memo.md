@@ -54,44 +54,44 @@ data still renders the same numbers.
 `apps/investing-web/src/components/PortfolioBenchmarkChart.tsx:182-224`:
 
 ```ts
-  const selectedSeries = useMemo(
-    () =>
-      selected.map(
-        (symbol) =>
-          benchmarks.find((benchmark) => benchmark.symbol === symbol) ?? {
-            symbol,
-            name: symbol,
-            exchange: "Yahoo Finance",
-            currency: "EUR",
-            points: [],
-          },
-      ),
-    [selected, benchmarks],
-  );
-  // Saved selection can arrive before benchmark prices. Ignore placeholders.
-  const loadedSeries = selectedSeries.filter((benchmark) => benchmark.points.length > 0);
-  const visibleBenchmarks = selectedSeries.filter((benchmark) => visible.has(benchmark.symbol));
-  const mode = deriveChartMode(selected);
-  const indexed = useMemo(
-    () => buildIndexedSeries(points, loadedSeries, externalCashFlows),
-    [points, loadedSeries, externalCashFlows],
-  );
-  const chartPoints =
-    mode === "euros"
-      ? points
-      : points.map((base, index) => {
-          const point = indexed[index]!;
-          return {
-            ...base,
-            ...point,
-            ...Object.fromEntries(
-              Object.entries(point.benchmarkReturns).map(([symbol, value]) => [
-                `benchmark:${symbol}`,
-                value,
-              ]),
-            ),
-          };
-        });
+const selectedSeries = useMemo(
+  () =>
+    selected.map(
+      (symbol) =>
+        benchmarks.find((benchmark) => benchmark.symbol === symbol) ?? {
+          symbol,
+          name: symbol,
+          exchange: "Yahoo Finance",
+          currency: "EUR",
+          points: [],
+        },
+    ),
+  [selected, benchmarks],
+);
+// Saved selection can arrive before benchmark prices. Ignore placeholders.
+const loadedSeries = selectedSeries.filter((benchmark) => benchmark.points.length > 0);
+const visibleBenchmarks = selectedSeries.filter((benchmark) => visible.has(benchmark.symbol));
+const mode = deriveChartMode(selected);
+const indexed = useMemo(
+  () => buildIndexedSeries(points, loadedSeries, externalCashFlows),
+  [points, loadedSeries, externalCashFlows],
+);
+const chartPoints =
+  mode === "euros"
+    ? points
+    : points.map((base, index) => {
+        const point = indexed[index]!;
+        return {
+          ...base,
+          ...point,
+          ...Object.fromEntries(
+            Object.entries(point.benchmarkReturns).map(([symbol, value]) => [
+              `benchmark:${symbol}`,
+              value,
+            ]),
+          ),
+        };
+      });
 ```
 
 Cost of the recomputed call, from `packages/core/src/investing/benchmarks.ts:340-374`:
@@ -121,21 +121,23 @@ already drive `pointerdown`/`pointermove`/`pointerup` on the chart container
 
 ## Commands you will need
 
-| Purpose | Command | Expected on success |
-|---------|---------|---------------------|
-| Web typecheck | `pnpm --filter @lavega/investing-web typecheck` | exit 0 |
-| Chart tests | `pnpm --filter @lavega/investing-web exec vitest run src/components/PortfolioBenchmarkChart.test.tsx` | all pass |
-| New memo test | `pnpm --filter @lavega/investing-web exec vitest run src/components/PortfolioBenchmarkChart.memo.test.tsx` | all pass |
-| Web tests | `pnpm --filter @lavega/investing-web test` | exit 0 |
-| Full typecheck (after 001) | `pnpm typecheck` | exit 0 |
+| Purpose                    | Command                                                                                                    | Expected on success |
+| -------------------------- | ---------------------------------------------------------------------------------------------------------- | ------------------- |
+| Web typecheck              | `pnpm --filter @lavega/investing-web typecheck`                                                            | exit 0              |
+| Chart tests                | `pnpm --filter @lavega/investing-web exec vitest run src/components/PortfolioBenchmarkChart.test.tsx`      | all pass            |
+| New memo test              | `pnpm --filter @lavega/investing-web exec vitest run src/components/PortfolioBenchmarkChart.memo.test.tsx` | all pass            |
+| Web tests                  | `pnpm --filter @lavega/investing-web test`                                                                 | exit 0              |
+| Full typecheck (after 001) | `pnpm typecheck`                                                                                           | exit 0              |
 
 ## Scope
 
 **In scope** (the only files you may modify):
+
 - `apps/investing-web/src/components/PortfolioBenchmarkChart.tsx`
 - `apps/investing-web/src/components/PortfolioBenchmarkChart.memo.test.tsx` (create)
 
 **Out of scope** (do NOT touch, even though they look related):
+
 - `packages/core/src/investing/benchmarks.ts` — the engine is fine; the component
   calls it too often. Do not optimize XIRR here.
 - `apps/investing-web/src/components/useChartWindow.ts` — pointer handling is
@@ -217,39 +219,39 @@ In `PortfolioBenchmarkChart.tsx`, keep `selectedSeries` as is and memoize the
 rest:
 
 ```ts
-  // Saved selection can arrive before benchmark prices. Ignore placeholders.
-  const loadedSeries = useMemo(
-    () => selectedSeries.filter((benchmark) => benchmark.points.length > 0),
-    [selectedSeries],
-  );
-  const visibleBenchmarks = useMemo(
-    () => selectedSeries.filter((benchmark) => visible.has(benchmark.symbol)),
-    [selectedSeries, visible],
-  );
-  const mode = deriveChartMode(selected);
-  const indexed = useMemo(
-    () => buildIndexedSeries(points, loadedSeries, externalCashFlows),
-    [points, loadedSeries, externalCashFlows],
-  );
-  const chartPoints = useMemo(
-    () =>
-      mode === "euros"
-        ? points
-        : points.map((base, index) => {
-            const point = indexed[index]!;
-            return {
-              ...base,
-              ...point,
-              ...Object.fromEntries(
-                Object.entries(point.benchmarkReturns).map(([symbol, value]) => [
-                  `benchmark:${symbol}`,
-                  value,
-                ]),
-              ),
-            };
-          }),
-    [mode, points, indexed],
-  );
+// Saved selection can arrive before benchmark prices. Ignore placeholders.
+const loadedSeries = useMemo(
+  () => selectedSeries.filter((benchmark) => benchmark.points.length > 0),
+  [selectedSeries],
+);
+const visibleBenchmarks = useMemo(
+  () => selectedSeries.filter((benchmark) => visible.has(benchmark.symbol)),
+  [selectedSeries, visible],
+);
+const mode = deriveChartMode(selected);
+const indexed = useMemo(
+  () => buildIndexedSeries(points, loadedSeries, externalCashFlows),
+  [points, loadedSeries, externalCashFlows],
+);
+const chartPoints = useMemo(
+  () =>
+    mode === "euros"
+      ? points
+      : points.map((base, index) => {
+          const point = indexed[index]!;
+          return {
+            ...base,
+            ...point,
+            ...Object.fromEntries(
+              Object.entries(point.benchmarkReturns).map(([symbol, value]) => [
+                `benchmark:${symbol}`,
+                value,
+              ]),
+            ),
+          };
+        }),
+  [mode, points, indexed],
+);
 ```
 
 Do not reorder hooks, do not add new state, and keep the computation identical —

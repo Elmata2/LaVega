@@ -21,7 +21,10 @@ export const recordMcpAudit: McpAuditSink = async (entry) => {
     await createMcpTokenRepository(database)
       .audit(entry)
       .catch((error: unknown) => {
-        console.error("[mcp] audit row not written", error instanceof Error ? error.message : error);
+        console.error(
+          "[mcp] audit row not written",
+          error instanceof Error ? error.message : error,
+        );
       });
     return;
   }

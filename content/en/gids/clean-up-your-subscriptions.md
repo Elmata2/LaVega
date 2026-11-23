@@ -7,11 +7,24 @@ status: published
 author: alexander
 updated: 2026-10-26
 sources:
-  - { title: "ACM: rules for renewing and cancelling subscriptions (in Dutch)", url: "https://www.acm.nl/nl/onderwerpen/consumentenrecht/prijzen-en-overeenkomsten/regels-voor-het-verlengen-en-opzeggen-van-abonnementen/", accessed: 2026-10-26 }
+  - {
+      title: "ACM: rules for renewing and cancelling subscriptions (in Dutch)",
+      url: "https://www.acm.nl/nl/onderwerpen/consumentenrecht/prijzen-en-overeenkomsten/regels-voor-het-verlengen-en-opzeggen-van-abonnementen/",
+      accessed: 2026-10-26,
+    }
 faq:
-  - { q: "How do I find all my subscriptions?", a: "Go through your bank statements for the last twelve months and look for amounts that repeat weekly, monthly or yearly under the same description. Include yearly charges: you only see those once a year." }
-  - { q: "How long is the notice period for a subscription in the Netherlands?", a: "According to the Dutch consumer authority ACM, after the fixed term consumers can always cancel with a notice period of at most 1 month. Newspapers and magazines that appear less than once a month may have up to 3 months." }
-  - { q: "Can I cancel by email?", a: "According to the ACM, consumers can at least cancel in writing, for example by letter, web form or email. Cancelling the same way you signed up, for example by phone, is also allowed." }
+  - {
+      q: "How do I find all my subscriptions?",
+      a: "Go through your bank statements for the last twelve months and look for amounts that repeat weekly, monthly or yearly under the same description. Include yearly charges: you only see those once a year.",
+    }
+  - {
+      q: "How long is the notice period for a subscription in the Netherlands?",
+      a: "According to the Dutch consumer authority ACM, after the fixed term consumers can always cancel with a notice period of at most 1 month. Newspapers and magazines that appear less than once a month may have up to 3 months.",
+    }
+  - {
+      q: "Can I cancel by email?",
+      a: "According to the ACM, consumers can at least cancel in writing, for example by letter, web form or email. Cancelling the same way you signed up, for example by phone, is also allowed.",
+    }
 ---
 
 Small amounts that leave your account every month are easy to overlook. Together they can add up. This guide shows how to put them in one list in four steps and decide for each one whether it stays. It is written for people living in the Netherlands, so it uses Dutch rules where they matter.

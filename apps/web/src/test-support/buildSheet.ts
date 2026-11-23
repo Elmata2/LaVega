@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
  * source CSS and eight layout assertions fail on classes that only the build
  * generates.
  *
- * `pnpm test` at the root hides that: turbo gives `@lavega/web#test` its own
+ * `bun run test` at the root hides that: turbo gives `@lavega/web#test` its own
  * build first (turbo.json). Running the package directly does not, and that is
  * exactly what a fresh worktree or a single-package run does. So build once
  * here, only when the sheet is missing. On CI and in an installed tree turbo
@@ -28,7 +28,7 @@ export default function setup(): void {
   /* vitest runs with NODE_ENV=test, and Vite takes its mode from NODE_ENV. A
    * build in test mode emits a sheet the layout assertions disagree with, so
    * force the mode the real build uses. */
-  execFileSync("pnpm", ["exec", "vite", "build"], {
+  execFileSync("bun", ["run", "vite", "build"], {
     cwd: appRoot,
     stdio: "inherit",
     env: { ...process.env, NODE_ENV: "production" },

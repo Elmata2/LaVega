@@ -2,10 +2,10 @@
 # Provision a fresh git worktree fast and offline:
 #   1. Share the primary worktree's content-addressed .turbo/cache via symlink
 #      so unchanged packages hit cache immediately.
-#   2. Install node_modules with `pnpm install --frozen-lockfile --offline`
-#      (APFS copy-on-write from the global store, zero network, preserves
+#   2. Install node_modules with `bun install --frozen-lockfile --offline`
+#      (APFS copy-on-write from the global cache, zero network, preserves
 #      per-worktree @lavega/* workspace links), falling back to --prefer-offline
-#      only when a new dependency is not yet in the global store.
+#      only when a new dependency is not yet in the global cache.
 #
 # Fires on `git worktree add` and branch switches. No-op when already set up.
 # Opt out with LAVEGA_SKIP_WORKTREE_INSTALL=1.
@@ -30,17 +30,13 @@ if [ -d node_modules ]; then
 	exit 0
 fi
 
-if command -v pnpm >/dev/null 2>&1; then
-	pm="pnpm"
-elif command -v corepack >/dev/null 2>&1; then
-	pm="corepack pnpm"
-else
-	echo "post-checkout: pnpm not found; run 'pnpm install' in $(pwd)" >&2
+if ! command -v bun >/dev/null 2>&1; then
+	echo "post-checkout: bun not found; run 'bun install' in $(pwd)" >&2
 	exit 0
 fi
 
-echo "post-checkout: provisioning node_modules offline ($pm install --frozen-lockfile --offline) in $(pwd)"
-if ! $pm install --frozen-lockfile --offline; then
+echo "post-checkout: provisioning node_modules offline (bun install --frozen-lockfile --offline) in $(pwd)"
+if ! bun install --frozen-lockfile --offline; then
 	echo "post-checkout: offline install missed a package; falling back to --prefer-offline"
-	$pm install --frozen-lockfile --prefer-offline
+	bun install --frozen-lockfile --prefer-offline
 fi

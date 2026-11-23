@@ -1,8 +1,8 @@
 /* Agent eval harness CLI (plan §3 WS5.9, #300).
  *
- *   pnpm agent:evals                    run every fixture offline + contract check
- *   pnpm agent:evals --update-contract  regenerate the reviewed contract snapshot
- *   pnpm agent:evals --mutate           prove a deliberate contract mutation FAILS
+ *   bun run agent:evals                    run every fixture offline + contract check
+ *   bun run agent:evals --update-contract  regenerate the reviewed contract snapshot
+ *   bun run agent:evals --mutate           prove a deliberate contract mutation FAILS
  *
  * The fixtures call the real investing tool registry, and the contract snapshot
  * pins each tool's name, scope, description and input schema. Run this after
@@ -82,7 +82,7 @@ async function main(): Promise<void> {
     failed = true;
     console.error("FAIL tool contract drifted from the reviewed snapshot:");
     for (const line of drift) console.error(`     - ${line}`);
-    console.error("     Review the change, then run: pnpm agent:evals --update-contract");
+    console.error("     Review the change, then run: bun run agent:evals --update-contract");
   } else {
     console.log(`ok   tool contract: ${evalRegistry().length} tools match the reviewed snapshot`);
   }

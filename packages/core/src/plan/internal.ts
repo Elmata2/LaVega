@@ -35,7 +35,10 @@ export function liquidAccountBalances(i: PlanInput): {
   });
   const eur = liquid.filter((a) => isEurCurrency(a.currency));
   return {
-    eur: eur.map((a) => ({ key: a.key, cents: a.balance === null ? null : Math.round(a.balance * 100) })),
+    eur: eur.map((a) => ({
+      key: a.key,
+      cents: a.balance === null ? null : Math.round(a.balance * 100),
+    })),
     excludedForeignCount: liquid.length - eur.length,
   };
 }

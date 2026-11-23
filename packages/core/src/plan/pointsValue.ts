@@ -32,4 +32,3 @@ export function pointsValueRange(
     examples: rates.length,
   };
 }
-

@@ -91,7 +91,11 @@ export function toInput(
 }
 
 /** Whether a file can be added as it stands. */
-export const isCommittable = (p: FilePreview, plan: CardFilePlan | undefined, overridden: boolean) =>
+export const isCommittable = (
+  p: FilePreview,
+  plan: CardFilePlan | undefined,
+  overridden: boolean,
+) =>
   p.result !== null &&
   plan !== undefined &&
   plan.problems.length === 0 &&

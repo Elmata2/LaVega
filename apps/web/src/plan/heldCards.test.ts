@@ -148,13 +148,22 @@ test("a rewards programme is linked only when exactly one name appears in the ca
 test("a bank card the catalogue knows carries its catalogue id; one it does not know carries null", () => {
   const known = acct("abn-cc2", { name: "creditcard", bank: "ABN AMRO", type: "Creditcard" });
   const unknown = acct("x", { name: "Mijn eigen pas", bank: "Onbekende Bank" });
-  const cards = buildHeldCards({ ...base, accounts: [known, unknown], facts: [], assumptionOn: false });
+  const cards = buildHeldCards({
+    ...base,
+    accounts: [known, unknown],
+    facts: [],
+    assumptionOn: false,
+  });
   expect(cards[0]!.catalogueId).toBe("abn-amro-creditcard");
   expect(cards[1]!.catalogueId).toBeNull();
 });
 
 test("a file-fed account with statedCardId gets that catalogue id", () => {
-  const fed = acct("fed", { name: "Mijn kaart", bank: "Onbekende Bank", statedCardId: "abn-amro-creditcard" });
+  const fed = acct("fed", {
+    name: "Mijn kaart",
+    bank: "Onbekende Bank",
+    statedCardId: "abn-amro-creditcard",
+  });
   const [card] = buildHeldCards({ ...base, accounts: [fed], facts: [], assumptionOn: false });
   expect(card!.catalogueId).toBe("abn-amro-creditcard");
   expect(heldCatalogueIds([fed], CATALOGUE_ENTRIES).has("abn-amro-creditcard")).toBe(true);

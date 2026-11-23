@@ -202,7 +202,7 @@ export default function GenericImportCard({
         <StatusLine
           tone="problem"
           role="alert"
-          
+
           data-testid="generic-import-error"
         >
           {c.unsupported}

@@ -1,9 +1,5 @@
 import { expect, test } from "vitest";
-import {
-  AdvisorProfile,
-  emptyProfileStore,
-  type AdvisorProfileStore,
-} from "../advisor/profile.js";
+import { AdvisorProfile, emptyProfileStore, type AdvisorProfileStore } from "../advisor/profile.js";
 import { planProfileOf } from "./profileView.js";
 
 const storeWith = (
@@ -118,16 +114,34 @@ test("the plan sees the stated credit cards and their balances; none stated give
   expect(planProfileOf(null)).toMatchObject({ statedCardIds: [], cardBalances: [] });
   const store = storeWith({
     ...base,
-    statedCards: { value: ["american-express-gold-card", "other"], source: "stated", at: "2026-10-27" },
+    statedCards: {
+      value: ["american-express-gold-card", "other"],
+      source: "stated",
+      at: "2026-10-27",
+    },
     cardBalances: {
-      value: [{ cardId: "american-express-gold-card", balanceCents: 250_000, paysInFull: false, ratePct: 14.9 }],
+      value: [
+        {
+          cardId: "american-express-gold-card",
+          balanceCents: 250_000,
+          paysInFull: false,
+          ratePct: 14.9,
+        },
+      ],
       source: "stated",
       at: "2026-10-27",
     },
   });
   expect(planProfileOf(store)).toMatchObject({
     statedCardIds: ["american-express-gold-card", "other"],
-    cardBalances: [{ cardId: "american-express-gold-card", balanceCents: 250_000, paysInFull: false, ratePct: 14.9 }],
+    cardBalances: [
+      {
+        cardId: "american-express-gold-card",
+        balanceCents: 250_000,
+        paysInFull: false,
+        ratePct: 14.9,
+      },
+    ],
   });
 });
 

@@ -150,7 +150,7 @@ After two independent reviews. These supersede sections 3.1 to 3.3 where they di
    brokers, goals, theses, agent history). Error reasons are chosen by code in the UI language.
 6. **Keys.** Added `lavega.n8nInvoiceUrl`, `lavega.n8nInvoiceToken`, `lavega.n8nBaseUrl`,
    `lavega.n8nApiKey` to the cleared list.
-8. **Known, not changed.** An old legacy password vault (`lavega-vault`, kept on purpose) can be
+7. **Known, not changed.** An old legacy password vault (`lavega-vault`, kept on purpose) can be
    offered again after a reset. The stale-tab weakness of the full erase.
 
 ### Fix round 2 (14 Nov 2026)

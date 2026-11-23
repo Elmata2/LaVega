@@ -75,10 +75,7 @@ export function ShellDrawer({
   }, [open, onClose]);
 
   return (
-    <div
-      className={`shell2-drawer-root${open ? " shell2-drawer-open" : ""}`}
-      {...((open ? {} : { inert: "" }) as Record<string, string>)}
-    >
+    <div className={`shell2-drawer-root${open ? " shell2-drawer-open" : ""}`} inert={!open}>
       <div className="shell2-scrim" onClick={onClose} aria-hidden="true" />
       <div
         ref={panelRef}

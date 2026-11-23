@@ -19,6 +19,7 @@
 @layer theme, base, components, utilities;
 @import "tailwindcss/theme.css" layer(theme);
 @import "tailwindcss/utilities.css" layer(utilities);
+@source "../../../../packages/ui/src";
 
 /* LaVega design-system tokens. "Midnight" palette matching the marketing site:
  * near-black ground, two raised panel tones, hairline borders, cantaloupe for the

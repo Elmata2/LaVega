@@ -9,12 +9,13 @@
     "node_modules/**",
     ".turbo/**",
     ".vercel/**",
-    ".pnpm-store/**",
+    ".bun/**",
     "coverage/**",
     "repos/**",
-    "pnpm-lock.yaml",
+    "bun.lock",
 
     "**/__fixtures__/**",
-    "docs/n8n/*.json"
+    "docs/n8n/*.json",
+    ".claude/skills/**/references/**"
   ]
 }

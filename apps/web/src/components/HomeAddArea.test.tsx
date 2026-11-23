@@ -142,9 +142,7 @@ test("the add grid is 4 columns, 2 at a container <= 900px and 1 at <= 520px", (
 test("there is no all-widgets link: the boxes are the only control", () => {
   mount();
   expect(
-    Array.from(container!.querySelectorAll("button")).some(
-      (b) => b.textContent === "Alle widgets",
-    ),
+    Array.from(container!.querySelectorAll("button")).some((b) => b.textContent === "Alle widgets"),
   ).toBe(false);
 });
 

@@ -134,20 +134,22 @@ and `beforeEach`/`afterEach` that reset modules and listeners (lines 37-64).
 
 ## Commands you will need
 
-| Purpose | Command | Expected on success |
-|---------|---------|---------------------|
-| Web typecheck | `pnpm --filter @lavega/investing-web typecheck` | exit 0 |
-| Sync tests | `pnpm --filter @lavega/investing-web exec vitest run src/lib/syncSession.test.ts` | all pass |
-| Web tests | `pnpm --filter @lavega/investing-web test` | exit 0 |
-| Full typecheck (after 001) | `pnpm typecheck` | exit 0 |
+| Purpose                    | Command                                                                           | Expected on success |
+| -------------------------- | --------------------------------------------------------------------------------- | ------------------- |
+| Web typecheck              | `pnpm --filter @lavega/investing-web typecheck`                                   | exit 0              |
+| Sync tests                 | `pnpm --filter @lavega/investing-web exec vitest run src/lib/syncSession.test.ts` | all pass            |
+| Web tests                  | `pnpm --filter @lavega/investing-web test`                                        | exit 0              |
+| Full typecheck (after 001) | `pnpm typecheck`                                                                  | exit 0              |
 
 ## Scope
 
 **In scope** (the only files you may modify):
+
 - `apps/investing-web/src/lib/syncSession.ts`
 - `apps/investing-web/src/lib/syncSession.test.ts`
 
 **Out of scope** (do NOT touch, even though they look related):
+
 - `apps/investing-web/src/lib/priceSync.ts` — the 1 Hz polling is intended (the
   rail shows live progress); only the dashboard invalidation is wrong.
 - `apps/investing-web/src/lib/dashboardResource.ts` — refresh handling is correct.
@@ -231,9 +233,9 @@ In `apps/investing-web/src/lib/syncSession.ts`, delete the extra dispatch and th
 now-unused local:
 
 ```ts
-    priceRun = runPriceSyncUntilComplete((progress) => {
-      if (isPrice(progress)) publish({ price: progress });
-    })
+priceRun = runPriceSyncUntilComplete((progress) => {
+  if (isPrice(progress)) publish({ price: progress });
+});
 ```
 
 Keep `publish(...)` as the single place that dispatches on terminal transitions.
@@ -304,7 +306,7 @@ Stop and report (do not improvise) if:
 - Removing the line makes a broker-sync test fail for a reason other than the
   removed dispatch (that test's contract is different — report it).
 - A third `dispatchDashboardRefresh` call site exists.
-- You find that the dashboard is *supposed* to update live during sync (check
+- You find that the dashboard is _supposed_ to update live during sync (check
   `docs/investing/DASHBOARD.md` "Dashboard latency and resumed history" and the
   `dataVersion` notes) — if so, stop and report the conflict instead of choosing
   a side.

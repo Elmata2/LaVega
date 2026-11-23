@@ -38,6 +38,7 @@ Two things make that honest rather than a slogan.
 ## 2. Goals, non-goals, anti-goals
 
 Goals
+
 - G1. Every explanation LaVega shows is built on the user's own engine output,
   with exact numbers filled in the browser.
 - G2. Each user's explanations adapt: reading level, depth, which concepts are
@@ -48,6 +49,7 @@ Goals
 - G5. Explanation features cost under EUR 0.05 per user per month.
 
 Non-goals
+
 - A recommendation, allocation or product pick of any kind (intake spec 6).
 - A model that produces or alters a number the user sees.
 - Federated learning, learned embeddings or fine-tuning on user data now
@@ -56,6 +58,7 @@ Non-goals
 - Voice, push-notification campaigns, or a gamified learning course.
 
 Anti-goals (a failure even if it works)
+
 - Optimising time in app, sessions, streaks or notification response.
 - Learning which emotional framing makes stressed users act (AI Act Art. 5(1)(a)
   and (b), in force since 2 Feb 2025; checked via commentary only, read the
@@ -117,6 +120,7 @@ extends the existing redaction boundary (`apps/server/src/agent/redaction.ts`,
 ## 4. Decision 1: the explanation pipeline
 
 ### 4.1 FactSheet (engine output)
+
 Defined with Effect Schema in `packages/core`, produced by the engine, never by
 a model. Each fact has a stable id (`room_month`, `buffer_months`,
 `goal_gap:<goalId>`), its exact value, a bucketed value for the prompt, a
@@ -127,6 +131,7 @@ a trend against the previous period, and a `mustMention` flag. Derived figures
 their own facts. The model may not do arithmetic. The FactSheet schema already exists: it is built in the plan step (ship order: intake, plan with templates, this AI layer), and this spec consumes it.
 
 ### 4.2 Model and call
+
 - Mistral, default the small current model (Small 4 per the models page, v26.03,
   VERIFIED in research). Constants stay in `apps/server/src/agent/models.ts`,
   the one place a model id may live. Escalate only the plan explanation to the
@@ -139,13 +144,14 @@ their own facts. The model may not do arithmetic. The FactSheet schema already e
 - The output is a list of sentence objects: `{kind, factIds, polarity, text}`
   where `text` contains only `{{placeholders}}` for numbers and dates.
 - `kind` is a closed enum: `fact | explanation | option_tradeoff |
-  next_step_generic`. There is no `recommendation` kind, so the model has
+next_step_generic`. There is no `recommendation` kind, so the model has
   nowhere to put one. `next_step_generic` means a generic step the engine
   allows ("review the subscriptions list"), never an instrument or an amount.
 - Lengths: digest 80-120 words, plan explanation 150-250 (chat is outside
   this pipeline, see 4.6). First sentence is the one number that matters and what it means.
 
 ### 4.3 Validation (server, all deterministic except the judge)
+
 1. Schema parses; `kind` in the enum.
 2. Every placeholder is in the allowlist built from the request's fact ids.
 3. No digit sequence, currency amount, percentage or number word outside a
@@ -172,11 +178,13 @@ failure: the static, localised template for that task, always B1. Refusals
 generated: what LaVega can do, what it cannot, and a link to the AFM register.
 
 ### 4.4 Browser fill
+
 The browser substitutes exact values from the local FactSheet, formatted for the
 locale and the euro-conversion setting, then renders. Unfilled placeholders are
 a hard error that falls back to the template; they are never shown.
 
 ### 4.5 Prompt layout and caching
+
 Order, stable prefix first: (1) system prompt with the advice-line constitution
 and style guide; (2) the per-tab instruction markdown already in
 `apps/server/src/agent/prompts/` (`_base.md` is business-owner copy; rewriting it
@@ -196,6 +204,7 @@ so nothing runs unattended and the 50% batch discount is not used; at the
 research's token assumptions the cost stays well under EUR 0.05 per user per month.
 
 ### 4.6 Chat stays outside this pipeline
+
 Chat keeps its current path: the conversations API with web search (card fees,
 rates and point values come from there). Rule G1 (the model never produces a
 number) applies to the digest, plan explanations and notes, not to chat. The
@@ -239,6 +248,7 @@ record type; it is not a `LearnedFact`, and the free-text `LearnedFact` store
 stays as it is.
 
 ### 6.1 Concept map
+
 A versioned, hand-authored catalogue in `packages/core`, 40-80 concepts at full
 size, about 25 at first: buffer, compound growth, costs and TER, diversification,
 risk and return, inflation, box 3, schenkvrijstelling, points value,
@@ -248,6 +258,7 @@ the misconception each wrong option represents), and the engine events that make
 it relevant. Content is reviewed for the advice line before it ships.
 
 ### 6.2 Mastery by Bayesian knowledge tracing
+
 Per user and concept: P(known), with the four BKT parameters (prior, learn,
 guess, slip) set by experts and held in one table. BKT works with one learner
 and is inspectable (Corbett and Anderson 1995, citation details UNVERIFIED);
@@ -260,6 +271,7 @@ absence of "simpler" taps. Mastery informs which concepts the explanation may
 skip defining and which it must define; it never gates features. The browser resolves mastery locally into the list of concept ids to explain now (define versus skip); the server never sees mastery.
 
 ### 6.3 Spaced re-exposure at teachable moments
+
 A concept whose P(known) is below 0.8, or which was last shown more than its
 interval ago (growing intervals, SM-2 style, specifics UNVERIFIED), becomes
 due. Due concepts surface only when an engine event makes them relevant, as a
@@ -272,12 +284,14 @@ recorded. Rules: at most one note per day and three per week, a quiet period
 after a dismissal, "stop this topic" in one tap, a global off switch. Notes show only when the app is open: there is no push, and the caps and quiet periods count app-open days.
 
 ### 6.4 Explanation feedback
+
 `helped / didn't`, `simpler`, `more detail`, `too long`, and topic dismissal are
 stored per user and per concept as `ExplanationEvent` rows (section 10). Counters
 and suppression, not a model, drive adaptation at this size: dismissed twice
 mutes the topic for 90 days.
 
 ### 6.5 Memory is structured, never transcripts
+
 Memory is concept states, level preferences, explained-concept dates, dismissed
 topics and the intake profile. Chat turns are not persisted beyond the session;
 what survives is the concept touched and whether it helped. A raw-transcript
@@ -285,6 +299,7 @@ memory would carry sensitive text back through the redaction boundary and make
 evaluation harder.
 
 ### 6.6 "What LaVega knows about you"
+
 The intake page (intake spec 4.6) gains a learning section: each concept with
 the mastery shown in words (new to you, getting there, known), last shown, the
 reading level per concept, muted topics; edit, reset one concept, and reset all
@@ -400,6 +415,7 @@ server. All on-device records live in the vault (sections `profile`, `plan`,
 `learning`, `events`, intake 4.7); none is sent as is.
 
 FactSheet
+
 - `id`, `taskType` (digest | plan | note), `locale`, `engineVersion`,
   `generatedAt`, `hash`
 - `facts[]`: `factId`, `exact` (number or date, never sent), `bucket`
@@ -407,6 +423,7 @@ FactSheet
   (low, expected, high, horizon, assumption), `mustMention`, `derivedFrom?`
 
 ProfileProjection (what the server may see; this spec owns it)
+
 - `locale`, `taskType`
 - `facts[]`: fact ids with bucketed values only (ranges, counts, categories),
   polarity and bucketed trend
@@ -420,11 +437,13 @@ ProfileProjection (what the server may see; this spec owns it)
   object.
 
 ConceptState (a new record type in the `learning` vault section; not a `LearnedFact`)
+
 - `conceptId`, `pKnown`, `bktVersion`, `lastShownAt`, `intervalDays`, `nextDueAt`,
   `levelOverride?`, `mutedUntil?`, `checksAnswered`, `checksCorrect`,
   `seededFrom` (intake item ids), `updatedAt`
 
 ExplanationEvent (`events` section: append-only, unique ids, union merge)
+
 - `id`, `at`, `taskType`, `contentVersion` (prompt version or template id),
   `catalogueItemId?`, `decisionPoint` (trigger type), `alternativesConsidered[]`,
   `propensity`, `policy` (rule | holdout | bandit), `level`, `usedFallback`,
@@ -432,12 +451,14 @@ ExplanationEvent (`events` section: append-only, unique ids, union merge)
   tooLong | dismissed | muted), `microCheck?` (conceptId, correct), `followUpAsked`
 
 OutcomeEvent (`events` section: append-only, unique ids, union merge)
+
 - `id`, `at`, `baselineWindow`, `buffer` (before, after, months), `roomRealisedVsShown`,
   `goalProgress[]` (goalId, vs own schedule), `subscriptionsCancelled`,
   `linkedExplanationId?`, `guardrails` (overdraftIncidents, lateFees,
   optOutsSince, stressFeedback), `confounders[]` (income change, life event)
 
 TelemetryReport (the only thing that may leave the device, and only with consent)
+
 - `codebookVersion`, `archetypeId`, `insightId` (catalogue item), `outcome`
   (none | helped | acted), `quarter`
 - No user id, no timestamp finer than the quarter, no amounts, no free text.
@@ -453,10 +474,12 @@ after debiasing and the k release floor.
 Counts below are opted-in actives unless stated.
 
 ### Stage 0b (any user count): style fine-tune on approved examples
+
 Owner decision, 23 Oct 2026. A small Mistral model is fine-tuned so its default
 wording is LaVega's: plain Dutch and English at the three reading levels, the
 placeholder format, and sentences that stay on the information side of the
 advice line. It learns tone and format, not facts and not users.
+
 - Training data contains no user data at all. Inputs are synthetic FactSheets
   (generated from the engine's own fixtures, every value invented) plus the
   ProfileProjection buckets; outputs are explanations the owner approved in the
@@ -482,6 +505,7 @@ advice line. It learns tone and format, not facts and not users.
   and needs its own cost check.
 
 ### Stage 1 (about 100-1,000)
+
 - Opt-in "Help improve LaVega": a separate, default-off toggle in Settings plus
   one non-blocking prompt after the user has seen value, equal-weight accept and
   decline, consent version and time stored in the vault. A "show me what would
@@ -514,6 +538,7 @@ advice line. It learns tone and format, not facts and not users.
   holdout, and a short outcome survey at 0, 30 and 90 days.
 
 ### Stage 2 (about 1,000-20,000)
+
 - Contextual bandits (LinUCB or Thompson, few features) only over presentation
   choices of a closed, pre-reviewed content catalogue: ordering, framing, depth,
   timing, channel. Never over instruments, amounts or high-harm topics. A bandit
@@ -533,6 +558,7 @@ advice line. It learns tone and format, not facts and not users.
   vulnerability review for Art. 5(1)(b) before the first learned policy ships.
 
 ### Stage 3 (20,000+), named, not designed
+
 Learned ranker, privacy-engineered embeddings or federated analytics and
 learning (Flower with ONNX or TF.js prototypes exist; Google's Gboard FL plus
 DP-FTRL is the production reference, VERIFIED), sequence knowledge tracing
@@ -550,14 +576,14 @@ must never optimise for agreeableness on risk tolerance.
 
 ### Trigger table
 
-| Stage | Opted-in actives | Starts when | Needs before it starts | Stops or rolls back when |
-|---|---|---|---|---|
-| 0 | any | now | sections 6 and 7 built; DPIA, DPA/ZDR, lawyer opinion done for launch | any validator regression in CI |
-| 0b | any | 300 approved examples across all concepts and levels | golden set, review loop, Mistral fine-tuning terms verified | golden-set regression; kill switch back to the base model |
-| 1 | about 100-1,000 | consent flow built and counted users reach 100 | DP client, endpoint with no linking token, k floor, payload preview | lifetime epsilon spent for a user; guardrail breach |
-| 1 reads | about 1,000 | opted-in reports pass 1,000 | debiasing job tested on synthetic data | k below 50 per cell: cell not released |
-| 2 | about 1,000-20,000 | reports per arm reach hundreds, 10-20 arms | logged propensities, OPE shows gain, vulnerability review | guardrail breach pauses that arm; kill switch |
-| 3 | 20,000+ | gain ceiling of stages 1-2 measured | new spec, DPIA update, audit | not applicable yet |
+| Stage   | Opted-in actives   | Starts when                                          | Needs before it starts                                                | Stops or rolls back when                                  |
+| ------- | ------------------ | ---------------------------------------------------- | --------------------------------------------------------------------- | --------------------------------------------------------- |
+| 0       | any                | now                                                  | sections 6 and 7 built; DPIA, DPA/ZDR, lawyer opinion done for launch | any validator regression in CI                            |
+| 0b      | any                | 300 approved examples across all concepts and levels | golden set, review loop, Mistral fine-tuning terms verified           | golden-set regression; kill switch back to the base model |
+| 1       | about 100-1,000    | consent flow built and counted users reach 100       | DP client, endpoint with no linking token, k floor, payload preview   | lifetime epsilon spent for a user; guardrail breach       |
+| 1 reads | about 1,000        | opted-in reports pass 1,000                          | debiasing job tested on synthetic data                                | k below 50 per cell: cell not released                    |
+| 2       | about 1,000-20,000 | reports per arm reach hundreds, 10-20 arms           | logged propensities, OPE shows gain, vulnerability review             | guardrail breach pauses that arm; kill switch             |
+| 3       | 20,000+            | gain ceiling of stages 1-2 measured                  | new spec, DPIA update, audit                                          | not applicable yet                                        |
 
 ## 12. Decision 8: cost
 
@@ -616,4 +642,4 @@ All are folded into the sections above; this log only records them.
 11. The `prompts/_base.md` rewrite belongs to this spec (4.5).
 12. Stage 0b style fine-tune added at the owner's request (23 Oct); synthetic and
     approved data only (11).
-12. The FactSheet is built in the plan step, before this layer (4.1).
+13. The FactSheet is built in the plan step, before this layer (4.1).

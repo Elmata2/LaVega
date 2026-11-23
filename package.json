@@ -1,6 +1,11 @@
 {
   "name": "lavega",
   "private": true,
+  "workspaces": [
+    "packages/*",
+    "apps/*",
+    "scripts/catalog"
+  ],
   "type": "module",
   "scripts": {
     "test": "turbo run test",
@@ -10,7 +15,7 @@
     "agent:evals": "tsx scripts/agent-evals.ts",
     "dev": "turbo run dev",
     "build": "turbo run build",
-    "start": "pnpm --filter @lavega/server start",
+    "start": "bun --filter @lavega/server start",
     "typecheck": "turbo run typecheck",
     "db:migrate": "tsx --env-file-if-exists=apps/server/.env scripts/migrate.ts apply",
     "db:migrate:check": "tsx --env-file-if-exists=apps/server/.env scripts/migrate.ts check",
@@ -24,7 +29,6 @@
     "format:fix": "oxfmt .",
     "quality": "turbo run lint format",
     "quality:fix": "turbo run lint:fix format:fix",
-    "orbstack:investing": "bash scripts/rebuild-investing-orbstack.sh",
     "sync:n8n": "node scripts/sync-n8n-code.mjs",
     "catalog:sweep": "tsx --env-file-if-exists=apps/server/.env scripts/catalog-sweep.ts",
     "catalog:report": "tsx scripts/catalog-report.ts",
@@ -39,6 +43,7 @@
     "@neondatabase/serverless": "^1.0.2",
     "@shadcn/lint": "^0.1.0",
     "@vercel/oidc": "3.2.0",
+    "esbuild": "^0.28.1",
     "jsdom": "^30.0.1",
     "oxfmt": "^0.66.0",
     "oxlint": "^1.81.0",
@@ -47,8 +52,16 @@
     "typescript": "^5.6.0",
     "vitest": "^2.1.0"
   },
+  "overrides": {
+    "undici@7": "7.29.1",
+    "undici@8": ">=8.10.2"
+  },
   "engines": {
     "node": ">=22"
   },
-  "packageManager": "pnpm@11.18.0"
+  "packageManager": "bun@1.4.4",
+  "trustedDependencies": [
+    "@sentry/cli",
+    "esbuild"
+  ]
 }

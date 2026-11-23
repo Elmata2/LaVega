@@ -1,4 +1,5 @@
 # Plan: freelancer cash-flow
+
 1. Core: PlanProfile gets `workKinds`, `chargesVat`; AdvisorProfile gets `chargesVat` (test: profileView).
 2. Core: `plan/cashflow.ts` + tests (series, irregular rule, forward paths, buffer rule, set-asides, applies gate). RED first.
 3. Core: wire `computePlan().cashflow`; preference `incomeTaxSetAsidePct`; pending fact id.

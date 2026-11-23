@@ -106,7 +106,9 @@ test("no card offer unless the verdict is a switch on history without carried ca
   expect(offerOf(advicePlan({ verdict: sw, ignoresInterest: true }))).toBeNull();
   expect(offerOf(advicePlan({ verdict: sw, basis: "stated" }))).toBeNull();
   // A first card (no card held) is not pitched unasked.
-  expect(offerOf(advicePlan({ verdict: sw, baseline: { kind: "no-card", netCents: 0 } }))).toBeNull();
+  expect(
+    offerOf(advicePlan({ verdict: sw, baseline: { kind: "no-card", netCents: 0 } })),
+  ).toBeNull();
 });
 
 beforeEach(() => vi.useFakeTimers());

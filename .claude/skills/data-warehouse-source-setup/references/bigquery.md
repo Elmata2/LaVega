@@ -22,9 +22,9 @@ You can connect your BigQuery tables to PostHog by configuring it as a source. Y
 
 ## Requirements
 
--   [A Google Cloud Service Account](https://cloud.google.com/iam/docs/service-account-overview) with the permissions described below
--   Google Cloud JSON Key file for that account's Dataset ID
--   (Optional) A Dataset ID for temporary tables
+- [A Google Cloud Service Account](https://cloud.google.com/iam/docs/service-account-overview) with the permissions described below
+- Google Cloud JSON Key file for that account's Dataset ID
+- (Optional) A Dataset ID for temporary tables
 
 ## Configuring BigQuery
 
@@ -32,36 +32,36 @@ To securely connect your BigQuery account to PostHog, create a dedicated service
 
 1.  **Create a service account:**
 
--   Go to the [**Google Cloud Console.**](https://console.cloud.google.com/)
--   Navigate to **IAM & Admin > Service Accounts.**
--   Click **Create Service Account.**
--   Provide a descriptive name (e.g., `bigquery-posthog-service-account`) and a brief description.
+- Go to the [**Google Cloud Console.**](https://console.cloud.google.com/)
+- Navigate to **IAM & Admin > Service Accounts.**
+- Click **Create Service Account.**
+- Provide a descriptive name (e.g., `bigquery-posthog-service-account`) and a brief description.
 
 2.  **Assign required permissions:**
 
--   For simplicity, you can assign the **BigQuery Data Editor**, **BigQuery Job User**, and **BigQuery Read Session User** roles if it meets your security requirements.
+- For simplicity, you can assign the **BigQuery Data Editor**, **BigQuery Job User**, and **BigQuery Read Session User** roles if it meets your security requirements.
 
--   Alternatively, create a custom role that includes only these permissions:
+- Alternatively, create a custom role that includes only these permissions:
 
-    ```
-    bigquery.readsessions.create
-    bigquery.readsessions.getData
-    bigquery.datasets.get
-    bigquery.jobs.create
-    bigquery.tables.get
-    bigquery.tables.list
-    bigquery.tables.getData
-    bigquery.tables.create
-    bigquery.tables.update
-    bigquery.tables.updateData
-    bigquery.tables.delete
-    ```
+  ```
+  bigquery.readsessions.create
+  bigquery.readsessions.getData
+  bigquery.datasets.get
+  bigquery.jobs.create
+  bigquery.tables.get
+  bigquery.tables.list
+  bigquery.tables.getData
+  bigquery.tables.create
+  bigquery.tables.update
+  bigquery.tables.updateData
+  bigquery.tables.delete
+  ```
 
 3.  **Generate and download the service account key:**
 
--   Once the service account is created, click on it and select the **Keys** tab.
--   Click **Add Key > Create new key**, choose **JSON**, and download the key file.
--   **Important:** Store the JSON key securely, as it contains sensitive credentials.
+- Once the service account is created, click on it and select the **Keys** tab.
+- Click **Add Key > Create new key**, choose **JSON**, and download the key file.
+- **Important:** Store the JSON key securely, as it contains sensitive credentials.
 
 ## Configuring PostHog
 
@@ -80,13 +80,13 @@ To securely connect your BigQuery account to PostHog, create a dedicated service
 
 ## Configuration
 
-| Option | Description |
-| --- | --- |
-| `Authentication type` **Type:** select **Required:** True |  |
-| `Manually specify your dataset region?` **Type:** switch-group **Required:** False | In most cases, BigQuery is able to automatically determine the region your dataset is located in. For the rare instances that BigQuery fails to do so, you can manually specify your dataset region here. |
-| `Dataset ID` **Type:** text **Required:** True |  |
-| `Use a different dataset for the temporary tables?` **Type:** switch-group **Required:** False | We have to create and delete temporary tables when querying your data, this is a requirement of querying large BigQuery tables. We can use a different dataset if you'd like to limit the permissions available to the service account provided. |
-| `Use a different project for the dataset than your service account project?` **Type:** switch-group **Required:** False | If the dataset you're wanting to sync exists in a different project than that of your service account, use this to provide the project ID of the BigQuery dataset. |
+| Option                                                                                                                  | Description                                                                                                                                                                                                                                      |
+| ----------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `Authentication type` **Type:** select **Required:** True                                                               |                                                                                                                                                                                                                                                  |
+| `Manually specify your dataset region?` **Type:** switch-group **Required:** False                                      | In most cases, BigQuery is able to automatically determine the region your dataset is located in. For the rare instances that BigQuery fails to do so, you can manually specify your dataset region here.                                        |
+| `Dataset ID` **Type:** text **Required:** True                                                                          |                                                                                                                                                                                                                                                  |
+| `Use a different dataset for the temporary tables?` **Type:** switch-group **Required:** False                          | We have to create and delete temporary tables when querying your data, this is a requirement of querying large BigQuery tables. We can use a different dataset if you'd like to limit the permissions available to the service account provided. |
+| `Use a different project for the dataset than your service account project?` **Type:** switch-group **Required:** False | If the dataset you're wanting to sync exists in a different project than that of your service account, use this to provide the project ID of the BigQuery dataset.                                                                               |
 
 ## Supported tables
 
@@ -108,8 +108,8 @@ You can also change column selection after setup:
 
 > **Adding columns to existing syncs:** When you add columns to a schema using incremental or append sync, PostHog prompts you to choose:
 >
-> -   **Sync forward only** - New columns are populated only for future data. Existing rows show `NULL` for the new columns.
-> -   **Full resync** - Triggers a complete resync to backfill the new columns for all rows.
+> - **Sync forward only** - New columns are populated only for future data. Existing rows show `NULL` for the new columns.
+> - **Full resync** - Triggers a complete resync to backfill the new columns for all rows.
 
 ## How it works
 
@@ -136,8 +136,8 @@ If you see an error like:
 
 This means the Project ID or Dataset ID you entered contains characters that BigQuery doesn't accept. BigQuery has strict naming rules:
 
--   **Project IDs** can only contain lowercase letters, digits, and hyphens.
--   **Dataset IDs** can only contain letters, digits, and underscores (no hyphens).
+- **Project IDs** can only contain lowercase letters, digits, and hyphens.
+- **Dataset IDs** can only contain letters, digits, and underscores (no hyphens).
 
 A common mistake is copying identifiers with extra characters like parentheses or spaces. Verify your Project ID and Dataset ID in the [Google Cloud Console](https://console.cloud.google.com/) and update your source configuration in PostHog.
 
@@ -169,8 +169,8 @@ If you see an error like:
 
 This means Google's authentication endpoint rejected your service account credentials. This happens when:
 
--   **The private key was rotated or revoked** — Someone generated a new key for this service account, invalidating the old one.
--   **The service account was deleted** — The service account no longer exists in Google Cloud.
+- **The private key was rotated or revoked** — Someone generated a new key for this service account, invalidating the old one.
+- **The service account was deleted** — The service account no longer exists in Google Cloud.
 
 To fix this, generate a new JSON key file in the [Google Cloud Console](https://console.cloud.google.com/) under **IAM & Admin > Service Accounts** and upload it to PostHog.
 
@@ -182,9 +182,9 @@ If you see an error like:
 
 This means the dataset or table you specified doesn't exist or isn't accessible from the region PostHog is querying. This can happen when:
 
--   **The dataset was deleted or renamed** — Verify the dataset exists in your [BigQuery console](https://console.cloud.google.com/bigquery).
--   **The dataset is in a non-US region** — Toggle **Manually specify your dataset region** in your source settings and enter the correct region (e.g., `us-east1`, `europe-west1`).
--   **Typo in dataset or table name** — Double-check the spelling in your source configuration.
+- **The dataset was deleted or renamed** — Verify the dataset exists in your [BigQuery console](https://console.cloud.google.com/bigquery).
+- **The dataset is in a non-US region** — Toggle **Manually specify your dataset region** in your source settings and enter the correct region (e.g., `us-east1`, `europe-west1`).
+- **Typo in dataset or table name** — Double-check the spelling in your source configuration.
 
 ### Permission denied
 

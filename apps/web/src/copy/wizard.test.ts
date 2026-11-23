@@ -60,9 +60,15 @@ test("household variants differ", () => {
 test("new keys exist: work kinds, five spend bands, upload copy, card questions", () => {
   for (const l of ["nl", "en"] as Locale[]) {
     const w = wizardCopy[l];
-    expect(Object.keys(w.workKinds).sort()).toEqual(
-      ["business", "employed", "freelance", "jobseeking", "other", "retired", "student"],
-    );
+    expect(Object.keys(w.workKinds).sort()).toEqual([
+      "business",
+      "employed",
+      "freelance",
+      "jobseeking",
+      "other",
+      "retired",
+      "student",
+    ]);
     expect(w.spendBands).toHaveLength(5);
     expect(w.upload.imported(3)).toContain("3");
   }

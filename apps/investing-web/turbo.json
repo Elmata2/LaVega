@@ -1,0 +1,22 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "extends": ["//"],
+  "tasks": {
+    "build": {
+      "dependsOn": ["^build"],
+      "env": [
+        "VITE_*",
+        "VERCEL_GIT_COMMIT_SHA",
+        "SENTRY_ORG",
+        "SENTRY_PROJECT",
+        "SENTRY_AUTH_TOKEN"
+      ],
+      "outputs": ["dist/**"]
+    },
+    "verify:base": {
+      "dependsOn": ["build"],
+      "env": ["LAVEGA_EXPECT_INVESTING_BASE"],
+      "outputs": []
+    }
+  }
+}

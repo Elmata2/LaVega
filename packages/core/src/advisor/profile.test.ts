@@ -211,7 +211,12 @@ test("decodes a stored profile without the wizard keys", async () => {
 });
 
 test("round-trips lastScreen and noUserDebts", async () => {
-  const intake = { blocksDone: 1, step0: "none", lastScreen: "savings", noUserDebts: true } as const;
+  const intake = {
+    blocksDone: 1,
+    step0: "none",
+    lastScreen: "savings",
+    noUserDebts: true,
+  } as const;
   const p = new AdvisorProfile({ removed: [], intake });
   const store = commitProfile(emptyProfileStore(), p, "2026-10-26T10:00:00Z");
   const back = await Effect.runPromise(decodeProfileStore(encodeProfileStore(store)));
@@ -228,7 +233,9 @@ test("decodes a profile without work/statedCards", () => {
 
 test("decodes a profile without statedDebitCards and round-trips it", () => {
   const dec = Schema.decodeUnknownSync(AdvisorProfile);
-  expect(dec({ removed: [], intake: { blocksDone: 3, step0: "none" } }).statedDebitCards).toBeUndefined();
+  expect(
+    dec({ removed: [], intake: { blocksDone: 3, step0: "none" } }).statedDebitCards,
+  ).toBeUndefined();
   const p = new AdvisorProfile({
     ...emptyProfile(),
     statedDebitCards: { value: ["ing-betaalpas", "other"], source: "stated", at: "2026-10-26" },
@@ -252,12 +259,19 @@ test("round-trips work and statedCards", () => {
 
 test("decodes a profile without cardBalances and round-trips it", () => {
   const dec = Schema.decodeUnknownSync(AdvisorProfile);
-  expect(dec({ removed: [], intake: { blocksDone: 3, step0: "none" } }).cardBalances).toBeUndefined();
+  expect(
+    dec({ removed: [], intake: { blocksDone: 3, step0: "none" } }).cardBalances,
+  ).toBeUndefined();
   const p = new AdvisorProfile({
     ...emptyProfile(),
     cardBalances: {
       value: [
-        { cardId: "american-express-gold-card", balanceCents: 123_456, paysInFull: false, ratePct: 14.5 },
+        {
+          cardId: "american-express-gold-card",
+          balanceCents: 123_456,
+          paysInFull: false,
+          ratePct: 14.5,
+        },
         { cardId: "other", balanceCents: 0, paysInFull: true },
       ],
       source: "stated",

@@ -3,7 +3,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, test } from "vitest";
-import { registerSharedPriceStoreContract } from "@lavega/adapters/src/prices/sharedPriceStore.contract.js";
+import { registerSharedPriceStoreContract } from "@lavega/adapters/prices/sharedPriceStore.contract";
 import { createFileSharedPriceStore } from "./filePriceStore.js";
 
 const temporaryDirectories: string[] = [];

@@ -46,6 +46,7 @@ Failure modes (six) the spec implies that no single task's happy path exercises 
 ## File Structure
 
 Core (new folder `packages/core/src/advisor/`, exported from `packages/core/src/index.ts`):
+
 - `profile.ts` Schema for the profile, `Field` wrapper, version-keeping helpers.
 - `evidence.ts` `Proposal<T>` type, evidence fingerprint, suppression filter.
 - `scopePersonal.ts` the personal-scope account/tx selector used by room, capacity and inference.
@@ -53,8 +54,8 @@ Core (new folder `packages/core/src/advisor/`, exported from `packages/core/src/
 - `packages/core/src/advice/language.ts` the one NL and EN banned advice-language list (Task 2); `advisor/publicFact.ts` the `PublicFact` schema (Task 2); `advisor/vaultSections.ts` section names and merge functions (Task 2).
 - `room.ts` room calculation.
 - `thresholds.ts` the single threshold table; `capacity.ts`; `riskScale.ts` (items, scoring, source record); `knowledge.ts` (questions, experience).
-Adapters: `packages/adapters/src/storage/encryptedStorage.ts` gets `getProfile`/`putProfile` for the `profile` section, and the scaffolding accessors for `plan`, `learning` and `events` (Task 2).
-Web: `apps/web/src/archive.ts`; `apps/web/src/copy/intake.ts`; `apps/web/src/intake/` (state, steps); `apps/web/src/views/Intake.tsx`; `apps/web/src/views/AboutYou.tsx`; `apps/web/src/components/blocks/RoomCard.tsx`.
+  Adapters: `packages/adapters/src/storage/encryptedStorage.ts` gets `getProfile`/`putProfile` for the `profile` section, and the scaffolding accessors for `plan`, `learning` and `events` (Task 2).
+  Web: `apps/web/src/archive.ts`; `apps/web/src/copy/intake.ts`; `apps/web/src/intake/` (state, steps); `apps/web/src/views/Intake.tsx`; `apps/web/src/views/AboutYou.tsx`; `apps/web/src/components/blocks/RoomCard.tsx`.
 
 Order differs from the brief in one place only: the copy cleanup that mentions the intake (landing, onboarding text) waits for Task 9, because it must point at a thing that exists. Task 1 removes pointers to archived features only. Reason: pointing copy at the intake before it ships would be a dead end.
 
@@ -63,11 +64,13 @@ Order differs from the brief in one place only: the copy cleanup that mentions t
 ### Task 1: Archive switch, redirects, copy cleanup
 
 **Files:**
+
 - Create: `apps/web/src/archive.ts`, `apps/web/src/archive.test.ts`
 - Modify: `apps/web/src/appRoutes.ts` (viewFromPathname), `apps/web/src/components/moduleRegistry.tsx` (`enabledModules`, `enabledWidgets`, `normaliseWidgets`, `navModules`), `apps/web/src/App.tsx` (initial scope forced to personal, view rendering for archived views at ~1731-1783), `apps/web/src/components/TopBar.tsx` (scope switch hidden), `apps/web/src/agent/tabContext.ts` (remove `valuta`, `belasting`, `facturen` cases at ~267-338), `apps/web/src/views/Overzicht.tsx` (Positie/Btw/Facturen widgets), `apps/web/src/views/Koppelingen.tsx` (invoice-address card + forwarding guide), `apps/web/src/views/Profiel.tsx` (scopeSection entity classifier hidden), `apps/web/src/copy/shell.ts`, `apps/web/src/landingCopy.ts`, `apps/server/src/agent/prompts/` (delete `facturen.md`, `belasting.md`, `valuta.md`; KEEP `facturen-extract.md`: the extract-invoice route stays deployed and `prompts.test.ts` loops over it; edit `overview.md` line 2 to drop "Belasting, Facturen" from the tab list; edit the `_base.md` sentence at line ~5 ("land verschillen — belasting vooral — bepaalt het land in de context welke ...") only if the read shows it points at the Belasting tab; the word "belasting" in the general tax-rules sense stays), `apps/server/src/agent/prompts.ts` (tab allowlist if any)
 - Test: `apps/web/src/archive.test.ts`, `apps/web/src/appRoutes.test.ts`, `apps/web/src/module-grid.test.tsx`, `apps/server/src/agent/prompts.test.ts`, `apps/web/src/agent/tabContext.test.ts`
 
 **Interfaces:**
+
 - Produces:
   - `export const ARCHIVE_BUSINESS = true` (the ONE switch)
   - `export const ARCHIVED_VIEWS: readonly View[]` = `["facturen","belasting","valuta"]` when switch on, `[]` off
@@ -91,14 +94,20 @@ test("deep link to an archived route lands on overview", () => {
 });
 // module-grid.test.tsx additions
 test("stored prefs naming archived ids are ignored, not an error", () => {
-  expect(enabledModules(["overview", "facturen", "belasting", "forecast"])).toEqual(["overview", "forecast"]);
-  expect(enabledWidgets({ on: ["btw-stand", "aandacht"], seen: ["btw-stand", "aandacht"] })).toEqual(["aandacht"]);
+  expect(enabledModules(["overview", "facturen", "belasting", "forecast"])).toEqual([
+    "overview",
+    "forecast",
+  ]);
+  expect(
+    enabledWidgets({ on: ["btw-stand", "aandacht"], seen: ["btw-stand", "aandacht"] }),
+  ).toEqual(["aandacht"]);
 });
 test("default modules and widgets exclude archived ids", () => {
   expect(DEFAULT_MODULES.some(isArchivedView)).toBe(false);
   expect(DEFAULT_WIDGETS.some(isArchivedWidget)).toBe(false);
 });
 ```
+
 Also: a prompts test that `loadChatPrompt("facturen" | "belasting" | "valuta")` falls back to the two charters and `loadTaskPrompt("facturen-extract")` still loads; `overview.md` does not contain the exact text "Belasting, Facturen"; and a `tabContext` test that those three tabs now return the default/empty context (no throw).
 
 - [ ] **Step 2: Run to verify failure**
@@ -112,6 +121,7 @@ Expected: FAIL (`archive.ts` missing; routes still resolve).
 
 Run: `pnpm --filter @lavega/web test && pnpm --filter @lavega/server test -- prompts agent-routes && pnpm typecheck && pnpm lint`
 Expected: PASS. Existing `facturen-*`, `belasting-*`, `grens-ui`, `valuta-ui`, `koppelingen` tests still pass or are updated only where they asserted the now-hidden card (list each change in the report).
+
 - [ ] **Step 6: Existing tests that change (list each in the report with the change):** `scope.test.ts` and `scope-restore.test.tsx` (switch UI absent; pure helpers in `scope.ts` stay and keep their tests); `grens-ui.test.tsx`, `belasting-ui.test.tsx`, `belasting-country.test.tsx`, `valuta-ui.test.tsx`, `facturen-*.test.tsx`, `forwardingGuide-ui.test.tsx` (mount components directly: expected unchanged; if one navigates through `App`, change it to assert the redirect); `koppelingen.test.tsx` (invoice-address card assertions removed or flipped to absent); `Profiel.test.tsx` (scopeSection absent); `overzicht.test.ts`/`module-grid.test.tsx` (default widget lists); `App.test.tsx`/`Root.test.tsx`/`shell.english.test.tsx`/`NavBar.test.tsx` (nav labels). Review Focus pin: a user with business entities set still opens, vault data unchanged, forecast figures identical to before; `/app/belasting` ends at `/app`.
 - [ ] **Step 7: Stage (owner commits):** `git add apps/web apps/server`
 
@@ -120,11 +130,13 @@ Expected: PASS. Existing `facturen-*`, `belasting-*`, `grens-ui`, `valuta-ui`, `
 ### Task 2: Profile Schema, vault section, versioning
 
 **Files:**
+
 - Create: `packages/core/src/advisor/profile.ts`, `packages/core/src/advisor/evidence.ts`, `packages/core/src/advisor/profile.test.ts`, `packages/core/src/advisor/vaultSections.ts` (+ test), `packages/core/src/advisor/publicFact.ts` (+ test), `packages/core/src/advice/language.ts` (+ test)
 - Modify: `packages/core/src/index.ts` (export), `packages/adapters/src/storage/encryptedStorage.ts` (`VaultData.profile`, `VaultData.plan`, `VaultData.learning`, `VaultData.events`; interface + impl), `packages/adapters/src/storage/encryptedStorage.test.ts`, `apps/web/src/backup.ts` only if it enumerates vault keys (check)
 - Test: `packages/core/src/advisor/profile.test.ts`, `packages/adapters/src/storage/encryptedStorage.test.ts`
 
 **Interfaces:**
+
 - Produces (core):
   - `Schema` `FieldSource = Literal("derived","confirmed","stated")`
   - `Field<A>(value: Schema<A>)` schema: `{ value: A, source: FieldSource, at: string /*ISO date*/, evidence?: string[] }` with a refinement: `evidence` required non-empty iff `source === "derived"`.
@@ -183,11 +195,13 @@ test("two rapid puts: the second wins (enqueueWrite ordering)", ...)
 ### Task 3: Core inference functions (income, housing, fixed costs, debts, savings, child signal)
 
 **Files:**
+
 - Create: `packages/core/src/advisor/scopePersonal.ts`, `incomeStreams.ts`, `housingProposal.ts`, `fixedCosts.ts`, `debts.ts`, `savings.ts`, `childSignal.ts`, each with `*.test.ts`; `lenders.ts` (known-lender list)
 - Modify: `packages/core/src/index.ts`
 - Reuse, do not change: `detectScheduleStreams`, `detectSubscriptions` (`subscriptions.ts`), `proposeHousingCost` (`housing.ts`), `accountsInScope` (`entities.ts`), `categorize`, `accountType` (`balance.ts`), `ownAccounts`
 
 **Interfaces:**
+
 - Produces:
   - `export type Proposal<T> = { id: string; kind: T; evidence: string[] /*tx ids*/; fingerprint: string; confidence: "enough" | "thin" }` (in `evidence.ts`, Task 2 file; add here if absent)
   - `export type HistoryCoverage = { days: number; sufficient: boolean }` and `historyCoverage(txs: readonly Tx[]): HistoryCoverage` (sufficient = at least 60 days between first and last dated tx)
@@ -234,11 +248,13 @@ test("non-EUR savings pocket excluded and counted in `excluded`", ...)
 ### Task 4: Room calculation (spec 10.2)
 
 **Files:**
+
 - Create: `packages/core/src/advisor/room.ts`, `room.test.ts`, `months.ts`, `months.test.ts`
 - Modify: `packages/core/src/index.ts`
 - Reuse: `categorize`, `ownAccountNamed`, `toEur`, `ConversionMode`, `CREDIT_CARD_PAYMENT_CATEGORY`, `personalView`
 
 **Interfaces:**
+
 - Consumes: `personalView` (Task 3).
 - Produces:
   - `months.ts`: `isoMonth(date: string): string`, `previousMonths(asOf: string, n: number): string[]` (newest first), `monthsBetween(from: string, to: string): number`, all via Effect `DateTime`
@@ -279,10 +295,12 @@ test("roomFromStated: income 2500-3000, spend 2000-2200 -> low 300, high 1000", 
 ### Task 5: Capacity and tolerance scoring (spec 10.3)
 
 **Files:**
+
 - Create: `packages/core/src/advisor/thresholds.ts`, `capacity.ts`, `riskScale.ts`, `knowledge.ts` and a `.test.ts` for each
 - Modify: `packages/core/src/index.ts`
 
 **Interfaces:**
+
 - Consumes: `RoomResult.middleCents` / `middleIncomeCents` (Task 4), `proposeDebts` (Task 3), `proposeFixedCosts`, `proposeSavings`.
 - Produces:
   - `export const CAPACITY_THRESHOLDS` (ONE table): `{ bufferMonths: [1, 3], roomShare: [0, 0.10], debtShare: [0.10, 0.30], horizonYears: [3, 10], sumToScore: [{max:1,score:1},{max:3,score:2},{max:5,score:3},{max:7,score:4},{max:8,score:5}] }`. Starting point, not research-backed (comment says so).
@@ -328,11 +346,13 @@ test("thresholds exist in exactly one exported table (grep guard): no numeric li
 ### Task 6: Intake UI: step 0 through block 3, with resume
 
 **Files:**
+
 - Create: `apps/web/src/copy/intake.ts`, `apps/web/src/intake/state.ts`, `apps/web/src/intake/state.test.ts`, `apps/web/src/intake/Step0.tsx`, `Block1.tsx`, `Block2.tsx`, `Block3.tsx`, `ProposalCard.tsx`, `RoomPayoff.tsx`, `apps/web/src/views/Intake.tsx`, `apps/web/src/views/Intake.test.tsx`
 - Modify: `apps/web/src/appRoutes.ts` (add `View` `"intake"`, segment `intake`), `apps/web/src/App.tsx` (load profile into state at ~568-595; `saveProfile` like `saveRewards` at ~953; render branch), `apps/web/src/copy/parity.test.ts` (add `intakeCopy`), `apps/web/src/copy/shell.ts` (`topBar.viewTitles` entry for `intake`). Widget ids added later (Task 8) must not equal any `ModuleId` or any new route id (`intake`, `about-you`); the existing test `ModulePicker.test.tsx` "geen enkele widget-id is ook een module-id" (~line 262) must still pass and is extended with the new View ids
 - Reuse: `Import` view (upload), `BankLink` (bank connect), `getFxConversionMode`, `setAppLocale`, `setHomeCountry`, `setHomeRegion`
 
 **Interfaces:**
+
 - Consumes: all of Tasks 2 to 5.
 - Produces:
   - `intakeCopy: Record<Locale, IntakeCopy>` (typed-complete; question text uses function-valued entries for amounts)
@@ -355,6 +375,7 @@ test("end of block 1 shows RoomPayoff: headline, low-high range, expandable calc
 test("block 3: risk items, knowledge items, optional worries free text; capacity/tolerance disagreement flag is shown, not resolved", ...)
 test("NL and EN render with no key missing (copy parity) and no Dutch string literal in intake/*.tsx", ...)
 ```
+
 The last test greps `apps/web/src/intake/*.tsx` and `views/Intake.tsx` for a small Dutch word list (en, de, het, niet, voor, rekening) inside string literals, failing on a match.
 
 - [ ] **Step 2: Run:** `pnpm --filter @lavega/web test -- intake Intake parity` Expected: FAIL.
@@ -369,10 +390,12 @@ The last test greps `apps/web/src/intake/*.tsx` and `views/Intake.tsx` for a sma
 ### Task 7: "What LaVega knows about you"
 
 **Files:**
+
 - Create: `apps/web/src/views/AboutYou.tsx`, `apps/web/src/views/AboutYou.test.tsx`
 - Modify: `apps/web/src/appRoutes.ts` (`View` `"about-you"`), `apps/web/src/views/Profiel.tsx` (link card), `apps/web/src/App.tsx` (render branch), `apps/web/src/copy/intake.ts` (add `aboutYou` tree), `apps/web/src/copy/shell.ts` (`viewTitles`)
 
 **Interfaces:**
+
 - Consumes: `AdvisorProfileStore`, `removeDerived`, `commitProfile`, `scoreCapacity` (capacity is displayed as computed, labelled "computed", never editable).
 - Produces: `AboutYou` props `{ store: AdvisorProfileStore | null; capacity: ReturnType<typeof scoreCapacity>; onSave(next: AdvisorProfileStore): Promise<void>; onNavigate(view: View): void }`. Lists every profile field with value, source (derived/confirmed/stated), date, Edit and Remove. Remove on a derived field calls `removeDerived`. It sits under Profiel (a link card there) with its own route segment `about-you` because `viewFromPathname` reads one path segment (the spec's "under Profiel" is satisfied by navigation, not URL nesting).
 
@@ -398,10 +421,12 @@ test("renders in NL and EN", ...)
 ### Task 8: Overzicht invitation and room card
 
 **Files:**
+
 - Create: `apps/web/src/components/blocks/RoomCard.tsx`, `apps/web/src/components/blocks/RoomCard.test.tsx`, `apps/web/src/components/blocks/IntakeInviteCard.tsx` (+ test)
 - Modify: `apps/web/src/views/Overzicht.tsx`, `apps/web/src/components/moduleRegistry.tsx` (widget entries `room-card` and `intake-invite`, `defaultOn: true`, with thumbnails; neither id may equal a ModuleId or the route ids `intake`, `about-you`; `ModulePicker.test.tsx` "geen enkele widget-id is ook een module-id" must pass), `apps/web/src/copy/shell.ts` (`modulePicker` widget labels, typed by `WidgetId`), `apps/web/src/copy/intake.ts`, `apps/web/src/App.tsx` (pass `store`, run `computeRoom` once per data change with `useMemo`)
 
 **Interfaces:**
+
 - Consumes: `computeRoom`, `RoomResult`, `AdvisorProfileStore`.
 - Produces: `RoomCard` props `{ result: RoomResult; onOpenIntake(): void }`; `IntakeInviteCard` props `{ onStart(): void; resumeAt: "step0"|"block1"|"block2"|"block3"|null }`. Invitation shows when `store === null` or `blocksDone < 3`; room card shows once `blocksDone >= 1` (block 1 done), otherwise the invitation.
 
@@ -428,11 +453,13 @@ test("widgets appear in the picker (WIDGETS) and respect enable/disable", ...)
 ### Task 9: Replace onboarding
 
 **Files:**
+
 - Modify: `apps/web/src/App.tsx` (~447, ~1521-1530: `showOnboarding` branch renders `Intake` step 0 instead of `Onboarding`), `apps/web/src/onboarding.ts` (keep `onboardingSeen`/`markOnboardingSeen`/`showOnboarding` unchanged: they gate existing users), `apps/web/src/copy/shell.ts` (remove `onboarding` tree from both languages), `apps/web/src/landingCopy.ts` and `apps/server/src/agent/prompts/` (now add the intake pointers deferred from Task 1), `apps/web/src/copy/parity.test.ts`
 - Delete: `apps/web/src/components/Onboarding.tsx`, `apps/web/src/onboarding.test.tsx` (migrate its still-relevant cases: fresh-vault-only, seen flag, restore-backup path)
 - Test: `apps/web/src/onboarding.test.ts` (new, logic only), `apps/web/src/Root.test.tsx`/`App.test.tsx` as they reference onboarding
 
 **Interfaces:**
+
 - Consumes: `Intake` (Task 6), `IntakeInviteCard` (Task 8).
 - Produces: a fresh vault opens `Intake` at step 0 with language/country/region fields; scope choice is gone; `setDefaultScope` is never called by new code. Existing users (onboarding seen, or a non-fresh vault) never see step 0's settings again; they get the Overzicht invitation.
 

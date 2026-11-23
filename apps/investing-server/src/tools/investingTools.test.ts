@@ -51,7 +51,10 @@ const dashboard = {
   risk: {
     defaultBenchmark: "^GSPC",
     byBenchmark: {
-      "^GSPC": { "1Y": { risk: { annualizedVolatility: 0.18 } }, "6M": { risk: { annualizedVolatility: 0.2 } } },
+      "^GSPC": {
+        "1Y": { risk: { annualizedVolatility: 0.18 } },
+        "6M": { risk: { annualizedVolatility: 0.2 } },
+      },
     },
   },
 };
@@ -129,7 +132,12 @@ test("get_trades forwards the symbol filter and the limit to the read route", as
   const seen: string[] = [];
   const tools = createInvestingReadTools(
     reader(
-      { "/api/investing/trades?symbol=AAPL&limit=5": { status: 200, body: { trades: [], total: 0 } } },
+      {
+        "/api/investing/trades?symbol=AAPL&limit=5": {
+          status: 200,
+          body: { trades: [], total: 0 },
+        },
+      },
       seen,
     ),
   );
@@ -210,7 +218,9 @@ test("get_risk defaults to 1Y", async () => {
 
 test("get_agent_memory says unavailable instead of pretending memory is empty", async () => {
   const tools = createInvestingReadTools(
-    reader({ "/api/memory": { status: 503, body: { problems: ["Agent memory needs a database"] } } }),
+    reader({
+      "/api/memory": { status: 503, body: { problems: ["Agent memory needs a database"] } },
+    }),
   );
   expect(await tool(tools, "get_agent_memory")).toMatchObject({
     available: false,
@@ -241,7 +251,9 @@ test("extra input properties are stripped before a tool uses the value", async (
   const seen: string[] = [];
   const tools = createInvestingReadTools(
     reader(
-      { "/api/investing/prices/AAPL": { status: 200, body: { symbol: "AAPL", date: "2026-03-04" } } },
+      {
+        "/api/investing/prices/AAPL": { status: 200, body: { symbol: "AAPL", date: "2026-03-04" } },
+      },
       seen,
     ),
   );

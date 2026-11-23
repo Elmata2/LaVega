@@ -30,15 +30,15 @@ Companion design: `docs/research/2026-10-26-lavega-agent-memory-design.md`.
 
 ## 2. Shape of the system
 
-| Layer | What the code shows |
-| --- | --- |
-| Frontend | React 18.3.1, Vite build with one entry plus 102 lazy route chunks, TanStack Router, Relay store, Radix primitives, Lexical editor. |
-| API | One GraphQL endpoint. Mutations return IDs only; reads are separate queries. |
-| Live updates | SSE `/client-events/stream`. The optimistic message is reconciled when the server echoes `ingressEventId`. |
-| Channels | `ChatSource` values seen in client code: `APP`, `IMESSAGE`, `WHATSAPP`, `SMS`. One user has one persistent chat per source family: `getOrCreatePersistentChat(source: APP)`. |
-| Ingress | A sent message returns `{chatId, wakeId, ingressEventId}`. `wakeId` is the agent turn the message started — **inference:** the agent is woken by an inbound event rather than by a request/response cycle. |
-| Runtime | Browser and computer actions execute on a paired Mac: `action { actionType, coordinate, text, key, scrollDirection, scrollAmount, command }`. |
-| Identity | The agent has its own phone number and its own mail address, separate from the owner's Gmail/Outlook (`agentMailStatus`, address changes allowed 3×/day). |
+| Layer        | What the code shows                                                                                                                                                                                        |
+| ------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Frontend     | React 18.3.1, Vite build with one entry plus 102 lazy route chunks, TanStack Router, Relay store, Radix primitives, Lexical editor.                                                                        |
+| API          | One GraphQL endpoint. Mutations return IDs only; reads are separate queries.                                                                                                                               |
+| Live updates | SSE `/client-events/stream`. The optimistic message is reconciled when the server echoes `ingressEventId`.                                                                                                 |
+| Channels     | `ChatSource` values seen in client code: `APP`, `IMESSAGE`, `WHATSAPP`, `SMS`. One user has one persistent chat per source family: `getOrCreatePersistentChat(source: APP)`.                               |
+| Ingress      | A sent message returns `{chatId, wakeId, ingressEventId}`. `wakeId` is the agent turn the message started — **inference:** the agent is woken by an inbound event rather than by a request/response cycle. |
+| Runtime      | Browser and computer actions execute on a paired Mac: `action { actionType, coordinate, text, key, scrollDirection, scrollAmount, command }`.                                                              |
+| Identity     | The agent has its own phone number and its own mail address, separate from the owner's Gmail/Outlook (`agentMailStatus`, address changes allowed 3×/day).                                                  |
 
 ### Why the transport matters
 
@@ -57,18 +57,18 @@ memory, and the strongest single piece of evidence that it does.
 branches plus an error branch — an event-sourced timeline rather than a message
 table:
 
-| `type` | Fields the client renders |
-| --- | --- |
-| `message` | `role`, `content`, `origin {kind, agentId, agentKind, agentDisplayName}`, `attachments[]`, `sentDraftEdits[]`, `readAt` |
-| `thinking` | `thinking` |
-| `tool_invocation` | `toolName`, `toolId`, `arguments` |
-| `tool_response` | `toolName`, `toolId`, `response`, `actionType`, `isError` |
-| `interaction` | `interactionType`, `title`, `body`, `payloadJson`, `question`, `options[]`, `actionSummary`, `targetMode`, `deviceName`, `plan` |
-| `interaction_response` | `approved`, `selected[]`, `text`, `payloadJson`, `summary`, `dismissed` |
-| `action` | `actionType`, `coordinate`, `text`, `key`, `scrollDirection`, `scrollAmount`, `command` |
-| `screenshot` | `url` |
-| `draft_field` | `label`, `before`, `content`, `userValue`, `userEditedAt` |
-| `error` | `message` |
+| `type`                 | Fields the client renders                                                                                                       |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `message`              | `role`, `content`, `origin {kind, agentId, agentKind, agentDisplayName}`, `attachments[]`, `sentDraftEdits[]`, `readAt`         |
+| `thinking`             | `thinking`                                                                                                                      |
+| `tool_invocation`      | `toolName`, `toolId`, `arguments`                                                                                               |
+| `tool_response`        | `toolName`, `toolId`, `response`, `actionType`, `isError`                                                                       |
+| `interaction`          | `interactionType`, `title`, `body`, `payloadJson`, `question`, `options[]`, `actionSummary`, `targetMode`, `deviceName`, `plan` |
+| `interaction_response` | `approved`, `selected[]`, `text`, `payloadJson`, `summary`, `dismissed`                                                         |
+| `action`               | `actionType`, `coordinate`, `text`, `key`, `scrollDirection`, `scrollAmount`, `command`                                         |
+| `screenshot`           | `url`                                                                                                                           |
+| `draft_field`          | `label`, `before`, `content`, `userValue`, `userEditedAt`                                                                       |
+| `error`                | `message`                                                                                                                       |
 
 Plus an `interruption` event that the client uses to end the current stream block,
 and voice transcripts stored as message content with a `<voice_` prefix, filtered
@@ -105,8 +105,8 @@ exists:
 > "Older data, memories, generated responses, generated or exported files, and
 > sandbox snapshots are outside this deletion." — Google-data deletion panel.
 
-The first separates *memories* from *conversations* as two stores that survive a
-phone change. The second puts *memories* outside a deletion the user did initiate,
+The first separates _memories_ from _conversations_ as two stores that survive a
+phone change. The second puts _memories_ outside a deletion the user did initiate,
 which is only possible if memory is its own store with its own lifetime.
 
 ### 4.2 The vault is not memory
@@ -123,12 +123,12 @@ vaultKinds   { kind, subfieldKeys[] }
   list view; a single value comes back from `revealVaultSubfieldValue(kind, name, key)`.
 - Access is bounded by `sites[]` — a credential is valid on an allowlist of
   hosts — and `anySite: Boolean` for the looser case.
-- `sandboxAccess` is the sharp edge: the approval screen asks *"Copy your
+- `sandboxAccess` is the sharp edge: the approval screen asks _"Copy your
   {username|password} to your agent's computer? Your agent and anything it runs
-  can read it there."* Decision scope is one of `ALLOW_ONCE`, `ALWAYS_ALLOW`,
+  can read it there."_ Decision scope is one of `ALLOW_ONCE`, `ALWAYS_ALLOW`,
   `DENY`, and for `scope: "SANDBOX"` the always-allow variant is labelled "Copying
   allowed".
-- Sharing is time-boxed (`VaultShareTTL`, `endsAt`) and is *between accounts*,
+- Sharing is time-boxed (`VaultShareTTL`, `endsAt`) and is _between accounts_,
   not a copy: `vaultSharesGiven` / `vaultSharesHeld`, "They stay theirs".
 - One-time links do the out-of-band approval: `vaultFillRequest(token)` and
   `vaultApprovalRequest(token)`, each bound to a phone number for the return SMS.
@@ -145,9 +145,9 @@ protocol. It has no place to keep a sentence. Memory is not in it.
   somewhere durable.
 - The profile seeds it: onboarding submits `name`, `email`, `birthDate`, `gender`,
   and the UI says "Your birthday helps Instinct get to know you."
-- The largest context source is named in the product: *"Indexing external data
+- The largest context source is named in the product: _"Indexing external data
   gives your agent efficient context, helping it work faster and make higher-quality
-  decisions"* — Gmail, Calendar, Tasks, Docs, Sheets, Slides, Outlook, Notion,
+  decisions"_ — Gmail, Calendar, Tasks, Docs, Sheets, Slides, Outlook, Notion,
   Linear, GitHub, Slack, Granola, Whoop, Spotify, iCloud mail, location.
   `deleteIndexedActivity` wipes it (`{ deletedData }`), and indexing resumes right
   after, so it is a cache over sources, not a source of truth.
@@ -157,15 +157,15 @@ protocol. It has no place to keep a sentence. Memory is not in it.
 
 ### 4.4 Deletion matrix as the client states it
 
-| Store | User-facing action in the app |
-| --- | --- |
-| Conversation history | Read, page by page |
-| Indexed data from connected services | Delete all at once (`deleteIndexedActivity`) |
-| Google source data | Per-service deletion jobs with status and retry |
-| Location history | Check existence, delete |
-| **Memories** | **Nothing, apart from deleting the whole account** |
-| Generated files, sandbox snapshots | Nothing, apart from deleting the whole account |
-| Training use | Opt-out toggle (`setTrainingDataOptOut`) |
+| Store                                | User-facing action in the app                      |
+| ------------------------------------ | -------------------------------------------------- |
+| Conversation history                 | Read, page by page                                 |
+| Indexed data from connected services | Delete all at once (`deleteIndexedActivity`)       |
+| Google source data                   | Per-service deletion jobs with status and retry    |
+| Location history                     | Check existence, delete                            |
+| **Memories**                         | **Nothing, apart from deleting the whole account** |
+| Generated files, sandbox snapshots   | Nothing, apart from deleting the whole account     |
+| Training use                         | Opt-out toggle (`setTrainingDataOptOut`)           |
 
 This table is the product's real stance: memory is infrastructure the user cannot
 see. For a finance product that stance is unacceptable, and it is the single

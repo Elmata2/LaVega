@@ -13,6 +13,7 @@ It is information and education. It computes on the user's own numbers and expla
 ## 2. Goals, non-goals, anti-goals
 
 Goals
+
 - P1. One page, seven sections in a fixed order, each on the user's numbers.
 - P2. Every number from a pure function in `packages/core` with tests; every section shows "how we calculated this".
 - P3. A status per section, computed in code from one threshold table.
@@ -33,6 +34,7 @@ intake, then the plan with template text only, then the AI layer. The plan is sh
 Navigation. "Jouw plan" / "Your plan" is the first nav item for users who finished the intake; Overzicht follows. Before the intake is finished the route shows the intake invitation and one sentence on what the plan will contain. A user who stopped after block 1 gets the sections their answers allow; the rest show not-enough-data.
 
 Top to bottom:
+
 1. Header: plan date, data freshness ("bank data to 20 Oct; profile confirmed 14 Oct"), links to "What LaVega knows about you" and to the assumptions.
 2. Backbone strip: four steps (buffer, expensive debt, goals, investing). It is general education with its source (Nibud and AFM consumer pages), shown identically to everyone: "A common order, and why: a buffer first so a surprise bill does not become a loan; expensive debt because its interest is certain; goals by their dates; investing for money you will not need for a long time (AFM)." Under each step the user sees only facts from their own sections ("Buffer: 2.1 months of fixed costs", "Debt interest: 1,140 a year"). It never says which step is the user's next one, and never ranks the user's steps.
 3. What changed since last month (section 13).
@@ -59,15 +61,15 @@ One advice-language list. `packages/core/src/advice/language.ts`, created in the
 
 Statuses. Three values, in one table `PLAN_THRESHOLDS` (versioned, placeholders to tune, not research-backed). A status is a prompt to look, never a verdict. Chips use a word and a symbol, not colour alone.
 
-| Section | On track | Attention | Not enough data |
-|---|---|---|---|
-| Your month | median-month room >= 10% of income and no month negative | median-month room below 10% of income, or any of the three months negative | under 60 days of history and no stated ranges |
-| Buffer | months of fixed costs >= the user's own buffer target | below that target | no fixed-cost figure or no savings balance |
-| Debts | no visible or stated debt | any debt with payments, or a debt without a rate | a debt exists with no rate and no stated rate (cost cannot be computed) |
-| Spending | every category within the user's own limit, or no limits set | a category above the user's own limit two months running | under 6 months of history |
-| Subscriptions | no price increase flagged in the last 12 months and no overlap | at least one flagged increase or an overlap | no detected subscriptions and under 90 days of history |
-| Cards and points | no held card with a net value more than 10% above the card in use | such a card exists | no card data or no cardable spend |
-| Investing and goals | every goal's saved amount at or above its straight-line schedule | any goal behind schedule | no goals or no room figure |
+| Section             | On track                                                          | Attention                                                                  | Not enough data                                                         |
+| ------------------- | ----------------------------------------------------------------- | -------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| Your month          | median-month room >= 10% of income and no month negative          | median-month room below 10% of income, or any of the three months negative | under 60 days of history and no stated ranges                           |
+| Buffer              | months of fixed costs >= the user's own buffer target             | below that target                                                          | no fixed-cost figure or no savings balance                              |
+| Debts               | no visible or stated debt                                         | any debt with payments, or a debt without a rate                           | a debt exists with no rate and no stated rate (cost cannot be computed) |
+| Spending            | every category within the user's own limit, or no limits set      | a category above the user's own limit two months running                   | under 6 months of history                                               |
+| Subscriptions       | no price increase flagged in the last 12 months and no overlap    | at least one flagged increase or an overlap                                | no detected subscriptions and under 90 days of history                  |
+| Cards and points    | no held card with a net value more than 10% above the card in use | such a card exists                                                         | no card data or no cardable spend                                       |
+| Investing and goals | every goal's saved amount at or above its straight-line schedule  | any goal behind schedule                                                   | no goals or no room figure                                              |
 
 Debts has no on-track/attention split by interest level: no unsourced percentage threshold is used (section 8).
 
@@ -82,6 +84,7 @@ Copy. NL and EN typed-complete in the copy modules, one module per section; a mi
 Question 1, how to live financially. Inputs: profile incomeStreams, housing, fixedCosts, household; room from the intake (`computeRoom`, intake plan Task 4); `detectSubscriptions` and the recurring-stream detectors.
 
 Computation.
+
 - Room: the plan calls `computeRoom` and reuses its `RoomResult` unchanged (three full months, personal scope, transfers excluded). "Median month" in this spec is the median by monthly net of those three months; the headline and the status use it; low and high months are the range.
 - Fixed versus variable: fixed = housing plus detected recurring outgoing streams and subscriptions (the one definition, intake 4.7; the buffer in section 7 and the capacity score use the same one); variable = all other outgoing. This is a split by detection, not a category taxonomy, and says so. Shown as amounts and shares of income. (Grouping by Nibud's three buckets is deferred: it needs a category-to-bucket table that does not exist.)
 - Savings rate: money moved to the user's own savings accounts plus room left, over net income, averaged over the three months. Shown as the user's rate, with Nibud's guidance of about 10% of net income as a cited reference once verified (section 15) ("Nibud's budget advice mentions saving about 10% of net income"). No shortfall amount is computed or shown, and nothing says what the user "could invest".
@@ -97,6 +100,7 @@ Empty state. No bank data: stated ranges from the intake give a room range; fixe
 Question 2. Inputs: profile `buffer` (target months), savings, fixedCosts; fixed costs from section 6; balances by account type.
 
 Computation. Two lines, never merged (research 1.2):
+
 - Income buffer: months of fixed costs = liquid savings (savings and current accounts of the personal scope, minus accounts linked to goals, section 12) divided by monthly fixed costs (section 6 definition). Gap to the user's own target in cents and months. The target is the intake value; if the intake has none, the card asks for it and computes nothing against a default.
 - Object buffer: Nibud's buffer is for large unexpected costs (replacing inventory, repairs, a car), not for falling income. LaVega does not clone the BufferBerekenaar (algorithm unpublished). The card links to the tool and accepts a typed result; with a value it shows what share of savings that is.
 - Time to close a gap: gap divided by the room range, or "not reachable at current room" when room is zero or negative. No date is promised.
@@ -141,6 +145,7 @@ Empty state: under six months, show plain monthly totals, say a comparison with 
 Question 5. Inputs: `detectSubscriptions` (monthly cents, `changePct`, cadence, `skippedCycles`), `subscriptionOverlaps`, `subscriptionPriceIncreases`, the user's decisions and usage events.
 
 Computation. An evidence list, one row per stream:
+
 - Cost per month and per year; months active.
 - Price changes use `subscriptionPriceIncreases` and its existing thresholds (3% and 0.50 euro). The change date (the first charge at the new price) and the price before and after are new code in the plan; the detector today gives only first and last amount.
 - Overlap with other streams in the same function group, with the combined monthly cost.
@@ -158,6 +163,7 @@ Empty state: under 90 days, say a stream needs three occurrences to be recognise
 Question 6. Inputs: the user's cards, spend per category (section 9 data), `rewards.ts` balances (`isStale`), `assumedCashback.ts` tiers, `netBenefit.ts`, the catalogue.
 
 Computation.
+
 - Card comparison: a new core function, ported from `apps/extension/src/rank.ts`. The extension ranks one checkout (`rankCheckout`) and reads checkout-specific terms; the plan needs net value over the user's annual spend per category. This is a rewrite on top of `netBenefit` and `rankByNetBenefit`, not a re-export; whether the extension then imports it from core is the builder's call, but plan and extension must agree on shared cases, tested with common fixtures.
 - Per spend category, per card: earned at the user's own spend minus the fee share, as net value over a stated horizon. Cashback tiers are respected: assumed is shown as assumed, unknown as unknown, never as zero.
 - Criteria columns: annual fee, earn rate by category, foreign exchange markup, points expiry, transfer ratio, insurance, each with date and source. Default sort is neutral, by name; the user may sort by any column. No row is highlighted, ordered by a profile score, or labelled.
@@ -218,6 +224,7 @@ No new server storage. The AI boundary is the AI spec's.
 ## 15. Verification before copy ships
 
 Each item is a `PublicFact` or catalogue value that needs `verifiedOn` and a primary page.
+
 1. Gift tax 2026 figures, the 18-to-40 versus 18-to-39 bound, any grandparent amount (belastingdienst.nl).
 2. Box 3 treatment of minors (fact only; no figures computed).
 3. Nibud: copyright page and data-agreement route; whether quoting the 10% guidance is allowed and its exact wording.
@@ -229,7 +236,7 @@ Each item is a `PublicFact` or catalogue value that needs `verifiedOn` and a pri
 9. The pension overview URL.
 10. EU AI Act Annex III coverage and the DPIA (intake 6).
 11. A Dutch financial-regulatory lawyer reads the final NL copy of section 12 and all wording tables. This is not legal advice.
-(Removed with the rulings: CBS licence check, the 10% debt rule of thumb, the 3 to 6 months and 5-year conventions, which are not used.)
+    (Removed with the rulings: CBS licence check, the 10% debt rule of thumb, the 3 to 6 months and 5-year conventions, which are not used.)
 
 ## 16. Verification of the build
 

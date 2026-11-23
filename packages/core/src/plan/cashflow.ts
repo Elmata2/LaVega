@@ -1,4 +1,11 @@
-import { addMonths, isIsoDate, isoMonth, lastDayOfMonth, previousMonths, daysBetween } from "../advisor/months.js";
+import {
+  addMonths,
+  isIsoDate,
+  isoMonth,
+  lastDayOfMonth,
+  previousMonths,
+  daysBetween,
+} from "../advisor/months.js";
 import { cleanTxs, personalView } from "../advisor/scopePersonal.js";
 import { scopedOwn } from "../advisor/room.js";
 import { isEurCurrency } from "../model.js";
@@ -117,11 +124,15 @@ export type CashflowResult = {
  *  seen, on top of a base of three months. */
 export function bufferMonthsFor(longestDryMonths: number): number {
   const t = PLAN_THRESHOLDS.cashflow;
-  return Math.min(t.bufferMaxMonths, Math.max(t.bufferBaseMonths, t.bufferBaseMonths + longestDryMonths));
+  return Math.min(
+    t.bufferMaxMonths,
+    Math.max(t.bufferBaseMonths, t.bufferBaseMonths + longestDryMonths),
+  );
 }
 
 const sum = (xs: readonly number[]): number => xs.reduce((a, b) => a + b, 0);
-const mean = (xs: readonly number[]): number => (xs.length === 0 ? 0 : Math.round(sum(xs) / xs.length));
+const mean = (xs: readonly number[]): number =>
+  xs.length === 0 ? 0 : Math.round(sum(xs) / xs.length);
 function median(xs: readonly number[]): number {
   if (xs.length === 0) return 0;
   const s = [...xs].sort((a, b) => a - b);
@@ -146,7 +157,11 @@ function longestRun(xs: readonly number[]): number {
 
 /** The full calendar months the data covers: the first month counts when the
  *  first row is on day 1-3; the last when the data runs to its last day. */
-function fullMonths(dates: readonly string[], balanceDates: readonly string[], asOf: string): string[] {
+function fullMonths(
+  dates: readonly string[],
+  balanceDates: readonly string[],
+  asOf: string,
+): string[] {
   if (dates.length === 0) return [];
   const first = dates.reduce((a, b) => (b < a ? b : a));
   const last = [...dates, ...balanceDates].reduce((a, b) => (b > a ? b : a));
@@ -173,7 +188,8 @@ const norm = (s: string): string =>
  *  uncategorised incoming payment is not counted as client income. */
 const BUSINESS_MARK = /\b(bv|vof|nv|holding|stichting|ltd|gmbh|llc|inc|factuur|invoice|opdracht)\b/;
 /** Words of pay that comes from an employer or a benefit. */
-const PAY_WORDS = /(salaris|loon|vakantie|eindejaar|13e|dertiende|bonus|uitkering|pensioen|toeslag|gehalt|declaratie|reiskosten)/;
+const PAY_WORDS =
+  /(salaris|loon|vakantie|eindejaar|13e|dertiende|bonus|uitkering|pensioen|toeslag|gehalt|declaratie|reiskosten)/;
 const TAX_OFFICE = /(belastingdienst|omzetbelasting|inkomstenbelasting|voorlopige aanslag)/;
 
 export function computeCashflow(i: PlanInput): CashflowResult | null {
@@ -195,7 +211,17 @@ export function computeCashflow(i: PlanInput): CashflowResult | null {
   const vatSettings = resolveVatSettings({
     entity: "",
     country: "NL",
-    ...(i.vatFrequency == null ? {} : { saved: { entity: "", frequency: i.vatFrequency, defaultRatePct: taxPack("NL").vat.defaultRatePct, mixedRates: false, country: "NL" } }),
+    ...(i.vatFrequency == null
+      ? {}
+      : {
+          saved: {
+            entity: "",
+            frequency: i.vatFrequency,
+            defaultRatePct: taxPack("NL").vat.defaultRatePct,
+            mixedRates: false,
+            country: "NL",
+          },
+        }),
   });
   const vatRate = vatSettings.defaultRatePct;
   const rawPct = i.preferences.incomeTaxSetAsidePct?.pct ?? null;
@@ -244,7 +270,8 @@ export function computeCashflow(i: PlanInput): CashflowResult | null {
     const k = idx.get(isoMonth(x.date));
     if (k === undefined) continue;
     if (cents > 0) otherPer[k]! += cents;
-    else if (!(taxPaymentsReplaced && TAX_OFFICE.test(norm(`${x.counterparty} ${x.description}`)))) outPer[k]! += -cents;
+    else if (!(taxPaymentsReplaced && TAX_OFFICE.test(norm(`${x.counterparty} ${x.description}`))))
+      outPer[k]! += -cents;
   }
 
   const enough = months.length >= t.minMonths;
@@ -262,36 +289,54 @@ export function computeCashflow(i: PlanInput): CashflowResult | null {
   // No client payment at all is not a dry stretch, it is no data on clients.
   const dry = clientRows.length === 0 ? 0 : longestRun(clientPer);
 
-  const liquid = (excludeGoalLinked: boolean): { cents: number | null; source: "accounts" | "stated" | null } => {
+  const liquid = (
+    excludeGoalLinked: boolean,
+  ): { cents: number | null; source: "accounts" | "stated" | null } => {
     const { eur } = liquidAccountBalances(i);
     const goalKeys = new Set(
       excludeGoalLinked
-        ? i.profile.goals.flatMap((g) => g.goal.accountRefs.filter((r) => r.kind === "bank").map((r) => r.id))
+        ? i.profile.goals.flatMap((g) =>
+            g.goal.accountRefs.filter((r) => r.kind === "bank").map((r) => r.id),
+          )
         : [],
     );
     const used = eur.filter((a) => !goalKeys.has(a.key));
     if (eur.every((a) => a.cents === null) && i.profile.savingsStatedCents !== null)
       return { cents: i.profile.savingsStatedCents, source: "stated" };
-    if (used.length === 0 || used.some((a) => a.cents === null)) return { cents: null, source: null };
+    if (used.length === 0 || used.some((a) => a.cents === null))
+      return { cents: null, source: null };
     return { cents: sum(used.map((a) => a.cents!)), source: "accounts" };
   };
   const { cents: start, source: startSource } = liquid(false);
 
   const noClientPayments = enough && clientRows.length === 0;
-  const vatCents = chargesVat === true && !noClientPayments ? Math.round((meanClient * vatRate) / (100 + vatRate)) : null;
+  const vatCents =
+    chargesVat === true && !noClientPayments
+      ? Math.round((meanClient * vatRate) / (100 + vatRate))
+      : null;
   const taxBase = meanClient - (vatCents ?? 0);
   const taxCents = pct === null || noClientPayments ? null : Math.round((taxBase * pct) / 100);
-  const period = chargesVat === true && !noClientPayments ? nextVatPeriod(vatSettings.frequency, i.asOf, "NL") : null;
+  const period =
+    chargesVat === true && !noClientPayments
+      ? nextVatPeriod(vatSettings.frequency, i.asOf, "NL")
+      : null;
   const periodCents =
     period === null
       ? null
       : Math.round(
-          (sum(periodRows.filter((r) => r.date >= period.periodStart && r.date <= period.periodEnd).map((r) => r.cents)) * vatRate) /
+          (sum(
+            periodRows
+              .filter((r) => r.date >= period.periodStart && r.date <= period.periodEnd)
+              .map((r) => r.cents),
+          ) *
+            vatRate) /
             (100 + vatRate),
         );
 
   const asOfMonth = isoMonth(i.asOf);
-  const horizon = Array.from({ length: t.horizonMonths }, (_, k) => addMonths(`${asOfMonth}-01`, k + 1).slice(0, 7));
+  const horizon = Array.from({ length: t.horizonMonths }, (_, k) =>
+    addMonths(`${asOfMonth}-01`, k + 1).slice(0, 7),
+  );
   const quietMonths = Math.min(Math.max(1, dry), t.horizonMonths);
   // The set-asides the card recommends are money that is not free to spend.
   const reserved = (vatCents ?? 0) + (taxCents ?? 0);
@@ -299,8 +344,16 @@ export function computeCashflow(i: PlanInput): CashflowResult | null {
   let forward: CashflowFigures["forward"] = null;
   const warnings: CashflowWarning[] = [];
   if (enough && start !== null) {
-    const typical = path(start, horizon.map(() => typicalNet), horizon);
-    const quiet = path(start, horizon.map((_, k) => (k < quietMonths ? quietNet : typicalNet)), horizon);
+    const typical = path(
+      start,
+      horizon.map(() => typicalNet),
+      horizon,
+    );
+    const quiet = path(
+      start,
+      horizon.map((_, k) => (k < quietMonths ? quietNet : typicalNet)),
+      horizon,
+    );
     forward = { points: t.horizonMonths, quietMonths, typical, quiet };
     if (typical.lowest.cents < 0) warnings.push({ kind: "typical-below-zero", ...typical.lowest });
     if (quiet.lowest.cents < 0) warnings.push({ kind: "quiet-below-zero", ...quiet.lowest });
@@ -324,7 +377,9 @@ export function computeCashflow(i: PlanInput): CashflowResult | null {
       emptyMonths: clientPer.filter((c) => c === 0).length,
       longestDryMonths: dry,
       payments: clientRows.length,
-      paymentList: [...clientRows].sort((a, b) => (a.date < b.date ? 1 : -1)).slice(0, CLIENT_LIST_MAX),
+      paymentList: [...clientRows]
+        .sort((a, b) => (a.date < b.date ? 1 : -1))
+        .slice(0, CLIENT_LIST_MAX),
       longestGapDays,
       variability: cv(clientPer),
     },
@@ -342,7 +397,8 @@ export function computeCashflow(i: PlanInput): CashflowResult | null {
       fixedCents: fixed,
       targetCents,
       liquidCents: bufLiquid,
-      gapCents: targetCents === null || bufLiquid === null ? null : Math.max(0, targetCents - bufLiquid),
+      gapCents:
+        targetCents === null || bufLiquid === null ? null : Math.max(0, targetCents - bufLiquid),
       ownTargetMonths: i.profile.bufferTargetMonths,
     },
     setAside: {
@@ -364,7 +420,11 @@ export function computeCashflow(i: PlanInput): CashflowResult | null {
   if (enough) {
     calc.push({
       id: "client-income",
-      inputs: { months: fig("count", months.length), empty: fig("count", figures.client.emptyMonths), payments: fig("count", clientRows.length) },
+      inputs: {
+        months: fig("count", months.length),
+        empty: fig("count", figures.client.emptyMonths),
+        payments: fig("count", clientRows.length),
+      },
       output: fig("cents", meanClient),
     });
     calc.push({
@@ -398,18 +458,31 @@ export function computeCashflow(i: PlanInput): CashflowResult | null {
   }
   calc.push({
     id: "buffer-target",
-    inputs: { dry_months: fig("count", dry), base_months: fig("count", t.bufferBaseMonths), fixed: fig("cents", fixed), max_months: fig("count", t.bufferMaxMonths) },
+    inputs: {
+      dry_months: fig("count", dry),
+      base_months: fig("count", t.bufferBaseMonths),
+      fixed: fig("cents", fixed),
+      max_months: fig("count", t.bufferMaxMonths),
+    },
     output: fig("months", bufferMonths),
   });
   calc.push({
     id: "income-tax",
-    inputs: { base: fig("cents", taxBase), pct: fig("pct", pct), vat_known: fig("count", chargesVat === null ? 0 : 1) },
+    inputs: {
+      base: fig("cents", taxBase),
+      pct: fig("pct", pct),
+      vat_known: fig("count", chargesVat === null ? 0 : 1),
+    },
     output: fig("cents", taxCents),
   });
   if (vatCents !== null) {
     calc.push({
       id: "vat",
-      inputs: { client: fig("cents", meanClient), rate: fig("pct", vatRate), period: fig("cents", periodCents) },
+      inputs: {
+        client: fig("cents", meanClient),
+        rate: fig("pct", vatRate),
+        period: fig("cents", periodCents),
+      },
       output: fig("cents", vatCents),
     });
   }

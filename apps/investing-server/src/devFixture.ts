@@ -11,7 +11,7 @@ import type { RuntimeBrokerDataSnapshot } from "./runtimeBrokerData.js";
 
 /** Canned local-dev data: a small portfolio plus matching price history, so the
  * dashboard renders instantly without a real broker sync or price fetch. Enabled
- * via INVESTING_DEV_FIXTURE=1 (see docker.ts / index.ts). Never used in production. */
+ * via INVESTING_DEV_FIXTURE=1 (see standalone.ts / index.ts). Never used in production. */
 
 const TENANT_ID = "local";
 const TRANSFER_IN_SYMBOL = "TSLA";

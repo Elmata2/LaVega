@@ -2,7 +2,7 @@
  *
  * DIT BESTAND DRAAIT OP DRIE PLEKKEN — het is de bron van de Code-nodes "Zet in
  * de wachtrij" ÉN "Geef de rij en leeg hem" in docs/n8n/lavega-invoices.json.
- * `pnpm run sync:n8n` kopieert het in allebei. Geen TypeScript-syntax, alleen
+ * `bun run sync:n8n` kopieert het in allebei. Geen TypeScript-syntax, alleen
  * JSDoc.
  *
  * De rij blijft in n8n staan, niet op de LaVega-server: een factuurbedrag is

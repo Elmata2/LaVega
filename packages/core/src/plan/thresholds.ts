@@ -1,7 +1,4 @@
-import {
-  PRICE_INCREASE_MIN_CENTS,
-  PRICE_INCREASE_MIN_PCT,
-} from "../subscriptions.js";
+import { PRICE_INCREASE_MIN_CENTS, PRICE_INCREASE_MIN_PCT } from "../subscriptions.js";
 
 /* The ONE table for every plan cut-off. Placeholders chosen by the builder for
  * the first launch; they are NOT research-backed. Change a number here and

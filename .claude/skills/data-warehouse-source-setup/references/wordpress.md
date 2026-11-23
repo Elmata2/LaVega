@@ -39,28 +39,28 @@ Once the syncs are complete, you can start querying this data in PostHog.
 
 When linking WordPress, you'll need:
 
--   **Site URL** – your WordPress site URL, for example `https://example.com`.
--   **Username** – optional. Required only to authenticate or sync private content.
--   **Application password** – optional. Create one under **Users > Profile > Application Passwords** ([application password docs](https://wordpress.org/documentation/article/application-passwords/)). Required only to authenticate or sync private content, and requires WordPress 5.6+ on an HTTPS site.
+- **Site URL** – your WordPress site URL, for example `https://example.com`.
+- **Username** – optional. Required only to authenticate or sync private content.
+- **Application password** – optional. Create one under **Users > Profile > Application Passwords** ([application password docs](https://wordpress.org/documentation/article/application-passwords/)). Required only to authenticate or sync private content, and requires WordPress 5.6+ on an HTTPS site.
 
 ## Sync modes
 
 Each table can be synced in one of several modes, depending on what the source supports:
 
--   **Webhook** (when available) – the source pushes changes to PostHog in real time. Fastest freshness, lowest ongoing cost, and the only mode that reliably captures updates and deletes.
--   **Incremental** – only new or updated rows are synced on each run, using a cursor field (such as an `updated_at` timestamp). Cheaper than a full refresh, but deletes aren't captured.
--   **Append only** – new rows are appended using a cursor field; existing rows are never updated. Ideal for immutable, append-only tables like event logs.
--   **Full refresh** – the whole table is reloaded on every sync. Use it when a table has no reliable cursor or when you need deletions reflected.
+- **Webhook** (when available) – the source pushes changes to PostHog in real time. Fastest freshness, lowest ongoing cost, and the only mode that reliably captures updates and deletes.
+- **Incremental** – only new or updated rows are synced on each run, using a cursor field (such as an `updated_at` timestamp). Cheaper than a full refresh, but deletes aren't captured.
+- **Append only** – new rows are appended using a cursor field; existing rows are never updated. Ideal for immutable, append-only tables like event logs.
+- **Full refresh** – the whole table is reloaded on every sync. Use it when a table has no reliable cursor or when you need deletions reflected.
 
 See [sync methods](/docs/cdp/sources.md#sync-methods) for a full explanation of how each mode works and how to choose between them.
 
 ## Configuration
 
-| Option | Type | Required |
-| --- | --- | --- |
-| `Site URL` | text | Yes |
-| `Username (optional)` | text | No |
-| `Application password (optional)` | password | No |
+| Option                            | Type     | Required |
+| --------------------------------- | -------- | -------- |
+| `Site URL`                        | text     | Yes      |
+| `Username (optional)`             | text     | No       |
+| `Application password (optional)` | password | No       |
 
 ## Supported tables
 
@@ -68,9 +68,9 @@ The tables available from this source are discovered from your account when you 
 
 ## Troubleshooting
 
--   If you see an authentication error, your username or application password may be invalid. Create a new application password and reconnect.
--   If you see a permissions error, check the user's role has permission to read this data, then try again.
--   If the site URL is rejected, use a publicly reachable URL, and make sure it uses HTTPS when you provide credentials.
+- If you see an authentication error, your username or application password may be invalid. Create a new application password and reconnect.
+- If you see a permissions error, check the user's role has permission to read this data, then try again.
+- If the site URL is rejected, use a publicly reachable URL, and make sure it uses HTTPS when you provide credentials.
 
 If your sync is failing or data looks wrong, see the [Data warehouse troubleshooting guide](/docs/data-warehouse/troubleshooting.md). If that doesn't help, [contact support](https://us.posthog.com/#panel=support%3Asupport%3Adata_warehouse%3A%3Atrue) – we're happy to help.
 

@@ -1,5 +1,7 @@
+import { realpathSync } from "node:fs";
 import { readFile } from "node:fs/promises";
-import { extname, join, normalize } from "node:path";
+import { dirname, extname, join, normalize, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { serve } from "@hono/node-server";
 import { createRuntimeApp } from "./index.js";
 import { redactProblem } from "@lavega/core";
@@ -30,8 +32,9 @@ import { createDevFixturePersonalNetWorthSeed } from "./devFixture.js";
 import { createInMemoryPersonalNetWorthStore } from "./personalNetWorthStore.js";
 
 const port = Number(process.env.PORT) || 8788;
+const serverDir = dirname(fileURLToPath(import.meta.url));
 const staticRoot =
-  process.env.INVESTING_WEB_DIST ?? join(process.cwd(), "apps/investing-web", "dist");
+  process.env.INVESTING_WEB_DIST?.trim() || resolve(serverDir, "../../investing-web/dist");
 
 const contentTypes: Record<string, string> = {
   ".css": "text/css; charset=UTF-8",
@@ -46,7 +49,7 @@ const isApiRequest = (pathname: string) => pathname === "/health" || pathname.st
 
 type ApplicationFetch = (request: Request) => Response | Promise<Response>;
 
-export function createDockerFetch(applicationFetch: ApplicationFetch, root = staticRoot) {
+export function createStaticFetch(applicationFetch: ApplicationFetch, root = staticRoot) {
   return async (request: Request): Promise<Response> => {
     const url = new URL(request.url);
     if (isApiRequest(url.pathname) || request.method !== "GET") return applicationFetch(request);
@@ -81,7 +84,16 @@ export function createDockerFetch(applicationFetch: ApplicationFetch, root = sta
   };
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+function isMainModule(): boolean {
+  if (!process.argv[1]) return false;
+  try {
+    return realpathSync(fileURLToPath(import.meta.url)) === realpathSync(resolve(process.argv[1]));
+  } catch {
+    return false;
+  }
+}
+
+if (isMainModule()) {
   /* One shared, instrument-keyed price series for this installation, in a file
    * store (issue #307). It converts an old per-tenant `prices.json` once. */
   const priceStoreFile = runtimePriceStoreFile();
@@ -110,9 +122,9 @@ if (import.meta.url === `file://${process.argv[1]}`) {
       : {}),
   });
   serve(
-    { fetch: createDockerFetch(runtimeApp.fetch, staticRoot), port, hostname: "0.0.0.0" },
+    { fetch: createStaticFetch(runtimeApp.fetch, staticRoot), port, hostname: "0.0.0.0" },
     (info) => {
-      console.log(`LaVega investing Docker server listening on 0.0.0.0:${info.port}`);
+      console.log(`LaVega investing standalone server listening on 0.0.0.0:${info.port}`);
     },
   );
   if (process.env.LAVEGA_PORTFOLIO_AGENT === "1") {

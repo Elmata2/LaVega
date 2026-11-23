@@ -170,7 +170,7 @@ async function up(args) {
   }
   if (!existsSync(join(webDist, "index.html"))) {
     console.error(
-      `no ${webDist}/index.html — build the SPA first:\n  pnpm --filter @lavega/web build`,
+      `no ${webDist}/index.html — build the SPA first:\n  bun --filter @lavega/web build`,
     );
     process.exit(1);
   }

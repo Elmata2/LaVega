@@ -18,8 +18,8 @@ function run(extra: string[]) {
   mkdirSync(out, { recursive: true });
   writeFileSync(join(out, "app.js"), "web app");
   const r = spawnSync(
-    "pnpm",
-    ["exec", "tsx", "src/cli-build.ts", "--content", content, "--out", out, ...extra],
+    "bun",
+    ["run", "tsx", "src/cli-build.ts", "--content", content, "--out", out, ...extra],
     { cwd: join(__dirname, ".."), encoding: "utf8" },
   );
   return { r, kept: existsSync(join(out, "app.js")) };

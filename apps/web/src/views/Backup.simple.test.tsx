@@ -34,7 +34,14 @@ async function render() {
   document.body.append(container);
   root = createRoot(container);
   await act(async () => {
-    root!.render(<Backup storage={{} as VaultStorage} asOf="2026-11-14" owner={{ kind: "device" }} onRestored={() => {}} />);
+    root!.render(
+      <Backup
+        storage={{} as VaultStorage}
+        asOf="2026-11-14"
+        owner={{ kind: "device" }}
+        onRestored={() => {}}
+      />,
+    );
   });
 }
 

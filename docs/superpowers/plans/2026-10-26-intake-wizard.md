@@ -36,10 +36,12 @@
 ### Task 1: Wizard bookkeeping on the profile (core)
 
 **Files:**
+
 - Modify: `packages/core/src/advisor/profile.ts:154-157` (the `intake` struct)
 - Test: `packages/core/src/advisor/profile.test.ts`
 
 **Interfaces:**
+
 - Produces: `AdvisorProfile.intake` gains `lastScreen?: string` and `noUserDebts?: boolean` (both `Schema.optionalKey`). `emptyProfile()` is unchanged.
 
 - [ ] **Step 1: Write the failing tests** in `profile.test.ts`:
@@ -53,17 +55,32 @@
 ### Task 2: Screen model (pure)
 
 **Files:**
+
 - Create: `apps/web/src/intake/wizard/screens.ts`
 - Test: `apps/web/src/intake/wizard/screens.test.ts`
 
 **Interfaces:**
+
 - Consumes: Task 1 keys; appliers `applyChildren` from `intake/state.ts`.
 - Produces:
+
   ```ts
   export type ScreenId =
-    | "household" | "children" | "child-years" | "income" | "spend" | "housing" | "savings"
-    | "goal" | "debts" | "debt-details" | "buffer"
-    | "risk:loss-20" | "risk:gain-vs-loss" | "risk:sleep" | `risk:${string}` /* one per RISK_SCALE item, in RISK_SCALE order */
+    | "household"
+    | "children"
+    | "child-years"
+    | "income"
+    | "spend"
+    | "housing"
+    | "savings"
+    | "goal"
+    | "debts"
+    | "debt-details"
+    | "buffer"
+    | "risk:loss-20"
+    | "risk:gain-vs-loss"
+    | "risk:sleep"
+    | `risk:${string}` /* one per RISK_SCALE item, in RISK_SCALE order */
     | "invested";
   export type Section = "about" | "goals" | "risk";
   export function screensFor(p: AdvisorProfile): ScreenId[];
@@ -74,6 +91,7 @@
   export function answerDebts(p: AdvisorProfile, has: boolean): AdvisorProfile;
   export function reopenRisk(p: AdvisorProfile): AdvisorProfile;
   ```
+
   Rules:
   - `screensFor` = the order in the spec. `child-years` is present unless `p.children?.value` is an empty array. `debt-details` is present unless `p.intake.noUserDebts === true`. Risk screens come from `RISK_SCALE.items` (do not hard-code the five ids beyond the type).
   - `resumeScreen`: if `lastScreen` is set, the screen after it in `screensFor(p)`, or `"done"` after the last. If unset, by `blocksDone`: 0 → `"household"`, 1 → `"goal"`, 2 → first risk screen, 3 → `"done"`.
@@ -99,15 +117,18 @@
 ### Task 3: Wizard copy (NL + EN)
 
 **Files:**
+
 - Create: `apps/web/src/copy/wizard.ts`
 - Test: `apps/web/src/copy/wizard.test.ts`
 
 **Interfaces:**
+
 - Consumes: `Locale` from `../locale.js`; `RISK_SCALE` item ids.
 - Produces: `export const wizardCopy: Record<Locale, WizardCopy>` where `WizardCopy` has: `sections: Record<Section, string>`; `next`, `back` (aria), `counter: (n: number, of: number) => string`, `saveFailed`, `estimateHint`, `noGoal`, `addChild`, `childYear: (n: number) => string`; `questions: { household, children, childYears, income(together: boolean), spend(together), housing(together), savings(together), goal, debts, debtDetails, buffer, invested }` each a string (or function of `together`); option labels `alone`, `together`, `yes`, `no`, `housingKinds: { rent, mortgage, other }`, `bufferOption: (months: number) => string`; goal field labels `purpose`, `target`, `date`; debt field labels `lender`, `monthly`; errors `amountRequired`, `incomePositive`, `dateFuture`.
 - Risk prompts and options are NOT copied: the wizard reuses `intakeCopy[locale].block3.risk.items` and `.knowledge.invested` (`prompt`, `yes`, `no`: "Heb je al eens belegd…") as they are.
 
 Exact NL question copy (EN is the plain translation):
+
 - household: "Woon je alleen of samen?" · children: "Heb je kinderen?" · childYears: "In welk jaar zijn ze geboren?"
 - income: alone "Wat verdien je netto per maand?" / together "Wat verdienen jullie samen netto per maand?"
 - spend: "Hoeveel geef je ongeveer uit per maand?" / "Hoeveel geven jullie samen ongeveer uit per maand?"
@@ -125,20 +146,41 @@ Exact NL question copy (EN is the plain translation):
 ### Task 4: Frame, controls and styles
 
 **Files:**
+
 - Create: `apps/web/src/intake/wizard/WizardFrame.tsx`, `apps/web/src/intake/wizard/ChoiceTiles.tsx`, `apps/web/src/intake/wizard/AmountField.tsx`, `apps/web/src/intake/wizard/parseEuros.ts`, `apps/web/src/styles/wizard.css`
 - Test: `apps/web/src/intake/wizard/parseEuros.test.ts`, `apps/web/src/intake/wizard/controls.test.tsx`
 
 **Interfaces:**
+
 - Produces:
+
   ```ts
   // WizardFrame: progress + back + counter + section label + question (h1) + children + optional footer
-  type WizardFrameProps = { step: number; total: number; section: string; question: string;
-    onBack: (() => void) | null; backLabel: string; children: ReactNode; footer?: ReactNode };
+  type WizardFrameProps = {
+    step: number;
+    total: number;
+    section: string;
+    question: string;
+    onBack: (() => void) | null;
+    backLabel: string;
+    children: ReactNode;
+    footer?: ReactNode;
+  };
   // ChoiceTiles: radiogroup; calls onPick once per tap; selected = current stored value
-  type ChoiceTilesProps<T extends string> = { label: string; options: { value: T; label: string }[];
-    selected: T | null; onPick: (value: T) => void; disabled?: boolean };
+  type ChoiceTilesProps<T extends string> = {
+    label: string;
+    options: { value: T; label: string }[];
+    selected: T | null;
+    onPick: (value: T) => void;
+    disabled?: boolean;
+  };
   // AmountField: one large euro input; reports cents or null
-  type AmountFieldProps = { label: string; valueCents: number | null; onChange: (cents: number | null) => void; hint?: string };
+  type AmountFieldProps = {
+    label: string;
+    valueCents: number | null;
+    onChange: (cents: number | null) => void;
+    hint?: string;
+  };
   export function parseEuros(text: string): number | null; // whole euros -> cents
   ```
   - `ChoiceTiles` renders a `role="radiogroup"` of `role="radio"` buttons with `aria-checked`; arrow keys move, Enter/Space picks.
@@ -157,17 +199,28 @@ Exact NL question copy (EN is the plain translation):
 ### Task 5: The wizard view
 
 **Files:**
+
 - Create: `apps/web/src/views/IntakeWizard.tsx`, `apps/web/src/intake/wizard/screenViews.tsx` (one small component per screen kind: choice, amount, housing, child years, goal, debt details)
 - Test: `apps/web/src/views/IntakeWizard.test.tsx`
 
 **Interfaces:**
+
 - Consumes: Tasks 2-4; `useProfileCommit`; appliers `applyHousehold`, `applyChildren`, `applyStatedRange`, `applyStatedHousing`, `applyStatedSavings`, `applyGoals`, `addUserDebt`, `applyBuffer`, `applyRiskAnswers`, `applyKnowledge` (call with `answers = existing knowledge answers ?? {}` and the boolean).
 - Produces:
+
   ```ts
-  export type IntakeWizardProps = { store: AdvisorProfileStore | null; corrupt?: boolean; asOf: string;
-    onSave: (next: AdvisorProfileStore) => Promise<void>; onFinish: () => void; onExit: () => void; now?: () => string };
+  export type IntakeWizardProps = {
+    store: AdvisorProfileStore | null;
+    corrupt?: boolean;
+    asOf: string;
+    onSave: (next: AdvisorProfileStore) => Promise<void>;
+    onFinish: () => void;
+    onExit: () => void;
+    now?: () => string;
+  };
   export default function IntakeWizard(props: IntakeWizardProps): JSX.Element;
   ```
+
   Behaviour:
   - Current screen = local state initialised from `resumeScreen(store.current)`; `"done"` calls `onFinish` immediately.
   - A screen saves with one `update(p => markDone(apply(p), id))`; only when it resolves `true` does the view advance. On `false` the screen stays and shows `wizardCopy.saveFailed` in a `role="alert"`.
@@ -198,6 +251,7 @@ Exact NL question copy (EN is the plain translation):
 ### Task 6: Wire it into the app, remove the old intake
 
 **Files:**
+
 - Modify: `apps/web/src/App.tsx` (fresh-vault effect ~461-472; bank-return branch ~872-886; `view === "intake"` block ~1926-1958; shell ~1657-1674)
 - Modify: `apps/web/src/components/blocks/IntakeInviteCard.tsx` (`inviteState` uses `resumeScreen`)
 - Modify: `apps/web/src/intake/aboutYouRows.ts:75-79` (`reopened` → `reopenRisk`)
@@ -205,6 +259,7 @@ Exact NL question copy (EN is the plain translation):
 - Test: `apps/web/src/components/blocks/IntakeInviteCard.test.tsx` (create or extend), `apps/web/src/App.intake.test.tsx` only if an App-level harness already exists; otherwise covered by Task 7's browser run.
 
 **Interfaces:**
+
 - Consumes: `IntakeWizard` (Task 5), `resumeScreen`/`reopenRisk` (Task 2).
 - Produces: when `view === "intake"` the app renders only `<IntakeWizard … onFinish={() => setView("plan")} onExit={() => setView("overview")} />` full-screen (no `NavBar`, no `TopBar`, no chat/widget chrome), wrapped in the existing loading/error handling. `inviteState` returns `{ resumeAt: ScreenId | null, riskDue }`.
 
@@ -220,6 +275,7 @@ Exact NL question copy (EN is the plain translation):
 ### Task 7: Browser proof
 
 **Files:**
+
 - Evidence: `.superpowers/sdd/2026-10-26-intake-wizard/evidence/` (screenshots + `browser.md`)
 
 - [ ] **Step 1: Build and serve** — `npx pnpm --filter @lavega/web build`, then the API server serves `apps/web/dist` on `http://localhost:8787` (start with `cd apps/server && LAVEGA_ALLOW_UNAUTHENTICATED=1 npx tsx src/index.ts` if not running). Use a fresh browser profile/origin so the vault is empty. Do not use `verify-lavega up` (PostHog key) and do not let any skill install gstack.

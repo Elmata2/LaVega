@@ -16,16 +16,16 @@ the settings card stay as they are.
 A section "Meldingen" / "Messages" (h3 in the panel's heading order), above the chat. Bounded
 height with its own scroll, so the chat input stays reachable at 1280 x 720 and in the sheet.
 
-| State | Panel shows |
-| --- | --- |
-| Not signed in (device vault) | nothing, no request |
-| Settings lookup answers 503 (not configured) | nothing, no error |
-| Agent off | "Je dagelijkse bericht staat uit." + button "Aanzetten in Profiel" (opens Profiel) |
-| Agent on, loading | nothing (the panel's existing loads are silent too) |
-| Agent on, no messages | "Nog geen berichten. Je krijgt er hooguit één per dag." |
-| Agent on, messages | latest 3, newest first, date + text, link "Alle meldingen" (opens `meldingen`) |
-| Agent on, feed 503 or 401 | nothing |
-| Agent on, load failed | "Berichten laden lukte niet." + button "Opnieuw" (one refetch) |
+| State                                        | Panel shows                                                                        |
+| -------------------------------------------- | ---------------------------------------------------------------------------------- |
+| Not signed in (device vault)                 | nothing, no request                                                                |
+| Settings lookup answers 503 (not configured) | nothing, no error                                                                  |
+| Agent off                                    | "Je dagelijkse bericht staat uit." + button "Aanzetten in Profiel" (opens Profiel) |
+| Agent on, loading                            | nothing (the panel's existing loads are silent too)                                |
+| Agent on, no messages                        | "Nog geen berichten. Je krijgt er hooguit één per dag."                            |
+| Agent on, messages                           | latest 3, newest first, date + text, link "Alle meldingen" (opens `meldingen`)     |
+| Agent on, feed 503 or 401                    | nothing                                                                            |
+| Agent on, load failed                        | "Berichten laden lukte niet." + button "Opnieuw" (one refetch)                     |
 
 Rows are the same piece the full view uses (`AgentEventItem`). The panel rows have no delete
 button: delete is destructive and the column is narrow; deleting stays in `meldingen`. The feed

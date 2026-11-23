@@ -537,11 +537,18 @@ export function parseBankCsv(
 ): ParsedBankCsv {
   const delim = sniffDelim(text);
   const rows = splitRows(text, delim);
-  if (!rows.length) return { accounts: [], txs: [], profile: "leeg", unrecognised: [], unreadable: 0 };
+  if (!rows.length)
+    return { accounts: [], txs: [], profile: "leeg", unrecognised: [], unreadable: 0 };
 
   if (delim === "\t" && looksLikeABN(rows)) {
     const { accounts, txs } = parseABN(rows);
-    return { accounts: Object.values(accounts), txs, profile: "ABN AMRO", unrecognised: [], unreadable: 0 };
+    return {
+      accounts: Object.values(accounts),
+      txs,
+      profile: "ABN AMRO",
+      unrecognised: [],
+      unreadable: 0,
+    };
   }
   return parseBankRows(rows, fallbackAccountKey, opts);
 }
@@ -556,7 +563,8 @@ export function parseBankRows(
   fallbackAccountKey: string,
   opts: ParseOptions = {},
 ): ParsedBankCsv {
-  if (!rows.length) return { accounts: [], txs: [], profile: "leeg", unrecognised: [], unreadable: 0 };
+  if (!rows.length)
+    return { accounts: [], txs: [], profile: "leeg", unrecognised: [], unreadable: 0 };
 
   const accounts: Record<string, Account> = {};
   const txs: Array<Omit<Tx, "id">> = [];

@@ -35,22 +35,23 @@
 
 ## File Structure
 
-| File | Responsibility |
-|------|----------------|
-| `scripts/catalog/mistralClient.ts` (create) | one chat-completions call with a tool, retries, usage, price table |
-| `scripts/catalog/readerFetch.ts` (create) | fetch a page through the rendering reader; reject non-documents |
-| `scripts/catalog/catalogConfirm.ts` (create) | confirm prompt, tool schema, reply parser |
-| `packages/core/src/catalogGuard.ts` (modify) | equal-number confirm rule |
-| `packages/core/src/catalogCoverage.ts` (create) | status for every catalogue figure; unchecked-weeks counter |
-| `scripts/catalog/catalogReport.ts` (modify) | "Not checked" section, always-on weekly report |
-| `scripts/catalog-sweep.ts` (modify) | wire the above; remove Anthropic |
-| `scripts/catalog-report.ts`, workflow, `package.json`, a scripts tsconfig (modify/create) | weekly issue handling, secret, timeout, typecheck |
+| File                                                                                      | Responsibility                                                     |
+| ----------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| `scripts/catalog/mistralClient.ts` (create)                                               | one chat-completions call with a tool, retries, usage, price table |
+| `scripts/catalog/readerFetch.ts` (create)                                                 | fetch a page through the rendering reader; reject non-documents    |
+| `scripts/catalog/catalogConfirm.ts` (create)                                              | confirm prompt, tool schema, reply parser                          |
+| `packages/core/src/catalogGuard.ts` (modify)                                              | equal-number confirm rule                                          |
+| `packages/core/src/catalogCoverage.ts` (create)                                           | status for every catalogue figure; unchecked-weeks counter         |
+| `scripts/catalog/catalogReport.ts` (modify)                                               | "Not checked" section, always-on weekly report                     |
+| `scripts/catalog-sweep.ts` (modify)                                                       | wire the above; remove Anthropic                                   |
+| `scripts/catalog-report.ts`, workflow, `package.json`, a scripts tsconfig (modify/create) | weekly issue handling, secret, timeout, typecheck                  |
 
 ---
 
 ### Task 1: Mistral client and Anthropic removal
 
 **Files:**
+
 - Create: `scripts/catalog/mistralClient.ts`, `scripts/catalog/mistralClient.test.ts`
 - Modify: `scripts/catalog-sweep.ts` (`askModel` ~505, `askRateModel` ~620, `findSource` ~854, spend table ~176, `apiKey` ~136, `useAgent`/`useSearch` ~143–156, `abortIfKeyUnusable` ~449, `createGuarded` ~492), root `package.json` (drop `@anthropic-ai/sdk` if nothing else imports it; check with `git grep`), `pnpm-lock.yaml` if the dependency goes
 
@@ -64,15 +65,19 @@ export type ToolSpec = { name: string; description: string; input_schema: object
 export type ModelUsage = { inputTokens: number; outputTokens: number };
 export type ToolCallResult =
   | { kind: "tool"; input: unknown; usage: ModelUsage }
-  | { kind: "declined"; text: string; usage: ModelUsage };      // model answered in text: a real answer
-export class MistralFatalError extends Error {}                  // 401, 402, 403: stop the run
-export class MistralCallError extends Error {}                   // this call failed after retries
+  | { kind: "declined"; text: string; usage: ModelUsage }; // model answered in text: a real answer
+export class MistralFatalError extends Error {} // 401, 402, 403: stop the run
+export class MistralCallError extends Error {} // this call failed after retries
 export function usdFor(model: string, usage: ModelUsage): number; // unknown model → priced at 10 / 10 per million
 export async function callWithTool(req: {
-  apiKey: string; model: string; system: string; user: string; tool: ToolSpec;
-  maxTokens?: number;            // default 8192
-  timeoutMs?: number;            // default 180_000
-  fetchImpl?: typeof fetch;      // injected in tests
+  apiKey: string;
+  model: string;
+  system: string;
+  user: string;
+  tool: ToolSpec;
+  maxTokens?: number; // default 8192
+  timeoutMs?: number; // default 180_000
+  fetchImpl?: typeof fetch; // injected in tests
   sleep?: (ms: number) => Promise<void>; // injected in tests
 }): Promise<ToolCallResult>;
 ```
@@ -91,6 +96,7 @@ Sweep changes: `askModel` and `askRateModel` call `callWithTool` and keep everyt
 ### Task 2: Rendering-reader rung
 
 **Files:**
+
 - Create: `scripts/catalog/readerFetch.ts`, `scripts/catalog/readerFetch.test.ts`
 - Modify: `scripts/catalog-sweep.ts` (the per-product ladder around lines 1016–1240), `packages/core/src/catalog.ts` only if a route name must be added
 
@@ -99,9 +105,13 @@ Sweep changes: `askModel` and `askRateModel` call `callWithTool` and keep everyt
 ```ts
 export type ReaderResult = { ok: true; text: string } | { ok: false; reason: string };
 /** Fetch `url` through https://r.jina.ai/<url>. */
-export async function readThroughReader(url: string, opts?: {
-  fetchImpl?: typeof fetch; timeoutMs?: number; // default 45_000
-}): Promise<ReaderResult>;
+export async function readThroughReader(
+  url: string,
+  opts?: {
+    fetchImpl?: typeof fetch;
+    timeoutMs?: number; // default 45_000
+  },
+): Promise<ReaderResult>;
 /** Pure: is this reader output a real document? */
 export function looksLikeDocument(text: string): { ok: boolean; reason?: string };
 ```
@@ -118,6 +128,7 @@ Ladder change: for a product whose own page (`termsUrl`, `docUrl`, `foundUrl`) w
 ### Task 3: Confirm rule and confirm step
 
 **Files:**
+
 - Modify: `packages/core/src/catalogGuard.ts`, `catalogGuard.test.ts`, `catalogGuardRun.ts`, `catalogGuardRun.test.ts`
 - Create: `scripts/catalog/catalogConfirm.ts`, `scripts/catalog/catalogConfirm.test.ts`
 - Modify: `scripts/catalog-sweep.ts`
@@ -129,7 +140,13 @@ Tests: `"uncovered read of the same number from a known host confirms"`, `"uncov
 **Part B — confirm step.** When a product has a stored covered figure and the open question ended without a covered answer and without an equal-number read, ask once more on the same text:
 
 ```ts
-export type ConfirmRequest = { product: string; field: "fxFeePct" | "interestPct"; storedValue: number; storedConditions: string | null; text: string };
+export type ConfirmRequest = {
+  product: string;
+  field: "fxFeePct" | "interestPct";
+  storedValue: number;
+  storedConditions: string | null;
+  text: string;
+};
 export function buildConfirmPrompt(req: ConfirmRequest): { system: string; user: string };
 export const CONFIRM_TOOL: ToolSpec; // name "confirm_figure"
 export type ConfirmReply =
@@ -153,32 +170,35 @@ Tests (`catalogConfirm.test.ts`): `"still_stated with the number in a real quote
 ### Task 4: Coverage status for every figure
 
 **Files:**
+
 - Create: `packages/core/src/catalogCoverage.ts`, `catalogCoverage.test.ts`
 - Modify: `packages/core/src/index.ts`, `scripts/catalog/catalogReport.ts` + test, `scripts/catalog-sweep.ts`, `scripts/catalog-report.ts`
 
 **Interfaces — Produces:**
 
 ```ts
-export type FigureStatus =
-  | "confirmed" | "changed" | "waiting" | "held"
-  | "not-checked";
+export type FigureStatus = "confirmed" | "changed" | "waiting" | "held" | "not-checked";
 export type NotCheckedCause =
-  | "field-not-swept"      // accountFee, pointsPerEuro, cashbackPct, convertFeePct until slice 3
-  | "not-in-this-run"      // product outside --only
-  | "no-source"            // figure has no http source (owner-stated)
-  | "fetch-failed"         // no rung could read a document
-  | "not-found-on-page"    // documents were read, no answer settled the figure
-  | "stopped-early";       // budget ceiling or fatal error before this product
+  | "field-not-swept" // accountFee, pointsPerEuro, cashbackPct, convertFeePct until slice 3
+  | "not-in-this-run" // product outside --only
+  | "no-source" // figure has no http source (owner-stated)
+  | "fetch-failed" // no rung could read a document
+  | "not-found-on-page" // documents were read, no answer settled the figure
+  | "stopped-early"; // budget ceiling or fatal error before this product
 export type FigureCoverage = {
-  id: string; product: string; field: CatalogField;
-  status: FigureStatus; cause?: NotCheckedCause; detail?: string;
-  uncheckedWeeks: number;  // 0 when checked this run
+  id: string;
+  product: string;
+  field: CatalogField;
+  status: FigureStatus;
+  cause?: NotCheckedCause;
+  detail?: string;
+  uncheckedWeeks: number; // 0 when checked this run
 };
 export function coverageForRun(input: {
-  entries: readonly MergeEntry[];          // the catalogue BEFORE the run
+  entries: readonly MergeEntry[]; // the catalogue BEFORE the run
   verdicts: readonly FieldVerdict[];
-  sweptFields: ReadonlySet<CatalogField>;  // fxFeePct, interestPct
-  sweptIds: ReadonlySet<string>;           // products this run visited
+  sweptFields: ReadonlySet<CatalogField>; // fxFeePct, interestPct
+  sweptIds: ReadonlySet<string>; // products this run visited
   reached: ReadonlyMap<string, { fetched: boolean; reason: string | null }>; // by product id
   stoppedEarlyIds: ReadonlySet<string>;
   previousUnchecked: Readonly<Record<string, number>>; // "id.field" → weeks, from state.json
@@ -197,6 +217,7 @@ Report: `RunSummary` gains `coverage: FigureCoverage[]`. The header line becomes
 ### Task 5: Workflow, typecheck, docs
 
 **Files:**
+
 - Modify: `.github/workflows/catalog-sweep.yml`, root `package.json`, `docs/catalog/watchlist.md`, the spec, `apps/server/.env.example` only if it documents the sweep
 - Create: `scripts/tsconfig.json` (strict, `noEmit`, covering `scripts/catalog-sweep.ts`, `scripts/catalog-report.ts`, `scripts/catalog/**/*.ts`)
 

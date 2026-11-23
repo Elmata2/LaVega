@@ -22,14 +22,14 @@ The data warehouse can link to data in Snowflake.
 
 Start by going to the [Data pipeline page](https://app.posthog.com/data-management/sources) and the sources tab and clicking **New source**. Choose Snowflake and enter the following data:
 
--   **Account identifier**: Likely a combination of your organization and the name of the account (e.g. `myorg-account123`). You can find this in the sidebar account selector or by executing the `CURRENT_ACCOUNT_NAME` and `CURRENT_ORGANIZATION_NAME` functions in SQL.
--   **Database**: Like `tasty_bytes_sample_data`
--   **Warehouse**: Like `compute_wh`
--   **User**: Your username like `IANVPH`
--   **Password**: The password for your user
--   **Role (optional)**: The role with necessary privileges to access your context like `accountadmin`.
--   **Schema**: The schema for your database like `RAW_POS`. If it isn't working, trying using all caps.
--   **Table Prefix:** The optional prefix for your tables in PostHog. For example, if your table name ended up being `menu`, a prefix of `snow_prod_` would create a table in PostHog called `snow_prod_menu`.
+- **Account identifier**: Likely a combination of your organization and the name of the account (e.g. `myorg-account123`). You can find this in the sidebar account selector or by executing the `CURRENT_ACCOUNT_NAME` and `CURRENT_ORGANIZATION_NAME` functions in SQL.
+- **Database**: Like `tasty_bytes_sample_data`
+- **Warehouse**: Like `compute_wh`
+- **User**: Your username like `IANVPH`
+- **Password**: The password for your user
+- **Role (optional)**: The role with necessary privileges to access your context like `accountadmin`.
+- **Schema**: The schema for your database like `RAW_POS`. If it isn't working, trying using all caps.
+- **Table Prefix:** The optional prefix for your tables in PostHog. For example, if your table name ended up being `menu`, a prefix of `snow_prod_` would create a table in PostHog called `snow_prod_menu`.
 
 ![Snowflake details](https://res.cloudinary.com/dmukukwp6/image/upload/Clean_Shot_2024_07_23_at_13_50_56_2x_c31bfa6237.png)
 
@@ -71,19 +71,19 @@ Once enabled, click **Query directly** on the **Schemas** tab to open the SQL ed
 
 ### When to use direct connections vs scheduled syncs
 
--   **Direct connections** are best for ad-hoc exploration, querying data that changes frequently, or when you don't want to duplicate data into PostHog.
--   **Scheduled syncs** are better when you need faster query performance, want to join external data with PostHog events in dashboards and insights, or need data available across all PostHog features.
+- **Direct connections** are best for ad-hoc exploration, querying data that changes frequently, or when you don't want to duplicate data into PostHog.
+- **Scheduled syncs** are better when you need faster query performance, want to join external data with PostHog events in dashboards and insights, or need data available across all PostHog features.
 
 ### Limitations
 
 Direct Snowflake queries are read-only. Some HogQL constructs are not supported and return a clear error if used:
 
--   `SAMPLE`
--   `PREWHERE`
--   `ARRAY JOIN`
--   `LIMIT BY`
--   Tuple expressions
--   Array slices
+- `SAMPLE`
+- `PREWHERE`
+- `ARRAY JOIN`
+- `LIMIT BY`
+- Tuple expressions
+- Array slices
 
 ## Troubleshooting
 
@@ -103,9 +103,9 @@ Direct Snowflake queries are read-only. Some HogQL constructs are not supported 
 
 **Solution:** Snowflake rejected key-pair authentication because the private key you configured doesn't match the public key registered on the Snowflake user. This can happen when:
 
--   The public key was rotated or removed from the Snowflake user
--   You pasted the wrong private key
--   The private key belongs to a different Snowflake user
+- The public key was rotated or removed from the Snowflake user
+- You pasted the wrong private key
+- The private key belongs to a different Snowflake user
 
 To fix this, verify that the public key matching your private key is registered on your Snowflake user. See [Snowflake's key-pair authentication documentation](https://docs.snowflake.com/en/user-guide/key-pair-auth) for instructions. Either re-register the matching public key on the Snowflake user, or update your PostHog source configuration with the correct private key. Once corrected, resync your data.
 
@@ -121,15 +121,15 @@ To fix this, connect with a service user that uses [key-pair authentication](htt
 
 ## Configuration
 
-| Option | Type | Required |
-| --- | --- | --- |
-| `Connection string (optional)` | text | No |
-| `Account id` | text | Yes |
-| `Database` | text | Yes |
-| `Warehouse` | text | Yes |
-| `Authentication type` | select | Yes |
-| `Role (optional)` | text | No |
-| `Schema (optional)` | text | No |
+| Option                         | Type   | Required |
+| ------------------------------ | ------ | -------- |
+| `Connection string (optional)` | text   | No       |
+| `Account id`                   | text   | Yes      |
+| `Database`                     | text   | Yes      |
+| `Warehouse`                    | text   | Yes      |
+| `Authentication type`          | select | Yes      |
+| `Role (optional)`              | text   | No       |
+| `Schema (optional)`            | text   | No       |
 
 ## Selecting columns
 
@@ -149,17 +149,17 @@ You can also change column selection after setup:
 
 When you add columns to a schema using incremental or append sync, PostHog prompts you to choose:
 
--   **Sync forward only** - New columns are populated only for future data. Existing rows show `NULL` for the new columns.
--   **Full resync** - Triggers a complete resync to backfill the new columns for all rows.
+- **Sync forward only** - New columns are populated only for future data. Existing rows show `NULL` for the new columns.
+- **Full resync** - Triggers a complete resync to backfill the new columns for all rows.
 
 #### Inbound IP addresses
 
 We use a set of IP addresses to access your instance. To ensure this connector works, add these IPs to your inbound security rules:
 
-| US | EU |
-| --- | --- |
-| 44.205.89.55 | 3.75.65.221 |
-| 52.4.194.122 | 18.197.246.42 |
+| US             | EU            |
+| -------------- | ------------- |
+| 44.205.89.55   | 3.75.65.221   |
+| 52.4.194.122   | 18.197.246.42 |
 | 44.208.188.173 | 3.120.223.253 |
 
 ### Still have questions?

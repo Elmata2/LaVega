@@ -7,11 +7,25 @@ status: published
 author: alexander
 updated: 2026-10-26
 sources:
-  - { title: "Belastingdienst: Doe online aangifte inkomstenbelasting in 4 stappen (checklist Gegevens bij belastingaangifte 2025)", url: "https://www.belastingdienst.nl/wps/wcm/connect/nl/belastingaangifte/content/online-aangifte-doen-in-4-stappen", accessed: 2026-10-26 }
-  - { title: "Belastingdienst: Aanvraag uitstel aangifte inkomstenbelasting", url: "https://belastingdienst.nl/wps/wcm/connect/bldcontentnl/themaoverstijgend/programmas_en_formulieren/aanvraag-uitstel-aangifte-inkomstenbelasting", accessed: 2026-10-26 }
+  - {
+      title: "Belastingdienst: Doe online aangifte inkomstenbelasting in 4 stappen (checklist Gegevens bij belastingaangifte 2025)",
+      url: "https://www.belastingdienst.nl/wps/wcm/connect/nl/belastingaangifte/content/online-aangifte-doen-in-4-stappen",
+      accessed: 2026-10-26,
+    }
+  - {
+      title: "Belastingdienst: Aanvraag uitstel aangifte inkomstenbelasting",
+      url: "https://belastingdienst.nl/wps/wcm/connect/bldcontentnl/themaoverstijgend/programmas_en_formulieren/aanvraag-uitstel-aangifte-inkomstenbelasting",
+      accessed: 2026-10-26,
+    }
 faq:
-  - { q: "Wanneer is de deadline voor de aangifte over 2026?", a: "Op het moment van schrijven vonden we bij de Belastingdienst nog geen data voor de aangifte over 2026. Op de uitstelpagina noemt de Belastingdienst als gebruikelijke data: uitstel aanvragen vóór 1 mei, dan uitstel tot 1 september. Kijk voor 2027 op belastingdienst.nl." }
-  - { q: "Welke papieren heb ik nodig?", a: "Volgens de checklist van de Belastingdienst onder meer je jaaropgaven, jaaroverzichten van je bank- en spaarrekeningen en beleggingen, de WOZ-waarde, de jaaropgaaf van je hypotheek en bewijzen voor aftrekposten." }
+  - {
+      q: "Wanneer is de deadline voor de aangifte over 2026?",
+      a: "Op het moment van schrijven vonden we bij de Belastingdienst nog geen data voor de aangifte over 2026. Op de uitstelpagina noemt de Belastingdienst als gebruikelijke data: uitstel aanvragen vóór 1 mei, dan uitstel tot 1 september. Kijk voor 2027 op belastingdienst.nl.",
+    }
+  - {
+      q: "Welke papieren heb ik nodig?",
+      a: "Volgens de checklist van de Belastingdienst onder meer je jaaropgaven, jaaroverzichten van je bank- en spaarrekeningen en beleggingen, de WOZ-waarde, de jaaropgaaf van je hypotheek en bewijzen voor aftrekposten.",
+    }
 ---
 
 Een aangifte inkomstenbelasting gaat sneller als je de gegevens al hebt verzameld voordat je inlogt. Deze pagina is een checklist voor de aangifte over belastingjaar 2026, die je in het voorjaar van 2027 doet. Het is een voorbereiding, geen invulinstructie.

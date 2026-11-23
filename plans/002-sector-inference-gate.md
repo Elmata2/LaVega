@@ -33,7 +33,7 @@ a tenant may not see reads as `Unknown`.
 The read does not do that. It computes the correct flag:
 
 ```ts
-const showInferred = consented && inferenceEnabled;   // sectorRead.ts:156
+const showInferred = consented && inferenceEnabled; // sectorRead.ts:156
 ```
 
 but never passes it to the resolver, which receives the raw consent flag instead
@@ -67,20 +67,20 @@ After this plan: the setting is honoured, and the tests actually test it.
 Lines 136-148, the client-side resolver inside the Effect layer:
 
 ```ts
-      const resolveWeights = async (
-        tenantId: string,
-        positions: readonly { symbol: string; marketValue: number | null; description?: string }[],
-        gates: { consented: boolean; corrections: Record<string, string> },
-      ): Promise<Map<string, SectorWeight[]>> => {
-        const result = await resolvePortfolioSectors(positions, {
-          store,
-          correction: async (symbol) => gates.corrections[symbol.toUpperCase()] ?? null,
-          showInferred: gates.consented,
-          resolveListing: (symbol) => resolveListing(tenantId, symbol),
-          ...(gates.consented ? { fetchProfile } : {}),
-        });
-        return result.weightsBySymbol;
-      };
+const resolveWeights = async (
+  tenantId: string,
+  positions: readonly { symbol: string; marketValue: number | null; description?: string }[],
+  gates: { consented: boolean; corrections: Record<string, string> },
+): Promise<Map<string, SectorWeight[]>> => {
+  const result = await resolvePortfolioSectors(positions, {
+    store,
+    correction: async (symbol) => gates.corrections[symbol.toUpperCase()] ?? null,
+    showInferred: gates.consented,
+    resolveListing: (symbol) => resolveListing(tenantId, symbol),
+    ...(gates.consented ? { fetchProfile } : {}),
+  });
+  return result.weightsBySymbol;
+};
 ```
 
 Lines 150-158, the caller that already knows the right value:
@@ -137,21 +137,23 @@ the surrounding file. Code identifiers are English; comments English.
 
 ## Commands you will need
 
-| Purpose | Command | Expected on success |
-|---------|---------|---------------------|
-| Server typecheck | `pnpm --filter @lavega/investing-server typecheck` | exit 0 |
-| Sector read tests | `pnpm --filter @lavega/investing-server exec vitest run src/sectorRead.test.ts` | all pass |
-| Server tests | `pnpm --filter @lavega/investing-server test` | exit 0 |
-| Full typecheck (after 001) | `pnpm typecheck` | exit 0 |
-| Lint (after 001) | `pnpm lint` | exit 0 |
+| Purpose                    | Command                                                                         | Expected on success |
+| -------------------------- | ------------------------------------------------------------------------------- | ------------------- |
+| Server typecheck           | `pnpm --filter @lavega/investing-server typecheck`                              | exit 0              |
+| Sector read tests          | `pnpm --filter @lavega/investing-server exec vitest run src/sectorRead.test.ts` | all pass            |
+| Server tests               | `pnpm --filter @lavega/investing-server test`                                   | exit 0              |
+| Full typecheck (after 001) | `pnpm typecheck`                                                                | exit 0              |
+| Lint (after 001)           | `pnpm lint`                                                                     | exit 0              |
 
 ## Scope
 
 **In scope** (the only files you may modify):
+
 - `apps/investing-server/src/sectorRead.ts`
 - `apps/investing-server/src/sectorRead.test.ts`
 
 **Out of scope** (do NOT touch, even though they look related):
+
 - `apps/investing-server/src/sectorResolution.ts` — its `showInferred` contract
   is already correct; do not change the resolver.
 - `apps/investing-server/src/app.ts` routes (`/api/investing/sectors`,
@@ -200,7 +202,11 @@ Append after the inference-off test:
 
 ```ts
 test("consent and inference on shows the cached inferred sector", async () => {
-  const h = harness({ consented: true, inferenceEnabled: true, positions: [position("MYST", 100)] });
+  const h = harness({
+    consented: true,
+    inferenceEnabled: true,
+    positions: [position("MYST", 100)],
+  });
   await h.store.set("MYST", {
     kind: "stock",
     sector: "Healthcare",
@@ -248,21 +254,21 @@ In `apps/investing-server/src/sectorRead.ts`:
    branch), keeping `consented` for the fetch spread:
 
 ```ts
-            const resolved = await resolveWeights(tenantId, unseen, {
-              consented,
-              showInferred,
-              corrections: correctionsForTenant,
-            });
+const resolved = await resolveWeights(tenantId, unseen, {
+  consented,
+  showInferred,
+  corrections: correctionsForTenant,
+});
 ```
 
 and
 
 ```ts
-          weightsBySymbol = await resolveWeights(tenantId, positions, {
-            consented,
-            showInferred,
-            corrections: correctionsForTenant,
-          });
+weightsBySymbol = await resolveWeights(tenantId, positions, {
+  consented,
+  showInferred,
+  corrections: correctionsForTenant,
+});
 ```
 
 Do not move the `showInferred` computation out of `executeRead`; the cache key

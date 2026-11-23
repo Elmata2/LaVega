@@ -6,7 +6,7 @@
  * weggelaten waren.
  *
  * Nu is het andersom. De logica staat in gewone .js-bestanden hiernaast, wordt
- * met vitest getest, en `pnpm run sync:n8n` schrijft hem letterlijk in de JSON.
+ * met vitest getest, en `bun run sync:n8n` schrijft hem letterlijk in de JSON.
  * `codeNodes.test.ts` bouwt hem opnieuw en vergelijkt met wat er in de JSON
  * staat, dus een node die uit de pas loopt laat de suite vallen.
  *
@@ -85,7 +85,7 @@ function buildCodeNode(sources, adapter) {
 const SHARED_NOTE = [
   "// ── n8n-adapter ─────────────────────────────────────────────────────────",
   "// Alles hierboven is LETTERLIJK gekopieerd uit packages/core/src/n8n/ en",
-  "// wordt daar getest. Wijzig het daar en draai `pnpm run sync:n8n`; wijzig je",
+  "// wordt daar getest. Wijzig het daar en draai `bun run sync:n8n`; wijzig je",
   "// het hier of in de n8n-UI, dan valt `codeNodes.test.ts` om.",
 ].join("\n");
 
