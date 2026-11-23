@@ -1,0 +1,1946 @@
+{
+  "version": 1,
+  "entries": {
+    "4a4aa66efa4c5415ba37c03ecb4031de872f8b6e4a492ff2a0a70e054c13131e": {
+      "key": "4a4aa66efa4c5415ba37c03ecb4031de872f8b6e4a492ff2a0a70e054c13131e",
+      "at": "2026-11-23",
+      "lastUsed": "2026-11-23",
+      "model": "mistral-large-latest",
+      "reply": {
+        "kind": "tool",
+        "input": {
+          "fxFeePct": 1.2,
+          "conditions": "Betalen met een betaalpas in vreemde valuta (per keer € 0,15 en 1,2% valutakoersopslag); geen maximum of drempel vermeld voor deze row",
+          "conditionsKnown": true,
+          "quote": "Betalen met een betaalpas\nin vreemde valuta                                          Per keer                                     € 0,15 en 1,2%\n                                                                                                     valutakoersopslag",
+          "section": "Kaarten en contanten",
+          "documentKind": "tariff-schedule",
+          "documentScope": "BasisPakket Betalen",
+          "capsExpressedElsewhere": true,
+          "unconditionalBasis": null
+        }
+      }
+    },
+    "fa464eec691fcdd3ae9c14daca7c8537d8e9919a68cbc27169787e08ebdfbd38": {
+      "key": "fa464eec691fcdd3ae9c14daca7c8537d8e9919a68cbc27169787e08ebdfbd38",
+      "at": "2026-11-23",
+      "lastUsed": "2026-11-23",
+      "model": "mistral-large-latest",
+      "reply": {
+        "kind": "tool",
+        "input": {
+          "fxFeePct": 1.4,
+          "conditions": "Kostenoverzicht ING betaalproducten particulieren; geldt voor 'Met een Betaalpas in het buitenland' bij 'Bij winkels, tankstations, restaurants, etc.' — 'In vreemde valuta' (niet 'In euro’s'); voetnoot 1: 'ING berekent een koersopslag op alle transacties in vreemde valuta'.",
+          "conditionsKnown": true,
+          "quote": "1,40 % koersopslag1",
+          "section": "Met een Betaalpas in het buitenland",
+          "documentKind": "tariff-schedule",
+          "documentScope": "ING betaalproducten particulieren",
+          "capsExpressedElsewhere": true,
+          "unconditionalBasis": null
+        }
+      }
+    },
+    "23891ff751ea3bbda195409d96f48990622578036aca3db610dca4e15a3497fb": {
+      "key": "23891ff751ea3bbda195409d96f48990622578036aca3db610dca4e15a3497fb",
+      "at": "2026-11-23",
+      "lastUsed": "2026-11-23",
+      "model": "mistral-large-latest",
+      "reply": {
+        "kind": "tool",
+        "input": {
+          "fxFeePct": 2,
+          "conditions": "Voor alle ABN AMRO creditcards; geldt voor alle transacties die niet in euro's gedaan worden (zowel betalen als geld opnemen in een vreemde valuta)",
+          "conditionsKnown": true,
+          "quote": "Voor alle ABN AMRO creditcards is de koersopslag 2% voor alle transacties die niet in euro's gedaan worden.",
+          "section": "Buitenlandse betalingen: over wisselkoersen en koersopslag",
+          "documentKind": "other",
+          "documentScope": null,
+          "capsExpressedElsewhere": true,
+          "unconditionalBasis": null
+        }
+      }
+    },
+    "aab45ee251f7ba6b635dc8f6328686464438f5e1246034455735157bd27f538a": {
+      "key": "aab45ee251f7ba6b635dc8f6328686464438f5e1246034455735157bd27f538a",
+      "at": "2026-11-23",
+      "lastUsed": "2026-11-23",
+      "model": "mistral-large-latest",
+      "reply": {
+        "kind": "tool",
+        "input": {
+          "fxFeePct": 2,
+          "conditions": "geldt op alle transacties in vreemde valuta — voetnoot 1: \"ING berekent een koersopslag op alle transacties in vreemde valuta\"; de koersopslag wordt verwerkt in het bestede bedrag; op deze regel staat geen cap, drempel of limiet vermeld",
+          "conditionsKnown": true,
+          "quote": "2,00 % koersopslag1",
+          "section": "Met een creditcard",
+          "documentKind": "tariff-schedule",
+          "documentScope": "ING betaalproducten particulieren",
+          "capsExpressedElsewhere": true,
+          "unconditionalBasis": null
+        }
+      }
+    },
+    "1abc7742cc88f59c9eef71ce4464c7634c325070aa6087da5f9615d16c1d12c3": {
+      "key": "1abc7742cc88f59c9eef71ce4464c7634c325070aa6087da5f9615d16c1d12c3",
+      "at": "2026-11-23",
+      "lastUsed": "2026-11-23",
+      "model": "mistral-large-latest",
+      "reply": {
+        "kind": "tool",
+        "input": {
+          "fxFeePct": 2,
+          "conditions": "geldt alleen bij betalen in vreemde valuta (een andere munt dan de euro); bij betalen in euro's kost het niets extra",
+          "conditionsKnown": true,
+          "quote": "Betalen kosten euro's geen extra kosten kosten vreemde valuta 2% koersopslag",
+          "section": "Betalen en contant geld opnemen met je creditcard",
+          "documentKind": "marketing",
+          "documentScope": "RaboCard",
+          "capsExpressedElsewhere": true,
+          "unconditionalBasis": null
+        }
+      }
+    },
+    "4924922ed838ba08f6e1c0327a6d263afc50b33971911a8a8f67d9cf7dc2ff53": {
+      "key": "4924922ed838ba08f6e1c0327a6d263afc50b33971911a8a8f67d9cf7dc2ff53",
+      "at": "2026-11-23",
+      "lastUsed": "2026-11-23",
+      "model": "mistral-large-latest",
+      "reply": {
+        "kind": "tool",
+        "input": {
+          "fxFeePct": 1.4,
+          "conditions": "geldt voor 'betalen met je betaalpas' onder de kolom 'In vreemde valuta' (in euro's: 'geen extra kosten'); dit is het tarief voor betalen, niet voor 'opname van contant geld met een betaalpas'",
+          "conditionsKnown": true,
+          "quote": "In euro’s In vreemde valuta betalen met je betaalpas geen extra kosten 1,4% koersopslag",
+          "section": "Kosten van betalen en contant geld opnemen in binnen- en buitenland",
+          "documentKind": "tariff-schedule",
+          "documentScope": null,
+          "capsExpressedElsewhere": true,
+          "unconditionalBasis": null
+        }
+      }
+    },
+    "cafa90b6f46a96ea7df98062deca02d78a2d73f3a25b8382f618d344bf4c9b08": {
+      "key": "cafa90b6f46a96ea7df98062deca02d78a2d73f3a25b8382f618d344bf4c9b08",
+      "at": "2026-11-23",
+      "lastUsed": "2026-11-23",
+      "model": "mistral-large-latest",
+      "reply": {
+        "kind": "tool",
+        "input": {
+          "fxFeePct": 1.4,
+          "conditions": "Geldt voor betalen met de betaalpas in vreemde valuta (een andere geldsoort dan de euro); hierbij worden de wisselkoersen van Mastercard of Visa gebruikt. Geen cap of drempel vermeld voor deze post.",
+          "conditionsKnown": true,
+          "quote": "in vreemde valuta                                                                              1,4% van het betaalde bedrag",
+          "section": "Kaarten en contanten",
+          "documentKind": "tariff-schedule",
+          "documentScope": null,
+          "capsExpressedElsewhere": true,
+          "unconditionalBasis": null
+        }
+      }
+    },
+    "6d03f80ae02d16092421ea7c51e7626614d1577109f32969b82a51dff476400f": {
+      "key": "6d03f80ae02d16092421ea7c51e7626614d1577109f32969b82a51dff476400f",
+      "at": "2026-11-23",
+      "lastUsed": "2026-11-23",
+      "model": "mistral-large-latest",
+      "reply": {
+        "kind": "tool",
+        "input": {
+          "fxFeePct": 2,
+          "conditions": "Geldt alleen bij betalen in een andere muntsoort dan de euro (vreemde valuta); bij betalingen in euro's, ook in het buitenland, zijn er geen extra kosten. Daarnaast kunnen (online) dienstverleners, banken of winkeliers soms een eigen toeslag vragen bij betalingen met de creditcard, waarvoor je extra betaalt.",
+          "conditionsKnown": true,
+          "quote": "Betaal je in een andere muntsoort, dus een vreemde valuta, dan brengt Rabobank een koersopslag in rekening. Dat betekent dat de wisselkoers wordt verhoogd met 2% van het opgenomen bedrag.",
+          "section": "Betalen en contant geld opnemen met je creditcard",
+          "documentKind": "marketing",
+          "documentScope": "Rabo GoldCard",
+          "capsExpressedElsewhere": true,
+          "unconditionalBasis": null
+        }
+      }
+    },
+    "637b3cbed8e6d9a689992acf2235247982403ad817d8c8dfbb1c9fd1743f8acd": {
+      "key": "637b3cbed8e6d9a689992acf2235247982403ad817d8c8dfbb1c9fd1743f8acd",
+      "at": "2026-11-23",
+      "lastUsed": "2026-11-23",
+      "model": "mistral-large-latest",
+      "reply": {
+        "kind": "tool",
+        "input": {
+          "capsExpressedElsewhere": true,
+          "conditions": "Geldt voor de ASN Betaalpas bij ASN Bankrekening, ASN Basisbankrekening, ASN Studentenrekening en ASN Jongerenpakket, bij 'Betalen met een betaalpas in het buitenland' in vreemde valuta; bij betalen in euro wordt € 0 gerekend.",
+          "conditionsKnown": true,
+          "documentKind": "tariff-schedule",
+          "documentScope": null,
+          "fxFeePct": 1.4,
+          "quote": "in vreemde valuta 1,4% van het betaalde bedrag",
+          "section": "Betalen met een betaalpas in het buitenland",
+          "unconditionalBasis": null
+        }
+      }
+    },
+    "261d5a7c28c22c7d332eeb119920e8ef5b8b8a3eb3fda98da94526716ca39e99": {
+      "key": "261d5a7c28c22c7d332eeb119920e8ef5b8b8a3eb3fda98da94526716ca39e99",
+      "at": "2026-11-23",
+      "lastUsed": "2026-11-23",
+      "model": "mistral-large-latest",
+      "reply": {
+        "kind": "tool",
+        "input": {
+          "fxFeePct": 1.4,
+          "conditions": "Geldt voor 'Betalen met een betaalpas in vreemde valuta' (een andere geldsoort dan de euro); voetnoot 1: 'Plus eventuele lokale kosten voor een geldopname van contant geld of bij een betaling.'",
+          "conditionsKnown": true,
+          "quote": "• Betalen met een betaalpas in vreemde valuta                                                                      1,4% van het betaalde bedrag 1",
+          "section": "Contant geld opnemen en betalen met de betaalpas",
+          "documentKind": "tariff-schedule",
+          "documentScope": null,
+          "capsExpressedElsewhere": true,
+          "unconditionalBasis": null
+        }
+      }
+    },
+    "ff9c4a3f3bb16c47ada5236b8caf9bc83d6b9bc3ceaba7ea167b8ec7f1c11b12": {
+      "key": "ff9c4a3f3bb16c47ada5236b8caf9bc83d6b9bc3ceaba7ea167b8ec7f1c11b12",
+      "at": "2026-11-23",
+      "lastUsed": "2026-11-23",
+      "model": "mistral-large-latest",
+      "reply": {
+        "kind": "tool",
+        "input": {
+          "fxFeePct": 2,
+          "conditions": "geldt voor 'Betalen met een creditcard — in vreemde valuta'; bij 'in euro' is het tarief € 0,00",
+          "conditionsKnown": true,
+          "quote": "Betalen met een creditcard\nin euro                                                                                                            € 0,00\nin vreemde valuta                                                                                  2% wisselkoersopslag",
+          "section": "Kaarten en contanten",
+          "documentKind": "tariff-schedule",
+          "documentScope": null,
+          "capsExpressedElsewhere": true,
+          "unconditionalBasis": null
+        }
+      }
+    },
+    "f37b4a28c4f042ae90f869f34c3ace0136cf32390949b446540657613eb8766e": {
+      "key": "f37b4a28c4f042ae90f869f34c3ace0136cf32390949b446540657613eb8766e",
+      "at": "2026-11-23",
+      "lastUsed": "2026-11-23",
+      "model": "mistral-large-latest",
+      "reply": {
+        "kind": "tool",
+        "input": {
+          "fxFeePct": 2,
+          "conditions": "Betalingen en geldopnames in vreemde valuta",
+          "conditionsKnown": true,
+          "quote": "De opslag is 2%.",
+          "section": "Artikel 13. Vreemde valuta, transactiekosten en overige kosten.",
+          "documentKind": "terms",
+          "documentScope": null,
+          "capsExpressedElsewhere": true,
+          "unconditionalBasis": null
+        }
+      }
+    },
+    "906d64209131663f58c1edc0a855a6d7eeb3f717f5b2373d7f074abf9225ff96": {
+      "key": "906d64209131663f58c1edc0a855a6d7eeb3f717f5b2373d7f074abf9225ff96",
+      "at": "2026-11-23",
+      "lastUsed": "2026-11-23",
+      "model": "mistral-large-latest",
+      "reply": {
+        "kind": "tool",
+        "input": {
+          "fxFeePct": 1.4,
+          "conditions": "Betalen met een betaalpas in vreemde valuta (koersopslag over het bedrag in euro); geen maximum of drempel vermeld op deze regel",
+          "conditionsKnown": true,
+          "quote": "Betalen met een betaalpas In vreemde valuta 1,4% koersopslag over het opgenomen bedrag in euro",
+          "section": "Kaarten en contanten",
+          "documentKind": "tariff-schedule",
+          "documentScope": "Knab Betaalrekening",
+          "capsExpressedElsewhere": false,
+          "unconditionalBasis": null
+        }
+      }
+    },
+    "2f0c92bc4102180981c7977ebe252fbfb5505b96d469034f7c7bfc7e0cb6d492": {
+      "key": "2f0c92bc4102180981c7977ebe252fbfb5505b96d469034f7c7bfc7e0cb6d492",
+      "at": "2026-11-23",
+      "lastUsed": "2026-11-23",
+      "model": "mistral-large-latest",
+      "reply": {
+        "kind": "tool",
+        "input": {
+          "conditions": "Betalen binnen en buiten de EU met buitenlands geld",
+          "conditionsKnown": true,
+          "capsExpressedElsewhere": true,
+          "documentKind": "tariff-schedule",
+          "documentScope": "ASN Creditcard",
+          "fxFeePct": 2,
+          "quote": "Betalen binnen en buiten de EU met buitenlands geld 2% koersopslag",
+          "section": "Kosten betalen met je ASN Creditcard",
+          "unconditionalBasis": null
+        }
+      }
+    },
+    "3a2d658c5441c9e03f1b5d21725f51c5db306f02768eaeec020cef4355017c8d": {
+      "key": "3a2d658c5441c9e03f1b5d21725f51c5db306f02768eaeec020cef4355017c8d",
+      "at": "2026-11-23",
+      "lastUsed": "2026-11-23",
+      "model": "mistral-large-latest",
+      "reply": {
+        "kind": "tool",
+        "input": {
+          "fxFeePct": 2,
+          "conditions": "geldt voor 'Betalen met de creditcard' in vreemde valuta (row: 'In vreemde valuta'); niet voor betalingen in euro",
+          "conditionsKnown": true,
+          "quote": "• In vreemde valuta                                                               2% valutawisselkosten",
+          "section": "Betalen met de creditcard",
+          "documentKind": "tariff-schedule",
+          "documentScope": null,
+          "capsExpressedElsewhere": true,
+          "unconditionalBasis": null
+        }
+      }
+    },
+    "c2191dd19ee8be24604774271f9b964cfd6941f91ce053d0f835aadf2e2df827": {
+      "key": "c2191dd19ee8be24604774271f9b964cfd6941f91ce053d0f835aadf2e2df827",
+      "at": "2026-11-23",
+      "lastUsed": "2026-11-23",
+      "model": "mistral-large-latest",
+      "reply": {
+        "kind": "tool",
+        "input": {
+          "fxFeePct": 2,
+          "conditions": "Knab Creditcard binnen het particuliere aanbod van Knab; geldt voor 'Betalingen in vreemde valuta' (betalen met de creditcard in een valuta anders dan de euro); de pagina vermeldt hiervoor geen cap, drempel of limiet",
+          "conditionsKnown": true,
+          "quote": "Betalingen in vreemde valuta 2% koersopslag",
+          "section": "Knab Creditcard",
+          "documentKind": "tariff-schedule",
+          "documentScope": "Rente & tarieven — Particulier",
+          "capsExpressedElsewhere": true,
+          "unconditionalBasis": null
+        }
+      }
+    },
+    "a4d7ce66cec6cba36c22b28bb304cc8a4c3baf95dd352a64e7864529aa7f2032": {
+      "key": "a4d7ce66cec6cba36c22b28bb304cc8a4c3baf95dd352a64e7864529aa7f2032",
+      "at": "2026-11-23",
+      "lastUsed": "2026-11-23",
+      "model": "mistral-large-latest",
+      "reply": {
+        "kind": "tool",
+        "input": {
+          "fxFeePct": 0.5,
+          "conditions": "Kaartbetaling (vreemde valuta): 'transacties die worden uitgevoerd in andere valuta dan euro' worden 'omgezet naar euro via de Mastercard wisselkoers' met '0,5% valutaschommelingen preventie'; in de bunq Pro-kolom staat geen bedragscap vermeld (de clausule 'Dit geldt voor €1.000 per jaar, daarna' staat in de bunq Free-kolom); bij geldopnames in andere valuta dan euro geldt hetzelfde indien de opgenomen valuta gelijk is aan de valuta van de rekening, bij valutaconversie 0,5%.",
+          "conditionsKnown": true,
+          "quote": "omzetting van valuta’s nodig is, worden er valutaschommelingen preventie (0,5%) in rekening gebracht",
+          "section": "Kaartbetaling",
+          "documentKind": "tariff-schedule",
+          "documentScope": "Personal en Business",
+          "capsExpressedElsewhere": true,
+          "unconditionalBasis": null
+        }
+      }
+    },
+    "733c1a39e7c0b2967d148e75c695447901bd669076e898c4b77f93661277a3f6": {
+      "key": "733c1a39e7c0b2967d148e75c695447901bd669076e898c4b77f93661277a3f6",
+      "at": "2026-11-23",
+      "lastUsed": "2026-11-23",
+      "model": "mistral-large-latest",
+      "reply": {
+        "kind": "tool",
+        "input": {
+          "fxFeePct": 1,
+          "conditions": "Naam van de rekening: Triodos Internet Betaalrekening; de vergoeding geldt voor 'Betalen met een betaalpas in vreemde valuta' (betalingen in vreemde valuta met de betaalpas, over het betaalde bedrag)",
+          "conditionsKnown": true,
+          "quote": "1% over het betaalde bedrag",
+          "section": "Kaarten en contanten",
+          "documentKind": "tariff-schedule",
+          "documentScope": "Triodos Internet Betaalrekening",
+          "capsExpressedElsewhere": true,
+          "unconditionalBasis": null
+        }
+      }
+    },
+    "d7d75ebef266e73e05601ce757087afe32330cba68c97290a53ab58c193c9707": {
+      "key": "d7d75ebef266e73e05601ce757087afe32330cba68c97290a53ab58c193c9707",
+      "at": "2026-11-23",
+      "lastUsed": "2026-11-23",
+      "model": "mistral-large-latest",
+      "reply": {
+        "kind": "tool",
+        "input": {
+          "fxFeePct": 1.5,
+          "conditions": "geldt pas na €1.000 aan pinbetalingen in vreemde valuta in een kalenderjaar: \"Als je het gratis abonnement hebt, kun je tot €1.000 per jaar tegen deze koers uitgeven\" en \"bunq Free bevat tot €1.000 aan ZeroFX-uitgaven in vreemde valuta per jaar; daarboven gelden standaard conversiekosten\" — daaronder gebruiken betalingen met je pas in het buitenland de Mastercard-koers met een valutafluctuatie-aanpassing van 0,5% wanneer de markten open zijn",
+          "conditionsKnown": true,
+          "quote": "Na €1.000 aan pinbetalingen in vreemde valuta in een kalenderjaar, geldt een tarief van 1,5% van elk volgend transactiebedrag.",
+          "section": "Gunstige kaartkoersen in het buitenland met ZeroFX",
+          "documentKind": "marketing",
+          "documentScope": "bunq Free",
+          "capsExpressedElsewhere": true,
+          "unconditionalBasis": null
+        }
+      }
+    },
+    "2bd9a3cce97b7ba8b0578f7928258f8cd81647583f7251282a3ec382a50a8a38": {
+      "key": "2bd9a3cce97b7ba8b0578f7928258f8cd81647583f7251282a3ec382a50a8a38",
+      "at": "2026-11-23",
+      "lastUsed": "2026-11-23",
+      "model": "mistral-large-latest",
+      "reply": {
+        "kind": "tool",
+        "input": {
+          "status": "changed",
+          "newValue": 1.5,
+          "quote": "Na €1.000 aan pinbetalingen in vreemde valuta in een kalenderjaar, geldt een tarief van 1,5% van elk volgend transactiebedrag. Zie de prijslijst."
+        }
+      }
+    },
+    "903c90a6fb3d1abcd96aa234f10d13d4167f005a7efa47e0ab0b0626599166c9": {
+      "key": "903c90a6fb3d1abcd96aa234f10d13d4167f005a7efa47e0ab0b0626599166c9",
+      "at": "2026-11-23",
+      "lastUsed": "2026-11-23",
+      "model": "mistral-large-latest",
+      "reply": {
+        "kind": "tool",
+        "input": {
+          "fxFeePct": 0.5,
+          "conditions": "ZeroFX is activated by default for all users and applies to all your cards; the 0.5% currency fluctuation prevention applies to card payments when spending in non-euro currencies; bunq Free users can make up to €1,000 ZeroFX payments per year in foreign currencies and all payments beyond the €1,000 are subject to a 1.5% currency conversion fee, while bunq Core, Pro, and Elite users can make unlimited ZeroFX payments per year.",
+          "conditionsKnown": true,
+          "quote": "Instead of the usual 3% currency conversion fee, you’ll get the real Mastercard exchange rate — with only a 0.5% adjustment for currency fluctuations.",
+          "section": "What's ZeroFX and how does it save me money?",
+          "documentKind": "other",
+          "documentScope": null,
+          "capsExpressedElsewhere": true,
+          "unconditionalBasis": null
+        }
+      }
+    },
+    "76a0a8fd90fcabb6f1840d3f38850404dbc6625a10f004fdb22b942c43162fed": {
+      "key": "76a0a8fd90fcabb6f1840d3f38850404dbc6625a10f004fdb22b942c43162fed",
+      "at": "2026-11-23",
+      "lastUsed": "2026-11-23",
+      "model": "mistral-large-latest",
+      "reply": {
+        "kind": "tool",
+        "input": {
+          "fxFeePct": 0.5,
+          "conditions": "geldt voor betalingen met je pas in het buitenland in vreemde valuta; toeslag van 0,5% wanneer de markten open zijn; Core, Pro en Elite hebben onbeperkt ZeroFX (bunq Free: tot €1.000 aan ZeroFX-uitgaven in vreemde valuta per jaar, daarboven standaard conversiekosten)",
+          "conditionsKnown": true,
+          "quote": "ZeroFX staat standaard aan: betalingen met je pas in het buitenland gebruiken de Mastercard-koers met een valutafluctuatie-aanpassing van 0,5% wanneer de markten open zijn.",
+          "section": "Hoe werkt ZeroFX?",
+          "documentKind": "marketing",
+          "documentScope": "bunq Elite",
+          "capsExpressedElsewhere": true,
+          "unconditionalBasis": null
+        }
+      }
+    },
+    "afbf79c2d84fde5e51400ba848f565d85333e89243fe6ae505eda3424fe3a2e1": {
+      "key": "afbf79c2d84fde5e51400ba848f565d85333e89243fe6ae505eda3424fe3a2e1",
+      "at": "2026-11-23",
+      "lastUsed": "2026-11-23",
+      "model": "mistral-large-latest",
+      "reply": {
+        "kind": "tool",
+        "input": {
+          "fxFeePct": 0.5,
+          "conditions": "'betalingen met je pas in het buitenland' in vreemde valuta: 'een valutafluctuatie-aanpassing van 0,5% wanneer de markten open zijn'; 'Kies lokale valuta bij de terminal wanneer je kunt'. Voor bunq Core geldt: 'Core, Pro en Elite hebben onbeperkt ZeroFX'; de limiet staat bij 'bunq Free bevat tot €1.000 aan ZeroFX-uitgaven in vreemde valuta per jaar; daarboven gelden standaard conversiekosten'.",
+          "conditionsKnown": true,
+          "quote": "ZeroFX staat standaard aan: betalingen met je pas in het buitenland gebruiken de Mastercard-koers met een valutafluctuatie-aanpassing van 0,5% wanneer de markten open zijn.",
+          "section": "Hoe werkt ZeroFX?",
+          "documentKind": "marketing",
+          "documentScope": "bunq Core",
+          "capsExpressedElsewhere": true,
+          "unconditionalBasis": null
+        }
+      }
+    },
+    "e3e79547faee42bf2d67911fa4a0a8ca14191e3c9c21c7a79675cca2ff531d29": {
+      "key": "e3e79547faee42bf2d67911fa4a0a8ca14191e3c9c21c7a79675cca2ff531d29",
+      "at": "2026-11-23",
+      "lastUsed": "2026-11-23",
+      "model": "mistral-large-latest",
+      "reply": {
+        "kind": "tool",
+        "input": {
+          "standardPct": 1.76,
+          "promoPct": null,
+          "promoUntil": null,
+          "conditions": "Gross annual interest rate depends on the fixed term chosen: 3 months 1.76%, 6 months 1.86%, 12 months 2.11%, 24 months 1.91%. Minimum deposit: €1,000. Maximum per Term Deposit: €100,000. Total maximum across all Term Deposits: €100,000. Once you start the term, you can't add more money to that Term Deposit. At the end of the term, the deposited amount and earned interest are automatically paid out to your oldest active Personal Bank Account and the Term Deposit automatically closes. You can end your Term Deposit early via the account settings in the app, but a Term Deposit Cancellation Penalty fee applies (waivable in special circumstances: death, disability, unemployment, debt restructuring, voluntary debt settlement). Eligibility: be 18 years old or older and have a verified Personal account with any bunq plan. Interest is earned on total savings, including Savings Accounts and Term Deposits, up to a total of €100,000.",
+          "conditionsKnown": true,
+          "freeWithdrawal": false,
+          "quote": "lable gross annual interest rates and their corresponding duration terms below:\n\n*   **3 months:** 1.76%\n\n*   **6 months:** 1.86%\n\n*   **12 months:** 2.11%\n\n*   **24 months:** 1.91%",
+          "documentScope": "bunq's Term Deposits"
+        }
+      }
+    },
+    "9276a3bef22717e79024db6d4d0bb11e51fdddd3951d8873a90cc6fde7fef8ac": {
+      "key": "9276a3bef22717e79024db6d4d0bb11e51fdddd3951d8873a90cc6fde7fef8ac",
+      "at": "2026-11-23",
+      "lastUsed": "2026-11-23",
+      "model": "mistral-large-latest",
+      "reply": {
+        "kind": "tool",
+        "input": {
+          "fxFeePct": 0.5,
+          "conditions": "Kaartbetaling in vreemde valuta; dit geldt voor €1.000 per jaar, daarna",
+          "conditionsKnown": true,
+          "quote": "0,5%                  0,5%                  0,5%               0,5%                 0,5%                  0,5%                  0,5%               0,5%",
+          "section": "Kaartbetaling",
+          "documentKind": "tariff-schedule",
+          "documentScope": null,
+          "capsExpressedElsewhere": true,
+          "unconditionalBasis": null
+        }
+      }
+    },
+    "21b49790105815f11f39f52d15026b59688e2964779aa3d1c2e7e74f002b722b": {
+      "key": "21b49790105815f11f39f52d15026b59688e2964779aa3d1c2e7e74f002b722b",
+      "at": "2026-11-23",
+      "lastUsed": "2026-11-23",
+      "model": "mistral-large-latest",
+      "reply": {
+        "kind": "tool",
+        "input": {
+          "fxFeePct": 0.5,
+          "conditions": "Kaartbetaling in vreemde valuta: voor transacties die worden uitgevoerd in andere valuta dan euro, omgezet naar euro via de Mastercard wisselkoers",
+          "conditionsKnown": true,
+          "quote": "0,5%                  0,5%                  0,5%               0,5%                 0,5%                  0,5%                  0,5%               0,5%",
+          "section": "Kaartbetaling",
+          "documentKind": "tariff-schedule",
+          "documentScope": null,
+          "capsExpressedElsewhere": true,
+          "unconditionalBasis": null
+        }
+      }
+    },
+    "025399feb448eb0c0f1071b652d56ab99c835f1502f517e1e11d2c8458ca7381": {
+      "key": "025399feb448eb0c0f1071b652d56ab99c835f1502f517e1e11d2c8458ca7381",
+      "at": "2026-11-23",
+      "lastUsed": "2026-11-23",
+      "model": "mistral-large-latest",
+      "reply": {
+        "kind": "tool",
+        "input": {
+          "status": "still_stated",
+          "quote": "Standard: wissellimiet van EUR 1.000 per maand. Bij alle extra valutawissels zijn er kosten voor fair usage van 1% per geldwissel van toepassing."
+        }
+      }
+    },
+    "c54a9d291a0c07d3770e13c810aad9048aab657066f29df7171c51ade3b0ae53": {
+      "key": "c54a9d291a0c07d3770e13c810aad9048aab657066f29df7171c51ade3b0ae53",
+      "at": "2026-11-23",
+      "lastUsed": "2026-11-23",
+      "model": "mistral-large-latest",
+      "reply": {
+        "kind": "tool",
+        "input": {
+          "status": "still_stated",
+          "quote": "* **Plus:**wissellimiet van EUR 3.000 per maand. Bij alle extra valutawissels zijn kosten voor fair usage van 0,5% van toepassing."
+        }
+      }
+    },
+    "2d42e8d532e78245ae431421d1414ef0a5b16d812e9803a9b6e394ebac36a7d6": {
+      "key": "2d42e8d532e78245ae431421d1414ef0a5b16d812e9803a9b6e394ebac36a7d6",
+      "at": "2026-11-23",
+      "lastUsed": "2026-11-23",
+      "model": "mistral-large-latest",
+      "reply": {
+        "kind": "tool",
+        "input": {
+          "status": "still_stated",
+          "quote": "    Feature              bunq Elite            bunq Pro              bunq Core             bunq Free            bunq Elite            bunq Pro              bunq Core          bunq Free\n                                                                                                             Business              Business              Business           Business\n\n\n    Kaartbetaling        De werkelijke         De werkelijke         De werkelijke      De werkelijke        De werkelijke         De werkelijke         De werkelijke      De werkelijke\n    (vreemde valuta)     Mastercard            Mastercard            Mastercard         Mastercard​          Mastercard            Mastercard            Mastercard         Mastercard​\n                         wisselkoers en        wisselkoers en        wisselkoers en     wisselkoers en       wisselkoers en        wisselkoers en        wisselkoers en     wisselkoers en\n                         0,5%                  0,5%                  0,5%               0,5%                 0,5%                  0,5%                  0,5%               0,5%"
+        }
+      }
+    },
+    "491547d335f6fa5d4444eefaa97dfe779f3cfa8c814b2f1f23723a58ea76f265": {
+      "key": "491547d335f6fa5d4444eefaa97dfe779f3cfa8c814b2f1f23723a58ea76f265",
+      "at": "2026-11-23",
+      "lastUsed": "2026-11-23",
+      "model": "mistral-large-latest",
+      "reply": {
+        "kind": "tool",
+        "input": {
+          "standardPct": 0.3,
+          "promoPct": null,
+          "promoUntil": null,
+          "conditions": "N26 Instant Savings account interest rates are based on your main N26 plan: from 11/06/2025 onwards, 0.30% p.a. for Standard and Smart, 0.50% p.a. for N26 Go, and 1.50% p.a. for Metal (before taxes). Please note that rates per plan can be changed by N26 over time. This offer is available at no extra cost in the N26 app in Estonia, Finland, Greece, Ireland, Latvia, Lithuania, Luxembourg, the Netherlands, Portugal, Slovakia, and Slovenia. Interest is only earned on funds held in your Instant Savings account. Withholding taxes may apply for customers who are residents of Germany, in which case N26 will withhold taxes on paid interest. Interest is calculated daily and paid out monthly. No deposit limits. The money in your bank accounts — including N26 Instant Savings — is protected up to €100,000 by the German Deposit Guarantee Scheme.",
+          "conditionsKnown": true,
+          "freeWithdrawal": true,
+          "quote": "1 N26 Instant Savings account interest rates are based on your main N26 plan: from 11/06/2025 onwards, 0.30% p.a. for Standard and Smart, 0.50% p.a. for N26 Go, and 1.50% p.a. for Metal (before taxes).",
+          "documentScope": "N26 Instant Savings"
+        }
+      }
+    },
+    "de7f1dabc3740ceb4eec12257f9d66eb3243636c85e1e01dfa28806660ce2748": {
+      "key": "de7f1dabc3740ceb4eec12257f9d66eb3243636c85e1e01dfa28806660ce2748",
+      "at": "2026-11-23",
+      "lastUsed": "2026-11-23",
+      "model": "mistral-large-latest",
+      "reply": {
+        "kind": "tool",
+        "input": {
+          "standardPct": 2.63,
+          "promoPct": null,
+          "promoUntil": null,
+          "conditions": "Variable annual return rate shown (2.63%), presented net of fees, reflecting information provided by the fund manager, Fidelity International, as of 18/11/2026; \"This rate is subject to change on a daily basis based on market conditions.\" \"All investments carry a risk of capital loss. A flexible cash fund is not a guaranteed investment, and a total loss of your investment is possible at any time. The risk of loss of principal is borne entirely by the investor. Investing in a flexible cash fund differs from an investment in deposits.\" No promotional rate and no promo end date are stated for this product.",
+          "conditionsKnown": true,
+          "freeWithdrawal": null,
+          "quote": "The variable annual return rate shown (2.63%) is presented net of fees and reflects information provided by the fund manager, Fidelity International, as of 18/11/2026. This rate is subject to change on a daily basis based on market conditions.",
+          "documentScope": "N26 Metal"
+        }
+      }
+    },
+    "ec4c0bb3948ef07d8f9d081e6ded64455d455a0fceaaebb7499899fdb8fe8979": {
+      "key": "ec4c0bb3948ef07d8f9d081e6ded64455d455a0fceaaebb7499899fdb8fe8979",
+      "at": "2026-11-23",
+      "lastUsed": "2026-11-23",
+      "model": "mistral-large-latest",
+      "reply": {
+        "kind": "tool",
+        "input": {
+          "status": "not_on_page"
+        }
+      }
+    },
+    "ee4655bc3fcef298069e3ae6863a0b597dfecf93da637627b608455ffe252664": {
+      "key": "ee4655bc3fcef298069e3ae6863a0b597dfecf93da637627b608455ffe252664",
+      "at": "2026-11-23",
+      "lastUsed": "2026-11-23",
+      "model": "mistral-large-latest",
+      "reply": {
+        "kind": "tool",
+        "input": {
+          "standardPct": 2.32,
+          "promoPct": null,
+          "promoUntil": null,
+          "conditions": "Not a guaranteed savings rate: \"Capital at risk, growth not guaranteed.\" \"Variable rates are based on 7 day performance as of 10/11/2026.\" \"Growth is not guaranteed and your money is at risk if governments default or interest rates go negative.\" EUR annual fee 0,26% (of which Wise 0,16%). No promotional rate and no balance bands are stated for EUR. Withdrawal: \"you can send and spend your money whenever you want — including your gains\"; \"You can transfer up to €120,000 each day from Interest currencies. Any amount over €120,000 adds a processing time of up to 2 working days\"; \"In certain circumstances we might need to temporarily limit the amount of money you can withdraw, send or spend each day. But you'd still always be able to get full access to your money within 2 working days.\" \"If your money is in a Jar, you'll need to move it to a balance if you want to spend it.\"",
+          "conditionsKnown": true,
+          "freeWithdrawal": false,
+          "quote": "###### EUR\n\n##### 2,32%",
+          "documentScope": "Wise Rente / Interest — EUR"
+        }
+      }
+    },
+    "66be03cd9cb7515afc9bd05d078ca741f80a0ef26c86f4c152790871193ca297": {
+      "key": "66be03cd9cb7515afc9bd05d078ca741f80a0ef26c86f4c152790871193ca297",
+      "at": "2026-11-23",
+      "lastUsed": "2026-11-23",
+      "model": "mistral-large-latest",
+      "reply": {
+        "kind": "tool",
+        "input": {
+          "status": "changed",
+          "quote": "###### EUR\n\n##### 2,32%",
+          "newValue": 2.32
+        }
+      }
+    },
+    "1275acc849ed9dbe392726f254bb44094c1dce6122af0749fcbb5d675fbb5279": {
+      "key": "1275acc849ed9dbe392726f254bb44094c1dce6122af0749fcbb5d675fbb5279",
+      "at": "2026-11-23",
+      "lastUsed": "2026-11-23",
+      "model": "mistral-large-latest",
+      "reply": {
+        "kind": "tool",
+        "input": {
+          "status": "still_stated",
+          "quote": "Je profiteert direct van de leidende Visa-wisselkoersen bij uitgaven in het buitenland. We rekenen geen valutawisselvergoedingen."
+        }
+      }
+    },
+    "7029548a281ca3c8078bd8c83845d7010dbcccd029c84bbe6fe10da0e16ad3a7": {
+      "key": "7029548a281ca3c8078bd8c83845d7010dbcccd029c84bbe6fe10da0e16ad3a7",
+      "at": "2026-11-23",
+      "lastUsed": "2026-11-23",
+      "model": "mistral-large-latest",
+      "reply": {
+        "kind": "tool",
+        "input": {
+          "fxFeePct": 0,
+          "conditions": "All card transactions have 0% FX fee, even if the purchase is in a currency the customer doesn't hold; the 0.15% FX fee applies only when the customer manually converts money in the app and does not apply to card payments.",
+          "conditionsKnown": true,
+          "quote": "There is no FX fee when paying with the 212 Card. All card transactions have 0% FX fee, even if the purchase is in a currency the customer doesn't hold.",
+          "section": "Can I pay in different currencies using the 212 Card?",
+          "documentKind": "other",
+          "documentScope": "212 Card",
+          "capsExpressedElsewhere": false,
+          "unconditionalBasis": null
+        }
+      }
+    },
+    "2292f1d41c31ede0060a5d5f66004680ac4a82c21c92779312b46cb103c62e60": {
+      "key": "2292f1d41c31ede0060a5d5f66004680ac4a82c21c92779312b46cb103c62e60",
+      "at": "2026-11-23",
+      "lastUsed": "2026-11-23",
+      "model": "mistral-large-latest",
+      "reply": {
+        "kind": "tool",
+        "input": {
+          "fxFeePct": 1.5,
+          "conditions": "Travel+ uitgeschakeld: 1,5% van het aankoopbedrag; Travel+ ingeschakeld: €0. Geldt voor \"Aankopen in buitenlandse valuta (niet €)\" met de Я42 Betaalpas (Travel+ is bij levering van de pas uitgeschakeld).",
+          "conditionsKnown": true,
+          "quote": "Aankopen in buitenlandse valuta (niet €)                     1,5% van het aankoopbedrag                       €0",
+          "section": "Passervices/reisvoordelen Travel+",
+          "documentKind": "tariff-schedule",
+          "documentScope": "Я42 Betaalpas",
+          "capsExpressedElsewhere": true,
+          "unconditionalBasis": null
+        }
+      }
+    },
+    "2b69fa3f7e1a3eaa3a643b6cfb1e8f9835c0067541df3498e264a9f2d47ca635": {
+      "key": "2b69fa3f7e1a3eaa3a643b6cfb1e8f9835c0067541df3498e264a9f2d47ca635",
+      "at": "2026-11-23",
+      "lastUsed": "2026-11-23",
+      "model": "mistral-large-latest",
+      "reply": {
+        "kind": "tool",
+        "input": {
+          "fxFeePct": 2.5,
+          "conditions": "geldt voor transacties die niet in euro zijn uitgevoerd; geen wisselkoersopslag wanneer een derde partij de transactie in euro's omzet",
+          "conditionsKnown": true,
+          "quote": "Wisselkoersopslag op het omgewisselde bedrag in euro.                                       2,5%",
+          "section": "2.6. Transactie in vreemde valuta",
+          "documentKind": "terms",
+          "documentScope": "Overeenkomst voor de American Express Consumenten Kaarthouders – per maart 2022",
+          "capsExpressedElsewhere": true,
+          "unconditionalBasis": null
+        }
+      }
+    },
+    "95a005be69c5d65d0e89b4f7ad45df67c2d6025bf3a5ddec3575a62db3a1dbc7": {
+      "key": "95a005be69c5d65d0e89b4f7ad45df67c2d6025bf3a5ddec3575a62db3a1dbc7",
+      "at": "2026-11-23",
+      "lastUsed": "2026-11-23",
+      "model": "mistral-medium-latest",
+      "reply": {
+        "kind": "tool",
+        "input": {
+          "fxFeePct": 2.5,
+          "conditions": "Wisselkoersopslag op het omgewisselde bedrag in euro",
+          "conditionsKnown": true,
+          "quote": "2.6. Transactie in vreemde valuta\n     Wisselkoersopslag op het omgewisselde bedrag in euro.                                       2,5%",
+          "section": "2.6. Transactie in vreemde valuta",
+          "documentKind": "terms",
+          "documentScope": null,
+          "capsExpressedElsewhere": false,
+          "unconditionalBasis": "stated"
+        }
+      }
+    },
+    "84dfafc938a21352a17d609d49f626410a3bcad31a496e628b9e47faed3949f4": {
+      "key": "84dfafc938a21352a17d609d49f626410a3bcad31a496e628b9e47faed3949f4",
+      "at": "2026-11-23",
+      "lastUsed": "2026-11-23",
+      "model": "mistral-large-latest",
+      "reply": {
+        "kind": "tool",
+        "input": {
+          "fxFeePct": 2.5,
+          "conditions": "geldt voor transacties die niet in euro zijn uitgevoerd; geen wisselkoersopslag wanneer een derde partij de transactie in euro's omzet voordat deze aan ons wordt voorgelegd",
+          "conditionsKnown": true,
+          "quote": "Wisselkoersopslag op het omgewisselde bedrag in euro. 2,5%",
+          "section": "2.6. Transactie in vreemde valuta",
+          "documentKind": "terms",
+          "documentScope": "American Express Consumenten Kaarthouders",
+          "capsExpressedElsewhere": false,
+          "unconditionalBasis": null
+        }
+      }
+    },
+    "63e9db2f2e3fa2b9d5b777ff84a6c2c16d58e75845638627062309facb3c78bb": {
+      "key": "63e9db2f2e3fa2b9d5b777ff84a6c2c16d58e75845638627062309facb3c78bb",
+      "at": "2026-11-23",
+      "lastUsed": "2026-11-23",
+      "model": "mistral-large-latest",
+      "reply": {
+        "kind": "tool",
+        "input": {
+          "fxFeePct": 2.5,
+          "conditions": "Geldt voor transacties in vreemde valuta (transacties die niet in euro zijn uitgevoerd), berekend op het omgewisselde bedrag in euro; geen wisselkoersopslag wanneer een derde partij de transactie eerst in euro's omzet. Document is scoped to: Overeenkomst voor de American Express Consumenten Kaarthouders.",
+          "conditionsKnown": true,
+          "quote": "Wisselkoersopslag op het omgewisselde bedrag in euro.                                       2,5%",
+          "section": "2.6. Transactie in vreemde valuta",
+          "documentKind": "terms",
+          "documentScope": "OVEREENKOMST VOOR DE AMERICAN EXPRESS CONSUMENTEN KAARTHOUDERS – PER MAART 2022",
+          "capsExpressedElsewhere": false,
+          "unconditionalBasis": null
+        }
+      }
+    },
+    "0bd00521bc98e93ed8be51eb7a8c6a176f39ff01380ed99e5a1605611fdf3390": {
+      "key": "0bd00521bc98e93ed8be51eb7a8c6a176f39ff01380ed99e5a1605611fdf3390",
+      "at": "2026-11-23",
+      "lastUsed": "2026-11-23",
+      "model": "mistral-large-latest",
+      "reply": {
+        "kind": "tool",
+        "input": {
+          "fxFeePct": 2.5,
+          "conditions": "Geldt voor transacties die niet in euro zijn uitgevoerd; geen wisselkoersopslag wanneer een derde partij de transactie vóór indiening in euro's omzet (dan worden wisselkoers en eventuele provisie/kost door de derde partij vastgesteld).",
+          "conditionsKnown": true,
+          "quote": "Wisselkoersopslag op het omgewisselde bedrag in euro. 2,5%",
+          "section": "2.6. Transactie in vreemde valuta",
+          "documentKind": "terms",
+          "documentScope": "American Express Consumenten Kaarthouders",
+          "capsExpressedElsewhere": false,
+          "unconditionalBasis": null
+        }
+      }
+    },
+    "cd2cc6a2be81a073cdc6b38e31a2938b437e7b87c3c9e4b4f71bac9ae5d500d6": {
+      "key": "cd2cc6a2be81a073cdc6b38e31a2938b437e7b87c3c9e4b4f71bac9ae5d500d6",
+      "at": "2026-11-23",
+      "lastUsed": "2026-11-23",
+      "model": "mistral-large-latest",
+      "reply": {
+        "kind": "tool",
+        "input": {
+          "fxFeePct": 2.5,
+          "conditions": "Geldt voor transacties die niet in euro zijn uitgevoerd ('de wisselkoersopslag voor transacties die niet in euro zijn uitgevoerd'); geen wisselkoersopslag wanneer een derde partij (bijvoorbeeld het kaartaccepterende bedrijf) de transactie in euro's omzet voordat deze aan ons wordt voorgelegd ('zullen wij geen wisselkoersopslag in rekening brengen')",
+          "conditionsKnown": true,
+          "quote": "Wisselkoersopslag op het omgewisselde bedrag in euro. 2,5%",
+          "section": "2.6. Transactie in vreemde valuta",
+          "documentKind": "terms",
+          "documentScope": "Overeenkomst voor de American Express Consumenten Kaarthouders – per maart 2022",
+          "capsExpressedElsewhere": true,
+          "unconditionalBasis": null
+        }
+      }
+    },
+    "fe83208cd117a4cd0d5b507927f8c4a4162bd8e0b630294bfb8c444f7e6a2ec0": {
+      "key": "fe83208cd117a4cd0d5b507927f8c4a4162bd8e0b630294bfb8c444f7e6a2ec0",
+      "at": "2026-11-23",
+      "lastUsed": "2026-11-23",
+      "model": "mistral-large-latest",
+      "reply": {
+        "kind": "tool",
+        "input": {
+          "fxFeePct": 2.5,
+          "conditions": "geldt voor transacties die niet in euro zijn uitgevoerd; geen wisselkoersopslag wanneer een derde partij de transactie in euro's omzet voordat deze aan ons wordt voorgelegd",
+          "conditionsKnown": true,
+          "quote": "Wisselkoersopslag op het omgewisselde bedrag in euro.                                       2,5%",
+          "section": "2.6. Transactie in vreemde valuta",
+          "documentKind": "terms",
+          "documentScope": "American Express Consumenten Kaarthouders",
+          "capsExpressedElsewhere": false,
+          "unconditionalBasis": null
+        }
+      }
+    },
+    "2eacd918a9f2fcf9eedd798590541c0bfc3dc6bfbe391cc17a3f03b7807553fc": {
+      "key": "2eacd918a9f2fcf9eedd798590541c0bfc3dc6bfbe391cc17a3f03b7807553fc",
+      "at": "2026-11-23",
+      "lastUsed": "2026-11-23",
+      "model": "mistral-large-latest",
+      "reply": {
+        "kind": "tool",
+        "input": {
+          "fxFeePct": 2.5,
+          "conditions": "Overeenkomst voor de American Express Business Card per 15 maart 2023; wisselkoersopslag voor transacties die niet in Euro zijn uitgevoerd; geen wisselkoersopslag wanneer een derde partij de transactie reeds in euro's heeft omgezet voordat deze aan ons wordt voorgelegd",
+          "conditionsKnown": true,
+          "quote": "Wisselkoersopslag op het omgewisselde bedrag in euro.         2,5%",
+          "section": "2.7. Transactie in vreemde valuta",
+          "documentKind": "terms",
+          "documentScope": "OVEREENKOMST VOOR DE AMERICAN EXPRESS BUSINESS CARD – PER 15 MAART 2023",
+          "capsExpressedElsewhere": false,
+          "unconditionalBasis": null
+        }
+      }
+    },
+    "128f2fa7e9f069d523fa2f1c00e166d6502e7c3539c3a101ee9b574107ad0b31": {
+      "key": "128f2fa7e9f069d523fa2f1c00e166d6502e7c3539c3a101ee9b574107ad0b31",
+      "at": "2026-11-23",
+      "lastUsed": "2026-11-23",
+      "model": "mistral-large-latest",
+      "reply": {
+        "kind": "tool",
+        "input": {
+          "fxFeePct": 2.5,
+          "conditions": "geldt voor transacties in vreemde valuta, d.w.z. transacties die niet in euro zijn uitgevoerd; wanneer een derde partij de transactie vóór indiening in euro's omzet, brengen wij geen wisselkoersopslag in rekening",
+          "conditionsKnown": true,
+          "quote": "Wisselkoersopslag op het omgewisselde bedrag in euro.                                       2,5%",
+          "section": "2.6. Transactie in vreemde valuta",
+          "documentKind": "terms",
+          "documentScope": "American Express Consumenten Kaarthouders",
+          "capsExpressedElsewhere": false,
+          "unconditionalBasis": null
+        }
+      }
+    },
+    "aa0a2f89e88eb8e6cfd746c284074e2abbea86e197430f97e16019b5e513053f": {
+      "key": "aa0a2f89e88eb8e6cfd746c284074e2abbea86e197430f97e16019b5e513053f",
+      "at": "2026-11-23",
+      "lastUsed": "2026-11-23",
+      "model": "mistral-large-latest",
+      "reply": {
+        "kind": "tool",
+        "input": {
+          "fxFeePct": 2.5,
+          "conditions": "geldt voor transacties die niet in Euro zijn uitgevoerd; geen wisselkoersopslag wanneer een derde partij (bijvoorbeeld het kaartaccepterende bedrijf) de transactie vóór indiening al in euro's heeft omgezet",
+          "conditionsKnown": true,
+          "quote": "Wisselkoersopslag op het omgewisselde bedrag in euro.         2,5%",
+          "section": "2.7. Transactie in vreemde valuta",
+          "documentKind": "terms",
+          "documentScope": "American Express Business Card",
+          "capsExpressedElsewhere": false,
+          "unconditionalBasis": null
+        }
+      }
+    },
+    "ce08b485cb127417fd7ceb9f5a5dc61d0496b12f7d2dc3e7198ac5014d90a9bc": {
+      "key": "ce08b485cb127417fd7ceb9f5a5dc61d0496b12f7d2dc3e7198ac5014d90a9bc",
+      "at": "2026-11-23",
+      "lastUsed": "2026-11-23",
+      "model": "mistral-large-latest",
+      "reply": {
+        "kind": "tool",
+        "input": {
+          "fxFeePct": 2.5,
+          "conditions": "Geldt voor transacties die niet in Euro zijn uitgevoerd; wanneer een derde partij de transactie in euro’s omzet voordat deze aan ons wordt voorgelegd, brengen wij geen wisselkoersopslag in rekening.",
+          "conditionsKnown": true,
+          "quote": "Wisselkoersopslag op het omgewisselde bedrag in euro.         2,5%",
+          "section": "2.7. Transactie in vreemde valuta",
+          "documentKind": "terms",
+          "documentScope": "AMERICAN EXPRESS BUSINESS CARD",
+          "capsExpressedElsewhere": false,
+          "unconditionalBasis": null
+        }
+      }
+    },
+    "c8665e5f57a1e1006c24d24b9f6a4400b9d69f4849cd68cccdb4710d3b7a7754": {
+      "key": "c8665e5f57a1e1006c24d24b9f6a4400b9d69f4849cd68cccdb4710d3b7a7754",
+      "at": "2026-11-23",
+      "lastUsed": "2026-11-23",
+      "model": "mistral-large-latest",
+      "reply": {
+        "kind": "tool",
+        "input": {
+          "fxFeePct": 2,
+          "conditions": "voor EU landen zonder euro en voor landen buiten EU",
+          "conditionsKnown": true,
+          "quote": "Koersopslag: 2% voor EU landen zonder euro en voor landen buiten EU",
+          "section": "Overige kosten",
+          "documentKind": "marketing",
+          "documentScope": "Visa World Card",
+          "capsExpressedElsewhere": true,
+          "unconditionalBasis": null
+        }
+      }
+    },
+    "96d99ce593032fde3949b039c380741ae7220c4f0e8a068705a33123fd72d73f": {
+      "key": "96d99ce593032fde3949b039c380741ae7220c4f0e8a068705a33123fd72d73f",
+      "at": "2026-11-23",
+      "lastUsed": "2026-11-23",
+      "model": "mistral-large-latest",
+      "reply": {
+        "kind": "tool",
+        "input": {
+          "fxFeePct": 2.5,
+          "conditions": "Geldt wanneer een bij ons ingediende Transactie in een andere valuta dan de euro plaatsvindt of als we een creditering ontvangen in een andere valuta dan de euro; aangezien een Transactie die via de derde wordt omgerekend bij ons wordt ingediend in de Euro's, zullen we in dat geval geen wisselkoersopslag in rekening brengen.",
+          "conditionsKnown": true,
+          "quote": "Deze koers wordt de “American Express-wisselkoers” genoemd en wordt vermeerderd met een wisselkoersopslag van 2,5%.",
+          "section": "11.  Transacties in vreemde valuta",
+          "documentKind": "terms",
+          "documentScope": "AMERICAN EXPRESS CORPORATE CARD",
+          "capsExpressedElsewhere": true,
+          "unconditionalBasis": null
+        }
+      }
+    },
+    "7b732b682cb116e086cdf1059f4f2a00cd96406ca1a024351e5b5f5f86472a0d": {
+      "key": "7b732b682cb116e086cdf1059f4f2a00cd96406ca1a024351e5b5f5f86472a0d",
+      "at": "2026-11-23",
+      "lastUsed": "2026-11-23",
+      "model": "mistral-large-latest",
+      "reply": {
+        "kind": "tool",
+        "input": {
+          "fxFeePct": 2,
+          "conditions": "voor EU landen zonder euro en voor landen buiten EU",
+          "conditionsKnown": true,
+          "quote": "Koersopslag: 2% voor EU landen zonder euro en voor landen buiten EU",
+          "section": "Kosten en voorwaarden",
+          "documentKind": "marketing",
+          "documentScope": "World Card Platinum",
+          "capsExpressedElsewhere": true,
+          "unconditionalBasis": null
+        }
+      }
+    },
+    "11163d9fc3ee86ddfa978f8e9b56d08d79184a44dd520fecd6652700bfeac210": {
+      "key": "11163d9fc3ee86ddfa978f8e9b56d08d79184a44dd520fecd6652700bfeac210",
+      "at": "2026-11-23",
+      "lastUsed": "2026-11-23",
+      "model": "mistral-large-latest",
+      "reply": {
+        "kind": "tool",
+        "input": {
+          "fxFeePct": 2,
+          "conditions": "voor EU landen zonder euro en voor landen buiten EU",
+          "conditionsKnown": true,
+          "quote": "Koersopslag: 2% voor EU landen zonder euro en voor landen buiten EU",
+          "section": "Overige kosten",
+          "documentKind": "marketing",
+          "documentScope": "Visa World Card Panda",
+          "capsExpressedElsewhere": true,
+          "unconditionalBasis": null
+        }
+      }
+    },
+    "73cc3af2a42256ae4d29245d8f6c9aac2e12e47b391a1481dfb5ac22de6918e4": {
+      "key": "73cc3af2a42256ae4d29245d8f6c9aac2e12e47b391a1481dfb5ac22de6918e4",
+      "at": "2026-11-23",
+      "lastUsed": "2026-11-23",
+      "model": "mistral-large-latest",
+      "reply": {
+        "kind": "tool",
+        "input": {
+          "fxFeePct": 2.5,
+          "conditions": "geldt voor een bij ons ingediende Transactie in een andere valuta dan de euro of een ontvangen creditering in een andere valuta dan de euro; geen wisselkoersopslag wanneer een Transactie via een derde in euro's wordt omgerekend voordat deze bij ons wordt ingediend",
+          "conditionsKnown": true,
+          "quote": "Deze koers wordt de “American Express-wisselkoers” genoemd en wordt vermeerderd met een wisselkoersopslag van 2,5%.",
+          "section": "11. Transacties in vreemde valuta",
+          "documentKind": "terms",
+          "documentScope": "AMERICAN EXPRESS CORPORATE CARD",
+          "capsExpressedElsewhere": true,
+          "unconditionalBasis": null
+        }
+      }
+    },
+    "b3b8a38c429ae384e1d1fec061a20b72f90704107f2edb65eb90d6b8c80a312b": {
+      "key": "b3b8a38c429ae384e1d1fec061a20b72f90704107f2edb65eb90d6b8c80a312b",
+      "at": "2026-11-23",
+      "lastUsed": "2026-11-23",
+      "model": "mistral-large-latest",
+      "reply": {
+        "kind": "tool",
+        "input": {
+          "fxFeePct": 2.5,
+          "conditions": "geldt wanneer een bij ons ingediende Transactie in een andere valuta dan de euro plaatsvindt of als we een creditering ontvangen in een andere valuta dan de euro; niet van toepassing wanneer een derde de Transactie vóór indiening in euro's omzet ('zullen we geen wisselkoersopslag in rekening brengen')",
+          "conditionsKnown": true,
+          "quote": "Deze koers wordt de “American Express-wisselkoers” genoemd en wordt vermeerderd met een wisselkoersopslag van 2,5%.",
+          "section": "11. Transacties in vreemde valuta",
+          "documentKind": "terms",
+          "documentScope": "KLM American Express Corporate Card",
+          "capsExpressedElsewhere": true,
+          "unconditionalBasis": null
+        }
+      }
+    },
+    "1e0e64913d9156020ddef44a888d0bd17ec742bb0a43a0aee5d1133f36de5833": {
+      "key": "1e0e64913d9156020ddef44a888d0bd17ec742bb0a43a0aee5d1133f36de5833",
+      "at": "2026-11-23",
+      "lastUsed": "2026-11-23",
+      "model": "mistral-large-latest",
+      "reply": {
+        "kind": "tool",
+        "input": {
+          "fxFeePct": 2,
+          "conditions": "voor EU landen zonder euro en voor landen buiten EU",
+          "conditionsKnown": true,
+          "quote": "Koersopslag: 2% voor EU landen zonder euro en voor landen buiten EU",
+          "section": "Overige kosten",
+          "documentKind": "marketing",
+          "documentScope": "Mastercard Classic",
+          "capsExpressedElsewhere": true,
+          "unconditionalBasis": null
+        }
+      }
+    },
+    "8ade5e758f45c60646f75cac372154b498f28f835997d87e3e970a94f79b43a6": {
+      "key": "8ade5e758f45c60646f75cac372154b498f28f835997d87e3e970a94f79b43a6",
+      "at": "2026-11-23",
+      "lastUsed": "2026-11-23",
+      "model": "mistral-large-latest",
+      "reply": {
+        "kind": "tool",
+        "input": {
+          "fxFeePct": 2,
+          "conditions": "geldt voor betalingen in vreemde valuta; deze worden omgerekend naar euro’s op basis van de Wisselkoers (Visa voor Visa Cards)",
+          "conditionsKnown": true,
+          "quote": "Betalingen en geldopnames in vreemde valuta worden door Visa voor Visa Cards of Mastercard voor Mastercards omgerekend naar euro’s op basis van de Wisselkoers. De opslag is 2%.",
+          "section": "Artikel 13. Vreemde valuta, transactiekosten en overige kosten",
+          "documentKind": "terms",
+          "documentScope": null,
+          "capsExpressedElsewhere": true,
+          "unconditionalBasis": null
+        }
+      }
+    },
+    "b53e7f352f0c712bf573655f24e16b7e122559b0f979f9900f46644e600325c1": {
+      "key": "b53e7f352f0c712bf573655f24e16b7e122559b0f979f9900f46644e600325c1",
+      "at": "2026-11-23",
+      "lastUsed": "2026-11-23",
+      "model": "mistral-large-latest",
+      "reply": {
+        "kind": "tool",
+        "input": {
+          "fxFeePct": 2,
+          "conditions": "voor EU landen zonder euro en voor landen buiten EU",
+          "conditionsKnown": true,
+          "quote": "Koersopslag: 2% voor EU landen zonder euro en voor landen buiten EU",
+          "section": "Overige kosten",
+          "documentKind": "marketing",
+          "documentScope": "Mastercard Gold",
+          "capsExpressedElsewhere": true,
+          "unconditionalBasis": null
+        }
+      }
+    },
+    "7194181b0abab38e41bfe3d3ef544c9b5ed1d34aa4d7a101bda1fa0d177030f1": {
+      "key": "7194181b0abab38e41bfe3d3ef544c9b5ed1d34aa4d7a101bda1fa0d177030f1",
+      "at": "2026-11-23",
+      "lastUsed": "2026-11-23",
+      "model": "mistral-large-latest",
+      "reply": {
+        "kind": "tool",
+        "input": {
+          "fxFeePct": 2,
+          "conditions": "voor EU landen zonder euro en voor landen buiten EU",
+          "conditionsKnown": true,
+          "quote": "Koersopslag: 2% voor EU landen zonder euro en voor landen buiten EU",
+          "section": "Overige kosten",
+          "documentKind": "marketing",
+          "documentScope": "Mastercard Black",
+          "capsExpressedElsewhere": true,
+          "unconditionalBasis": null
+        }
+      }
+    },
+    "69fc5ed80d244bcbef3e228a58187792868d1ce815dce7bdb3c3ee79033f60d6": {
+      "key": "69fc5ed80d244bcbef3e228a58187792868d1ce815dce7bdb3c3ee79033f60d6",
+      "at": "2026-11-23",
+      "lastUsed": "2026-11-23",
+      "model": "mistral-large-latest",
+      "reply": {
+        "kind": "tool",
+        "input": {
+          "conditions": "Transacties in vreemde valuta worden tussen het Bedrijf en ICS afgerekend in euro's op basis van de Wisselkoers; de opslagcomponent daarop is 2,5% en er geldt geen cap of drempel voor",
+          "conditionsKnown": true,
+          "capsExpressedElsewhere": false,
+          "documentKind": "terms",
+          "documentScope": "Visa Worldcard Business",
+          "fxFeePct": 2.5,
+          "quote": "De opslagcomponent in de Wisselkoers is 2,5%.",
+          "section": "Artikel 15 - Regels voor Transacties",
+          "unconditionalBasis": null
+        }
+      }
+    },
+    "ce1b6c3196665d30beed848556fb2b9c7daa44567ea3ca65f3e9d0ffa074bd07": {
+      "key": "ce1b6c3196665d30beed848556fb2b9c7daa44567ea3ca65f3e9d0ffa074bd07",
+      "at": "2026-11-23",
+      "lastUsed": "2026-11-23",
+      "model": "mistral-large-latest",
+      "reply": {
+        "kind": "tool",
+        "input": {
+          "fxFeePct": 2.5,
+          "conditions": "Transacties in vreemde valuta worden tussen het Bedrijf en ICS afgerekend in euro's; de omrekening gebeurt op basis van de Wisselkoers op de dag en tijd waarop de Transactie bij ICS wordt verwerkt",
+          "conditionsKnown": true,
+          "quote": "De opslagcomponent in de Wisselkoers is 2,5%.",
+          "section": "Artikel 15 - Regels voor Transacties",
+          "documentKind": "terms",
+          "documentScope": "ICS Mastercard Business",
+          "capsExpressedElsewhere": true,
+          "unconditionalBasis": null
+        }
+      }
+    },
+    "c77bf548640da28374f14cb4560ec23b0ca83825e685e0be5803a2e6c5b1d1e2": {
+      "key": "c77bf548640da28374f14cb4560ec23b0ca83825e685e0be5803a2e6c5b1d1e2",
+      "at": "2026-11-23",
+      "lastUsed": "2026-11-23",
+      "model": "mistral-large-latest",
+      "reply": {
+        "kind": "tool",
+        "input": {
+          "fxFeePct": 2.5,
+          "conditions": "Geldt voor transacties in vreemde valuta: \"Transacties in vreemde valuta worden tussen het Bedrijf en ICS afgerekend in euro's. De omrekening naar euro's gebeurt op basis van de Wisselkoers op de dag en tijd waarop de Transactie bij ICS wordt verwerkt.\" Geen cap of drempel vermeld voor deze opslag.",
+          "conditionsKnown": true,
+          "quote": "De opslagcomponent in de Wisselkoers is 2,5%.",
+          "section": "Artikel 15 - Regels voor Transacties",
+          "documentKind": "terms",
+          "documentScope": "ICS Mastercard Corporate",
+          "capsExpressedElsewhere": true,
+          "unconditionalBasis": null
+        }
+      }
+    },
+    "f8131c558bec305d586788f8738e231f9e40f3f661faab21d49439da42e7e470": {
+      "key": "f8131c558bec305d586788f8738e231f9e40f3f661faab21d49439da42e7e470",
+      "at": "2026-11-23",
+      "lastUsed": "2026-11-23",
+      "model": "mistral-large-latest",
+      "reply": {
+        "kind": "tool",
+        "input": {
+          "fxFeePct": 2.5,
+          "conditions": "geldt voor Transacties in vreemde valuta: \"Transacties in vreemde valuta worden tussen het Bedrijf en ICS afgerekend in euro's\" — de pagina vermeldt voor deze opslagcomponent geen cap, drempel, free-usage limit of promo-window",
+          "conditionsKnown": true,
+          "quote": "De opslagcomponent in de Wisselkoers is 2,5%.",
+          "section": "Artikel 15 - Regels voor Transacties",
+          "documentKind": "terms",
+          "documentScope": "Visa Worldcard Business Gold",
+          "capsExpressedElsewhere": false,
+          "unconditionalBasis": null
+        }
+      }
+    },
+    "86b5883c5f5ad4748c207b56c30e365a2c1bb88d316902efbd5d04d110095fb3": {
+      "key": "86b5883c5f5ad4748c207b56c30e365a2c1bb88d316902efbd5d04d110095fb3",
+      "at": "2026-11-23",
+      "lastUsed": "2026-11-23",
+      "model": "mistral-large-latest",
+      "reply": {
+        "kind": "tool",
+        "input": {
+          "fxFeePct": 2,
+          "conditions": "voor EU landen zonder euro en voor landen buiten EU",
+          "conditionsKnown": true,
+          "quote": "Koersopslag: 2% voor EU landen zonder euro en voor landen buiten EU",
+          "section": "Overige kosten",
+          "documentKind": "marketing",
+          "documentScope": "ANWB Visa Silver Card",
+          "capsExpressedElsewhere": true,
+          "unconditionalBasis": null
+        }
+      }
+    },
+    "040f5b2d53ea189e494d9c142a6729c7cc3a27c8f3435d9624d180840f67fea3": {
+      "key": "040f5b2d53ea189e494d9c142a6729c7cc3a27c8f3435d9624d180840f67fea3",
+      "at": "2026-11-23",
+      "lastUsed": "2026-11-23",
+      "model": "mistral-large-latest",
+      "reply": {
+        "kind": "tool",
+        "input": {
+          "fxFeePct": 2,
+          "conditions": "geldt voor betalingen en geldopnames in vreemde valuta, omgerekend naar euro’s op basis van de Wisselkoers (Visa voor Visa Cards, Mastercard voor Mastercards)",
+          "conditionsKnown": true,
+          "quote": "Betalingen en geldopnames in vreemde valuta worden door Visa voor Visa Cards of Mastercard voor Mastercards omgerekend naar euro’s op basis van de Wisselkoers. De opslag is 2%.",
+          "section": "Artikel 13. Vreemde valuta, transactiekosten en overige kosten",
+          "documentKind": "terms",
+          "documentScope": "ANWB Creditcard",
+          "capsExpressedElsewhere": true,
+          "unconditionalBasis": null
+        }
+      }
+    },
+    "8c3021eb492d65765fdaa5a8c935e2a3b5e6067fd50a8470a7197ba7cda0d7dd": {
+      "key": "8c3021eb492d65765fdaa5a8c935e2a3b5e6067fd50a8470a7197ba7cda0d7dd",
+      "at": "2026-11-23",
+      "lastUsed": "2026-11-23",
+      "model": "mistral-large-latest",
+      "reply": {
+        "kind": "tool",
+        "input": {
+          "fxFeePct": 2,
+          "conditions": "geldt voor betalingen en geldopnames in vreemde valuta, omgerekend naar euro’s op basis van de Wisselkoers (de door Visa/Mastercard vastgestelde koers vermeerderd met de opslag)",
+          "conditionsKnown": true,
+          "quote": "Betalingen en geldopnames in vreemde valuta worden door Visa voor Visa Cards of Mastercard voor Mastercards omgerekend naar euro’s op basis van de Wisselkoers. De opslag is 2%.",
+          "section": "Artikel 13. Vreemde valuta, transactiekosten en overige kosten",
+          "documentKind": "terms",
+          "documentScope": "ANWB Creditcard",
+          "capsExpressedElsewhere": true,
+          "unconditionalBasis": null
+        }
+      }
+    },
+    "9513ab92ec2deb2c9c32cee5211ca36cee3b17f1ca01d87a0b8217461ad7a2a3": {
+      "key": "9513ab92ec2deb2c9c32cee5211ca36cee3b17f1ca01d87a0b8217461ad7a2a3",
+      "at": "2026-11-23",
+      "lastUsed": "2026-11-23",
+      "model": "mistral-large-latest",
+      "reply": {
+        "kind": "tool",
+        "input": {
+          "fxFeePct": 2,
+          "conditions": "the respective foreign transaction (FX) fees depend on the day of the week of the transaction: FX Fees on Weekdays EEA/UK/CH: 0.2% ROW: 2%; FX Fees on Weekends EEA/UK/CH: 0.7% ROW: 2.5% (reported figure is the weekday ROW rate; weekends ROW are 2.5% and EEA/UK/CH are lower)",
+          "conditionsKnown": true,
+          "quote": "Yes, the respective foreign transaction (FX) fees depend on the day of the week of the transaction: FX Fees on Weekdays EEA/UK/CH: 0.2% ROW: 2% FX Fees on Weekends EEA/UK/CH: 0.7% ROW: 2.5%",
+          "section": "Are there any foreign transaction fees?",
+          "documentKind": "marketing",
+          "documentScope": "Nexo Card",
+          "capsExpressedElsewhere": true,
+          "unconditionalBasis": null
+        }
+      }
+    },
+    "cd4a331aa6a60969a2394c89111bb5ff687e1aaf74e0f2aceabdde926714eee1": {
+      "key": "cd4a331aa6a60969a2394c89111bb5ff687e1aaf74e0f2aceabdde926714eee1",
+      "at": "2026-11-23",
+      "lastUsed": "2026-11-23",
+      "model": "mistral-large-latest",
+      "reply": {
+        "kind": "tool",
+        "input": {
+          "status": "still_stated",
+          "quote": "FX Fees on Weekdays EEA/UK/CH: 0.2% ROW: 2% FX Fees on Weekends EEA/UK/CH: 0.7% ROW: 2.5%"
+        }
+      }
+    },
+    "eea03975e4ea9ad9e83d2f818fc34d60ca3a612eeafd7870c32c687bbc600719": {
+      "key": "eea03975e4ea9ad9e83d2f818fc34d60ca3a612eeafd7870c32c687bbc600719",
+      "at": "2026-11-23",
+      "lastUsed": "2026-11-23",
+      "model": "mistral-large-latest",
+      "reply": {
+        "kind": "tool",
+        "input": {
+          "fxFeePct": 2.5,
+          "conditions": "Applies to Point of Sale transaction (Non Domestic) only — a payment made in a currency other than that of the card/account: \"if you use a EURO-denominated card to make a payment in a currency other than EURO, a 2.5% fee will be imposed (classified as a non-domestic transaction)\". Domestic (same-currency) POS transactions are Free. Rate is identical (2.5%) across all subscription plans: Starter, Everyday and Premium.",
+          "conditionsKnown": true,
+          "quote": "However, if you use a EURO-denominated card to make a payment in a currency other than EURO, a 2.5% fee will be imposed (classified as a non-domestic transaction).",
+          "section": "2. POS Visa Transaction",
+          "documentKind": "tariff-schedule",
+          "documentScope": null,
+          "capsExpressedElsewhere": true,
+          "unconditionalBasis": null
+        }
+      }
+    },
+    "3009b185022419a6d175ea2a84e5603eb90b5166ab415c059bfbb684b7e84880": {
+      "key": "3009b185022419a6d175ea2a84e5603eb90b5166ab415c059bfbb684b7e84880",
+      "at": "2026-11-23",
+      "lastUsed": "2026-11-23",
+      "model": "mistral-large-latest",
+      "reply": {
+        "kind": "tool",
+        "input": {
+          "fxFeePct": 0.5,
+          "conditions": "On top of Mastercard’s Foreign Exchange Rate; Foreign exchange (FX) Fee applies to transactions that are performed in a currency other than the currency your card is denominated in.",
+          "conditionsKnown": true,
+          "quote": "Foreign Exchange Fee 0.5% (On top of Mastercard ’s Foreign Exchange Rate)",
+          "section": "Fees",
+          "documentKind": "tariff-schedule",
+          "documentScope": "Bybit Card",
+          "capsExpressedElsewhere": true,
+          "unconditionalBasis": null
+        }
+      }
+    },
+    "bc6d1a63f2d9dd1d2ffa197e335a2850d3269d8b10f4524962e68a639bb3796e": {
+      "key": "bc6d1a63f2d9dd1d2ffa197e335a2850d3269d8b10f4524962e68a639bb3796e",
+      "at": "2026-11-23",
+      "lastUsed": "2026-11-23",
+      "model": "mistral-medium-latest",
+      "reply": {
+        "kind": "tool",
+        "input": {
+          "fxFeePct": 2,
+          "conditions": "Outside the EU & UK",
+          "conditionsKnown": true,
+          "quote": "Outside the EU & UK : 2.0%",
+          "section": "Foreign Transaction Fee (Till 30 September 2026)",
+          "documentKind": "other",
+          "documentScope": null,
+          "capsExpressedElsewhere": false,
+          "unconditionalBasis": null
+        }
+      }
+    },
+    "e2894786312f26253ad3dc94432413b44d73b933b5e6803840fb5022a91a7ad9": {
+      "key": "e2894786312f26253ad3dc94432413b44d73b933b5e6803840fb5022a91a7ad9",
+      "at": "2026-11-23",
+      "lastUsed": "2026-11-23",
+      "model": "mistral-large-latest",
+      "reply": {
+        "kind": "tool",
+        "input": {
+          "standardPct": 2,
+          "promoPct": 3.25,
+          "promoUntil": "voor de eerste 6 maanden",
+          "conditions": "Nieuwe klanten ontvangen gegarandeerd 3,25% voor de eerste 6 maanden. Variabele/flexibele rente (\"Een flexibel rentepercentage van - op dit moment - 2,00%\"). Rente over een maximaal bedrag van 250.000 euro. Opnemen en storten alleen via een eigen Nederlandse tegenrekening. Geen minimum inleg. Rentebetaling vindt jaarlijks plaats op 31 december. Opgenomen bedragen worden uiterlijk na 3 bankdagen uitbetaald.",
+          "conditionsKnown": true,
+          "freeWithdrawal": true,
+          "quote": "Een flexibel rentepercentage van - op dit moment - 2,00%",
+          "documentScope": "Flexibel Sparen"
+        }
+      }
+    },
+    "a9d713963938bace2a120b7466a6940ae91b272e6ac2b8696c7b56afc2ef1909": {
+      "key": "a9d713963938bace2a120b7466a6940ae91b272e6ac2b8696c7b56afc2ef1909",
+      "at": "2026-11-23",
+      "lastUsed": "2026-11-23",
+      "model": "mistral-large-latest",
+      "reply": {
+        "kind": "tool",
+        "input": {
+          "status": "still_stated",
+          "quote": "We pass on the Visa exchange rate and a 1% fee on debit card transactions."
+        }
+      }
+    },
+    "82bec93a704bcdf2a3a5e45f19758f6657588fb3647f8a82bc21f31e0dcd8e99": {
+      "key": "82bec93a704bcdf2a3a5e45f19758f6657588fb3647f8a82bc21f31e0dcd8e99",
+      "at": "2026-11-23",
+      "lastUsed": "2026-11-23",
+      "model": "mistral-large-latest",
+      "reply": {
+        "kind": "tool",
+        "input": {
+          "fxFeePct": 1,
+          "conditions": "On every membership; applies to purchases in a currency other than USD (network fees may also apply)",
+          "conditionsKnown": true,
+          "quote": "On every membership, card purchases carry a **0.5% Tria fee**, plus a **1% Visa foreign exchange fee** on purchases in a currency other than USD (network fees may also apply).",
+          "section": "Choosing Your Membership",
+          "documentKind": "other",
+          "documentScope": null,
+          "capsExpressedElsewhere": true,
+          "unconditionalBasis": null
+        }
+      }
+    },
+    "c9a7d3a5d0bd95794a8c89084e5a21f9cc38f291a849e124990aed853236c224": {
+      "key": "c9a7d3a5d0bd95794a8c89084e5a21f9cc38f291a849e124990aed853236c224",
+      "at": "2026-11-23",
+      "lastUsed": "2026-11-23",
+      "model": "mistral-large-latest",
+      "reply": {
+        "kind": "tool",
+        "input": {
+          "standardPct": 2.2,
+          "promoPct": 3.01,
+          "promoUntil": "gedurende 6 maanden",
+          "conditions": "*Promotionele rente voor nieuwe klanten gedurende 6 maanden op de eerste € 250.000. Boven dat bedrag en daarna op het hele bedrag basisrente, momenteel 2,20 %. Dagelijks opneembaar. Maandelijkse rentebetaling. Variabele rente. Tot € 1.000.000 per rekening; op het bedrag boven deze limiet wordt geen rente uitgekeerd. Geen kosten.",
+          "conditionsKnown": true,
+          "freeWithdrawal": true,
+          "quote": "*Promotionele rente voor nieuwe klanten gedurende 6 maanden op de eerste € 250.000. Boven dat bedrag en daarna op het hele bedrag basisrente, momenteel 2,20 %",
+          "documentScope": "Spaarrekening"
+        }
+      }
+    },
+    "970fbfce2e07ef47f986cc3aa2c7c5c9bb7f34e2fdd4ddfc47e64827eab97771": {
+      "key": "970fbfce2e07ef47f986cc3aa2c7c5c9bb7f34e2fdd4ddfc47e64827eab97771",
+      "at": "2026-11-23",
+      "lastUsed": "2026-11-23",
+      "model": "mistral-large-latest",
+      "reply": {
+        "kind": "tool",
+        "input": {
+          "status": "changed",
+          "newValue": 1,
+          "quote": "On every membership, card purchases carry a **0.5% Tria fee**, plus a **1% Visa foreign exchange fee** on purchases in a currency other than USD (network fees may also apply)."
+        }
+      }
+    },
+    "26a0b83207fafde5ff1903bf73043f8fce959f0b8cd0147f0be3df0fa5e96b8a": {
+      "key": "26a0b83207fafde5ff1903bf73043f8fce959f0b8cd0147f0be3df0fa5e96b8a",
+      "at": "2026-11-23",
+      "lastUsed": "2026-11-23",
+      "model": "mistral-large-latest",
+      "reply": {
+        "kind": "tool",
+        "input": {
+          "status": "changed",
+          "quote": "*Promotionele rente voor nieuwe klanten gedurende 6 maanden op de eerste € 250.000. Boven dat bedrag en daarna op het hele bedrag basisrente, momenteel 2,20 %",
+          "newValue": 2.2
+        }
+      }
+    },
+    "c60baf77ae89ca0f9fc742aed61c226c38826c8f4abc1be237f2996f0412ff7c": {
+      "key": "c60baf77ae89ca0f9fc742aed61c226c38826c8f4abc1be237f2996f0412ff7c",
+      "at": "2026-11-23",
+      "lastUsed": "2026-11-23",
+      "model": "mistral-large-latest",
+      "reply": {
+        "kind": "tool",
+        "input": {
+          "standardPct": 1.9,
+          "promoPct": null,
+          "promoUntil": null,
+          "conditions": "Rente variabel (effectief op jaarbasis); geen promotie of staffels vermeld in het document",
+          "conditionsKnown": true,
+          "freeWithdrawal": null,
+          "quote": "Anadolubank Alfa Slimmer Sparen (Geldig vanaf 26 oktober 2026) 1.90 % Rente variabel (effectief op jaarbasis)",
+          "documentScope": null
+        }
+      }
+    },
+    "bfd692106a3e522530690a78816be8b669e1b1e2bbea360aaca1c1c92cff6e3a": {
+      "key": "bfd692106a3e522530690a78816be8b669e1b1e2bbea360aaca1c1c92cff6e3a",
+      "at": "2026-11-23",
+      "lastUsed": "2026-11-23",
+      "model": "mistral-large-latest",
+      "reply": {
+        "kind": "tool",
+        "input": {
+          "standardPct": 2.6,
+          "promoPct": null,
+          "promoUntil": null,
+          "conditions": "Variabele rente, onder andere gebaseerd op marktrentes. Geen minimale inleg, altijd beschikbaar en toegankelijk in de app. Rente wordt dagelijks berekend en maandelijks uitbetaald. Met PRIME+ een depositogarantie tot 5 × € 100.000 door spreiding over Scalable en partnerbanken; zonder PRIME+ spreiding over banken met depositogarantie tot € 100.000 of gekwalificeerde geldmarktfondsen (UCITS, onderhevig aan marktrisico's). Beschikbaarheid 24/7 realtime. De 3% p.a. voor 12 maanden in het document betreft de Scalable Spaardeposito's, niet de Overnight account.",
+          "conditionsKnown": true,
+          "freeWithdrawal": true,
+          "quote": "Rente 2,60% p.j.* op onbeperkt tegoed",
+          "documentScope": "Scalable Overnight account"
+        }
+      }
+    },
+    "22cad83ce8117a2219ff2d5eae6f5aa5b912a2c43c4c8cb878b12624d1658a9b": {
+      "key": "22cad83ce8117a2219ff2d5eae6f5aa5b912a2c43c4c8cb878b12624d1658a9b",
+      "at": "2026-11-23",
+      "lastUsed": "2026-11-23",
+      "model": "mistral-large-latest",
+      "reply": {
+        "kind": "tool",
+        "input": {
+          "standardPct": 1.85,
+          "promoPct": 3,
+          "promoUntil": "6 maanden lang geldig",
+          "conditions": "S@veOnlinerekening Welkomstactie alleen voor nieuwe klanten, 6 maanden lang geldig t/m €50.000 3,00% &gt; €50.000 1,85% 14.07.2026; DHB Bank behoudt zich het recht voor om over saldi boven de € 500.000 een afwijkende rente te vergoeden.",
+          "conditionsKnown": true,
+          "freeWithdrawal": null,
+          "quote": "S@veOnlinerekening &gt; €0 1,85% 14.07.2026 S@veOnlinerekening Welkomstactie alleen voor nieuwe &nbsp; klanten, 6 maanden lang geldig t/m €50.000 3,00% 14.07.2026 &nbsp;&gt; €50.000 1,85% 14.07.2026",
+          "documentScope": null
+        }
+      }
+    },
+    "86557060bb7811d2c74e9e49ef0a68de5b248ea4da478c53593bdf365ac80974": {
+      "key": "86557060bb7811d2c74e9e49ef0a68de5b248ea4da478c53593bdf365ac80974",
+      "at": "2026-11-23",
+      "lastUsed": "2026-11-23",
+      "model": "mistral-large-latest",
+      "reply": {
+        "kind": "tool",
+        "input": {
+          "status": "changed",
+          "newValue": 2.6,
+          "quote": "Profiteer van 2,60% rente p.j.* op je tegoed in de Scalable Overnight account."
+        }
+      }
+    },
+    "4a08eecb3a14cc56a5742ef843234ba564c1a5a5e7fd93db688634d5db68fba0": {
+      "key": "4a08eecb3a14cc56a5742ef843234ba564c1a5a5e7fd93db688634d5db68fba0",
+      "at": "2026-11-23",
+      "lastUsed": "2026-11-23",
+      "model": "mistral-large-latest",
+      "reply": {
+        "kind": "tool",
+        "input": {
+          "standardPct": 1.51,
+          "promoPct": 3.11,
+          "promoUntil": null,
+          "conditions": "EUR Personal Savings Account (MassInterest). Your interest rate depends on your personal threshold, which is the highest balance you held in your Savings Accounts during the previous half of the year. It's recalculated twice a year on: January 1 (00:00 UTC): based on your highest balance from July 1 to December 31; July 1 (00:00 UTC): based on your highest balance from January 1 to June 30. You get the following interest on: 3.11% (Bonus Interest) on savings above your threshold (every euro you add above your highest balance earns the highest rate); 1.61% (Starting Interest) on your first €10,000 up to your threshold (if your threshold is lower than €10,000, everything above it earns the Bonus Rate); 1.51% (Base Interest) on any savings above €10,000 up to your threshold (if your threshold is €10,000 or less, all your savings up to your threshold earn the higher Starting Interest instead). Example given: €22,000 saved with a €15,000 threshold → €10,000 earns 1.61%, €5,000 earns 1.51%, €7,000 earns 3.11%; if your threshold is €0 because you just started saving, all your savings earn bonus interest of 3.11% until your first threshold calculation. New savers: when you join bunq you don't have a threshold yet, so you get the bonus rate of 3.11% on all your EUR savings up to €100,000; once your first personal threshold is set on either January 1 or July 1, you get the bonus rate on all savings above your threshold. *The Starting Interest, Base Interest, and Bonus Interest are variable and are subject to change.* Rates went up on October 15, 2026 at 09:30 CEST (Bonus Interest now 3.11% up from 3.01%; Starting Interest now 1.61%; Base Interest stays at 1.51%).",
+          "conditionsKnown": true,
+          "freeWithdrawal": null,
+          "quote": "Base Interest stays at 1.51% on savings below your threshold and above €10,000.",
+          "documentScope": null
+        }
+      }
+    },
+    "139a0350b9dab85a13bce871a65983c3406425a485bc2a1ae08b29cad0b1ab96": {
+      "key": "139a0350b9dab85a13bce871a65983c3406425a485bc2a1ae08b29cad0b1ab96",
+      "at": "2026-11-23",
+      "lastUsed": "2026-11-23",
+      "model": "mistral-large-latest",
+      "reply": {
+        "kind": "tool",
+        "input": {
+          "standardPct": 1.8,
+          "promoPct": null,
+          "promoUntil": null,
+          "conditions": "voor bestaande klanten; Geldig per 7 juli 2025. Minimale inleg is €2.000,- of tegenwaarde €2.000,- in US Dollar, Turkse Lira en Britse Pond.",
+          "conditionsKnown": true,
+          "freeWithdrawal": null,
+          "quote": "Euro-Plus Spaarrekening 1,80% effectief op jaarbasis (voor bestaande klanten)",
+          "documentScope": null
+        }
+      }
+    },
+    "99b167562cdf2f1dbad8f39e824df1943a898f78caf400e3a392cd87bfa963d7": {
+      "key": "99b167562cdf2f1dbad8f39e824df1943a898f78caf400e3a392cd87bfa963d7",
+      "at": "2026-11-23",
+      "lastUsed": "2026-11-23",
+      "model": "mistral-large-latest",
+      "reply": {
+        "kind": "tool",
+        "input": {
+          "standardPct": 1.85,
+          "promoPct": 3.25,
+          "promoUntil": null,
+          "conditions": "Actierente voor nieuwe klanten: 'nu tijdelijk' actierente van 3,25% 'bij het openen van een spaarrekening' (geen einddatum vermeld in het document); alle tarieven *nominaal op jaarbasis.",
+          "conditionsKnown": true,
+          "freeWithdrawal": null,
+          "quote": "Huidige flexibele rente 1,85%",
+          "documentScope": null
+        }
+      }
+    },
+    "6d2b23fb7f16033ace9f899bd618535d674eebcbca46ace32366fc65cfff7dc5": {
+      "key": "6d2b23fb7f16033ace9f899bd618535d674eebcbca46ace32366fc65cfff7dc5",
+      "at": "2026-11-23",
+      "lastUsed": "2026-11-23",
+      "model": "mistral-large-latest",
+      "reply": {
+        "kind": "tool",
+        "input": {
+          "standardPct": 2.25,
+          "promoPct": null,
+          "promoUntil": null,
+          "conditions": "De rente is van toepassing op het saldo t/m € 300.000. Voor saldi boven € 300.000 is de rente 0,00%. Iedere maand ontvang je de rente op je Open Spaarrekening.",
+          "conditionsKnown": true,
+          "freeWithdrawal": true,
+          "quote": "2,25%* rente op saldi t/m € 300.000",
+          "documentScope": "Open Spaarrekening"
+        }
+      }
+    },
+    "f8f239e29446df344babe4792889f32b643254218268b3c7f47b939b5ee34fd4": {
+      "key": "f8f239e29446df344babe4792889f32b643254218268b3c7f47b939b5ee34fd4",
+      "at": "2026-11-23",
+      "lastUsed": "2026-11-23",
+      "model": "mistral-large-latest",
+      "reply": {
+        "kind": "tool",
+        "input": {
+          "standardPct": 2.2,
+          "promoPct": null,
+          "promoUntil": null,
+          "conditions": "Krijg 2,20%¹ rente op je geld — geen beheerkosten, geen minimumbedrag. Rente wordt dagelijks berekend en maandelijks uitbetaald naar je flex rekening. Je kunt maximaal 3 flex rekeningen tegelijk hebben. Meld je aan voor een lidmaatschap via de app en verdien extra rente op je spaargeld, bovenop onze aantrekkelijke tarieven. De huidige rentepercentages vind je in de app. Je kunt altijd geld toevoegen aan en opnemen van flex rekeningen, zonder opnamekosten. Tegoed tot 1.150.000 SEK valt onder het Zweedse depositogarantiestelsel.",
+          "conditionsKnown": true,
+          "freeWithdrawal": true,
+          "quote": "Krijg 2,20%¹ rente op je geld — geen beheerkosten, geen minimumbedrag.",
+          "documentScope": "Klarna flex rekening"
+        }
+      }
+    },
+    "c6510cd069bfd8282172f81041f7d934a71d206fc788af4cf9f6804061b59217": {
+      "key": "c6510cd069bfd8282172f81041f7d934a71d206fc788af4cf9f6804061b59217",
+      "at": "2026-11-23",
+      "lastUsed": "2026-11-23",
+      "model": "mistral-large-latest",
+      "reply": {
+        "kind": "tool",
+        "input": {
+          "status": "not_on_page"
+        }
+      }
+    },
+    "3f628e6a141b97cdd70ca2aa00b2f9f66d7549ca496dfad8c0fa7086d58baada": {
+      "key": "3f628e6a141b97cdd70ca2aa00b2f9f66d7549ca496dfad8c0fa7086d58baada",
+      "at": "2026-11-23",
+      "lastUsed": "2026-11-23",
+      "model": "mistral-large-latest",
+      "reply": {
+        "kind": "tool",
+        "input": {
+          "standardPct": 1.5,
+          "promoPct": null,
+          "promoUntil": null,
+          "conditions": "Dit is de rente op jaarbasis. Een variabele rente kan op ieder moment veranderen. Geen minimuminleg en geen kosten. Spaar zo veel u wilt.",
+          "conditionsKnown": true,
+          "freeWithdrawal": true,
+          "quote": "De actuele spaarrente is 1,50%",
+          "documentScope": "Internet Spaarrekening"
+        }
+      }
+    },
+    "a30ab2a447952456884a2e82fa0120cc7d010191e6186332203d11213c3d3540": {
+      "key": "a30ab2a447952456884a2e82fa0120cc7d010191e6186332203d11213c3d3540",
+      "at": "2026-11-23",
+      "lastUsed": "2026-11-23",
+      "model": "mistral-large-latest",
+      "reply": {
+        "kind": "tool",
+        "input": {
+          "standardPct": 1.6,
+          "promoPct": null,
+          "promoUntil": null,
+          "conditions": "Variabele basisrente van 1,20% + variabele bonusrente van 0,40%. Basisrente wordt maandelijks bijgeschreven en de bonusrente één keer per kwartaal. Over het geld dat een volledig kwartaal op je rekening staat, krijg je daarbovenop een bonusrente. Geen minimum inleg en geen kosten. Sparen onder het Nederlandse depositogarantiestelsel; je spaargeld is beschermd tot € 100.000,-.",
+          "conditionsKnown": true,
+          "freeWithdrawal": true,
+          "quote": "1,60% spaarrente\nVariabele basisrente van 1,20% + variabele bonusrente van 0,40%\nBasisrente wordt maandelijks bijgeschreven en de bonusrente één keer per kwartaal.",
+          "documentScope": "Kwartaalspaarrekening"
+        }
+      }
+    },
+    "1e75834a8c687086fed22e6f77881b2592f06abebcfb7e76902bd18b22b18bc0": {
+      "key": "1e75834a8c687086fed22e6f77881b2592f06abebcfb7e76902bd18b22b18bc0",
+      "at": "2026-11-23",
+      "lastUsed": "2026-11-23",
+      "model": "mistral-large-latest",
+      "reply": {
+        "kind": "tool",
+        "input": {
+          "standardPct": 1.25,
+          "promoPct": null,
+          "promoUntil": null,
+          "conditions": "Saldoklasse € 0 tot en met € 500.000: 1,25% (basisrente 1,25%, geen bonusrente, n.v.t.); € 500.000 tot en met € 1.000.000: 1,45%; vanaf € 1.000.000: 0,00%. Rentes gelden vanaf 29 september 2026 en zijn op jaarbasis.",
+          "conditionsKnown": true,
+          "freeWithdrawal": null,
+          "quote": "Direct Sparen € 0 tot en met € 500.000 1,25% 1,25% n.v.t.",
+          "documentScope": null
+        }
+      }
+    },
+    "948557287bbc1471479db3e08da2a009d5e9dc031c3bf00de33e10d14c2c1f70": {
+      "key": "948557287bbc1471479db3e08da2a009d5e9dc031c3bf00de33e10d14c2c1f70",
+      "at": "2026-11-23",
+      "lastUsed": "2026-11-23",
+      "model": "mistral-large-latest",
+      "reply": {
+        "kind": "tool",
+        "input": {
+          "standardPct": 1.7,
+          "promoPct": null,
+          "promoUntil": null,
+          "conditions": "Saldoklassen per internetspaarrekening: € 0,- tot en met € 10.000,-: 1,70%; boven € 10.000,- tot en met € 25.000,-: 1,55%; boven € 25.000,- tot en met € 100.000,-: 1,45%; boven € 100.000,-: 1,30%. \"Bovenstaande rentes zijn variabele rentes op jaarbasis. Rentewijzigingen voorbehouden.\" Elk deel van het saldo op je internetspaarrekening heeft een eigen rentepercentage ('saldoklassen'); de saldoklassen en rentes gelden per internetspaarrekening en niet per persoon; maximaal twee internetspaarrekeningen, de twee spaarsaldo's worden niet bij elkaar opgeteld.",
+          "conditionsKnown": true,
+          "freeWithdrawal": null,
+          "quote": "| € 0,- tot en met € 10.000,- | 1,70% |",
+          "documentScope": "Internetsparen"
+        }
+      }
+    },
+    "60efa91623fe987199e9c126cf77bb879b8cf493be02f49bdc68c80cc442de40": {
+      "key": "60efa91623fe987199e9c126cf77bb879b8cf493be02f49bdc68c80cc442de40",
+      "at": "2026-11-23",
+      "lastUsed": "2026-11-23",
+      "model": "mistral-large-latest",
+      "reply": {
+        "kind": "tool",
+        "input": {
+          "standardPct": 1.25,
+          "promoPct": null,
+          "promoUntil": null,
+          "conditions": "Variabele rente, effectief op jaarbasis: \"Alle rentetarieven zijn variabel en effectief op jaarbasis.\" Alle saldo-banden van Flexibel Sparen betalen hetzelfde tarief 1,25%: \"Spaarsaldo tot € 25.000 1,25%\", \"Spaarsaldo tussen € 25.000 en € 100.000 1,25%\", \"Spaarsaldo boven € 100.000 1,25%\". \"De saldolimiet geldt voor het totale saldo van alle Flexibele Spaarrekeningen binnen je pakket.\"",
+          "conditionsKnown": true,
+          "freeWithdrawal": true,
+          "quote": "Variabele rente op een flexibele spaarrekening (Flexibel Sparen) Spaarsaldo tot € 25.000 1,25% Spaarsaldo tussen € 25.000 en € 100.000 1,25% Spaarsaldo boven € 100.000 1,25%",
+          "documentScope": null
+        }
+      }
+    },
+    "ad93203f5aa57a8e7940ad3183a56530506c59237c614ea0588b01b997908572": {
+      "key": "ad93203f5aa57a8e7940ad3183a56530506c59237c614ea0588b01b997908572",
+      "at": "2026-11-23",
+      "lastUsed": "2026-11-23",
+      "model": "mistral-large-latest",
+      "reply": {
+        "kind": "tool",
+        "input": {
+          "status": "changed",
+          "quote": "Internetsparen\n\nHuidige saldoklasse Huidige rente\n\n€ 0,- tot en met € 10.000,- 1,70%",
+          "newValue": 1.7
+        }
+      }
+    },
+    "ab9e806fc6a44fcbfa174907e44c7d70a7c9783d500b0f6a3a39e5e96a27211f": {
+      "key": "ab9e806fc6a44fcbfa174907e44c7d70a7c9783d500b0f6a3a39e5e96a27211f",
+      "at": "2026-11-23",
+      "lastUsed": "2026-11-23",
+      "model": "mistral-large-latest",
+      "reply": {
+        "kind": "tool",
+        "input": {
+          "standardPct": 1.8,
+          "promoPct": null,
+          "promoUntil": null,
+          "conditions": "Variabele rente — \"Wij kunnen de rente op elk moment aanpassen.\" Grensbedragen: \"€0,- tot en met €25.000,-\" = 1,80%; \"Boven €25.000,-\" = 1,65% (*effectieve rente per jaar). \"Rentepercentages en grensbedragen per 10 juli 2025\"; \"Actuele rente maximaal 1,80 %\" \"Sinds 02-11-2026\". \"Je mag maximaal 2 RentePlús Rekeningen hebben\" per persoon (een en/of rekening telt ook als 1 rekening). Rente wordt per dag berekend en maandelijks bijgeschreven (\"in een schrikkeljaar rekenen wij met 366 dagen\").",
+          "conditionsKnown": true,
+          "freeWithdrawal": true,
+          "quote": "| €0,- tot en met €25.000,- | 1,80% |",
+          "documentScope": "RentePlús Rekening"
+        }
+      }
+    },
+    "123ac169a6a6b4884b74b25bdd6a45e59dcd712572128069d19d011a1e8f56ee": {
+      "key": "123ac169a6a6b4884b74b25bdd6a45e59dcd712572128069d19d011a1e8f56ee",
+      "at": "2026-11-23",
+      "lastUsed": "2026-11-23",
+      "model": "mistral-large-latest",
+      "reply": {
+        "kind": "tool",
+        "input": {
+          "standardPct": 1.6,
+          "promoPct": null,
+          "promoUntil": null,
+          "conditions": "Variabele rente per bedrag: €0 t/m €10.000: 1,60%; Boven €10.000 t/m €20.000: 1,50%; Boven €20.000 t/m €100.000: 1,40%; Boven €100.000 t/m € 5 miljoen: 1,30%; Boven € 5 miljoen: 0,00%. Deze rentes kunnen veranderen.",
+          "conditionsKnown": true,
+          "freeWithdrawal": null,
+          "quote": "| €0 t/m €10.000 | 1,60% |",
+          "documentScope": null
+        }
+      }
+    },
+    "d598398a2e13bd23df4f5c5c82030ecb808230a6265b43768e631d2f4911344b": {
+      "key": "d598398a2e13bd23df4f5c5c82030ecb808230a6265b43768e631d2f4911344b",
+      "at": "2026-11-23",
+      "lastUsed": "2026-11-23",
+      "model": "mistral-large-latest",
+      "reply": {
+        "kind": "tool",
+        "input": {
+          "status": "changed",
+          "quote": "€ 0,- tot en met € 25.000,- 1,80%",
+          "newValue": 1.8
+        }
+      }
+    },
+    "e5e0dfe4dabd49b2560f2d508ec920aa6953202eec90a8823b78ae1b5a68a18a": {
+      "key": "e5e0dfe4dabd49b2560f2d508ec920aa6953202eec90a8823b78ae1b5a68a18a",
+      "at": "2026-11-23",
+      "lastUsed": "2026-11-23",
+      "model": "mistral-large-latest",
+      "reply": {
+        "kind": "tool",
+        "input": {
+          "standardPct": 1.3,
+          "promoPct": null,
+          "promoUntil": null,
+          "conditions": "Saldoklasse 0 - € 25.000: 1,30%; € 25.000 - € 100.000: 1,20%; saldo boven € 100.000: 1,00%. Voor alle rentes hierboven geldt: variabele rente over je positieve saldo op jaarbasis vanaf 23 oktober 2025. Rentewijzigingen voorbehouden.",
+          "conditionsKnown": true,
+          "freeWithdrawal": null,
+          "quote": "SNS Internet Sparen \n 1,30% \n 1,20% \n 1,00% \n \n \n \n \nVoor alle rentes hierboven geldt: variabele rente over je positieve saldo op jaarbasis vanaf 23 oktober 2025. Rentewijzigingen voorbehouden.",
+          "documentScope": null
+        }
+      }
+    },
+    "2009de7c331630ca6ecbfc1575138084b2eddf536cb206857f0423ba75838ede": {
+      "key": "2009de7c331630ca6ecbfc1575138084b2eddf536cb206857f0423ba75838ede",
+      "at": "2026-11-23",
+      "lastUsed": "2026-11-23",
+      "model": "mistral-large-latest",
+      "reply": {
+        "kind": "tool",
+        "input": {
+          "status": "changed",
+          "newValue": 1.6,
+          "quote": "| €0 t/m €10.000 | 1,60% |"
+        }
+      }
+    },
+    "5a6f050f40bd6bb9395baacf1faf80e9adca79feaa3ac6cb5d54939fe3d449c9": {
+      "key": "5a6f050f40bd6bb9395baacf1faf80e9adca79feaa3ac6cb5d54939fe3d449c9",
+      "at": "2026-11-23",
+      "lastUsed": "2026-11-23",
+      "model": "mistral-large-latest",
+      "reply": {
+        "kind": "tool",
+        "input": {
+          "standardPct": 1.25,
+          "promoPct": null,
+          "promoUntil": null,
+          "conditions": "Ingangsdatum 1 januari 2026 — Saldo t/m €10.000: 1,25%; Saldo boven €10.000 t/m €100.000: 1,00%; Saldo boven €100.000 t/m €250.000: 1,00%; Saldo boven €250.000 t/m €1.000.000: 1,00%; Saldo boven €1.000.000: 0,00%. De rentepercentages in dit historisch overzicht zijn op jaarbasis.",
+          "conditionsKnown": true,
+          "freeWithdrawal": null,
+          "quote": "1 januari 2026 1,25% 1,00% 1,00% 1,00% 0,00%",
+          "documentScope": null
+        }
+      }
+    },
+    "abec2e8e770c46fac6d329319bf6342bf73b0fccd7fcd3bfdefada80359f2cc3": {
+      "key": "abec2e8e770c46fac6d329319bf6342bf73b0fccd7fcd3bfdefada80359f2cc3",
+      "at": "2026-11-23",
+      "lastUsed": "2026-11-23",
+      "model": "mistral-large-latest",
+      "reply": {
+        "kind": "tool",
+        "input": {
+          "standardPct": 1.25,
+          "promoPct": null,
+          "promoUntil": null,
+          "conditions": "De rente bedraagt 1,25% bij een saldo tot en met € 10.000. Vanaf € 10.000 tot en met € 25.000 ontvang je 1,10% en vanaf € 25.000 tot en met € 100.000 ontvang je 1,00%. Op het saldo daarboven ontvang je 1,00% rente (sinds 01-11-2026, wijzigingen voorbehouden).* Groeit je vermogen boven de € 500.000? Neem dan contact op met Triodos Bank Private Banking via 030 693 6505. Je kunt zo vaak als je wilt geld storten en opnemen. Het openen en aanhouden van Internet Sparen is gratis.",
+          "conditionsKnown": true,
+          "freeWithdrawal": true,
+          "quote": "De rente bedraagt&nbsp;1,25%&nbsp;bij een saldo tot en met € 10.000.",
+          "documentScope": null
+        }
+      }
+    },
+    "b66ba581e66519017ba8a348c45dffcd0f84df77b366e489940fe908bdd05050": {
+      "key": "b66ba581e66519017ba8a348c45dffcd0f84df77b366e489940fe908bdd05050",
+      "at": "2026-11-23",
+      "lastUsed": "2026-11-23",
+      "model": "mistral-large-latest",
+      "reply": {
+        "kind": "tool",
+        "input": {
+          "standardPct": 1.25,
+          "promoPct": null,
+          "promoUntil": null,
+          "conditions": "Saldo 1 tot 1.000.000 EUR; Minimumbedrag: € 1; Maximumbedrag: € 1.000.000; Dagelijks opvraagbaar. De voorwaarden zijn van toepassing vanaf 27-08-2026 tot nader order. (De 3,10% p.j. actierente gedurende 3 maanden/92 dagen vanaf het openen belongs to the Welkom Spaarrekening row, not to this product.)",
+          "conditionsKnown": true,
+          "freeWithdrawal": true,
+          "quote": "Nexent Bank Spaarrekening 1 tot 1.000.000 EUR 1,25 % p.j.",
+          "documentScope": "Nexent Bank Spaarrekening"
+        }
+      }
+    },
+    "8d39cdfd9f6bdcbf194871814379c0e9275025744a4bc2dd686c64631dd720ad": {
+      "key": "8d39cdfd9f6bdcbf194871814379c0e9275025744a4bc2dd686c64631dd720ad",
+      "at": "2026-11-23",
+      "lastUsed": "2026-11-23",
+      "model": "mistral-large-latest",
+      "reply": {
+        "kind": "tool",
+        "input": {
+          "status": "changed",
+          "newValue": 1.25,
+          "quote": "Particulier Internet Sparen De rente bedraagt&nbsp;1,25%&nbsp;bij een saldo tot en met € 10.000. Vanaf €&nbsp;10.000 tot en met&nbsp;€ 25.000 ontvang je&nbsp;1,10%&nbsp;en vanaf € 25.000 tot en met&nbsp;€ 100.000 ontvang je 1,00%. Op het saldo daarboven ontvang je 1,00% rente (sinds 01-11-2026, wijzigingen voorbehouden).*"
+        }
+      }
+    },
+    "0cd19957ace2ea2c3d42ad20e614af13adf02b8860378b49f4343d289cb573fa": {
+      "key": "0cd19957ace2ea2c3d42ad20e614af13adf02b8860378b49f4343d289cb573fa",
+      "at": "2026-11-23",
+      "lastUsed": "2026-11-23",
+      "model": "mistral-large-latest",
+      "reply": {
+        "kind": "tool",
+        "input": {
+          "standardPct": 1.3,
+          "promoPct": null,
+          "promoUntil": null,
+          "conditions": "Rente % vanaf 18 november 2025. Spaar-op-Maat Vrij: € 0 tot € 25.000: 1,30%; € 25.000 tot € 100.000: 1,20%; € 100.000 en hoger: 1,00%. Voor alle rentes hierboven geldt: variabele rente op jaarbasis. Rentewijzigingen voorbehouden.",
+          "conditionsKnown": true,
+          "freeWithdrawal": null,
+          "quote": "Spaar-op-Maat Vrij € 0 tot € 25.000 1,30% € 25.000 tot € 100.000 1,20% € 100.000 en hoger 1,00%",
+          "documentScope": null
+        }
+      }
+    },
+    "070aa03927f8ef1f7c806819424ea639b0f752d5412dbe37a1a36de63e77d644": {
+      "key": "070aa03927f8ef1f7c806819424ea639b0f752d5412dbe37a1a36de63e77d644",
+      "at": "2026-11-23",
+      "lastUsed": "2026-11-23",
+      "model": "mistral-large-latest",
+      "reply": {
+        "kind": "tool",
+        "input": {
+          "standardPct": 1.3,
+          "promoPct": null,
+          "promoUntil": null,
+          "conditions": "Geen verplichtingen: storten en opnemen wanneer u wilt; De rente is variabel en kan dus elk moment verhoogd of verlaagd worden; De rente wordt maandelijks bijgeschreven; Brand New Day heeft de mogelijkheid om een negatief rentepercentage te hanteren of om het saldo op de rekening in verschillende categorieën (qua saldo) in te delen en voor iedere categorie een ander rentepercentage te hanteren. Momenteel is dat echter niet het geval. Bijzonderheden: huidige rente per 07-05-2025",
+          "conditionsKnown": true,
+          "freeWithdrawal": true,
+          "quote": "Variabele rente: 1,30% per jaar",
+          "documentScope": null
+        }
+      }
+    },
+    "0bd3b31afb428ae218dae999e4ca41423a7800dc35f9ba30f9df4d6cc80c142e": {
+      "key": "0bd3b31afb428ae218dae999e4ca41423a7800dc35f9ba30f9df4d6cc80c142e",
+      "at": "2026-11-23",
+      "lastUsed": "2026-11-23",
+      "model": "mistral-large-latest",
+      "reply": {
+        "kind": "tool",
+        "input": {
+          "fxFeePct": 2,
+          "conditions": "Koersopslag non-euro — voetnoot 1: 'ING berekent een koersopslag op alle transacties in vreemde valuta'; het 'tot € 1000*** per maand' maximum staat bij ING Creditcard Extra en voetnoot 2 noemt daarvoor 'ING Studenten Creditcard More, ING Creditcard Extra of ING Creditcard Max', niet ING Creditcard More",
+          "conditionsKnown": true,
+          "quote": "ING Creditcard More        ING Creditcard More\nCreditcards               2,00%                      2,00%\nKoersopslag non-euro",
+          "section": "Betaalpakketten           ING Go                     ING More                   ING Extra                  ING Max",
+          "documentKind": "tariff-schedule",
+          "documentScope": "ING betaalproducten particulieren",
+          "capsExpressedElsewhere": true,
+          "unconditionalBasis": null
+        }
+      }
+    }
+  }
+}
