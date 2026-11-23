@@ -386,6 +386,59 @@ test("a clean fold writes records first, then deletes, and ends healed", async (
   expectHealed(f.state);
 });
 
+test("issue #355: category set while commitToStorage is in-flight is preserved in storage and result", async () => {
+  const existing: Tx = {
+    id: "tx-existing",
+    accountKey: "NL91ABNA0417164300",
+    date: "2026-02-01",
+    amount: -12.5,
+    currency: "EUR",
+    counterparty: "NS Groep",
+    description: "Treinkaartje",
+    category: "",
+    manual: false,
+  };
+  const f = fake(null, { accounts: [], txs: [existing] });
+
+  // Hold putAccounts open so a category save can land in storage mid-import,
+  // while commitToStorage was handed the older held snapshot (`category: ""`).
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const origPutAccounts = f.store.putAccounts.bind(f.store);
+  f.store.putAccounts = async (a) => {
+    await gate;
+    await origPutAccounts(a);
+  };
+
+  const committing = commitToStorage(
+    f.store,
+    { accounts: [], txs: [existing] },
+    files,
+    "2026-11-16",
+    async () => {},
+  );
+
+  // Concurrent category save updates existing tx in storage while import runs.
+  await f.store.putTxs([{ ...existing, category: "Transport", manual: true }]);
+  release();
+
+  const r = await committing;
+  if (!r.ok) throw new Error("expected ok");
+  expect(r.count).toBe(1);
+  // Both persisted storage AND returned state keep the newly set category.
+  expect(f.written().txs.find((t) => t.id === "tx-existing")).toMatchObject({
+    category: "Transport",
+    manual: true,
+  });
+  expect(r.txs.find((t) => t.id === "tx-existing")).toMatchObject({
+    category: "Transport",
+    manual: true,
+  });
+  expect(f.written().txs).toHaveLength(2);
+});
+
 test.each(STEPS)(
   "a failure at %s returns partial, never throws, and the same import afterwards heals",
   async (step) => {

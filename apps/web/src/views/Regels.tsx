@@ -23,6 +23,7 @@ import Button from "../components/ui/Button.js";
 import Card from "../components/ui/Card.js";
 import { Table, TableWrap, Th, Td } from "../components/ui/Table.js";
 import StatusLine from "../components/ui/StatusLine.js";
+import type { RulePatch } from "../categorize-persist.js";
 
 /* The rules editor for the v2 engine.
  *
@@ -33,7 +34,8 @@ import StatusLine from "../components/ui/StatusLine.js";
  * boundary decides that, not this screen.
  *
  * ORDER IS PRIORITY. `rules[index]` is the priority, so the list renders in
- * stored order and Omhoog/Omlaag hand `onSaveRules` a reordered whole array.
+ * stored order and Omhoog/Omlaag hand `onSaveRules` a move patch applied to the
+ * current list (never a stale whole array).
  * The old screen sorted a copy for reading and said so; that note is gone
  * because the number column now says which rule matches first.
  *
@@ -76,7 +78,7 @@ type RegelsProps = {
   accounts: Account[];
   own?: OwnAccounts;
   busy: boolean;
-  onSaveRules: (next: Rule[]) => void;
+  onSaveRules: (patch: RulePatch) => void;
 };
 
 const CONDITION_KINDS: ConditionKind[] = [
@@ -902,23 +904,13 @@ export default function Regels({ rules, txs, accounts, own, busy, onSaveRules }:
       return;
     }
     const next = toRuleV2(editing.draft, editing.id);
-    onSaveRules(
-      editing.isNew
-        ? [...rules, next]
-        : rules.map((rule) => (rule.id === editing.id ? next : rule)),
-    );
+    onSaveRules(editing.isNew ? { kind: "add", rule: next } : { kind: "update", rule: next });
     setEditing(null);
     setError(null);
   }
 
-  function moveRule(index: number, delta: -1 | 1) {
-    const target = index + delta;
-    if (target < 0 || target >= rules.length) return;
-    const next = [...rules];
-    const [row] = next.splice(index, 1);
-    if (row === undefined) return;
-    next.splice(target, 0, row);
-    onSaveRules(next);
+  function moveRule(id: string, delta: -1 | 1) {
+    onSaveRules({ kind: "move", id, delta });
   }
 
   function addQuickRule() {
@@ -931,7 +923,7 @@ export default function Regels({ rules, txs, accounts, own, busy, onSaveRules }:
       conditions: [{ kind: "text", target: "text", op: "contains", value: text }],
       actions: [{ kind: "setCategory", category: chosen }],
     };
-    onSaveRules([...rules, next]);
+    onSaveRules({ kind: "add", rule: next });
     setMatch("");
     setCategory("");
   }
@@ -1031,21 +1023,19 @@ export default function Regels({ rules, txs, accounts, own, busy, onSaveRules }:
                           </Button>
                           <Button
                             disabled={busy || index === 0}
-                            onClick={() => moveRule(index, -1)}
+                            onClick={() => moveRule(rule.id, -1)}
                           >
                             {c.list.upButton}
                           </Button>
                           <Button
                             disabled={busy || index === rules.length - 1}
-                            onClick={() => moveRule(index, 1)}
+                            onClick={() => moveRule(rule.id, 1)}
                           >
                             {c.list.downButton}
                           </Button>
                           <Button
                             disabled={busy}
-                            onClick={() =>
-                              onSaveRules(rules.filter((candidate) => candidate.id !== rule.id))
-                            }
+                            onClick={() => onSaveRules({ kind: "delete", id: rule.id })}
                           >
                             {c.list.deleteButton}
                           </Button>

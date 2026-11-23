@@ -18,6 +18,7 @@ import {
   type Valuation,
   type VaultDocument,
 } from "@lavega/core";
+import { txDiff } from "../accountActions.js";
 
 /** Every stored record that points at a transaction id or an account key. A fold
  *  changes both, so each is rewritten (see `writeFoldReferences`). */
@@ -139,9 +140,10 @@ export async function commitToStorage(
   let wrote = false;
   try {
     const out = applyCardFiles(held, files, asOf);
+    const { upserts } = txDiff([...held.txs], out.txs);
     await store.putAccounts(out.accounts);
     wrote = true;
-    await store.putTxs(out.txs);
+    if (upserts.length > 0) await store.putTxs(upserts);
     // A fold moved rows to the one account (new ids) and drops the old account.
     // Order: new rows (above), then every record that points at the old rows or
     // account, THEN the deletes. A failure anywhere leaves the old rows and
