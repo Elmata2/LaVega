@@ -8,7 +8,7 @@
     "dev": "tsx watch --env-file-if-exists=.env src/docker.ts",
     "start:docker": "tsx --env-file-if-exists=.env src/docker.ts",
     "build": "tsc -p .",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "node ../../scripts/typecheck.mjs",
     "test": "vitest run"
   },
   "dependencies": {

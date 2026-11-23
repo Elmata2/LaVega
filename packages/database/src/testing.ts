@@ -51,21 +51,75 @@ export function databaseOver(connect: () => Promise<Connection>): Database {
   return { connect, http } as unknown as Database;
 }
 
+let migratedSnapshot: Promise<Blob | File> | undefined;
+
+async function getMigratedSnapshot(): Promise<Blob | File> {
+  if (!migratedSnapshot) {
+    migratedSnapshot = (async () => {
+      const [
+        { createHash },
+        { existsSync, readdirSync, readFileSync, renameSync, writeFileSync },
+        { tmpdir },
+        { join },
+      ] = await Promise.all([
+        import("node:crypto"),
+        import("node:fs"),
+        import("node:os"),
+        import("node:path"),
+      ]);
+      const migrations = new URL("../../../db/migrations/", import.meta.url);
+      const files = readdirSync(migrations)
+        .filter((name) => name.endsWith(".sql"))
+        .sort();
+      const hash = createHash("sha256");
+      const sqls: string[] = [];
+      for (const name of files) {
+        const sql = readFileSync(new URL(name, migrations), "utf8");
+        hash.update(name).update("\0").update(sql).update("\0");
+        sqls.push(sql);
+      }
+      const cachePath = join(tmpdir(), `lavega-pglite-${hash.digest("hex").slice(0, 16)}.tar`);
+      if (existsSync(cachePath)) {
+        return new Blob([readFileSync(cachePath)]);
+      }
+
+      const { PGlite } = await import("@electric-sql/pglite");
+      const seed = new PGlite();
+      try {
+        await seed.exec("CREATE ROLE lavega_runtime LOGIN NOSUPERUSER;");
+        for (const sql of sqls) await seed.exec(sql);
+        const blob = await seed.dumpDataDir("none");
+        const tmpPath = `${cachePath}.${process.pid}.${Math.random().toString(36).slice(2)}`;
+        try {
+          writeFileSync(tmpPath, Buffer.from(await blob.arrayBuffer()));
+          renameSync(tmpPath, cachePath);
+        } catch {
+          // Another worker won the race or tmpdir is read-only; return the in-memory blob.
+        }
+        return blob;
+      } finally {
+        await seed.close();
+      }
+    })();
+  }
+  return migratedSnapshot;
+}
+
 /** A fresh PGlite with every migration applied, acting as `lavega_runtime` so
- *  row-level security applies as it does in production. */
+ *  row-level security applies as it does in production.
+ *
+ *  Migrations run once per worker process and are cloned via `loadDataDir` so
+ *  each test still gets a completely isolated Postgres instance without
+ *  re-executing every SQL file from scratch. */
 export async function migratedTestDatabase(): Promise<{
   pglite: import("@electric-sql/pglite").PGlite;
   db: Database;
 }> {
-  const { PGlite } = await import("@electric-sql/pglite");
-  const { readdirSync, readFileSync } = await import("node:fs");
-  const migrations = new URL("../../../db/migrations/", import.meta.url);
-  const pglite = new PGlite();
-  await pglite.exec("CREATE ROLE lavega_runtime LOGIN NOSUPERUSER;");
-  for (const name of readdirSync(migrations)
-    .filter((name) => name.endsWith(".sql"))
-    .sort())
-    await pglite.exec(readFileSync(new URL(name, migrations), "utf8"));
+  const [{ PGlite }, snapshot] = await Promise.all([
+    import("@electric-sql/pglite"),
+    getMigratedSnapshot(),
+  ]);
+  const pglite = new PGlite({ loadDataDir: snapshot });
   // Only a non-superuser is subject to row-level security.
   await pglite.exec("SET ROLE lavega_runtime;");
   return { pglite, db: singleConnectionDatabase(pglite) };

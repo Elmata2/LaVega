@@ -14,7 +14,7 @@
     "./src/prices/sharedPriceStore.contract.js": "./src/prices/sharedPriceStore.contract.ts"
   },
   "scripts": {
-    "typecheck": "tsc --noEmit",
+    "typecheck": "node ../../scripts/typecheck.mjs",
     "test": "vitest run"
   },
   "dependencies": {

@@ -11,7 +11,7 @@
     "./testing": "./src/testing.ts"
   },
   "scripts": {
-    "typecheck": "tsc --noEmit",
+    "typecheck": "node ../../scripts/typecheck.mjs",
     "test": "vitest run"
   },
   "dependencies": {

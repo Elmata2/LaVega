@@ -4,8 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "typecheck": "node ../../scripts/typecheck.mjs",
+    "test": "vitest run --pool=threads --no-isolate"
   },
   "dependencies": {
     "effect": "^4.0.1"

@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "node ../../scripts/typecheck.mjs",
     "test": "vitest run",
     "verify:base": "vitest run src/base-guard.test.ts"
   },
