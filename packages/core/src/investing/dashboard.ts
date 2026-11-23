@@ -1,5 +1,5 @@
 import { Schema } from "effect";
-import { convertCurrency, MissingFxRateError, type FxRates } from "./portfolio.js";
+import { tryConvertCurrency, type FxRates } from "./portfolio.js";
 import type { DeepMutable } from "./schema.js";
 import { bucketPricedAllocation, buildAllocationLadder } from "./allocation.js";
 import {
@@ -628,20 +628,17 @@ export function buildInvestingDashboard(reported: InvestingDashboardInput): Inve
     const identity = `${flow.entity}\u0000${flow.broker}\u0000${flow.currency}\u0000${flow.brokerFlowId ?? flow.id}`;
     if (seenFlows.has(identity)) continue;
     seenFlows.add(identity);
-    let converted: number | null = null;
-    if (flow.amount !== null) {
-      try {
-        converted = convertCurrency(
-          flow.amount,
-          flow.currency,
-          input.presentationCurrency,
-          flow.date,
-          input.fxRates,
-        );
-      } catch {
-        // Keep unknown owner flow visible. TWR must not skip or move it.
-      }
-    }
+    // Keep unknown owner flow visible. TWR must not skip or move it.
+    const converted =
+      flow.amount === null
+        ? null
+        : tryConvertCurrency(
+            flow.amount,
+            flow.currency,
+            input.presentationCurrency,
+            flow.date,
+            input.fxRates,
+          );
     const current = externalByDate.get(flow.date);
     externalByDate.set(
       flow.date,
@@ -653,18 +650,14 @@ export function buildInvestingDashboard(reported: InvestingDashboardInput): Inve
    * own date, is one labelled Cash bucket; holdings keep their instrument and
    * entity grouping and an empty/unknown key folds into Unclassified. */
   const cashRows = latestCashBalances(input.cashBalances ?? []).map((balance) => {
-    let value: number | null = null;
-    try {
-      value = convertCurrency(
-        balance.amount,
-        balance.currency,
-        input.presentationCurrency,
-        balance.asOf,
-        input.fxRates,
-      );
-    } catch {
-      // A missing FX rate leaves the cash bucket unpriced, never guessed.
-    }
+    // A missing FX rate leaves the cash bucket unpriced, never guessed.
+    const value = tryConvertCurrency(
+      balance.amount,
+      balance.currency,
+      input.presentationCurrency,
+      balance.asOf,
+      input.fxRates,
+    );
     return { label: `${balance.broker} ${balance.currency} cash`, value };
   });
   const ladder = {
@@ -702,21 +695,16 @@ export function buildInvestingDashboard(reported: InvestingDashboardInput): Inve
         converted: isConverted,
         points: bars.map((bar) => {
           if (!isConverted) return { date: bar.date, value: bar.close };
-          try {
-            return {
-              date: bar.date,
-              value: convertCurrency(
-                bar.close,
-                instrument.currency,
-                input.presentationCurrency,
-                bar.date,
-                input.fxRates,
-              ),
-            };
-          } catch (error) {
-            if (error instanceof MissingFxRateError) return { date: bar.date, value: null };
-            throw error;
-          }
+          return {
+            date: bar.date,
+            value: tryConvertCurrency(
+              bar.close,
+              instrument.currency,
+              input.presentationCurrency,
+              bar.date,
+              input.fxRates,
+            ),
+          };
         }),
       };
     }),

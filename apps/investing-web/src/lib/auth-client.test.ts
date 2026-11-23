@@ -37,6 +37,7 @@ test("getSession returns anonymous when configured but no cookie", async () => {
   );
   expect(await getSession()).toEqual({ status: "anonymous" });
   expect(fetch).toHaveBeenCalledWith("/api/auth/get-session", {
+    credentials: "same-origin",
     headers: { accept: "application/json" },
   });
 });
@@ -63,6 +64,7 @@ test("signUp posts name, email and password to sign-up/email", async () => {
   expect(result).toEqual({ ok: true });
   expect(fetchMock).toHaveBeenCalledWith("/api/auth/sign-up/email", {
     method: "POST",
+    credentials: "same-origin",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
       name: "Jort",
@@ -95,6 +97,7 @@ test("resendVerificationEmail sends callback to Better Auth", async () => {
   expect(await resendVerificationEmail("jort@example.com")).toEqual({ ok: true });
   expect(fetchMock).toHaveBeenCalledWith("/api/auth/send-verification-email", {
     method: "POST",
+    credentials: "same-origin",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ email: "jort@example.com", callbackURL: verificationCallbackUrl() }),
   });
@@ -108,12 +111,14 @@ test("password recovery sends reset callback and exchanges token for new passwor
   expect(await requestPasswordReset("jort@example.com")).toEqual({ ok: true });
   expect(fetchMock).toHaveBeenCalledWith("/api/auth/request-password-reset", {
     method: "POST",
+    credentials: "same-origin",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ email: "jort@example.com", redirectTo: passwordResetCallbackUrl() }),
   });
   expect(await resetPassword("reset-token", "new password")).toEqual({ ok: true });
   expect(fetchMock).toHaveBeenCalledWith("/api/auth/reset-password", {
     method: "POST",
+    credentials: "same-origin",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ token: "reset-token", newPassword: "new password" }),
   });
@@ -144,6 +149,7 @@ test("signIn posts email and password to sign-in/email", async () => {
   expect(result).toEqual({ ok: true });
   expect(fetchMock).toHaveBeenCalledWith("/api/auth/sign-in/email", {
     method: "POST",
+    credentials: "same-origin",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ email: "jort@example.com", password: "correct horse battery staple" }),
   });
@@ -164,6 +170,7 @@ test("signOut posts JSON to sign-out", async () => {
   await signOut();
   expect(fetchMock).toHaveBeenCalledWith("/api/auth/sign-out", {
     method: "POST",
+    credentials: "same-origin",
     headers: { "content-type": "application/json" },
     body: "{}",
   });

@@ -1,3 +1,4 @@
+import { fetchAuthSession, postAuthJson, postSignOut, readAuthJson } from "@lavega/ui";
 import { useCallback, useEffect, useState } from "react";
 import { APP_BASE } from "./appRoutes.js";
 
@@ -42,35 +43,18 @@ export function verificationCallbackUrl(): string {
 }
 
 export async function getSession(): Promise<AuthState> {
-  try {
-    const response = await fetch("/api/auth/get-session", {
-      credentials: "same-origin",
-      headers: { accept: "application/json" },
-    });
-    if (response.status === 503) return { kind: "unconfigured" };
-    const body = (await response.json().catch(() => null)) as {
-      user?: { id?: string; email?: string };
-    } | null;
-    return body?.user?.id && body.user.email
-      ? { kind: "signed-in", id: body.user.id, email: body.user.email }
-      : { kind: "signed-out" };
-  } catch {
-    return { kind: "signed-out" };
-  }
+  const response = await fetchAuthSession();
+  if (!response) return { kind: "signed-out" };
+  if (response.status === 503) return { kind: "unconfigured" };
+  const body = await readAuthJson<{ user?: { id?: string; email?: string } }>(response);
+  return body?.user?.id && body.user.email
+    ? { kind: "signed-in", id: body.user.id, email: body.user.email }
+    : { kind: "signed-out" };
 }
 
 export async function signIn(email: string, password: string): Promise<SignInResult> {
-  let response: Response;
-  try {
-    response = await fetch("/api/auth/sign-in/email", {
-      method: "POST",
-      credentials: "same-origin",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ email, password }),
-    });
-  } catch {
-    return { ok: false, kind: "unreachable" };
-  }
+  const response = await postAuthJson("sign-in/email", { email, password });
+  if (!response) return { ok: false, kind: "unreachable" };
   /* 403 is better-auth's EMAIL_NOT_VERIFIED. With sendOnSignIn on, that same
    * request has already mailed a fresh confirmation link. */
   if (!response.ok)
@@ -85,31 +69,20 @@ export async function signIn(email: string, password: string): Promise<SignInRes
               ? "rate-limited"
               : "unreachable",
     };
-  const body = (await response.json().catch(() => null)) as {
-    user?: { id?: string; email?: string };
-  } | null;
+  const body = await readAuthJson<{ user?: { id?: string; email?: string } }>(response);
   if (!body?.user?.id || !body.user.email) return { ok: false, kind: "unreachable" };
   return { ok: true, state: { kind: "signed-in", id: body.user.id, email: body.user.email } };
 }
 
 export async function signUp(input: SignUpInput): Promise<SignUpResult> {
-  let response: Response;
-  try {
-    response = await fetch("/api/auth/sign-up/email", {
-      method: "POST",
-      credentials: "same-origin",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(input),
-    });
-  } catch {
-    return { ok: false, kind: "unreachable" };
-  }
+  const response = await postAuthJson("sign-up/email", input);
+  if (!response) return { ok: false, kind: "unreachable" };
   /* A duplicate email is deliberately indistinguishable from a new one: with
    * requireEmailVerification on, better-auth answers both with the same 200
    * (sign-up.mjs, buildGenericDuplicateResponse), so there is no "exists" kind. */
   if (response.ok) return { ok: true };
   if (response.status === 429) return { ok: false, kind: "rate-limited" };
-  const body = (await response.json().catch(() => null)) as { code?: string } | null;
+  const body = await readAuthJson<{ code?: string }>(response);
   if (body?.code === "PASSWORD_TOO_SHORT" || body?.code === "PASSWORD_TOO_LONG")
     return { ok: false, kind: "weak-password" };
   return { ok: false, kind: "unreachable" };
@@ -120,19 +93,6 @@ export const RESET_PASSWORD_PATH = "/reset-password";
 
 export type MailResult = { ok: true } | { ok: false; kind: "rate-limited" | "unreachable" };
 
-async function postAuth(path: string, body: unknown): Promise<Response | null> {
-  try {
-    return await fetch(`/api/auth/${path}`, {
-      method: "POST",
-      credentials: "same-origin",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(body),
-    });
-  } catch {
-    return null;
-  }
-}
-
 function mailResult(response: Response | null): MailResult {
   if (response?.ok) return { ok: true };
   return { ok: false, kind: response?.status === 429 ? "rate-limited" : "unreachable" };
@@ -142,14 +102,17 @@ function mailResult(response: Response | null): MailResult {
  *  or already-confirmed address, so this reveals nothing about who has an account. */
 export async function resendVerification(email: string): Promise<MailResult> {
   return mailResult(
-    await postAuth("send-verification-email", { email, callbackURL: verificationCallbackUrl() }),
+    await postAuthJson("send-verification-email", {
+      email,
+      callbackURL: verificationCallbackUrl(),
+    }),
   );
 }
 
 /** Same answer whether or not the address has an account. */
 export async function requestPasswordReset(email: string): Promise<MailResult> {
   return mailResult(
-    await postAuth("request-password-reset", {
+    await postAuthJson("request-password-reset", {
       email,
       redirectTo: `${window.location.origin}${RESET_PASSWORD_PATH}`,
     }),
@@ -162,10 +125,10 @@ export async function resetPassword(
   token: string,
   newPassword: string,
 ): Promise<{ ok: true } | { ok: false; kind: ResetPasswordFailure }> {
-  const response = await postAuth("reset-password", { token, newPassword });
+  const response = await postAuthJson("reset-password", { token, newPassword });
   if (response?.ok) return { ok: true };
   if (!response) return { ok: false, kind: "unreachable" };
-  const body = (await response.json().catch(() => null)) as { code?: string } | null;
+  const body = await readAuthJson<{ code?: string }>(response);
   if (body?.code === "PASSWORD_TOO_SHORT" || body?.code === "PASSWORD_TOO_LONG")
     return { ok: false, kind: "weak-password" };
   if (body?.code === "INVALID_TOKEN") return { ok: false, kind: "invalid-link" };
@@ -175,19 +138,7 @@ export async function resetPassword(
 /** Rejects with a stable message when the session may still be valid (network
  *  error or non-2xx), so callers stay on the page instead of navigating away. */
 export async function signOut(): Promise<void> {
-  let response: Response;
-  try {
-    // The auth server answers 415 to a POST without a JSON content type.
-    response = await fetch("/api/auth/sign-out", {
-      method: "POST",
-      credentials: "same-origin",
-      headers: { "content-type": "application/json" },
-      body: "{}",
-    });
-  } catch {
-    throw new Error("sign-out-failed");
-  }
-  if (!response.ok) throw new Error("sign-out-failed");
+  await postSignOut();
 }
 
 export function useAuthState(): { state: AuthState; refresh: () => void } {

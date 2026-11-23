@@ -1,4 +1,4 @@
-import { crossRate, type FxRate } from "../fx.js";
+import { crossRate, UnknownCurrencyError, type FxRate } from "../fx.js";
 import type { Dividend } from "./dividend.js";
 import type {
   CashBalance,
@@ -103,6 +103,12 @@ function rateFor(rates: FxRates, from: string, to: string, date: string): FxRate
   return rate;
 }
 
+export function isFxConversionError(
+  error: unknown,
+): error is MissingFxRateError | UnknownCurrencyError {
+  return error instanceof MissingFxRateError || error instanceof UnknownCurrencyError;
+}
+
 export function convertCurrency(
   value: number,
   from: string,
@@ -112,6 +118,21 @@ export function convertCurrency(
 ): number {
   if (from === to) return value;
   return value * crossRate(from, to, rateFor(fxRates, from, to, date));
+}
+
+export function tryConvertCurrency(
+  value: number,
+  from: string,
+  to: string,
+  date: string,
+  fxRates: FxRates,
+): number | null {
+  try {
+    return convertCurrency(value, from, to, date, fxRates);
+  } catch (error) {
+    if (isFxConversionError(error)) return null;
+    throw error;
+  }
 }
 
 function isoDate(date: Date): string {
@@ -468,19 +489,14 @@ function cashLegs(
       if (owned?.length !== 1) continue;
       const wallet = owned[0]!;
       for (const event of candidate.events) {
-        let amount: number;
-        try {
-          amount = convertCurrency(
-            event.amount,
-            candidate.currency,
-            wallet.currency,
-            event.date,
-            fxRates,
-          );
-        } catch {
-          amount = Number.NaN;
-        }
-        wallet.events.push({ date: event.date, amount });
+        const converted = tryConvertCurrency(
+          event.amount,
+          candidate.currency,
+          wallet.currency,
+          event.date,
+          fxRates,
+        );
+        wallet.events.push({ date: event.date, amount: converted ?? Number.NaN });
       }
       legs.delete(key);
     }
@@ -716,14 +732,16 @@ export function computePortfolioValueSeries(
         bound();
         continue;
       }
-      try {
-        const symbolValue = convertCurrency(
-          quantity * latest.close,
-          latest.currency,
-          presentationCurrency,
-          date,
-          fxRates,
-        );
+      const symbolValue = tryConvertCurrency(
+        quantity * latest.close,
+        latest.currency,
+        presentationCurrency,
+        date,
+        fxRates,
+      );
+      if (symbolValue === null) {
+        bound();
+      } else {
         positionsValue += symbolValue;
         priced += 1;
         lastKnownValue.set(symbol, symbolValue);
@@ -734,8 +752,6 @@ export function computePortfolioValueSeries(
         const symbolForwardFilled = !exact && !tradedLater;
         if (symbolForwardFilled) forwardFilled.add(symbol);
         if (symbolHoldingUnknown || symbolForwardFilled) unaccountedValue += Math.abs(symbolValue);
-      } catch {
-        bound();
       }
     }
 
@@ -759,12 +775,19 @@ export function computePortfolioValueSeries(
         cashUnknown.add(displayCashKey(leg));
         continue;
       }
-      try {
-        cashValue += convertCurrency(amount, leg.currency, presentationCurrency, date, fxRates);
+      const convertedCash = tryConvertCurrency(
+        amount,
+        leg.currency,
+        presentationCurrency,
+        date,
+        fxRates,
+      );
+      if (convertedCash === null) {
+        cashUnknown.add(displayCashKey(leg));
+      } else {
+        cashValue += convertedCash;
         reachableCashLegs += 1;
         if (estimated) cashEstimated.add(displayCashKey(leg));
-      } catch {
-        cashUnknown.add(displayCashKey(leg));
       }
     }
 
@@ -790,17 +813,13 @@ export function computePortfolioValueSeries(
         const latest = prices?.latest;
         let repriced: number | null = null;
         if (latest && (latest.date === date || isPriceFresh(latest.date, date))) {
-          try {
-            repriced = convertCurrency(
-              previous.quantity * latest.close,
-              latest.currency,
-              presentationCurrency,
-              date,
-              fxRates,
-            );
-          } catch {
-            repriced = null;
-          }
+          repriced = tryConvertCurrency(
+            previous.quantity * latest.close,
+            latest.currency,
+            presentationCurrency,
+            date,
+            fxRates,
+          );
         }
         if (repriced === null) {
           before = Number.NaN;

@@ -1,7 +1,12 @@
 import { replayCostBasis, selectCostBasis, type CostBasisSummary } from "./costBasis.js";
 import type { Dividend } from "./dividend.js";
 import type { Position, PriceBar, Trade } from "./model.js";
-import { convertCurrency, MissingFxRateError, type FxRates } from "./portfolio.js";
+import {
+  convertCurrency,
+  isFxConversionError,
+  MissingFxRateError,
+  type FxRates,
+} from "./portfolio.js";
 import { latestOwnershipAnchors } from "./ownership.js";
 import { solveXirr } from "./benchmarks.js";
 import { orderTrades } from "./quantity.js";
@@ -287,8 +292,9 @@ function brokerCostReturn(
       sinceFirstBuyPercentage: null,
       firstBuyDate,
     };
-  } catch {
-    return emptyReturn("missing-fx", firstBuyDate);
+  } catch (error) {
+    if (isFxConversionError(error)) return emptyReturn("missing-fx", firstBuyDate);
+    throw error;
   }
 }
 

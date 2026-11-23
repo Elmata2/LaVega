@@ -5,7 +5,7 @@
 
 import type { Position } from "./model.js";
 import { brokerLabel, isBrokerId } from "./brokers.js";
-import { convertCurrency, type FxRates } from "./portfolio.js";
+import { tryConvertCurrency, type FxRates } from "./portfolio.js";
 
 export type AllocationGroup = "instrument" | "entity" | "broker";
 export type AllocationBucket = {
@@ -35,11 +35,13 @@ function positionValue(
     position.marketValue ??
     (position.marketPrice === null ? null : position.quantity * position.marketPrice);
   if (value === null) return null;
-  try {
-    return convertCurrency(value, position.currency, presentationCurrency, position.asOf, fxRates);
-  } catch {
-    return null;
-  }
+  return tryConvertCurrency(
+    value,
+    position.currency,
+    presentationCurrency,
+    position.asOf,
+    fxRates,
+  );
 }
 
 /** Group current holdings by instrument or legal entity in one presentation currency. */

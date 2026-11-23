@@ -191,9 +191,9 @@ test("a fresh balance says when it will be asked about, and is not nagged at", (
 
 test("answering with just the number stores it and re-dates it to today", () => {
   render([mr(200_000, "2026-01-01")]);
-  click(byText('[data-testid="punt-card"] [data-testid="card-link"]', "Saldo bijwerken"));
+  click(byText('[data-testid="punt-card"] button', "Saldo bijwerken"));
   type(container!.querySelector<HTMLInputElement>('[data-testid="punt-ask"] input')!, "245k");
-  click(byText('[data-testid="punt-ask"] [data-testid="btn-primary"]', "Opslaan"));
+  click(byText('[data-testid="punt-ask"] button', "Opslaan"));
   expect(saved).toHaveLength(1);
   expect(saved[0][0].points).toBe(245_000);
   expect(saved[0][0].updatedAt).toBe(ASOF);
@@ -201,12 +201,12 @@ test("answering with just the number stores it and re-dates it to today", () => 
 
 test("a reply that is a sentence is refused out loud — nothing is guessed into the vault", () => {
   render([mr(200_000, "2026-01-01")]);
-  click(byText('[data-testid="punt-card"] [data-testid="card-link"]', "Saldo bijwerken"));
+  click(byText('[data-testid="punt-card"] button', "Saldo bijwerken"));
   type(
     container!.querySelector<HTMLInputElement>('[data-testid="punt-ask"] input')!,
     "ergens tussen 240000 en 250000",
   );
-  click(byText('[data-testid="punt-ask"] [data-testid="btn-primary"]', "Opslaan"));
+  click(byText('[data-testid="punt-ask"] button', "Opslaan"));
   expect(saved).toHaveLength(0);
   expect(container!.querySelector('[data-testid="punt-error"]')!.textContent).toContain(
     "stuur alleen het saldo",
@@ -215,7 +215,7 @@ test("a reply that is a sentence is refused out loud — nothing is guessed into
 
 test("'Niet nu' snoozes exactly one month and asks nothing in between", () => {
   render([mr(200_000, "2026-01-01")]);
-  click(byText('[data-testid="punt-card"] [data-testid="card-link"]', "Niet nu"));
+  click(byText('[data-testid="punt-card"] button', "Niet nu"));
   expect(saved[0][0].snoozedUntil).toBe("2026-09-16");
 });
 
@@ -242,7 +242,7 @@ test("the add form takes '245k' and refuses text, saying why", () => {
     container!.querySelector<HTMLInputElement>('[data-testid="punt-form"] [aria-label="Punten"]')!,
     "geen idee",
   );
-  click(byText('[data-testid="stack-form-actions"] [data-testid="btn-primary"]', "Opslaan"));
+  click(byText('[data-testid="stack-form-actions"] button', "Opslaan"));
   expect(saved).toHaveLength(0);
   expect(container!.querySelector('[data-testid="punt-error"]')!.textContent).toContain(
     "geen getal",
@@ -252,7 +252,7 @@ test("the add form takes '245k' and refuses text, saying why", () => {
     container!.querySelector<HTMLInputElement>('[data-testid="punt-form"] [aria-label="Punten"]')!,
     "245k",
   );
-  click(byText('[data-testid="stack-form-actions"] [data-testid="btn-primary"]', "Opslaan"));
+  click(byText('[data-testid="stack-form-actions"] button', "Opslaan"));
   expect(saved[0][0].points).toBe(245_000);
 });
 

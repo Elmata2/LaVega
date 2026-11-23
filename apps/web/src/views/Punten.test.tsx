@@ -308,7 +308,7 @@ test("een geïmporteerd saldo zegt van welke dag het is, en dat er nieuwere tran
 
 test("de platte tabel zegt per rij hetzelfde, en vult ook daar geen dag in", () => {
   mount(<Rekeningen {...rekProps()} />);
-  click(byText('[data-testid=bank-modes] [data-testid="pill"]', "Alle rekeningen"));
+  click(byText("[data-testid=bank-modes] button", "Alle rekeningen"));
   const cells = [...container!.querySelectorAll<HTMLElement>('td[data-label="Saldo"]')];
   const texts = cells.map((c) => c.querySelector(".cell-sub")!.textContent);
   expect(texts).toContain("stand van 31 juli 2026");

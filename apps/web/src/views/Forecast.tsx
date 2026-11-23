@@ -9,7 +9,7 @@ import type {
 } from "@lavega/core";
 import { billForecastProjection, forecastCashflow } from "@lavega/core";
 import type { ConversionMode } from "../settings.js";
-import { formatDate, formatEuroIn } from "../format";
+import { formatDate, formatEuroIn, localeTag } from "../format";
 import { useAppLocale, pick } from "../appLocale";
 import { moneyCopy, type MoneyCopy } from "../copy/money";
 import type { Locale } from "../locale";
@@ -50,7 +50,7 @@ const HORIZON_DAYS = 91;
  *  driver rows — the mockup's "+€18.400" style is more scannable in a dense
  *  list/axis than formatEuroIn's full "€ 18.400,00". `n` is already in euros. */
 function wholeEuroFormat(locale: Locale, n: number): string {
-  return new Intl.NumberFormat(locale === "nl" ? "nl-NL" : "en-GB", {
+  return new Intl.NumberFormat(localeTag(locale), {
     maximumFractionDigits: 0,
   }).format(Math.round(n));
 }

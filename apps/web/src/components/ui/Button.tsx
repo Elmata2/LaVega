@@ -52,7 +52,7 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button(
     <button
       ref={ref}
       type={type}
-      data-testid={dataTestId ?? (variant === "primary" ? "btn-primary" : undefined)}
+      data-testid={dataTestId}
       className={cn(buttonVariants({ variant }), className)}
       {...props}
     />

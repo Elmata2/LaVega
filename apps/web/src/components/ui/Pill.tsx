@@ -39,7 +39,7 @@ const Pill = forwardRef<HTMLButtonElement, PillProps>(function Pill(
     <button
       ref={ref}
       type={type}
-      data-testid={dataTestId ?? "pill"}
+      data-testid={dataTestId}
       className={cn(pillVariants({ active }), className)}
       {...props}
     />

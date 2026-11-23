@@ -3,6 +3,7 @@
  * dependency: this app already talks to its backend with raw fetch
  * everywhere else, and the surface it needs here is three endpoints. */
 
+import { fetchAuthSession, postAuthJson, postSignOut, readAuthJson } from "@lavega/ui";
 import { forgetDashboards } from "./dashboardResource";
 import { forgetLayout } from "./layoutResource";
 
@@ -22,17 +23,17 @@ export function verificationCallbackUrl(): string {
   return new URL(`${base.replace(/\/$/, "")}/email-confirmed`, window.location.origin).href;
 }
 
-async function readMessage(response: Response, fallback: string): Promise<string> {
-  const body = (await response.json().catch(() => null)) as { message?: string } | null;
+async function readMessage(response: Response | null, fallback: string): Promise<string> {
+  if (!response) return fallback;
+  const body = await readAuthJson<{ message?: string }>(response);
   return body?.message ?? fallback;
 }
 
 export async function getSession(): Promise<SessionState> {
-  const response = await fetch("/api/auth/get-session", {
-    headers: { accept: "application/json" },
-  });
+  const response = await fetchAuthSession();
+  if (!response) return { status: "anonymous" };
   if (response.status === 503) return { status: "unconfigured" };
-  const body = (await response.json().catch(() => null)) as { user: AuthUser } | null;
+  const body = await readAuthJson<{ user: AuthUser }>(response);
   return body?.user ? { status: "authenticated", user: body.user } : { status: "anonymous" };
 }
 
@@ -42,30 +43,23 @@ export async function signUp(input: {
   password: string;
   callbackURL?: string;
 }): Promise<AuthResult> {
-  const response = await fetch("/api/auth/sign-up/email", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      ...input,
-      callbackURL: input.callbackURL ?? verificationCallbackUrl(),
-    }),
+  const response = await postAuthJson("sign-up/email", {
+    ...input,
+    callbackURL: input.callbackURL ?? verificationCallbackUrl(),
   });
-  const body = (await response.json().catch(() => null)) as {
-    token?: string | null;
-    message?: string;
-  } | null;
+  if (!response) return { ok: false, message: "Failed to create account." };
+  const body = await readAuthJson<{ token?: string | null; message?: string }>(response);
   if (!response.ok) return { ok: false, message: body?.message ?? "Failed to create account." };
   if (body?.token === null) return { ok: true, pendingVerification: true };
   return { ok: true };
 }
 
 export async function resendVerificationEmail(email: string): Promise<AuthResult> {
-  const response = await fetch("/api/auth/send-verification-email", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ email, callbackURL: verificationCallbackUrl() }),
+  const response = await postAuthJson("send-verification-email", {
+    email,
+    callbackURL: verificationCallbackUrl(),
   });
-  if (!response.ok) {
+  if (!response?.ok) {
     return {
       ok: false,
       message: await readMessage(response, "Could not send confirmation email."),
@@ -80,23 +74,18 @@ export function passwordResetCallbackUrl(): string {
 }
 
 export async function requestPasswordReset(email: string): Promise<AuthResult> {
-  const response = await fetch("/api/auth/request-password-reset", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ email, redirectTo: passwordResetCallbackUrl() }),
+  const response = await postAuthJson("request-password-reset", {
+    email,
+    redirectTo: passwordResetCallbackUrl(),
   });
-  if (!response.ok)
+  if (!response?.ok)
     return { ok: false, message: await readMessage(response, "Could not request password reset.") };
   return { ok: true };
 }
 
 export async function resetPassword(token: string, newPassword: string): Promise<AuthResult> {
-  const response = await fetch("/api/auth/reset-password", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ token, newPassword }),
-  });
-  if (!response.ok)
+  const response = await postAuthJson("reset-password", { token, newPassword });
+  if (!response?.ok)
     return {
       ok: false,
       message: await readMessage(response, "Could not reset password. Request a new link."),
@@ -105,12 +94,8 @@ export async function resetPassword(token: string, newPassword: string): Promise
 }
 
 export async function signIn(input: { email: string; password: string }): Promise<AuthResult> {
-  const response = await fetch("/api/auth/sign-in/email", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(input),
-  });
-  if (!response.ok) return { ok: false, message: await readMessage(response, "Sign-in failed.") };
+  const response = await postAuthJson("sign-in/email", input);
+  if (!response?.ok) return { ok: false, message: await readMessage(response, "Sign-in failed.") };
   return { ok: true };
 }
 
@@ -118,16 +103,5 @@ export async function signOut(): Promise<void> {
   // Portfolio data kept for a fast reload must not outlive the session on a shared device.
   forgetDashboards();
   forgetLayout();
-  let response: Response;
-  try {
-    // The auth server answers 415 to a POST without a JSON content type.
-    response = await fetch("/api/auth/sign-out", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: "{}",
-    });
-  } catch {
-    throw new Error("sign-out-failed");
-  }
-  if (!response.ok) throw new Error("sign-out-failed");
+  await postSignOut();
 }

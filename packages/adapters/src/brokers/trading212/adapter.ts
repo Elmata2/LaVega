@@ -9,7 +9,7 @@ import {
   type Position,
   type TradeSide,
   type TradeWithoutId,
-  convertCurrency,
+  tryConvertCurrency,
   normalizeTradeQuantity,
 } from "@lavega/core";
 import {
@@ -357,14 +357,8 @@ export function resolveTrading212CashHistory(input: {
   /* Trading 212 keeps one wallet and converts a foreign movement into it at
    * that day's rate (see core `cashLegs`), so the proof converts the same way
    * instead of rejecting a currency the account plainly holds. */
-  const inAccountCurrency = (amount: number, from: string, date: string): number | null => {
-    if (from === currency) return amount;
-    try {
-      return convertCurrency(amount, from, currency, date, input.fxRates);
-    } catch {
-      return null;
-    }
-  };
+  const inAccountCurrency = (amount: number, from: string, date: string): number | null =>
+    tryConvertCurrency(amount, from, currency, date, input.fxRates);
   const dates: string[] = [];
   const ambiguous: CashFlow[] = [];
   let reported = 0;

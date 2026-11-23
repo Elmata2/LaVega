@@ -25,7 +25,7 @@ import {
   type CostBasisUnknownReason,
 } from "./costBasis.js";
 import { latestOwnershipAnchors } from "./ownership.js";
-import { convertCurrency, type FxRates } from "./portfolio.js";
+import { tryConvertCurrency, type FxRates } from "./portfolio.js";
 import { orderTrades } from "./quantity.js";
 import type { DeepMutable } from "./schema.js";
 import { inCurrentShareUnits } from "./splits.js";
@@ -481,13 +481,9 @@ function convertOrNull(
   date: string,
   fxRates: FxRates,
 ): number | null {
-  try {
-    return convertCurrency(value, from, to, date, fxRates);
-  } catch {
-    // A missing rate and an unknown currency are both "cannot convert": the
-    // report shows unknown, never a 1:1 guess.
-    return null;
-  }
+  // A missing rate and an unknown currency are both "cannot convert": the
+  // report shows unknown, never a 1:1 guess.
+  return tryConvertCurrency(value, from, to, date, fxRates);
 }
 
 function tradeGross(trade: Trade): number | null {

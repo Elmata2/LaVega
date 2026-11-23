@@ -36,7 +36,7 @@ const CheckboxField = forwardRef<HTMLLabelElement, CheckboxFieldProps>(function 
   return (
     <label
       ref={ref}
-      data-testid={dataTestId ?? "vault-checkbox-field"}
+      data-testid={dataTestId}
       className={cn(CHECKBOX_FIELD_BASE, className)}
       {...props}
     />

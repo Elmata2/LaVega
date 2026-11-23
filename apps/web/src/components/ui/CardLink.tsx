@@ -45,7 +45,7 @@ const CardLink = forwardRef<HTMLButtonElement, CardLinkProps>(function CardLink(
     <button
       ref={ref}
       type={type}
-      data-testid={dataTestId ?? "card-link"}
+      data-testid={dataTestId}
       data-variant={variant === "danger" ? "danger" : undefined}
       className={cn(cardLinkVariants({ variant }), className)}
       {...props}
