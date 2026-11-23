@@ -52,6 +52,9 @@ const ALLOWED = new Set<string>([
   "$geoip_disable",
   "$process_person_profile",
   "distinct_id",
+  /* The public project key. posthog-js reads the batch `api_key` from
+   * `properties.token`; without it ingest rejects every event. */
+  "token",
   // Eigen eventeigenschappen, uit de capture()-aanroepen in de app.
   "direction",
   "duplicate",
@@ -61,6 +64,8 @@ const ALLOWED = new Set<string>([
   "invoice_count",
   "collections_erased",
   "rows_erased",
+  // Een vaste foutsoort uit authClient (SignInFailure / SignUpFailure), geen servertekst.
+  "reason",
 ]);
 
 /** Sleutels waarvan de waarde een ADRES is: die gaat door `normalisePath`,

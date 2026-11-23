@@ -5,6 +5,7 @@ import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import SignUpForm from "./SignUpForm";
 import { signUp } from "../authClient.js";
 import type { Locale } from "../locale.js";
+import posthog from "../posthog.js";
 
 (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -18,9 +19,11 @@ let container: HTMLElement | null = null;
 
 beforeEach(() => {
   vi.mocked(signUp).mockReset();
+  vi.spyOn(posthog, "capture").mockReturnValue(undefined);
 });
 
 afterEach(() => {
+  vi.restoreAllMocks();
   if (root) act(() => root!.unmount());
   container?.remove();
   root = null;
@@ -121,6 +124,8 @@ test.each([
   await act(async () => submit(el));
   expect(el.querySelector('[role="alert"]')?.textContent).toBe(text);
   expect(el.querySelector("form")).not.toBeNull();
+  expect(posthog.capture).toHaveBeenCalledWith("sign_up_failed", { reason: kind });
+  expect(posthog.capture).not.toHaveBeenCalledWith("sign_up_requested");
 });
 
 test("the password input is capped at the server's 128 characters", () => {
