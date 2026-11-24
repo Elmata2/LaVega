@@ -1,5 +1,6 @@
 import { cp, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { execFile } from "node:child_process";
+import { createRequire } from "node:module";
 import { promisify } from "node:util";
 
 /*
@@ -19,7 +20,7 @@ import { promisify } from "node:util";
 const exec = promisify(execFile);
 const root = process.cwd();
 const execOptions = { cwd: root, env: { ...process.env, CI: "true" } };
-const esbuild = `${root}/node_modules/.pnpm/esbuild@0.28.1/node_modules/esbuild/bin/esbuild`;
+const esbuild = createRequire(import.meta.url).resolve("esbuild/bin/esbuild");
 const output = `${root}/.vercel/output`;
 const functionDir = `${output}/functions/api/[...route].func`;
 
@@ -33,7 +34,7 @@ const functionDir = `${output}/functions/api/[...route].func`;
  * the last moment where that difference is still cheap to notice.
  *
  * This only reads the ledger; applying stays a deliberate act by the schema
- * owner (`pnpm db:migrate`). A build that applies DDL on its own would let a
+ * owner (`bun run db:migrate`). A build that applies DDL on its own would let a
  * rolled-back deploy leave the schema ahead of the code that ran it.
  *
  * Without DATABASE_URL there is no database to be behind — a build for the file
@@ -41,14 +42,14 @@ const functionDir = `${output}/functions/api/[...route].func`;
  */
 if (process.env.DATABASE_URL?.trim()) {
   try {
-    const { stdout } = await exec("pnpm", ["db:migrate:check"], execOptions);
+    const { stdout } = await exec("bun", ["run", "db:migrate:check"], execOptions);
     process.stdout.write(stdout);
   } catch (error) {
     process.stdout.write(error.stdout ?? "");
     process.stderr.write(error.stderr ?? "");
     throw new Error(
       "vercel-build: the database is missing a migration in db/migrations. " +
-        "Apply it as the schema owner (pnpm db:migrate), then redeploy.",
+        "Apply it as the schema owner (bun run db:migrate), then redeploy.",
     );
   }
 } else {
@@ -133,7 +134,7 @@ await writeFile(
  * esbuild bundles the API function above, and esbuild STRIPS types without
  * checking them. Nothing else in this pipeline runs `tsc`, so until now a type
  * error could reach production and only show up as a runtime TypeError. Railway
- * used to catch that by accident, as the one place that ran `pnpm build`; it is
+ * used to catch that by accident, as the one place that ran `bun run build`; it is
  * gone, so the check has to live where the deploys happen.
  *
  * `@lavega/investing-web` and `@lavega/investing-server` are deliberately NOT in
@@ -156,11 +157,7 @@ const TYPECHECKED = [
   "@lavega/email-worker",
   "@lavega/site",
 ];
-await exec(
-  "pnpm",
-  [...TYPECHECKED.flatMap((name) => ["--filter", name]), "typecheck"],
-  execOptions,
-);
+await exec("bun", [...TYPECHECKED.flatMap((name) => ["--filter", name]), "typecheck"], execOptions);
 
 /* The Sentry Vercel integration sets SENTRY_DSN for the server, but a Vite
  * browser bundle only sees variables Vite exposes (VITE_*) and turbo's strict
@@ -171,7 +168,7 @@ await exec(
 const sentryDsn = process.env.VITE_SENTRY_DSN ?? process.env.SENTRY_DSN;
 const browserEnv = sentryDsn ? { VITE_SENTRY_DSN: sentryDsn } : {};
 
-await exec("pnpm", ["--filter", "@lavega/web", "build"], {
+await exec("bun", ["--filter", "@lavega/web", "build"], {
   cwd: root,
   env: { ...process.env, CI: "true", ...browserEnv },
 });
@@ -186,8 +183,8 @@ await exec("pnpm", ["--filter", "@lavega/web", "build"], {
  * hydrated, the bundle replaces it with createRoot. It runs only
  * after `build` and refuses to run twice on the same dist; it also checks its
  * own output, so a broken render fails the deploy here. */
-await exec("pnpm", ["--filter", "@lavega/web", "prerender"], execOptions);
-await exec("pnpm", ["--filter", "@lavega/investing-web", "build"], {
+await exec("bun", ["--filter", "@lavega/web", "prerender"], execOptions);
+await exec("bun", ["--filter", "@lavega/investing-web", "build"], {
   cwd: root,
   env: { ...process.env, CI: "true", VITE_INVESTING_BASE: "/investing/", ...browserEnv },
 });
@@ -213,11 +210,11 @@ await cp("apps/investing-web/dist", `${staticDir}/investing`, { recursive: true 
  * deployed. Only `status: published` pages are built — drafts never ship. */
 const siteOverridesFile = `${root}/.vercel/site-overrides.json`;
 await exec(
-  "pnpm",
+  "bun",
   [
-    "--filter",
-    "@lavega/site",
-    "exec",
+    "run",
+    "--cwd",
+    `${root}/apps/site`,
     "tsx",
     "src/cli-build.ts",
     "--content",
@@ -358,7 +355,7 @@ await writeFile(
         /* Layer 2 (edge) of the /app session gate — see apps/web/src/Root.tsx
          * for layer 1 (the one that actually closes the hole; a hash route
          * like `#app` never reaches here at all) and requireAppSession in
-         * apps/server/src/index.ts for layer 3 (Docker/Railway/`pnpm dev`,
+         * apps/server/src/index.ts for layer 3 (Railway/`bun dev`,
          * where the Hono function runs and this static routing table does
          * not apply). This layer checks cookie PRESENCE only, not validity —
          * a funnel gate ahead of the CDN-served static shell below, not an
@@ -418,7 +415,7 @@ await writeFile(
 
 await exec("node", ["scripts/verify-seo-output.mjs", output], execOptions);
 
-// Kept so a local `pnpm build`-style check still has something to look at.
+// Kept so a local `bun run build`-style check still has something to look at.
 await rm("dist", { recursive: true, force: true });
 await mkdir("dist", { recursive: true });
 await cp(staticDir, "dist", { recursive: true });

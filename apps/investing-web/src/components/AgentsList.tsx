@@ -1,7 +1,7 @@
 import { Link } from "react-router-dom";
 import { useAgentCatalog } from "../lib/portfolioAgents.js";
-import { Card, CardContent, CardHeader, CardTitle } from "./ui/card.js";
-import { Button } from "./ui/button.js";
+import { Card, CardContent, CardHeader, CardTitle } from "@lavega/ui";
+import { Button } from "@lavega/ui";
 
 export function AgentsList() {
   const { catalog, reload } = useAgentCatalog();

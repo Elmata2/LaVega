@@ -8,7 +8,7 @@
  */
 
 import { createMcpTokenRepository, type McpAuditEntry } from "@lavega/database";
-import { runtimeDatabase } from "@lavega/investing-server/src/credentialStore.js";
+import { runtimeDatabase } from "@lavega/database";
 
 export type McpAuditSink = (entry: McpAuditEntry) => Promise<void>;
 
@@ -21,7 +21,10 @@ export const recordMcpAudit: McpAuditSink = async (entry) => {
     await createMcpTokenRepository(database)
       .audit(entry)
       .catch((error: unknown) => {
-        console.error("[mcp] audit row not written", error instanceof Error ? error.message : error);
+        console.error(
+          "[mcp] audit row not written",
+          error instanceof Error ? error.message : error,
+        );
       });
     return;
   }

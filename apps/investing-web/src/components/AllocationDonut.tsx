@@ -4,7 +4,7 @@ import type { Allocation, InvestingDashboardData } from "@lavega/core";
 import { EmptyState } from "./EmptyState";
 import { Swatch } from "./Swatch";
 import { Segmented } from "./ui/segmented";
-import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@lavega/ui";
 import { ChartContainer } from "./ui/chart";
 
 type AllocationLadderView = NonNullable<InvestingDashboardData["allocation"]["ladder"]>;

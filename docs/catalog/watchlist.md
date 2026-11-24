@@ -18,8 +18,8 @@
 >
 > **And one live data error this sweep did not catch:** Revolut is _not_ 0%. Its own per-plan pages
 > say 0% applies only inside a monthly limit — Standard €1.000 then **1%**, Plus €3.000 then **0,5%**.
-> LaVega currently ranks Revolut top on an unconditional 0%. See
-> `docs/superpowers/specs/2026-08-18-catalog-coverage-design.md` for the full corrections.
+> LaVega currently ranks Revolut top on an unconditional 0%. The catalogue rows
+> carry the corrected per-plan limits and dates.
 
 Sweep of **18 August 2026**. This is a watchlist, **not a price list**: it records _what products exist_,
 _where their terms live_, and _whether we can actually read them_. No rates are collected here as product
@@ -1972,7 +1972,7 @@ rounded down, plus 1, so a figure first missed this week is "1 week". An `--only
 
 ### The weekly report issue
 
-After the commit step, the workflow runs `pnpm catalog:report`, also when the sweep failed (`if: always()`).
+After the commit step, the workflow runs `bun run catalog:report`, also when the sweep failed (`if: always()`).
 The issue has the label `catalog-report`.
 
 - **A written run always opens an issue.** It starts with "Checked this run: N of M figures (confirmed, changed,
@@ -2064,15 +2064,15 @@ The text in the issue comes from scraped pages, so it is cleaned of markdown and
 ### Dry run on your machine
 
 ```
-pnpm catalog:sweep -- --no-agent --dry --summary-out <path>
-pnpm catalog:report -- --summary <path> --dry
+bun run catalog:sweep -- --no-agent --dry --summary-out <path>
+bun run catalog:report -- --summary <path> --dry
 ```
 
-A run with the model needs the key. `pnpm catalog:sweep` loads `apps/server/.env` if it exists. From another
+A run with the model needs the key. `bun run catalog:sweep` loads `apps/server/.env` if it exists. From another
 file, pass it to tsx, and always set a ceiling:
 
 ```
-CATALOG_MAX_USD=2 pnpm exec tsx --env-file=<path to env file> scripts/catalog-sweep.ts --dry --only <id> --summary-out <path>
+CATALOG_MAX_USD=2 bunx tsx --env-file=<path to env file> scripts/catalog-sweep.ts --dry --only <id> --summary-out <path>
 ```
 
 Flags: `--dry` writes nothing but the summary; `--only <text>` is a substring match on the product id (`--only ing`

@@ -26,7 +26,9 @@ const context = (overrides: Partial<PortfolioChatContext> = {}): PortfolioChatCo
     trade({ date: "2026-02-03", symbol: "AAPL" }),
   ],
   price: async (symbol, date) =>
-    symbol === "AAPL" ? { symbol: "AAPL", date: date ?? "2026-03-04", close: 190.5, currency: "USD" } : null,
+    symbol === "AAPL"
+      ? { symbol: "AAPL", date: date ?? "2026-03-04", close: 190.5, currency: "USD" }
+      : null,
   fundamentals: { fetch: async () => null },
   ...overrides,
 });
@@ -66,9 +68,10 @@ test("an invalid trade symbol is refused, not treated as a symbol", async () => 
 
 test("the trade limit never exceeds the read ceiling", async () => {
   const res = await appWith({
-    trades: () => Array.from({ length: MAX_MCP_TRADES + 10 }, (_, index) =>
-      trade({ date: `2026-01-${String((index % 28) + 1).padStart(2, "0")}`, id: String(index) }),
-    ),
+    trades: () =>
+      Array.from({ length: MAX_MCP_TRADES + 10 }, (_, index) =>
+        trade({ date: `2026-01-${String((index % 28) + 1).padStart(2, "0")}`, id: String(index) }),
+      ),
   }).request("/api/investing/trades?limit=999");
   expect(res.status).toBe(200);
   const body = (await res.json()) as { trades: Trade[]; total: number; truncated: boolean };

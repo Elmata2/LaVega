@@ -1,5 +1,5 @@
 import { forwardRef, type HTMLAttributes, type LabelHTMLAttributes } from "react";
-import { cn } from "./utils.js";
+import { cn } from "@lavega/ui";
 
 /* Extracted from `.vault-field`/`.vault-checkbox-field` (docs/adr/0005) — the
  * labelled-input row used by the vault gate, backup restore and the account
@@ -36,7 +36,7 @@ const CheckboxField = forwardRef<HTMLLabelElement, CheckboxFieldProps>(function 
   return (
     <label
       ref={ref}
-      data-testid={dataTestId ?? "vault-checkbox-field"}
+      data-testid={dataTestId}
       className={cn(CHECKBOX_FIELD_BASE, className)}
       {...props}
     />

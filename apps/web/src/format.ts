@@ -198,19 +198,13 @@ export function formatDate(locale: Locale, iso: string): string {
 }
 
 export function formatEuro(n: number): string {
-  return new Intl.NumberFormat("nl-NL", { style: "currency", currency: "EUR" }).format(n);
+  return formatEuroIn("nl", n);
 }
 
 /** Same formatting as `formatEuro`, for a foreign-currency amount kept in its
- *  own currency (the "separate" FX display mode). The try/catch covers an ISO
- *  code `Intl` doesn't recognize — fall back to a manual currency-code-plus-
- *  number rendering rather than throwing and blanking the whole row. */
+ *  own currency (the "separate" FX display mode). */
 export function formatCurrency(n: number, currency: string): string {
-  try {
-    return new Intl.NumberFormat("nl-NL", { style: "currency", currency }).format(n);
-  } catch {
-    return `${currency} ${new Intl.NumberFormat("nl-NL").format(n)}`;
-  }
+  return formatCurrencyIn("nl", n, currency);
 }
 
 /** "2026-08" -> "aug 2026" (empty string for a missing month). Also accepts a

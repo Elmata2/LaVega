@@ -122,14 +122,10 @@ const MERCHANT_MATCHERS: ReadonlyArray<{
   re: RegExp;
 }> = SUBSCRIPTION_FUNCTIONS.map((f) => ({
   ...f,
-  re: new RegExp(
-    `(^|[^a-z0-9])${f.match.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}([^a-z0-9]|$)`,
-  ),
+  re: new RegExp(`(^|[^a-z0-9])${f.match.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}([^a-z0-9]|$)`),
 }));
 
-function knownMerchant(
-  normalized: string,
-): { match: string; fn: string } | null {
+function knownMerchant(normalized: string): { match: string; fn: string } | null {
   for (const m of MERCHANT_MATCHERS) if (m.re.test(normalized)) return m;
   return null;
 }
@@ -329,9 +325,7 @@ function mean(nums: number[]): number {
 function std(nums: number[]): number {
   if (nums.length < 2) return 0;
   const m = mean(nums);
-  return Math.sqrt(
-    nums.reduce((s, n) => s + (n - m) ** 2, 0) / (nums.length - 1),
-  );
+  return Math.sqrt(nums.reduce((s, n) => s + (n - m) ** 2, 0) / (nums.length - 1));
 }
 
 /* Cadence bands accepted for a subscription. Weekly is deliberately excluded —
@@ -569,10 +563,8 @@ function chainFrom(
 }
 
 function betterFit(a: CadenceFit, b: CadenceFit): boolean {
-  if (a.members.length !== b.members.length)
-    return a.members.length > b.members.length;
-  if (a.skippedCycles !== b.skippedCycles)
-    return a.skippedCycles < b.skippedCycles;
+  if (a.members.length !== b.members.length) return a.members.length > b.members.length;
+  if (a.skippedCycles !== b.skippedCycles) return a.skippedCycles < b.skippedCycles;
   if (a.residual !== b.residual) return a.residual < b.residual;
   return a.band.cadenceDays < b.band.cadenceDays;
 }
@@ -760,8 +752,7 @@ function amountGroups(days: number[], amountsCents: number[]): number[][] {
   /* First charge, then amount: two groups starting on the same day must still
    * come out in the same order on every machine. */
   const bare = [...byAmount.values()].sort(
-    (x, y) =>
-      days[x[0]] - days[y[0]] || amountsCents[x[0]] - amountsCents[y[0]],
+    (x, y) => days[x[0]] - days[y[0]] || amountsCents[x[0]] - amountsCents[y[0]],
   );
 
   const merged: number[][] = [];
@@ -777,8 +768,7 @@ function amountGroups(days: number[], amountsCents: number[]): number[][] {
       const step = Math.abs(amountsCents[g[0]] - from) / from;
       // A group that has already repeated may take a real price step; a lone
       // charge may only be joined by something within a hair of it.
-      if (step > (open.length >= 2 ? MAX_PRICE_STEP : TIGHT_PRICE_STEP))
-        continue;
+      if (step > (open.length >= 2 ? MAX_PRICE_STEP : TIGHT_PRICE_STEP)) continue;
       if (step < bestStep) {
         bestStep = step;
         into = open;
@@ -875,11 +865,7 @@ function amountCv(members: number[], amountsCents: number[]): number {
  *  Dezelfde toets die `detectSubscriptions` verderop doet, maar hier al nodig —
  *  zie de uitleg bij `useSplit` hieronder. De drempel wordt meegegeven zodat er
  *  geen tweede getal ontstaat dat op een dag afwijkt van het eerste. */
-function amountsCoherent(
-  members: number[],
-  amountsCents: number[],
-  maxCv: number,
-): boolean {
+function amountsCoherent(members: number[], amountsCents: number[], maxCv: number): boolean {
   if (members.length < 2) return true;
   return amountCv(members, amountsCents) <= maxCv;
 }
@@ -930,13 +916,9 @@ const DOMINANT_PRICE_TOLERANCE = 0.05;
  *  it already checks `wholeClaimed` and `splitClaimed`, against `claimed`, not
  *  against the count before filtering; a second budget here, on a different
  *  base, would only disagree with that one. */
-function dominantPriceMembers(
-  members: number[],
-  amountsCents: number[],
-): number[] | null {
+function dominantPriceMembers(members: number[], amountsCents: number[]): number[] | null {
   const counts = new Map<number, number>();
-  for (const i of members)
-    counts.set(amountsCents[i], (counts.get(amountsCents[i]) ?? 0) + 1);
+  for (const i of members) counts.set(amountsCents[i], (counts.get(amountsCents[i]) ?? 0) + 1);
   let modeCents = -1;
   let modeCount = 0;
   for (const [cents, count] of counts) {
@@ -1018,10 +1000,7 @@ function diagnoseEmpty(
 
   // 2: the whole-merchant chain found a rhythm, but its own amounts don't
   // agree closely enough.
-  if (
-    whole !== null &&
-    !amountsCoherent(whole.members, amountsCents, maxAmountCv)
-  ) {
+  if (whole !== null && !amountsCoherent(whole.members, amountsCents, maxAmountCv)) {
     return {
       source: "whole",
       failure: {
@@ -1036,8 +1015,7 @@ function diagnoseEmpty(
   // price, or one whose chain attempt failed outright. "Best" by the same
   // member-count heuristic `fitCadenceDays` already used for its own
   // `bestFailure`.
-  let bestSplit: { members: number; diagnosis: MerchantDiagnosis } | null =
-    null;
+  let bestSplit: { members: number; diagnosis: MerchantDiagnosis } | null = null;
   for (const { idx, result } of splitAttempts) {
     const repCents = amountsCents[idx[0]];
     if (result.fit !== null) {
@@ -1091,10 +1069,7 @@ function diagnoseEmpty(
 
   // 5: nothing chained anywhere, not even partially — the only rhythm left
   // to name is "these landed on the same day".
-  if (
-    whole === null &&
-    splitAttempts.every(({ result }) => result.fit === null)
-  ) {
+  if (whole === null && splitAttempts.every(({ result }) => result.fit === null)) {
     const dateCounts = new Map<number, number>();
     for (const d of days) dateCounts.set(d, (dateCounts.get(d) ?? 0) + 1);
     let maxSameDay = 0;
@@ -1114,10 +1089,7 @@ function diagnoseEmpty(
   } | null = null;
   for (const { idx, result } of splitAttempts) {
     if (result.bestFailure === null) continue;
-    if (
-      bestSplitFailure === null ||
-      result.bestFailure.members > bestSplitFailure.members
-    ) {
+    if (bestSplitFailure === null || result.bestFailure.members > bestSplitFailure.members) {
       bestSplitFailure = {
         members: result.bestFailure.members,
         amountCents: amountsCents[idx[0]],
@@ -1203,10 +1175,7 @@ export function fitMerchantStreams(
   const strays = sortedDates.length - claimed;
   const budget = Math.floor(claimed / 3);
   if (streams.length > 0 && strays <= budget) {
-    streams.sort(
-      (a, b) =>
-        b.members.length - a.members.length || a.members[0] - b.members[0],
-    );
+    streams.sort((a, b) => b.members.length - a.members.length || a.members[0] - b.members[0]);
     return { streams, strays, splitByAmount: useSplit };
   }
 
@@ -1227,8 +1196,7 @@ export function fitMerchantStreams(
    * empty for this purpose too. Carried into `diagnoseEmpty` instead, where
    * it is checked first, ahead of every other case, but only once rescue has
    * also had its shot. */
-  const merchantBudgetFailure =
-    claimed > 0 ? { strays, claimed, budget } : null;
+  const merchantBudgetFailure = claimed > 0 ? { strays, claimed, budget } : null;
 
   // The third reading — see the block comment above `dominantPriceMembers`.
   // Only tried once the first two have nothing: it can never take a stream away
@@ -1316,10 +1284,7 @@ function euro(cents: number): string {
  *  `majority-multi-cycle` or `too-many-extras` — see `fitMerchantStreams` —
  *  but its type is the general `ChainFailure`, so this stays exhaustive rather
  *  than assumed). */
-function chainFailureText(
-  f: ChainFailure,
-  amountCents: number | undefined,
-): string {
+function chainFailureText(f: ChainFailure, amountCents: number | undefined): string {
   switch (f.kind) {
     case "too-few":
       return `te weinig afschrijvingen (${f.got} < ${f.needed})`;
@@ -1379,19 +1344,13 @@ export function explainMerchant(
 ): string | null {
   const result = fitMerchantStreams(sortedDates, amountsCents, maxAmountCv);
   if (result.streams.length === 0) {
-    return result.diagnostics
-      ? diagnosisText(result.diagnostics)
-      : "geen ritme herkend";
+    return result.diagnostics ? diagnosisText(result.diagnostics) : "geen ritme herkend";
   }
 
   let best = result.streams[0];
   for (const s of result.streams) {
     if (s.members.length > best.members.length) best = s;
-    else if (
-      s.members.length === best.members.length &&
-      s.members[0] < best.members[0]
-    )
-      best = s;
+    else if (s.members.length === best.members.length && s.members[0] < best.members[0]) best = s;
   }
   const band = best.band;
   const streamAmounts = best.members.map((i) => amountsCents[i]);
@@ -1400,15 +1359,12 @@ export function explainMerchant(
   // Nog lopend? Zelfde grens als `detectSubscriptions`: twee overgeslagen
   // cycli plus wat speling.
   const daysAgo = daysBetween(lastDate, asOf);
-  if (daysAgo > band.cadenceDays * 2 + 5)
-    return `laatste afschrijving ${daysAgo} dagen geleden`;
+  if (daysAgo > band.cadenceDays * 2 + 5) return `laatste afschrijving ${daysAgo} dagen geleden`;
 
   // Herhaalt het bedrag zich? Eén keer is een prijs die nooit is bevestigd.
   const timesCharged = new Map<number, number>();
-  for (const c of streamAmounts)
-    timesCharged.set(c, (timesCharged.get(c) ?? 0) + 1);
-  if (Math.max(...timesCharged.values()) < 2)
-    return "geen enkel bedrag komt twee keer voor";
+  for (const c of streamAmounts) timesCharged.set(c, (timesCharged.get(c) ?? 0) + 1);
+  if (Math.max(...timesCharged.values()) < 2) return "geen enkel bedrag komt twee keer voor";
 
   // Laatste bedragspreiding-controle: `amountsCoherent` heeft dit al bovenstrooms
   // gecheckt, maar de reddingslezing controleert `kept` daar zelf niet op — dus
@@ -1416,8 +1372,7 @@ export function explainMerchant(
   const amtMean = mean(streamAmounts);
   if (streamAmounts.length >= 2 && amtMean > 0) {
     const cv = std(streamAmounts) / amtMean;
-    if (cv > maxAmountCv)
-      return `prijsspreiding ${cv.toFixed(2)} boven ${maxAmountCv.toFixed(2)}`;
+    if (cv > maxAmountCv) return `prijsspreiding ${cv.toFixed(2)} boven ${maxAmountCv.toFixed(2)}`;
   }
 
   return null;
@@ -1457,8 +1412,7 @@ export function subscriptionCoverage(txs: Tx[]): SubscriptionCoverage {
     if (firstDate === "" || t.date < firstDate) firstDate = t.date;
     if (t.date > lastDate) lastDate = t.date;
   }
-  const historyDays =
-    firstDate === "" ? 0 : daysBetween(firstDate, lastDate) + 1;
+  const historyDays = firstDate === "" ? 0 : daysBetween(firstDate, lastDate) + 1;
   const visibleCadences: number[] = [];
   const hiddenCadences: { cadenceDays: number; needsDays: number }[] = [];
   for (const b of CADENCE_BANDS) {
@@ -1579,17 +1533,12 @@ export function merchantTallies(txs: Tx[]): MerchantTally[] {
 
   const out: MerchantTally[] = [];
   for (const [key, g] of groups) {
-    const sorted = [...g.rows].sort((a, b) =>
-      a.date < b.date ? -1 : a.date > b.date ? 1 : 0,
-    );
+    const sorted = [...g.rows].sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
     const cents = sorted.map((t) => Math.round(Math.abs(t.amount) * 100));
     const gaps: number[] = [];
     for (let i = 1; i < sorted.length; i++) {
       gaps.push(
-        Math.round(
-          (Date.parse(sorted[i].date) - Date.parse(sorted[i - 1].date)) /
-            86400000,
-        ),
+        Math.round((Date.parse(sorted[i].date) - Date.parse(sorted[i - 1].date)) / 86400000),
       );
     }
     const med = (xs: number[]): number | null => {
@@ -1599,9 +1548,7 @@ export function merchantTallies(txs: Tx[]): MerchantTally[] {
       return s.length % 2 === 1 ? s[m] : Math.round((s[m - 1] + s[m]) / 2);
     };
     const mean = cents.reduce((a, b) => a + b, 0) / cents.length;
-    const sd = Math.sqrt(
-      cents.reduce((a, c) => a + (c - mean) ** 2, 0) / cents.length,
-    );
+    const sd = Math.sqrt(cents.reduce((a, c) => a + (c - mean) ** 2, 0) / cents.length);
     // `asOf` per merchant, niet globaal: het maximum van de accounts die deze
     // ontvanger zelf raakt, dezelfde grondslag als hierboven — een ontvanger die
     // alleen op de oude ING-export voorkomt hoort niet "nog lopend" getoetst te
@@ -1619,10 +1566,7 @@ export function merchantTallies(txs: Tx[]): MerchantTally[] {
       firstDate: sorted[0].date,
       lastDate: sorted[sorted.length - 1].date,
       medianGapDays: med(gaps),
-      amountCv:
-        cents.length > 1 && mean > 0
-          ? Math.round((sd / mean) * 1000) / 1000
-          : null,
+      amountCv: cents.length > 1 && mean > 0 ? Math.round((sd / mean) * 1000) / 1000 : null,
       excluded: g.excluded,
       reason:
         g.excluded === null
@@ -1706,9 +1650,7 @@ export function detectSubscriptions(
   const subs: Subscription[] = [];
   for (const [merchant, group] of groups) {
     if (group.txs.length < 2) continue;
-    const sorted = [...group.txs].sort((a, b) =>
-      a.date < b.date ? -1 : a.date > b.date ? 1 : 0,
-    );
+    const sorted = [...group.txs].sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
 
     /* The rhythms, read by the same function the Betaalagenda uses, and read
      * per AMOUNT rather than over the whole merchant — see the block comment at
@@ -1718,9 +1660,7 @@ export function detectSubscriptions(
      * this line looks at `stream` — the charges that ARE this subscription —
      * not at every row the merchant produced, so the price is read off the
      * stream and `occurrences` counts what was actually billed on the cadence. */
-    const groupAmounts = sorted.map((t) =>
-      Math.round(Math.abs(t.amount) * 100),
-    );
+    const groupAmounts = sorted.map((t) => Math.round(Math.abs(t.amount) * 100));
     const { streams } = fitMerchantStreams(
       sorted.map((t) => t.date),
       groupAmounts,
@@ -1742,16 +1682,12 @@ export function detectSubscriptions(
           const end = accountEnd.get(t.accountKey) ?? "";
           if (end > asOf) asOf = end;
         }
-      if (asOf !== "" && daysBetween(lastDate, asOf) > band.cadenceDays * 2 + 5)
-        continue;
+      if (asOf !== "" && daysBetween(lastDate, asOf) > band.cadenceDays * 2 + 5) continue;
 
-      const amountsCents = stream.map((t) =>
-        Math.round(Math.abs(t.amount) * 100),
-      );
+      const amountsCents = stream.map((t) => Math.round(Math.abs(t.amount) * 100));
       const amtMean = mean(amountsCents);
       if (amtMean <= 0) continue;
-      if (amountsCents.length >= 2 && std(amountsCents) / amtMean > maxAmountCv)
-        continue;
+      if (amountsCents.length >= 2 && std(amountsCents) / amtMean > maxAmountCv) continue;
       // A subscription bills the SAME figure more than once — that is what makes
       // it a price and not a series of purchases. Replaces the old ±25% guard on
       // 2-occurrence streams, and closes the same hole for 3+ occurrences, where
@@ -1760,8 +1696,7 @@ export function detectSubscriptions(
       // bill that is never twice the same does not, and is refused rather than
       // reported at a "monthly price" that was never charged.
       const timesCharged = new Map<number, number>();
-      for (const c of amountsCents)
-        timesCharged.set(c, (timesCharged.get(c) ?? 0) + 1);
+      for (const c of amountsCents) timesCharged.set(c, (timesCharged.get(c) ?? 0) + 1);
       if (Math.max(...timesCharged.values()) < 2) continue;
 
       /* The price is the figure the stream REPEATS, not simply its first and last
@@ -1782,13 +1717,9 @@ export function detectSubscriptions(
       }
       const changePct =
         firstAmountCents > 0
-          ? Math.round(
-              ((lastAmountCents - firstAmountCents) / firstAmountCents) * 1000,
-            ) / 1000
+          ? Math.round(((lastAmountCents - firstAmountCents) / firstAmountCents) * 1000) / 1000
           : 0;
-      const monthlyCents = Math.round(
-        (lastAmountCents * 30) / band.cadenceDays,
-      );
+      const monthlyCents = Math.round((lastAmountCents * 30) / band.cadenceDays);
 
       subs.push({
         // The price is part of the identity now: one merchant, two streams, and
@@ -1812,9 +1743,7 @@ export function detectSubscriptions(
 
   // Key as the tie-breaker: a merchant can now contribute more than one row, and
   // two rows at the same monthly cost must not swap places between renders.
-  return subs.sort(
-    (a, b) => b.monthlyCents - a.monthlyCents || a.key.localeCompare(b.key),
-  );
+  return subs.sort((a, b) => b.monthlyCents - a.monthlyCents || a.key.localeCompare(b.key));
 }
 
 export type PriceIncrease = {
@@ -1830,9 +1759,7 @@ export const PRICE_INCREASE_MIN_CENTS = 50;
 
 /** Subscriptions whose price rose meaningfully (>= 3% AND >= €0.50), so a
  *  one-cent rounding wobble isn't reported. */
-export function subscriptionPriceIncreases(
-  subs: Subscription[],
-): PriceIncrease[] {
+export function subscriptionPriceIncreases(subs: Subscription[]): PriceIncrease[] {
   return subs
     .filter(
       (s) =>
@@ -1864,9 +1791,7 @@ export function subscriptionPriceIncreases(
  *  cancellable service — the device credit is often the bigger figure. Taking
  *  the smallest under-claims the saving instead of promising money he cannot
  *  free up by cancelling. */
-export function subscriptionOverlaps(
-  subs: Subscription[],
-): SubscriptionOverlap[] {
+export function subscriptionOverlaps(subs: Subscription[]): SubscriptionOverlap[] {
   const byFn = new Map<string, Map<string, Subscription>>();
   for (const s of subs) {
     if (s.function === "Overig") continue;
@@ -2004,10 +1929,7 @@ const INSTITUTIONS: ReadonlyArray<{
 const INSTITUTION_MATCHERS = INSTITUTIONS.map((i) => ({
   ...i,
   res: i.any.map(
-    (a) =>
-      new RegExp(
-        `(^|[^a-z0-9])${a.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}([^a-z0-9]|$)`,
-      ),
+    (a) => new RegExp(`(^|[^a-z0-9])${a.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}([^a-z0-9]|$)`),
   ),
 }));
 
@@ -2092,9 +2014,7 @@ export function detectScheduleStreams(
 
   const out: ScheduleStream[] = [];
   for (const [key, group] of groups) {
-    const sorted = [...group.txs].sort((a, b) =>
-      a.date < b.date ? -1 : a.date > b.date ? 1 : 0,
-    );
+    const sorted = [...group.txs].sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
     if (sorted.length < 2) continue;
 
     /* Amount-first, exactly like Optimalisatie — `fitMerchantStreams`, not a
@@ -2103,9 +2023,7 @@ export function detectScheduleStreams(
      * Simyo's EUR 11,89 subscription plus the EUR 25,00 device credit is two
      * dates on the agenda, not none. The device credit ends one day and its row
      * stops with it — that is what the asOf check below is for. */
-    const groupAmounts = sorted.map((t) =>
-      Math.round(Math.abs(t.amount) * 100),
-    );
+    const groupAmounts = sorted.map((t) => Math.round(Math.abs(t.amount) * 100));
     const { streams } = fitMerchantStreams(
       sorted.map((t) => t.date),
       groupAmounts,
@@ -2124,24 +2042,20 @@ export function detectScheduleStreams(
           const end = accountEnd.get(t.accountKey) ?? "";
           if (end > asOf) asOf = end;
         }
-      if (asOf !== "" && daysBetween(lastDate, asOf) > band.cadenceDays * 2 + 5)
-        continue;
+      if (asOf !== "" && daysBetween(lastDate, asOf) > band.cadenceDays * 2 + 5) continue;
 
       /* The amount. An agenda that prints a figure nobody was ever charged is
        * worse than an agenda with one row fewer, so a stream must either repeat a
        * figure or be tight enough that its last charge IS the figure (a yearly
        * index-linked premium). Both are then reported as what it last actually
        * charged, never as an average. */
-      const amountsCents = stream.map((t) =>
-        Math.round(Math.abs(t.amount) * 100),
-      );
+      const amountsCents = stream.map((t) => Math.round(Math.abs(t.amount) * 100));
       const amtMean = mean(amountsCents);
       if (amtMean <= 0) continue;
       const amtCv = std(amountsCents) / amtMean;
       if (amtCv > 0.35) continue;
       const timesCharged = new Map<number, number>();
-      for (const c of amountsCents)
-        timesCharged.set(c, (timesCharged.get(c) ?? 0) + 1);
+      for (const c of amountsCents) timesCharged.set(c, (timesCharged.get(c) ?? 0) + 1);
       const repeats = (c: number) => (timesCharged.get(c) ?? 0) >= 2;
       if (Math.max(...timesCharged.values()) < 2 && amtCv > 0.1) continue;
       let amountCents = amountsCents[amountsCents.length - 1];
@@ -2170,7 +2084,5 @@ export function detectScheduleStreams(
     }
   }
 
-  return out.sort(
-    (a, b) => b.amountCents - a.amountCents || a.key.localeCompare(b.key),
-  );
+  return out.sort((a, b) => b.amountCents - a.amountCents || a.key.localeCompare(b.key));
 }

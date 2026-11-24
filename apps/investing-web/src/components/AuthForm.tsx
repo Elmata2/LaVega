@@ -12,10 +12,10 @@ import {
 import { AuthLayout } from "./auth-layout";
 import { LoginForm, type LoginValues } from "./login-form";
 import { SignupForm, type SignupValues } from "./signup-form";
-import { Button } from "./ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
-import { Input } from "./ui/input";
-import { Label } from "./ui/label";
+import { Button } from "@lavega/ui";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@lavega/ui";
+import { Input } from "@lavega/ui";
+import { Label } from "@lavega/ui";
 
 type AuthLocationState = { from?: { pathname: string }; email?: string } | null;
 

@@ -7,11 +7,25 @@ status: published
 author: alexander
 updated: 2026-10-26
 sources:
-  - { title: "Belastingdienst: Doe online aangifte inkomstenbelasting in 4 stappen (checklist Gegevens bij belastingaangifte 2025, in Dutch)", url: "https://www.belastingdienst.nl/wps/wcm/connect/nl/belastingaangifte/content/online-aangifte-doen-in-4-stappen", accessed: 2026-10-26 }
-  - { title: "Belastingdienst: Aanvraag uitstel aangifte inkomstenbelasting (in Dutch)", url: "https://belastingdienst.nl/wps/wcm/connect/bldcontentnl/themaoverstijgend/programmas_en_formulieren/aanvraag-uitstel-aangifte-inkomstenbelasting", accessed: 2026-10-26 }
+  - {
+      title: "Belastingdienst: Doe online aangifte inkomstenbelasting in 4 stappen (checklist Gegevens bij belastingaangifte 2025, in Dutch)",
+      url: "https://www.belastingdienst.nl/wps/wcm/connect/nl/belastingaangifte/content/online-aangifte-doen-in-4-stappen",
+      accessed: 2026-10-26,
+    }
+  - {
+      title: "Belastingdienst: Aanvraag uitstel aangifte inkomstenbelasting (in Dutch)",
+      url: "https://belastingdienst.nl/wps/wcm/connect/bldcontentnl/themaoverstijgend/programmas_en_formulieren/aanvraag-uitstel-aangifte-inkomstenbelasting",
+      accessed: 2026-10-26,
+    }
 faq:
-  - { q: "When is the deadline for the 2026 Dutch tax return?", a: "At the time of writing we found no dates for the return over 2026 at the Belastingdienst. Its extension page names the usual dates: you can request an extension before 1 May, which gives you until 1 September. Check belastingdienst.nl in spring 2027." }
-  - { q: "Which documents do I need?", a: "According to the Belastingdienst checklist, among others your annual income statements (jaaropgaven), yearly overviews of your bank, savings and investment accounts, the WOZ value of your home, the annual mortgage statement and receipts for deductible items." }
+  - {
+      q: "When is the deadline for the 2026 Dutch tax return?",
+      a: "At the time of writing we found no dates for the return over 2026 at the Belastingdienst. Its extension page names the usual dates: you can request an extension before 1 May, which gives you until 1 September. Check belastingdienst.nl in spring 2027.",
+    }
+  - {
+      q: "Which documents do I need?",
+      a: "According to the Belastingdienst checklist, among others your annual income statements (jaaropgaven), yearly overviews of your bank, savings and investment accounts, the WOZ value of your home, the annual mortgage statement and receipts for deductible items.",
+    }
 ---
 
 A Dutch income tax return goes faster when you have collected the data before you log in. This page is a checklist for the return over tax year 2026, which you file in spring 2027. It is preparation, not a step-by-step guide to filling in the form.

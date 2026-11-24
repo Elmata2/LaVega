@@ -7,11 +7,24 @@ status: published
 author: alexander
 updated: 2026-10-26
 sources:
-  - { title: "ACM ConsuWijzer: regels voor het verlengen en opzeggen van abonnementen", url: "https://www.acm.nl/nl/onderwerpen/consumentenrecht/prijzen-en-overeenkomsten/regels-voor-het-verlengen-en-opzeggen-van-abonnementen/", accessed: 2026-10-26 }
+  - {
+      title: "ACM ConsuWijzer: regels voor het verlengen en opzeggen van abonnementen",
+      url: "https://www.acm.nl/nl/onderwerpen/consumentenrecht/prijzen-en-overeenkomsten/regels-voor-het-verlengen-en-opzeggen-van-abonnementen/",
+      accessed: 2026-10-26,
+    }
 faq:
-  - { q: "Hoe vind ik al mijn abonnementen?", a: "Loop je bankafschriften van de afgelopen twaalf maanden door en zoek naar bedragen die elke week, maand of elk jaar terugkomen met dezelfde omschrijving. Vergeet jaarlijkse afschrijvingen niet: die zie je maar één keer per jaar." }
-  - { q: "Hoe lang is de opzegtermijn van een abonnement?", a: "Volgens de ACM mogen consumenten na de vaste looptijd altijd opzeggen, met een opzegtermijn van maximaal 1 maand. Voor kranten en tijdschriften die minder dan één keer per maand verschijnen mag dat 3 maanden zijn." }
-  - { q: "Kan ik opzeggen per e-mail?", a: "Volgens de ACM kunnen consumenten in elk geval schriftelijk opzeggen, bijvoorbeeld via een brief, een webformulier of e-mail. Opzeggen op de manier waarop je het contract sloot, bijvoorbeeld telefonisch, is ook toegestaan." }
+  - {
+      q: "Hoe vind ik al mijn abonnementen?",
+      a: "Loop je bankafschriften van de afgelopen twaalf maanden door en zoek naar bedragen die elke week, maand of elk jaar terugkomen met dezelfde omschrijving. Vergeet jaarlijkse afschrijvingen niet: die zie je maar één keer per jaar.",
+    }
+  - {
+      q: "Hoe lang is de opzegtermijn van een abonnement?",
+      a: "Volgens de ACM mogen consumenten na de vaste looptijd altijd opzeggen, met een opzegtermijn van maximaal 1 maand. Voor kranten en tijdschriften die minder dan één keer per maand verschijnen mag dat 3 maanden zijn.",
+    }
+  - {
+      q: "Kan ik opzeggen per e-mail?",
+      a: "Volgens de ACM kunnen consumenten in elk geval schriftelijk opzeggen, bijvoorbeeld via een brief, een webformulier of e-mail. Opzeggen op de manier waarop je het contract sloot, bijvoorbeeld telefonisch, is ook toegestaan.",
+    }
 ---
 
 Kleine bedragen die elke maand van je rekening gaan, vallen weinig op. Samen kunnen ze een flinke post zijn. Deze gids laat in vier stappen zien hoe je ze op een rij zet en per abonnement bepaalt of het blijft.

@@ -1,4 +1,4 @@
-// Renders brand PNGs with headless Chrome. Run: pnpm --filter @lavega/site exec tsx scripts/make-images.mjs
+// Renders brand PNGs with headless Chrome. Run: bun run --cwd apps/site tsx scripts/make-images.mjs
 import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";

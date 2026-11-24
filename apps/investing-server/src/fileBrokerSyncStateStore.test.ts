@@ -10,7 +10,7 @@ import type {
 import {
   brokerSyncCommitContract,
   brokerSyncLeaseContract,
-} from "@lavega/adapters/src/brokers/brokerSyncLease.contract.js";
+} from "@lavega/adapters/brokers/brokerSyncLease.contract";
 import { createFileBrokerSyncStateStore } from "./fileBrokerSyncStateStore.js";
 
 const progress = { status: "completed" as const, message: null, updatedAt: null, leaseId: null };

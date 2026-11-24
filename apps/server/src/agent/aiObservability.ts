@@ -41,7 +41,9 @@ function posthogClient(): PostHog | null {
 }
 
 /** One user-initiated AI workflow becomes one session and trace. */
-export function createAiObservationContext(userId: string | undefined): AiObservationContext | undefined {
+export function createAiObservationContext(
+  userId: string | undefined,
+): AiObservationContext | undefined {
   const distinctId = userId?.trim();
   if (!distinctId) return undefined;
   return {

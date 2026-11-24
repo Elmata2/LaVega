@@ -19,7 +19,7 @@ import {
   type FilePreview,
 } from "../../lib/cardFileImport.js";
 import Button from "../ui/Button.js";
-import Dialog from "../ui/Dialog.js";
+import { Dialog } from "@lavega/ui";
 import StatusLine from "../ui/StatusLine.js";
 
 /* One dialog: choose the card, see how to get the file, drop files, check what
@@ -87,13 +87,7 @@ export default function CardFileDialog(p: CardFileDialogProps) {
         (choosing ? (
           <Choice choices={p.choices} onPick={setChosen} firstRef={firstRef} />
         ) : (
-          <Body
-            key={card?.id ?? OTHER}
-            {...p}
-            card={card}
-            firstRef={firstRef}
-            onBusy={setBusy}
-          />
+          <Body key={card?.id ?? OTHER} {...p} card={card} firstRef={firstRef} onBusy={setBusy} />
         ))}
     </Dialog>
   );
@@ -102,7 +96,7 @@ export default function CardFileDialog(p: CardFileDialogProps) {
 function Choice(p: {
   choices: readonly CardTarget[];
   onPick: (v: CardTarget | typeof OTHER) => void;
-  firstRef: React.RefObject<HTMLButtonElement>;
+  firstRef: React.RefObject<HTMLButtonElement | null>;
 }) {
   const [locale] = useAppLocale();
   const c = cardFileCopy[locale];
@@ -151,7 +145,7 @@ function Body({
   card,
 }: CardFileDialogProps & {
   card: CardTarget | null;
-  firstRef: React.RefObject<HTMLButtonElement>;
+  firstRef: React.RefObject<HTMLButtonElement | null>;
   onBusy: (b: boolean) => void;
 }) {
   const [locale] = useAppLocale();
@@ -486,12 +480,25 @@ function PreviewCard(p: {
             </div>
           )}
           {plan.question && (
-            <div role="group" aria-label={c.question(plan.question.accountName)} className="flex flex-col gap-2" data-testid="same-card-question">
+            <div
+              role="group"
+              aria-label={c.question(plan.question.accountName)}
+              className="flex flex-col gap-2"
+              data-testid="same-card-question"
+            >
               <div>{c.question(plan.question.accountName)}</div>
-              <Button className="self-start min-h-[44px]" disabled={p.disabled} onClick={() => p.onAnswer(true)}>
+              <Button
+                className="self-start min-h-[44px]"
+                disabled={p.disabled}
+                onClick={() => p.onAnswer(true)}
+              >
                 {c.questionYes(plan.question.accountName)}
               </Button>
-              <Button className="self-start min-h-[44px]" disabled={p.disabled} onClick={() => p.onAnswer(false)}>
+              <Button
+                className="self-start min-h-[44px]"
+                disabled={p.disabled}
+                onClick={() => p.onAnswer(false)}
+              >
                 {c.questionNo}
               </Button>
             </div>

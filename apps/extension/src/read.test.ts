@@ -46,8 +46,7 @@ describe("echt opgehaalde winkelpagina's", () => {
    * 17 oktober (M14) is die lijst terug en sluit hij coolblue.nl weer uit. Deze
    * test blijft staan als de GEDOCUMENTEERDE beperking van de GENERIEKE lezer:
    * readCheckout kan dit soort fout niet onderscheiden van een kloppend
-   * antwoord, en daarom beslist `src/sites.ts` welk domein gelezen mag worden.
-   * Zie docs/superpowers/specs/2026-08-26-brede-kassa-toestemming-design.md. */
+   * antwoord, en daarom beslist `src/sites.ts` welk domein gelezen mag worden. */
   it("coolblue.nl: leest 420 EUR uit het JSON-LD Offer, als ARTIKELprijs", () => {
     const r = read("coolblue-product.html", "www.coolblue.nl");
     expect(r.ok).toBe(true);

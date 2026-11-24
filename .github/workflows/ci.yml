@@ -10,23 +10,160 @@ permissions:
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
+
+env:
+  # On PRs, Turbo runs only packages reachable from the diff; push to master
+  # always runs the full suite.
+  TURBO_SCM_BASE: ${{ github.event_name == 'pull_request' && format('origin/{0}', github.base_ref) || '' }}
+  AFFECTED_FLAG: ${{ github.event_name == 'pull_request' && '--affected' || '' }}
+
 jobs:
-  checks:
+  quality:
     runs-on: ubuntu-latest
-    # Cold typecheck+lint+test is ~1-2 minutes locally; this is headroom, not
-    # an expectation, so a genuinely hung step still fails fast.
-    timeout-minutes: 15
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
+        with: { fetch-depth: 0, filter: "blob:none" }
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with: { bun-version: "1.4.4" }
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
-        with: { node-version: 22, cache: pnpm }
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm run typecheck
-      - run: pnpm run lint
-      - run: pnpm run test
+        with: { node-version: 22 }
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: .turbo/cache
+          key: turbo-quality-${{ runner.os }}-${{ github.sha }}
+          restore-keys: turbo-quality-${{ runner.os }}-
+      - run: bun install --frozen-lockfile
+      - run: bun run typecheck
+      - run: bun run lint
       # The verify-investing CLI is a skill, not a workspace package, so
       # `turbo run test` never reaches its node:test suite. It is black-box
       # (spawns the real CLI against a stub server and fake binaries) and
       # needs no install, so it adds seconds, not minutes.
-      - run: pnpm run test:verify-investing
+      - run: bun run test:verify-investing
+
+  test-packages:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with: { fetch-depth: 0, filter: "blob:none" }
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with: { bun-version: "1.4.4" }
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with: { node-version: 22 }
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: .turbo/cache
+          key: turbo-packages-${{ runner.os }}-${{ github.sha }}
+          restore-keys: turbo-packages-${{ runner.os }}-
+      - run: bun install --frozen-lockfile
+      - run: >
+          bun run turbo run test $AFFECTED_FLAG --concurrency=2
+          --filter=@lavega/core
+          --filter=@lavega/adapters
+          --filter=@lavega/database
+          --filter=@lavega/extension
+          --filter=@lavega/site
+          --filter=@lavega/email-worker
+          --filter=@lavega/catalog-sweep
+
+  test-servers:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with: { fetch-depth: 0, filter: "blob:none" }
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with: { bun-version: "1.4.4" }
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with: { node-version: 22 }
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: .turbo/cache
+          key: turbo-servers-${{ runner.os }}-${{ github.sha }}
+          restore-keys: turbo-servers-${{ runner.os }}-
+      - run: bun install --frozen-lockfile
+      - run: >
+          bun run turbo run test $AFFECTED_FLAG --concurrency=2
+          --filter=@lavega/server
+          --filter=@lavega/investing-server
+
+  test-investing-web:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with: { fetch-depth: 0, filter: "blob:none" }
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with: { bun-version: "1.4.4" }
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with: { node-version: 22 }
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: .turbo/cache
+          key: turbo-investing-web-${{ runner.os }}-${{ github.sha }}
+          restore-keys: turbo-investing-web-${{ runner.os }}-
+      - run: bun install --frozen-lockfile
+      - run: bun run turbo run test $AFFECTED_FLAG --filter=@lavega/investing-web
+
+  test-web:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with: { fetch-depth: 0, filter: "blob:none" }
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with: { bun-version: "1.4.4" }
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with: { node-version: 22 }
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: .turbo/cache
+          key: turbo-web-${{ runner.os }}-${{ github.sha }}
+          restore-keys: turbo-web-${{ runner.os }}-
+      - run: bun install --frozen-lockfile
+      - name: Check if @lavega/web is affected
+        id: affected
+        run: |
+          if [ "${{ github.event_name }}" != "pull_request" ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          COUNT=$(bun run turbo run test --filter=@lavega/web --affected --dry=json | node -e 'const d = JSON.parse(require("node:fs").readFileSync(0, "utf8")); console.log((d.tasks || []).length);')
+          if [ "$COUNT" -gt 0 ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Build @lavega/web stylesheet for resolveStyle tests
+        if: steps.affected.outputs.run == 'true'
+        run: bun run turbo run build --filter=@lavega/web
+      - name: Run @lavega/web tests (shard ${{ matrix.shard }}/3)
+        if: steps.affected.outputs.run == 'true'
+        run: bun run --cwd apps/web vitest run --shard=${{ matrix.shard }}/3
+
+  # Single aggregate status check preserving the existing `checks` name for
+  # branch protection rules.
+  checks:
+    runs-on: ubuntu-latest
+    needs: [quality, test-packages, test-servers, test-investing-web, test-web]
+    if: always()
+    steps:
+      - name: Verify all CI jobs succeeded
+        run: |
+          for result in \
+            "${{ needs.quality.result }}" \
+            "${{ needs.test-packages.result }}" \
+            "${{ needs.test-servers.result }}" \
+            "${{ needs.test-investing-web.result }}" \
+            "${{ needs.test-web.result }}"; do
+            if [ "$result" != "success" ] && [ "$result" != "skipped" ]; then
+              echo "Upstream CI job failed or was cancelled: $result"
+              exit 1
+            fi
+          done

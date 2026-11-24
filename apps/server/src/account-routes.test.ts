@@ -64,7 +64,10 @@ const RESET = "/api/account/personal-data";
 
 test("personal reset: an anonymous caller gets 401 and nothing runs", async () => {
   const { app, erase, resetPersonal } = appWith(null);
-  const res = await app.request(RESET, erasePost({ confirm: "RESET-PERSONAL", expectedOwner: "user-123" }));
+  const res = await app.request(
+    RESET,
+    erasePost({ confirm: "RESET-PERSONAL", expectedOwner: "user-123" }),
+  );
   expect(res.status).toBe(401);
   expect(resetPersonal).not.toHaveBeenCalled();
   expect(erase).not.toHaveBeenCalled();
@@ -135,7 +138,10 @@ test("personal reset: a missing or non-string expectedOwner is a 400 and deletes
 
 test("personal reset: a stale tab (expectedOwner differs from the session) gets 409 and nothing is deleted", async () => {
   const { app, resetPersonal, erase } = appWith("user-B");
-  const res = await app.request(RESET, erasePost({ confirm: "RESET-PERSONAL", expectedOwner: "user-A" }));
+  const res = await app.request(
+    RESET,
+    erasePost({ confirm: "RESET-PERSONAL", expectedOwner: "user-A" }),
+  );
   expect(res.status).toBe(409);
   expect(await res.json()).toMatchObject({ code: "owner-changed" });
   expect(resetPersonal).not.toHaveBeenCalled();
@@ -144,7 +150,10 @@ test("personal reset: a stale tab (expectedOwner differs from the session) gets 
 
 test("personal reset: matching expectedOwner deletes the session's tenant", async () => {
   const { app, resetPersonal } = appWith("user-123");
-  const res = await app.request(RESET, erasePost({ confirm: "RESET-PERSONAL", expectedOwner: "user-123" }));
+  const res = await app.request(
+    RESET,
+    erasePost({ confirm: "RESET-PERSONAL", expectedOwner: "user-123" }),
+  );
   expect(res.status).toBe(200);
   expect(resetPersonal).toHaveBeenCalledWith("user-123");
 });

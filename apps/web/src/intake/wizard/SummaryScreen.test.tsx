@@ -53,7 +53,13 @@ test("lists only answered screens", () => {
   expect(rows.map((r) => r.screen)).toEqual(["household", "work", "income"]);
   expect(rows.find((r) => r.screen === "income")!.value).toContain("3,250");
   const c = mount(
-    <SummaryScreen copy={wizardCopy.en} busy={false} rows={rows} onEdit={() => {}} onSubmit={() => {}} />,
+    <SummaryScreen
+      copy={wizardCopy.en}
+      busy={false}
+      rows={rows}
+      onEdit={() => {}}
+      onSubmit={() => {}}
+    />,
   );
   expect(c.querySelectorAll(".wz-summary-row")).toHaveLength(3);
   expect(c.textContent).not.toContain("Spending");
@@ -65,7 +71,13 @@ test("each line has a Change button that reports its screen; Verder submits", ()
   const onEdit = vi.fn();
   const onSubmit = vi.fn();
   const c = mount(
-    <SummaryScreen copy={wizardCopy.en} busy={false} rows={rows} onEdit={onEdit} onSubmit={onSubmit} />,
+    <SummaryScreen
+      copy={wizardCopy.en}
+      busy={false}
+      rows={rows}
+      onEdit={onEdit}
+      onSubmit={onSubmit}
+    />,
   );
   const buttons = [...c.querySelectorAll<HTMLButtonElement>(".wz-summary-row button")];
   expect(buttons.map((b) => b.textContent)).toEqual(["Change", "Change", "Change"]);
@@ -94,8 +106,20 @@ test("goal and debt lines come from the wizard goal and wizard debt only", () =>
     ...base,
     goals: [goal("other", "Other goal"), goal(WIZARD_GOAL, "Holiday")],
     debts: [
-      { id: "other-debt", lender: "Other bank", monthlyCents: 5000, source: "stated" as const, at: AS_OF },
-      { id: WIZARD_DEBT, lender: "Wizard bank", monthlyCents: 9000, source: "stated" as const, at: AS_OF },
+      {
+        id: "other-debt",
+        lender: "Other bank",
+        monthlyCents: 5000,
+        source: "stated" as const,
+        at: AS_OF,
+      },
+      {
+        id: WIZARD_DEBT,
+        lender: "Wizard bank",
+        monthlyCents: 9000,
+        source: "stated" as const,
+        at: AS_OF,
+      },
     ],
   } as typeof base;
   const rows = summaryRows(p, ["goal", "debts"], ctx);
@@ -106,18 +130,29 @@ test("goal and debt lines come from the wizard goal and wizard debt only", () =>
 
 test("an answered card-balances screen shows a line; a pending one does not", () => {
   const stated = applyStatedCards(profile(), ["american-express-gold-card"], AS_OF);
-  expect(summaryRows(stated, screensFor(stated), ctx).map((r) => r.screen)).not.toContain("card-balances");
+  expect(summaryRows(stated, screensFor(stated), ctx).map((r) => r.screen)).not.toContain(
+    "card-balances",
+  );
   const p = applyCardBalances(
     stated,
-    [{ cardId: "american-express-gold-card", balanceCents: 250_000, paysInFull: false, ratePct: 9.5 }],
+    [
+      {
+        cardId: "american-express-gold-card",
+        balanceCents: 250_000,
+        paysInFull: false,
+        ratePct: 9.5,
+      },
+    ],
     AS_OF,
   );
   const line = summaryRows(p, screensFor(p), ctx).find((r) => r.screen === "card-balances");
   expect(line!.value).toContain("2,500");
   expect(line!.value).toContain("9,5%");
-  const nl = summaryRows(p, screensFor(p), { ...ctx, c: intakeCopy.nl.aboutYou, locale: "nl" }).find(
-    (r) => r.screen === "card-balances",
-  );
+  const nl = summaryRows(p, screensFor(p), {
+    ...ctx,
+    c: intakeCopy.nl.aboutYou,
+    locale: "nl",
+  }).find((r) => r.screen === "card-balances");
   expect(nl!.value).toContain("2.500");
 });
 

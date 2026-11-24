@@ -1,6 +1,6 @@
 {
   "lane": "spaarkosten-datums",
-  "question": "Wat kost het om een SPAARREKENING aan te houden? Aanleiding: de meting van 22 augustus 2026 (docs/research/2026-08-22-spaarrekening-kosten.md) vond negen uitgesproken nullen en kreeg er nul in de catalogus, omdat het allemaal productpagina's zonder eigen datum waren. Dit is verificatiewerk: het bedrag stond vast, de datum ontbrak.",
+  "question": "Wat kost het om een SPAARREKENING aan te houden? Aanleiding: de meting van 22 augustus 2026 vond negen uitgesproken nullen en kreeg er nul in de catalogus, omdat het allemaal productpagina's zonder eigen datum waren. Dit is verificatiewerk: het bedrag stond vast, de datum ontbrak.",
   "generatedAt": "2026-08-24",
   "usedApiCredits": false,
   "field": "accountFee",

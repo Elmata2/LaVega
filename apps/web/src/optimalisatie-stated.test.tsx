@@ -275,7 +275,9 @@ const adviceOf = (
 test("card debt: the plan's pay-off advice leads, the verdict follows and the offer stays visible", () => {
   const advice = adviceOf(6, [CREDIT, HELD_CREDIT], {
     heldIds: [HELD_CREDIT.id],
-    cardBalances: [{ cardId: HELD_CREDIT.id, balanceCents: 300_000, paysInFull: false, ratePct: 15 }],
+    cardBalances: [
+      { cardId: HELD_CREDIT.id, balanceCents: 300_000, paysInFull: false, ratePct: 15 },
+    ],
     cardRepayment: "sometimes",
     buffer: { liquidSavingsCents: 1_000_000, fixedCostsMonthlyCents: 200_000, targetMonths: 3 },
   });

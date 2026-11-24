@@ -16,7 +16,7 @@ import {
 
 const {
   createRuntimeAppMock,
-  createDockerFetchMock,
+  createStaticFetchMock,
   createDashboardCacheMock,
   dashboardCacheMock,
   getAuthMock,
@@ -38,7 +38,7 @@ const {
         }),
     ),
   })),
-  createDockerFetchMock: vi.fn(
+  createStaticFetchMock: vi.fn(
     (_fetch: unknown, _root: string) => async (request: Request) =>
       new Response(`path:${new URL(request.url).pathname}`, { status: 200 }),
   ),
@@ -60,17 +60,23 @@ vi.mock("@lavega/investing-server/src/index.js", () => ({
   },
   createRuntimeApp: createRuntimeAppMock,
 }));
-vi.mock("./auth.js", () => ({ getAuth: getAuthMock, verifiedSession: verifiedSessionMock }));
-vi.mock("@lavega/investing-server/src/credentialStore.js", async (importOriginal) => ({
+vi.mock("./auth.js", async (importOriginal) => ({
   ...(await importOriginal<object>()),
-  runtimeDatabase: runtimeDatabaseMock,
+  getAuth: getAuthMock,
+  verifiedSession: verifiedSessionMock,
+  investingTenantId: async () => {
+    if (!getAuthMock()) return "local";
+    const session = await verifiedSessionMock();
+    return session?.user?.id ?? null;
+  },
 }));
 vi.mock("@lavega/database", async (importOriginal) => ({
   ...(await importOriginal<object>()),
   listBrokerSyncTenants: listBrokerSyncTenantsMock,
+  runtimeDatabase: runtimeDatabaseMock,
 }));
-vi.mock("@lavega/investing-server/src/docker.js", () => ({
-  createDockerFetch: createDockerFetchMock,
+vi.mock("@lavega/investing-server/src/standalone.js", () => ({
+  createStaticFetch: createStaticFetchMock,
 }));
 vi.mock("@lavega/investing-server/src/filePriceStore.js", () => ({
   createFileSharedPriceStore: vi.fn(() => ({ clear: async () => undefined })),
@@ -126,7 +132,7 @@ test("forwardInvesting builds an investing runtime per request", async () => {
   expect(await first.text()).toBe("path:/health");
   expect(await second.text()).toBe("path:/api/investing/dashboard");
   expect(createRuntimeAppMock).toHaveBeenCalledTimes(2);
-  expect(createDockerFetchMock).toHaveBeenCalledWith(expect.any(Function), investingDist());
+  expect(createStaticFetchMock).toHaveBeenCalledWith(expect.any(Function), investingDist());
   expect(createRuntimeAppMock).toHaveBeenNthCalledWith(
     1,
     expect.objectContaining({ dashboardCache: dashboardCacheMock }),
@@ -244,7 +250,7 @@ async function cronMount(
   vi.resetModules();
   const mount = await import("./investing-mount.js");
   const seen: string[] = [];
-  createDockerFetchMock.mockImplementation(() => async (request: Request) => {
+  createStaticFetchMock.mockImplementation(() => async (request: Request) => {
     const entry = `${mount.currentInvestingTenant()}:${new URL(request.url).pathname}`;
     seen.push(entry);
     return handle(mount.currentInvestingTenant(), new URL(request.url).pathname);
@@ -504,7 +510,7 @@ test("forwardInvesting runs the forwarded request inside the caller's tenant sco
   vi.resetModules();
   const mount = await import("./investing-mount.js");
   const seen: string[] = [];
-  createDockerFetchMock.mockImplementationOnce(() => async () => {
+  createStaticFetchMock.mockImplementationOnce(() => async () => {
     seen.push(mount.currentInvestingTenant());
     return new Response("ok");
   });
@@ -553,7 +559,7 @@ async function drainMount(
   const mount = await import("./investing-mount.js");
   const seen: string[] = [];
   const bodies: string[] = [];
-  createDockerFetchMock.mockImplementation(() => async (request: Request) => {
+  createStaticFetchMock.mockImplementation(() => async (request: Request) => {
     const path = new URL(request.url).pathname;
     if (path === "/api/sync/drive") bodies.push(await request.text());
     const entry = `${mount.currentInvestingTenant()}:${path}`;

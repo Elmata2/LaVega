@@ -26,17 +26,31 @@ function rich(over: Partial<PlanInput> = {}): PlanInput {
       mkTx("Albert Heijn", `2026-${m}-15`, -900, { category: "Boodschappen" }),
       mkTx("Landlord", `2026-${m}-02`, -1000, { category: "Wonen" }),
     ]),
-    ...["04", "05", "06", "07"].map((m) => mkTx("Netflix", `2026-${m}-05`, -9.99, { category: "Abonnementen" })),
-    ...["08", "09", "10"].map((m) => mkTx("Netflix", `2026-${m}-05`, -11.79, { category: "Abonnementen" })),
+    ...["04", "05", "06", "07"].map((m) =>
+      mkTx("Netflix", `2026-${m}-05`, -9.99, { category: "Abonnementen" }),
+    ),
+    ...["08", "09", "10"].map((m) =>
+      mkTx("Netflix", `2026-${m}-05`, -11.79, { category: "Abonnementen" }),
+    ),
   ];
   const debt: Debt = {
-    id: "d1", lender: "Santander Consumer", monthlyCents: 30000, balanceCents: 900000,
-    ratePct: 9.5, source: "confirmed", at: "2026-10-01",
+    id: "d1",
+    lender: "Santander Consumer",
+    monthlyCents: 30000,
+    balanceCents: 900000,
+    ratePct: 9.5,
+    source: "confirmed",
+    at: "2026-10-01",
   } as Debt;
   const goal: PlanGoal = {
     goal: {
-      id: "g1", purpose: "Car", kind: "general", targetCents: 1_000_000,
-      targetDate: "2027-03-01", priority: "important", accountRefs: [],
+      id: "g1",
+      purpose: "Car",
+      kind: "general",
+      targetCents: 1_000_000,
+      targetDate: "2027-03-01",
+      priority: "important",
+      accountRefs: [],
     } as PlanGoal["goal"],
     since: "2026-01-01",
   };
@@ -44,8 +58,11 @@ function rich(over: Partial<PlanInput> = {}): PlanInput {
     accounts: [mkAccount("A1", { iban: IBAN, balance: 2000, balanceDate: "2026-10-20" })],
     txs,
     profile: {
-      debts: [debt], goals: [goal], children: [{ id: "c1", birthYear: 2020 }],
-      bufferTargetMonths: 3, fixedCostsMonthlyCents: 150000,
+      debts: [debt],
+      goals: [goal],
+      children: [{ id: "c1", birthYear: 2020 }],
+      bufferTargetMonths: 3,
+      fixedCostsMonthlyCents: 150000,
       incomeStreams: [{ id: "s1", label: "Job", monthlyCents: 300000, regular: true }],
     },
     heldCards: [],
@@ -81,7 +98,10 @@ describe("computePlan", () => {
     ];
     const withBiz = {
       ...base,
-      accounts: [...base.accounts, mkAccount("B1", { entity: "BV1", balance: 50000, balanceDate: "2026-10-20" })],
+      accounts: [
+        ...base.accounts,
+        mkAccount("B1", { entity: "BV1", balance: 50000, balanceDate: "2026-10-20" }),
+      ],
       txs: [...base.txs, ...bizTxs],
       entityProfiles: [{ entity: "BV1", scope: "business" as const }],
     } as PlanInput;
@@ -114,13 +134,19 @@ describe("computePlan", () => {
 
   test("backbone has exactly four keys and no ordering or next field", () => {
     const r = computePlan(rich());
-    expect(Object.keys(r.backbone).sort()).toEqual(
-      ["buffer", "debtInterestPerYear", "goalsGap", "investingUnallocated"],
-    );
+    expect(Object.keys(r.backbone).sort()).toEqual([
+      "buffer",
+      "debtInterestPerYear",
+      "goalsGap",
+      "investingUnallocated",
+    ]);
     expect(r.backbone.debtInterestPerYear?.unit).toBe("cents");
     expect(r.backbone.goalsGap).toEqual({ unit: "cents", value: 1_000_000 });
     expect(computePlan(planInput()).backbone).toEqual({
-      buffer: null, debtInterestPerYear: null, goalsGap: null, investingUnallocated: null,
+      buffer: null,
+      debtInterestPerYear: null,
+      goalsGap: null,
+      investingUnallocated: null,
     });
   });
 
@@ -135,8 +161,18 @@ describe("computePlan", () => {
     for (const s of ["month", "buffer", "debts", "subscriptions", "goals"] as const) {
       expect(sections.has(s)).toBe(true);
     }
-    const blob = JSON.stringify(r.factSheet("nl").facts.map((f) => [f.factId, f.exact])).toLowerCase();
-    for (const bad of [...MERCHANTS, IBAN, "nl91", "netflix", "employer", "santander", "landlord"]) {
+    const blob = JSON.stringify(
+      r.factSheet("nl").facts.map((f) => [f.factId, f.exact]),
+    ).toLowerCase();
+    for (const bad of [
+      ...MERCHANTS,
+      IBAN,
+      "nl91",
+      "netflix",
+      "employer",
+      "santander",
+      "landlord",
+    ]) {
       expect(blob).not.toContain(bad.toLowerCase());
     }
     for (const f of r.factSheet("nl").facts) {
@@ -147,9 +183,13 @@ describe("computePlan", () => {
   test("mustMention: negative room, goal behind, missed payment yes; a positive buffer gap no", () => {
     const neg = computePlan(
       rich({
-        txs: [-1, -2, -3].map((k) => mkTx("Shops", `2026-0${6 + k + 3}-15`, -3500 * 1, {})).concat(
-          ["07", "08", "09"].map((m) => mkTx("Employer BV", `2026-${m}-01`, 3000, { category: "Salaris" })),
-        ),
+        txs: [-1, -2, -3]
+          .map((k) => mkTx("Shops", `2026-0${6 + k + 3}-15`, -3500 * 1, {}))
+          .concat(
+            ["07", "08", "09"].map((m) =>
+              mkTx("Employer BV", `2026-${m}-01`, 3000, { category: "Salaris" }),
+            ),
+          ),
       }),
     );
     expect(neg.facts.some((f) => f.section === "month" && f.mustMention)).toBe(true);
@@ -162,13 +202,19 @@ describe("computePlan", () => {
     const missed = computePlan(
       rich({
         txs: [
-          ...["01", "02", "03", "04"].map((m) => mkTx("Gym", `2026-${m}-05`, -30, { category: "Sport" })),
-          ...["07", "08", "09", "10"].map((m) => mkTx("Gym", `2026-${m}-05`, -30, { category: "Sport" })),
+          ...["01", "02", "03", "04"].map((m) =>
+            mkTx("Gym", `2026-${m}-05`, -30, { category: "Sport" }),
+          ),
+          ...["07", "08", "09", "10"].map((m) =>
+            mkTx("Gym", `2026-${m}-05`, -30, { category: "Sport" }),
+          ),
           ...rich().txs,
         ],
       }),
     );
-    expect(missed.sections.subscriptions.figures.rows.some((x) => x.facts.includes("missed-payment"))).toBe(true);
+    expect(
+      missed.sections.subscriptions.figures.rows.some((x) => x.facts.includes("missed-payment")),
+    ).toBe(true);
     expect(missed.facts.some((f) => f.section === "subscriptions" && f.mustMention)).toBe(true);
   });
 
@@ -179,13 +225,28 @@ describe("computePlan", () => {
     expect(r.markers.childCount).toBe(1);
     expect(r.markers.goalsWithin12m).toEqual(["g1"]);
     expect(r.markers.flaggedIncreaseKeys).toEqual(
-      r.sections.subscriptions.figures.rows.filter((x) => x.facts.includes("price-up")).map((x) => x.key).sort(),
+      r.sections.subscriptions.figures.rows
+        .filter((x) => x.facts.includes("price-up"))
+        .map((x) => x.key)
+        .sort(),
     );
     expect(r.markers.flaggedIncreaseKeys.length).toBe(1);
     expect(r.markers.bufferBelowWish).toBe(r.sections.buffer.statusReason.key === "below-target");
     // exactly 12 months away counts; 13 does not; a past date does not
     const at = (d: string) =>
-      computePlan(rich({ profile: { ...rich().profile, goals: [{ ...rich().profile.goals[0]!, goal: { ...rich().profile.goals[0]!.goal, targetDate: d } }] } })).markers.goalsWithin12m;
+      computePlan(
+        rich({
+          profile: {
+            ...rich().profile,
+            goals: [
+              {
+                ...rich().profile.goals[0]!,
+                goal: { ...rich().profile.goals[0]!.goal, targetDate: d },
+              },
+            ],
+          },
+        }),
+      ).markers.goalsWithin12m;
     expect(at("2027-10-24")).toEqual(["g1"]);
     expect(at("2027-11-24")).toEqual([]);
     expect(at("2026-10-01")).toEqual([]);
@@ -195,8 +256,12 @@ describe("computePlan", () => {
     const r = computePlan(rich());
     const s = snapshotOf(r, "manual", "h1");
     expect(s).toMatchObject({
-      asOf: AS_OF, thresholdsVersion: PLAN_THRESHOLDS.version, engineVersion: PLAN_ENGINE_VERSION,
-      profileHash: "h1", trigger: "manual", markers: r.markers,
+      asOf: AS_OF,
+      thresholdsVersion: PLAN_THRESHOLDS.version,
+      engineVersion: PLAN_ENGINE_VERSION,
+      profileHash: "h1",
+      trigger: "manual",
+      markers: r.markers,
     });
     for (const id of SECTION_IDS) {
       expect(s.sections[id]).toEqual({
@@ -221,7 +286,10 @@ describe("computePlan", () => {
       entityProfiles: [{ entity: "BV1", scope: "business" as const }],
     } as PlanInput;
     expect(computePlan(biz).freshness.bankDataTo).toBe("2026-10-05");
-    const withStore = { ...base, profile: { ...base.profile, profileUpdatedAt: "2026-10-23T09:00:00Z" } };
+    const withStore = {
+      ...base,
+      profile: { ...base.profile, profileUpdatedAt: "2026-10-23T09:00:00Z" },
+    };
     expect(computePlan(withStore).freshness.profileConfirmedAt).toBe("2026-10-23T09:00:00Z");
   });
 
@@ -233,18 +301,42 @@ describe("computePlan", () => {
     ]);
     const g0 = base.profile.goals[0]!;
     const goals = ["Ab", "BA"].map((id) => ({ ...g0, goal: { ...g0.goal, id } }));
-    const r = computePlan({ ...base, txs: [...base.txs, ...extra], profile: { ...base.profile, goals } });
+    const r = computePlan({
+      ...base,
+      txs: [...base.txs, ...extra],
+      profile: { ...base.profile, goals },
+    });
     const ids = r.facts.map((f) => f.factId);
     expect(new Set(ids).size).toBe(ids.length);
     expect(ids.filter((x) => x.startsWith("spend_last_month:")).length).toBeGreaterThanOrEqual(2);
     expect(() => r.factSheet("nl")).not.toThrow();
     expect(r.factSheet("nl").facts.length).toBe(ids.length);
-    expect(computePlan({ ...base, txs: [...base.txs, ...extra], profile: { ...base.profile, goals } }).facts.map((f) => f.factId)).toEqual(ids);
+    expect(
+      computePlan({
+        ...base,
+        txs: [...base.txs, ...extra],
+        profile: { ...base.profile, goals },
+      }).facts.map((f) => f.factId),
+    ).toEqual(ids);
   });
 
   test("uniqueFactIds suffixes repeats -3, -4 ... skipping ids already in use", () => {
-    const f = (factId: string) => ({ factId, section: "month", exact: 1, unit: "count", polarity: "neutral", mustMention: false }) as never;
-    expect(uniqueFactIds([f("a"), f("a"), f("b"), f("a"), f("a-2")]).map((x) => x.factId)).toEqual(["a", "a-3", "b", "a-4", "a-2"]);
+    const f = (factId: string) =>
+      ({
+        factId,
+        section: "month",
+        exact: 1,
+        unit: "count",
+        polarity: "neutral",
+        mustMention: false,
+      }) as never;
+    expect(uniqueFactIds([f("a"), f("a"), f("b"), f("a"), f("a-2")]).map((x) => x.factId)).toEqual([
+      "a",
+      "a-3",
+      "b",
+      "a-4",
+      "a-2",
+    ]);
   });
 });
 

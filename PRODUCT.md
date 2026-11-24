@@ -28,7 +28,7 @@ Local-first (data stays on the machine or in an encrypted vault, read-only broke
 - Prices default to Yahoo Finance locally; Trading 212 history can be incomplete.
 - Investing dashboard is live at lavega.dev/investing, authenticated.
 - Shipped surfaces today: investing-web dashboard, site (marketing), extension (checkout points).
-- Personal vault (`apps/web`) ships now, per owner decision 2026-11-10. Build it for owner use first; public launch follows the Sure adoption plan gates.
+- Personal vault (`apps/web`) ships now, per owner decision 2026-11-10. Build it for owner use first; public launch follows the Sure port gates.
 
 ## Capabilities and Constraints
 

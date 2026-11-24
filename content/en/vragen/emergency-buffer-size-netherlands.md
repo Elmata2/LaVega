@@ -7,12 +7,29 @@ status: published
 author: alexander
 updated: 2026-10-26
 sources:
-  - { title: "Nibud: BufferBerekenaar (buffer calculator, in Dutch)", url: "https://www.nibud.nl/tools/een-financiele-buffer/", accessed: 2026-10-26 }
-  - { title: "Nibud: Sparen, zo pak je het aan (saving, in Dutch)", url: "https://www.nibud.nl/onderwerpen/sparen/sparen-zo-pak-je-het-aan/", accessed: 2026-10-26 }
+  - {
+      title: "Nibud: BufferBerekenaar (buffer calculator, in Dutch)",
+      url: "https://www.nibud.nl/tools/een-financiele-buffer/",
+      accessed: 2026-10-26,
+    }
+  - {
+      title: "Nibud: Sparen, zo pak je het aan (saving, in Dutch)",
+      url: "https://www.nibud.nl/onderwerpen/sparen/sparen-zo-pak-je-het-aan/",
+      accessed: 2026-10-26,
+    }
 faq:
-  - { q: "How big a buffer do you need according to Nibud?", a: "Nibud writes that it differs per household. Its BufferBerekenaar calculates a personal buffer from your household situation." }
-  - { q: "What is the ten percent guideline?", a: "Nibud names ten percent of monthly income as a guideline for building a buffer and keeping it topped up. Nibud itself calls it a guideline, not a fixed amount." }
-  - { q: "What is a buffer for?", a: "According to Nibud, to pay unexpected, larger and necessary expenses directly. Money for falling or fluctuating income is a separate question." }
+  - {
+      q: "How big a buffer do you need according to Nibud?",
+      a: "Nibud writes that it differs per household. Its BufferBerekenaar calculates a personal buffer from your household situation.",
+    }
+  - {
+      q: "What is the ten percent guideline?",
+      a: "Nibud names ten percent of monthly income as a guideline for building a buffer and keeping it topped up. Nibud itself calls it a guideline, not a fixed amount.",
+    }
+  - {
+      q: "What is a buffer for?",
+      a: "According to Nibud, to pay unexpected, larger and necessary expenses directly. Money for falling or fluctuating income is a separate question.",
+    }
 ---
 
 ## The short answer

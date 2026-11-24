@@ -156,22 +156,22 @@ export default function BankLink({
         </div>
       )}
       {!compact && (
-      <div className="scope-switch" role="group" aria-label={c.bankLink.typeRekeningAria}>
-        {PSU_TYPE_ORDER.map((t, i) => (
-          <Fragment key={t}>
-            {i > 0 && <span className="scope-rule" aria-hidden="true" />}
-            <button
-              type="button"
-              className={`scope-option${psuType === t ? " scope-on" : ""}`}
-              aria-pressed={psuType === t}
-              disabled={busy || loading}
-              onClick={() => pickPsuType(t)}
-            >
-              {psuTypeLabels[t]}
-            </button>
-          </Fragment>
-        ))}
-      </div>
+        <div className="scope-switch" role="group" aria-label={c.bankLink.typeRekeningAria}>
+          {PSU_TYPE_ORDER.map((t, i) => (
+            <Fragment key={t}>
+              {i > 0 && <span className="scope-rule" aria-hidden="true" />}
+              <button
+                type="button"
+                className={`scope-option${psuType === t ? " scope-on" : ""}`}
+                aria-pressed={psuType === t}
+                disabled={busy || loading}
+                onClick={() => pickPsuType(t)}
+              >
+                {psuTypeLabels[t]}
+              </button>
+            </Fragment>
+          ))}
+        </div>
       )}
       {aspsps === null ? (
         <Button disabled={busy || loading} onClick={() => void loadBanks(psuType)}>

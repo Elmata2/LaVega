@@ -17,7 +17,7 @@ import {
   type ProvenanceCitation,
 } from "@lavega/core";
 import { createPersonalNetWorthRepository } from "@lavega/database";
-import { runtimeDatabase } from "@lavega/investing-server/src/credentialStore.js";
+import { runtimeDatabase } from "@lavega/database";
 import { forwardInvesting } from "../investing-mount.js";
 
 /** Every structural write an MCP write tool may perform. Exactly one path. */

@@ -7,8 +7,7 @@
  * the server and can act; LaVega's personal ledger is sealed in the browser
  * (ADR 0009), so the tools run HERE and the server never sees a row. This module
  * is the pure part: the tool vocabulary, the intent router, the closed memory
- * vocabulary from `docs/superpowers/specs/2026-10-27-assistant-design.md`, and
- * the append-only approval reducer.
+ * vocabulary, and the append-only approval reducer.
  *
  * No clock, no I/O: the caller passes `asOf` and timestamps. Nothing here
  * imports storage or a transport, which is what keeps the tool path provably

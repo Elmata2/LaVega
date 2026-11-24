@@ -18,9 +18,14 @@ export default function OptimalisatieRoute({
   /** The adviser profile has been read; the plan is not trusted before. */
   profileLoaded: boolean;
 }) {
-  const plan = usePlan({ ...planInput, readOnly: true, ready: (planInput.ready ?? true) && profileLoaded });
+  const plan = usePlan({
+    ...planInput,
+    readOnly: true,
+    ready: (planInput.ready ?? true) && profileLoaded,
+  });
   // The plan reads the stored preferences first; until they are read the figure
   // could still change, so the block shows nothing rather than a wrong line.
-  const cardAdvice = profileLoaded && plan.loaded ? plan.result.sections.cards.figures.advice : null;
+  const cardAdvice =
+    profileLoaded && plan.loaded ? plan.result.sections.cards.figures.advice : null;
   return <Optimalisatie {...props} cardAdvice={cardAdvice} />;
 }

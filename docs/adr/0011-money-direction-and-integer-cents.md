@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted 2026-11-10 (owner approved the Sure adoption plan; Phase 0 deliverable).
+Accepted 2026-11-10 (owner approved the Sure port; Phase 0 deliverable).
 
 ## Context
 
@@ -16,7 +16,7 @@ Sure also stores money as `BigDecimal(19,4)`. LaVega's vault stores `Tx.amount` 
 JavaScript number. Ported budget, bill and matching math must not inherit float comparison
 behaviour or Sure's decimal scale by accident.
 
-The adoption plan ports Sure algorithms into new TypeScript/Effect modules. A port that copies
+The Sure port moves algorithms into new TypeScript/Effect modules. A port that copies
 a formula such as `amount.negative? ? income : expense` without flipping it will silently
 invert cashflow, budgets and reports. This ADR fixes the one boundary where direction is
 defined.

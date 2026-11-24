@@ -34,7 +34,7 @@ import Optimalisatie from "./views/Optimalisatie";
 
 /* De rentetabel wordt bij het opstarten opgehaald. In de test hoort daar geen
  * netwerk aan te pas te komen: een test die stilletjes localhost:8787 probeert
- * is een test die anders uitvalt zodra iemand `pnpm dev:server` heeft draaien.
+ * is een test die anders uitvalt zodra iemand `bun --filter @lavega/server dev` heeft draaien.
  * De provider vangt een mislukte fetch zelf op en valt terug op de ingebakken
  * momentopname, dus dit is genoeg — en het is dezelfde weg als op een telefoon
  * zonder bereik. */

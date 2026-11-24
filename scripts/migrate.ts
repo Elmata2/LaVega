@@ -2,10 +2,10 @@
 /*
  * Applies db/migrations to a PostgreSQL database and records what it applied.
  *
- *   pnpm db:migrate            apply every pending migration
- *   pnpm db:migrate:check      list pending migrations, exit 1 if there are any
- *   pnpm db:migrate:status     show the ledger against the directory
- *   pnpm db:migrate -- baseline   record every file as applied, running none
+ *   bun run db:migrate            apply every pending migration
+ *   bun run db:migrate:check      list pending migrations, exit 1 if there are any
+ *   bun run db:migrate:status     show the ledger against the directory
+ *   bun run db:migrate -- baseline   record every file as applied, running none
  *
  * Connect as the schema owner (`lavega_owner` on Neon), not `lavega_runtime`:
  * the runtime role cannot ALTER the tables it reads. Set MIGRATION_DATABASE_URL
@@ -62,13 +62,13 @@ async function main(): Promise<number> {
           if (command !== "baseline" && command !== "adopt") {
             console.error(
               "This database has tables but no migration ledger. It predates the runner.\n" +
-                "If its schema already matches db/migrations: pnpm db:migrate:baseline\n" +
-                "If you are not sure it does:                 pnpm db:migrate:adopt",
+                "If its schema already matches db/migrations: bun run db:migrate:baseline\n" +
+                "If you are not sure it does:                 bun run db:migrate:adopt",
             );
             return 1;
           }
         } else if (command === "baseline") {
-          console.error("This database is empty. Run pnpm db:migrate instead of baseline.");
+          console.error("This database is empty. Run bun run db:migrate instead of baseline.");
           return 1;
         }
       }

@@ -1236,11 +1236,7 @@ test.each([
   expect(filterPortfolioValueRange(points, range).map(({ date }) => date)).toEqual([latest]);
   // The start date is observable through the filter boundary: a point placed
   // on the expected start must be kept, and one day earlier dropped.
-  const boundary = [
-    point("1999-01-01", 1),
-    point(expectedStart, 2),
-    point(latest, 3),
-  ];
+  const boundary = [point("1999-01-01", 1), point(expectedStart, 2), point(latest, 3)];
   expect(filterPortfolioValueRange(boundary, range).map(({ date }) => date)).toEqual([
     expectedStart,
     latest,

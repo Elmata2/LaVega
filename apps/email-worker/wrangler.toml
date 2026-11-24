@@ -4,8 +4,8 @@
 # er geen 30 MB dependency in een pad meeloopt dat een factuur draagt):
 #
 #     cd apps/email-worker
-#     pnpm dlx wrangler@4 secret put N8N_SHARED_SECRET     # eenmalig
-#     pnpm dlx wrangler@4 deploy
+#     bunx wrangler@4 secret put N8N_SHARED_SECRET     # eenmalig
+#     bunx wrangler@4 deploy
 #
 # De volledige stappen — Email Routing aanzetten, de catch-all-regel, de
 # n8n-credential — staan in docs/n8n/DOORSTUURADRES.md.
@@ -40,6 +40,6 @@ enabled = true
 [previews]
 
 # N8N_WEBHOOK_URL en N8N_SHARED_SECRET staan hier NIET. Het zijn secrets:
-#     pnpm dlx wrangler@4 secret put N8N_WEBHOOK_URL
-#     pnpm dlx wrangler@4 secret put N8N_SHARED_SECRET
+#     bunx wrangler@4 secret put N8N_WEBHOOK_URL
+#     bunx wrangler@4 secret put N8N_SHARED_SECRET
 # Secrets komen de repo niet in. Zie docs/CONTEXT.md, harde eis 2.

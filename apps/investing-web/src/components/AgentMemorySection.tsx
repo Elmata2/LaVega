@@ -11,8 +11,8 @@ import {
   type RiskTolerance,
   type Thesis,
 } from "../lib/agentMemory.js";
-import { Button } from "./ui/button.js";
-import { Card, CardContent, CardHeader, CardTitle } from "./ui/card.js";
+import { Button } from "@lavega/ui";
+import { Card, CardContent, CardHeader, CardTitle } from "@lavega/ui";
 
 /* What every portfolio agent reads about the owner: risk tolerance, theses
  * and goals. Theses and goals can be edited here but not deleted on their

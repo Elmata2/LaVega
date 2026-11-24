@@ -184,7 +184,9 @@ function mountAccounts(accounts: Account[]) {
 }
 
 test("a file-fed account with no balance gets Saldo invullen, which focuses its existing saldo field", () => {
-  const h = mountAccounts([{ ...ING, bank: "American Express", name: "Amex Card", source: "file", balance: null }]);
+  const h = mountAccounts([
+    { ...ING, bank: "American Express", name: "Amex Card", source: "file", balance: null },
+  ]);
   // (a generic CSV import has the same gap: see the next test)
   const btn = [...h.querySelectorAll("button")].find((b) => b.textContent === "Saldo invullen")!;
   expect(btn).toBeTruthy();
@@ -199,7 +201,9 @@ test("Saldo invullen also shows for a generic CSV account with no balance, not f
     { ...ING, key: "live", balance: null, balanceFetchedAt: "2026-01-01" },
     { ...ING, key: "known", balance: 5 },
   ]);
-  expect([...h.querySelectorAll("button")].filter((b) => b.textContent === "Saldo invullen")).toHaveLength(1);
+  expect(
+    [...h.querySelectorAll("button")].filter((b) => b.textContent === "Saldo invullen"),
+  ).toHaveLength(1);
 });
 
 test("a failed save leaves no value in the field and says so", async () => {
@@ -247,7 +251,8 @@ test("a failed save leaves no value in the field and says so", async () => {
   await act(async () => {
     await new Promise((r) => setTimeout(r, 10));
   });
-  expect(h.querySelector('[role="alert"]')!.textContent).toBe("Opslaan lukte niet. Probeer het opnieuw.");
+  expect(h.querySelector('[role="alert"]')!.textContent).toBe(
+    "Opslaan lukte niet. Probeer het opnieuw.",
+  );
   expect(h.querySelector<HTMLInputElement>('[data-testid="saldo-input"]')!.value).toBe("");
 });
-

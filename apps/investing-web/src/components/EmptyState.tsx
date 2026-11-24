@@ -1,4 +1,4 @@
-import { Card, CardContent } from "./ui/card";
+import { Card, CardContent } from "@lavega/ui";
 
 export function EmptyState({ title, description }: { title: string; description: string }) {
   return (

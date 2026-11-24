@@ -5,7 +5,8 @@ Commit `562fe096d149cb4d1fb1e6d3446527572c1ec7f6` (2026-11-10). Shallow clone; s
 All citations are repo-relative under `/tmp/sure` (`path:line`). Docs claims are marked "docs"; code claims were read.
 
 Method: read `docs/CONTEXT.md`, `docs/investing/PORTFOLIO-AGENTS.md`,
-`docs/research/2026-10-26-lavega-agent-memory-design.md`, `docs/adr/0007` first; then read Sure
+`docs/adr/0007-agent-memory-in-neon.md` and `docs/adr/0014-server-reads-transactions-at-night.md`
+first; then read Sure
 models/controllers/services/jobs/docs and cross-checked the MCP tool inventory against
 `app/models/assistant/function/*.rb` (55 files, 8,367 lines). No runtime, no Rails, no bundle.
 
@@ -15,12 +16,12 @@ models/controllers/services/jobs/docs and cross-checked the MCP tool inventory a
 
 Sure's agent platform is not one feature; it is four separable assets. Ranked by reuse value for LaVega:
 
-| # | Asset | Why it matters | Verdict |
-|---|---|---|---|
-| 1 | MCP tool contract: one tool registry shared by in-app chat and `/mcp`, JSON Schema definitions, error-as-data, dry-run/write pairs | Exact, tested shape for "agent acts on a finance app". 49 tools; the registry is the single source for both surfaces | **PORT** the transport + registry pattern (S) and the provenance tools (M) |
-| 2 | Provenance contract: `record_valuation` citation grammar `(grade: A/B/C)`, statement-coverage statuses, reconcile-vs-ledger report-only | Turns "the model may invent numbers" into a parseable, enforced invariant without giving the model write trust | **PORT** grammar + **ADOPT** coverage/reconciliation (S/M) |
-| 3 | Import/export interop: ZIP of CSVs + `all.ndjson`, version marker, portable rules by name/`value_ref`, import readback verification | Directly usable to migrate a past self-hosted Maybe/Sure instance into LaVega; the NDJSON record vocabulary is a ready interop schema | **PORT** subset (M) |
-| 4 | AI plumbing patterns: tool-call round cap + forced text on last round, tool-pair-safe history trimming, stable prompt prefix for provider cache, per-operation LLM cost ledger, capability probes | Small, battle-tested details that prevent the expensive failure modes | **ADOPT** (S–M each) |
+| #   | Asset                                                                                                                                                                                             | Why it matters                                                                                                                        | Verdict                                                                    |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| 1   | MCP tool contract: one tool registry shared by in-app chat and `/mcp`, JSON Schema definitions, error-as-data, dry-run/write pairs                                                                | Exact, tested shape for "agent acts on a finance app". 49 tools; the registry is the single source for both surfaces                  | **PORT** the transport + registry pattern (S) and the provenance tools (M) |
+| 2   | Provenance contract: `record_valuation` citation grammar `(grade: A/B/C)`, statement-coverage statuses, reconcile-vs-ledger report-only                                                           | Turns "the model may invent numbers" into a parseable, enforced invariant without giving the model write trust                        | **PORT** grammar + **ADOPT** coverage/reconciliation (S/M)                 |
+| 3   | Import/export interop: ZIP of CSVs + `all.ndjson`, version marker, portable rules by name/`value_ref`, import readback verification                                                               | Directly usable to migrate a past self-hosted Maybe/Sure instance into LaVega; the NDJSON record vocabulary is a ready interop schema | **PORT** subset (M)                                                        |
+| 4   | AI plumbing patterns: tool-call round cap + forced text on last round, tool-pair-safe history trimming, stable prompt prefix for provider cache, per-operation LLM cost ledger, capability probes | Small, battle-tested details that prevent the expensive failure modes                                                                 | **ADOPT** (S–M each)                                                       |
 
 What does not port: Rails/ActiveRecord, Doorkeeper, Sidekiq capsules, Turbo/Hotwire streaming,
 Active Storage authorization, PG-specific SQL. Also skip Sure's dual API envelopes, its single
@@ -68,12 +69,12 @@ Two failure-path details worth copying:
 35 core tool classes, plus 14 preview tools when `user.preview_features_enabled?`, minus 5
 family-config write tools for guests (`app/models/assistant.rb:17-46,66-108`). Therefore:
 
-| Caller | Tool count |
-|---|---|
-| admin/member, preview on | 49 |
-| admin/member, preview off | 35 |
-| guest, preview on | 44 |
-| guest, preview off | 30 |
+| Caller                    | Tool count |
+| ------------------------- | ---------- |
+| admin/member, preview on  | 49         |
+| admin/member, preview off | 35         |
+| guest, preview on         | 44         |
+| guest, preview off        | 30         |
 
 MCP uses exactly this registry: `tools/list` maps `Assistant.function_classes(mcp_user)`
 (`app/controllers/mcp_controller.rb:85-96`). A tool added to the array is immediately callable by
@@ -227,7 +228,7 @@ Apply path (`app/models/family/auto_categorizer.rb`):
   and already holds the cached AI value (`auto_categorizer.rb:269-318`);
 - low-confidence classification decisions are **withheld**, not applied; only providers reporting
   calibrated confidence are gated (`auto_categorizer.rb:151-171`);
-- shadow mode: a configurable share of runs also asks the *other* provider and records agreement
+- shadow mode: a configurable share of runs also asks the _other_ provider and records agreement
   in `CategorizationComparison`, never applying the shadow answer (`auto_categorizer.rb:173-240`);
 - writes go through `transaction.enrich_attribute(:category_id, id, source: "ai")` then
   `lock_attr!(:category_id)` — provenance per attribute (`auto_categorizer.rb:80-89`);
@@ -241,7 +242,7 @@ PDF pipeline: upload creates an `AccountStatement` then a `PdfImport`; `ProcessP
 into the vector store, emails next steps, and leaves statements with rows in `pending` for human
 review (`app/jobs/process_pdf_job.rb:1-53`; `app/models/pdf_import.rb:63-84`). Vector search
 (`search_family_files`) needs a configured adapter (OpenAI/pgvector/Qdrant); the Statement Vault is
-deliberately *not* indexed (`docs/hosting/mcp.md:164-168`).
+deliberately _not_ indexed (`docs/hosting/mcp.md:164-168`).
 
 ### 1.10 Chat over API v1
 
@@ -261,17 +262,17 @@ same background job that the web path triggers; assistant responses are polled, 
 One endpoint: `POST /mcp` (`config/routes.rb:1067`), JSON-RPC 2.0 over HTTP with MCP Streamable
 HTTP conventions (`app/controllers/mcp_controller.rb:1-247`).
 
-| Property | Value (source) |
-|---|---|
-| Protocol | `2025-06-18`; accepts `2025-03-26` too (`mcp_controller.rb:4-5`) |
-| Methods | `initialize`, `tools/list`, `tools/call`; anything else → `-32601` (`:59-69`) |
-| Notifications | no `id` → `202 Accepted`, empty body (`:30-35`) |
-| Session | server-issued UUID, Rails.cache `mcp:session:<id>` TTL 1 day; header `Mcp-Session-Id` must map to the authenticated user (`:72-83,198-208`); `Mcp-Protocol-Version` echoed (`:244-247`) |
-| Auth | `Authorization: Bearer`; first Doorkeeper token requiring scope `read_write` and an active user, then static `MCP_API_TOKEN` constant-time compared + `MCP_USER_EMAIL` lookup (`:127-166`) |
-| 401 | sets `WWW-Authenticate: Bearer resource_metadata="<base>/.well-known/oauth-protected-resource/mcp", scope="read_write"` (`:225-231`) |
-| Context | fresh unsaved `Current.session` per request to avoid impersonation bleed (`:168-177`) |
-| Errors | JSON-RPC error object; tool exceptions become `{content:[text], isError:true}` with a generic message (no exception text) (`:117-125,233-242`) |
-| Tools source | `Assistant.function_classes(mcp_user)` (`:85-96`), scoped lookup on call so hidden tools are not callable by name (`:98-110`) |
+| Property      | Value (source)                                                                                                                                                                             |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Protocol      | `2025-06-18`; accepts `2025-03-26` too (`mcp_controller.rb:4-5`)                                                                                                                           |
+| Methods       | `initialize`, `tools/list`, `tools/call`; anything else → `-32601` (`:59-69`)                                                                                                              |
+| Notifications | no `id` → `202 Accepted`, empty body (`:30-35`)                                                                                                                                            |
+| Session       | server-issued UUID, Rails.cache `mcp:session:<id>` TTL 1 day; header `Mcp-Session-Id` must map to the authenticated user (`:72-83,198-208`); `Mcp-Protocol-Version` echoed (`:244-247`)    |
+| Auth          | `Authorization: Bearer`; first Doorkeeper token requiring scope `read_write` and an active user, then static `MCP_API_TOKEN` constant-time compared + `MCP_USER_EMAIL` lookup (`:127-166`) |
+| 401           | sets `WWW-Authenticate: Bearer resource_metadata="<base>/.well-known/oauth-protected-resource/mcp", scope="read_write"` (`:225-231`)                                                       |
+| Context       | fresh unsaved `Current.session` per request to avoid impersonation bleed (`:168-177`)                                                                                                      |
+| Errors        | JSON-RPC error object; tool exceptions become `{content:[text], isError:true}` with a generic message (no exception text) (`:117-125,233-242`)                                             |
+| Tools source  | `Assistant.function_classes(mcp_user)` (`:85-96`), scoped lookup on call so hidden tools are not callable by name (`:98-110`)                                                              |
 
 OAuth discovery and dynamic client registration:
 
@@ -298,65 +299,65 @@ family and account ACLs.
 
 **Core tools — 35, always in `tools/list` for members**
 
-| Tool | Input params |
-|---|---|
-| `get_transactions` | `page`, `page_size`, `order`(asc/desc), `sort_by`(date/amount), `search`, `amount`, `amount_operator`(equal/less/greater), `start_date`, `end_date`, `types`(income/expense/transfer), `statuses`, `account_ids`, `accounts`, `categories`, `merchants`, `tags` |
-| `get_recurring_transactions` | `status`, `upcoming_within_days` |
-| `get_uncategorized_transactions` | `start_date`, `end_date`, `account_ids`, `limit` |
-| `get_accounts` | `include_balance_series`, `series_period` |
-| `get_holdings` | `page*`, `accounts`, `securities` |
-| `get_balance_sheet` | `period`, `start_date`, `end_date`, `interval` |
-| `get_income_statement` | `start_date*`, `end_date*`, `account_ids`, `group_by`, `compare_previous_period` |
-| `get_budget` | `month`, `prior_months` |
-| `get_merchants` | `page`, `page_size`, `search` |
-| `get_tags` | `page`, `page_size` |
-| `get_categories` | `page`, `page_size` |
-| `get_rules` | `rule_id`, `active`, `search`, `page`, `page_size` |
-| `get_rule_options` | (none) — returns condition/action types + operators for rule building |
-| `get_transfer_match_candidates` | `transaction_id` |
-| `search_family_files` | `query*`, `max_results` (vector store; not the Statement Vault) |
-| `import_bank_statement` | `pdf_import_id*`, `account_id` |
-| `create_goal` | `name`, `target_amount`, `target_date`, `linked_account_names`, `earmarks`, `notes` |
-| `create_tag` | `name*`, `color` |
-| `update_tag` | `name*`, `new_name`, `color` |
-| `create_category` | `name*`, `color`, `icon`, `parent_id` |
-| `update_category` | `id*`, `name`, `color`, `icon`, `parent_id` |
-| `delete_category` | `id*`, `replacement_id` |
-| `create_rule` | `conditions*`, `actions*`, `effective_date`, `name`, `sample_size` |
-| `update_rule` | `rule_id`, `name`, `active`, `conditions`, `actions`, `effective_date`, `sample_size` |
-| `preview_rule` | `rule_id` or `conditions`+`actions`+`effective_date`, `sample_size` |
-| `apply_rule` | `rule_id*`, `preview_token*`, `override_locked` |
-| `set_opening_balance` | `account_id`, `balance`, `date`, `dry_run` |
-| `update_transaction` | `id*`, `name`, `notes`, `category_id`, `merchant_id`, `tag_ids` |
-| `create_transaction` | `account_id*`, `date*`, `amount*`, `name*`, `type`, `currency`, `notes`, `category_id`, `merchant_id`, `tag_ids`, `external_id`, `source`, `user_modified` |
-| `delete_transaction` | `id`, `account_id` |
-| `match_transfer` | `transaction_id`, `counterpart_transaction_id`, `target_account_id`, `dry_run` |
-| `unmatch_transfer` | `transaction_id`, `transfer_id`, `reject`, `dry_run` |
-| `review_transfer` | `transfer_id`, `action` |
-| `update_transfer` | `transaction_id`, `transfer_id`, `investment_contribution`, `dry_run` |
-| `update_budget` | `month`, `budgeted_spending`, `expected_income`, `categories` (each `{category*, amount*}`) |
+| Tool                             | Input params                                                                                                                                                                                                                                                    |
+| -------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `get_transactions`               | `page`, `page_size`, `order`(asc/desc), `sort_by`(date/amount), `search`, `amount`, `amount_operator`(equal/less/greater), `start_date`, `end_date`, `types`(income/expense/transfer), `statuses`, `account_ids`, `accounts`, `categories`, `merchants`, `tags` |
+| `get_recurring_transactions`     | `status`, `upcoming_within_days`                                                                                                                                                                                                                                |
+| `get_uncategorized_transactions` | `start_date`, `end_date`, `account_ids`, `limit`                                                                                                                                                                                                                |
+| `get_accounts`                   | `include_balance_series`, `series_period`                                                                                                                                                                                                                       |
+| `get_holdings`                   | `page*`, `accounts`, `securities`                                                                                                                                                                                                                               |
+| `get_balance_sheet`              | `period`, `start_date`, `end_date`, `interval`                                                                                                                                                                                                                  |
+| `get_income_statement`           | `start_date*`, `end_date*`, `account_ids`, `group_by`, `compare_previous_period`                                                                                                                                                                                |
+| `get_budget`                     | `month`, `prior_months`                                                                                                                                                                                                                                         |
+| `get_merchants`                  | `page`, `page_size`, `search`                                                                                                                                                                                                                                   |
+| `get_tags`                       | `page`, `page_size`                                                                                                                                                                                                                                             |
+| `get_categories`                 | `page`, `page_size`                                                                                                                                                                                                                                             |
+| `get_rules`                      | `rule_id`, `active`, `search`, `page`, `page_size`                                                                                                                                                                                                              |
+| `get_rule_options`               | (none) — returns condition/action types + operators for rule building                                                                                                                                                                                           |
+| `get_transfer_match_candidates`  | `transaction_id`                                                                                                                                                                                                                                                |
+| `search_family_files`            | `query*`, `max_results` (vector store; not the Statement Vault)                                                                                                                                                                                                 |
+| `import_bank_statement`          | `pdf_import_id*`, `account_id`                                                                                                                                                                                                                                  |
+| `create_goal`                    | `name`, `target_amount`, `target_date`, `linked_account_names`, `earmarks`, `notes`                                                                                                                                                                             |
+| `create_tag`                     | `name*`, `color`                                                                                                                                                                                                                                                |
+| `update_tag`                     | `name*`, `new_name`, `color`                                                                                                                                                                                                                                    |
+| `create_category`                | `name*`, `color`, `icon`, `parent_id`                                                                                                                                                                                                                           |
+| `update_category`                | `id*`, `name`, `color`, `icon`, `parent_id`                                                                                                                                                                                                                     |
+| `delete_category`                | `id*`, `replacement_id`                                                                                                                                                                                                                                         |
+| `create_rule`                    | `conditions*`, `actions*`, `effective_date`, `name`, `sample_size`                                                                                                                                                                                              |
+| `update_rule`                    | `rule_id`, `name`, `active`, `conditions`, `actions`, `effective_date`, `sample_size`                                                                                                                                                                           |
+| `preview_rule`                   | `rule_id` or `conditions`+`actions`+`effective_date`, `sample_size`                                                                                                                                                                                             |
+| `apply_rule`                     | `rule_id*`, `preview_token*`, `override_locked`                                                                                                                                                                                                                 |
+| `set_opening_balance`            | `account_id`, `balance`, `date`, `dry_run`                                                                                                                                                                                                                      |
+| `update_transaction`             | `id*`, `name`, `notes`, `category_id`, `merchant_id`, `tag_ids`                                                                                                                                                                                                 |
+| `create_transaction`             | `account_id*`, `date*`, `amount*`, `name*`, `type`, `currency`, `notes`, `category_id`, `merchant_id`, `tag_ids`, `external_id`, `source`, `user_modified`                                                                                                      |
+| `delete_transaction`             | `id`, `account_id`                                                                                                                                                                                                                                              |
+| `match_transfer`                 | `transaction_id`, `counterpart_transaction_id`, `target_account_id`, `dry_run`                                                                                                                                                                                  |
+| `unmatch_transfer`               | `transaction_id`, `transfer_id`, `reject`, `dry_run`                                                                                                                                                                                                            |
+| `review_transfer`                | `transfer_id`, `action`                                                                                                                                                                                                                                         |
+| `update_transfer`                | `transaction_id`, `transfer_id`, `investment_contribution`, `dry_run`                                                                                                                                                                                           |
+| `update_budget`                  | `month`, `budgeted_spending`, `expected_income`, `categories` (each `{category*, amount*}`)                                                                                                                                                                     |
 
 **Preview tools — 14, only when the MCP user opted into preview features**
 
 Statement Vault tools also require the user to be admin/member, matching the web UI
 (`assistant.rb:26-36`; docs `docs/hosting/mcp.md:170-204`).
 
-| Tool | Input params |
-|---|---|
-| `upload_account_statement` | `filename*`, `content_base64*`, `account_id` (PDF/CSV/XLSX, ≤25 MB; dedup by SHA-256) |
-| `list_account_statements` | `account_id`, `review_status`, `content_sha256`, `overlapping_from`, `overlapping_until`, `limit` |
-| `get_account_statement` | `statement_id*` (identity + recorded balances + reconciliation; no bytes, no link) |
-| `get_statement_coverage` | `account_id*`, `year` |
-| `record_valuation` | `account_id*`, `date*`, `amount*`, `source*` (citation grammar) |
-| `get_valuations` | `account_id`, `start_date`, `end_date`, `page` |
-| `get_insights` | `insight_type`, `include_acknowledged`, `limit` |
-| `get_bills` | `status`, `payment_state`, `bill_type`, `search`, `due_within_days` |
-| `get_bill_details` | `bill_id*` |
-| `get_paycheck_plan` | `periods_limit` |
-| `get_bill_audit` | `lookback_months` |
-| `create_bill` | `name*`, `amount*`, `first_due_on*`, `frequency`, `is_income`, `bill_type`, `account_name`, `category_name`, `autopay`, `payment_url`, `notes` |
-| `update_bill` | `bill_id*`, `name`, `amount`, `account_name`, `category_name`, `bill_type`, `status`, `frequency`, `due_day_of_month`, `weekday`, `month_of_year`, `autopay`, `payment_url`, `notes`, `renews_on`, `trial_ends_on` |
-| `record_bill_payment` | `bill_id*`, `occurrence_due_on`, `amount`, `paid_on` |
+| Tool                       | Input params                                                                                                                                                                                                       |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `upload_account_statement` | `filename*`, `content_base64*`, `account_id` (PDF/CSV/XLSX, ≤25 MB; dedup by SHA-256)                                                                                                                              |
+| `list_account_statements`  | `account_id`, `review_status`, `content_sha256`, `overlapping_from`, `overlapping_until`, `limit`                                                                                                                  |
+| `get_account_statement`    | `statement_id*` (identity + recorded balances + reconciliation; no bytes, no link)                                                                                                                                 |
+| `get_statement_coverage`   | `account_id*`, `year`                                                                                                                                                                                              |
+| `record_valuation`         | `account_id*`, `date*`, `amount*`, `source*` (citation grammar)                                                                                                                                                    |
+| `get_valuations`           | `account_id`, `start_date`, `end_date`, `page`                                                                                                                                                                     |
+| `get_insights`             | `insight_type`, `include_acknowledged`, `limit`                                                                                                                                                                    |
+| `get_bills`                | `status`, `payment_state`, `bill_type`, `search`, `due_within_days`                                                                                                                                                |
+| `get_bill_details`         | `bill_id*`                                                                                                                                                                                                         |
+| `get_paycheck_plan`        | `periods_limit`                                                                                                                                                                                                    |
+| `get_bill_audit`           | `lookback_months`                                                                                                                                                                                                  |
+| `create_bill`              | `name*`, `amount*`, `first_due_on*`, `frequency`, `is_income`, `bill_type`, `account_name`, `category_name`, `autopay`, `payment_url`, `notes`                                                                     |
+| `update_bill`              | `bill_id*`, `name`, `amount`, `account_name`, `category_name`, `bill_type`, `status`, `frequency`, `due_day_of_month`, `weekday`, `month_of_year`, `autopay`, `payment_url`, `notes`, `renews_on`, `trial_ends_on` |
+| `record_bill_payment`      | `bill_id*`, `occurrence_due_on`, `amount`, `paid_on`                                                                                                                                                               |
 
 **Guest delta — 5 core tools removed** for `user.guest?`: `create_tag`, `update_tag`,
 `create_category`, `update_category`, `delete_category` (`assistant.rb:38-46,105-107`).
@@ -400,18 +401,18 @@ Vault (bytes + SHA-256), coverage and ledger reconciliation.
 
 Ownership table (`wealth-agent-harness.md:38-52`):
 
-| Blueprint layer | Owner | In Sure |
-|---|---|---|
-| L0/L1 entities, holders | Sure, partially | `Family`, `User`, `accounts.owner_id`; non-user holders (trust, holding company) have no home |
-| L1 account registry | Sure | `Account` + `accountable`; off-bank positions as `OtherAsset`/`Property` |
-| L1 positions, parameters, FX, tax criteria | Harness | — |
-| L2 wealth series | **Sure authoritative** | `Entry`/`Valuation`, `Holding`; harness snapshots to CSV |
-| L2 tax series (criterion, applicable, declared, legal_max) | Harness only | "one value, one criterion" has no representation |
-| L3 vault — account statements | **Split** | archive, SHA-256 dedup, period detection, matching, review queue; bytes never returned over MCP |
-| L3 vault — tax returns, annual accounts, contracts, email | Harness | vault is statement-shaped, PDF/CSV/XLSX only |
-| `_control.csv` / reconcile-or-abort | Split | `get_account_statement` reports statement-vs-ledger only (tolerance 0.01, report-only) |
-| Gap map / `PENDING` | Sure | `get_statement_coverage` statuses |
-| Numbered deltas, goldens, workbook, divergences | Harness only | — |
+| Blueprint layer                                            | Owner                  | In Sure                                                                                         |
+| ---------------------------------------------------------- | ---------------------- | ----------------------------------------------------------------------------------------------- |
+| L0/L1 entities, holders                                    | Sure, partially        | `Family`, `User`, `accounts.owner_id`; non-user holders (trust, holding company) have no home   |
+| L1 account registry                                        | Sure                   | `Account` + `accountable`; off-bank positions as `OtherAsset`/`Property`                        |
+| L1 positions, parameters, FX, tax criteria                 | Harness                | —                                                                                               |
+| L2 wealth series                                           | **Sure authoritative** | `Entry`/`Valuation`, `Holding`; harness snapshots to CSV                                        |
+| L2 tax series (criterion, applicable, declared, legal_max) | Harness only           | "one value, one criterion" has no representation                                                |
+| L3 vault — account statements                              | **Split**              | archive, SHA-256 dedup, period detection, matching, review queue; bytes never returned over MCP |
+| L3 vault — tax returns, annual accounts, contracts, email  | Harness                | vault is statement-shaped, PDF/CSV/XLSX only                                                    |
+| `_control.csv` / reconcile-or-abort                        | Split                  | `get_account_statement` reports statement-vs-ledger only (tolerance 0.01, report-only)          |
+| Gap map / `PENDING`                                        | Sure                   | `get_statement_coverage` statuses                                                               |
+| Numbered deltas, goldens, workbook, divergences            | Harness only           | —                                                                                               |
 
 Three invariants Sure **cannot** provide (`wealth-agent-harness.md:53-68`): **closed periods are
 immutable** (a mutable Postgres row keeps no diffable history; immutability lives in harness
@@ -453,15 +454,15 @@ request specs (`openapi.yaml:1-16`; docs `docs/api/users.md:5-19`).
 
 Resource groups (all under `/api/v1`):
 
-| Group | Endpoints |
-|---|---|
+| Group                | Endpoints                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Read/write financial | `accounts` (index/show), `account_statements` (index/show/create), `balances` (index/show), `budgets`, `budget_categories` (index/show), `categories` (index/show/create), `merchants` (index/show/create), `tags` (full CRUD), `transactions` (full CRUD + nested `split` show/create/update/destroy), `trades` (full CRUD), `holdings` (index/show), `transfers` (index/show), `rejected_transfers` (index/show), `valuations` (index/show/create/update), `recurring_transactions` (full CRUD), `securities` (index/show), `security_prices` (index/show/create), `rules` (index/show), `rule_runs` (index/show) |
-| Aggregate views | `balance_sheet`, `cash_flow`, `spending_vs_normal`, `usage`, `family_settings`, `insights` (+`acknowledge`), `provider_connections` |
-| Imports/exports | `imports` (index/show/create, `preflight`, `rows`), `import_sessions` (show/create + `chunks` + `publish`), `family_exports` (index/show/create + `download`) |
-| Sync | `POST /sync`, `syncs` (index/show + `latest`) |
-| Chat | `chats` (index/show/create/update/destroy), nested `messages` create + `retry` |
-| Auth/account | `auth/signup|login|refresh|sso_providers|sso_exchange|sso_link|sso_create_account|enable_ai`, `users/reset/status`, `users/reset`, `users/me`, `version` |
-| Devices/FinanceKit | `push_subscriptions` create/destroy, `financekit/*` (connections, mappings, activate, credential, repair, conflicts, publisher batches) |
+| Aggregate views      | `balance_sheet`, `cash_flow`, `spending_vs_normal`, `usage`, `family_settings`, `insights` (+`acknowledge`), `provider_connections`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| Imports/exports      | `imports` (index/show/create, `preflight`, `rows`), `import_sessions` (show/create + `chunks` + `publish`), `family_exports` (index/show/create + `download`)                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| Sync                 | `POST /sync`, `syncs` (index/show + `latest`)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| Chat                 | `chats` (index/show/create/update/destroy), nested `messages` create + `retry`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| Auth/account         | `auth/signup                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        | login | refresh | sso_providers | sso_exchange | sso_link | sso_create_account | enable_ai`, `users/reset/status`, `users/reset`, `users/me`, `version` |
+| Devices/FinanceKit   | `push_subscriptions` create/destroy, `financekit/*` (connections, mappings, activate, credential, repair, conflicts, publisher batches)                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
 
 OpenAPI outcome: two capabilities are documented in routes but absent from `openapi.yaml`:
 `POST /api/v1/sync` (grep for `"/api/v1/sync"` finds nothing) — verify generated docs before
@@ -499,12 +500,12 @@ today**; self-hosted gets `NoopApiRateLimiter` (infinite, `:73-85`); 429 body
 Three shapes exist, which is a design debt to avoid:
 
 1. **Named collection + `pagination`** (most resources): `{transactions:[...], pagination:{page,
-   per_page, total_count, total_pages}}` (`app/views/api/v1/transactions/index.json.jbuilder:1-13`;
+per_page, total_count, total_pages}}` (`app/views/api/v1/transactions/index.json.jbuilder:1-13`;
    same for accounts/holdings/trades/valuations/transfers/budgets/balances/…).
 2. **`{data, meta}`** (newer resources: imports, family_exports, syncs, rule_runs, provider
    connections, account_statements, financekit): e.g.
    `app/views/api/v1/imports/index.json.jbuilder:1-21` with `meta.current_page,next_page,
-   prev_page,total_pages,total_count,per_page`.
+prev_page,total_pages,total_count,per_page`.
 3. `Pagination` component in OpenAPI is the four-field `{page,per_page,total_count,total_pages}`
    (`openapi.yaml:133-152`); `{data,meta}` collections reuse it for `meta` or declare their own.
 
@@ -517,15 +518,15 @@ Paging params: `page`, `per_page`; API-wide clamp 1..100 (default 25) in
 Shared `ErrorResponse` (`openapi.yaml:344-364`): required `error`, optional `message`, `details`
 (array or object), `errors` (array). Runtime handlers (`base_controller.rb:42-45,256-282`):
 
-| Status | `error` | Trigger |
-|---|---|---|
-| 400 | `bad_request` | missing parameters |
-| 401 | `unauthorized` | no/invalid token or key, inactive user, missing scope on OAuth |
-| 403 | `forbidden` / `insufficient_scope` / `feature_disabled` | wrong family, missing scope, AI not enabled |
-| 404 | `record_not_found` | |
-| 422 | `validation_failed` (+ `errors: [message]`) | |
-| 429 | `rate_limit_exceeded` (+ `details`) | |
-| 500 | `internal_server_error` | per-action rescue in many controllers |
+| Status | `error`                                                 | Trigger                                                        |
+| ------ | ------------------------------------------------------- | -------------------------------------------------------------- |
+| 400    | `bad_request`                                           | missing parameters                                             |
+| 401    | `unauthorized`                                          | no/invalid token or key, inactive user, missing scope on OAuth |
+| 403    | `forbidden` / `insufficient_scope` / `feature_disabled` | wrong family, missing scope, AI not enabled                    |
+| 404    | `record_not_found`                                      |                                                                |
+| 422    | `validation_failed` (+ `errors: [message]`)             |                                                                |
+| 429    | `rate_limit_exceeded` (+ `details`)                     |                                                                |
+| 500    | `internal_server_error`                                 | per-action rescue in many controllers                          |
 
 Some controllers deviate with inline `{error: "Failed to create chat", details:[...]}` (e.g.
 `api/v1/chats_controller.rb:46,56`) — another drift to not copy.
@@ -553,17 +554,17 @@ Storage (`app/jobs/family_data_export_job.rb:1-27`, `app/models/family_export.rb
 
 ZIP contents (`app/models/family/data_exporter.rb:12-55`):
 
-| Entry | Shape |
-|---|---|
-| `version.txt` | `export_version: 2` |
-| `accounts.csv` | `id,name,type,subtype,balance,currency,created_at` (`:64-80`) |
-| `transactions.csv` | `date,account_name,amount,name,category,tags,notes,currency`; split parents excluded, children exported; tags escaped with backslash (`:6,83-108`) |
-| `trades.csv` | `date,account_name,ticker,quantity,price,amount,currency` (`:110-129`) |
-| `categories.csv` | `name,color,parent_category,lucide_icon` (`:131-145`) |
-| `merchants.csv` | `name,color,website_url` — matches MerchantImport columns for round-trip (`:147-161`) |
-| `rules.csv` | `name,resource_type,active,effective_date,conditions,actions,group`; conditions/actions are JSON with IDs resolved to names + `value_ref` (`:163-181,940-946`) |
+| Entry              | Shape                                                                                                                                                                                                                                        |
+| ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `version.txt`      | `export_version: 2`                                                                                                                                                                                                                          |
+| `accounts.csv`     | `id,name,type,subtype,balance,currency,created_at` (`:64-80`)                                                                                                                                                                                |
+| `transactions.csv` | `date,account_name,amount,name,category,tags,notes,currency`; split parents excluded, children exported; tags escaped with backslash (`:6,83-108`)                                                                                           |
+| `trades.csv`       | `date,account_name,ticker,quantity,price,amount,currency` (`:110-129`)                                                                                                                                                                       |
+| `categories.csv`   | `name,color,parent_category,lucide_icon` (`:131-145`)                                                                                                                                                                                        |
+| `merchants.csv`    | `name,color,website_url` — matches MerchantImport columns for round-trip (`:147-161`)                                                                                                                                                        |
+| `rules.csv`        | `name,resource_type,active,effective_date,conditions,actions,group`; conditions/actions are JSON with IDs resolved to names + `value_ref` (`:163-181,940-946`)                                                                               |
 | `attachments.json` | manifest only: `{version:1, binary_included:false, attachments:[{id,record_type,record_id,name,filename,content_type,byte_size,checksum,binary_included:false,created_at,...}]}` for transaction attachments + family documents (`:183-244`) |
-| `all.ndjson` | the canonical record stream, one JSON object per line (`:246-554`) |
+| `all.ndjson`       | the canonical record stream, one JSON object per line (`:246-554`)                                                                                                                                                                           |
 
 `all.ndjson` line shape: `{type, data, version?}`. Types emitted, in order:
 
@@ -599,7 +600,7 @@ split-action config rewrites category/merchant/tag ids to names (`:850-869`); bi
 - **readback verification**: snapshots family row counts before/after, compares expected counts
   (from line types, with reused-by-name and provider-merchant adjustments), stores
   `readback_verification {status: matched|mismatch|failed|reverted, before/after/actual_delta,
-  mismatches}` on the import (`sure_import.rb:292-369`). This is an export→import fidelity check
+mismatches}` on the import (`sure_import.rb:292-369`). This is an export→import fidelity check
   LaVega should copy for migrations.
 - Reverting a published import deletes its entries; Monarch import additionally restores existing
   accounts it mutated (`app/models/monarch_import.rb:12-16,326-366`).
@@ -807,36 +808,36 @@ with reservations, in-memory rate limiting, redaction, facts, prompt files and t
 lacks and Sure proves: a first-class MCP surface, provenance grammar, coverage/reconciliation,
 import/export interop, provider capability probing. Effort: S ≈ ≤1 day, M ≈ 2–5 days, L ≈ 1–2 weeks.
 
-| # | Item | Verdict | Effort | Where / shape |
-|---|---|---|---|---|
-| 1 | MCP endpoint: JSON-RPC `initialize`/`tools/list`/`tools/call`, protocol version negotiation, session id, `202` for notifications, JSON-RPC errors | **PORT** | M | `apps/server/src/mcp.ts` + Hono route `/mcp`. Keep Sure's exact wire behaviour; drop Rails cache → in-memory/file session map or stateless token-only mode |
-| 2 | Bearer token auth: static env token + future OAuth. For local-first, start with the static `MCP_API_TOKEN` + user pin; reuse `apiGuard.ts` patterns | **ADOPT** | S | `apps/server/src/apiGuard.ts` extension; document in `docs/` |
-| 3 | Shared tool registry for in-app agent and MCP, with per-caller filtering (preview, role) | **PORT** | S | `packages/core/src/agentTools.ts` registry: `{name, description, schema, scope: read|write, preview?: bool, handler}`. Filter once; MCP and chat both consume |
-| 4 | Tool semantics in the description (sign convention, `kind`, `rail`, pagination fields) | **PORT** | S | one file per tool group in `apps/server/src/agent/tools/`; descriptions are part of the contract |
-| 5 | Error-as-data with `{error, hint}`, retry-once instruction, no SQL/stack text across the boundary | **PORT** | S | tool dispatcher wrapper; test that every tool's thrown error becomes this shape |
-| 6 | Loop hardening: round cap (8), forced `tool_choice: none` on last round, pair-safe history trimming, whitespace-hold streaming, demote partial turns to failed | **PORT** | S | LaVega uses AI SDK `ToolLoopAgent` (investing) and a single-turn provider (personal). Add: `stopWhen` step cap + final text instruction; trim by assistant+tool-result pairs; persist partial as failed |
-| 7 | Stable prompt prefix + volatile context tail (provider cache discount) | **PORT** | S | `apps/server/src/agent/prompts.ts`: static markdown first, then `TAB-CONTEXT`/session block; keep the fact block and redaction order |
-| 8 | Provenance citation grammar `(grade: A/B/C)` + `estimated:` | **PORT** | S | `packages/core/src/provenance.ts`: `parseCitation`, `isEstimated`, `grade`; reused by valuation write + investing thesis/facts. Rejections are tests |
-| 9 | Read/write tool pairs and dry-run/preview-token guard for risky writes | **ADOPT** | S | rule/transaction writes: `preview_*` returns token + diff; `apply_*` requires it; 30-min TTL; refuse if target changed |
-| 10 | Statement-vault *concepts*: SHA-256 identity, period detection confidence tiers, deterministic hint matching with tie refusal, review queue, month coverage statuses, ledger reconciliation (report-only, 0.01), explicit "unavailable" | **ADOPT CONCEPT** | M | `packages/core/src/statements/` + `packages/adapters` storage. Do **not** copy Active Storage or server-side plaintext bytes: LaVega's vault is encrypted client-side (ADR 0009) |
-| 11 | Import/export interop: read Sure ZIP `all.ndjson` (`Account`, `Balance`, `Transaction`, `Trade`, `Holding`, `Valuation`, `Category`, `Tag`, `Merchant`, `Rule`) and Sure `transactions.csv`; emit LaVega's own version marker + NDJSON; verify readback counts | **PORT subset** | M | `packages/core/src/interop/sureExport.ts`; CLI `pnpm lavega import-sure <zip>`. Idempotency: `external_id`/`extra` keys, never rewrite `tx.id` |
-| 12 | Actual/Monarch CSV adapters as migration fixtures | **PORT** | S | `packages/adapters/src/import/actual.ts`, `monarch.ts`; treat their exact columns as fixtures (see §4.3–4.4) |
-| 13 | Per-operation LLM cost ledger incl. failed calls (0 tokens + error + HTTP status), cache tokens, model→provider inference, long-context tiers | **ADOPT** | S | LaVega `ai_usage` already tracks cost; add `operation` enum + error rows + cache token columns; keep `pricing.ts` as the price source and throw on unknown model |
-| 14 | AI health probes: liveness + function-calling probe (with tool-less control request), PDF-extraction probe, bounded timeout, cached results, `not_configured/not_checked/unsupported/failing` states | **ADOPT** | M | `apps/server/src/agent/health.ts` + admin route/CLI; reuse `provider.ts` capabilities |
-| 15 | Provider abstraction: capability booleans on the adapter (`supports_model`, `supports_pdf_processing`, `supports_responses_endpoint`) + registry keyed by concept | **ADOPT** | S | extend `apps/server/src/agent/provider.ts`; investing and personal adapters implement the same contract |
-| 16 | Categorization provenance and locks: `data_enrichments(attribute,value,source)`, `lock_attr!`, confidence gate only for calibrated providers, shadow comparison | **PORT** | M | `packages/core/src/categorize.ts` + storage; applies to LaVega's categorize/merchant/facts writes |
-| 17 | AI consent + per-tenant assistant type/provider selection (family vs instance) | **ADOPT** | S | LaVega local: one profile setting + instance env; hosted: per-tenant. Gate writes at the route |
-| 18 | Preview-feature gate for agent capabilities (per-user flag; tools absent from `tools/list` when off; name-guessing also refused) | **ADOPT** | S | reuse for LaVega experimental agent tools; one flag, enforced in registry build + dispatch |
-| 19 | API v1 dual auth, hierarchical scopes (`read`/`read_write`), per-resource family check, guest write refusal | **ADOPT CONCEPT** | M | only when hosted tier lands; implement with Effect HTTP + typed errors, not Doorkeeper. One scope pair is enough initially |
-| 20 | Consistent API envelope + pagination + error shape; generate OpenAPI from executable tests, not hand-written YAML | **ADOPT** | M | pick `{data, meta}` everywhere; `meta {page,per_page,total_count,total_pages}`; one error schema; OpenAPI generation in CI |
-| 21 | Rate-limit headers + 429 shape; hourly buckets keyed per credential | **ADOPT** | S | extend `sharedRateLimit.ts` to emit headers; key by credential; no-op only for genuinely local mode |
-| 22 | Stuck-work reaping: presumed-lost vs stuck thresholds, re-read under lock before mutation, automatic + manual escape hatch | **ADOPT** | S | LaVega's agent runs (file store / DB): add thresholds + reaper route/CLI |
-| 23 | Manifest-only attachment exports (hashes, sizes, no bytes) + separate document copy | **ADOPT** | S | export must state `binary_included:false` so users know to copy files |
-| 24 | Archive-before-delete with expiring tokenized download | **ADOPT CONCEPT** | S | "erase all data" flow: offer a downloadable archive first; store only token digest |
-| 25 | Pipelock-style MCP front proxy (DLP, prompt-injection scan, signed receipts) or equivalent local scanning | **ADOPT** | L | out of scope now, but design `/mcp` so a reverse proxy can sit in front (bearer token only, no cookies) |
-| 26 | Sidekiq AI capsule, chat reservation, Turbo streaming, Active Storage authorization, Doorkeeper, `has_secure_password`, PostgreSQL RLS | **SKIP** | — | Rails/PG runtime; LaVega has Effect/Hono, encrypted vault, Neon RLS (ADR 0004/0007). Copy the *fairness idea* (single-thread lane) only if LaVega runs a local model |
-| 27 | Sure's coarse single `read_write` MCP scope and unthrottled OAuth tokens | **SKIP / do better** | — | Give LaVega agent tokens per-capability scopes and a budget gate before MCP launch |
-| 28 | Sure's dual API envelopes and inline error shapes | **SKIP** | — | They are documented debt (§3.4–3.5) |
+| #   | Item                                                                                                                                                                                                                                                           | Verdict              | Effort | Where / shape                                                                                                                                                                                           |
+| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | MCP endpoint: JSON-RPC `initialize`/`tools/list`/`tools/call`, protocol version negotiation, session id, `202` for notifications, JSON-RPC errors                                                                                                              | **PORT**             | M      | `apps/server/src/mcp.ts` + Hono route `/mcp`. Keep Sure's exact wire behaviour; drop Rails cache → in-memory/file session map or stateless token-only mode                                              |
+| 2   | Bearer token auth: static env token + future OAuth. For local-first, start with the static `MCP_API_TOKEN` + user pin; reuse `apiGuard.ts` patterns                                                                                                            | **ADOPT**            | S      | `apps/server/src/apiGuard.ts` extension; document in `docs/`                                                                                                                                            |
+| 3   | Shared tool registry for in-app agent and MCP, with per-caller filtering (preview, role)                                                                                                                                                                       | **PORT**             | S      | `packages/core/src/agentTools.ts` registry: `{name, description, schema, scope: read                                                                                                                    | write, preview?: bool, handler}`. Filter once; MCP and chat both consume |
+| 4   | Tool semantics in the description (sign convention, `kind`, `rail`, pagination fields)                                                                                                                                                                         | **PORT**             | S      | one file per tool group in `apps/server/src/agent/tools/`; descriptions are part of the contract                                                                                                        |
+| 5   | Error-as-data with `{error, hint}`, retry-once instruction, no SQL/stack text across the boundary                                                                                                                                                              | **PORT**             | S      | tool dispatcher wrapper; test that every tool's thrown error becomes this shape                                                                                                                         |
+| 6   | Loop hardening: round cap (8), forced `tool_choice: none` on last round, pair-safe history trimming, whitespace-hold streaming, demote partial turns to failed                                                                                                 | **PORT**             | S      | LaVega uses AI SDK `ToolLoopAgent` (investing) and a single-turn provider (personal). Add: `stopWhen` step cap + final text instruction; trim by assistant+tool-result pairs; persist partial as failed |
+| 7   | Stable prompt prefix + volatile context tail (provider cache discount)                                                                                                                                                                                         | **PORT**             | S      | `apps/server/src/agent/prompts.ts`: static markdown first, then `TAB-CONTEXT`/session block; keep the fact block and redaction order                                                                    |
+| 8   | Provenance citation grammar `(grade: A/B/C)` + `estimated:`                                                                                                                                                                                                    | **PORT**             | S      | `packages/core/src/provenance.ts`: `parseCitation`, `isEstimated`, `grade`; reused by valuation write + investing thesis/facts. Rejections are tests                                                    |
+| 9   | Read/write tool pairs and dry-run/preview-token guard for risky writes                                                                                                                                                                                         | **ADOPT**            | S      | rule/transaction writes: `preview_*` returns token + diff; `apply_*` requires it; 30-min TTL; refuse if target changed                                                                                  |
+| 10  | Statement-vault _concepts_: SHA-256 identity, period detection confidence tiers, deterministic hint matching with tie refusal, review queue, month coverage statuses, ledger reconciliation (report-only, 0.01), explicit "unavailable"                        | **ADOPT CONCEPT**    | M      | `packages/core/src/statements/` + `packages/adapters` storage. Do **not** copy Active Storage or server-side plaintext bytes: LaVega's vault is encrypted client-side (ADR 0009)                        |
+| 11  | Import/export interop: read Sure ZIP `all.ndjson` (`Account`, `Balance`, `Transaction`, `Trade`, `Holding`, `Valuation`, `Category`, `Tag`, `Merchant`, `Rule`) and Sure `transactions.csv`; emit LaVega's own version marker + NDJSON; verify readback counts | **PORT subset**      | M      | `packages/core/src/interop/sureExport.ts`; CLI `pnpm lavega import-sure <zip>`. Idempotency: `external_id`/`extra` keys, never rewrite `tx.id`                                                          |
+| 12  | Actual/Monarch CSV adapters as migration fixtures                                                                                                                                                                                                              | **PORT**             | S      | `packages/adapters/src/import/actual.ts`, `monarch.ts`; treat their exact columns as fixtures (see §4.3–4.4)                                                                                            |
+| 13  | Per-operation LLM cost ledger incl. failed calls (0 tokens + error + HTTP status), cache tokens, model→provider inference, long-context tiers                                                                                                                  | **ADOPT**            | S      | LaVega `ai_usage` already tracks cost; add `operation` enum + error rows + cache token columns; keep `pricing.ts` as the price source and throw on unknown model                                        |
+| 14  | AI health probes: liveness + function-calling probe (with tool-less control request), PDF-extraction probe, bounded timeout, cached results, `not_configured/not_checked/unsupported/failing` states                                                           | **ADOPT**            | M      | `apps/server/src/agent/health.ts` + admin route/CLI; reuse `provider.ts` capabilities                                                                                                                   |
+| 15  | Provider abstraction: capability booleans on the adapter (`supports_model`, `supports_pdf_processing`, `supports_responses_endpoint`) + registry keyed by concept                                                                                              | **ADOPT**            | S      | extend `apps/server/src/agent/provider.ts`; investing and personal adapters implement the same contract                                                                                                 |
+| 16  | Categorization provenance and locks: `data_enrichments(attribute,value,source)`, `lock_attr!`, confidence gate only for calibrated providers, shadow comparison                                                                                                | **PORT**             | M      | `packages/core/src/categorize.ts` + storage; applies to LaVega's categorize/merchant/facts writes                                                                                                       |
+| 17  | AI consent + per-tenant assistant type/provider selection (family vs instance)                                                                                                                                                                                 | **ADOPT**            | S      | LaVega local: one profile setting + instance env; hosted: per-tenant. Gate writes at the route                                                                                                          |
+| 18  | Preview-feature gate for agent capabilities (per-user flag; tools absent from `tools/list` when off; name-guessing also refused)                                                                                                                               | **ADOPT**            | S      | reuse for LaVega experimental agent tools; one flag, enforced in registry build + dispatch                                                                                                              |
+| 19  | API v1 dual auth, hierarchical scopes (`read`/`read_write`), per-resource family check, guest write refusal                                                                                                                                                    | **ADOPT CONCEPT**    | M      | only when hosted tier lands; implement with Effect HTTP + typed errors, not Doorkeeper. One scope pair is enough initially                                                                              |
+| 20  | Consistent API envelope + pagination + error shape; generate OpenAPI from executable tests, not hand-written YAML                                                                                                                                              | **ADOPT**            | M      | pick `{data, meta}` everywhere; `meta {page,per_page,total_count,total_pages}`; one error schema; OpenAPI generation in CI                                                                              |
+| 21  | Rate-limit headers + 429 shape; hourly buckets keyed per credential                                                                                                                                                                                            | **ADOPT**            | S      | extend `sharedRateLimit.ts` to emit headers; key by credential; no-op only for genuinely local mode                                                                                                     |
+| 22  | Stuck-work reaping: presumed-lost vs stuck thresholds, re-read under lock before mutation, automatic + manual escape hatch                                                                                                                                     | **ADOPT**            | S      | LaVega's agent runs (file store / DB): add thresholds + reaper route/CLI                                                                                                                                |
+| 23  | Manifest-only attachment exports (hashes, sizes, no bytes) + separate document copy                                                                                                                                                                            | **ADOPT**            | S      | export must state `binary_included:false` so users know to copy files                                                                                                                                   |
+| 24  | Archive-before-delete with expiring tokenized download                                                                                                                                                                                                         | **ADOPT CONCEPT**    | S      | "erase all data" flow: offer a downloadable archive first; store only token digest                                                                                                                      |
+| 25  | Pipelock-style MCP front proxy (DLP, prompt-injection scan, signed receipts) or equivalent local scanning                                                                                                                                                      | **ADOPT**            | L      | out of scope now, but design `/mcp` so a reverse proxy can sit in front (bearer token only, no cookies)                                                                                                 |
+| 26  | Sidekiq AI capsule, chat reservation, Turbo streaming, Active Storage authorization, Doorkeeper, `has_secure_password`, PostgreSQL RLS                                                                                                                         | **SKIP**             | —      | Rails/PG runtime; LaVega has Effect/Hono, encrypted vault, Neon RLS (ADR 0004/0007). Copy the _fairness idea_ (single-thread lane) only if LaVega runs a local model                                    |
+| 27  | Sure's coarse single `read_write` MCP scope and unthrottled OAuth tokens                                                                                                                                                                                       | **SKIP / do better** | —      | Give LaVega agent tokens per-capability scopes and a budget gate before MCP launch                                                                                                                      |
+| 28  | Sure's dual API envelopes and inline error shapes                                                                                                                                                                                                              | **SKIP**             | —      | They are documented debt (§3.4–3.5)                                                                                                                                                                     |
 
 Sequencing suggestion: 3 → 4 → 5 → 6 (tool loop) → 1 → 2 (MCP) → 8 → 9 (provenance + writes);
 10 and 11 are independent tracks for the personal/finance side; 13/14 fit the existing

@@ -62,7 +62,7 @@ test("a wrong token is 401, not local-tenant data", async () => {
   expect(res.status).toBe(401);
 });
 
-test("the pnpm-dev escape hatch does not open /mcp: no token is still 401", async () => {
+test("the bun-dev escape hatch does not open /mcp: no token is still 401", async () => {
   process.env.LAVEGA_ALLOW_UNAUTHENTICATED = "1";
   const res = await post(rpc("tools/list"));
   expect(res.status).toBe(401);

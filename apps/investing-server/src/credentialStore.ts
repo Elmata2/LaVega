@@ -1,10 +1,17 @@
-import { createDatabase, createBrokerRepository, type Database } from "@lavega/database";
-import { AsyncLocalStorage } from "node:async_hooks";
+import {
+  createBrokerRepository,
+  credentialsArePerTenant,
+  requireRuntimeDatabase,
+  runtimeDatabase,
+  withRuntimeDatabase,
+} from "@lavega/database";
 import { createFileCredentialStore, type ServerVaultStatus } from "./fileCredentialStore.js";
 import { createNeonCredentialStore, type BrokerReadability } from "./neonCredentialStore.js";
 import type { BrokerId, CredentialStore } from "@lavega/core";
 import type { BrokerAccountSnapshot } from "@lavega/adapters";
 import type { RuntimeBrokerDataSnapshot } from "./runtimeBrokerData.js";
+
+export { credentialsArePerTenant, requireRuntimeDatabase, runtimeDatabase, withRuntimeDatabase };
 
 export type RuntimeCredentialStore = CredentialStore & {
   status(): Promise<ServerVaultStatus>;
@@ -20,41 +27,6 @@ export type RuntimeCredentialStore = CredentialStore & {
   brokerReadability?(): Promise<BrokerReadability>;
 };
 
-const databaseScope = new AsyncLocalStorage<Database | null>();
-
-/**
- * Run one request with one Neon pool. Vercel can freeze an invocation after a
- * response, which makes a retained WebSocket stale on its next request.
- */
-export async function withRuntimeDatabase<T>(fn: () => Promise<T>): Promise<T> {
-  if (databaseScope.getStore() !== undefined) return fn();
-  const connectionString = process.env.DATABASE_URL?.trim();
-  if (!connectionString) return databaseScope.run(null, fn);
-  const database = createDatabase(connectionString);
-  try {
-    return await databaseScope.run(database, fn);
-  } finally {
-    await database.end();
-  }
-}
-
-/** Neon pool belonging to current request, or `null` when Neon is unavailable. */
-export function runtimeDatabase(): Database | null {
-  return databaseScope.getStore() ?? null;
-}
-
-/**
- * The current request's Neon pool. Throws outside a request or without a
- * database: a route factory that runs at module load must call this inside the
- * handler, because `runtimeDatabase()` is `null` there and a factory that
- * checks it at load silently never registers its routes.
- */
-export function requireRuntimeDatabase(): Database {
-  const database = runtimeDatabase();
-  if (!database) throw new Error("geen database in dit verzoek");
-  return database;
-}
-
 /**
  * Where one tenant's broker credentials live.
  *
@@ -67,9 +39,4 @@ export function createRuntimeCredentialStore(tenantId: string): RuntimeCredentia
   const database = runtimeDatabase();
   if (!database) return createFileCredentialStore();
   return createNeonCredentialStore(createBrokerRepository(database, tenantId), tenantId);
-}
-
-/** True when credentials are stored per user rather than in one local vault. */
-export function credentialsArePerTenant(): boolean {
-  return Boolean(process.env.DATABASE_URL?.trim());
 }

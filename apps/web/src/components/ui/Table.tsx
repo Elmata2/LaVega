@@ -7,7 +7,7 @@ import {
   type ThHTMLAttributes,
 } from "react";
 import { cva, type VariantProps } from "class-variance-authority";
-import { cn } from "./utils.js";
+import { cn } from "@lavega/ui";
 
 /* Extracted from the `.table`/`.table-wrap`/`.table-cards` cluster
  * (docs/adr/0005) — 12 tables, ~60 `<th>`, ~60 `<td>` across six views shared
@@ -84,7 +84,7 @@ const Table = forwardRef<HTMLTableElement, TableProps>(function Table(
   return (
     <table
       ref={ref}
-      data-testid={dataTestId ?? "table"}
+      data-testid={dataTestId}
       className={cn(tableVariants({ cards }), className)}
       {...props}
     >

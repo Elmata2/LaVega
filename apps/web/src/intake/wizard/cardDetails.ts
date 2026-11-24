@@ -43,7 +43,11 @@ export function detailRows(i: {
   repayment?: CardRepayment | null;
 }): DetailRowInit[] {
   const fromRepayment =
-    i.repayment === "full" ? true : i.repayment === "sometimes" || i.repayment === "rarely" ? false : null;
+    i.repayment === "full"
+      ? true
+      : i.repayment === "sometimes" || i.repayment === "rarely"
+        ? false
+        : null;
   const asked = new Set<string>();
   return [...new Set(i.cardIds)].map((cardId) => {
     const b = i.balances.find((x) => x.cardId === cardId);
@@ -99,7 +103,10 @@ export type DetailsResult = {
 };
 
 /** The rows as stored data. Rows with an empty balance and empty points give nothing. */
-export function collectDetails(inits: readonly DetailRowInit[], states: readonly RowState[]): DetailsResult {
+export function collectDetails(
+  inits: readonly DetailRowInit[],
+  states: readonly RowState[],
+): DetailsResult {
   const balances: CardBalance[] = [];
   const points: DetailsResult["points"] = [];
   inits.forEach((r, k) => {

@@ -14,9 +14,7 @@ import type { UsePlan } from "../usePlan";
 import GoalsSection from "./GoalsSection";
 import type { PlanCtx } from "./types";
 
-(
-  globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }
-).IS_REACT_ACT_ENVIRONMENT = true;
+(globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 let root: Root | null = null;
 let container: HTMLElement | null = null;
@@ -42,18 +40,14 @@ function withProfile(
   const at = "2026-10-01";
   const store: AdvisorProfileStore = {
     ...base,
-    current: Object.assign(
-      Object.create(Object.getPrototypeOf(base.current)),
-      base.current,
-      {
-        ...(over.birthYear !== undefined && {
-          birthYear: { value: over.birthYear, source: "stated", at },
-        }),
-        ...(over.experience !== undefined && {
-          experience: { value: over.experience, source: "stated", at },
-        }),
-      },
-    ),
+    current: Object.assign(Object.create(Object.getPrototypeOf(base.current)), base.current, {
+      ...(over.birthYear !== undefined && {
+        birthYear: { value: over.birthYear, source: "stated", at },
+      }),
+      ...(over.experience !== undefined && {
+        experience: { value: over.experience, source: "stated", at },
+      }),
+    }),
   };
   const result = computePlan(richPlanInput(store)).sections.goals;
   expect(result.figures.rows.length).toBeGreaterThan(0);
@@ -94,8 +88,7 @@ function withProfile(
   });
   return container;
 }
-const q = (c: HTMLElement, id: string) =>
-  c.querySelector<HTMLElement>(`[data-testid="${id}"]`);
+const q = (c: HTMLElement, id: string) => c.querySelector<HTMLElement>(`[data-testid="${id}"]`);
 
 test("born 1990 in 2026 shows 31 years", () => {
   const c = withProfile({ birthYear: 1990 });
@@ -103,9 +96,7 @@ test("born 1990 in 2026 shows 31 years", () => {
     "Nog 31 jaar tot je 67e. Je precieze AOW-leeftijd staat bij de SVB.",
   );
   const a = q(c, "plan-investing-years")!.querySelector("a")!;
-  expect(a.getAttribute("href")).toBe(
-    "https://www.svb.nl/nl/aow/aow-leeftijd/uw-aow-leeftijd",
-  );
+  expect(a.getAttribute("href")).toBe("https://www.svb.nl/nl/aow/aow-leeftijd/uw-aow-leeftijd");
   expect(a.getAttribute("target")).toBe("_blank");
   expect(a.getAttribute("rel")).toBe("noopener noreferrer");
 });
@@ -130,9 +121,7 @@ test("beginner sees the explainer first, others do not", () => {
   const score = [...c.querySelectorAll("p")].find((p) =>
     /Draagkracht uit je cijfers/.test(p.textContent!),
   )!;
-  expect(
-    ex.compareDocumentPosition(score) & Node.DOCUMENT_POSITION_FOLLOWING,
-  ).toBeTruthy();
+  expect(ex.compareDocumentPosition(score) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 });
 
 test("copy passes findAdviceLanguage", () => {

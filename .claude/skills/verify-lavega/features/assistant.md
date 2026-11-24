@@ -36,7 +36,7 @@ E=/tmp/lavega-verify/evidence
 node $C up                       # port 8797, guard open, no database
 node $C doctor
 node $C guard --out $E/guard-local.json
-pnpm --filter @lavega/web build  # if dist is older than the change
+bun --filter @lavega/web build  # if dist is older than the change
 ```
 
 In the browser tab on `http://127.0.0.1:8797/app`:

@@ -24,8 +24,14 @@ describe("room", () => {
   test("room is the intake RoomResult unchanged; median-by-net month is the headline", () => {
     const i = planInput({ accounts: [CHECKING], txs: threeMonths([300, 700, 500], 3000) });
     const direct = computeRoom({
-      txs: i.txs, accounts: i.accounts, profiles: i.entityProfiles, rules: i.rules,
-      own: i.own, asOf: i.asOf, mode: i.mode, fxHistory: i.fxHistory,
+      txs: i.txs,
+      accounts: i.accounts,
+      profiles: i.entityProfiles,
+      rules: i.rules,
+      own: i.own,
+      asOf: i.asOf,
+      mode: i.mode,
+      fxHistory: i.fxHistory,
     });
     const r = computeMonth(i);
     expect(r.figures.room).toEqual(direct);
@@ -53,7 +59,9 @@ describe("room", () => {
       mkTx("Shops", `${m}-30`, -2000, { category: "Boodschappen" }),
     ]);
     const stale = mkAccount("A1", { iban: "NL01INGB0000000001", balanceDate: "2026-06-30" });
-    const r = computeMonth(planInput({ accounts: [stale], txs, profile: { fixedCostsMonthlyCents: 100000 } }));
+    const r = computeMonth(
+      planInput({ accounts: [stale], txs, profile: { fixedCostsMonthlyCents: 100000 } }),
+    );
     expect(r.status).toBe("not-enough-data");
     expect(r.statusReason.key).toBe("data-stale");
     expect(r.missing).toContainEqual({ kind: "account-stale", action: "connect-bank", ref: "A1" });
@@ -62,7 +70,9 @@ describe("room", () => {
   });
 
   test("fresh data is not stale: the same shape ending last month stays on-track", () => {
-    const r = computeMonth(planInput({ accounts: [CHECKING], txs: threeMonths([300, 300, 300], 3000) }));
+    const r = computeMonth(
+      planInput({ accounts: [CHECKING], txs: threeMonths([300, 300, 300], 3000) }),
+    );
     expect(r.statusReason.key).toBe("room-ok");
   });
 
@@ -145,7 +155,9 @@ describe("fixed and variable", () => {
   });
 
   test("no fixed costs -> fixed, variable and shares null, fixed-costs missing, status unchanged", () => {
-    const r = computeMonth(planInput({ accounts: [CHECKING], txs: threeMonths([700, 700, 700], 3200) }));
+    const r = computeMonth(
+      planInput({ accounts: [CHECKING], txs: threeMonths([700, 700, 700], 3200) }),
+    );
     expect(r.figures.fixedCents).toBeNull();
     expect(r.figures.variableCents).toBeNull();
     expect(r.figures.fixedShare).toBeNull();
@@ -189,9 +201,7 @@ describe("savings rate", () => {
     mkTx("Own transfer", `${m}-20`, -200, { description: `to ${to}`, category: "" });
 
   test("200 moved to an own savings account is already inside room 400: rate = 400 / 3000, not 600 / 3000", () => {
-    const txs = threeMonths([400, 400, 400], 3000).concat(
-      MONTHS.map((m) => move(SAVINGS.iban, m)),
-    );
+    const txs = threeMonths([400, 400, 400], 3000).concat(MONTHS.map((m) => move(SAVINGS.iban, m)));
     const r = computeMonth(planInput({ accounts: [CHECKING, SAVINGS], txs }));
     expect(r.figures.room).toMatchObject({ kind: "computed", middleCents: 40000 });
     expect(r.figures.savingsMovedCents).toBe(20000);
@@ -206,9 +216,7 @@ describe("savings rate", () => {
       entity: "Acme BV",
       balanceDate: "2026-10-20",
     });
-    const txs = threeMonths([400, 400, 400], 3000).concat(
-      MONTHS.map((m) => move(BIZ.iban, m)),
-    );
+    const txs = threeMonths([400, 400, 400], 3000).concat(MONTHS.map((m) => move(BIZ.iban, m)));
     const r = computeMonth(
       planInput({
         accounts: [CHECKING, BIZ],
@@ -320,21 +328,41 @@ describe("fix round 1", () => {
   });
   test("M1: 0.1 boundary is exact in cents on a large income", () => {
     const at = (net: number) =>
-      computeMonth(planInput({ accounts: [CHECKING], txs: threeMonths([net, net, net], 3_000_000) })).status;
+      computeMonth(
+        planInput({ accounts: [CHECKING], txs: threeMonths([net, net, net], 3_000_000) }),
+      ).status;
     expect(at(300_000)).toBe("on-track");
     expect(at(299_999.99)).toBe("attention");
   });
   test("M5: the savings-rate calc lists the per-month rates", () => {
-    const r = computeMonth(planInput({ accounts: [CHECKING], txs: threeMonths([400, 400, 400], 3000) }));
+    const r = computeMonth(
+      planInput({ accounts: [CHECKING], txs: threeMonths([400, 400, 400], 3000) }),
+    );
     expect(Object.keys(r.calc.find((c) => c.id === "savings-rate")!.inputs).sort()).toEqual([
-      "rate_2026_07", "rate_2026_08", "rate_2026_09",
+      "rate_2026_07",
+      "rate_2026_08",
+      "rate_2026_09",
     ]);
   });
   test("M6: a savings-to-savings own transfer is not 'moved to savings'", () => {
-    const S1 = mkAccount("S1", { iban: "NL02INGB0000000002", type: "Spaarrekening", balanceDate: "2026-10-20" });
-    const S2 = mkAccount("S2", { iban: "NL08INGB0000000008", type: "Spaarrekening", balanceDate: "2026-10-20" });
+    const S1 = mkAccount("S1", {
+      iban: "NL02INGB0000000002",
+      type: "Spaarrekening",
+      balanceDate: "2026-10-20",
+    });
+    const S2 = mkAccount("S2", {
+      iban: "NL08INGB0000000008",
+      type: "Spaarrekening",
+      balanceDate: "2026-10-20",
+    });
     const txs = threeMonths([400, 400, 400], 3000).concat(
-      MONTHS.map((m) => mkTx("Own", `${m}-20`, -200, { accountKey: "S2", description: `to ${S1.iban}`, category: "" })),
+      MONTHS.map((m) =>
+        mkTx("Own", `${m}-20`, -200, {
+          accountKey: "S2",
+          description: `to ${S1.iban}`,
+          category: "",
+        }),
+      ),
     );
     const r = computeMonth(planInput({ accounts: [CHECKING, S1, S2], txs }));
     expect(r.figures.savingsMovedCents).toBe(0);

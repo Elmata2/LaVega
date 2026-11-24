@@ -25,8 +25,7 @@ const FIXTURE = new URL(
   "../../../packages/core/src/plan/__fixtures__/cardCases.json",
   import.meta.url,
 );
-const cases = (JSON.parse(readFileSync(FIXTURE, "utf8")) as { cases: Case[] })
-  .cases;
+const cases = (JSON.parse(readFileSync(FIXTURE, "utf8")) as { cases: Case[] }).cases;
 
 const sourced = (value: number) => ({
   value,
@@ -45,10 +44,7 @@ function cardOf(c: Case): CheckoutCard {
     cashbackPct: sourced(c.cashbackPct),
     pointsPerEuro: null,
     fee: {
-      value:
-        (c.feeBilledPer === "maand"
-          ? c.feeCentsPerYear / 12
-          : c.feeCentsPerYear) / 100,
+      value: (c.feeBilledPer === "maand" ? c.feeCentsPerYear / 12 : c.feeCentsPerYear) / 100,
       period: c.feeBilledPer ?? "jaar",
       sourceUrl: "https://voorbeeld.nl/tarieven",
       checkedAt: "2026-01-15",
@@ -60,8 +56,7 @@ function cardOf(c: Case): CheckoutCard {
 describe("rankCheckout agrees with the plan on the shared cases", () => {
   it("the fixture has agreeing and documented non-agreeing cases", () => {
     expect(cases.some((c) => c.agree)).toBe(true);
-    for (const c of cases.filter((x) => !x.agree))
-      expect(c.reason).toBeTruthy();
+    for (const c of cases.filter((x) => !x.agree)) expect(c.reason).toBeTruthy();
   });
 
   for (const c of cases.filter((x) => x.agree)) {
@@ -75,9 +70,7 @@ describe("rankCheckout agrees with the plan on the shared cases", () => {
         asOf: "2026-10-24",
       });
       const row = (
-        c.held
-          ? r.mine
-          : [...r.openWorthIt, ...r.openBackwards, ...r.openUnknownCost]
+        c.held ? r.mine : [...r.openWorthIt, ...r.openBackwards, ...r.openUnknownCost]
       )[0];
       expect(row?.basis).toBe(c.held ? "opbrengst" : "netto");
       expect(row?.resultCents).toBe(c.expectedNetCents);
@@ -95,9 +88,7 @@ describe("rankCheckout agrees with the plan on the shared cases", () => {
         asOf: "2026-10-24",
       });
       expect(
-        (c.held
-          ? r.mine
-          : [...r.openWorthIt, ...r.openBackwards, ...r.openUnknownCost])[0]
+        (c.held ? r.mine : [...r.openWorthIt, ...r.openBackwards, ...r.openUnknownCost])[0]
           ?.resultCents,
       ).toBe(c.extensionNetCents);
     });

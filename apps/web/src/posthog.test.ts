@@ -19,6 +19,11 @@ describe("postHogOptions", () => {
     expect(out?.properties).toEqual({ $lib: "web" });
   });
 
+  test("before_send keeps the project token, which ingest needs as the batch api_key", () => {
+    const out = beforeSend(capture({ $lib: "web", token: "phc_public_project_key" }));
+    expect(out?.properties.token).toBe("phc_public_project_key");
+  });
+
   test("before_send passes a dropped capture through as null", () => {
     expect(beforeSend(null)).toBeNull();
   });
@@ -150,6 +155,11 @@ describe("scrubPostHogEvent", () => {
     );
     expect(out.properties.amountCents).toBeUndefined();
     expect(out.properties.counterparty).toBeUndefined();
+  });
+
+  test("keeps the failure reason of a sign-in or sign-up attempt", () => {
+    const out = scrubPostHogEvent(capture({ reason: "rate-limited" }, "sign_up_failed"));
+    expect(out.properties.reason).toBe("rate-limited");
   });
 
   test("never carries person properties or autocaptured DOM elements", () => {

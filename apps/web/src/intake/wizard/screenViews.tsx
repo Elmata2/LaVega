@@ -128,20 +128,13 @@ export function ChildYearsScreen(
       ? p.initial.map((c) => ({ id: c.id, year: String(c.birthYear) }))
       : [{ id: `child-${newId()}`, year: "" }],
   );
-  const parsed = rows.map((r) =>
-    /^\d{4}$/.test(r.year.trim()) ? Number(r.year) : null,
-  );
-  const valid = parsed.every(
-    (y) => y !== null && y >= 1900 && y <= p.currentYear,
-  );
+  const parsed = rows.map((r) => (/^\d{4}$/.test(r.year.trim()) ? Number(r.year) : null));
+  const valid = parsed.every((y) => y !== null && y >= 1900 && y <= p.currentYear);
   return (
     <Form
       ok={valid && !p.busy}
       onSubmit={() =>
-        valid &&
-        p.onSubmit(
-          rows.map((r, i) => ({ id: r.id, birthYear: parsed[i] as number })),
-        )
+        valid && p.onSubmit(rows.map((r, i) => ({ id: r.id, birthYear: parsed[i] as number })))
       }
     >
       {rows.map((r, i) => (
@@ -158,20 +151,14 @@ export function ChildYearsScreen(
             placeholder={p.copy.childYear(i + 1)}
             value={r.year}
             onChange={(e) =>
-              setRows((all) =>
-                all.map((x) =>
-                  x.id === r.id ? { ...x, year: e.target.value } : x,
-                ),
-              )
+              setRows((all) => all.map((x) => (x.id === r.id ? { ...x, year: e.target.value } : x)))
             }
           />
           {rows.length > 1 ? (
             <button
               type="button"
               className="wz-link"
-              onClick={() =>
-                setRows((all) => all.filter((x) => x.id !== r.id))
-              }
+              onClick={() => setRows((all) => all.filter((x) => x.id !== r.id))}
             >
               {p.copy.removeChild(i + 1)}
             </button>
@@ -181,9 +168,7 @@ export function ChildYearsScreen(
       <button
         type="button"
         className="wz-link"
-        onClick={() =>
-          setRows((all) => [...all, { id: `child-${newId()}`, year: "" }])
-        }
+        onClick={() => setRows((all) => [...all, { id: `child-${newId()}`, year: "" }])}
       >
         {p.copy.addChild}
       </button>
@@ -201,23 +186,16 @@ export function GoalScreen(
       targetCents: number;
       targetDate: string;
     } | null;
-    onSubmit: (g: {
-      purpose: string;
-      targetCents: number;
-      targetDate: string;
-    }) => void;
+    onSubmit: (g: { purpose: string; targetCents: number; targetDate: string }) => void;
     onSkip: () => void;
   },
 ) {
   const id = useId();
   const [purpose, setPurpose] = useState(p.initial?.purpose ?? "");
-  const [target, setTarget] = useState<number | null>(
-    p.initial?.targetCents ?? null,
-  );
+  const [target, setTarget] = useState<number | null>(p.initial?.targetCents ?? null);
   const [date, setDate] = useState(p.initial?.targetDate ?? "");
   const dateOk = date > p.asOf;
-  const valid =
-    purpose.trim() !== "" && target !== null && target > 0 && dateOk;
+  const valid = purpose.trim() !== "" && target !== null && target > 0 && dateOk;
   return (
     <Form
       ok={valid && !p.busy}
@@ -242,11 +220,7 @@ export function GoalScreen(
       </div>
       <div className="wz-field">
         <p className="wz-field-label">{p.copy.target}</p>
-        <AmountField
-          label={p.copy.target}
-          valueCents={target}
-          onChange={setTarget}
-        />
+        <AmountField label={p.copy.target} valueCents={target} onChange={setTarget} />
       </div>
       <div className="wz-field">
         <label htmlFor={`${id}-date`}>{p.copy.date}</label>
@@ -257,17 +231,10 @@ export function GoalScreen(
           value={date}
           onChange={(e) => setDate(e.target.value)}
         />
-        {date !== "" && !dateOk ? (
-          <p className="wz-hint">{p.copy.dateFuture}</p>
-        ) : null}
+        {date !== "" && !dateOk ? <p className="wz-hint">{p.copy.dateFuture}</p> : null}
       </div>
       <Next label={p.copy.next} disabled={!valid || p.busy} />
-      <button
-        type="button"
-        className="wz-link"
-        disabled={p.busy}
-        onClick={p.onSkip}
-      >
+      <button type="button" className="wz-link" disabled={p.busy} onClick={p.onSkip}>
         {p.copy.noGoal}
       </button>
     </Form>
@@ -283,16 +250,12 @@ export function DebtScreen(
 ) {
   const id = useId();
   const [lender, setLender] = useState(p.initial?.lender ?? "");
-  const [monthly, setMonthly] = useState<number | null>(
-    p.initial?.monthlyCents ?? null,
-  );
+  const [monthly, setMonthly] = useState<number | null>(p.initial?.monthlyCents ?? null);
   const valid = lender.trim() !== "" && monthly !== null;
   return (
     <Form
       ok={valid && !p.busy}
-      onSubmit={() =>
-        valid && p.onSubmit({ lender: lender.trim(), monthlyCents: monthly })
-      }
+      onSubmit={() => valid && p.onSubmit({ lender: lender.trim(), monthlyCents: monthly })}
     >
       <div className="wz-field">
         <label htmlFor={`${id}-lender`}>{p.copy.lender}</label>
@@ -306,11 +269,7 @@ export function DebtScreen(
       </div>
       <div className="wz-field">
         <p className="wz-field-label">{p.copy.monthly}</p>
-        <AmountField
-          label={p.copy.monthly}
-          valueCents={monthly}
-          onChange={setMonthly}
-        />
+        <AmountField label={p.copy.monthly} valueCents={monthly} onChange={setMonthly} />
       </div>
       <Next label={p.copy.next} disabled={!valid || p.busy} />
     </Form>
@@ -449,19 +408,12 @@ export function SpendScreen(
           busy={p.busy}
           label={p.label}
           initialCents={
-            p.stored !== null && p.stored.highCents === p.stored.lowCents
-              ? p.stored.lowCents
-              : null
+            p.stored !== null && p.stored.highCents === p.stored.lowCents ? p.stored.lowCents : null
           }
           allowZero
           onSubmit={p.onExact}
         />
-        <button
-          type="button"
-          className="wz-link"
-          disabled={p.busy}
-          onClick={() => setBands(true)}
-        >
+        <button type="button" className="wz-link" disabled={p.busy} onClick={() => setBands(true)}>
           {p.copy.spendUnknown}
         </button>
       </>
@@ -480,12 +432,7 @@ export function SpendScreen(
           label: p.copy.spendBands[i] as string,
         }))}
       />
-      <button
-        type="button"
-        className="wz-link"
-        disabled={p.busy}
-        onClick={() => setBands(false)}
-      >
+      <button type="button" className="wz-link" disabled={p.busy} onClick={() => setBands(false)}>
         {p.copy.spendExact}
       </button>
     </>
@@ -602,11 +549,7 @@ export function UploadScreen(
           {linked ? (
             <>
               <p className="wz-hint">{u.connectBody}</p>
-              {p.pending === true ? (
-                <div aria-busy="true" style={{ minHeight: 96 }} />
-              ) : (
-                p.bankLink
-              )}
+              {p.pending === true ? <div aria-busy="true" style={{ minHeight: 96 }} /> : p.bankLink}
             </>
           ) : null}
           <div className="wz-footer">

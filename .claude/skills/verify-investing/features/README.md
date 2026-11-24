@@ -38,5 +38,4 @@ app for LaVega Personal. It is not an investing route.
 | DeGiro file import                                             | `/profile#brokers` (tab `DeGiro import`)                                                          | [degiro-import.md](degiro-import.md)                   |
 
 Backing docs: `docs/investing/DASHBOARD.md` (layout, return definitions, chart modes),
-`docs/investing/CONNECTORS.md` (broker adapters, credentials, disclosure gates),
-`docs/investing/DOCKER.md` (self-host runtime and the vault).
+`docs/investing/CONNECTORS.md` (broker adapters, credentials, disclosure gates).

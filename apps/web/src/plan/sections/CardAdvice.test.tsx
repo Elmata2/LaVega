@@ -42,7 +42,9 @@ const mount = (
   return el;
 };
 const q = (c: ParentNode, id: string) => c.querySelector<HTMLElement>(`[data-testid="${id}"]`);
-const qa = (c: ParentNode, id: string) => [...c.querySelectorAll<HTMLElement>(`[data-testid="${id}"]`)];
+const qa = (c: ParentNode, id: string) => [
+  ...c.querySelectorAll<HTMLElement>(`[data-testid="${id}"]`),
+];
 
 const cv = (value: number, extra: Record<string, unknown> = {}) => ({
   value,
@@ -73,7 +75,12 @@ const base: CardAdviceInput = {
     card("american-express-gold-card", 240, { ppe: 1 }),
     card("cheap-card", 0),
     card("pricey-card", 400),
-    { id: "no-fee", product: "NO-FEE", kind: "creditcard", fields: { fxFeePct: cv(0), pointsPerEuro: cv(0), cashbackPct: cv(0) } } as CatalogueEntryLike,
+    {
+      id: "no-fee",
+      product: "NO-FEE",
+      kind: "creditcard",
+      fields: { fxFeePct: cv(0), pointsPerEuro: cv(0), cashbackPct: cv(0) },
+    } as CatalogueEntryLike,
   ],
   heldIds: ["american-express-gold-card"],
   hasOtherCard: false,
@@ -150,7 +157,9 @@ test("a revolving balance shows the yearly interest, the pay-off recommendation 
 test("without a rate nothing is estimated and the cost of one percent is shown", () => {
   const advice = computeCardAdvice({
     ...base,
-    cardBalances: [{ cardId: "american-express-gold-card", balanceCents: 300_000, paysInFull: false }],
+    cardBalances: [
+      { cardId: "american-express-gold-card", balanceCents: 300_000, paysInFull: false },
+    ],
   });
   const t = q(mount(advice), "plan-card-interest")!.textContent!;
   expect(t).toContain("Elke 1% rente kost daarover €30 per jaar");
@@ -167,7 +176,14 @@ test("points show the indicative value with its source, and the expiry is unknow
 });
 
 test("not enough history: one honest line, no numbers invented", () => {
-  const c = mount(computeCardAdvice({ ...base, spend: { ...base.spend, months: 2 }, cardBalances: [], rewards: [] }));
+  const c = mount(
+    computeCardAdvice({
+      ...base,
+      spend: { ...base.spend, months: 2 },
+      cardBalances: [],
+      rewards: [],
+    }),
+  );
   expect(q(c, "plan-card-verdict")!.textContent).toContain("minder dan 3 volle maanden");
   expect(qa(c, "plan-card-option")).toHaveLength(0);
 });
@@ -176,7 +192,9 @@ test("English copy renders the same structure", () => {
   document.cookie = "lavega_locale=en";
   const c = mount(computeCardAdvice(base));
   expect(q(c, "plan-card-verdict")!.textContent).toContain("Recommendation: CHEAP-CARD");
-  expect(q(c, "plan-card-interest")!.textContent).toContain("Recommendation: pay off the whole balance");
+  expect(q(c, "plan-card-interest")!.textContent).toContain(
+    "Recommendation: pay off the whole balance",
+  );
 });
 
 const buf = { liquidSavingsCents: 1_000_000, fixedCostsMonthlyCents: 100_000, targetMonths: 3 };
@@ -186,14 +204,21 @@ test("two revolving cards: the savings pot is split, highest rate first, and eac
     ...base,
     buffer: buf,
     cardBalances: [
-      { cardId: "american-express-gold-card", balanceCents: 500_000, paysInFull: false, ratePct: 15 },
+      {
+        cardId: "american-express-gold-card",
+        balanceCents: 500_000,
+        paysInFull: false,
+        ratePct: 15,
+      },
       { cardId: "cheap-card", balanceCents: 500_000, paysInFull: false, ratePct: 14 },
     ],
   });
   const blocks = qa(mount(advice), "plan-card-interest").map((b) => b.textContent!);
   expect(blocks[0]).toContain("los het hele saldo af");
   expect(blocks[1]).toContain("los €2.000 af");
-  expect(blocks[1]).toContain("waarvan €2.000 voor deze kaart overblijft na kaarten met een hogere rente");
+  expect(blocks[1]).toContain(
+    "waarvan €2.000 voor deze kaart overblijft na kaarten met een hogere rente",
+  );
   expect(blocks[1]).toContain("Er blijft €3.000 openstaan");
 });
 
@@ -288,7 +313,9 @@ test("not comparable without any named reason prints no empty parentheses, in NL
     expect(text).not.toMatch(/ \.|\s\(\s*\)/);
   }
   expect(cardAdviceCopy.nl.noAdvice(advice, fmt)).toContain("te vergelijken. Er is niets geschat.");
-  expect(cardAdviceCopy.en.noAdvice(advice, fmt)).toContain("compared in full. Nothing has been estimated.");
+  expect(cardAdviceCopy.en.noAdvice(advice, fmt)).toContain(
+    "compared in full. Nothing has been estimated.",
+  );
 });
 
 // The spend calculation is one of several "Zo is het berekend" blocks; find it by its foreign-spend sentence.
@@ -370,7 +397,10 @@ test("a switch with no points part and no Amex card shows no extra verdict lines
 
 test("English verdict lines", () => {
   document.cookie = "lavega_locale=en";
-  const t = q(mount(switchTo("american-express-test-card")), "plan-card-verdict-lines")!.textContent!;
+  const t = q(
+    mount(switchTo("american-express-test-card")),
+    "plan-card-verdict-lines",
+  )!.textContent!;
   expect(t).toContain("of which €36 in points, at 0.3 cent per point");
   expect(t).toContain("American Express is not accepted everywhere.");
 });
@@ -397,14 +427,20 @@ test("an assumed zero cashback says it is assumed, a measured zero does not", ()
   expect(a).toContain("Cashback: 0% (aangenomen: geen bron, gewone Nederlandse kaart)");
   expect(m).not.toContain("aangenomen");
   expect(m).toContain("Cashback: €12.000 maal 0%");
-  expect(cardAdviceCopy.en.optionCalc(advice.options.find((o) => o.cardId === "plain-ing")!, advice, {
-    eur: (v: number) => `€${v / 100}`,
-    eurExact: (v: number) => `€${v / 100}`,
-    plain: (v: number) => String(v),
-    points: (v: number) => `${v}%`,
-    count: (v: number) => String(v),
-    date: (v: string) => v,
-  } as never)).toContain("Cashback: 0% (assumed: no source, ordinary Dutch card).");
+  expect(
+    cardAdviceCopy.en.optionCalc(
+      advice.options.find((o) => o.cardId === "plain-ing")!,
+      advice,
+      {
+        eur: (v: number) => `€${v / 100}`,
+        eurExact: (v: number) => `€${v / 100}`,
+        plain: (v: number) => String(v),
+        points: (v: number) => `${v}%`,
+        count: (v: number) => String(v),
+        date: (v: string) => v,
+      } as never,
+    ),
+  ).toContain("Cashback: 0% (assumed: no source, ordinary Dutch card).");
   expect(cardAdviceCopy.nl.caveats.join(" ")).toContain("rekenen we met 0% (aangenomen)");
   expect(cardAdviceCopy.en.caveats.join(" ")).toContain("we use 0% (assumed)");
 });
@@ -451,5 +487,10 @@ test("no question without a writer, and none for a stated other card", () => {
   act(() => root!.unmount());
   el!.remove();
   const other = computeCardAdvice({ ...base, heldIds: [], hasOtherCard: true });
-  expect(q(mount(other, () => {}), "plan-card-identify")).toBeNull();
+  expect(
+    q(
+      mount(other, () => {}),
+      "plan-card-identify",
+    ),
+  ).toBeNull();
 });

@@ -13,7 +13,10 @@ const SECTION_OF: Record<Priority, SectionId> = {
 /** Sections the person's priorities point at move to the front, in priority
  *  order (a section reached twice moves once, at its first position); the rest
  *  keep their order. No priorities leaves the order as it was. */
-export function orderSections(sections: readonly SectionId[], priorities: readonly Priority[]): SectionId[] {
+export function orderSections(
+  sections: readonly SectionId[],
+  priorities: readonly Priority[],
+): SectionId[] {
   const front: SectionId[] = [];
   for (const p of priorities) {
     const s = SECTION_OF[p];

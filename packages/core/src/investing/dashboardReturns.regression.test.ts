@@ -22,7 +22,7 @@ import {
  * relative and still fails, as does any added, removed or renamed field.
  *
  * Regenerate only against a base commit, never against the working tree:
- *   GENERATE_GOLDEN=1 pnpm --filter @lavega/core exec vitest run \
+ *   GENERATE_GOLDEN=1 bun run --cwd packages/core vitest run \
  *     src/investing/dashboardReturns.regression.test.ts
  */
 const GOLDEN_URL = new URL("./__fixtures__/dashboard-returns.golden.json", import.meta.url);

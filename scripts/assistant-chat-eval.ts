@@ -1,10 +1,10 @@
 /* Assistent chat evaluation against the REAL model, on a synthetic vault.
  *
- *   pnpm exec tsx scripts/assistant-chat-eval.ts                 run every case
- *   pnpm exec tsx scripts/assistant-chat-eval.ts --only 7,12     run some cases
- *   pnpm exec tsx scripts/assistant-chat-eval.ts --model medium  use mistral-medium
- *   pnpm exec tsx scripts/assistant-chat-eval.ts --record        also write the recording CI replays
- *   pnpm exec tsx scripts/assistant-chat-eval.ts --out <file>    write the results as markdown
+ *   bunx tsx scripts/assistant-chat-eval.ts                 run every case
+ *   bunx tsx scripts/assistant-chat-eval.ts --only 7,12     run some cases
+ *   bunx tsx scripts/assistant-chat-eval.ts --model medium  use mistral-medium
+ *   bunx tsx scripts/assistant-chat-eval.ts --record        also write the recording CI replays
+ *   bunx tsx scripts/assistant-chat-eval.ts --out <file>    write the results as markdown
  *
  * Needs MISTRAL_API_KEY (read from apps/server/.env; never printed). Sends
  * SYNTHETIC data only: the fixture in packages/core/src/chat/fixture.ts. Each case

@@ -18,7 +18,7 @@ import { ingestCatalogue } from "./cardTerms.js";
 
 /** Absolute path to the committed catalogue, derived from THIS file
  *  (apps/server/src) rather than from the working directory — the same trick,
- *  for the same reason, as `WEB_DIST` in index.ts: `pnpm --filter` runs in the
+ *  for the same reason, as `WEB_DIST` in index.ts: `bun --filter` runs in the
  *  package dir while Railway runs from the repo root, and a cwd-relative path
  *  would silently find nothing in one of them. Overridable via env. */
 export const CATALOG_FILE =

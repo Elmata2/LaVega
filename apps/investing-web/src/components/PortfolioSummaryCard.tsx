@@ -8,8 +8,8 @@ import type { ReactNode } from "react";
 import { shortDate } from "../lib/dates.js";
 import { isIsinSymbol } from "../lib/holdingIdentity.js";
 import { BenchmarkPicker } from "./BenchmarkPicker";
-import { Button } from "./ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
+import { Button } from "@lavega/ui";
+import { Card, CardContent, CardHeader, CardTitle } from "@lavega/ui";
 
 /** The view this card renders: the risk projection's metrics and report plus
  *  the composition projection, both read from the one dashboard. */

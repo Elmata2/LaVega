@@ -27,7 +27,11 @@ export type CapacityParts = {
 };
 
 /** The one capacity computation (About-you and the plan both call it). */
-export function capacityForParts(parts: CapacityParts, room: RoomResult, asOf: string): CapacityScore {
+export function capacityForParts(
+  parts: CapacityParts,
+  room: RoomResult,
+  asOf: string,
+): CapacityScore {
   const inputs = capacityInputs({
     savingsCents: parts.savingsCents ?? 0,
     fixedCostsMonthlyCents: parts.fixedCostsMonthlyCents,
@@ -67,7 +71,8 @@ export function resolveRoomRanges(
   spend: Range | null | undefined,
 ): { room: RoomResult; statedInputs?: { income: Range; spend: Range } } {
   if (income == null || spend == null) return { room: computed };
-  const short = computed.kind === "computed" && (computed.coverageDays ?? MIN_HISTORY_DAYS) < MIN_HISTORY_DAYS;
+  const short =
+    computed.kind === "computed" && (computed.coverageDays ?? MIN_HISTORY_DAYS) < MIN_HISTORY_DAYS;
   if (computed.kind === "computed" && !short) return { room: computed };
   return { room: roomFromStated(income, spend), statedInputs: { income, spend } };
 }

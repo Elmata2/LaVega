@@ -7,12 +7,30 @@ status: published
 author: alexander
 updated: 2026-10-26
 sources:
-  - { title: "Belastingdienst: How much can I give my child tax-free? (in Dutch)", url: "https://www.belastingdienst.nl/wps/wcm/connect/nl/schenken/content/hoeveel-mag-ik-mijn-kind-belastingvrij-schenken", accessed: 2026-10-26 }
-  - { title: "Belastingdienst: Assets and debts (box 3), 2025 tax return guide (in Dutch)", url: "https://www.belastingdienst.nl/wps/wcm/connect/fisin/fisin2025/bezittingen_en_schulden_box_3_", accessed: 2026-10-26 }
-  - { title: "Belastingdienst: How the box 3 income on your 2026 provisional assessment is calculated (in Dutch)", url: "https://www.belastingdienst.nl/wps/wcm/connect/nl/box-3/content/berekening-box-3-inkomen-2026", accessed: 2026-10-26 }
+  - {
+      title: "Belastingdienst: How much can I give my child tax-free? (in Dutch)",
+      url: "https://www.belastingdienst.nl/wps/wcm/connect/nl/schenken/content/hoeveel-mag-ik-mijn-kind-belastingvrij-schenken",
+      accessed: 2026-10-26,
+    }
+  - {
+      title: "Belastingdienst: Assets and debts (box 3), 2025 tax return guide (in Dutch)",
+      url: "https://www.belastingdienst.nl/wps/wcm/connect/fisin/fisin2025/bezittingen_en_schulden_box_3_",
+      accessed: 2026-10-26,
+    }
+  - {
+      title: "Belastingdienst: How the box 3 income on your 2026 provisional assessment is calculated (in Dutch)",
+      url: "https://www.belastingdienst.nl/wps/wcm/connect/nl/box-3/content/berekening-box-3-inkomen-2026",
+      accessed: 2026-10-26,
+    }
 faq:
-  - { q: "How much can you give your child tax-free in 2026?", a: "According to the Belastingdienst the annual exemption is 6,908 euro. For a child aged 18 to 40 there is also a one-time increased exemption of up to 33,129 euro, which replaces the annual exemption in that year." }
-  - { q: "Does your child's money count in your own box 3?", a: "According to the Belastingdienst you also report the assets of children under 18 on 1 January over whom you or your fiscal partner have parental authority. This is from the guide for tax year 2025." }
+  - {
+      q: "How much can you give your child tax-free in 2026?",
+      a: "According to the Belastingdienst the annual exemption is 6,908 euro. For a child aged 18 to 40 there is also a one-time increased exemption of up to 33,129 euro, which replaces the annual exemption in that year.",
+    }
+  - {
+      q: "Does your child's money count in your own box 3?",
+      a: "According to the Belastingdienst you also report the assets of children under 18 on 1 January over whom you or your fiscal partner have parental authority. This is from the guide for tax year 2025.",
+    }
 ---
 
 ## What are the options?
@@ -64,12 +82,12 @@ Also:
 
 Gifting is not a third kind of account: it settles whose money it is, not where it sits.
 
-| | Savings account | Investment account | Gifting |
-| --- | --- | --- | --- |
-| Value moves with markets | No | Yes | Depends on where the money goes |
-| Box 3 deemed return, 2026 | 1.28% (provisional) | 6.00% | Not applicable to the gift itself |
-| Costs | Per provider | Per provider | None; no gift tax within the exemption |
-| Who decides about the money | Per the terms | Per the terms | The child, after the gift |
+|                             | Savings account     | Investment account | Gifting                                |
+| --------------------------- | ------------------- | ------------------ | -------------------------------------- |
+| Value moves with markets    | No                  | Yes                | Depends on where the money goes        |
+| Box 3 deemed return, 2026   | 1.28% (provisional) | 6.00%              | Not applicable to the gift itself      |
+| Costs                       | Per provider        | Per provider       | None; no gift tax within the exemption |
+| Who decides about the money | Per the terms       | Per the terms      | The child, after the gift              |
 
 ## What LaVega does here
 

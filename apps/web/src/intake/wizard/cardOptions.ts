@@ -162,9 +162,9 @@ const CARDS = CARDS_BY_KIND.credit;
  *  not among them (the picker always shows it). */
 export const matchCards = (query: string, kind: CardKind = "credit"): Card[] => {
   const needle = normalise(query);
-  return CARDS_BY_KIND[kind].filter((c) => needle === "" || c.search.includes(needle)).map(
-    ({ id, label }) => ({ id, label }),
-  );
+  return CARDS_BY_KIND[kind]
+    .filter((c) => needle === "" || c.search.includes(needle))
+    .map(({ id, label }) => ({ id, label }));
 };
 
 export type CardGroup = { brand: CardBrand; label: string; cards: Card[] };
@@ -183,13 +183,15 @@ export const cardGroups = (
     kind === "debit"
       ? (debitLabels?.[brand as Exclude<DebitBrand, "other-brand">] ?? brand)
       : BRAND_LABELS[brand as CreditBrand];
-  return brandOrder(kind).map((brand) => ({
-    brand,
-    label: brand === "other-brand" ? otherLabel : nameOf(brand),
-    cards: all
-      .filter((c) => brandOf(c.id, kind) === brand)
-      .sort((a, b) => byName(a.label, b.label)),
-  })).filter((g) => g.cards.length > 0);
+  return brandOrder(kind)
+    .map((brand) => ({
+      brand,
+      label: brand === "other-brand" ? otherLabel : nameOf(brand),
+      cards: all
+        .filter((c) => brandOf(c.id, kind) === brand)
+        .sort((a, b) => byName(a.label, b.label)),
+    }))
+    .filter((g) => g.cards.length > 0);
 };
 
 /** The credit cards of the catalogue, sorted by product, then the
@@ -206,9 +208,7 @@ export const cardLabel = (id: string, otherLabel: string, kind: CardKind = "cred
 /** Every bank or issuer brand id the card pickers know, debit first, each once.
  *  The banks screen lists these plus "other". */
 export const bankBrandIds = (): string[] => [
-  ...new Set(
-    [...brandOrder("debit"), ...brandOrder("credit")].filter((b) => b !== "other-brand"),
-  ),
+  ...new Set([...brandOrder("debit"), ...brandOrder("credit")].filter((b) => b !== "other-brand")),
 ];
 
 /** The brands a card picker is limited to, from the banks answer. null means
@@ -218,9 +218,7 @@ export const bankFilter = (
   banks: readonly string[] | null | undefined,
 ): ReadonlySet<CardBrand> | null => {
   const valid = new Set(bankBrandIds());
-  const known = new Set<CardBrand>(
-    (banks ?? []).filter((b) => valid.has(b)) as CardBrand[],
-  );
+  const known = new Set<CardBrand>((banks ?? []).filter((b) => valid.has(b)) as CardBrand[]);
   if (known.size === 0) return null;
   if ((banks ?? []).includes(OTHER_CARD)) known.add("other-brand");
   return known;

@@ -1,5 +1,5 @@
-import type { HTMLAttributes } from "react";
-import { cn } from "./utils.js";
+import type { HTMLAttributes, ReactElement } from "react";
+import { cn } from "@lavega/ui";
 
 /* A status is never carried by tint alone. For colour-blind users --warn,
  * --neg and --pos can look alike, so the SHAPE says what it is:
@@ -18,7 +18,7 @@ export const STATUS_TONE_CLASS: Record<StatusTone, string> = {
 /** The icon alone also knows "info" (a neutral note: no border style, no tint). */
 export type StatusIconKind = StatusTone | "info";
 
-const ICON_PATH: Record<StatusIconKind, JSX.Element> = {
+const ICON_PATH: Record<StatusIconKind, ReactElement> = {
   info: (
     <>
       <circle cx="12" cy="12" r="9" />

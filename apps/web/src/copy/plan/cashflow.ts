@@ -8,7 +8,13 @@ import type { PlanFmt } from "./shared.js";
 export type CashflowCopy = {
   title: string;
   headline: (f: CashflowFigures, fmt: PlanFmt) => string;
-  parts: { figures: string; advice: string; assumptions: string; howCalculated: string; sources: string };
+  parts: {
+    figures: string;
+    advice: string;
+    assumptions: string;
+    howCalculated: string;
+    sources: string;
+  };
   why: string;
   notEnough: string;
   importLink: string;
@@ -38,7 +44,12 @@ export type CashflowCopy = {
   noWarning: (quietMonths: number, points: number) => string;
   advice: {
     /** `gap` null = the savings are at or above the target (or unknown). */
-    buffer: (months: string, target: string | null, gap: string | null, own: string | null) => string;
+    buffer: (
+      months: string,
+      target: string | null,
+      gap: string | null,
+      own: string | null,
+    ) => string;
     bufferNoFixed: (months: string) => string;
     tax: (amount: string, pct: string, exVat: boolean) => string;
     taxNeedsPct: string;
@@ -97,7 +108,8 @@ const nl: CashflowCopy = {
     emptyMonths: "Maanden zonder klantinkomen",
     longestGap: "Langste tijd tussen twee betalingen",
     variability: "Hoe sterk je klantinkomen wisselt",
-    startStated: "Startbedrag: het spaargeld dat je zelf opgaf, want je rekeningen hebben geen bekend saldo.",
+    startStated:
+      "Startbedrag: het spaargeld dat je zelf opgaf, want je rekeningen hebben geen bekend saldo.",
     payments: "Dit telden we mee als klantinkomen (controleer of het klopt)",
     steady: "Ander inkomen per maand (loon, uitkering, partner)",
     spend: "Uitgaven per maand (gemiddelde, incl. periodieke kosten)",
@@ -136,7 +148,8 @@ const nl: CashflowCopy = {
     vat: (amount, deadline, period) =>
       `Zet per maand ${amount} apart voor btw. De eerstvolgende aangifte moet uiterlijk ${deadline} binnen zijn${period === null ? "" : `; over de ontvangsten in die periode is dat ${period}`}.`,
     vatUnknown: "Btw: je hebt niet aangegeven of je btw rekent. Kies hieronder Ja of Nee.",
-    left: (amount) => `Na deze reserveringen houd je gemiddeld ${amount} per maand over van je klantinkomen.`,
+    left: (amount) =>
+      `Na deze reserveringen houd je gemiddeld ${amount} per maand over van je klantinkomen.`,
     fixedHint: "Vaste lasten ontbreken.",
   },
   inputs: {
@@ -175,7 +188,8 @@ const nl: CashflowCopy = {
     vat: (rate, asOf, freq) =>
       `Btw-tarief ${rate}% en aangiftetermijn uit het Nederlandse regelpakket van LaVega, gecontroleerd op ${asOf}, aangifte ${freq}. Controleer bij de Belastingdienst.`,
     tax: "Inkomstenbelasting: het percentage is dat van jou. LaVega heeft hier geen gecontroleerde bron voor.",
-    notAdvice: "Alles hier is een schatting uit je bankgegevens. Kosten, aftrekposten en btw op inkoop zijn niet bekend.",
+    notAdvice:
+      "Alles hier is een schatting uit je bankgegevens. Kosten, aftrekposten en btw op inkoop zijn niet bekend.",
   },
   frequency: { quarterly: "per kwartaal", monthly: "per maand", yearly: "per jaar" },
 };
@@ -194,7 +208,8 @@ const en: CashflowCopy = {
     sources: "Sources",
   },
   why: "You said you freelance or run your own business. Then money arrives in lumps and you set tax aside yourself.",
-  notEnough: "There are fewer than three full months of data, too little to measure how much your income varies.",
+  notEnough:
+    "There are fewer than three full months of data, too little to measure how much your income varies.",
   importLink: "Import more statements",
   labels: {
     clientMean: "Client income per month (average)",
@@ -202,7 +217,8 @@ const en: CashflowCopy = {
     emptyMonths: "Months without client income",
     longestGap: "Longest time between two payments",
     variability: "How much your client income varies",
-    startStated: "Starting amount: the savings you typed in, because your accounts have no known balance.",
+    startStated:
+      "Starting amount: the savings you typed in, because your accounts have no known balance.",
     payments: "What we counted as client income (check that it is right)",
     steady: "Other income per month (pay, benefits, partner)",
     spend: "Spending per month (average, incl. periodic costs)",
@@ -214,7 +230,8 @@ const en: CashflowCopy = {
   clientRange: (a, b, c) => `${a} / ${b} / ${c}`,
   emptyMonths: (e, t) => `${e} of ${t}`,
   days: (n) => `${n} days`,
-  variability: (cv) => (cv >= 1 ? "Very high" : cv >= 0.5 ? "High" : cv >= 0.25 ? "Moderate" : "Low"),
+  variability: (cv) =>
+    cv >= 1 ? "Very high" : cv >= 0.5 ? "High" : cv >= 0.25 ? "Moderate" : "Low",
   quietCover: (m) => (m === 1 ? "1 month" : `${m} months`),
   noDeficit: "Your steady income already covers your spending, without client income.",
   lowest: (b, m) => `${b} (${m})`,
@@ -240,7 +257,8 @@ const en: CashflowCopy = {
     vat: (amount, deadline, period) =>
       `Set aside ${amount} per month for VAT. The next return is due on or before ${deadline}${period === null ? "" : `; on the receipts in that period that is ${period}`}.`,
     vatUnknown: "VAT: you have not said whether you charge VAT. Choose Yes or No below.",
-    left: (amount) => `After these reserves you keep about ${amount} per month of your client income.`,
+    left: (amount) =>
+      `After these reserves you keep about ${amount} per month of your client income.`,
     fixedHint: "Fixed costs are missing.",
   },
   inputs: {
@@ -279,7 +297,8 @@ const en: CashflowCopy = {
     vat: (rate, asOf, freq) =>
       `VAT rate ${rate}% and filing period from LaVega's Dutch rule pack, checked on ${asOf}, filed ${freq}. Check with the Belastingdienst.`,
     tax: "Income tax: the percentage is yours. LaVega has no checked source for it.",
-    notAdvice: "Everything here is an estimate from your bank data. Costs, deductions and VAT on purchases are not known.",
+    notAdvice:
+      "Everything here is an estimate from your bank data. Costs, deductions and VAT on purchases are not known.",
   },
   frequency: { quarterly: "quarterly", monthly: "monthly", yearly: "yearly" },
 };

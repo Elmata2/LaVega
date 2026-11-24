@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, beforeEach } from "vitest";
 import { migratedTestDatabase } from "@lavega/database/testing";
-import { registerSharedPriceStoreContract } from "@lavega/adapters/src/prices/sharedPriceStore.contract.js";
+import { registerSharedPriceStoreContract } from "@lavega/adapters/prices/sharedPriceStore.contract";
 import { createNeonSharedPriceStore } from "./neonStores.js";
 
 let context: Awaited<ReturnType<typeof migratedTestDatabase>>;

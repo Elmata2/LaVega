@@ -21,7 +21,7 @@
 import { createHash } from "node:crypto";
 import { isAgentToolScope, type AgentToolScope } from "@lavega/core";
 import { createMcpTokenRepository } from "@lavega/database";
-import { runtimeDatabase } from "@lavega/investing-server/src/credentialStore.js";
+import { runtimeDatabase } from "@lavega/database";
 import { secretsMatch } from "../secrets.js";
 
 export type McpTokenIdentity = {

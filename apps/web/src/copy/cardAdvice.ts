@@ -76,11 +76,16 @@ const distinct = (
   return list === "" ? "" : ` (${list})`;
 };
 /** "X cannot be compared (reason)" for each card of the user that blocks the comparison. */
-const blockerText = (a: CardAdvice, c: { reasons: Record<NotComparableReason, string>; otherCardName: string }): string =>
+const blockerText = (
+  a: CardAdvice,
+  c: { reasons: Record<NotComparableReason, string>; otherCardName: string },
+): string =>
   a.baseline.kind !== "unknown"
     ? ""
     : a.baseline.blockers
-        .map((b) => `${b.name ?? c.otherCardName} (${b.reasons.map((r) => c.reasons[r]).join("; ")})`)
+        .map(
+          (b) => `${b.name ?? c.otherCardName} (${b.reasons.map((r) => c.reasons[r]).join("; ")})`,
+        )
         .join(", ");
 const signed = (v: number, f: PlanFmt) => `${v >= 0 ? "+" : ""}${f.eur(v)}`;
 const pct = (n: number, f: PlanFmt) => f.points(n);
@@ -120,7 +125,8 @@ const nl: CardAdviceCopy = {
       return `Je huidige ${a.baseline.kind === "unknown" && a.baseline.blockers.length === 1 ? "kaart" : "kaarten"} is niet te vergelijken: ${blockerText(a, nl)}. Er is dus geen aanbeveling om over te stappen. Dit zijn de kaarten met de hoogste nettowaarde bij jouw uitgaven.`;
     return "";
   },
-  gainOfWhichPoints: (amount, cpp) => `waarvan ${amount} aan punten, gerekend tegen ${cpp} cent per punt`,
+  gainOfWhichPoints: (amount, cpp) =>
+    `waarvan ${amount} aan punten, gerekend tegen ${cpp} cent per punt`,
   amexAcceptance: "American Express wordt niet overal geaccepteerd.",
   rankedTitle: "Kaarten naast elkaar, bij jouw uitgaven",
   basisStated: "Op basis van je antwoorden, niet van je transacties.",
@@ -204,7 +210,8 @@ const nl: CardAdviceCopy = {
     "fee-unknown": "jaarkosten niet in de catalogus",
     "fx-unknown": "opslag buitenlandse valuta niet in de catalogus",
     "points-unknown": "punten per euro niet in de catalogus",
-    "fee-condition-unknown": "de jaarkosten hangen af van iets waarvan de prijs niet in de catalogus staat",
+    "fee-condition-unknown":
+      "de jaarkosten hangen af van iets waarvan de prijs niet in de catalogus staat",
     "points-unvalued": "de waarde van de punten of miles is onbekend; vul een inwisselvoorbeeld in",
     "cashback-unknown": "cashback onbekend",
     "not-in-catalogue": "niet in de catalogus",
@@ -220,7 +227,9 @@ const nl: CardAdviceCopy = {
     const rate = i.ratePct === null ? "" : pct(i.ratePct, f);
     switch (i.recommendation) {
       case "enter-rate":
-        out.push("Vul de rente van je kaart in (bij de kaartgegevens hieronder) voor een aanbeveling.");
+        out.push(
+          "Vul de rente van je kaart in (bij de kaartgegevens hieronder) voor een aanbeveling.",
+        );
         break;
       case "keep-balance":
         out.push(
@@ -290,10 +299,7 @@ const nl: CardAdviceCopy = {
       out.push(
         `Waarde: ${f.eurRange(p.valueCents.lowCents, p.valueCents.highCents)} (midden ${f.eur(p.valueCents.medianCents)}), volgens je ${p.valuation.examples} eigen inwisselvoorbeelden.`,
       );
-    else
-      out.push(
-        `Indicatieve waarde: ${f.eur(p.valueCents.medianCents)} bij betalen met punten.`,
-      );
+    else out.push(`Indicatieve waarde: ${f.eur(p.valueCents.medianCents)} bij betalen met punten.`);
     out.push(
       p.expiresOn === null
         ? "Verloopt: niet bekend. De catalogus kent geen vervaltermijn; vul je eigen datum in."
@@ -396,7 +402,9 @@ const en: CardAdviceCopy = {
       : `Spending that can be paid by card: ${cents(a.spend.windowCents, f)} over ${a.spend.months} full months, which is ${cents(a.spend.annualCents, f)} a year (times 12, divided by ${a.spend.months}). Rent, mortgage, tax, insurance, loan repayments, cash and transfers between your own accounts are left out. All other spending is counted as on the card; whether every shop accepts the card is not checked. Of this in another currency: ${cents(a.spend.annualForeignCents, f)} a year.${a.spend.excludedForeignCount > 0 ? ` ${a.spend.excludedForeignCount} lines in another currency are not counted, so the markup on them is not compared.` : ""}`,
   optionCalc: (o, a, f) => {
     const out: string[] = [];
-    out.push(o.feeCents === null ? "Annual fee: unknown." : `Annual fee: ${f.eurExact(o.feeCents)}.`);
+    out.push(
+      o.feeCents === null ? "Annual fee: unknown." : `Annual fee: ${f.eurExact(o.feeCents)}.`,
+    );
     if (o.feeNote !== null) out.push(en.feeNoteLine(o.feeNote, a.spend.annualCents, f));
     if (o.fxFeePct !== null && o.fxCostCents !== null)
       out.push(
@@ -445,7 +453,8 @@ const en: CardAdviceCopy = {
     "fee-unknown": "annual fee not in the catalogue",
     "fx-unknown": "foreign currency markup not in the catalogue",
     "points-unknown": "points per euro not in the catalogue",
-    "fee-condition-unknown": "the annual fee depends on something whose price is not in the catalogue",
+    "fee-condition-unknown":
+      "the annual fee depends on something whose price is not in the catalogue",
     "points-unvalued": "the value of the points or miles is unknown; add a redemption example",
     "cashback-unknown": "cashback unknown",
     "not-in-catalogue": "not in the catalogue",
@@ -461,7 +470,9 @@ const en: CardAdviceCopy = {
     const rate = i.ratePct === null ? "" : pct(i.ratePct, f);
     switch (i.recommendation) {
       case "enter-rate":
-        out.push("Fill in your card's interest rate (in the card details below) for a recommendation.");
+        out.push(
+          "Fill in your card's interest rate (in the card details below) for a recommendation.",
+        );
         break;
       case "keep-balance":
         out.push(

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { deleteThread, fetchThreads, type ThreadSummary } from "../lib/agentMemory.js";
-import { Button } from "./ui/button.js";
+import { Button } from "@lavega/ui";
 import { longDate } from "../lib/dates.js";
 
 /* A persona's saved conversations: reopen one, start a new one, or delete

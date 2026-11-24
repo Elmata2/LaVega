@@ -734,7 +734,9 @@ export function mergeImportedAccounts(existing: Account[], imported: Account[]):
             ...(imp.balanceFetchedAt === undefined && !prev.renamed ? { name: prev.name } : {}),
           }
         : {}),
-      ...(imp.balanceFetchedAt === undefined && imp.source === undefined && prev.source !== undefined
+      ...(imp.balanceFetchedAt === undefined &&
+      imp.source === undefined &&
+      prev.source !== undefined
         ? { source: prev.source }
         : {}),
     };

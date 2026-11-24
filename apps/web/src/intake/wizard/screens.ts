@@ -93,7 +93,15 @@ const GOALS: readonly ScreenId[] = ["goal", "debts", "debt-details", "buffer"];
 const riskScreens = (): ScreenId[] => RISK_SCALE.items.map((i) => `risk:${i.id}` as const);
 
 /** Every screen in order, including the conditional ones. */
-const canonical = (): ScreenId[] => [...ABOUT, ...GOALS, ...riskScreens(), "invested", "priorities", "summary", "upload"];
+const canonical = (): ScreenId[] => [
+  ...ABOUT,
+  ...GOALS,
+  ...riskScreens(),
+  "invested",
+  "priorities",
+  "summary",
+  "upload",
+];
 
 /** Freelance or own business: the work kinds that ask the VAT question. */
 export const isSelfEmployed = (p: AdvisorProfile): boolean =>
@@ -204,17 +212,25 @@ export function sectionOf(id: ScreenId): Section {
  *  blocksDone 3; any other lastScreen (upload, legacy ids, none) is finished. */
 export function isFinishedIntake(p: AdvisorProfile): boolean {
   const { lastScreen, blocksDone } = p.intake;
-  return blocksDone >= 3 && lastScreen !== "invested" && lastScreen !== "priorities" && lastScreen !== "summary";
+  return (
+    blocksDone >= 3 &&
+    lastScreen !== "invested" &&
+    lastScreen !== "priorities" &&
+    lastScreen !== "summary"
+  );
 }
 
 /** A finished user's unanswered round-1 questions, in wizard order. */
 export function pendingNewQuestions(p: AdvisorProfile): ScreenId[] {
   const present = new Set(screensFor(p));
-  return canonical().filter((id) => ROUND1_NEW.includes(id) && present.has(id) && !isAnswered(p, id));
+  return canonical().filter(
+    (id) => ROUND1_NEW.includes(id) && present.has(id) && !isAnswered(p, id),
+  );
 }
 
 /** Round 2 screens still to answer, in order. */
-export const round2Pending = (p: AdvisorProfile): ScreenId[] => ROUND2.filter((id) => !isAnswered(p, id));
+export const round2Pending = (p: AdvisorProfile): ScreenId[] =>
+  ROUND2.filter((id) => !isAnswered(p, id));
 
 export const round2Due = (p: AdvisorProfile, hasTransactions: boolean): boolean =>
   p.intake.blocksDone >= 3 && hasTransactions && p.intake.round2Done !== true;
@@ -252,7 +268,11 @@ export function resumeScreen(p: AdvisorProfile): ScreenId | "done" {
 const withIntake = (p: AdvisorProfile, intake: AdvisorProfile["intake"]) =>
   new AdvisorProfile({ ...p, intake });
 
-const SECTION_END: Partial<Record<string, 1 | 2 | 3>> = { "foreign-spend": 1, buffer: 2, invested: 3 };
+const SECTION_END: Partial<Record<string, 1 | 2 | 3>> = {
+  "foreign-spend": 1,
+  buffer: 2,
+  invested: 3,
+};
 
 export function markDone(p: AdvisorProfile, id: ScreenId): AdvisorProfile {
   const end = SECTION_END[id];

@@ -337,7 +337,9 @@ test("summary carries only enums", () => {
 });
 
 test("empty profile gives an empty summary", () => {
-  const s = profileSummaryOf(new AdvisorProfile({ removed: [], intake: { blocksDone: 0, step0: null } }));
+  const s = profileSummaryOf(
+    new AdvisorProfile({ removed: [], intake: { blocksDone: 0, step0: null } }),
+  );
   expect(s.priorities).toEqual([]);
   expect(s.household).toBeNull();
   expect(s.confidence).toBeNull();
@@ -348,7 +350,18 @@ test("birthYear and statedBanks never appear, in the summary or the built contex
   for (const view of ["overview", "forecast", "backup", "unknown-view"]) {
     const { context } = buildTabContext(view, { profileSummary: summary });
     const json = JSON.stringify(context);
-    for (const leak of ["1987", "birthYear", "statedBanks", "abn-amro", "ing", "amex", "flying-blue", "NL91", "12000", "worries"]) {
+    for (const leak of [
+      "1987",
+      "birthYear",
+      "statedBanks",
+      "abn-amro",
+      "ing",
+      "amex",
+      "flying-blue",
+      "NL91",
+      "12000",
+      "worries",
+    ]) {
       // "ing" is checked as a whole JSON string value, not as a substring
       if (leak === "ing") expect(json).not.toContain('"ing"');
       else expect(json).not.toContain(leak);
@@ -363,7 +376,11 @@ test("buildTabContext adds no profile key without a summary", () => {
 
 test("a tampered summary is re-sanitized in the browser too", () => {
   const { context } = buildTabContext("backup", {
-    profileSummary: { ...profileSummaryOf(richProfile()), priorities: ["NL91ABNA0417164300"], birthYear: 1987 } as never,
+    profileSummary: {
+      ...profileSummaryOf(richProfile()),
+      priorities: ["NL91ABNA0417164300"],
+      birthYear: 1987,
+    } as never,
   });
   expect((context.profile as ProfileSummary).priorities).toEqual([]);
   expect(JSON.stringify(context)).not.toContain("birthYear");

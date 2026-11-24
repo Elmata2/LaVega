@@ -4,7 +4,11 @@ import type {
   ScoreQuestion,
   ScoreResponse,
 } from "@typesafe-ai/sdk";
-import { positionsByMarketValueDesc, type InvestingDashboardData, type SectorExposure } from "@lavega/core";
+import {
+  positionsByMarketValueDesc,
+  type InvestingDashboardData,
+  type SectorExposure,
+} from "@lavega/core";
 import {
   createSystemOneProvider,
   type SystemOneProvider,

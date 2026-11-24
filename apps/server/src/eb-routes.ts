@@ -1,11 +1,17 @@
 import { randomUUID } from "node:crypto";
+import { amsterdamDay } from "@lavega/core";
 import { createRateLimiter, clientIp, rateLimitKey, type RateLimiter } from "./agent/rateLimit.js";
 import type { Hono } from "hono";
 import { loadConfig, type EbConfig, type PsuType } from "./config.js";
 import { createEbFlowRepository } from "@lavega/database";
-import { runtimeDatabase } from "@lavega/investing-server/src/credentialStore.js";
-import { investingTenantId } from "./investing-mount.js";
-import { eb, type EbClientConfig } from "./eb-client.js";
+import { runtimeDatabase } from "@lavega/database";
+import { investingTenantId } from "./auth.js";
+import {
+  eb,
+  EnableBankingApiError,
+  EnableBankingTimeoutError,
+  type EbClientConfig,
+} from "./eb-client.js";
 
 /* Enable Banking AIS flow. The server holds the app credential (JWT signing)
  * and does the OAuth exchange; it never persists the user's financial data.
@@ -24,8 +30,26 @@ export type EbSession = {
    *  this date whatever our own row says, so it travels with the session and
    *  the refresh path checks it rather than discovering a 401 from the bank. */
   validUntil?: string;
+  /** RFC3339 timestamp of the last completed sync. Absent until the initial
+   *  365-day sync succeeds; subsequent refreshes read a shorter window. */
+  lastSyncedAt?: string;
 };
 export type PendingAuth = { userId: string; name: string; country: string };
+
+export type EbRefreshFailureReason = "rate-limited" | "bank-down" | "unknown";
+
+export type EbRefreshFailure = {
+  aspsp: string;
+  reason: EbRefreshFailureReason;
+  retryAfterSeconds?: number;
+};
+
+/** Initial sync window (days) on first read after connecting a bank. */
+export const INITIAL_SYNC_DAYS = 365;
+/** Incremental sync window (days) on subsequent refreshes after the first sync. */
+export const REFRESH_SYNC_DAYS = 35;
+/** Shared daily unattended bank-read budget per user across web, cron, and WhatsApp. */
+export const DAILY_BANK_FETCH_CAP = 4;
 
 /**
  * Where the flow's two intermediate states live.
@@ -48,6 +72,7 @@ export type EbFlowStore = {
   ): Promise<Array<{ sessionId: string; payload: EbSession; createdAt: string }>>;
   getSession(userId: string, sessionId: string, ttlMs: number): Promise<EbSession | null>;
   deleteSession(userId: string, sessionId: string): Promise<void>;
+  takeFetchBudget(userId: string, today: string, max: number): Promise<boolean>;
 };
 
 export const PENDING_TTL_MS = 15 * 60 * 1000;
@@ -127,8 +152,45 @@ function errMsg(e: unknown): string {
  * trigger an EB call (security review 2026-10-17, A5). The detail is logged
  * here, where the operator can read it; the caller gets one fixed sentence.
  */
+export function classifyEbFailure(e: unknown): {
+  reason: EbRefreshFailureReason;
+  status: number | null;
+  retryAfterMs: number | null;
+} {
+  if (
+    e instanceof EnableBankingTimeoutError ||
+    (e instanceof Error && (e.name === "TimeoutError" || e.name === "AbortError"))
+  ) {
+    return { reason: "bank-down", status: null, retryAfterMs: null };
+  }
+  const rawStatus =
+    e instanceof EnableBankingApiError ? e.status : (e as { status?: unknown } | null)?.status;
+  const status = typeof rawStatus === "number" && Number.isFinite(rawStatus) ? rawStatus : null;
+  const rawRetryAfter =
+    e instanceof EnableBankingApiError
+      ? e.retryAfterMs
+      : (e as { retryAfterMs?: unknown } | null)?.retryAfterMs;
+  const retryAfterMs =
+    typeof rawRetryAfter === "number" && Number.isFinite(rawRetryAfter) && rawRetryAfter >= 0
+      ? rawRetryAfter
+      : null;
+
+  if (status === 429) {
+    return { reason: "rate-limited", status, retryAfterMs };
+  }
+  if (status !== null && status >= 500 && status < 600) {
+    return { reason: "bank-down", status, retryAfterMs };
+  }
+  return { reason: "unknown", status, retryAfterMs: null };
+}
+
+export function syncWindowDays(session: EbSession): number {
+  return session.lastSyncedAt ? REFRESH_SYNC_DAYS : INITIAL_SYNC_DAYS;
+}
+
 function ebFailure(context: string, e: unknown): string {
-  console.error(`eb/${context}: ${errMsg(e)}`);
+  const { status, reason } = classifyEbFailure(e);
+  console.error(`eb/${context}: ${errMsg(e)}`, { context, status, reason });
   return "Enable Banking gaf een fout. Probeer het later opnieuw.";
 }
 
@@ -329,7 +391,11 @@ export function registerEbRoutes(app: Hono, dependencies: EbRouteDependencies): 
     if (!session)
       return c.json({ error: "Sessie onbekend of verlopen — koppel de bank opnieuw." }, 404);
     try {
-      const items = await fetchSessionItems(cfg, session);
+      const items = await fetchSessionItems(cfg, session, syncWindowDays(session));
+      await store.putSession(userId, sessionId, {
+        ...session,
+        lastSyncedAt: new Date().toISOString(),
+      });
       /* THE SESSION STAYS. It used to be deleted here — "one-shot: data
          delivered" — which is why a connected bank could never be re-read.
          The consent is good for CONSENT_DAYS; throwing away our half of it
@@ -350,7 +416,8 @@ export function registerEbRoutes(app: Hono, dependencies: EbRouteDependencies): 
    * Expired means the consent lapsed and the only way forward is to reconnect
    * that bank — reported by name, never silently skipped, because a balance
    * that has quietly stopped updating is worse than one that says so. Failed
-   * is the bank being unreachable, which is worth retrying.
+   * carries a typed reason (`rate-limited`, `bank-down`, `unknown`) so the UI
+   * can tell the user whether to wait or reconnect.
    *
    * A dead consent is also PRUNED here. `sweepSessions` only ever fires when
    * someone starts a new authorisation, so without this a user who never
@@ -372,28 +439,69 @@ export function registerEbRoutes(app: Hono, dependencies: EbRouteDependencies): 
     const now = Date.now();
     const refreshed: Array<{ aspsp: string; items: unknown[] }> = [];
     const expired: string[] = [];
-    const failed: Array<{ aspsp: string; error: string }> = [];
-    for (const { sessionId, payload, createdAt } of sessions) {
-      if (!consentLive(payload, createdAt, now)) {
-        expired.push(payload.aspsp);
-        await store.deleteSession(userId, sessionId);
+    const failed: EbRefreshFailure[] = [];
+    const liveSessions: typeof sessions = [];
+    for (const entry of sessions) {
+      if (!consentLive(entry.payload, entry.createdAt, now)) {
+        expired.push(entry.payload.aspsp);
+        await store.deleteSession(userId, entry.sessionId);
         continue;
       }
+      liveSessions.push(entry);
+    }
+
+    if (liveSessions.length > 0) {
+      const today = amsterdamDay(new Date(now));
+      const allowed = await store.takeFetchBudget(userId, today, DAILY_BANK_FETCH_CAP);
+      if (!allowed) {
+        for (const { payload } of liveSessions) {
+          console.warn("eb refresh failed", {
+            aspsp: payload.aspsp,
+            status: 429,
+            reason: "rate-limited",
+            source: "daily-budget",
+          });
+          failed.push({ aspsp: payload.aspsp, reason: "rate-limited" });
+        }
+        return c.json({ refreshed, expired, failed });
+      }
+    }
+
+    for (const { sessionId, payload } of liveSessions) {
       try {
-        refreshed.push({ aspsp: payload.aspsp, items: await fetchSessionItems(cfg, payload) });
+        const items = await fetchSessionItems(cfg, payload, syncWindowDays(payload));
+        await store.putSession(userId, sessionId, {
+          ...payload,
+          lastSyncedAt: new Date(now).toISOString(),
+        });
+        refreshed.push({ aspsp: payload.aspsp, items });
       } catch (e) {
         /* THE BANK'S OWN WORDS DO NOT REACH THE BROWSER. `errMsg` is bare
            `e.message`, and on this path that can be 400 bytes of upstream body
            or — from the JWT signer — an absolute path to the private key on
            this server. It was already reachable once per connect; a refresh
            button makes it a thing any tenant can press repeatedly. The detail
-           is logged, the screen gets a sentence. */
+           is logged with structured status + reason; the screen gets a typed
+           reason. */
         if (isConsentRejection(e)) {
           expired.push(payload.aspsp);
           await store.deleteSession(userId, sessionId);
         } else {
-          console.error("eb refresh failed", { aspsp: payload.aspsp, error: errMsg(e) });
-          failed.push({ aspsp: payload.aspsp, error: "unreachable" });
+          const { reason, status, retryAfterMs } = classifyEbFailure(e);
+          console.error("eb refresh failed", {
+            aspsp: payload.aspsp,
+            status,
+            reason,
+            ...(retryAfterMs !== null ? { retryAfterMs } : {}),
+            error: errMsg(e),
+          });
+          failed.push({
+            aspsp: payload.aspsp,
+            reason,
+            ...(retryAfterMs !== null && retryAfterMs > 0
+              ? { retryAfterSeconds: Math.ceil(retryAfterMs / 1000) }
+              : {}),
+          });
         }
       }
     }
@@ -501,6 +609,7 @@ function requestScopedEbStore(): EbFlowStore {
     getSession: (userId, sessionId, ttlMs) => repository().getSession(userId, sessionId, ttlMs),
     listSessions: (userId, ttlMs) => repository().listSessions(userId, ttlMs),
     deleteSession: (userId, sessionId) => repository().deleteSession(userId, sessionId),
+    takeFetchBudget: (userId, today, max) => repository().takeFetchBudget(userId, today, max),
   };
 }
 

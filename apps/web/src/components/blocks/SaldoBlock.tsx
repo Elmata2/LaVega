@@ -19,7 +19,12 @@ import { moneyCopy, dayLabelIn } from "../../copy/money.js";
 import { accountGaps } from "@lavega/core";
 import { POSITION_WINDOW_DAYS, positionSeries } from "../../totalePositie.js";
 
-export { POSITION_WINDOW_DAYS, positionSeries, type PositionPoint, type PositionSeries } from "../../totalePositie.js";
+export {
+  POSITION_WINDOW_DAYS,
+  positionSeries,
+  type PositionPoint,
+  type PositionSeries,
+} from "../../totalePositie.js";
 
 /** Below this much transaction history there is no line worth drawing — two or
  *  three days of movement is a squiggle, not a trend. */

@@ -1,0 +1,4 @@
+name: "LaVega CodeQL config"
+
+paths-ignore:
+  - repos/**

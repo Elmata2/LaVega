@@ -3,8 +3,8 @@ import { erasePersonalData, eraseUserData, type ErasureReport } from "@lavega/da
 import {
   credentialsArePerTenant,
   requireRuntimeDatabase,
-} from "@lavega/investing-server/src/credentialStore.js";
-import { investingTenantId } from "./investing-mount.js";
+} from "@lavega/database";
+import { investingTenantId } from "./auth.js";
 
 export type AccountRouteDependencies = {
   tenantId: (request: Request) => Promise<string | null>;
@@ -75,7 +75,10 @@ export function registerAccountRoutes(app: Hono, dependencies: AccountRouteDepen
      * deleting would hit an account the person did not look at. The value only
      * GATES; the tenant that is deleted is still the session's, never this. */
     if (body.expectedOwner !== tenantId) {
-      return c.json({ problems: ["Het account in deze sessie is een ander account"], code: "owner-changed" }, 409);
+      return c.json(
+        { problems: ["Het account in deze sessie is een ander account"], code: "owner-changed" },
+        409,
+      );
     }
 
     return c.json({ erased: await dependencies.resetPersonal(tenantId) });

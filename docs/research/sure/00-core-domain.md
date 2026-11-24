@@ -15,21 +15,21 @@ This note targets the personal side; investing is covered only where it touches 
 
 ## 0. TL;DR
 
-| # | Candidate | Sure source LOC | TS effort | Verdict |
-|---|---|---|---|---|
-| 1 | Transfer model + auto/manual matching + confirm/reject | ~1,390 (`family/auto_transfer_matchable.rb`, `transfer*.rb`) | M | PORT — directly missing in LaVega |
-| 2 | Rules engine: conditions, actions, ordering, claims, dry-run | ~3,190 (`rule*`) | L | PORT in phases (model+eval first) |
-| 3 | Recurring schedule → occurrences → matcher → allocations ("Bills") | ~4,530 (`recurring_transaction*`) | L | PORT scheduler+occurrences first (M), matcher second |
-| 4 | Balance materialization (anchors, forward/reverse daily balances) | ~1,450 (`balance/*`) | M | PORT — needed for any historical net-worth line |
-| 5 | Budget envelope math + signed carry rollover | ~1,280 (`budget*`) | M | PORT math; keep UI concept only |
-| 6 | Label normalizer (bank descriptor → merchant) | ~730 (`transaction/label_normalizer*`) | M | PORT — cheap win for dedupe/categorize |
-| 7 | Income statement/netting/medians/spending-vs-normal | ~2,610 (`income_statement*`, `period.rb`) | M | PORT subset; skip Sankey/SQL |
-| 8 | CSV import column mapping + date/number detection + preflight | ~1,500 (subset of `import*`) | M | ADOPT concept + port mapping/preflight |
-| 9 | Goals + pledges + runway/projection | ~1,930 (`goal*`) | M-L | ADOPT concept; port formulas only |
-| 10 | Loan amortization/projection engine | ~2,010 (`loan*`) | M | SKIP v1 (no loans in LaVega vault yet) |
-| 11 | Insights generators (8) | ~810 (`insight*`) | S-M | ADOPT formulas, not the AI body writer |
-| 12 | FX (Money class, ExchangeRate nearest-rate cache) | ~880 | S | ADOPT concept; LaVega `fx.ts` covers most |
-| 13 | Provider sync architecture / 28 provider adapters / PDF vault / AI assistant | huge | — | SKIP |
+| #   | Candidate                                                                    | Sure source LOC                                              | TS effort | Verdict                                              |
+| --- | ---------------------------------------------------------------------------- | ------------------------------------------------------------ | --------- | ---------------------------------------------------- |
+| 1   | Transfer model + auto/manual matching + confirm/reject                       | ~1,390 (`family/auto_transfer_matchable.rb`, `transfer*.rb`) | M         | PORT — directly missing in LaVega                    |
+| 2   | Rules engine: conditions, actions, ordering, claims, dry-run                 | ~3,190 (`rule*`)                                             | L         | PORT in phases (model+eval first)                    |
+| 3   | Recurring schedule → occurrences → matcher → allocations ("Bills")           | ~4,530 (`recurring_transaction*`)                            | L         | PORT scheduler+occurrences first (M), matcher second |
+| 4   | Balance materialization (anchors, forward/reverse daily balances)            | ~1,450 (`balance/*`)                                         | M         | PORT — needed for any historical net-worth line      |
+| 5   | Budget envelope math + signed carry rollover                                 | ~1,280 (`budget*`)                                           | M         | PORT math; keep UI concept only                      |
+| 6   | Label normalizer (bank descriptor → merchant)                                | ~730 (`transaction/label_normalizer*`)                       | M         | PORT — cheap win for dedupe/categorize               |
+| 7   | Income statement/netting/medians/spending-vs-normal                          | ~2,610 (`income_statement*`, `period.rb`)                    | M         | PORT subset; skip Sankey/SQL                         |
+| 8   | CSV import column mapping + date/number detection + preflight                | ~1,500 (subset of `import*`)                                 | M         | ADOPT concept + port mapping/preflight               |
+| 9   | Goals + pledges + runway/projection                                          | ~1,930 (`goal*`)                                             | M-L       | ADOPT concept; port formulas only                    |
+| 10  | Loan amortization/projection engine                                          | ~2,010 (`loan*`)                                             | M         | SKIP v1 (no loans in LaVega vault yet)               |
+| 11  | Insights generators (8)                                                      | ~810 (`insight*`)                                            | S-M       | ADOPT formulas, not the AI body writer               |
+| 12  | FX (Money class, ExchangeRate nearest-rate cache)                            | ~880                                                         | S         | ADOPT concept; LaVega `fx.ts` covers most            |
+| 13  | Provider sync architecture / 28 provider adapters / PDF vault / AI assistant | huge                                                         | —         | SKIP                                                 |
 
 Highest-value first port: **transfer matching** (self-contained, pure SQL → pure TS, immediately
 fixes LaVega's "Eigen overboeking" blind spot) then **rules engine** and **recurring occurrences**.
@@ -76,6 +76,7 @@ convention in `Tx` and the ported algebra takes a normalized `signedAmount` or e
 157 tables. Core tables and invariants:
 
 ### accounts (`db/schema.rb:99-139`)
+
 - `accountable_type/id` delegated type: Depository, Investment, Crypto, Property, Vehicle,
   OtherAsset, CreditCard, Loan, OtherLiability (`concerns/accountable.rb:4`). `classification` is a
   stored generated column: liability for Loan/CreditCard/OtherLiability, else asset (`db/schema.rb:105`).
@@ -87,6 +88,7 @@ convention in `Tx` and the ported algebra takes a normalized `signedAmount` or e
   (`account.rb:905-918`).
 
 ### entries (`db/schema.rb:709-748`)
+
 - One row per movement: `account_id`, `amount decimal(19,4)` non-null, `currency`, `date`, `name`,
   `notes`, `entryable_type/id`, `excluded`, `parent_entry_id` (splits), `external_id`+`source`
   (provider identity), `idempotency_key` (manual transfer double-submit guard), `import_locked`,
@@ -99,11 +101,12 @@ convention in `Tx` and the ported algebra takes a normalized `signedAmount` or e
   import_locked (`:477-486`). Cleared = provider-acknowledged; reconciled = statement matched (`:400-434`).
 
 ### transactions and transfers (`db/schema.rb:2846-2880, 2247-2255`)
+
 - Transaction is the cash-flow entryable: `category_id`, `merchant_id`, `transfer_id`, `kind`,
   `investment_activity_label`, `extra` jsonb (provider metadata, `exchange_rate`, merge records).
 - `kind`: standard, funds_movement, cc_payment, loan_payment, one_time, investment_contribution
   (`transaction.rb:70-77`). `TRANSFER_KINDS = funds_movement, cc_payment, loan_payment,
-  investment_contribution`; `BUDGET_EXCLUDED_KINDS = funds_movement, one_time, cc_payment`
+investment_contribution`; `BUDGET_EXCLUDED_KINDS = funds_movement, one_time, cc_payment`
   (loan and investment contributions ARE budgeted expenses); `UNCATEGORIZED_EXCLUDED_KINDS = funds_movement, cc_payment` (`:81-103`).
 - Pending is derived from `extra[provider]["pending"]` by one canonical SQL predicate plus a Ruby
   twin, deliberately not a boolean cast (`transaction.rb:114-220`).
@@ -112,15 +115,17 @@ convention in `Tx` and the ported algebra takes a normalized `signedAmount` or e
   user's "not a transfer" memory keyed on the pair (`:2247-2255`).
 
 ### valuations and balances (`db/schema.rb:257-282, 3018-3023`)
+
 - `Valuation` entryable kinds: reconciliation (resets balance that date), opening_anchor (seeds
   history), current_anchor (provider "balance now") (`valuation.rb:4-8`; `account/current_balance_manager.rb:1-40`).
 - `balances`: one row per account/date/currency. Generated columns: `start_balance = start_cash + start_non_cash`;
   `end_cash_balance = start_cash + (cash_in - cash_out) * flows_factor + cash_adjustments`;
   `end_non_cash_balance = start_non_cash + (non_cash_in - non_cash_out) * flows_factor +
-  net_market_flows + non_cash_adjustments`; `end_balance = end_cash + end_non_cash` (`db/schema.rb:267-275`). `flows_factor` = 1 asset / -1 liability
+net_market_flows + non_cash_adjustments`; `end_balance = end_cash + end_non_cash` (`db/schema.rb:267-275`). `flows_factor` = 1 asset / -1 liability
   (`balance/base_calculator.rb:76-79`).
 
 ### budgets, categories, merchants (`db/schema.rb:364-419, 1661-1677, 2727-2735`)
+
 - `budgets`: family, optional user (personal vs household), period, currency, `budgeted_spending`, `expected_income`; `budget_categories`: allocation,
   `rollover_enabled`, materialized `rolled_over_amount >= 0`, frozen currency.
 - Categories family-scoped, one nesting level (`parent_id`), `last_used_at`, color/icon; synthetic
@@ -129,6 +134,7 @@ convention in `Tx` and the ported algebra takes a normalized `signedAmount` or e
   unique per family/name resp. provider id/source+name (`merchant.rb:1-43`).
 
 ### recurring bills (`db/schema.rb:2055-2201`)
+
 - `recurring_transactions` (series): amount, currency, strategy fixed|average|last,
   `amount_tolerance_pct` 7.5, expected_amount min/max/avg, expected day 1..31, anchor (required for
   interval > 1), end_mode never|on_date|after_count (count <= 600), weekend_adjust
@@ -145,6 +151,7 @@ convention in `Tx` and the ported algebra takes a normalized `signedAmount` or e
   auto_matched|user_confirmed|user_created, confidence/signals, paid_on (`:2077-2097`). Plus `recurring_match_rejections`, `recurring_price_changes`.
 
 ### rules and imports (`db/schema.rb:2257-2320, 1272-1421`)
+
 - `rules`: resource_type (only transaction), ordered position, group, active, effective_date,
   stop_processing; `rule_conditions` self-nesting parent_id (one compound level),
   type/operator/value; `rule_actions` action_type + value (JSON for split, CSV for tags);
@@ -157,12 +164,13 @@ convention in `Tx` and the ported algebra takes a normalized `signedAmount` or e
   `account_statements` + `family_documents` are the PDF/CSV/XLSX statement vault feeding `PdfImport` (`account_statement.rb:1-60`).
 
 ### remaining tables
+
 - FX: `exchange_rates` unique (from,to,date), positive-rate check; `exchange_rate_pairs` backfill tracking (`db/schema.rb:824-845`).
 - Goals: target amount/currency, kind one_off|maintained, target_mode fixed|months_of_expenses,
   target_date, progress_basis, consumed amount, frozen completed amount; `goal_accounts` (allocated_amount); `goal_pledges` (`:1158-1186`).
 - Investments: `securities` (ticker+MIC unique), `security_prices`, `security_splits`,
   `holdings` (qty decimal(34,18), price, amount, cost_basis), `trades` (`:1188-1212,2322-2385,
-  2793-2808`). Latest commit moved cost basis to in-memory `Holding::LotBook` (150 LOC).
+2793-2808`). Latest commit moved cost basis to in-memory `Holding::LotBook` (150 LOC).
 - `insights` (dedup key per family, type, priority, facts/meta, period, status);
   `syncs` (polymorphic syncable, parent/children, status, window dates); `sync_schedules`
   (interval + next run); `notification_deliveries` unique (rule, transaction) email watermark
@@ -176,26 +184,26 @@ convention in `Tx` and the ported algebra takes a normalized `signedAmount` or e
 
 ## 3. Feature inventory
 
-| Area | Present in Sure | Where |
-|---|---|---|
-| Accounts | 9 accountable types, subtypes, manual vs linked, disable, shares, owner, per-account currency, logos | `account.rb`, `concerns/accountable.rb` |
-| Entries | transactions, trades, valuations; splits; excluded; scheduled; reconciliation; attachments | `entry.rb`, `valuation.rb`, `trade.rb` |
-| Transfers | auto-match (exact + FX tolerance), manual match dialog, reject memory, confirm before budgets change, fees, recurring transfers, kind derivation | `transfer.rb`, `family/auto_transfer_matchable.rb` |
-| Rules | 9 condition filters × text/number/select operators incl regex, 13 actions (set category/merchant/name/tags/investment label, exclude, set-as-transfer, split, email, AI), ordered groups, stop-processing, top-rule-wins, dry-run counts, run audit | `rule*` |
-| Recurring/bills | frequency presets, recurrence rules, occurrence generation, matcher with confidence tiers, partial-payment allocations, price-change detection, classifier, history backfill, staleness cleaner, bill feed token, upcoming/payable scopes, paycheck planner | `recurring_transaction*`, `recurring_occurrence.rb` |
-| Budgets | monthly/custom-month envelopes, parent/child categories, per-category rollover, bills-reserved read hook, personal vs household, template copy, YNAB-style move allocation | `budget.rb`, `budget_category.rb`, `budget/rollover_calculator.rb` |
-| Reports | income statement, net-category netting, cash-flow Sankey, balance sheet, net-worth series + velocity/momentum, spending vs normal, savings rate, investment flows, period catalog | `income_statement*`, `balance_sheet*`, `period.rb` |
-| Insights | 8 deterministic generators (spending anomaly, cash-flow warning, net-worth milestone, subscription audit, savings-rate change, idle cash, budget, maintained goal depleted) + AI body writer | `insight*` |
-| Categorization | rules, naive Bayes (configurable multinomial/complement, amount/merchant/account/direction features), LLM categorizer (OpenAI/Anthropic/JEV/custom), confidence threshold + shadow evaluation, merchant detector, similar-merchant filler | `family/bayes_categorizer.rb`, `family/auto_categorizer.rb`, `provider/openai/*` |
-| Label cleanup | deterministic bank-descriptor normalizer, regional marker dictionary, merchant-name suggestion from history | `transaction/label_normalizer*`, `name_suggestion.rb` |
-| Imports | CSV wizard (12 types), QIF, PDF statements (AI extraction), Sure/Mint/Monarch/YNAB/Actual exports, category/rule/merchant/tag/account/trade imports, revert, chunked sessions, dedupe against provider rows | `import*`, `pdf_import.rb`, `qif_import.rb` |
-| FX | rates table, provider fetch with nearest-rate reuse, batch conversion, custom per-transaction rate | `exchange_rate*`, `lib/money.rb` |
-| Goals | one-off/maintained, linked-account earmarks, whole-account links, pledges, consumption, runway/projection payload, months-of-expenses target | `goal.rb` |
-| Loans | amortization schedule, payoff chart/projection, extra-repayment simulator, insurance/rate resolvers | `loan*` |
-| Sync | family→children sync tree, per-account reverse/forward balance sync, schedules, cancellation, stale sweeps, post-sync transfer matching + rules | `sync.rb`, `concerns/syncable.rb`, `family/syncer.rb` |
-| Multi-entity | family + members + account shares + per-user finance scoping | `family.rb`, `account_shares` |
-| Notifications | rule email watermarks, Web Push subscriptions, APNs device push, bills feed token | `notification_delivery.rb`, `push_subscription*` |
-| Other | AI assistant/chat/MCP tooling, demo generator, SSO/OIDC/WebAuthn, admin, hosted billing | `assistant*`, `demo/*`, `sso_*`, `subscription.rb` |
+| Area            | Present in Sure                                                                                                                                                                                                                                             | Where                                                                            |
+| --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| Accounts        | 9 accountable types, subtypes, manual vs linked, disable, shares, owner, per-account currency, logos                                                                                                                                                        | `account.rb`, `concerns/accountable.rb`                                          |
+| Entries         | transactions, trades, valuations; splits; excluded; scheduled; reconciliation; attachments                                                                                                                                                                  | `entry.rb`, `valuation.rb`, `trade.rb`                                           |
+| Transfers       | auto-match (exact + FX tolerance), manual match dialog, reject memory, confirm before budgets change, fees, recurring transfers, kind derivation                                                                                                            | `transfer.rb`, `family/auto_transfer_matchable.rb`                               |
+| Rules           | 9 condition filters × text/number/select operators incl regex, 13 actions (set category/merchant/name/tags/investment label, exclude, set-as-transfer, split, email, AI), ordered groups, stop-processing, top-rule-wins, dry-run counts, run audit         | `rule*`                                                                          |
+| Recurring/bills | frequency presets, recurrence rules, occurrence generation, matcher with confidence tiers, partial-payment allocations, price-change detection, classifier, history backfill, staleness cleaner, bill feed token, upcoming/payable scopes, paycheck planner | `recurring_transaction*`, `recurring_occurrence.rb`                              |
+| Budgets         | monthly/custom-month envelopes, parent/child categories, per-category rollover, bills-reserved read hook, personal vs household, template copy, YNAB-style move allocation                                                                                  | `budget.rb`, `budget_category.rb`, `budget/rollover_calculator.rb`               |
+| Reports         | income statement, net-category netting, cash-flow Sankey, balance sheet, net-worth series + velocity/momentum, spending vs normal, savings rate, investment flows, period catalog                                                                           | `income_statement*`, `balance_sheet*`, `period.rb`                               |
+| Insights        | 8 deterministic generators (spending anomaly, cash-flow warning, net-worth milestone, subscription audit, savings-rate change, idle cash, budget, maintained goal depleted) + AI body writer                                                                | `insight*`                                                                       |
+| Categorization  | rules, naive Bayes (configurable multinomial/complement, amount/merchant/account/direction features), LLM categorizer (OpenAI/Anthropic/JEV/custom), confidence threshold + shadow evaluation, merchant detector, similar-merchant filler                   | `family/bayes_categorizer.rb`, `family/auto_categorizer.rb`, `provider/openai/*` |
+| Label cleanup   | deterministic bank-descriptor normalizer, regional marker dictionary, merchant-name suggestion from history                                                                                                                                                 | `transaction/label_normalizer*`, `name_suggestion.rb`                            |
+| Imports         | CSV wizard (12 types), QIF, PDF statements (AI extraction), Sure/Mint/Monarch/YNAB/Actual exports, category/rule/merchant/tag/account/trade imports, revert, chunked sessions, dedupe against provider rows                                                 | `import*`, `pdf_import.rb`, `qif_import.rb`                                      |
+| FX              | rates table, provider fetch with nearest-rate reuse, batch conversion, custom per-transaction rate                                                                                                                                                          | `exchange_rate*`, `lib/money.rb`                                                 |
+| Goals           | one-off/maintained, linked-account earmarks, whole-account links, pledges, consumption, runway/projection payload, months-of-expenses target                                                                                                                | `goal.rb`                                                                        |
+| Loans           | amortization schedule, payoff chart/projection, extra-repayment simulator, insurance/rate resolvers                                                                                                                                                         | `loan*`                                                                          |
+| Sync            | family→children sync tree, per-account reverse/forward balance sync, schedules, cancellation, stale sweeps, post-sync transfer matching + rules                                                                                                             | `sync.rb`, `concerns/syncable.rb`, `family/syncer.rb`                            |
+| Multi-entity    | family + members + account shares + per-user finance scoping                                                                                                                                                                                                | `family.rb`, `account_shares`                                                    |
+| Notifications   | rule email watermarks, Web Push subscriptions, APNs device push, bills feed token                                                                                                                                                                           | `notification_delivery.rb`, `push_subscription*`                                 |
+| Other           | AI assistant/chat/MCP tooling, demo generator, SSO/OIDC/WebAuthn, admin, hosted billing                                                                                                                                                                     | `assistant*`, `demo/*`, `sso_*`, `subscription.rb`                               |
 
 Deliberately absent: a general-purpose cash-flow forecast/projection engine. Projections exist
 only as (a) loan payoff simulation, (b) goal pace/projection, (c) 30-day low-balance warning,
@@ -233,6 +241,7 @@ dialog tolerance 10% + 30-day window; inline "Transfer?" hint 2 days / 3% (`:6-2
 **Output** is `Transfer.new(pending)` rows (`find_or_create_transfer!`, `:202-230`). Auto matches
 start **pending**: kinds are NOT changed until `Transfer#confirm!`, so budgets/reports ignore
 suggestions (`transfer.rb:186-206`). Confirm:
+
 - inflow leg kind := `funds_movement`;
 - outflow kind := destination-account-derived (`Transfer.kind_for_account`): Loan → `loan_payment`; CreditCard/other liability → `cc_payment`;
   Investment/Crypto → `investment_contribution` unless source is also investment/crypto →
@@ -263,6 +272,7 @@ Files: `rule.rb` (567), `rule/runner.rb` (211), `rule/condition.rb` (144),
 `rule/safe_regex.rb` (104), `rule/layout.rb` (143), `rule_import.rb` (501).
 
 **Evaluation model is set-based SQL, not per-row Ruby.** A rule becomes an ActiveRecord scope:
+
 - base scope: `family.transactions.visible.with_entry` minus split parents, `entry.date >= effective_date` (`registry/transaction_resource.rb:42`);
 - each condition `prepare`s joins then `apply` filters the SQL where-clause
   (`rule.rb:375-396`); compound groups evaluate AND (reduce) or OR (`condition.rb:133-143`);
@@ -285,6 +295,7 @@ split_transaction, send_email_notification, fill_similar_merchants, bayes_catego
 auto_categorize, auto_detect_merchants (`registry/transaction_resource.rb:17-31`).
 
 **Execution order** (`rule/runner.rb`):
+
 1. Run rules in `position, created_at, id` order (`rule.rb:27`); active rules above requested
    rules run first; inactive ones skipped (`runner.rb:50-65`).
 2. For each rule: compute matched ids under a family advisory lock; then apply every action to
@@ -322,6 +333,7 @@ Files: `recurring_transaction.rb` (964), `identifier.rb` (612), `matcher.rb` (44
 `recurring_occurrence.rb` (190), `recurring_allocation.rb` (41).
 
 #### Schedule engine (`schedule.rb`)
+
 - A series has N `RecurrenceRule`s (weekly/monthly/yearly, interval, day_of_month incl -1 last,
   nth weekday, month). If none, implicit "monthly on expected_day_of_month" (`:51-67,232-237`).
 - Every generated occurrence is a **pair** `(original_due_on, due_on)`: the raw schedule date is
@@ -335,6 +347,7 @@ Files: `recurring_transaction.rb` (964), `identifier.rb` (612), `matcher.rb` (44
 - End conditions: on_date truncates; after_count counts from anchor using raw dates (`:271-291`). `search cap` 10 years (`:21-23`).
 
 #### Occurrence generation (`occurrence_generator.rb`)
+
 - Horizon: 90 days, extended to next occurrence and to the full finite plan for `after_count`
   (`:57-70`). Starts at current cycle start (so an unpaid recently-due row exists); a manual bill's anchor is the floor (`:20-34`).
 - Idempotent `insert_all` with `unique_by: idx_recurring_occurrences_identity` (series + original_due_on) (`:72-95`).
@@ -344,7 +357,9 @@ Files: `recurring_transaction.rb` (964), `identifier.rb` (612), `matcher.rb` (44
   occurrences instead of marking them missed (`history_backfiller.rb:16-55`).
 
 #### Detection (`identifier.rb`)
+
 Input: 3 months of non-transfer, non-Investment/Crypto Transaction entries (`:210-224`).
+
 1. Group by identity = (merchant_id | normalized name) × currency × account (`:231-237`).
 2. Cluster amounts: sort by amount, add to current cluster while within 7.5% of the cluster's
    running mean; else start new cluster. Mean (not neighbour) prevents drift chaining
@@ -358,13 +373,15 @@ Input: 3 months of non-transfer, non-Investment/Crypto Transaction entries (`:21
    (`:483-491`). Classifier assigns bill_type/category/autopay (`classifier.rb:52-128`):
    keyword lists (subscription/BILL/installment/ACH/autopay), flat modest card charge heuristic.
 6. `income_source_candidates` uses source grouping only (variable paychecks), not amount clustering (`:57-103`).
-Candidate UI patterns require only 2 occurrences and expose candidates not already covered
-(`:42-55,62-103`).
+   Candidate UI patterns require only 2 occurrences and expose candidates not already covered
+   (`:42-55,62-103`).
 
 #### Matching payments (`matcher.rb`)
+
 Hard filters: currency, account, sign (series positive = expense vs entry positive), merchant or
 known-name alias; transfer series identified by destination account (`:359-379`).
 Confidence score max ~1.0:
+
 ```
 merchant/name/transfer  0.40 / 0.35 / 0.40
 amount: exact (<0.01)   0.30
@@ -373,6 +390,7 @@ amount: exact (<0.01)   0.30
 date:  due date         0.20, linear to 0.05 at window edge
 account: right/scoped   0.10
 ```
+
 (`:394-439`). Window: `due ± min(match_days_early|late, half cycle)`; each side capped at half the
 cycle so adjacent occurrences cannot claim one entry; overdue occurrences extend to today
 (`:313-329`). One entry pairs with the nearest open occurrence per series; cross-series
@@ -384,6 +402,7 @@ Greedy sort by `[-confidence, occurrence.id, entry.id]`; each entry/occurrence a
 (`:111-138`).
 
 #### Allocations (`allocator.rb`)
+
 - Only write path; row lock on occurrence, advisory lock on entry, capacity bounded by entry's
   unallocated amount in entry currency (supports one entry paying many bills) (`:49-91,287-399`).
 - Cross-currency: converts at entry date rate; explicit amount or capped by remaining; missing rate raises (`:234-285`).
@@ -396,6 +415,7 @@ Greedy sort by `[-confidence, occurrence.id, entry.id]`; each entry/occurrence a
 - `mark_paid!` settles without a transaction; `reject_suggestion!` records `recurring_match_rejections` so the matcher won't re-propose (`:144-181`).
 
 #### Price changes (`price_change_detector.rb`), cleaner, pipeline
+
 - Price change = a settled payment amount different from previous amounts; stored with
   effective date, updates series amount from then on, future open occurrences inherit
   (`recurring_transaction.rb:267-282`, `price_change_detector.rb`).
@@ -425,6 +445,7 @@ Budgets only exist for initialized months (`budgeted_spending` present); limits 
 2 years forward (`budget.rb:93-105`).
 
 Actuals come from the income statement, not raw entries:
+
 - `budget_category_actual_spending = max(expense_total - refund_total, 0)` per category, where
   refunds are income booked to the same category (`budget.rb:418-423`).
 - `actual_spending = net_totals.total_net_expense` (net of refunds); `income_totals` = actual income for the period (`budget.rb:410-423,509-515`).
@@ -433,6 +454,7 @@ Actuals come from the income statement, not raw entries:
   to the budget currency; unconvertible ones are counted, not silently dropped (`budget.rb:427-450`; `budget_category.rb:1-17,420-437`).
 
 Derived figures (`budget.rb:460-540`):
+
 ```
 available_to_spend     = budgeted_spending - actual_spending
 allocated_spending     = sum(non-subcategory budget_categories.budgeted_spending)
@@ -441,12 +463,14 @@ percent_of_budget_spent= actual / budgeted * 100
 remaining_expected_income = expected_income - actual_income
 surplus_percent        = |remaining_expected_income| / expected_income * 100 when negative
 ```
+
 Cash figures are deliberately separate: `available_cash` = sum of visible Depository balances
 converted at today's rate (missing rate excluded and tracked, 0 not 1:1);
 `earmarked_for_goals` = goal backing restricted to the same accounts; `free_cash = max(0,
 available - earmarked)` (`budget.rb:200-251,543-551`).
 
 Category hierarchy:
+
 - Parent `budgeted_spending` always contains its funded subcategories + own reserve (`sync_parent_budgeted_spending!`, `budget_category.rb:439-460`).
 - Subcategory with no own allocation "inherits" the parent budget; its available is the parent's shared remainder (`budget_category.rb:237-286`).
 - `available_to_spend` for parents includes ring-fenced children's carry without double counting (`:276-286`).
@@ -454,6 +478,7 @@ Category hierarchy:
   parent/child moves, uncategorized, insufficient funds; caller must run rollover after (`:69-147`).
 
 Rollover (`budget/rollover_calculator.rb`):
+
 - Forward pass over initialized budgets of one chain (household = user nil, or one user's personal budgets); advisory lock; cached input fingerprint.
 - `incoming = previous month's outgoing carry` (0 if toggle off or currency changed);
   `outgoing = max(0, budgeted_spending + incoming - actual_spending)`; ring-fenced children are
@@ -461,7 +486,7 @@ Rollover (`budget/rollover_calculator.rb`):
 - Only surplus carries; negative balances stop at the month (`:209-211`). A budget currency
   change breaks the chain (carry resets 0) (`:64-69`). Toggle-off kills both incoming and
   outgoing carry (`:96-107`). Materialized via `upsert_all(update_only: rolled_over_amount,
-  updated_at)` so a concurrent allocation edit is not clobbered (`:113-123`).
+updated_at)` so a concurrent allocation edit is not clobbered (`:113-123`).
 - Rollover flag is a standing preference: new months inherit from the most recent initialized
   budget; changing it propagates forward (`budget.rb:140-155`; `budget_category.rb:175-184`).
 
@@ -476,6 +501,7 @@ Files: `balance/materializer.rb` (124), `base_calculator.rb` (186),
 `reconciliation_manager.rb`, `holding/materializer.rb` (334).
 
 Two anchors:
+
 - **Opening anchor** valuation: balance at (usually) oldest entry date - 1 day (`opening_balance_manager.rb:8-75`). Must precede oldest entry.
 - **Current anchor** valuation: provider-reported balance "now"; used by reverse calculation (`current_balance_manager.rb:13-40`).
 
@@ -483,11 +509,12 @@ Strategy selection: linked account → reverse; manual account → forward
 (`account/syncer.rb:21-24`).
 
 Forward (`balance/forward_calculator.rb`):
+
 - Window `calculation_start_date = min(opening_anchor_date, oldest non-pending entry, today)`
   (`base_calculator.rb:41-43`), end = max(last non-future entry date, last holding date, today) (`forward_calculator.rb:141-147`).
 - For each date: if a valuation exists, end balance is hard-reset to it; else
   `end_cash = start_cash + signed cash flows`; `end_non_cash = start_non_cash + signed non-cash
-  flows` (+ holdings value for investment accounts); compute `cash_adjustments`,
+flows` (+ holdings value for investment accounts); compute `cash_adjustments`,
   `non_cash_adjustments`, `net_market_flows` to make the generated end columns reconcile (`forward_calculator.rb:17-63`).
 - Incremental sync seeds from the persisted balance of `window_start_date - 1`; falls back to full
   recompute when the prior row has non-cash component or the account has foreign-currency
@@ -500,6 +527,7 @@ once); opening-boundary adjustment makes the first derived day reconcile explici
 (`:18-89,115-167`).
 
 Flows (`base_calculator.rb:96-137`):
+
 - transactions: negative = inflow, positive = outflow (asset view);
 - trades split into regular (qty != 0) and income-only (qty == 0); a buy is cash outflow + non-cash inflow (inverse);
 - Loan non-cash accounts special-case payments into non-cash inflows;
@@ -526,6 +554,7 @@ exclusion. No DB needed if vault replays txs; keep the incremental-sync concept 
 ### 4.6 Reports
 
 #### Income statement (`income_statement.rb` + `income_statement/*`)
+
 - Applies: visible transactions, excluding pending (`extra[provider].pending`), excluding
   scheduled (future) rows, date range, accounts not excluded from reports, status draft/active,
   not tax-advantaged, and (when scoped) user's finance accounts (`income_statement.rb:20-36,153-174`; `scoped_transactions_query.rb:78-90`).
@@ -547,6 +576,7 @@ exclusion. No DB needed if vault replays txs; keep the incremental-sync concept 
   and `investment_contributions_as_spending` (`income_statement.rb:130-151,337-363`).
 
 #### Balance sheet (`balance_sheet.rb`, `balance_sheet/*`)
+
 - Classification groups assets/liabilities; account groups by accountable type; per-account
   converted balance uses today's rate batch (`account_totals.rb:92-108`).
 - Totals count only accounts included in the viewer's finances and not excluded from reports
@@ -557,12 +587,14 @@ exclusion. No DB needed if vault replays txs; keep the incremental-sync concept 
   window velocity; withheld (nil) unless all accounts' first history date <= window start (`net_worth_velocity.rb:20-102`).
 
 #### Cash flow / savings rate (`income_statement/cash_flow.rb`)
+
 - Month-to-date totals; cumulative daily spending vs previous month's same number of days;
   `savings_rate = (income - spending) / income * 100` when income > 0.
 - Sankey (`income_statement/sankey.rb`): net category groups; center capacity
   `max(income, spending + invested)`; net surplus/deficit node; invested node when investing is not spending.
 
 #### Spending vs normal (`income_statement/spending_comparison.rb`)
+
 - Net per category = expense - refunds (income to same category), clamped positive.
 - Baseline = up to 1 year before period (min 28 days of history). Whole period:
   `normal = baseline_net * period_days / baseline_days`. In-progress period: average of the same
@@ -571,6 +603,7 @@ exclusion. No DB needed if vault replays txs; keep the incremental-sync concept 
   rows plus a "direct" parent row so children sum to parent; treemap guards overstatement (`:26-37,152-182`).
 
 #### Investment flows (`investment_flow_statement.rb`)
+
 - Contribution/withdrawal totals from `investment_activity_label`, including matched transfer
   legs moving money between investment and non-investment accounts; internal investment-to- investment movements excluded (`:1-77`).
 
@@ -582,6 +615,7 @@ Sankey, account-share scoping. **Effort M**.
 
 Eight deterministic generators, each produces typed `facts`/`metadata`, dedup key, priority,
 period:
+
 - spending anomaly: current-month pace projected (`month_days / elapsed_days`) vs 3-month
   baseline; flag |deviation| ≥ 25%, high at ≥ 50%, min baseline 50, min 7 elapsed days, top 3 (`spending_anomaly_generator.rb:1-40`).
 - cash-flow warning: 30-day projection of Depository balances = start balance - daily residual
@@ -589,9 +623,9 @@ period:
   expenses, 0)/30; low point < 500 (family-currency caveat documented) → medium/high (`cash_flow_warning_generator.rb:1-80`).
 - net-worth milestone, subscription audit, savings-rate change, idle cash, budget, maintained
   goal depleted (`insight/generators/*`, registry `insight/generator_registry.rb:7-16`).
-Registry catches per-generator failures so a crashing generator can't wipe healthy insights.
-`build_insight` writes deterministic body from templates (`insight/generator.rb`), LLM body
-writer is optional (`insight/body_writer.rb`).
+  Registry catches per-generator failures so a crashing generator can't wipe healthy insights.
+  `build_insight` writes deterministic body from templates (`insight/generator.rb`), LLM body
+  writer is optional (`insight/body_writer.rb`).
 
 Port notes: formulas are cheap; port 3-4 highest-signal ones. **Effort S-M**.
 
@@ -609,6 +643,7 @@ Result = `{name, rail, operation_date}`. Dictionary packs hold regional markers;
 This is a direct fix for LaVega's dedupe/merchant grouping weakness (cross-source spellings).
 
 **Naive Bayes categorizer** (`family/bayes_categorizer.rb:1-20`):
+
 - trains per family on already-categorized transactions; guard ≥ 20 training rows and ≥ 2 categories; model version `bayes-2`.
 - default multinomial NB over name/notes/merchant tokens, add-1 smoothing, uniform prior.
 - tunable to complement NB (Lidstone), with independent factors:
@@ -647,8 +682,9 @@ Files: `import.rb` (871), `import_session.rb` (497), `transaction_import.rb` (18
 `pdf_import.rb` (596).
 
 CSV settings (stored on the import row, schema `:1364-1421`):
+
 - `col_sep` comma/semicolon; `rows_to_skip` (preamble); `CSV.parse(headers: true,
-  liberal_parsing: true)`, values stripped; duplicate normalized headers are a validation error (`import.rb:190-198,667-690`).
+liberal_parsing: true)`, values stripped; duplicate normalized headers are a validation error (`import.rb:190-198,667-690`).
 - `number_format` ∈ {"1,234.56", "1.234,56", "1 234,56", "1,234"}; `sanitize_number` strips the
   configured delimiter/edge currency symbols, converts the separator to ".", rejects non-numeric
   output; handles NBSP for the space format (`:56-61,707-759`).
@@ -689,6 +725,7 @@ custom Money with BigDecimal amount, currency object, `exchange_to(other, date:,
 dev/test, reports in production (`lib/money.rb:1-120`; initializer `:1-6`).
 
 `ExchangeRate::Provided`:
+
 - `find_or_fetch_rate(from,to,date)`: exact row, else nearest cached rate within
   `NEAREST_RATE_LOOKBACK_DAYS = 5` (weekend/holiday reuse), else provider fetch, else nil; caches
   fetched rates keyed `(from,to,date)` (`exchange_rate/provided.rb:12-56`).
@@ -763,6 +800,7 @@ partial unique indexes, `insert_all ... returning`, owner-token cache locks for 
 BigDecimal money with explicit rounding + cent epsilon (`recurring_occurrence.rb:16-19`).
 
 Weaknesses / bugs / traps noticed:
+
 1. **SQL-embedded business rules.** Transfers (`auto_transfer_matchable.rb:346-485`), income
    statement, balance sheet and net-worth series are raw SQL. Porting means re-expressing, not
    translating; the FX branch and NULL/`NOT IN` semantics are easy to get subtly wrong.
@@ -798,22 +836,22 @@ outflow), currency, counterparty, description, category, manual}`; `Rule = {id, 
 
 ### PORT (logic + tests, TS/Effect)
 
-| Sure | What to port | LaVega target | LOC (TS est.) | Effort | Deps |
-|---|---|---|---|---|---|
-| `family/auto_transfer_matchable.rb` + `transfer.rb` + `transaction/transferable.rb` | exact + FX-tolerant pair matching, ranking, pending→confirm lifecycle, reject memory, kind derivation, fee legs | `packages/core/src/transfers.ts`; `Transfer` in `model.ts`; storage adapter methods; rules action in `rules.ts` | 600-800 | M | `fx.ts`, new `Transfer` record, account types |
-| `rule.rb`, `rule/condition*`, `rule/action*`, `rule/runner.rb`, `rule/registry.rb` | condition tree, operators, ordered execution, claim sets/top-rule-wins, stop_processing, effective_date, enrichment locks, split action | `packages/core/src/rules/*.ts` (pure evaluator) + Effect service `RuleRunner` at server/ingest boundary | 900-1,200 | L | Tx model extension (category/merchant/tags/kind/transfer), tests |
-| `recurring_transaction/schedule.rb` + `occurrence_generator.rb` + `recurring_occurrence.rb` | recurrence rules, weekend adjust, end modes, occurrence identity pairs, 90-day horizon, regeneration rules | `packages/core/src/recurring/schedule.ts` + `occurrences.ts`; storage tables | 350-500 | M | integer-cents date math |
-| `recurring_transaction/matcher.rb` + `allocator.rb` | confidence scoring, windows, tiering, partial payments, close rules, learning hints | `packages/core/src/recurring/match.ts`; storage for allocations/occurrences | 500-700 | M | schedule/occurrences, fx |
-| `recurring_transaction/identifier.rb` + `classifier.rb` | amount clustering, day clustering, circular-median expected day, claim/create semantics, classifier keywords | extend `forecast.ts`/`subscriptions.ts` or `recurring/detect.ts` | 400-600 | M | existing dedupe/merchant keys |
-| `balance/{base,forward,reverse}_calculator.rb` + `materializer` concept + `anchorable` | anchors, daily balance series, cash/non-cash split, flows factor, adjustments, scheduled exclusion | `packages/core/src/balanceSeries.ts` + extend `balance.ts` | 500-700 | M | tx replay, fx |
-| `budget.rb` + `budget_category.rb` + `rollover_calculator.rb` | envelope math, parent/child inheritance, ring-fenced rollover, carry chain, bills-reserved hook | `packages/core/src/budget.ts`; storage `Budget`/`BudgetCategory` | 450-600 | M | period/custom month, reports actuals |
-| `income_statement.rb` + `family_stats`/`category_stats` + `spending_comparison.rb` | classification rules, netting, medians, spending-vs-normal, savings rate | `packages/core/src/reports.ts` (extend), reuse `forecast.ts` primitives | 450-650 | M | tx categorization, fx, period |
-| `transaction/label_normalizer.rb` + dictionary (trimmed) | rail/date/noise stripping, regional packs NL/DE/EN, operation date | `packages/core/src/labels.ts` | 350-500 | M | merchant key normalization |
-| `family/bayes_categorizer.rb` | NB feature model + confidence thresholds (optional; LaVega already has deterministic rules) | `packages/core/src/categorizeBayes.ts` | 300-450 | M | categorized history |
-| `import.rb` mapping/preflight/detection subset + `import/row.rb` | column mapping, date/number detection, signage, validation, dry run, dedupe check | `packages/core/src/csvImport.ts`; UI wizard in `apps/web` | 400-600 | M | `ingest.ts`, parsers, storage |
-| `insight/generators/{spending_anomaly,cash_flow_warning,subscription_audit,savings_rate_change}` | formulas only | `packages/core/src/insights.ts` | 250-350 | S-M | reports/forecast primitives |
-| `exchange_rate/provided.rb` | 5-day nearest-rate reuse, explicit missing-rate policy, batch conversion | extend `fx.ts` (`rateOn`, `crossRate`) | 60-120 | S | fx payload |
-| `goal.rb` formulas + `goal_pledge` matches | remaining/progress/pace/runway/projection | `packages/core/src/goals.ts` | 250-400 | M | balance/forecast |
+| Sure                                                                                             | What to port                                                                                                                            | LaVega target                                                                                                   | LOC (TS est.) | Effort | Deps                                                             |
+| ------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- | ------------- | ------ | ---------------------------------------------------------------- |
+| `family/auto_transfer_matchable.rb` + `transfer.rb` + `transaction/transferable.rb`              | exact + FX-tolerant pair matching, ranking, pending→confirm lifecycle, reject memory, kind derivation, fee legs                         | `packages/core/src/transfers.ts`; `Transfer` in `model.ts`; storage adapter methods; rules action in `rules.ts` | 600-800       | M      | `fx.ts`, new `Transfer` record, account types                    |
+| `rule.rb`, `rule/condition*`, `rule/action*`, `rule/runner.rb`, `rule/registry.rb`               | condition tree, operators, ordered execution, claim sets/top-rule-wins, stop_processing, effective_date, enrichment locks, split action | `packages/core/src/rules/*.ts` (pure evaluator) + Effect service `RuleRunner` at server/ingest boundary         | 900-1,200     | L      | Tx model extension (category/merchant/tags/kind/transfer), tests |
+| `recurring_transaction/schedule.rb` + `occurrence_generator.rb` + `recurring_occurrence.rb`      | recurrence rules, weekend adjust, end modes, occurrence identity pairs, 90-day horizon, regeneration rules                              | `packages/core/src/recurring/schedule.ts` + `occurrences.ts`; storage tables                                    | 350-500       | M      | integer-cents date math                                          |
+| `recurring_transaction/matcher.rb` + `allocator.rb`                                              | confidence scoring, windows, tiering, partial payments, close rules, learning hints                                                     | `packages/core/src/recurring/match.ts`; storage for allocations/occurrences                                     | 500-700       | M      | schedule/occurrences, fx                                         |
+| `recurring_transaction/identifier.rb` + `classifier.rb`                                          | amount clustering, day clustering, circular-median expected day, claim/create semantics, classifier keywords                            | extend `forecast.ts`/`subscriptions.ts` or `recurring/detect.ts`                                                | 400-600       | M      | existing dedupe/merchant keys                                    |
+| `balance/{base,forward,reverse}_calculator.rb` + `materializer` concept + `anchorable`           | anchors, daily balance series, cash/non-cash split, flows factor, adjustments, scheduled exclusion                                      | `packages/core/src/balanceSeries.ts` + extend `balance.ts`                                                      | 500-700       | M      | tx replay, fx                                                    |
+| `budget.rb` + `budget_category.rb` + `rollover_calculator.rb`                                    | envelope math, parent/child inheritance, ring-fenced rollover, carry chain, bills-reserved hook                                         | `packages/core/src/budget.ts`; storage `Budget`/`BudgetCategory`                                                | 450-600       | M      | period/custom month, reports actuals                             |
+| `income_statement.rb` + `family_stats`/`category_stats` + `spending_comparison.rb`               | classification rules, netting, medians, spending-vs-normal, savings rate                                                                | `packages/core/src/reports.ts` (extend), reuse `forecast.ts` primitives                                         | 450-650       | M      | tx categorization, fx, period                                    |
+| `transaction/label_normalizer.rb` + dictionary (trimmed)                                         | rail/date/noise stripping, regional packs NL/DE/EN, operation date                                                                      | `packages/core/src/labels.ts`                                                                                   | 350-500       | M      | merchant key normalization                                       |
+| `family/bayes_categorizer.rb`                                                                    | NB feature model + confidence thresholds (optional; LaVega already has deterministic rules)                                             | `packages/core/src/categorizeBayes.ts`                                                                          | 300-450       | M      | categorized history                                              |
+| `import.rb` mapping/preflight/detection subset + `import/row.rb`                                 | column mapping, date/number detection, signage, validation, dry run, dedupe check                                                       | `packages/core/src/csvImport.ts`; UI wizard in `apps/web`                                                       | 400-600       | M      | `ingest.ts`, parsers, storage                                    |
+| `insight/generators/{spending_anomaly,cash_flow_warning,subscription_audit,savings_rate_change}` | formulas only                                                                                                                           | `packages/core/src/insights.ts`                                                                                 | 250-350       | S-M    | reports/forecast primitives                                      |
+| `exchange_rate/provided.rb`                                                                      | 5-day nearest-rate reuse, explicit missing-rate policy, batch conversion                                                                | extend `fx.ts` (`rateOn`, `crossRate`)                                                                          | 60-120        | S      | fx payload                                                       |
+| `goal.rb` formulas + `goal_pledge` matches                                                       | remaining/progress/pace/runway/projection                                                                                               | `packages/core/src/goals.ts`                                                                                    | 250-400       | M      | balance/forecast                                                 |
 
 ### ADOPT CONCEPT ONLY
 

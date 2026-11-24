@@ -12,7 +12,7 @@ test("ids are unique and the short one has eight characters", () => {
 test("without randomUUID the id comes from getRandomValues, never Math.random", () => {
   const random = vi.spyOn(Math, "random");
   vi.stubGlobal("crypto", {
-    getRandomValues: (b: Uint8Array) => realCrypto.getRandomValues(b),
+    getRandomValues: (b: Parameters<Crypto["getRandomValues"]>[0]) => realCrypto.getRandomValues(b),
   });
   expect(localId()).toMatch(/^[0-9a-f]{32}$/);
   expect(shortLocalId()).toMatch(/^[0-9a-f]{8}$/);

@@ -3,7 +3,7 @@
  *
  * The question was asked as "average category spending percentile", and the
  * first instinct was to compare against a Dutch average. That was measured and
- * rejected (docs/research/2026-08-20-categorie-gemiddelden.md): the CBS classes
+ * rejected: the CBS classes
  * by PRODUCT where LaVega classes by COUNTERPARTY — one Albert Heijn debit
  * splits over five CBS posts and no mapping puts it back together — its biggest
  * post ("toegerekende huur eigen woning", 16% of the total) has no bank

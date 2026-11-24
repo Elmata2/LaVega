@@ -79,12 +79,25 @@ export type LavegaExportSection = (typeof LAVEGA_EXPORT_SECTIONS)[number];
 export const LAVEGA_EXPORT_EXCLUDED = [
   { name: "document_bytes", reason: "sealed document bytes stay in the encrypted .lavega bundle" },
   { name: "credentials", reason: "broker credentials never travel in a plain export" },
-  { name: "assistant_memory", reason: "assistant threads and theses are not ledger data; export on request" },
+  {
+    name: "assistant_memory",
+    reason: "assistant threads and theses are not ledger data; export on request",
+  },
   { name: "vault_blob", reason: "the encrypted vault is the .lavega back-up, not this archive" },
   { name: "profile", reason: "the adviser intake answers are entered data, not ledger rows" },
-  { name: "plan_preferences", reason: "plan thresholds and preferences are settings; the budget rows they produced are included" },
-  { name: "facts_and_events", reason: "learned facts and the audit event log are rebuildable side state" },
-  { name: "n8n_queue", reason: "pending invoice/notice rows are an external mail transport's queue" },
+  {
+    name: "plan_preferences",
+    reason:
+      "plan thresholds and preferences are settings; the budget rows they produced are included",
+  },
+  {
+    name: "facts_and_events",
+    reason: "learned facts and the audit event log are rebuildable side state",
+  },
+  {
+    name: "n8n_queue",
+    reason: "pending invoice/notice rows are an external mail transport's queue",
+  },
 ] as const;
 
 export type LavegaExportManifest = {
@@ -379,7 +392,10 @@ export function buildLavegaExport(input: LavegaExportInput): LavegaExport {
     format: LAVEGA_EXPORT_FORMAT,
     version: LAVEGA_EXPORT_VERSION,
     createdAt: input.createdAt,
-    generator: { app: "lavega", ...(input.appVersion == null ? {} : { appVersion: input.appVersion }) },
+    generator: {
+      app: "lavega",
+      ...(input.appVersion == null ? {} : { appVersion: input.appVersion }),
+    },
     vocabulary: "sure-record-v1",
     money: "integer cents (ADR 0011)",
     recordCounts: {},
@@ -389,7 +405,8 @@ export function buildLavegaExport(input: LavegaExportInput): LavegaExport {
     binaries: {
       documents: {
         included: false,
-        reason: "sealed document bytes live in the encrypted .lavega bundle; this archive carries metadata only",
+        reason:
+          "sealed document bytes live in the encrypted .lavega bundle; this archive carries metadata only",
       },
     },
     importNote:
@@ -409,7 +426,11 @@ export function buildLavegaExport(input: LavegaExportInput): LavegaExport {
     TRANSACTION_CSV_HEADERS,
     records.transactions as TransactionRecord[],
   );
-  manifest.csvFiles.push({ name: "accounts", file: "csv/accounts.csv", rows: records.accounts.length });
+  manifest.csvFiles.push({
+    name: "accounts",
+    file: "csv/accounts.csv",
+    rows: records.accounts.length,
+  });
   manifest.csvFiles.push({
     name: "transactions",
     file: "csv/transactions.csv",
@@ -418,7 +439,10 @@ export function buildLavegaExport(input: LavegaExportInput): LavegaExport {
   entries.push({ path: "csv/accounts.csv", bytes: utf8Bytes(accountsCsv) });
   entries.push({ path: "csv/transactions.csv", bytes: utf8Bytes(transactionsCsv) });
 
-  entries.unshift({ path: "manifest.json", bytes: utf8Bytes(`${JSON.stringify(manifest, null, 2)}\n`) });
+  entries.unshift({
+    path: "manifest.json",
+    bytes: utf8Bytes(`${JSON.stringify(manifest, null, 2)}\n`),
+  });
   return { bytes: buildStoreZip(entries), manifest };
 }
 
@@ -473,7 +497,9 @@ export function readLavegaExport(bytes: Uint8Array): LavegaExportReadback {
     }
     sections[section.name] = rows;
     if (rows.length !== section.rows) {
-      problems.push(`${section.name}: manifest zegt ${section.rows} rijen, bestand heeft ${rows.length}`);
+      problems.push(
+        `${section.name}: manifest zegt ${section.rows} rijen, bestand heeft ${rows.length}`,
+      );
     }
     if ((manifest.recordCounts[section.name] ?? -1) !== rows.length) {
       problems.push(`${section.name}: recordCounts wijkt af van het bestand`);

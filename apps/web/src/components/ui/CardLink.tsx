@@ -1,6 +1,6 @@
 import { type ButtonHTMLAttributes, forwardRef } from "react";
 import { cva, type VariantProps } from "class-variance-authority";
-import { cn } from "./utils.js";
+import { cn } from "@lavega/ui";
 
 /* Extracted from `.card-link`/`.card-link-danger` (docs/adr/0005) — the
  * borderless "see more" / destructive-action button inside a card.
@@ -45,7 +45,7 @@ const CardLink = forwardRef<HTMLButtonElement, CardLinkProps>(function CardLink(
     <button
       ref={ref}
       type={type}
-      data-testid={dataTestId ?? "card-link"}
+      data-testid={dataTestId}
       data-variant={variant === "danger" ? "danger" : undefined}
       className={cn(cardLinkVariants({ variant }), className)}
       {...props}

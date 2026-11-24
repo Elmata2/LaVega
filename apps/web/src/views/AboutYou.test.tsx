@@ -502,7 +502,9 @@ test("a freelancer who never answered the VAT question sees an editable 'Not fil
   const select = container!.querySelector<HTMLSelectElement>("select")!;
   await fill(select, "yes");
   await click(
-    [...container!.querySelectorAll<HTMLButtonElement>("button")].find((b) => b.textContent === "Save")!,
+    [...container!.querySelectorAll<HTMLButtonElement>("button")].find(
+      (b) => b.textContent === "Save",
+    )!,
   );
   expect(lastSaved(props).current.chargesVat).toEqual({ value: true, source: "stated", at: AS_OF });
 });

@@ -1,7 +1,13 @@
 // @vitest-environment jsdom
 import { expect, test } from "vitest";
 import { applyCardFiles, ingest, planCardFiles, type Account } from "@lavega/core";
-import { formatPeriod, isCommittable, previewCardFile, toInput, type CardTarget } from "./cardFileImport";
+import {
+  formatPeriod,
+  isCommittable,
+  previewCardFile,
+  toInput,
+  type CardTarget,
+} from "./cardFileImport";
 import { CATALOGUE_ENTRIES } from "../catalogue-rates";
 import { statedCardPlaceholders } from "../plan/statedPlaceholders";
 import { unconnectedItems } from "../intake/unconnectedBrands";
@@ -78,7 +84,10 @@ test("Trading 212: a card file and a cash-only file both land in the ONE account
   const cash = await read(T212_CASH, "trading212-other-name.csv", T212);
   const cin = toInput(cash, T212, false)!;
   const [again] = planCardFiles({ accounts: out.accounts, txs: out.txs }, [cin], ASOF);
-  expect(again).toMatchObject({ foldsExisting: false, destination: { existing: true, name: "Trading 212" } });
+  expect(again).toMatchObject({
+    foldsExisting: false,
+    destination: { existing: true, name: "Trading 212" },
+  });
   const both = applyCardFiles({ accounts: out.accounts, txs: out.txs }, [cin], ASOF);
   expect(both.txs.map((t) => t.accountKey)).toEqual(["TRADING212-CARD", "TRADING212-CARD"]);
 
@@ -96,10 +105,23 @@ test("Trading 212: a card file and a cash-only file both land in the ONE account
 test("Trading 212 preview: the fold line only appears when a fold will happen, and planning writes nothing", async () => {
   const card = await read(T212_CSV, "t212.csv", T212);
   const input = toInput(card, T212, false)!;
-  const old = { key: "FILE-NAME", iban: "", name: "FILE-NAME", bank: "Trading 212", entity: "P", currency: "EUR", balance: null, source: "file", linkedAt: "2026-11-01" } as Account;
+  const old = {
+    key: "FILE-NAME",
+    iban: "",
+    name: "FILE-NAME",
+    bank: "Trading 212",
+    entity: "P",
+    currency: "EUR",
+    balance: null,
+    source: "file",
+    linkedAt: "2026-11-01",
+  } as Account;
   const held = { accounts: [old], txs: [] };
   const snap = JSON.stringify(held);
-  expect(planCardFiles(held, [input], ASOF)[0]).toMatchObject({ foldsExisting: true, destination: { name: "Trading 212" } });
+  expect(planCardFiles(held, [input], ASOF)[0]).toMatchObject({
+    foldsExisting: true,
+    destination: { name: "Trading 212" },
+  });
   expect(JSON.stringify(held)).toBe(snap);
   expect(planCardFiles({ accounts: [], txs: [] }, [input], ASOF)[0]!.foldsExisting).toBe(false);
 });
@@ -107,17 +129,35 @@ test("Trading 212 preview: the fold line only appears when a fold will happen, a
 test("two overlapping files in one list store 3 rows; previews say 2 new then 1 new", async () => {
   const mk = (rows: string[]) =>
     `Date,Description,Card Member,Account #,Amount,Appears on Your Statement As,Extended Details\n${rows.join("\n")}`;
-  const a = await read(mk(["03/01/2026,R1,A,-11111,1.00,R1,x", "03/02/2026,R2,A,-11111,2.00,R2,x"]), "a.csv", AMEX);
-  const b = await read(mk(["03/02/2026,R2,A,-11111,2.00,R2,x", "03/03/2026,R3,A,-11111,3.00,R3,x"]), "b.csv", AMEX);
+  const a = await read(
+    mk(["03/01/2026,R1,A,-11111,1.00,R1,x", "03/02/2026,R2,A,-11111,2.00,R2,x"]),
+    "a.csv",
+    AMEX,
+  );
+  const b = await read(
+    mk(["03/02/2026,R2,A,-11111,2.00,R2,x", "03/03/2026,R3,A,-11111,3.00,R3,x"]),
+    "b.csv",
+    AMEX,
+  );
   const inputs = [toInput(a, AMEX, false)!, toInput(b, AMEX, false)!];
-  expect(planCardFiles({ accounts: [], txs: [] }, inputs, ASOF).map((p) => p.newCount)).toEqual([2, 1]);
+  expect(planCardFiles({ accounts: [], txs: [] }, inputs, ASOF).map((p) => p.newCount)).toEqual([
+    2, 1,
+  ]);
   const out = applyCardFiles({ accounts: [], txs: [] }, inputs, ASOF);
   expect(out.added).toBe(3);
-  expect(ingest([], out.txs.map(({ id: _id, ...t }) => t))).toHaveLength(3);
+  expect(
+    ingest(
+      [],
+      out.txs.map(({ id: _id, ...t }) => t),
+    ),
+  ).toHaveLength(3);
 });
 
 test("an old filename-keyed Amex account takes the rows only after the user says it is the same card", async () => {
-  const old = await read(AMEX_CSV.replace(",Account #", ",Zzz").replace("-11111", "x"), "AMEX-2026.csv");
+  const old = await read(
+    AMEX_CSV.replace(",Account #", ",Zzz").replace("-11111", "x"),
+    "AMEX-2026.csv",
+  );
   expect(old.result!.accounts[0]!.key).toBe("AMEX-2026");
   const held = {
     accounts: old.result!.accounts.map((a) => ({ ...a, linkedAt: "2026-01-01" })),
@@ -163,7 +203,16 @@ test("keeping current: a file-fed card's entered balance is rolled forward by LA
   // The user entered what they owe on 16 Nov (stored negative by the saldo path).
   const acct = { ...out.accounts[0]!, balance: -842.17, balanceDate: "2026-11-16" };
   const later = ingest(out.txs, [
-    { accountKey: acct.key, date: "2026-11-18", amount: -10, currency: "EUR", counterparty: "NEW", description: "", category: "", manual: false },
+    {
+      accountKey: acct.key,
+      date: "2026-11-18",
+      amount: -10,
+      currency: "EUR",
+      counterparty: "NEW",
+      description: "",
+      category: "",
+      manual: false,
+    },
   ]);
   const [rolled] = withCurrentBalances([acct], later, "2026-11-20");
   expect(rolled!.balance).toBeCloseTo(-852.17, 2);

@@ -76,8 +76,12 @@ function plan(over: {
       removed: [],
       intake: { blocksDone: 1, step0: null },
       work: { value: (over.work ?? ["freelance"]) as never, source: "stated", at: AS_OF },
-      ...(over.vat === undefined ? {} : { chargesVat: { value: over.vat, source: "stated", at: AS_OF } }),
-      ...(over.savings === undefined ? {} : { savings: { value: { totalCents: over.savings }, source: "stated", at: AS_OF } }),
+      ...(over.vat === undefined
+        ? {}
+        : { chargesVat: { value: over.vat, source: "stated", at: AS_OF } }),
+      ...(over.savings === undefined
+        ? {}
+        : { savings: { value: { totalCents: over.savings }, source: "stated", at: AS_OF } }),
     }),
   };
   return computePlan({
@@ -142,7 +146,9 @@ test("income tax stays a question until the person types a percentage, and savin
     set.call(input, "25");
     input.dispatchEvent(new Event("input", { bubbles: true }));
   });
-  await act(async () => c.querySelector<HTMLButtonElement>('[data-testid="plan-save-income-tax-pct"]')!.click());
+  await act(async () =>
+    c.querySelector<HTMLButtonElement>('[data-testid="plan-save-income-tax-pct"]')!.click(),
+  );
   expect(setPreference).toHaveBeenCalledWith({ incomeTaxSetAsidePct: { pct: 25, at: AS_OF } });
 });
 
@@ -168,12 +174,20 @@ test("the Dutch card renders too", () => {
 
 test("an existing freelancer without a VAT answer gets Yes/No on the card, and the answer is saved", async () => {
   const update = vi.fn(async (_change: (p: AdvisorProfile) => AdvisorProfile) => true);
-  const c = mount(plan({}), vi.fn(async () => {}), update as never);
+  const c = mount(
+    plan({}),
+    vi.fn(async () => {}),
+    update as never,
+  );
   expect(q(c, "plan-cashflow-advice")!.textContent).toContain("Choose Yes or No below");
-  await act(async () => c.querySelector<HTMLButtonElement>('[data-testid="plan-cashflow-vat-yes"]')!.click());
+  await act(async () =>
+    c.querySelector<HTMLButtonElement>('[data-testid="plan-cashflow-vat-yes"]')!.click(),
+  );
   expect(update).toHaveBeenCalledTimes(1);
   const change = update.mock.calls[0]![0];
-  expect(change(new AdvisorProfile({ removed: [], intake: { blocksDone: 1, step0: null } })).chargesVat).toEqual({
+  expect(
+    change(new AdvisorProfile({ removed: [], intake: { blocksDone: 1, step0: null } })).chargesVat,
+  ).toEqual({
     value: true,
     source: "stated",
     at: AS_OF,
@@ -194,7 +208,9 @@ test("the choice is gone once VAT is answered; income tax says it still includes
 test("no warning only claims the stretch that was tested; VAT says 'on or before' and the period amount", () => {
   const c = mount(plan({ vat: true, balance: 90000 }));
   const text = c.textContent!;
-  expect(text).toMatch(/even if you get no client income for 2 months, you stay above zero for the coming 6 months/);
+  expect(text).toMatch(
+    /even if you get no client income for 2 months, you stay above zero for the coming 6 months/,
+  );
   expect(text).toContain("on or before");
   expect(text).toContain("on the receipts in that period that is");
 });
@@ -209,7 +225,9 @@ test("with no account balance the calculation names the typed savings, and the c
 
 test("freelancer with no recognised client payment: says so, no VAT or tax amounts", () => {
   const none = txs.filter((t) => t.counterparty !== "Studio Noord BV");
-  const c = mount(plan({ vat: true, txs: none, prefs: { incomeTaxSetAsidePct: { pct: 25, at: AS_OF } } }));
+  const c = mount(
+    plan({ vat: true, txs: none, prefs: { incomeTaxSetAsidePct: { pct: 25, at: AS_OF } } }),
+  );
   const advice = q(c, "plan-cashflow-advice")!.textContent!;
   expect(advice).toContain("We do not recognise any client payments in your accounts yet.");
   expect(advice).not.toContain("Set aside");

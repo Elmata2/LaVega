@@ -9,9 +9,9 @@ import {
 import {
   credentialsArePerTenant,
   requireRuntimeDatabase,
-} from "@lavega/investing-server/src/credentialStore.js";
+} from "@lavega/database";
 import { PBKDF2_ITERATIONS } from "@lavega/adapters";
-import { investingTenantId } from "./investing-mount.js";
+import { investingTenantId } from "./auth.js";
 
 /* Bounded at both ends. Below the vault's own KDF floor the blob is weakly
  * sealed and deriveKey would reject it on the way back out, so storing it only

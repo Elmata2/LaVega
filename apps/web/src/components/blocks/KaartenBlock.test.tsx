@@ -233,7 +233,12 @@ test("bank logos carry the bank-logo class", () => {
   expect(imgs.length).toBeGreaterThan(0);
   for (const img of imgs) expect(img).toContain('class="bank-logo"');
   const placeholder = renderToStaticMarkup(
-    <KaartenBlock accounts={[]} statedCredit={[]} statedDebit={["knab-betaalpas"]} onNavigate={() => {}} />,
+    <KaartenBlock
+      accounts={[]}
+      statedCredit={[]}
+      statedDebit={["knab-betaalpas"]}
+      onNavigate={() => {}}
+    />,
   );
   for (const m of placeholder.matchAll(/<img[^>]*>/g)) expect(m[0]).toContain('class="bank-logo"');
 });

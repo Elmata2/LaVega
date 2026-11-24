@@ -31,14 +31,14 @@ Two targets, one API surface:
 
 What differs between the two, and is not a bug:
 
-| Route                      | local (no DB)                   | prod                    |
-| -------------------------- | ------------------------------- | ----------------------- |
-| `/api/vault/backup`        | route not registered → SPA HTML | 401 without session     |
-| `/api/vault/key`           | route not registered → SPA HTML | 401 without session     |
-| `DELETE /api/account/data` | 404 (needs Neon)                | 401 without session     |
-| `DELETE /api/account/personal-data` | 404 (needs Neon)       | 401 without session     |
-| `POST /api/agent/*`        | 503 "niet geconfigureerd"       | 401; 503 once signed in |
-| `/api/investing/*`         | off (`INVESTING_MOUNT=0`)       | 401 without session     |
+| Route                               | local (no DB)                   | prod                    |
+| ----------------------------------- | ------------------------------- | ----------------------- |
+| `/api/vault/backup`                 | route not registered → SPA HTML | 401 without session     |
+| `/api/vault/key`                    | route not registered → SPA HTML | 401 without session     |
+| `DELETE /api/account/data`          | 404 (needs Neon)                | 401 without session     |
+| `DELETE /api/account/personal-data` | 404 (needs Neon)                | 401 without session     |
+| `POST /api/agent/*`                 | 503 "niet geconfigureerd"       | 401; 503 once signed in |
+| `/api/investing/*`                  | off (`INVESTING_MOUNT=0`)       | 401 without session     |
 
 ## Launch
 
@@ -53,7 +53,7 @@ path. Needs `apps/web/dist/index.html`; if it is missing or older than the chang
 verifying:
 
 ```bash
-pnpm --filter @lavega/web build
+bun --filter @lavega/web build
 ```
 
 Teardown, at the end of every run including failed ones:
@@ -63,7 +63,7 @@ node .claude/skills/verify-lavega/control-lavega.mjs cleanup
 ```
 
 `cleanup` kills only the pid this CLI recorded (never by name, which would take down a
-`pnpm dev` the user started), removes `/tmp/lavega-verify/run`, and keeps
+`bun run dev` the user started), removes `/tmp/lavega-verify/run`, and keeps
 `/tmp/lavega-verify/evidence`.
 
 ## Doctor

@@ -323,7 +323,10 @@ test("the income-tax percentage survives a reload: set, read back from the store
   await act(async () => {
     await h.out.current.setPreference({ incomeTaxSetAsidePct: { pct: 27.5, at: AS_OF } });
   });
-  expect(decodePlanState(mem.plan()).preferences.incomeTaxSetAsidePct).toEqual({ pct: 27.5, at: AS_OF });
+  expect(decodePlanState(mem.plan()).preferences.incomeTaxSetAsidePct).toEqual({
+    pct: 27.5,
+    at: AS_OF,
+  });
   const again = mount(baseInput(mem.storage));
   await settle();
   expect(again.out.current.preferences.incomeTaxSetAsidePct).toEqual({ pct: 27.5, at: AS_OF });
@@ -337,7 +340,9 @@ test("the saved VAT filing frequency comes from the entity that holds the person
   const acct = (key: string, entity: string) => ({ key, entity }) as never;
   const vat = (entity: string, frequency: "monthly" | "quarterly" | "yearly") =>
     ({ entity, frequency, defaultRatePct: 21, mixedRates: false }) as never;
-  expect(vatFrequencyOf([vat("Prive", "monthly"), vat("Acme BV", "yearly")], [acct("A", "Prive")], [])).toBe("monthly");
+  expect(
+    vatFrequencyOf([vat("Prive", "monthly"), vat("Acme BV", "yearly")], [acct("A", "Prive")], []),
+  ).toBe("monthly");
   expect(vatFrequencyOf([vat("Acme BV", "yearly")], [acct("A", "Prive")], [])).toBeNull();
   expect(vatFrequencyOf([], [acct("A", "Prive")], [])).toBeNull();
 });

@@ -1,10 +1,10 @@
 import type { FormEvent } from "react";
 import { Link } from "react-router-dom";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
+import { Button } from "@lavega/ui";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@lavega/ui";
+import { Field, FieldDescription, FieldGroup, FieldLabel } from "@lavega/ui";
 import { AuthHonestyLine } from "@/components/auth-layout";
-import { Input } from "@/components/ui/input";
+import { Input } from "@lavega/ui";
 
 export type LoginValues = { email: string; password: string };
 

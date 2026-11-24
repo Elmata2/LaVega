@@ -808,7 +808,7 @@ const optimalisatieCopy_nl: OptimalisatieCopy = {
       refreshingButton: "verversen…",
       refreshNote:
         "Alleen publieke rentes worden opgehaald — je eigen saldi/rentes blijven lokaal.",
-      offlineNote: "Voor live tarieven: start de rente-service (pnpm dev:server).",
+      offlineNote: "Voor live tarieven: start de rente-service (bun run dev).",
     },
   },
 
@@ -1322,7 +1322,7 @@ const optimalisatieCopy_en: OptimalisatieCopy = {
       refreshButton: "refresh rates",
       refreshingButton: "refreshing…",
       refreshNote: "Only public rates are fetched — your own balances and rates stay local.",
-      offlineNote: "For live rates: start the rates service (pnpm dev:server).",
+      offlineNote: "For live rates: start the rates service (bun run dev).",
     },
   },
 

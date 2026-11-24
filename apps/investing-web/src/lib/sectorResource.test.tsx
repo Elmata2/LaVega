@@ -110,6 +110,9 @@ test("a failed read reports the status", async () => {
   const samples: Sample[] = [];
   const { root, Probe } = mount(samples);
   await act(async () => root.render(<Probe enabled={true} reloadKey="1" />));
-  expect(samples.at(-1)?.state).toEqual({ status: "error", message: "Failed to load sectors: 503" });
+  expect(samples.at(-1)?.state).toEqual({
+    status: "error",
+    message: "Failed to load sectors: 503",
+  });
   root.unmount();
 });

@@ -36,18 +36,18 @@ Once the syncs are complete, you can start using WooCommerce data in PostHog.
 
 ## Available tables
 
-| Table | Description | Sync method |
-| --- | --- | --- |
-| `products` | Store products | Incremental |
-| `orders` | Customer orders | Incremental |
-| `coupons` | Discount coupons | Incremental |
-| `customers` | Customers | Full refresh |
+| Table                | Description        | Sync method  |
+| -------------------- | ------------------ | ------------ |
+| `products`           | Store products     | Incremental  |
+| `orders`             | Customer orders    | Incremental  |
+| `coupons`            | Discount coupons   | Incremental  |
+| `customers`          | Customers          | Full refresh |
 | `product_categories` | Product categories | Full refresh |
-| `product_tags` | Product tags | Full refresh |
-| `product_reviews` | Product reviews | Full refresh |
+| `product_tags`       | Product tags       | Full refresh |
+| `product_reviews`    | Product reviews    | Full refresh |
 | `product_attributes` | Product attributes | Full refresh |
-| `tax_rates` | Tax rates | Full refresh |
-| `shipping_zones` | Shipping zones | Full refresh |
+| `tax_rates`          | Tax rates          | Full refresh |
+| `shipping_zones`     | Shipping zones     | Full refresh |
 
 **Incremental** tables sync only new or updated records on each run. **Full refresh** tables reload all data on each sync.
 
@@ -57,26 +57,26 @@ Only `products`, `orders`, and `coupons` support incremental sync, using the Woo
 
 ## Configuration
 
-| Option | Type | Required |
-| --- | --- | --- |
-| `Store URL` | text | Yes |
-| `Consumer key` | text | Yes |
-| `Consumer secret` | password | Yes |
+| Option            | Type     | Required |
+| ----------------- | -------- | -------- |
+| `Store URL`       | text     | Yes      |
+| `Consumer key`    | text     | Yes      |
+| `Consumer secret` | password | Yes      |
 
 ## Supported tables
 
-| Table | Description | Sync method | Incremental field | Primary key |
-| --- | --- | --- | --- | --- |
-| `products` | A product sold in the WooCommerce store. | Webhook, Incremental, Full refresh | date\_modified\_gmt | — |
-| `orders` | A customer order placed in the WooCommerce store. | Webhook, Incremental, Full refresh | date\_modified\_gmt | — |
-| `coupons` | A discount coupon configured in the WooCommerce store. | Webhook, Incremental, Full refresh | date\_modified\_gmt | — |
-| `customers` | A registered customer of the WooCommerce store. | Webhook, Full refresh | — | — |
-| `product_categories` | A category used to organize products in the WooCommerce store. | Full refresh | — | — |
-| `product_tags` | A tag used to label products in the WooCommerce store. | Full refresh | — | — |
-| `product_reviews` | A customer review left on a product in the WooCommerce store. | Full refresh | — | — |
-| `product_attributes` | A global product attribute (e.g. color, size) defined in the WooCommerce store. | Full refresh | — | — |
-| `tax_rates` | A tax rate configured in the WooCommerce store. | Full refresh | — | — |
-| `shipping_zones` | A shipping zone that groups regions for shipping method configuration. | Full refresh | — | — |
+| Table                | Description                                                                     | Sync method                        | Incremental field   | Primary key |
+| -------------------- | ------------------------------------------------------------------------------- | ---------------------------------- | ------------------- | ----------- |
+| `products`           | A product sold in the WooCommerce store.                                        | Webhook, Incremental, Full refresh | date\_modified\_gmt | —           |
+| `orders`             | A customer order placed in the WooCommerce store.                               | Webhook, Incremental, Full refresh | date\_modified\_gmt | —           |
+| `coupons`            | A discount coupon configured in the WooCommerce store.                          | Webhook, Incremental, Full refresh | date\_modified\_gmt | —           |
+| `customers`          | A registered customer of the WooCommerce store.                                 | Webhook, Full refresh              | —                   | —           |
+| `product_categories` | A category used to organize products in the WooCommerce store.                  | Full refresh                       | —                   | —           |
+| `product_tags`       | A tag used to label products in the WooCommerce store.                          | Full refresh                       | —                   | —           |
+| `product_reviews`    | A customer review left on a product in the WooCommerce store.                   | Full refresh                       | —                   | —           |
+| `product_attributes` | A global product attribute (e.g. color, size) defined in the WooCommerce store. | Full refresh                       | —                   | —           |
+| `tax_rates`          | A tax rate configured in the WooCommerce store.                                 | Full refresh                       | —                   | —           |
+| `shipping_zones`     | A shipping zone that groups regions for shipping method configuration.          | Full refresh                       | —                   | —           |
 
 ### Still have questions?
 

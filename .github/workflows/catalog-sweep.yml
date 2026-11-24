@@ -28,11 +28,12 @@ jobs:
     timeout-minutes: 180
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with: { bun-version: "1.4.4" }
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
-        with: { node-version: 22, cache: pnpm }
+        with: { node-version: 22 }
       - run: sudo apt-get update && sudo apt-get install -y poppler-utils # pdftotext
-      - run: pnpm install --frozen-lockfile
+      - run: bun install --frozen-lockfile
       # The only step that gets the model key.
       - name: Sweep
         # Shorter than the job, so a hung sweep ends as a failed STEP and the Report step still runs.
@@ -47,7 +48,7 @@ jobs:
           # The fee, points and cashback passes stop starting figures 20 minutes earlier (130), so the FX and
           # interest results are written before the step timeout.
           CATALOG_DEADLINE_MIN: "150"
-        run: pnpm catalog:sweep -- --summary-out "$RUNNER_TEMP/catalog-summary.json"
+        run: bun run catalog:sweep -- --summary-out "$RUNNER_TEMP/catalog-summary.json"
       - name: Commit whatever changed
         id: commit
         run: |
@@ -65,7 +66,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           PUSH_FAILED: ${{ steps.commit.outcome == 'failure' && '--push-failed' || '' }}
-        run: pnpm catalog:report -- --summary "$RUNNER_TEMP/catalog-summary.json" $PUSH_FAILED
+        run: bun run catalog:report -- --summary "$RUNNER_TEMP/catalog-summary.json" $PUSH_FAILED
   # Independent of `sweep`: a failed sweep must not skip this, and this only
   # ever writes a GitHub issue, never the repo.
   business-savings:
@@ -78,8 +79,9 @@ jobs:
       GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with: { bun-version: "1.4.4" }
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
-        with: { node-version: 22, cache: pnpm }
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm business-savings:watch
+        with: { node-version: 22 }
+      - run: bun install --frozen-lockfile
+      - run: bun run business-savings:watch

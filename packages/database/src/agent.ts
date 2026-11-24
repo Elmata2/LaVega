@@ -2,6 +2,8 @@ import { createHash, createHmac, randomInt } from "node:crypto";
 import type { QueryResultRow } from "@neondatabase/serverless";
 import {
   encryptBlob,
+  encryptionKey,
+  isUniqueViolation,
   tryDecryptBlob,
   withTenant,
   withTenantStatement,
@@ -111,12 +113,7 @@ function dedupeSecret(): Buffer {
  */
 export function assertAgentConfig(): void {
   dedupeSecret();
-  const value = process.env.LAVEGA_ENCRYPTION_KEY;
-  if (!value) throw new Error("LAVEGA_ENCRYPTION_KEY is required");
-  const key = /^[0-9a-f]{64}$/i.test(value)
-    ? Buffer.from(value, "hex")
-    : Buffer.from(value, "base64");
-  if (key.length !== 32) throw new Error("LAVEGA_ENCRYPTION_KEY must decode to 32 bytes");
+  encryptionKey();
 }
 
 /*
@@ -375,14 +372,15 @@ export function createAgentRepository(
       if (max < 1) return false;
       return withTenantStatement(db, userId, async (client) => {
         const result = await client.query(
-          `INSERT INTO personal.agent_state (user_id, fetches_today, fetches_day)
+          `INSERT INTO personal.eb_daily_reads (user_id, fetches_today, fetches_day)
            SELECT ${ME}, 1, $1::date WHERE ${ENABLED}
            ON CONFLICT (user_id) DO UPDATE SET
-             fetches_today = CASE WHEN personal.agent_state.fetches_day = $1::date
-               THEN personal.agent_state.fetches_today + 1 ELSE 1 END,
+             fetches_today = CASE WHEN personal.eb_daily_reads.fetches_day = $1::date
+               THEN personal.eb_daily_reads.fetches_today + 1 ELSE 1 END,
              fetches_day = $1::date
-           WHERE personal.agent_state.fetches_day IS DISTINCT FROM $1::date
-              OR personal.agent_state.fetches_today < $2
+           WHERE ${ENABLED}
+             AND (personal.eb_daily_reads.fetches_day IS DISTINCT FROM $1::date
+                  OR personal.eb_daily_reads.fetches_today < $2)
            RETURNING 1`,
           [today, max],
         );
@@ -657,12 +655,6 @@ export async function listAgentDueUsers(
 export async function purgeLinkAttempts(db: Database): Promise<number> {
   const result = await db.http.query("SELECT personal.agent_purge_link_attempts() AS deleted", []);
   return Number(result.rows[0]?.deleted ?? 0);
-}
-
-function isUniqueViolation(error: unknown): boolean {
-  return (
-    typeof error === "object" && error !== null && (error as { code?: unknown }).code === "23505"
-  );
 }
 
 /**

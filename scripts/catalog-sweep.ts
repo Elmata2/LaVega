@@ -11,10 +11,10 @@
  * packages/core/src/*.ts — node cannot load those directly and the existing
  * sync-n8n-code.mjs only works because the n8n modules really are .js.
  *
- *   pnpm catalog:sweep                          # every product
- *   pnpm catalog:sweep -- --only ing-betaalpas  # one, while iterating
- *   pnpm catalog:sweep -- --dry                 # report, write nothing
- *   pnpm catalog:sweep -- --no-agent            # free tiers only, no model calls
+ *   bun run catalog:sweep                          # every product
+ *   bun run catalog:sweep -- --only ing-betaalpas  # one, while iterating
+ *   bun run catalog:sweep -- --dry                 # report, write nothing
+ *   bun run catalog:sweep -- --no-agent            # free tiers only, no model calls
  *
  * Five rungs (the reader rung comes last), tried in ladder order, first COVERED answer wins:
  *

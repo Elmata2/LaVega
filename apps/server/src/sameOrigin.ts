@@ -17,7 +17,7 @@ import type { Context, MiddlewareHandler } from "hono";
  *
  *   `Origin` — the authoritative signal for every fetch and form POST. It is
  *   accepted only when it equals this request's own origin, is a loopback
- *   origin (`pnpm dev`'s Vite on :5173 calling the server on :8787), or is one
+ *   origin (`bun run dev`'s Vite on :5173 calling the server on :8787), or is one
  *   of the deployment's trusted origins. A request that carries neither header
  *   (a non-browser client, an allowlisted machine endpoint) is not a CSRF
  *   vector and passes. */

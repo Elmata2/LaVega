@@ -52,7 +52,11 @@ export function requiredMonthlyCents(i: {
   months: number;
   annualRate: number;
 }): number | null {
-  if (!(i.months > 0) || ![i.targetCents, i.savedCents, i.annualRate, i.months].every(Number.isFinite)) return null;
+  if (
+    !(i.months > 0) ||
+    ![i.targetCents, i.savedCents, i.annualRate, i.months].every(Number.isFinite)
+  )
+    return null;
   const gap = i.targetCents - Math.max(0, i.savedCents) * growth(i.annualRate, i.months);
   if (Number.isNaN(gap) || !Number.isFinite(growth(i.annualRate, i.months))) return null;
   if (gap <= 0) return 0;

@@ -1,9 +1,5 @@
 import { expect, test, vi } from "vitest";
-import {
-  createMcpInvestingRead,
-  isMcpReadPath,
-  MCP_READ_PATH_PREFIXES,
-} from "./investingRead.js";
+import { createMcpInvestingRead, isMcpReadPath, MCP_READ_PATH_PREFIXES } from "./investingRead.js";
 
 test("only the documented read paths pass the allowlist", () => {
   for (const prefix of MCP_READ_PATH_PREFIXES) {
@@ -56,7 +52,10 @@ test("a path outside the allowlist is refused before any request is forwarded", 
 });
 
 test("a non-JSON body becomes a safe problem, not data", async () => {
-  const forward = vi.fn(async (_request: Request, _tenantId: string) => new Response("<html>error</html>", { status: 500 }));
+  const forward = vi.fn(
+    async (_request: Request, _tenantId: string) =>
+      new Response("<html>error</html>", { status: 500 }),
+  );
   const read = createMcpInvestingRead("user-1", "http://local", forward);
   const result = await read("/api/investing/dashboard");
   expect(result.status).toBe(500);

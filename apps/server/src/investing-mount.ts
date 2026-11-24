@@ -5,13 +5,13 @@ import { fileURLToPath } from "node:url";
 import { createPartnerBudgetClient, hasBrokerSyncTime, PartnerBudget } from "@lavega/adapters";
 import * as Sentry from "@sentry/node";
 import { LOCAL_TENANT_ID } from "@lavega/core";
-import { listBrokerSyncTenants } from "@lavega/database";
+import { listBrokerSyncTenants, runtimeDatabase } from "@lavega/database";
 import { syncBudgets } from "@lavega/investing-server/src/priceOrchestrator.js";
 import { createProblemReporter } from "@lavega/investing-server/src/observability.js";
 import { createDashboardCache, createRuntimeApp } from "@lavega/investing-server/src/index.js";
-import { getAuth, verifiedSession } from "./auth.js";
-import { secretsMatch } from "./secrets.js";
-import { createDockerFetch } from "@lavega/investing-server/src/docker.js";
+import { getAuth, investingTenantId } from "./auth.js";
+import { authorizedCronRequest } from "./secrets.js";
+import { createStaticFetch } from "@lavega/investing-server/src/standalone.js";
 import {
   createFileBenchmarkSelectionStore,
   runtimeBenchmarkSelectionFile,
@@ -42,7 +42,6 @@ import {
   createFileCashFlowStore,
   runtimeCashFlowStoreFile,
 } from "@lavega/investing-server/src/fileCashFlowStore.js";
-import { runtimeDatabase } from "@lavega/investing-server/src/credentialStore.js";
 import {
   createNeonAccountWrapperStore,
   createNeonBenchmarkSelectionStore,
@@ -82,7 +81,7 @@ const dashboardCache = createDashboardCache();
  * Neon's, and the runtime builds it from that request's pool. */
 const localPartnerBudget = createPartnerBudgetClient(PartnerBudget.memoryLayer);
 
-/** Built investing SPA path. Set in production Docker (`INVESTING_WEB_DIST`). */
+/** Built investing SPA path. Override in production/standalone builds (`INVESTING_WEB_DIST`). */
 export function investingDist(): string {
   return process.env.INVESTING_WEB_DIST?.trim() || defaultInvestingDist;
 }
@@ -91,7 +90,7 @@ export function investingDist(): string {
  * Whether this server answers the investing API and serves its UI.
  *
  * The default asks whether the built SPA sits next to this server, which is the
- * right question for the Docker image that ships both. It is the wrong question
+ * right question for the standalone build that ships both. It is the wrong question
  * on Vercel: there the CDN serves those files and the function never has them
  * on disk, so the check said no and `/api/investing/*` 404'd while `/investing/`
  * loaded — a dashboard with no backend. INVESTING_MOUNT answers it outright.
@@ -135,29 +134,19 @@ const cronProblem = (message: string, cause?: unknown) =>
 const reportCronProblems = (problems: string[]) =>
   reportCronProblem({ source: "broker-sync", problems });
 
-export function authorizedCronRequest(request: Request): boolean {
-  const secret = process.env.CRON_SECRET?.trim();
-  if (!secret) return false;
-  return secretsMatch(request.headers.get("authorization") ?? "", `Bearer ${secret}`);
-}
+export { authorizedCronRequest, investingTenantId };
 
-/**
- * The tenant an investing request belongs to, or `null` when it may not be
- * served. Without authentication configured (local dev, self-hosted) there is
- * one local tenant; with it, only a verified session names a tenant.
- */
-export async function investingTenantId(request: Request): Promise<string | null> {
-  if (!getAuth()) return LOCAL_TENANT_ID;
-  const session = await verifiedSession(request);
-  return session?.user?.id ?? null;
-}
+let cachedApiNamespaces: Set<string> | null = null;
 
 /** The `/api/<namespace>` segments the investing app answers, read from its own
  *  routing table. This server holding a second, hand-written copy is what let
  *  `/api/agents` ship and 404: the copy went stale and nobody noticed. */
 export async function investingOwnsApiPath(path: string): Promise<boolean> {
-  const { apiNamespaces } = await getInvestingFetch();
-  return apiNamespaces.has(path.split("/")[2] ?? "");
+  if (!cachedApiNamespaces) {
+    const { apiNamespaces } = await getInvestingFetch();
+    cachedApiNamespaces = apiNamespaces;
+  }
+  return cachedApiNamespaces.has(path.split("/")[2] ?? "");
 }
 
 async function getInvestingFetch(): Promise<{
@@ -227,7 +216,7 @@ async function getInvestingFetch(): Promise<{
   );
   return {
     apiNamespaces,
-    fetch: createDockerFetch(runtimeApp.fetch.bind(runtimeApp), investingDist()),
+    fetch: createStaticFetch(runtimeApp.fetch.bind(runtimeApp), investingDist()),
   };
 }
 
@@ -250,13 +239,15 @@ export function rewriteInvestingRequest(request: Request): Request {
  * callers name `LOCAL_TENANT_ID` out loud because they carry no tenant data.
  */
 export async function forwardInvesting(request: Request, tenantId: string): Promise<Response> {
-  const runtime = await getInvestingFetch();
   /* initServerSentry runs once for the shared process and tags everything
    * app=server. Anything captured while the investing app handles the request
    * is its own, so it is re-tagged for the duration of this call. */
   return Sentry.withScope((scope) => {
     scope.setTag("app", "investing-server");
-    return withInvestingTenant(tenantId, () => runtime.fetch(rewriteInvestingRequest(request)));
+    return withInvestingTenant(tenantId, async () => {
+      const runtime = await getInvestingFetch();
+      return runtime.fetch(rewriteInvestingRequest(request));
+    });
   });
 }
 

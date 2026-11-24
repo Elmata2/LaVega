@@ -7,11 +7,24 @@ status: published
 author: alexander
 updated: 2026-10-26
 sources:
-  - { title: "LaVega: productpagina en veelgestelde vragen", url: "https://www.lavega.dev/", accessed: 2026-10-26 }
+  - {
+      title: "LaVega: productpagina en veelgestelde vragen",
+      url: "https://www.lavega.dev/",
+      accessed: 2026-10-26,
+    }
 faq:
-  - { q: "Kan een AI financieel assistent mijn geld beheren?", a: "Nee. Een assistent leest en legt uit. Betalen, overboeken of orders plaatsen vraagt een aparte koppeling met schrijfrechten, en bij een alleen-lezen koppeling bestaat die niet." }
-  - { q: "Zijn de getallen van een AI-assistent betrouwbaar?", a: "Dat hangt af van waar ze vandaan komen. Getallen die uit gewone, controleerbare code komen, zijn te herleiden. Een taalmodel dat zelf rekent kan fouten maken." }
-  - { q: "Welke privacyvraag stel ik altijd?", a: "Welke gegevens gaan naar de AI-aanbieder, worden ze bewaard of voor training gebruikt, en wie heeft de sleutels van de opslag?" }
+  - {
+      q: "Kan een AI financieel assistent mijn geld beheren?",
+      a: "Nee. Een assistent leest en legt uit. Betalen, overboeken of orders plaatsen vraagt een aparte koppeling met schrijfrechten, en bij een alleen-lezen koppeling bestaat die niet.",
+    }
+  - {
+      q: "Zijn de getallen van een AI-assistent betrouwbaar?",
+      a: "Dat hangt af van waar ze vandaan komen. Getallen die uit gewone, controleerbare code komen, zijn te herleiden. Een taalmodel dat zelf rekent kan fouten maken.",
+    }
+  - {
+      q: "Welke privacyvraag stel ik altijd?",
+      a: "Welke gegevens gaan naar de AI-aanbieder, worden ze bewaard of voor training gebruikt, en wie heeft de sleutels van de opslag?",
+    }
 ---
 
 ## Wat is een AI financieel assistent?

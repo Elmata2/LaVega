@@ -2,7 +2,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { DateTime, Effect } from "effect";
 import { PGlite } from "@electric-sql/pglite";
 import { PartnerBudget } from "@lavega/adapters";
-import { partnerBudgetContract } from "@lavega/adapters/src/partnerBudget/partnerBudget.contract.js";
+import { partnerBudgetContract } from "@lavega/adapters/partnerBudget/partnerBudget.contract";
 import { createPartnerBudgetRepository, type Database } from "@lavega/database";
 import { databaseOver } from "@lavega/database/testing";
 import { afterAll, beforeAll, expect, test } from "vitest";

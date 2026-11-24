@@ -178,7 +178,7 @@ import { TopBarActions } from "./components/TopBar";
 import CardLink from "./components/ui/CardLink.js";
 import Button from "./components/ui/Button.js";
 import StatusLine from "./components/ui/StatusLine.js";
-import { createCategorizeSaver, diffPatch } from "./categorize-persist";
+import { createCategorizeSaver, diffPatch, type RulePatch } from "./categorize-persist";
 import {
   enabledModules as resolveModules,
   navModules,
@@ -216,7 +216,7 @@ import { useAgentMirror } from "./agent/useAgentMirror.js";
 import { createFeedStore } from "./agent/feedStore.js";
 import { shellCopy } from "./copy/shell.js";
 import { importSessionCopy } from "./copy/importSession.js";
-import { type ShellNotice } from "./shellNotice.js";
+import { type BankRefreshFailureReason, type ShellNotice } from "./shellNotice.js";
 
 export type { View } from "./appRoutes";
 
@@ -1025,32 +1025,37 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
       const key = ebAccountKey(item.account);
       for (const t of item.transactions ?? []) rawTxs.push(mapEbTransaction(t, key, acc.currency));
     }
-    const [curAccounts, curTxs] = await Promise.all([storage.getAccounts(), storage.getTxs()]);
-    /* HET KOPPELMOMENT, hier en nergens anders. Dit is letterlijk het moment
-     * waarop de rekening binnenkomt, dus dit is de enige plek waar het
-     * eerlijk te stempelen valt. `curAccounts` is de stand van vóór deze
-     * koppeling: alleen wat daar niet in stond is nieuw. Een rekening die er
-     * al was houdt haar eigen koppelmoment (of blijft zonder, als dat er nooit
-     * was) — zie `withLinkedAt`. */
-    const mergedAccounts = withLinkedAt(
-      curAccounts,
-      mergeImportedAccounts(curAccounts, newAccounts),
-      asOf,
-    );
-    const mergedTxs = ingest(curTxs, assignTxIds(rawTxs));
-    /* WAT ER NIEUW IS, niet wat de bank stuurde. Bij een koppeling is dat
-     * hetzelfde getal, maar bij een verversing stuurt de bank elke keer een vol
-     * jaar terug: melden dat er 812 transacties zijn binnengekomen terwijl er
-     * drie nieuw waren, is een onwaarheid op de plek die net om vertrouwen
-     * vraagt. `ingest` dedupliceert op een inhoud-afgeleide id, dus het
-     * verschil in lengte IS het aantal nieuwe rijen. */
-    const addedTxs = mergedTxs.length - curTxs.length;
-    const addedAccounts = mergedAccounts.length - curAccounts.length;
-    await storage.putAccounts(mergedAccounts);
-    await storage.putTxs(mergedTxs);
-    const [fa, ft] = await Promise.all([storage.getAccounts(), storage.getTxs()]);
-    setAccounts(fa);
-    setTxs(ft);
+    const { addedAccounts, addedTxs, ft } = await categorizeSaver.current!.enqueue(async () => {
+      const [curAccounts, curTxs] = await Promise.all([storage.getAccounts(), storage.getTxs()]);
+      /* HET KOPPELMOMENT, hier en nergens anders. Dit is letterlijk het moment
+       * waarop de rekening binnenkomt, dus dit is de enige plek waar het
+       * eerlijk te stempelen valt. `curAccounts` is de stand van vóór deze
+       * koppeling: alleen wat daar niet in stond is nieuw. Een rekening die er
+       * al was houdt haar eigen koppelmoment (of blijft zonder, als dat er nooit
+       * was) — zie `withLinkedAt`. */
+      const mergedAccounts = withLinkedAt(
+        curAccounts,
+        mergeImportedAccounts(curAccounts, newAccounts),
+        asOf,
+      );
+      const mergedTxs = ingest(curTxs, assignTxIds(rawTxs));
+      const { upserts } = txDiff(curTxs, mergedTxs);
+      /* WAT ER NIEUW IS, niet wat de bank stuurde. Bij een koppeling is dat
+       * hetzelfde getal, maar bij een verversing stuurt de bank elke keer een vol
+       * jaar terug: melden dat er 812 transacties zijn binnengekomen terwijl er
+       * drie nieuw waren, is een onwaarheid op de plek die net om vertrouwen
+       * vraagt. `ingest` dedupliceert op een inhoud-afgeleide id, dus het
+       * verschil in lengte IS het aantal nieuwe rijen. */
+      const addedTxs = mergedTxs.length - curTxs.length;
+      const addedAccounts = mergedAccounts.length - curAccounts.length;
+      await storage.putAccounts(mergedAccounts);
+      if (upserts.length > 0) await storage.putTxs(upserts);
+      const [fa, ft] = await Promise.all([storage.getAccounts(), storage.getTxs()]);
+      setAccounts(fa);
+      txsRef.current = ft;
+      setTxs(ft);
+      return { addedAccounts, addedTxs, ft };
+    });
     // Reconcile invoices against the freshly linked bank txs (same as file import).
     const curInvoices = await storage.getInvoices();
     const reconciled = reconcileInvoices(curInvoices, ft);
@@ -1079,7 +1084,7 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
         error?: string;
         refreshed?: Array<{ aspsp: string; items: [] }>;
         expired?: string[];
-        failed?: Array<{ aspsp: string; error: string }>;
+        failed?: Array<{ aspsp: string; reason?: string; retryAfterSeconds?: number }>;
       };
       if (!res.ok || data.error) {
         setProblems([{ kind: "bank-link-failed", detail: String(data.error ?? res.status) }]);
@@ -1108,8 +1113,20 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
         });
       for (const name of data.expired ?? [])
         notices.push({ kind: "bank-consent-expired", aspsp: name });
-      for (const f of data.failed ?? [])
-        notices.push({ kind: "bank-link-failed", detail: `${f.aspsp}: ${f.error}` });
+      for (const f of data.failed ?? []) {
+        const reason: BankRefreshFailureReason =
+          f.reason === "rate-limited" || f.reason === "bank-down" || f.reason === "unknown"
+            ? f.reason
+            : "unknown";
+        notices.push({
+          kind: "bank-refresh-failed",
+          aspsp: f.aspsp,
+          reason,
+          ...(typeof f.retryAfterSeconds === "number"
+            ? { retryAfterSeconds: f.retryAfterSeconds }
+            : {}),
+        });
+      }
       if (notices.length === 0 && !silent) notices.push({ kind: "bank-nothing-to-refresh" });
       // Niets te melden en niemand die erom vroeg: de balk blijft staan zoals
       // hij stond, in plaats van leeggemaakt te worden en daarmee een eerdere
@@ -1240,16 +1257,11 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
     else setOpenAttempt((n) => n + 1);
   }
 
-  // Rules are UI-owned as a whole list (replace-all persistence), so every
-  // add/remove goes through this single helper to keep state and storage in sync.
-  // It joins the categorise queue so a rule edit and a categorise save can
-  // never interleave their replace-all writes.
-  async function saveRules(next: Rule[]) {
-    await categorizeSaver.current!.enqueue(async () => {
-      setRules(next);
-      rulesRef.current = next;
-      await storage.putRules(next);
-    });
+  // Rules are persisted as a whole list, so every edit is applied as a patch
+  // against the newest rules on the categorise queue — a rule added by a
+  // concurrent category save is never dropped.
+  async function saveRules(patch: RulePatch) {
+    await categorizeSaver.current!.patchRules(patch);
   }
 
   /* Transfer decisions are UI-owned as a whole list too (replace-all), and the
@@ -1720,51 +1732,57 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
         sessions: importSessions,
         documents,
       };
-      const r = await commitToStorage(
-        storage,
-        { accounts, txs },
-        files,
-        asOf,
-        async (_a, freshTxs) => {
-          const freshAccounts = _a;
-          setAccounts(freshAccounts);
-          setTxs(freshTxs);
-          // An `expected` invoice whose settling bank transaction now appears flips to
-          // `paid`; a new statement can also hold the payment a bill was waiting for.
-          const curInvoices = await storage.getInvoices();
-          const reconciled = reconcileInvoices(curInvoices, freshTxs);
-          if (JSON.stringify(reconciled) !== JSON.stringify(curInvoices))
-            await saveInvoices(reconciled);
-          const matched = runBillMatcher({
-            bills: refs.bills,
-            occurrences: refs.billOccurrences,
-            decisions: refs.decisions,
-            txs: freshTxs,
-            accounts: freshAccounts,
-            asOf,
-          });
-          if (matched.changed)
-            await saveBillPlan(matched.bills, matched.occurrences, matched.decisions);
-        },
-        {
-          state: refs,
-          store: storage,
-          onWritten: (next) => {
-            refs = next;
-            setTransfers(next.transfers);
-            setValuations(next.valuations);
-            setBills(next.bills);
-            setBillDecisions(next.decisions);
-            setImportSessions(next.sessions);
-            setDocuments(next.documents);
+      return await categorizeSaver.current!.enqueue(async () => {
+        const r = await commitToStorage(
+          storage,
+          { accounts, txs: txsRef.current },
+          files,
+          asOf,
+          async (_a, freshTxs) => {
+            const freshAccounts = _a;
+            setAccounts(freshAccounts);
+            txsRef.current = freshTxs;
+            setTxs(freshTxs);
+            // An `expected` invoice whose settling bank transaction now appears flips to
+            // `paid`; a new statement can also hold the payment a bill was waiting for.
+            const curInvoices = await storage.getInvoices();
+            const reconciled = reconcileInvoices(curInvoices, freshTxs);
+            if (JSON.stringify(reconciled) !== JSON.stringify(curInvoices))
+              await saveInvoices(reconciled);
+            const matched = runBillMatcher({
+              bills: refs.bills,
+              occurrences: refs.billOccurrences,
+              decisions: refs.decisions,
+              txs: freshTxs,
+              accounts: freshAccounts,
+              asOf,
+            });
+            if (matched.changed)
+              await saveBillPlan(matched.bills, matched.occurrences, matched.decisions);
           },
-        },
-      );
-      if (r.ok) return { ok: true, count: r.count, written: r.written };
-      // The state must match what is really stored, whatever failed.
-      if (r.accounts) setAccounts(r.accounts);
-      if (r.txs) setTxs(r.txs);
-      return { ok: false, partial: r.partial };
+          {
+            state: refs,
+            store: storage,
+            onWritten: (next) => {
+              refs = next;
+              setTransfers(next.transfers);
+              setValuations(next.valuations);
+              setBills(next.bills);
+              setBillDecisions(next.decisions);
+              setImportSessions(next.sessions);
+              setDocuments(next.documents);
+            },
+          },
+        );
+        if (r.ok) return { ok: true, count: r.count, written: r.written };
+        // The state must match what is really stored, whatever failed.
+        if (r.accounts) setAccounts(r.accounts);
+        if (r.txs) {
+          txsRef.current = r.txs;
+          setTxs(r.txs);
+        }
+        return { ok: false, partial: r.partial };
+      });
     } finally {
       setBusy(false);
     }
@@ -2083,18 +2101,18 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
     try {
       const sha256 = await sha256Hex(request.bytes);
       const sessionId = `import-${sha256.slice(0, 12)}-${importSessions.length + 1}`;
-      const result = applyGenericImport({
-        existingTxs: txs,
-        plan: request.plan,
-        id: sessionId,
-        filename: request.filename,
-        asOf,
-        documentId: sha256,
+      const result = await categorizeSaver.current!.upsertTxs((curTxs) => {
+        const next = applyGenericImport({
+          existingTxs: curTxs,
+          plan: request.plan,
+          id: sessionId,
+          filename: request.filename,
+          asOf,
+          documentId: sha256,
+        });
+        const { upserts } = txDiff(curTxs, next.txs);
+        return { upserts, result: next };
       });
-      const added = new Set(result.importedIds);
-      const newRows = result.txs.filter((tx) => added.has(tx.id));
-      if (newRows.length > 0) await storage.putTxs(newRows);
-      setTxs(result.txs);
       const nextSessions = [...importSessions, result.session];
       setImportSessions(nextSessions);
       await storage.putImportSessions(nextSessions);
@@ -2146,10 +2164,17 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
   // Revert ONE import: exactly the rows its session recorded. The retained
   // source document stays (it is the evidence) but is no longer linked.
   async function handleRevertImport(sessionId: string) {
-    const reverted = revertImport({ txs, sessions: importSessions, sessionId });
+    const reverted = await categorizeSaver.current!.enqueue(async () => {
+      const out = revertImport({ txs: txsRef.current, sessions: importSessions, sessionId });
+      if (out.session == null) return out;
+      if (out.removedIds.length > 0) await storage.deleteTxs(out.removedIds);
+      const removed = new Set(out.removedIds);
+      const drop = (prev: Tx[]) => prev.filter((t) => !removed.has(t.id));
+      txsRef.current = drop(txsRef.current);
+      setTxs(drop);
+      return out;
+    });
     if (reverted.session == null) return;
-    if (reverted.removedIds.length > 0) await storage.deleteTxs(reverted.removedIds);
-    setTxs(reverted.txs);
     const nextSessions = importSessions.filter((session) => session.id !== sessionId);
     setImportSessions(nextSessions);
     await storage.putImportSessions(nextSessions);

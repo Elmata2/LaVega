@@ -6,7 +6,7 @@ import {
   isCredentialBroker,
   type CredentialBroker,
 } from "@lavega/core";
-import { Button } from "./ui/button.js";
+import { Button } from "@lavega/ui";
 import { DeGiroImportTab } from "./DeGiroImportTab.js";
 import { filterVisibleSyncProblems, requestRefresh, useSyncSession } from "../lib/syncSession.js";
 

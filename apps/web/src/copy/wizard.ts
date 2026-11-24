@@ -195,17 +195,12 @@ export const wizardCopy: Record<Locale, WizardCopy> = {
       children: "Heb je kinderen?",
       childYears: "In welk jaar zijn ze geboren?",
       income: (t) =>
-        t
-          ? "Wat verdienen jullie samen netto per maand?"
-          : "Wat verdien je netto per maand?",
+        t ? "Wat verdienen jullie samen netto per maand?" : "Wat verdien je netto per maand?",
       spend: (t) =>
         t
           ? "Hoeveel geven jullie samen ongeveer uit per maand?"
           : "Hoeveel geef je ongeveer uit per maand?",
-      housing: (t) =>
-        t
-          ? "Wat kost wonen jullie per maand?"
-          : "Wat kost wonen je per maand?",
+      housing: (t) => (t ? "Wat kost wonen jullie per maand?" : "Wat kost wonen je per maand?"),
       savings: (t) =>
         t
           ? "Hoeveel spaargeld hebben jullie samen ongeveer?"
@@ -220,8 +215,7 @@ export const wizardCopy: Record<Locale, WizardCopy> = {
       cards: (t) => (t ? "Welke creditcards hebben jullie?" : "Welke creditcards heb je?"),
       cardDetails: (t) =>
         t ? "Wat staat er nu op jullie creditcards?" : "Wat staat er nu op je creditcards?",
-      debitCards: (t) =>
-        t ? "Welke betaalpassen hebben jullie?" : "Welke betaalpassen heb je?",
+      debitCards: (t) => (t ? "Welke betaalpassen hebben jullie?" : "Welke betaalpassen heb je?"),
       upload: "Wil je je bankafschrift toevoegen?",
       connectBank: "Koppel je bank",
       moneySharing: "Delen jullie je geld?",
@@ -392,9 +386,7 @@ export const wizardCopy: Record<Locale, WizardCopy> = {
       children: "Do you have children?",
       childYears: "What year were they born?",
       income: (t) =>
-        t
-          ? "What do you earn together, net per month?"
-          : "What do you earn, net per month?",
+        t ? "What do you earn together, net per month?" : "What do you earn, net per month?",
       spend: (t) =>
         t
           ? "About how much do you spend together per month?"
@@ -404,9 +396,7 @@ export const wizardCopy: Record<Locale, WizardCopy> = {
           ? "What does housing cost the two of you per month?"
           : "What does housing cost you per month?",
       savings: (t) =>
-        t
-          ? "About how much savings do you have together?"
-          : "About how much savings do you have?",
+        t ? "About how much savings do you have together?" : "About how much savings do you have?",
       goal: "What are you saving for?",
       debts: "Do you have debts we cannot see?",
       debtDetails: "Owed to whom, and how much do you pay off per month?",

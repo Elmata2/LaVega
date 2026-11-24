@@ -7,13 +7,34 @@ status: published
 author: alexander
 updated: 2026-10-26
 sources:
-  - { title: "Belastingdienst: Hoe is het box 3-inkomen op mijn voorlopige aanslag 2026 berekend?", url: "https://www.belastingdienst.nl/wps/wcm/connect/nl/box-3/content/berekening-box-3-inkomen-2026", accessed: 2026-10-26 }
-  - { title: "Belastingdienst: Alles over het herstel van uw box 3-inkomen", url: "https://www.belastingdienst.nl/wps/wcm/connect/nl/box-3/box-3", accessed: 2026-10-26 }
-  - { title: "Rijksoverheid: Tijdlijn Wet werkelijk rendement box 3", url: "https://www.rijksoverheid.nl/themas/werk/inkomstenbelasting/plannen-werkelijk-rendement-box-3/tijdlijn-werkelijk-rendement-box-3", accessed: 2026-10-26 }
+  - {
+      title: "Belastingdienst: Hoe is het box 3-inkomen op mijn voorlopige aanslag 2026 berekend?",
+      url: "https://www.belastingdienst.nl/wps/wcm/connect/nl/box-3/content/berekening-box-3-inkomen-2026",
+      accessed: 2026-10-26,
+    }
+  - {
+      title: "Belastingdienst: Alles over het herstel van uw box 3-inkomen",
+      url: "https://www.belastingdienst.nl/wps/wcm/connect/nl/box-3/box-3",
+      accessed: 2026-10-26,
+    }
+  - {
+      title: "Rijksoverheid: Tijdlijn Wet werkelijk rendement box 3",
+      url: "https://www.rijksoverheid.nl/themas/werk/inkomstenbelasting/plannen-werkelijk-rendement-box-3/tijdlijn-werkelijk-rendement-box-3",
+      accessed: 2026-10-26,
+    }
 faq:
-  - { q: "Hoeveel is het heffingsvrij vermogen in 2026?", a: "Volgens de Belastingdienst 59.357 euro per persoon en 118.714 euro voor fiscale partners samen." }
-  - { q: "Welk tarief geldt er in box 3 in 2026?", a: "36 procent, berekend over het voordeel uit sparen en beleggen, zoals de Belastingdienst het beschrijft." }
-  - { q: "Wordt box 3 een belasting op werkelijk rendement?", a: "Dat is de bedoeling vanaf 1 januari 2028. De Tweede Kamer nam het wetsvoorstel op 12 februari 2026 aan. Volgens de laatste vermelding van Rijksoverheid, 19 juni 2026, blijft dat wetsvoorstel de basis voor box 3 vanaf 2028." }
+  - {
+      q: "Hoeveel is het heffingsvrij vermogen in 2026?",
+      a: "Volgens de Belastingdienst 59.357 euro per persoon en 118.714 euro voor fiscale partners samen.",
+    }
+  - {
+      q: "Welk tarief geldt er in box 3 in 2026?",
+      a: "36 procent, berekend over het voordeel uit sparen en beleggen, zoals de Belastingdienst het beschrijft.",
+    }
+  - {
+      q: "Wordt box 3 een belasting op werkelijk rendement?",
+      a: "Dat is de bedoeling vanaf 1 januari 2028. De Tweede Kamer nam het wetsvoorstel op 12 februari 2026 aan. Volgens de laatste vermelding van Rijksoverheid, 19 juni 2026, blijft dat wetsvoorstel de basis voor box 3 vanaf 2028.",
+    }
 ---
 
 ## Wat is box 3?
@@ -24,13 +45,13 @@ Hieronder staat hoe dat in 2026 werkt, volgens de Belastingdienst. De cijfers zi
 
 ## De cijfers voor 2026
 
-| Onderdeel | 2026 |
-| --- | --- |
-| Forfaitair rendement banktegoeden | 1,28% (voorlopig) |
-| Forfaitair rendement beleggingen en andere bezittingen | 6,00% (staat vast) |
-| Forfaitair rendement op schulden | 2,70% (voorlopig) |
-| Heffingsvrij vermogen | 59.357 euro per persoon, 118.714 euro voor fiscale partners |
-| Tarief | 36% |
+| Onderdeel                                              | 2026                                                        |
+| ------------------------------------------------------ | ----------------------------------------------------------- |
+| Forfaitair rendement banktegoeden                      | 1,28% (voorlopig)                                           |
+| Forfaitair rendement beleggingen en andere bezittingen | 6,00% (staat vast)                                          |
+| Forfaitair rendement op schulden                       | 2,70% (voorlopig)                                           |
+| Heffingsvrij vermogen                                  | 59.357 euro per persoon, 118.714 euro voor fiscale partners |
+| Tarief                                                 | 36%                                                         |
 
 Volgens de Belastingdienst worden de definitieve percentages voor banktegoeden en schulden begin 2027 vastgesteld en gelden ze voor de definitieve aanslag inkomstenbelasting 2026.
 

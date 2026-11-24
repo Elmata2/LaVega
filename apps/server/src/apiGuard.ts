@@ -130,7 +130,7 @@ export function isHostedDeployment(): boolean {
  * default is "no" — a flag that defaults to open would reproduce the bug this
  * middleware exists to fix.
  *
- * `pnpm dev` needs it: Vite serves the app on :5173 while the server runs on
+ * `bun run dev` needs it: Vite serves the app on :5173 while the server runs on
  * :8787, which makes every call cross-origin, and a cross-origin fetch does not
  * send the session cookie unless it asks (`credentials: "include"`), which none
  * of the client's fetches do. Production serves the app from this same origin,
@@ -139,7 +139,7 @@ export function isHostedDeployment(): boolean {
  * On a hosted deployment the flag is REFUSED. It switches off both guards, so a
  * stray `LAVEGA_ALLOW_UNAUTHENTICATED=1` in a platform's environment UI would
  * publish the vault and the broker API to anyone who finds the URL — a switch
- * whose failure mode is total. A self-host or `pnpm dev` is not a hosted
+ * whose failure mode is total. A self-host or `bun run dev` is not a hosted
  * deployment and keeps the escape hatch.
  */
 export function guardIsDisabled(): boolean {
@@ -150,7 +150,7 @@ export function guardIsDisabled(): boolean {
 export function apiGuard(dependencies: ApiGuardDependencies = {}): MiddlewareHandler {
   const resolveToken = dependencies.resolveMcpToken ?? resolveMcpToken;
   return async (c, next) => {
-    /* The machine endpoint is checked BEFORE the `pnpm dev` escape hatch: a
+    /* The machine endpoint is checked BEFORE the `bun run dev` escape hatch: a
      * local run starts with `LAVEGA_ALLOW_UNAUTHENTICATED=1`, and `/mcp` must
      * still answer 401 without a token there. ADR 0012: missing token is 401,
      * never local-tenant data. */

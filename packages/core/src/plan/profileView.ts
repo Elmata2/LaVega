@@ -93,9 +93,7 @@ export function planProfileOf(
     incomeStreams: (p?.incomeStreams ?? []).map((f) => ({ ...f.value })),
     housingMonthlyCents: housing,
     fixedCostsMonthlyCents:
-      p === null || (housing === null && fixed.length === 0)
-        ? null
-        : fixedCostsMonthlyCents(p),
+      p === null || (housing === null && fixed.length === 0) ? null : fixedCostsMonthlyCents(p),
     debts: [...(p?.debts ?? [])],
     bufferTargetMonths: p?.buffer?.value.months ?? null,
     goals: (p?.goals ?? []).map((f) => {
@@ -127,8 +125,7 @@ export function planProfileOf(
     pointsGoal: p?.pointsGoal?.value ?? null,
     intakeBlocksDone: p?.intake.blocksDone ?? 0,
     profileHash: emptyHash(p ?? emptyProfile()),
-    profileUpdatedAt:
-      store === null || store.updatedAt === EPOCH ? null : store.updatedAt,
+    profileUpdatedAt: store === null || store.updatedAt === EPOCH ? null : store.updatedAt,
     removed: [...(p?.removed ?? [])],
   };
 }

@@ -89,7 +89,9 @@ test("an audit row records the call without the raw token", async () => {
   const rows = (await database.http.query(
     `SELECT token_id, method, tool, outcome FROM investing.mcp_audit
       WHERE token_id = 'env' ORDER BY id DESC LIMIT 1`,
-  )) as unknown as { rows: Array<{ token_id: string; method: string; tool: string | null; outcome: string }> };
+  )) as unknown as {
+    rows: Array<{ token_id: string; method: string; tool: string | null; outcome: string }>;
+  };
   expect(rows.rows[0]).toEqual({
     token_id: "env",
     method: "tools/call",

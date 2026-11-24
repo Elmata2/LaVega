@@ -527,15 +527,13 @@ test("business-entity accounts present: displayed figures equal those without th
   expect(q(c, "plan-goal-link-g1-S1")).not.toBeNull();
 });
 
-
 /** The text the advice-language scan reads: the card recommendation block and the
  *  footer are left out, since the owner allowed recommendations there (27 Oct 2026). */
 const scanText = (c: HTMLElement, locale: "nl" | "en"): string => {
   const clone = c.cloneNode(true) as HTMLElement;
   clone.querySelectorAll("[data-testid='plan-card-advice']").forEach((n) => n.remove());
   let text = clone.textContent ?? "";
-  for (const l of [locale])
-    text = text.replace(planShellCopy[l].footer.notice, "");
+  for (const l of [locale]) text = text.replace(planShellCopy[l].footer.notice, "");
   return text;
 };
 
@@ -955,7 +953,11 @@ const currentAccount: Account = {
 };
 
 /** The cards section as the app builds it: a real held-card list from `accounts`. */
-function cardsFor(accounts: Account[], patch: Record<string, unknown>, over: Record<string, unknown> = {}) {
+function cardsFor(
+  accounts: Account[],
+  patch: Record<string, unknown>,
+  over: Record<string, unknown> = {},
+) {
   const store = asClass(richStore(), patch);
   const rich = richPlanInput(store);
   const input = {
@@ -1299,16 +1301,25 @@ test("card details editor: balance goes to the profile, points to the Punten sto
   const c = mount(
     <CardsSection
       result={result}
-      ctx={{ ...ctx, profile: { store: withCard, update, saveFailed: false }, rewards: [], saveRewards }}
+      ctx={{
+        ...ctx,
+        profile: { store: withCard, update, saveFailed: false },
+        rewards: [],
+        saveRewards,
+      }}
     />,
   );
   openAll(c);
   const form = q(c, "plan-card-details")!;
   const input = (re: RegExp) =>
-    ([...form.querySelectorAll<HTMLLabelElement>("label")].find((l) => re.test(l.textContent ?? ""))!
-      .control as HTMLInputElement);
+    [...form.querySelectorAll<HTMLLabelElement>("label")].find((l) => re.test(l.textContent ?? ""))!
+      .control as HTMLInputElement;
   typeInto(input(/Outstanding balance/), "2000");
-  await click([...form.querySelectorAll<HTMLButtonElement>("[role='radio']")].find((b) => b.textContent === "No, part of it stays")!);
+  await click(
+    [...form.querySelectorAll<HTMLButtonElement>("[role='radio']")].find(
+      (b) => b.textContent === "No, part of it stays",
+    )!,
+  );
   typeInto(input(/Interest on the outstanding/), "12");
   typeInto(input(/Points balance/), "9000");
   await click(form.querySelector<HTMLButtonElement>("button[type='submit']")!);

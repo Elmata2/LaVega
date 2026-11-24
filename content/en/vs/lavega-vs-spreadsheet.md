@@ -7,10 +7,20 @@ status: published
 author: alexander
 updated: 2026-10-26
 sources:
-  - { title: "LaVega: product description and FAQ", url: "https://www.lavega.dev/en", accessed: 2026-10-26 }
+  - {
+      title: "LaVega: product description and FAQ",
+      url: "https://www.lavega.dev/en",
+      accessed: 2026-10-26,
+    }
 faq:
-  - { q: "Can I just track my finances in Excel?", a: "Yes. A spreadsheet gives you full freedom over layout and calculations and costs nothing extra if you already have Excel or a free alternative. It does take time to enter or import and categorise transactions." }
-  - { q: "What does LaVega do differently from a spreadsheet?", a: "LaVega imports bank exports or reads your account read-only, categorises transactions automatically, shows accounts and investments in one view and forecasts your cash position. It gives information, not financial advice." }
+  - {
+      q: "Can I just track my finances in Excel?",
+      a: "Yes. A spreadsheet gives you full freedom over layout and calculations and costs nothing extra if you already have Excel or a free alternative. It does take time to enter or import and categorise transactions.",
+    }
+  - {
+      q: "What does LaVega do differently from a spreadsheet?",
+      a: "LaVega imports bank exports or reads your account read-only, categorises transactions automatically, shows accounts and investments in one view and forecasts your cash position. It gives information, not financial advice.",
+    }
 ---
 
 Many people start with a spreadsheet, and it is a perfectly good way to get a grip on your money. This page sets side by side what a home-made sheet does well and what LaVega does differently. There is no winner: it depends on what you want to track and how much time you want to spend on it.
@@ -50,14 +60,14 @@ With a spreadsheet, everything sits on your own computer or in your own cloud. L
 
 ## Side by side
 
-| | Spreadsheet | LaVega |
-| --- | --- | --- |
-| Layout | Fully free | Fixed sections |
-| Cost | Nothing extra if you already have the program | LaVega is in beta; no price has been published yet |
-| Input | Import or type yourself | Import or read-only link |
-| Categorising | Build your own rules | Automatic |
-| Looking ahead | Your own formulas | Forecast built in |
-| Data storage | Your file | Encrypted, see above |
+|               | Spreadsheet                                   | LaVega                                             |
+| ------------- | --------------------------------------------- | -------------------------------------------------- |
+| Layout        | Fully free                                    | Fixed sections                                     |
+| Cost          | Nothing extra if you already have the program | LaVega is in beta; no price has been published yet |
+| Input         | Import or type yourself                       | Import or read-only link                           |
+| Categorising  | Build your own rules                          | Automatic                                          |
+| Looking ahead | Your own formulas                             | Forecast built in                                  |
+| Data storage  | Your file                                     | Encrypted, see above                               |
 
 ## Which fits you?
 

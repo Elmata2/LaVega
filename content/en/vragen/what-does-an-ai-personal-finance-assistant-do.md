@@ -7,11 +7,24 @@ status: published
 author: alexander
 updated: 2026-10-26
 sources:
-  - { title: "LaVega: product page and frequently asked questions", url: "https://www.lavega.dev/en", accessed: 2026-10-26 }
+  - {
+      title: "LaVega: product page and frequently asked questions",
+      url: "https://www.lavega.dev/en",
+      accessed: 2026-10-26,
+    }
 faq:
-  - { q: "Can an AI finance assistant manage my money?", a: "No. An assistant reads and explains. Paying, transferring or placing orders needs a separate connection with write access, and a read-only connection does not have it." }
-  - { q: "Are the numbers from an AI assistant reliable?", a: "That depends on where they come from. Numbers produced by ordinary, checkable code can be traced. A language model that does its own arithmetic can make mistakes." }
-  - { q: "Which privacy question do I always ask?", a: "Which data goes to the AI provider, is it stored or used for training, and who holds the keys to the storage?" }
+  - {
+      q: "Can an AI finance assistant manage my money?",
+      a: "No. An assistant reads and explains. Paying, transferring or placing orders needs a separate connection with write access, and a read-only connection does not have it.",
+    }
+  - {
+      q: "Are the numbers from an AI assistant reliable?",
+      a: "That depends on where they come from. Numbers produced by ordinary, checkable code can be traced. A language model that does its own arithmetic can make mistakes.",
+    }
+  - {
+      q: "Which privacy question do I always ask?",
+      a: "Which data goes to the AI provider, is it stored or used for training, and who holds the keys to the storage?",
+    }
 ---
 
 ## What is an AI personal finance assistant?

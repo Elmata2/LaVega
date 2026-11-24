@@ -95,15 +95,21 @@ export const applyStatedSavings = (p: AdvisorProfile, totalCents: number, asOf: 
 
 export const applyHousehold = (
   p: AdvisorProfile,
-  value: { kind: "alone" | "together"; partnerIncomeInScope?: boolean; moneySharing?: MoneySharing },
+  value: {
+    kind: "alone" | "together";
+    partnerIncomeInScope?: boolean;
+    moneySharing?: MoneySharing;
+  },
   asOf: string,
 ) => {
   const { moneySharing, ...rest } = value;
   // Together again after Back keeps the earlier answer to "do you share?".
   const prev = p.household?.value;
   const sharing =
-    moneySharing ?? (value.kind === "together" && prev?.kind === "together" ? prev.moneySharing : undefined);
-  const kept = value.kind === "alone" || sharing === undefined ? rest : { ...rest, moneySharing: sharing };
+    moneySharing ??
+    (value.kind === "together" && prev?.kind === "together" ? prev.moneySharing : undefined);
+  const kept =
+    value.kind === "alone" || sharing === undefined ? rest : { ...rest, moneySharing: sharing };
   return copyProfile(p, { household: { value: kept, source: "stated", at: asOf } });
 };
 
@@ -113,7 +119,10 @@ export const applyMoneySharing = (p: AdvisorProfile, sharing: MoneySharing, asOf
     ? p
     : copyProfile(p, {
         household: {
-          value: { ...(p.household?.value ?? { kind: "together" as const }), moneySharing: sharing },
+          value: {
+            ...(p.household?.value ?? { kind: "together" as const }),
+            moneySharing: sharing,
+          },
           source: "stated",
           at: asOf,
         },

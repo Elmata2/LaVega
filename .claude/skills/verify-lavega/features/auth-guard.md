@@ -6,7 +6,7 @@ Every `/api/*` route is closed unless it is on the public list or the request ca
 
 - `guard-closed` every non-public route answers 401 without a session on a closed target.
 - `guard-public` `/api/agent/status`, `/api/eb/status`, `/api/rates`, `/api/fx/rate`, `/api/auth/*`, `/api/eb/callback` answer without a session.
-- `guard-open-dev` with `LAVEGA_ALLOW_UNAUTHENTICATED=1` (what `up` and `pnpm dev` set) nothing answers 401.
+- `guard-open-dev` with `LAVEGA_ALLOW_UNAUTHENTICATED=1` (what `up` and `bun run dev` set) nothing answers 401.
 - `guard-signup-open` registration is open. A session is issued only after the address is confirmed. `/api/auth/sign-up/email` is limited to 5 requests per IP per 10 minutes.
 
 ## How to get to it (user POV)

@@ -36,10 +36,9 @@ async function render() {
 
 test("renders the totals the server answers with", async () => {
   globalThis.fetch = vi.fn().mockResolvedValue(
-    new Response(
-      JSON.stringify({ totals: [{ date: "2026-09-01", totalCents: 100_00 }] }),
-      { status: 200 },
-    ),
+    new Response(JSON.stringify({ totals: [{ date: "2026-09-01", totalCents: 100_00 }] }), {
+      status: 200,
+    }),
   );
   await render();
   expect(container!.querySelector('[data-testid="totals"]')!.textContent).toBe(
@@ -63,7 +62,10 @@ test("drops a malformed entry rather than crashing the chart", async () => {
   globalThis.fetch = vi.fn().mockResolvedValue(
     new Response(
       JSON.stringify({
-        totals: [{ date: "2026-09-01", totalCents: 100 }, { date: 5, totalCents: "oops" }],
+        totals: [
+          { date: "2026-09-01", totalCents: 100 },
+          { date: 5, totalCents: "oops" },
+        ],
       }),
       { status: 200 },
     ),

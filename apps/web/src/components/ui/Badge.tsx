@@ -1,6 +1,6 @@
 import { forwardRef, type HTMLAttributes } from "react";
 import { StatusIcon, STATUS_TONE_CLASS, type StatusTone } from "./StatusLine.js";
-import { cn } from "./utils.js";
+import { cn } from "@lavega/ui";
 
 /* Extracted from `.badge` (docs/adr/0005) — a small mono-uppercase chip. Plain
  * by default; `tone` marks it as a status (dashed border + triangle for

@@ -23,7 +23,12 @@ describe("resolveRoomRanges", () => {
   });
   test("no computed room and both ranges: the stated room (low = income low - spend high)", () => {
     const r = resolveRoomRanges(none, income, spend);
-    expect(r.room).toEqual({ kind: "stated", lowCents: 30_000, highCents: 100_000, incomeMidCents: 275_000 });
+    expect(r.room).toEqual({
+      kind: "stated",
+      lowCents: 30_000,
+      highCents: 100_000,
+      incomeMidCents: 275_000,
+    });
     expect(r.statedInputs).toEqual({ income, spend });
   });
   test("a computed room with under 60 days of history and both ranges: the stated room (one rule for every caller)", () => {

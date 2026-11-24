@@ -726,7 +726,9 @@ export default function Belasting({
                     <span
                       className={`font-body text-[1.2rem] font-semibold tabular-nums ${total > 0 ? "text-neg" : ""}`}
                     >
-                      {flows.length > 0 ? formatSignedEuroIn(locale, -total / 100) : c.profitTax.noAmount}
+                      {flows.length > 0
+                        ? formatSignedEuroIn(locale, -total / 100)
+                        : c.profitTax.noAmount}
                     </span>
                   </div>
                   {flows.length === 0 ? (

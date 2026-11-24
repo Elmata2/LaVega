@@ -98,7 +98,8 @@ export const cardFileCopy: Record<Locale, CardFileCopy> = {
     foldsExisting: "Je Trading 212-rekeningen worden samengevoegd tot één.",
     foldBlocked:
       "Je Trading 212-rekeningen horen bij verschillende profielen en worden niet samengevoegd.",
-    failedPartialFold: "Niet alles is opgeslagen. Importeer het bestand opnieuw om het af te maken.",
+    failedPartialFold:
+      "Niet alles is opgeslagen. Importeer het bestand opnieuw om het af te maken.",
     unmatchedExisting:
       "We konden je bestaande American Express-gegevens niet aan dit bestand koppelen. Controleer na het toevoegen of er dubbele transacties staan.",
     xls: "Dit is een oud Excel-bestand (.xls). Kies CSV of .xlsx.",
@@ -107,9 +108,11 @@ export const cardFileCopy: Record<Locale, CardFileCopy> = {
     balanceCredit: "Openstaand bedrag op je kaart",
     balanceDebit: "Saldo op je kaart nu",
     balanceOther: (n) => `Saldo van ${n} nu`,
-    helperAmex: "Te vinden in de Amex-app of op je laatste afschrift. Laat leeg als je het niet weet.",
+    helperAmex:
+      "Te vinden in de Amex-app of op je laatste afschrift. Laat leeg als je het niet weet.",
     helperT212: "Te vinden in de Trading 212-app.",
-    helperCredit: "Te vinden in de app van je kaart of op je laatste afschrift. Laat leeg als je het niet weet.",
+    helperCredit:
+      "Te vinden in de app van je kaart of op je laatste afschrift. Laat leeg als je het niet weet.",
     helperOther: "Laat leeg als je het niet weet.",
     perToday: "per vandaag",
     save: "Opslaan",
@@ -151,8 +154,7 @@ export const cardFileCopy: Record<Locale, CardFileCopy> = {
     adding: "Bezig met toevoegen...",
     cancel: "Annuleren",
     failed: "Toevoegen lukte niet. Er is niets opgeslagen. Probeer het nog eens.",
-    done: (c, name) =>
-      `${c === 1 ? "1 transactie" : `${c} transacties`} toegevoegd aan ${name}.`,
+    done: (c, name) => `${c === 1 ? "1 transactie" : `${c} transacties`} toegevoegd aan ${name}.`,
     doneNothing: (name) =>
       `Deze transacties stonden er al bij ${name}. Er is niets nieuws toegevoegd.`,
     doneClose: "Sluiten",
@@ -180,8 +182,7 @@ export const cardFileCopy: Record<Locale, CardFileCopy> = {
       t === 1
         ? "Nothing new: this transaction was already here."
         : `Nothing new: all ${t} transactions were already here.`,
-    unreadableRows: (k) =>
-      k === 1 ? "1 row could not be read." : `${k} rows could not be read.`,
+    unreadableRows: (k) => (k === 1 ? "1 row could not be read." : `${k} rows could not be read.`),
     foldsExisting: "Your Trading 212 accounts will be merged into one.",
     foldBlocked: "Your Trading 212 accounts belong to different profiles and are not merged.",
     failedPartialFold: "Not everything was saved. Import the file again to finish it.",
@@ -193,9 +194,11 @@ export const cardFileCopy: Record<Locale, CardFileCopy> = {
     balanceCredit: "Amount you currently owe on the card",
     balanceDebit: "Card balance now",
     balanceOther: (n) => `Balance of ${n} now`,
-    helperAmex: "You can find it in the Amex app or on your latest statement. Leave empty if you don't know.",
+    helperAmex:
+      "You can find it in the Amex app or on your latest statement. Leave empty if you don't know.",
     helperT212: "You can find it in the Trading 212 app.",
-    helperCredit: "You can find it in your card's app or on your latest statement. Leave empty if you don't know.",
+    helperCredit:
+      "You can find it in your card's app or on your latest statement. Leave empty if you don't know.",
     helperOther: "Leave empty if you don't know.",
     perToday: "as of today",
     save: "Save",
@@ -237,8 +240,7 @@ export const cardFileCopy: Record<Locale, CardFileCopy> = {
     adding: "Adding...",
     cancel: "Cancel",
     failed: "Adding failed. Nothing was saved. Try again.",
-    done: (c, name) =>
-      `${c === 1 ? "1 transaction" : `${c} transactions`} added to ${name}.`,
+    done: (c, name) => `${c === 1 ? "1 transaction" : `${c} transactions`} added to ${name}.`,
     doneNothing: (name) => `These transactions were already in ${name}. Nothing new was added.`,
     doneClose: "Close",
     upload: "Upload file",

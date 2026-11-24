@@ -1,5 +1,6 @@
 @layer ui-sdk;
 @import "tailwindcss";
+@source "../../../../packages/ui/src";
 
 @theme {
   --radius-lg: 20px;

@@ -7,10 +7,20 @@ status: published
 author: alexander
 updated: 2026-10-26
 sources:
-  - { title: "LaVega: productomschrijving en veelgestelde vragen", url: "https://www.lavega.dev/", accessed: 2026-10-26 }
+  - {
+      title: "LaVega: productomschrijving en veelgestelde vragen",
+      url: "https://www.lavega.dev/",
+      accessed: 2026-10-26,
+    }
 faq:
-  - { q: "Kan ik mijn geldzaken gewoon in Excel bijhouden?", a: "Ja. Een spreadsheet geeft je volledige vrijheid over indeling en berekeningen en kost niets extra als je Excel of een gratis variant al hebt. Het kost wel tijd om transacties in te voeren of te importeren en te categoriseren." }
-  - { q: "Wat doet LaVega anders dan een spreadsheet?", a: "LaVega importeert bankexports of leest je rekening alleen-lezen mee, categoriseert transacties automatisch, toont rekeningen en beleggingen in één overzicht en voorspelt je kaspositie vooruit. Het geeft informatie, geen financieel advies." }
+  - {
+      q: "Kan ik mijn geldzaken gewoon in Excel bijhouden?",
+      a: "Ja. Een spreadsheet geeft je volledige vrijheid over indeling en berekeningen en kost niets extra als je Excel of een gratis variant al hebt. Het kost wel tijd om transacties in te voeren of te importeren en te categoriseren.",
+    }
+  - {
+      q: "Wat doet LaVega anders dan een spreadsheet?",
+      a: "LaVega importeert bankexports of leest je rekening alleen-lezen mee, categoriseert transacties automatisch, toont rekeningen en beleggingen in één overzicht en voorspelt je kaspositie vooruit. Het geeft informatie, geen financieel advies.",
+    }
 ---
 
 Veel mensen beginnen met een spreadsheet, en dat is een prima manier om grip op je geld te krijgen. Deze pagina zet naast elkaar wat een eigen sheet goed doet en wat LaVega anders aanpakt. Er is geen winnaar: het hangt af van wat je wilt bijhouden en hoeveel tijd je eraan wilt besteden.
@@ -50,14 +60,14 @@ Bij een spreadsheet staat alles op je eigen computer of in je eigen cloud. LaVeg
 
 ## Naast elkaar
 
-| | Spreadsheet | LaVega |
-| --- | --- | --- |
-| Indeling | Volledig vrij | Vaste onderdelen |
-| Kosten | Geen extra als je het programma al hebt | LaVega is in testfase; er is nog geen prijs gepubliceerd |
-| Invoer | Zelf importeren of typen | Import of alleen-lezen koppeling |
-| Categoriseren | Zelf regels bouwen | Automatisch |
-| Vooruitkijken | Eigen formules | Forecast ingebouwd |
-| Gegevensopslag | Jouw bestand | Versleuteld, zie hierboven |
+|                | Spreadsheet                             | LaVega                                                   |
+| -------------- | --------------------------------------- | -------------------------------------------------------- |
+| Indeling       | Volledig vrij                           | Vaste onderdelen                                         |
+| Kosten         | Geen extra als je het programma al hebt | LaVega is in testfase; er is nog geen prijs gepubliceerd |
+| Invoer         | Zelf importeren of typen                | Import of alleen-lezen koppeling                         |
+| Categoriseren  | Zelf regels bouwen                      | Automatisch                                              |
+| Vooruitkijken  | Eigen formules                          | Forecast ingebouwd                                       |
+| Gegevensopslag | Jouw bestand                            | Versleuteld, zie hierboven                               |
 
 ## Welke past bij jou?
 

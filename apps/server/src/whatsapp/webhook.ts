@@ -7,7 +7,7 @@ import {
   type AgentRepository,
   type Database,
 } from "@lavega/database";
-import { requireRuntimeDatabase } from "@lavega/investing-server/src/credentialStore.js";
+import { requireRuntimeDatabase } from "@lavega/database";
 import { handleUnlinked, toE164 } from "./linking.js";
 import { answerApprovalButton, parseApprovalButton } from "./approval.js";
 import { whatsappClientFromEnv } from "./client.js";

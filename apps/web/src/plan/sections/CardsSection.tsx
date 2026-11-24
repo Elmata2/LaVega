@@ -276,7 +276,9 @@ export default function CardsSection({ result, ctx }: SectionProps<CardsFigures>
                 ...nets.flatMap((n) => {
                   const lines = [copy.netLine(n, fmt), copy.pointsLine(n.name, n, fmt)];
                   return n.cardKey.startsWith(STATED_CARD_PREFIX)
-                    ? lines.map((l) => (l === null ? null : `${l.replace(/\.$/, "")} (${copy.statedEstimate}).`))
+                    ? lines.map((l) =>
+                        l === null ? null : `${l.replace(/\.$/, "")} (${copy.statedEstimate}).`,
+                      )
                     : lines;
                 }),
                 ...f.breakEven.map((b) =>
@@ -296,33 +298,33 @@ export default function CardsSection({ result, ctx }: SectionProps<CardsFigures>
           </div>
         ),
         assumptions: (
-            <Group title={a.groups.yourFigures}>
-              <CardBalancesEditor ctx={ctx} />
-              {programs.length > 0 && <Redemption programs={programs} ctx={ctx} />}
-              {f.balances.map((b) => (
-                <ValueInput
-                  key={b.programId}
-                  name={`expiry-${b.programId}`}
-                  label={a.cards.expiry.label(a.cards.program(b.programId))}
-                  hint={a.cards.expiry.hint}
-                  stored={prefs.pointsExpiry[b.programId] ?? ""}
-                  parse={parseDate}
-                  onSave={(date) =>
-                    ctx.plan.setPreference((cur) => ({
-                      pointsExpiry: {
-                        ...cur.pointsExpiry,
-                        [b.programId]: date,
-                      },
-                    }))
-                  }
-                  onClear={() =>
-                    ctx.plan.setPreference((cur) => ({
-                      pointsExpiry: dropKey(cur.pointsExpiry, b.programId),
-                    }))
-                  }
-                />
-              ))}
-            </Group>
+          <Group title={a.groups.yourFigures}>
+            <CardBalancesEditor ctx={ctx} />
+            {programs.length > 0 && <Redemption programs={programs} ctx={ctx} />}
+            {f.balances.map((b) => (
+              <ValueInput
+                key={b.programId}
+                name={`expiry-${b.programId}`}
+                label={a.cards.expiry.label(a.cards.program(b.programId))}
+                hint={a.cards.expiry.hint}
+                stored={prefs.pointsExpiry[b.programId] ?? ""}
+                parse={parseDate}
+                onSave={(date) =>
+                  ctx.plan.setPreference((cur) => ({
+                    pointsExpiry: {
+                      ...cur.pointsExpiry,
+                      [b.programId]: date,
+                    },
+                  }))
+                }
+                onClear={() =>
+                  ctx.plan.setPreference((cur) => ({
+                    pointsExpiry: dropKey(cur.pointsExpiry, b.programId),
+                  }))
+                }
+              />
+            ))}
+          </Group>
         ),
         howCalculated: <CalcList section="cards" result={result} />,
         sources: <Sources lines={[terms]} />,

@@ -7,6 +7,7 @@ import type { Account, LegacyRule, Rule, Tx } from "@lavega/core";
 import { categorize, isRuleV2 } from "@lavega/core";
 import { adminCopy } from "../copy/admin.js";
 import { categoryLabel } from "../copy/money.js";
+import { applyRulePatch, type RulePatch } from "../categorize-persist.js";
 import Regels from "./Regels";
 
 /* Regels — the v2 rules editor.
@@ -50,7 +51,7 @@ afterEach(() => {
 
 function render(
   rules: Rule[],
-  onSaveRules: (next: Rule[]) => void = () => {},
+  onSaveRules: (patch: RulePatch) => void = () => {},
   txs: Tx[] = [],
   accounts: Account[] = [ACCOUNT],
 ) {
@@ -134,7 +135,7 @@ test("shows the rules in stored order with their priority", () => {
   );
 });
 
-test("move down and up persist the reordered whole array", () => {
+test("move down and up emit move patches that reorder the stored array", () => {
   const stored: Rule[] = [
     { id: "1", match: "zalando pay", category: "Kleding" },
     { id: "2", match: "Albert Heijn", category: "Boodschappen" },
@@ -144,7 +145,9 @@ test("move down and up persist the reordered whole array", () => {
 
   click(byText("button", adminCopy.nl.regels.list.downButton));
   // The first Omlaag belongs to "zalando pay": it swaps with the row below.
-  expect(onSaveRules).toHaveBeenLastCalledWith([stored[1], stored[0]]);
+  const downPatch = onSaveRules.mock.calls.at(-1)![0] as RulePatch;
+  expect(downPatch).toEqual({ kind: "move", id: "1", delta: 1 });
+  expect(applyRulePatch(stored, downPatch)).toEqual([stored[1], stored[0]]);
 
   // Re-render with the persisted order, then move the now-second rule up.
   act(() =>
@@ -161,7 +164,9 @@ test("move down and up persist the reordered whole array", () => {
   const upOnSecond = ruleRows()[1]!.querySelectorAll("button")[1]!;
   expect(upOnSecond.textContent).toBe(adminCopy.nl.regels.list.upButton);
   click(upOnSecond);
-  expect(onSaveRules).toHaveBeenLastCalledWith([stored[0], stored[1]]);
+  const upPatch = onSaveRules.mock.calls.at(-1)![0] as RulePatch;
+  expect(upPatch).toEqual({ kind: "move", id: "1", delta: -1 });
+  expect(applyRulePatch([stored[1]!, stored[0]!], upPatch)).toEqual([stored[0], stored[1]]);
 });
 
 test("the ends are disabled", () => {
@@ -187,7 +192,9 @@ test("quick add appends a canonical v2 rule after the existing rules", () => {
   setValue(quickAddInput(adminCopy.nl.regels.form.categoryLabel), "Boodschappen");
   click(byText("button", adminCopy.nl.regels.form.addButton));
 
-  const next = onSaveRules.mock.calls[0]![0] as Rule[];
+  const patch = onSaveRules.mock.calls[0]![0] as RulePatch;
+  expect(patch.kind).toBe("add");
+  const next = applyRulePatch(stored, patch);
   expect(next).toHaveLength(2);
   expect(next[0]!.id).toBe("1");
   const added = next[1]!;
@@ -218,7 +225,9 @@ test("editing a legacy rule lowers it, changes the condition and action, and sav
   setValue(actionValue, "Online shopping");
   click(byText("button", adminCopy.nl.regels.editor.saveButton));
 
-  const next = onSaveRules.mock.calls[0]![0] as Rule[];
+  const patch = onSaveRules.mock.calls[0]![0] as RulePatch;
+  expect(patch.kind).toBe("update");
+  const next = applyRulePatch(stored, patch);
   const saved = next[0]!;
   expect(isRuleV2(saved)).toBe(true);
   if (!isRuleV2(saved)) throw new Error("saving an edited legacy rule must write v2");
@@ -227,6 +236,24 @@ test("editing a legacy rule lowers it, changes the condition and action, and sav
     { kind: "text", target: "text", op: "contains", value: "zalando" },
   ]);
   expect(saved.actions).toEqual([{ kind: "setCategory", category: "Online shopping" }]);
+});
+
+test("issue #355: saving an edit while another rule was added concurrently preserves the new rule", () => {
+  const stored: Rule[] = [{ id: "1", match: "zalando pay", category: "Kleding" }];
+  const onSaveRules = vi.fn();
+  render(stored, onSaveRules);
+
+  click(byText("button", adminCopy.nl.regels.list.editButton));
+  const editor = container!.querySelector('[data-testid="rule-editor"]')!;
+  const actionValue = editor.querySelector('[data-testid="editor-actions"] input')!;
+  setValue(actionValue, "Online shopping");
+  click(byText("button", adminCopy.nl.regels.editor.saveButton));
+
+  const patch = onSaveRules.mock.calls[0]![0] as RulePatch;
+  const concurrent: Rule = { id: "cat-1", match: "ns.nl", category: "Transport" };
+  const merged = applyRulePatch([...stored, concurrent], patch);
+  expect(merged.map((r) => r.id)).toEqual(["1", "cat-1"]);
+  expect(merged[1]).toEqual(concurrent);
 });
 
 test("the editor opens a v2 rule with every field and saves it unchanged", () => {
@@ -268,7 +295,7 @@ test("the editor opens a v2 rule with every field and saves it unchanged", () =>
   expect((actionInputs[1] as HTMLInputElement).value).toBe("groot");
 
   click(byText("button", adminCopy.nl.regels.editor.saveButton));
-  expect(onSaveRules).toHaveBeenCalledWith([rule]);
+  expect(onSaveRules).toHaveBeenCalledWith({ kind: "update", rule });
 });
 
 test("the editor refuses an empty value and saves nothing", () => {

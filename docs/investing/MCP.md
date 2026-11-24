@@ -11,8 +11,7 @@ owns auth and tenant resolution. ADR
 the standalone investing server: that server has no auth and resolves
 `LOCAL_TENANT_ID`.
 
-Plan: `docs/superpowers/specs/2026-11-10-sure-adoption-plan.md` §3
-WS5.1/WS5.2/WS5.3/WS5.4/WS5.6/WS5.7.
+Provenance: `docs/provenance/sure.md`.
 Sure source followed for protocol and registry shape:
 `app/controllers/mcp_controller.rb`, `app/models/assistant/function/*`,
 `function_tool_caller.rb` at pinned commit `562fe09`. Sure's write-capable,
@@ -45,19 +44,19 @@ choose one.
    use. The fallback is disabled whenever `DATABASE_URL` is set, so a stray env
    token cannot bypass revocation.
 3. A missing, unknown, expired, revoked or scope-less token is **401**, never
-   local-tenant data. `/mcp` also ignores the `pnpm dev` escape hatch
+   local-tenant data. `/mcp` also ignores the `bun run dev` escape hatch
    (`LAVEGA_ALLOW_UNAUTHENTICATED`): its guard branch runs before it.
 
 Create a token with the operator script (prints the raw token once):
 
 ```bash
 # read-only token (default)
-DATABASE_URL=... pnpm tsx scripts/mcp-token.ts create --user <better-auth-user-id> --label "cursor"
+DATABASE_URL=... bunx tsx scripts/mcp-token.ts create --user <better-auth-user-id> --label "cursor"
 # separate WRITE token: lists preview_rule/apply_rule and the read tools
-DATABASE_URL=... pnpm tsx scripts/mcp-token.ts create --user <better-auth-user-id> --label "cursor-write" --scopes write
+DATABASE_URL=... bunx tsx scripts/mcp-token.ts create --user <better-auth-user-id> --label "cursor-write" --scopes write
 # list / revoke
-DATABASE_URL=... pnpm tsx scripts/mcp-token.ts list --user <better-auth-user-id>
-DATABASE_URL=... pnpm tsx scripts/mcp-token.ts revoke --id <token-row-id>
+DATABASE_URL=... bunx tsx scripts/mcp-token.ts list --user <better-auth-user-id>
+DATABASE_URL=... bunx tsx scripts/mcp-token.ts revoke --id <token-row-id>
 ```
 
 A write token also carries the read tools: its previews must be described from

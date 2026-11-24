@@ -53,7 +53,10 @@ export default function CardPicker(p: CardPickerProps) {
   const found = matchCards(query, kind).filter((c) => cardVisible(c.id, kind, filter, keep));
   const toggle = (c: string) =>
     p.onChange(p.picked.includes(c) ? p.picked.filter((x) => x !== c) : [...p.picked, c]);
-  const other = { value: OTHER_CARD, label: kind === "debit" ? p.copy.otherDebitCard : p.copy.otherCard };
+  const other = {
+    value: OTHER_CARD,
+    label: kind === "debit" ? p.copy.otherDebitCard : p.copy.otherCard,
+  };
   const toOptions = (cards: readonly { id: string; label: string }[]) =>
     cards.map((o) => ({ value: o.id, label: o.label }));
   const stray = p.picked

@@ -76,10 +76,7 @@ import ModuleGrid from "../components/ModuleGrid";
 import ToonMeer from "../components/ToonMeer";
 import Badge from "../components/ui/Badge.js";
 import { planShellCopy } from "../copy/plan/index.js";
-import {
-  statedHeldRows,
-  type StatedAnswers,
-} from "../plan/optimalisatieStated";
+import { statedHeldRows, type StatedAnswers } from "../plan/optimalisatieStated";
 import CardLink from "../components/ui/CardLink.js";
 import OptimalisatieCardVerdict from "../plan/OptimalisatieCardVerdict.js";
 import SaldoInput from "../components/ui/SaldoInput.js";
@@ -114,7 +111,7 @@ import "../styles/views.css";
  *     is the monthly average and not last month. */
 
 // Where to fetch the public rate benchmark. Set VITE_RATES_URL to your rates
-// service; in dev it defaults to the local Hono server (run `pnpm dev:server`).
+// service; in dev it defaults to the local Hono server (run `bun --filter @lavega/server dev`).
 // Unset in prod => no fetch, offline snapshot. Only public data is requested.
 const RATES_URL: string | undefined =
   import.meta.env.VITE_RATES_URL ??
@@ -168,7 +165,6 @@ type OptimalisatieProps = {
   onSaveStatedCard?: (accountKey: string, cardId: string) => Promise<void>;
   onRateCommit: (key: string, value: string) => void;
 };
-
 
 const euro = (locale: Locale, cents: number) => formatEuroIn(locale, cents / 100);
 const signedEuro = (locale: Locale, cents: number) => formatSignedEuroIn(locale, cents / 100);

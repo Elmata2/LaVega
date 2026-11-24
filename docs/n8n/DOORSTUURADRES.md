@@ -1,7 +1,7 @@
 # Facturen doorsturen naar een eigen adres
 
-Ontwerp: `docs/superpowers/specs/2026-08-17-invoice-forwarding-address-design.md`.
-Dit bestand is de bouw- en instelhandleiding.
+Dit bestand is de bouw- en instelhandleiding. De code-indeling staat in
+`apps/email-worker/README.md`.
 
 Je stuurt een factuurmail door naar een adres van jezelf. Een Cloudflare Email
 Worker neemt hem aan en POST hem naar dezelfde n8n-workflow die Gmail al voedt.
@@ -96,9 +96,9 @@ haalt wrangler per keer op.
 
    ```bash
    cd apps/email-worker
-   pnpm dlx wrangler@4 secret put N8N_WEBHOOK_URL       # plak de Production URL
-   pnpm dlx wrangler@4 secret put N8N_SHARED_SECRET     # plak het geheim
-   pnpm dlx wrangler@4 deploy
+   bunx wrangler@4 secret put N8N_WEBHOOK_URL       # plak de Production URL
+   bunx wrangler@4 secret put N8N_SHARED_SECRET     # plak het geheim
+   bunx wrangler@4 deploy
    ```
 
    De `[[ratelimits]]`-binding `INBOUND_RATE_LIMIT` staat al in
@@ -169,7 +169,7 @@ anders: `normalizeInboundMail` weet welk JSON-veld welk deel van een bericht is.
 Twee normalisaties naast elkaar zouden binnen een maand uit elkaar lopen, en het
 eerste dat je daarvan merkt is een gemiste factuur.
 
-`pnpm run sync:n8n` schrijft die code letterlijk in de nodes;
+`bun run sync:n8n` schrijft die code letterlijk in de nodes;
 `packages/core/src/n8n/codeNodes.test.ts` bouwt hem opnieuw en vergelijkt. Pas je
 de Code in de n8n-UI aan en exporteer je terug, dan valt die test om. Dat is de
 bedoeling.
@@ -289,7 +289,7 @@ Stuur één echte factuurmail met een PDF door en loop dit af.
 1. **De Worker heeft hem gezien.**
 
    ```bash
-   cd apps/email-worker && pnpm dlx wrangler@4 tail
+   cd apps/email-worker && bunx wrangler@4 tail
    ```
 
    Je hoort één regel te zien: `[lavega-email-in] 1 factuur/facturen en 0
@@ -341,8 +341,8 @@ melding(en) toegevoegd voor wachtrij <sleutel>`. Er staat geen adres, geen
 
 Eerlijk opgeschreven, want dit is precies waar dit soort werk misgaat.
 
-**Wél in tests vastgelegd** (`pnpm --filter @lavega/email-worker test`, 85 tests;
-`pnpm --filter @lavega/core test`, 430 tests): het MIME-parsen op vijf echte
+**Wél in tests vastgelegd** (`bun --filter @lavega/email-worker test`, 85 tests;
+`bun --filter @lavega/core test`, 430 tests): het MIME-parsen op vijf echte
 mailvormen, RFC 2047 en RFC 2231 in headers en bestandsnamen, base64 en
 quoted-printable, het negeren van onbetrouwbare authenticatieheaders, het lokale deel van een
 adres, elke bounce-tekst met zijn oorzaak, de terugval van antwoord naar bounce,

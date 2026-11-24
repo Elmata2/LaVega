@@ -9,8 +9,21 @@ const rows = (cardIds: string[], o: Partial<Parameters<typeof detailRows>[0]> = 
 describe("detailRows", () => {
   test("one row per distinct card, prefilled from the stored balance and points", () => {
     const r = rows(["american-express-gold-card", "american-express-gold-card"], {
-      balances: [{ cardId: "american-express-gold-card", balanceCents: 123_400, paysInFull: false, ratePct: 14.9 }],
-      rewards: [makeRewardsBalance({ program: "American Express Membership Rewards", points: 8_000, updatedAt: "2026-10-01" })],
+      balances: [
+        {
+          cardId: "american-express-gold-card",
+          balanceCents: 123_400,
+          paysInFull: false,
+          ratePct: 14.9,
+        },
+      ],
+      rewards: [
+        makeRewardsBalance({
+          program: "American Express Membership Rewards",
+          points: 8_000,
+          updatedAt: "2026-10-01",
+        }),
+      ],
     });
     expect(r).toEqual([
       {
@@ -34,12 +47,24 @@ describe("detailRows", () => {
     expect(paid(null)).toBeNull();
     expect(paid(undefined)).toBeNull();
     const own = [{ cardId: "american-express-gold-card", balanceCents: 0, paysInFull: true }];
-    expect(rows(["american-express-gold-card"], { repayment: "rarely", balances: own })[0]!.paysInFull).toBe(true);
+    expect(
+      rows(["american-express-gold-card"], { repayment: "rarely", balances: own })[0]!.paysInFull,
+    ).toBe(true);
   });
 
   test("points are asked once per programme, not at all for cards without one or when they cannot be saved", () => {
-    const r = rows(["american-express-gold-card", "american-express-green-card", "abn-amro-creditcard", "other"]);
-    expect(r.map((x) => x.programName)).toEqual(["American Express Membership Rewards", null, null, null]);
+    const r = rows([
+      "american-express-gold-card",
+      "american-express-green-card",
+      "abn-amro-creditcard",
+      "other",
+    ]);
+    expect(r.map((x) => x.programName)).toEqual([
+      "American Express Membership Rewards",
+      null,
+      null,
+      null,
+    ]);
     expect(rows(["american-express-gold-card"], { askPoints: false })[0]!.programName).toBeNull();
   });
 });
@@ -56,17 +81,28 @@ describe("rowIssues and collectDetails", () => {
   test("a balance needs the paid-in-full answer; a bad balance, rate or points are flagged", () => {
     expect(rowIssues(state({ balance: "1500" }), true)).toEqual(["pays-in-full"]);
     expect(rowIssues(state({ balance: "abc" }), true)).toEqual(["balance"]);
-    expect(rowIssues(state({ balance: "1500", paysInFull: false, rate: "x" }), true)).toEqual(["rate"]);
+    expect(rowIssues(state({ balance: "1500", paysInFull: false, rate: "x" }), true)).toEqual([
+      "rate",
+    ]);
     expect(rowIssues(state({ points: "12 abc" }), true)).toEqual(["points"]);
     expect(rowIssues(state({ points: "12 abc" }), false)).toEqual([]);
   });
 
   test("a revolving balance stores the rate; paid in full stores none; zero counts as paid in full", () => {
-    const rev = collectDetails([init], [state({ balance: "1.500", paysInFull: false, rate: "14,9", points: "12.500" })]);
-    expect(rev.balances).toEqual([{ cardId: init.cardId, balanceCents: 150_000, paysInFull: false, ratePct: 14.9 }]);
-    expect(rev.points).toEqual([{ program: "American Express Membership Rewards", points: 12_500 }]);
+    const rev = collectDetails(
+      [init],
+      [state({ balance: "1.500", paysInFull: false, rate: "14,9", points: "12.500" })],
+    );
+    expect(rev.balances).toEqual([
+      { cardId: init.cardId, balanceCents: 150_000, paysInFull: false, ratePct: 14.9 },
+    ]);
+    expect(rev.points).toEqual([
+      { program: "American Express Membership Rewards", points: 12_500 },
+    ]);
     const full = collectDetails([init], [state({ balance: "800", paysInFull: true, rate: "9" })]);
-    expect(full.balances).toEqual([{ cardId: init.cardId, balanceCents: 80_000, paysInFull: true }]);
+    expect(full.balances).toEqual([
+      { cardId: init.cardId, balanceCents: 80_000, paysInFull: true },
+    ]);
     const zero = collectDetails([init], [state({ balance: "0" })]);
     expect(zero.balances).toEqual([{ cardId: init.cardId, balanceCents: 0, paysInFull: true }]);
   });
@@ -78,11 +114,15 @@ describe("rowIssues and collectDetails", () => {
 });
 
 describe("applyPoints (S2)", () => {
-  const upsert = (list: ReturnType<typeof makeRewardsBalance>[], b: ReturnType<typeof makeRewardsBalance>) => [
-    ...list.filter((x) => x.id !== b.id),
-    b,
-  ];
-  const old = makeRewardsBalance({ program: "American Express Membership Rewards", points: 5000, updatedAt: "2026-04-01" });
+  const upsert = (
+    list: ReturnType<typeof makeRewardsBalance>[],
+    b: ReturnType<typeof makeRewardsBalance>,
+  ) => [...list.filter((x) => x.id !== b.id), b];
+  const old = makeRewardsBalance({
+    program: "American Express Membership Rewards",
+    points: 5000,
+    updatedAt: "2026-04-01",
+  });
   const pt = (points: number) => [{ program: "American Express Membership Rewards", points }];
 
   test("an unchanged number keeps the row and its date; nothing is saved", () => {

@@ -40,7 +40,8 @@ export function isStale(b: RewardsBalance, asOf: string, maxDays = 90): boolean 
  *  puntenprogramma — gebruik dit voor cashback/acties". Op 21 augustus is dat
  *  weerlegd langs ING's eigen pagemodel-API achter
  *  ing.nl/particulier/ing-punten/zo-spaar-je-ing-punten: de spaartabel staat er
- *  gewoon in, ING Punten bestaan. Zie docs/research/2026-08-20-punten-koersen.md.
+ *  gewoon in, ING Punten bestaan. De broncapture staat in
+ *  `__fixtures__/ing-points-source.md`.
  *
  *  Waarom hij toch weg moest terwijl geen enkel scherm hem afdrukt: een note in
  *  deze lijst is bedoeld om afgedrukt te worden — `programUnit` in de Punten-view

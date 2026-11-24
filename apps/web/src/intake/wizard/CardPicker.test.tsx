@@ -19,7 +19,9 @@ afterEach(() => {
 
 function Harness({ lang = "nl" }: { lang?: "nl" | "en" }) {
   const [picked, setPicked] = useState<string[]>([]);
-  return <CardPicker copy={wizardCopy[lang]} label="Kaarten" picked={picked} onChange={setPicked} />;
+  return (
+    <CardPicker copy={wizardCopy[lang]} label="Kaarten" picked={picked} onChange={setPicked} />
+  );
 }
 function mount(lang: "nl" | "en" = "nl") {
   el = document.createElement("div");
@@ -28,7 +30,8 @@ function mount(lang: "nl" | "en" = "nl") {
   act(() => root!.render(<Harness lang={lang} />));
   return el;
 }
-const boxes = () => [...el!.querySelectorAll<HTMLElement>('[role="checkbox"]')].map((b) => b.textContent);
+const boxes = () =>
+  [...el!.querySelectorAll<HTMLElement>('[role="checkbox"]')].map((b) => b.textContent);
 const brand = (re: RegExp) =>
   [...el!.querySelectorAll<HTMLButtonElement>("button[aria-expanded]")].find((b) =>
     re.test(b.textContent ?? ""),

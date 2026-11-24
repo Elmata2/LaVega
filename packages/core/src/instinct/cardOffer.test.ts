@@ -8,14 +8,16 @@ const best = (name: string): CardOption => ({ cardId: "c-best", name }) as unkno
 const plan = (advice: Partial<CardAdvice>): PlanResult =>
   ({
     sections: {
-      cards: { figures: { advice: {
-          basis: "history",
-          ignoresInterest: false,
-          baseline: { kind: "best-held", cardId: "c-held", name: "Mijn kaart", netCents: 0 },
-          ...advice,
+      cards: {
+        figures: {
+          advice: {
+            basis: "history",
+            ignoresInterest: false,
+            baseline: { kind: "best-held", cardId: "c-held", name: "Mijn kaart", netCents: 0 },
+            ...advice,
+          },
         },
       },
-    },
     },
   }) as unknown as PlanResult;
 

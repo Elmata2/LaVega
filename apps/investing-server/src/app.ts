@@ -636,7 +636,7 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
           currentSymbol: price.currentSymbol,
           remainingSymbols: price.remainingSymbols ?? [],
         },
-        problems: [...brokerProblems(await brokerProgress()), ...(price.problems ?? [])],
+        problems: [...(price.problems ?? [])],
       };
     },
     continueRun:
@@ -667,7 +667,6 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
         problems: [message, ...(error instanceof Error ? [error.message] : [])],
       }),
   });
-  const brokerProblems = (_progress: { message?: string | null }) => [];
   const visiblePriceProgress = (progress: PriceSyncProgress): PriceSyncProgress => {
     const visible = { ...progress };
     delete visible.leaseId;
@@ -1226,7 +1225,13 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
 
   const bearerIsCron = (c: { req: { header: (name: string) => string | undefined } }) => {
     const secret = process.env.CRON_SECRET?.trim();
-    return secret !== undefined && c.req.header("authorization") === `Bearer ${secret}`;
+    if (!secret) return false;
+    const given = new TextEncoder().encode(c.req.header("authorization") ?? "");
+    const expected = new TextEncoder().encode(`Bearer ${secret}`);
+    const len = Math.max(given.length, expected.length);
+    let diff = given.length ^ expected.length;
+    for (let i = 0; i < len; i++) diff |= (given[i] ?? 0) ^ (expected[i] ?? 0);
+    return diff === 0;
   };
   const validContinueBody = (
     body: unknown,

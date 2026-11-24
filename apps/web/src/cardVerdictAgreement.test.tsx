@@ -230,7 +230,11 @@ const CASES: Case[] = [
   },
   {
     name: "a first card: no card held, a switch, no unprompted offer",
-    input: inputOf([account("CUR", { name: "Betaalrekening" })], spendOn("CUR", FULL_YEAR, 5000), storeWith({})),
+    input: inputOf(
+      [account("CUR", { name: "Betaalrekening" })],
+      spendOn("CUR", FULL_YEAR, 5000),
+      storeWith({}),
+    ),
     kind: "switch",
     card: "American Express Green Card",
     euro: "102",
@@ -300,7 +304,7 @@ const shownOn = (c: HTMLElement): Shown => ({
     q(c, "plan-card-verdict") !== null &&
     Boolean(
       q(c, "plan-card-interest")!.compareDocumentPosition(q(c, "plan-card-verdict")!) &
-        Node.DOCUMENT_POSITION_FOLLOWING,
+      Node.DOCUMENT_POSITION_FOLLOWING,
     ),
 });
 

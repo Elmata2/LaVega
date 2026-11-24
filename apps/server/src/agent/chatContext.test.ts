@@ -205,7 +205,9 @@ test("server drops unknown profile keys and non-enum values", () => {
 
 test("a free-text value in priorities is dropped on the server", () => {
   const out = sanitizeChatContext("forecast", {
-    profile: { priorities: ["save-more", "ik wil sparen voor NL91ABNA0417164300", "mijn partner heet Jan"] },
+    profile: {
+      priorities: ["save-more", "ik wil sparen voor NL91ABNA0417164300", "mijn partner heet Jan"],
+    },
   });
   expect((out.profile as { priorities: string[] }).priorities).toEqual(["save-more"]);
 });
@@ -254,23 +256,35 @@ test("every enum literal survives the server scrub byte-identical", () => {
   const out = sanitizeChatContext("overview", { profile: all });
   expect(JSON.stringify(out.profile)).toBe(JSON.stringify(all));
   for (const c of ["daily", "weekly"])
-    expect(sanitizeChatContext("overview", { profile: { checkInCadence: c } }).profile).toMatchObject({
+    expect(
+      sanitizeChatContext("overview", { profile: { checkInCadence: c } }).profile,
+    ).toMatchObject({
       checkInCadence: c,
     });
   for (const v of ["rarely", "full"])
-    expect(sanitizeChatContext("overview", { profile: { cardRepayment: v } }).profile).toMatchObject({
+    expect(
+      sanitizeChatContext("overview", { profile: { cardRepayment: v } }).profile,
+    ).toMatchObject({
       cardRepayment: v,
     });
 });
 
 test("an empty or fully invalid profile is omitted", () => {
   expect(sanitizeChatContext("overview", { profile: {} })).toEqual({});
-  expect(sanitizeChatContext("overview", { profile: { priorities: ["x"], confidence: 9 } })).toEqual({});
+  expect(
+    sanitizeChatContext("overview", { profile: { priorities: ["x"], confidence: 9 } }),
+  ).toEqual({});
 });
 
 test.each([
-  ["proto keys", JSON.parse('{"__proto__":{"a":1},"constructor":{"b":2},"priorities":["save-more"]}')],
-  ["huge array", { priorities: Array.from({ length: 100_000 }, (_, i) => (i % 2 ? "save-more" : `x${i}`)) }],
+  [
+    "proto keys",
+    JSON.parse('{"__proto__":{"a":1},"constructor":{"b":2},"priorities":["save-more"]}'),
+  ],
+  [
+    "huge array",
+    { priorities: Array.from({ length: 100_000 }, (_, i) => (i % 2 ? "save-more" : `x${i}`)) },
+  ],
   ["string confidence", { confidence: "3", priorities: ["save-more"] }],
   ["NaN confidence", { confidence: NaN, priorities: ["save-more"] }],
   ["confidence 9", { confidence: 9, priorities: ["save-more"] }],
@@ -287,7 +301,18 @@ test.each([
     expect(p.confidence ?? null).toBeNull();
     expect(p.household ?? null).toBeNull();
     expect(Object.keys(p).sort()).toEqual(
-      ["priorities","cutTargets","checkInCadence","confidence","household","moneySharing","incomeRegularity","spendMix","cardRepayment","pointsGoal"].sort(),
+      [
+        "priorities",
+        "cutTargets",
+        "checkInCadence",
+        "confidence",
+        "household",
+        "moneySharing",
+        "incomeRegularity",
+        "spendMix",
+        "cardRepayment",
+        "pointsGoal",
+      ].sort(),
     );
   }
 });

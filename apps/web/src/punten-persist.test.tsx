@@ -79,7 +79,7 @@ const pointsField = () =>
 /** The form's own save button, whatever it currently calls itself. */
 const saveButton = () =>
   container!.querySelector<HTMLButtonElement>(
-    '[data-testid="stack-form-actions"] [data-testid="btn-primary"]',
+    '[data-testid="stack-form-actions"] button',
   )!;
 const formNote = () =>
   container!.querySelector('[data-testid="punt-overwrite"]')?.textContent ?? "";

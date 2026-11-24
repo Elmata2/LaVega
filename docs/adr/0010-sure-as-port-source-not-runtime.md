@@ -2,9 +2,9 @@
 
 ## Status
 
-Accepted 2026-11-10 (owner approved the adoption plan and decisions). Applies to the
+Accepted 2026-11-10 (owner approved the Sure port decisions). Applies to the
 personal and investing sides. Companion:
-[`docs/superpowers/specs/2026-11-10-sure-adoption-plan.md`](../superpowers/specs/2026-11-10-sure-adoption-plan.md).
+[`docs/provenance/sure.md`](../provenance/sure.md).
 
 ## Context
 
@@ -30,7 +30,7 @@ The teardown (`docs/research/2026-11-10-sure-teardown.md`) established that:
    personal-vault promise, and add a second Postgres/Redis/Sidekiq stack with no Dutch model.
 4. LaVega's existing return/risk stack must not be replaced by Sure's weaker one.
 
-Sorting requires a decision on *how* Sure is used, not only *what* is taken.
+Sorting requires a decision on _how_ Sure is used, not only _what_ is taken.
 
 ## Decision
 
@@ -41,13 +41,13 @@ Use Sure as a **design and algorithm source**, through independent reimplementat
 2. **Port selected logic to TypeScript/Effect**, from the pinned commit
    `562fe096d149cb4d1fb1e6d3446527572c1ec7f6`, using the Ruby code and its behavioural tests
    as the specification. Say "independent reimplementation", not "clean-room": the method
-   reads the Ruby. Port order and scope are in the adoption plan.
+   reads the Ruby. Port order and scope live in `docs/BACKLOG.md` and GitHub issues.
 3. **Adopt concepts** where the code is Rails-bound: transfer state machine, bill
    occurrence identity, budget carry semantics, statement coverage/review, agent tool
    contract, provenance citation grammar.
 4. **Attribute every port.** Each derived module carries a header naming Sure, the commit,
    AGPL-3.0, "independently reimplemented for LaVega" and the change date. The root `NOTICE`
-   entry lands in Phase 0, before the first module ships; the plan's provenance ledger records
+   entry lands in Phase 0, before the first module ships; the provenance ledger records
    each reuse. No verbatim source copy into first-party modules; no widening of the MIT-only
    vendor policy. Text adapted from the MIT-licensed wealth blueprint carries its own
    attribution.
@@ -81,13 +81,13 @@ Negative / accepted costs:
 
 ## Alternatives rejected
 
-| Alternative | Why rejected |
-|---|---|
-| Run Sure as a local sidecar and integrate | Second runtime and source of truth; breaks the encrypted-vault promise; no Dutch tax/catalogue/invoice model; duplicates auth, backup and erasure. |
-| Fork Sure as the personal app | Rewrites the product away from LaVega's privacy, Dutch and design constraints; abandons the existing forecast/investing work. |
-| Copy Ruby verbatim into a `vendor/` tree | Nothing runs it; adds a dead dependency and a large AGPL surface without portability benefit. |
-| Wait for Sure upstream to expose an API and use it remotely | Violates local-first/privacy, requires hosting credentials and personal data off-machine. |
-| Take nothing | Leaves the highest-value personal gaps (transfers, bills, budgets, evidence) and the agent contract unaddressed. |
+| Alternative                                                 | Why rejected                                                                                                                                       |
+| ----------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Run Sure as a local sidecar and integrate                   | Second runtime and source of truth; breaks the encrypted-vault promise; no Dutch tax/catalogue/invoice model; duplicates auth, backup and erasure. |
+| Fork Sure as the personal app                               | Rewrites the product away from LaVega's privacy, Dutch and design constraints; abandons the existing forecast/investing work.                      |
+| Copy Ruby verbatim into a `vendor/` tree                    | Nothing runs it; adds a dead dependency and a large AGPL surface without portability benefit.                                                      |
+| Wait for Sure upstream to expose an API and use it remotely | Violates local-first/privacy, requires hosting credentials and personal data off-machine.                                                          |
+| Take nothing                                                | Leaves the highest-value personal gaps (transfers, bills, budgets, evidence) and the agent contract unaddressed.                                   |
 
 ## Follow-ups
 
@@ -95,7 +95,7 @@ Negative / accepted costs:
 2. ADR 0012 — MCP mount, bearer-token authentication and tenant resolution (Phase 0).
 3. Phase 0 attribution scaffolding: `NOTICE`, reference script, provenance ledger, scrub rules,
    metric baselines.
-4. Owner decisions listed in the adoption plan §9 (personal shipping, old data export,
+4. Owner decisions recorded in `docs/BACKLOG.md` (personal shipping, old data export,
    server-readable boundary, budget shape, investing priority, rules scope, issue filing).
 5. Revisit if Sure changes licence, adds a stable documented API that fits local-first, or
    if LaVega's architecture moves to a server-readable personal store (new ADR required).

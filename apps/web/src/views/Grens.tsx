@@ -30,8 +30,8 @@ import { Table, TableWrap, Th, Td } from "../components/ui/Table.js";
  *
  * De meting staat in packages/core/src/crossScope.ts en dit bestand voegt er
  * geen enkel getal aan toe. Wat hier gebeurt is het andere half van het
- * ontwerp: van een meting een ZIN maken die de drie toetsen van sectie 7 van
- * docs/superpowers/specs/2026-08-20-belastingoptimalisatie-design.md doorstaat.
+ * ontwerp: van een meting een ZIN maken die de drie toetsen van de
+ * belastingcopy-grens doorstaat.
  *
  *  · HERKOMST — elk bedrag noemt waar het vandaan komt. Bij een gekoppelde
  *    overboeking zijn dat twee transacties, en die staan er allebei bij: het

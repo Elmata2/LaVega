@@ -389,8 +389,8 @@ export default function Transacties({
           : r.followers > 0
             ? c.transacties.categorieGezetVolgen(r.followers, who)
             : r.rulesAdded > 0
-            ? c.transacties.categorieGezetOnthouden(who)
-            : c.transacties.categorieGezetPlain,
+              ? c.transacties.categorieGezetOnthouden(who)
+              : c.transacties.categorieGezetPlain,
       });
     } catch (e) {
       setPickNote({
@@ -563,7 +563,9 @@ export default function Transacties({
               <div className="cell-sub">{pick(locale, "Onbekend", "Uncategorised")}</div>
               <strong style={{ fontVariantNumeric: "tabular-nums" }}>
                 {unknown.count} {c.rekeningen.transactieWoord(unknown.count)} ·{" "}
-                <span className={`whitespace-nowrap ${unknown.amount >= 0 ? "text-pos" : "text-neg"}`}>
+                <span
+                  className={`whitespace-nowrap ${unknown.amount >= 0 ? "text-pos" : "text-neg"}`}
+                >
                   {formatSignedEuroIn(locale, unknown.amount)}
                 </span>
               </strong>
@@ -660,7 +662,9 @@ export default function Transacties({
                     <Td data-label={c.transacties.tegenpartij}>{p.tx.counterparty}</Td>
                     <Td data-label={c.transacties.omschrijving}>{p.tx.description}</Td>
                     <Td data-label={c.transacties.bedrag}>
-                      <span className={`whitespace-nowrap ${p.tx.amount >= 0 ? "text-pos" : "text-neg"}`}>
+                      <span
+                        className={`whitespace-nowrap ${p.tx.amount >= 0 ? "text-pos" : "text-neg"}`}
+                      >
                         {formatSignedEuroIn(locale, p.tx.amount)}
                       </span>
                     </Td>
@@ -874,7 +878,9 @@ export default function Transacties({
                     {t.bank} · {t.accountKey}
                   </Td>
                   <Td data-label={c.transacties.tableBedrag}>
-                    <span className={`whitespace-nowrap ${t.amount >= 0 ? "text-pos" : "text-neg"}`}>
+                    <span
+                      className={`whitespace-nowrap ${t.amount >= 0 ? "text-pos" : "text-neg"}`}
+                    >
                       {isEurCurrency(t.currency)
                         ? formatSignedEuroIn(locale, t.amount)
                         : formatSignedCurrencyIn(locale, t.amount, t.currency)}

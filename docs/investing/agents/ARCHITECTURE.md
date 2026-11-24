@@ -2,7 +2,7 @@
 
 > **Status: Work in progress.** A ground-up rebuild of the engine, developed
 > alongside the shipped v1 app (`src/`, `app/`) but not yet wired into it.
-> See [`../VISION.md`](../VISION.md) and [`../ROADMAP.md`](../ROADMAP.md) for
+> See [`VISION.md`](VISION.md) and [`ROADMAP.md`](ROADMAP.md) for
 > where this is headed.
 
 v2 rebuilds the fund as a persistent, point-in-time-honest system, mirroring a
@@ -116,4 +116,4 @@ Two high-leverage contributions:
 - **A new strategy** (no code): drop a YAML in `strategies/` bundling existing
   models with a blend policy — the fund builder picks it up automatically.
 
-See [`../ROADMAP.md`](../ROADMAP.md) for the open list.
+See [`ROADMAP.md`](ROADMAP.md) for the open list.

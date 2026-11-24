@@ -1,10 +1,5 @@
 import { describe, expect, test } from "vitest";
-import {
-  AdvisorProfile,
-  capacityFor,
-  emptyProfile,
-  type RoomResult,
-} from "@lavega/core";
+import { AdvisorProfile, capacityFor, emptyProfile, type RoomResult } from "@lavega/core";
 import {
   addUserDebt,
   removeUserDebt,
@@ -142,7 +137,11 @@ describe("card balances", () => {
     expect(p.cardBalances).toBeUndefined();
   });
   test("changing the stated cards drops balances of cards that are gone", () => {
-    const base = applyCardBalances(applyStatedCards(emptyProfile(), ["gold", "other"], AT), rows, AT);
+    const base = applyCardBalances(
+      applyStatedCards(emptyProfile(), ["gold", "other"], AT),
+      rows,
+      AT,
+    );
     const next = applyStatedCards(base, ["gold"], AT);
     expect(next.cardBalances?.value).toEqual([rows[0]]);
     expect(applyStatedCards(base, ["x"], AT).cardBalances).toBeUndefined();
@@ -160,7 +159,7 @@ describe("card balances", () => {
   });
 });
 
-const stated = <T,>(value: T) => ({ value, source: "stated", at: AS_OF });
+const stated = <T>(value: T) => ({ value, source: "stated", at: AS_OF });
 const base = emptyProfile();
 
 test("personalisation writers store a stated field", () => {
@@ -198,13 +197,21 @@ test("applySpendMix keeps the first three", () => {
 });
 
 test("switching to alone drops moneySharing", () => {
-  const sharing = applyMoneySharing(applyHousehold(base, { kind: "together" }, AS_OF), "shared", AS_OF);
+  const sharing = applyMoneySharing(
+    applyHousehold(base, { kind: "together" }, AS_OF),
+    "shared",
+    AS_OF,
+  );
   const alone = applyHousehold(sharing, { kind: "alone" }, AS_OF);
   expect(alone.household?.value).toEqual({ kind: "alone" });
 });
 
 test("together again keeps the money-sharing answer", () => {
-  const sharing = applyMoneySharing(applyHousehold(base, { kind: "together" }, AS_OF), "mixed", AS_OF);
+  const sharing = applyMoneySharing(
+    applyHousehold(base, { kind: "together" }, AS_OF),
+    "mixed",
+    AS_OF,
+  );
   const again = applyHousehold(sharing, { kind: "together", partnerIncomeInScope: true }, AS_OF);
   expect(again.household?.value).toEqual({
     kind: "together",

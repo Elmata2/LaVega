@@ -1,0 +1,14 @@
+import type { InputHTMLAttributes } from "react";
+import { cn } from "./utils.js";
+
+export function Input({ className, ...props }: InputHTMLAttributes<HTMLInputElement>) {
+  return (
+    <input
+      className={cn(
+        "block w-full rounded-tile border border-input bg-background px-3 py-2.5 text-sm font-normal",
+        className,
+      )}
+      {...props}
+    />
+  );
+}

@@ -1,7 +1,7 @@
 import { afterEach, expect, test, vi } from "vitest";
 import { priceInstrumentKey } from "@lavega/core";
 import type { PriceCoverage, SharedPriceBar, SharedPriceStore } from "@lavega/adapters";
-import { createImmediatePartnerBudget } from "@lavega/adapters/src/partnerBudget/fakes.js";
+import { createImmediatePartnerBudget } from "@lavega/adapters/partnerBudget/fakes";
 import { PartnerBudgetUnavailable, PartnerWait } from "@lavega/adapters";
 import { DateTime } from "effect";
 import { app, createApp as createPacedApp } from "./app.js";

@@ -1,19 +1,16 @@
 # LaVega
 
-LaVega — local-first personal finance agent. See `docs/CONTEXT.md`.
+LaVega — local-first personal finance agent. Start with [`docs/README.md`](docs/README.md).
 
 Production deployment and the `lavega.dev` Cloudflare connection are documented
 in [DEPLOY.md](DEPLOY.md).
 
-Self-hosted investing Docker deployment is documented in
-[docs/investing/DOCKER.md](docs/investing/DOCKER.md).
-
 ## Getting started
 
 ```bash
-pnpm install
-pnpm test
-pnpm dev
+bun install
+bun run test
+bun run dev
 ```
 
 ## Credits

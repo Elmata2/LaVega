@@ -5,7 +5,7 @@
 
 import type { ManualCostBasis, Position, Trade } from "./model.js";
 import { fromCents, toCents } from "../money.js";
-import { convertCurrency, MissingFxRateError, type FxRates } from "./portfolio.js";
+import { convertCurrency, isFxConversionError, type FxRates } from "./portfolio.js";
 import { orderTrades } from "./quantity.js";
 
 /* Cost-basis lot book and basis provenance (plan §3 WS4.1 + WS4.2, #295).
@@ -300,10 +300,9 @@ export function replayCostBasis(input: {
         input.fxRates,
       );
     } catch (error) {
-      if (error instanceof MissingFxRateError)
+      if (isFxConversionError(error))
         return { status: "unknown", reason: "missing-fx", firstBuyDate };
-      // An unknown currency is still an unconvertible leg; never guess 1:1.
-      return { status: "unknown", reason: "missing-fx", firstBuyDate };
+      throw error;
     }
 
     if (trade.side === "buy") {
@@ -386,8 +385,9 @@ function convertLegs(
         sum + convertCurrency(leg.amount, leg.currency, presentationCurrency, leg.date, fxRates),
       0,
     );
-  } catch {
-    return null;
+  } catch (error) {
+    if (isFxConversionError(error)) return null;
+    throw error;
   }
 }
 

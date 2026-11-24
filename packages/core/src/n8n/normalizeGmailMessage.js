@@ -1,7 +1,7 @@
 /* Normaliseer één bericht uit de Gmail-node tot één vorm.
  *
  * DIT BESTAND DRAAIT OP TWEE PLEKKEN. Het is de bron van de Code-node
- * "Normaliseer bericht" in docs/n8n/lavega-invoices.json: `pnpm run sync:n8n`
+ * "Normaliseer bericht" in docs/n8n/lavega-invoices.json: `bun run sync:n8n`
  * kopieert de tekst hieronder letterlijk die node in. Daarom staat er geen
  * TypeScript-syntax in — types staan in JSDoc, en die overleeft de kopie.
  *

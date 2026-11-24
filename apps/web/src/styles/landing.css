@@ -1,7 +1,6 @@
-/* LaVega public landing page. Ported from the approved mockup
- * (docs/superpowers/specs/2026-11-02-website-redesign-mockup.html): midnight
- * palette, Instrument Serif headlines over Geist, the cantaloupe gradient
- * only in the hero and the closing call to action.
+/* LaVega public landing page: midnight palette, Instrument Serif headlines
+ * over Geist, the cantaloupe gradient only in the hero and the closing call to
+ * action.
  *
  * Every page rule is scoped under `.lp` so it never reaches the app, and sits
  * in `@layer components` like base.css. The sign-in dialog block at the bottom
@@ -19,6 +18,14 @@
   html:has(.lp) {
     background: #02070a;
     scroll-padding-top: 96px;
+    /* Anchor jumps travel the long page instead of teleporting; reduced motion
+     * turns this back into an instant jump below. */
+    scroll-behavior: smooth;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    html:has(.lp) {
+      scroll-behavior: auto;
+    }
   }
   body.lp-scroll {
     background: #02070a;

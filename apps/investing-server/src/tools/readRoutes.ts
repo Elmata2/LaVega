@@ -95,10 +95,7 @@ export function attachMcpReadRoutes<T extends Hono>(app: T, deps: McpReadRouteDe
     const symbol = normalizeSymbol(c.req.param("symbol"));
     if (!symbol) return c.json({ problems: ["symbol must be a ticker, for example AAPL"] }, 400);
     if (!(await deps.consent()))
-      return c.json(
-        { consentRequired: true, problems: ["Yahoo Finance consent required"] },
-        428,
-      );
+      return c.json({ consentRequired: true, problems: ["Yahoo Finance consent required"] }, 428);
     const context = await deps.context();
     try {
       const fundamentals = await context.fundamentals.fetch(symbol);
@@ -106,11 +103,10 @@ export function attachMcpReadRoutes<T extends Hono>(app: T, deps: McpReadRouteDe
         return c.json({
           symbol,
           brief: null,
-          problems: [
-            "No company fundamentals: a fund, or a symbol the provider does not know.",
-          ],
+          problems: ["No company fundamentals: a fund, or a symbol the provider does not know."],
         });
-      return c.json({ symbol, brief: renderFundamentalsBrief(fundamentals) });    } catch {
+      return c.json({ symbol, brief: renderFundamentalsBrief(fundamentals) });
+    } catch {
       return c.json({ problems: ["Fundamentals are unavailable right now"] }, 502);
     }
   });

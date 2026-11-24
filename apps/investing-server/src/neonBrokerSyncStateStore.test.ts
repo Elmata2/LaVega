@@ -8,7 +8,7 @@ import { singleConnectionDatabase } from "@lavega/database/testing";
 import {
   brokerSyncCommitContract,
   brokerSyncLeaseContract,
-} from "@lavega/adapters/src/brokers/brokerSyncLease.contract.js";
+} from "@lavega/adapters/brokers/brokerSyncLease.contract";
 import { createNeonBrokerSyncStateStore } from "./neonStores.js";
 
 /* The broker lease answered the same way on Neon as on the file and memory

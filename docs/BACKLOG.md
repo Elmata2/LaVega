@@ -1,8 +1,8 @@
 # LaVega — backlog
 
-Bijgewerkt **22 september 2026** (§0c). De rest dateert van **25 augustus 2026**. Basis: de drie app-reviews van 20 augustus
-(`docs/reviews/2026-08-20-app-review.md`, `-2.md`, `-3.md`), plus §0b hieronder voor wat er op
-24–25 augustus bij is gekomen en gesloten.
+Bijgewerkt **22 september 2026** (§0c). De rest dateert van **25 augustus 2026**. Basis: de
+app-reviews van 20 augustus, plus §0b hieronder voor wat er op 24–25 augustus bij is gekomen en
+gesloten.
 
 **Gegroepeerd op wat een punt blokkeert**, niet op wanneer het is opgeschreven. Bij elk open punt
 staat waarom het open staat. Staat die reden er niet bij, dan hoort het punt hier niet.
@@ -24,7 +24,7 @@ je moet kijken voordat je eraan zit:
   NDJSON en CSV; het scherm Back-up leest het bestand na en zegt pas dan dat het klopt. De
   versleutelde `.lavega`-back-up blijft het herstelbestand; er is geen importeur en er wordt geen
   dedupe over formaten beloofd (ADR 0013).
-- **Attributie**: `pnpm run check:attribution` controleert in beide richtingen dat elk geport
+- **Attributie**: `bun run check:attribution` controleert in beide richtingen dat elk geport
   bestand een Sure-header, een Appendix A-rij en `NOTICE`-dekking heeft. Nu: 42 bestanden,
   23 rijen.
 - **Metrieken**: `docs/metrics/2026-11-11-sure-program-metrics.md` met gemeten aggregaten op
@@ -68,8 +68,8 @@ teruggezien, staat eronder.
 | R3-9                                         | Profiel opgeschoond: de n8n-opzethulp weg, het paar dat Facturen nodig heeft blijft                                                                                                                                                                 | `dc06b59`                                                                     |
 | R3-10                                        | Nul ondernemingen is geen openstaande vraag — dan is het één zzp'er en gaat de factuur gewoon in het overzicht                                                                                                                                      | `a6e7d7b`                                                                     |
 | R3-11                                        | Regels alfabetisch, op een kopie gesorteerd zodat de winnende regel niet stilletjes verandert                                                                                                                                                       | in `Regels.tsx`                                                               |
-| R1-19, R3-13                                 | Implementatieplan voor de extensie                                                                                                                                                                                                                  | `docs/superpowers/specs/2026-08-20-checkout-extension-implementation-plan.md` |
-| R3-14, R3-15                                 | De laatste kaarten zonder FX-cijfer en de ING-puntendata — gevonden, nog niet samengevoegd (§2.1)                                                                                                                                                   | `docs/superpowers/specs/2026-08-20-catalog-fx-gaps-and-ing-punten-data.md`    |
+| R1-19, R3-13                                 | Implementatieplan voor de extensie                                                                                                                                                                                                                  | `apps/extension`                                                              |
+| R3-14, R3-15                                 | De laatste kaarten zonder FX-cijfer en de ING-puntendata — gevonden, nog niet samengevoegd (§2.1)                                                                                                                                                   | `docs/catalog/`                                                               |
 | B7 (oude backlog)                            | `category-trend.ts` met zijn zeven misleidend groene tests is weg; de dode `rules`-tak is weg en er staat nu bij waarom `koppelingen` en `backup` géén dode takken zijn; `saveScheduledFlows` merget, dus Belasting kan een gescopete lijst krijgen | diverse                                                                       |
 | B6 (oude backlog)                            | Trendlijnen: de groeigrafiek en het weekdagpatroon staan er, en die vond hij goed                                                                                                                                                                   | `53c4ebc`                                                                     |
 
@@ -99,7 +99,7 @@ achter de werkelijkheid aan en zijn hieronder bijgewerkt.
 | §2.3, `ing-betaalpas`-datum                                                                                          | **Bevestigd correct.** Het ING-kostenoverzicht zelf zegt "geldig vanaf 15 juni 2026" — precies de `checkedAt` die er al stond. Staat nog op `route: "agent"` in plaats van `provider-pdf`, wat een onderwaardering is en geen fout in het cijfer                                                                                                                                                                                                                                                                                                                                                                          |
 | Extensie: `bepaalClaim` gaf altijd een caveat bij een niet-lege voorwaardentekst, dus basis "netto" was onbereikbaar | **Gerepareerd.** Herkomstnotitie en beperking worden nu onderscheiden; bij twijfel blijft het een beperking. Gemeten: 0 netto-rijen op de echte bundel, in EUR en USD — de tak leeft maar is op de data van vandaag onbereikbaar                                                                                                                                                                                                                                                                                                                                                                                          |
 | Extensie: ING Winkel las nul artikelen                                                                               | **Twee fouten, allebei gemeten door de eigenaar.** Het adres stond op `www.ing.nl/punten`, hij zat op `mijn.ing.nl/punten/overview` — de voorwaarden van ING noemden de ingang, niet de pagina. En de kaarten staan in open shadow roots; `collectIngWinkel` piercet ze nu, met plafonds tegen een pathologische pagina. Sluitende roots en iframes geven bewust een eerlijke "kan hier niet in kijken"-zin in plaats van een gok                                                                                                                                                                                         |
-| `docs/n8n/2026-08-24-workflow-diagnose.md`: de wachtrij-leegmaker zat op het mailpad                                 | **Gecorrigeerde workflow klaar** (`docs/n8n/lavega-facturen-workflow.json`) plus een permanente structuurwacht (49 tests). **Nog niet geïmporteerd in n8n — wacht op de cofounder die de Cloudflare-kant aanpast.** Zie §4.3                                                                                                                                                                                                                                                                                                                                                                                              |
+| De workflowdiagnose: de wachtrij-leegmaker zat op het mailpad                                                        | **Gecorrigeerde workflow klaar** (`docs/n8n/lavega-facturen-workflow.json`) plus een permanente structuurwacht (49 tests). **Nog niet geïmporteerd in n8n — wacht op de cofounder die de Cloudflare-kant aanpast.** Zie §4.3                                                                                                                                                                                                                                                                                                                                                                                              |
 | `/investing/` laadde een blanco pagina                                                                               | **Root cause was Turbo, niet Vite:** `envMode: "strict"` filterde `INVESTING_WEB_BASE` uit de tweede, overschrijvende build. Hernoemd naar `VITE_INVESTING_BASE` (Turbo laat `VITE_*` automatisch door), dubbele build eruit, een build-poort die het image laat falen als de base terugvalt. **Live bevestigd na deploy:** `/investing/assets/…` geeft 200 text/javascript, het oude pad geeft nu 404 in plaats van stil 200 HTML                                                                                                                                                                                        |
 | Belastingspec van 20 augustus, Richting A                                                                            | **Was al gebouwd** — `vatPosition` (tax.ts) draagt stage/basis/coverage/rulesAsOf, het lopende kwartaal geeft `status: "expected"`, een teruggave wordt zichtbaar. Niets aan te sluiten                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | Belastingspec, Richting B                                                                                            | **Gebouwd** (`packages/core/src/crossScope.ts`, module "Privé en zakelijk" op Belasting). Meet oversteken BV↔Privé zonder oordeel — alleen een vraag per stroom. Signaal 1 (gebruikelijkloon) bewust niet gebouwd, geen loonadministratie; signaal 2 (box-2) bewust niet gebouwd, "closest thing to advice"; geen boekhouder-export, hij zei nee. **Nog niet gepusht** — lokaal gecommit, wacht op: rekeningen samenvoegen vóór hij de cijfers leest (een dubbel geïmporteerde rekening verdubbelt elke oversteek erop), en de verbogen vormen in de woordwacht (`besparen`, `adviseren`, `moet je` komen er nu doorheen) |
@@ -276,11 +276,10 @@ nog tussen zit, met per punt de reden dat het er nog is.
 
 Twee losse dingen, en het tweede is groter dan het eerste.
 
-**a) Investing als tweede Railway-service.** `Dockerfile.investing` bestaat en is beschreven in
-`docs/investing/DOCKER.md`: één container die de dashboard en de API serveert op poort 8788, met
-`/data` als volume voor de prijs-cache en de versleutelde brokerkluis. `railway.json` bouwt vandaag
-alleen de gewone `Dockerfile`. Wat er moet gebeuren: een tweede service die op
-`Dockerfile.investing` bouwt, en daarna `VITE_INVESTING_URL` op de web-build zetten. Tot dat er
+**a) Investing als tweede Railway-service.** De repo heeft geen aparte investing-container;
+`railway.json` bouwt vandaag de gewone all-in-one service (zie `DEPLOY.md`). Een tweede service
+moet de dashboard en de API op poort 8788 serveren, met `/data` als volume voor de prijs-cache en
+de versleutelde brokerkluis. Daarna moet `VITE_INVESTING_URL` op de web-build staan. Tot dat er
 staat, verbergt `investing.ts` de link — bewust, want _"a link that refuses to connect is worse than
 no link"_ — en ziet hij de app dus niet in de navigatie.
 
@@ -320,7 +319,7 @@ Het doorstuuradres was het eerste blokkade en is opgelost: `ale@invoices.lavega.
 eigenaar draait het zelf (§6, "Beantwoord op 23 augustus"). Dat maakte de mailketen end-to-end
 testbaar — en die test vond een ERNSTIGER probleem terug dan de oude CORS-preflight.
 
-**De diagnose van 24 augustus** (`docs/n8n/2026-08-24-workflow-diagnose.md`): de webhook die de
+**De diagnose van 24 augustus**: de webhook die de
 wachtrij ophaalt staat op GET, LaVega's eigen `n8n.ts` doet ook GET — dat matcht — maar de node die
 de wachtrij LEEGT zit op het MAILPAD, niet achter de ophaalkant. Zodra een factuur wordt
 doorgestuurd, leegt hij de hele wachtrij voordat de app hem heeft opgehaald. n8n antwoordt daarbij
@@ -349,8 +348,7 @@ afwezigheid draagt die conclusie niet. Elk punt hieronder noemt de route die dic
 nieuwe route herkenbaar is als hij zich voordoet.
 
 En één waarschuwing bij alle vier: op dezelfde dag gaf `r.jina.ai` in de ene ronde HTTP 403 met een
-Cloudflare-challenge (`docs/research/2026-08-20-rekeningkosten.md`) en in de andere gewoon de pagina
-(`docs/research/2026-08-20-punten-koersen.md`). "Onbereikbaar" is hier dus een waarneming van een
+Cloudflare-challenge en in de andere gewoon de pagina. "Onbereikbaar" is hier dus een waarneming van een
 moment, geen eigenschap van de bron.
 
 ### 5.1 De euro-waarde van een ING-punt
@@ -557,8 +555,7 @@ verwijzen.
 
 ### 7.1 De houding van de extensie
 
-Het extensieplan (`docs/superpowers/specs/2026-08-20-checkout-extension-implementation-plan.md`)
-neemt deze vier regels als gegeven en herhaalt ze niet:
+Het extensieplan neemt deze vier regels als gegeven en herhaalt ze niet:
 
 - hij leest de merchant en het bedrag van de pagina, en **niets anders** — geen pagina-inhoud, geen
   formuliervelden, geen cookies, geen geschiedenis;
@@ -577,8 +574,8 @@ prijst al een hele reis. De extensie is een nieuw **oppervlak** op werk dat er i
 
 Elke gebruiker krijgt `<slug>-<random>@invoices.lavega.dev` en stuurt facturen door. Cloudflare Email
 Routing plus een Email Worker POST't naar de n8n-webhook, en alles daarna is de pijplijn die al
-gebouwd en gedebugd is. Ontwerp:
-`docs/superpowers/specs/2026-08-17-invoice-forwarding-address-design.md`.
+gebouwd en gedebugd is. Ontwerp: `apps/email-worker/README.md` en
+`docs/n8n/DOORSTUURADRES.md`.
 
 Waarom niet meteen "Connect Gmail": `gmail.readonly` is een **restricted** scope, dus een publieke
 app heeft OAuth-verificatie **plus een CASA Tier 2-beoordeling, elke 12 maanden opnieuw**, vanaf zo'n

@@ -22,32 +22,16 @@ import {
   ValueInput,
   useSectionCopy,
 } from "./common.js";
-import {
-  centsText,
-  parseEuros,
-  parseNumber,
-  parseWholeNumber,
-  type Parsed,
-} from "./parse.js";
+import { centsText, parseEuros, parseNumber, parseWholeNumber, type Parsed } from "./parse.js";
 import { applyGoalEdit, dropKey, saveProfile } from "./profileEdits.js";
 import type { PlanCtx, SectionProps } from "./types.js";
 
 /** One goal's own figures: the accounts linked to it, what is saved so far and
  *  what is planned each month. Each change is stored as a confirmed edit. */
-function GoalEditor({
-  row,
-  goal,
-  ctx,
-}: {
-  row: GoalRow;
-  goal: Goal;
-  ctx: PlanCtx;
-}) {
+function GoalEditor({ row, goal, ctx }: { row: GoalRow; goal: Goal; ctx: PlanCtx }) {
   const { a } = useSectionCopy();
   const [linkError, setLinkError] = useState(false);
-  const refs = goal.accountRefs
-    .filter((r) => r.kind === "bank")
-    .map((r) => r.id);
+  const refs = goal.accountRefs.filter((r) => r.kind === "bank").map((r) => r.id);
   const offered = ctx.accounts.filter((acc) => {
     const k = accountTypeKind(acc);
     return k === "savings" || k === "current";
@@ -96,25 +80,14 @@ function GoalEditor({
   );
 
   return (
-    <fieldset
-      className="m-0 mb-3 border-0 p-0"
-      data-testid={`plan-goal-editor-${goal.id}`}
-    >
-      <legend className="mb-1 p-0 font-semibold">
-        {a.goals.editTitle(row.purpose)}
-      </legend>
+    <fieldset className="m-0 mb-3 border-0 p-0" data-testid={`plan-goal-editor-${goal.id}`}>
+      <legend className="mb-1 p-0 font-semibold">{a.goals.editTitle(row.purpose)}</legend>
       <p className="m-0 mb-1 text-[0.85rem] text-muted">{a.goals.linkLegend}</p>
       <ul className="m-0 mb-1 grid list-none gap-1 p-0">
-        {offered.map((acc) =>
-          box(acc.key, a.goals.linkAccount(acc.name, acc.bank, acc.currency)),
-        )}
+        {offered.map((acc) => box(acc.key, a.goals.linkAccount(acc.name, acc.bank, acc.currency)))}
         {orphans.map((id) => box(id, a.goals.unknownAccount(id)))}
       </ul>
-      {hasForeign && (
-        <p className="m-0 mb-2 text-muted text-[0.85rem]">
-          {a.goals.foreignNote}
-        </p>
-      )}
+      {hasForeign && <p className="m-0 mb-2 text-muted text-[0.85rem]">{a.goals.foreignNote}</p>}
       {linkError && (
         <StatusLine tone="problem" role="alert" className="m-0 mb-2 text-[0.85rem]">
           {a.saveFailed}
@@ -124,11 +97,7 @@ function GoalEditor({
         name={`goal-saved-${goal.id}`}
         label={a.goals.savedLabel(row.purpose)}
         hint={a.goals.savedHint}
-        stored={
-          goal.startingBalanceCents === undefined
-            ? ""
-            : centsText(goal.startingBalanceCents)
-        }
+        stored={goal.startingBalanceCents === undefined ? "" : centsText(goal.startingBalanceCents)}
         parse={(t) => parseEuros(t, { allowZero: true })}
         onSave={async (cents) => {
           await edit((g) => ({ ...g, startingBalanceCents: cents }));
@@ -143,11 +112,7 @@ function GoalEditor({
         name={`goal-monthly-${goal.id}`}
         label={a.goals.monthlyLabel(row.purpose)}
         hint={a.goals.monthlyHint}
-        stored={
-          goal.plannedMonthlyCents === undefined
-            ? ""
-            : centsText(goal.plannedMonthlyCents)
-        }
+        stored={goal.plannedMonthlyCents === undefined ? "" : centsText(goal.plannedMonthlyCents)}
         parse={(t) => parseEuros(t, { allowZero: true })}
         onSave={(cents) => edit((g) => ({ ...g, plannedMonthlyCents: cents }))}
         onClear={() => edit((g) => dropKey(g, "plannedMonthlyCents") as Goal)}
@@ -202,9 +167,7 @@ function StudyForm({ ctx }: { ctx: PlanCtx }) {
       max: 50,
       maxDecimals: 2,
     });
-    const bad = [m, n, t, i].find(
-      (x): x is Extract<Parsed<number>, { ok: false }> => !x.ok,
-    );
+    const bad = [m, n, t, i].find((x): x is Extract<Parsed<number>, { ok: false }> => !x.ok);
     if (bad !== undefined || !m.ok || !n.ok || !t.ok || !i.ok) {
       setError(a.errors[bad?.error ?? "required"]);
       return;
@@ -224,11 +187,7 @@ function StudyForm({ ctx }: { ctx: PlanCtx }) {
       setError(a.saveFailed);
     }
   }
-  const field = (
-    k: keyof StudyDraft,
-    label: string,
-    mode: "decimal" | "numeric",
-  ) => (
+  const field = (k: keyof StudyDraft, label: string, mode: "decimal" | "numeric") => (
     <label className="flex flex-col gap-1 text-muted">
       {label}
       <input
@@ -249,9 +208,7 @@ function StudyForm({ ctx }: { ctx: PlanCtx }) {
       data-testid="plan-study-form"
       className="mb-3"
     >
-      <h5 className="m-0 mb-1 text-[0.85rem] font-semibold">
-        {a.goals.study.title}
-      </h5>
+      <h5 className="m-0 mb-1 text-[0.85rem] font-semibold">{a.goals.study.title}</h5>
       <p className="m-0 mb-2 text-muted text-[0.85rem]">{a.goals.study.hint}</p>
       <div className="flex flex-wrap items-end gap-2">
         {field("monthlyCost", a.goals.study.monthlyCost, "decimal")}
@@ -291,10 +248,7 @@ function StudyForm({ ctx }: { ctx: PlanCtx }) {
  *  Order is the order the person entered the goals. The fixed scenario table
  *  stays its own card on the page; the one general short-horizon note shows
  *  here only from a verified source. */
-export default function GoalsSection({
-  result,
-  ctx,
-}: SectionProps<GoalsFigures>) {
+export default function GoalsSection({ result, ctx }: SectionProps<GoalsFigures>) {
   const { locale, fmt, a } = useSectionCopy();
   const copy = goalsCopy[locale];
   const f = result.figures;
@@ -307,8 +261,7 @@ export default function GoalsSection({
       : Math.max(0, 67 - (Number(ctx.asOf.slice(0, 4)) - profile.birthYear));
   const learn = learnShortHorizonText(locale, ctx.publicFacts);
   const showStudy =
-    f.rows.some((r) => r.kind === "child") ||
-    ctx.plan.preferences.studyCostAssumptions !== null;
+    f.rows.some((r) => r.kind === "child") || ctx.plan.preferences.studyCostAssumptions !== null;
 
   return (
     <SectionCard section="goals" result={result}>
@@ -317,24 +270,14 @@ export default function GoalsSection({
           <div>
             <StatusBody section="goals" result={result} ctx={ctx} />
             {f.rows.length > 0 && profile.experience === "beginner" && (
-              <p
-                className="m-0 mb-1 text-[0.9rem]"
-                data-testid="plan-investing-explainer"
-              >
+              <p className="m-0 mb-1 text-[0.9rem]" data-testid="plan-investing-explainer">
                 {inv.explainer}
               </p>
             )}
             {f.rows.length > 0 && aowYears !== undefined && (
-              <p
-                className="m-0 mb-1 text-[0.9rem]"
-                data-testid="plan-investing-years"
-              >
+              <p className="m-0 mb-1 text-[0.9rem]" data-testid="plan-investing-years">
                 {inv.lead(aowYears === 0 ? null : aowYears)}
-                <a
-                  href={inv.linkHref}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
+                <a href={inv.linkHref} target="_blank" rel="noopener noreferrer">
                   {inv.linkLabel}
                 </a>
                 .
@@ -347,17 +290,12 @@ export default function GoalsSection({
                   : f.rows.length > 0
                     ? copy.unallocatedStopped(f.unallocated.missing)
                     : null,
-                f.rows.length > 0
-                  ? copy.capacityLine(f.capacity.score, f.toleranceScore)
-                  : null,
+                f.rows.length > 0 ? copy.capacityLine(f.capacity.score, f.toleranceScore) : null,
                 f.rows.length > 0 ? copy.disagreement[f.disagreement] : null,
               ]}
             />
             {f.rows.length > 0 && (
-              <ul
-                className="m-0 mb-2 grid list-none gap-3 p-0"
-                data-testid="plan-goal-rows"
-              >
+              <ul className="m-0 mb-2 grid list-none gap-3 p-0" data-testid="plan-goal-rows">
                 {f.rows.map((r) => (
                   <li key={r.goalId}>
                     <Lines
@@ -370,11 +308,7 @@ export default function GoalsSection({
                         copy.goal.scheduleLine(r, fmt) ?? copy.goal.undated,
                         copy.goal.scheduleSpan(r, fmt),
                         ...copy.goal.requiredLine(r, fmt),
-                        copy.goal.sharedLine(
-                          r.sharedWithGoals,
-                          r.savedCents,
-                          fmt,
-                        ),
+                        copy.goal.sharedLine(r.sharedWithGoals, r.savedCents, fmt),
                         copy.goal.excludedLine(r.linkedExcludedCount),
                         copy.goal.brokerLine(r.brokerRefsNotCounted),
                       ]}
@@ -383,9 +317,7 @@ export default function GoalsSection({
                 ))}
               </ul>
             )}
-            {f.study !== null && (
-              <Lines lines={[copy.studyLine(f.study, fmt)]} />
-            )}
+            {f.study !== null && <Lines lines={[copy.studyLine(f.study, fmt)]} />}
           </div>
         ),
         assumptions:
@@ -396,16 +328,9 @@ export default function GoalsSection({
               ) : (
                 <Group title={a.groups.yourFigures}>
                   {f.rows.map((r) => {
-                    const goal = goals.find(
-                      (g) => g.value.id === r.goalId,
-                    )?.value;
+                    const goal = goals.find((g) => g.value.id === r.goalId)?.value;
                     return goal === undefined ? null : (
-                      <GoalEditor
-                        key={r.goalId}
-                        row={r}
-                        goal={goal}
-                        ctx={ctx}
-                      />
+                      <GoalEditor key={r.goalId} row={r} goal={goal} ctx={ctx} />
                     );
                   })}
                 </Group>
@@ -417,9 +342,7 @@ export default function GoalsSection({
         sources:
           learn === null ? null : (
             <div data-testid="plan-learn-short-horizon">
-              <p className="m-0 font-semibold">
-                {copy.learnShortHorizon.title}
-              </p>
+              <p className="m-0 font-semibold">{copy.learnShortHorizon.title}</p>
               <Sources lines={[learn]} />
             </div>
           ),

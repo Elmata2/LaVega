@@ -1,5 +1,5 @@
 import { type ElementType, forwardRef, type ReactNode } from "react";
-import { cn } from "./utils.js";
+import { cn } from "@lavega/ui";
 
 /* Extracted from `.card`/`.card-header` (docs/adr/0005) — the app's
  * most-shared primitive, 25 call sites. Call sites use `<section>` (the

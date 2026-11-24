@@ -25,36 +25,36 @@ To link MySQL:
 1.  Go to the [Data pipeline page](https://app.posthog.com/data-management/sources) and the sources tab in PostHog
 2.  Click **New source** and select MySQL
 3.  Enter your database connection details:
-    -   **Host:** The hostname or IP your database server like `db.example.com` or `123.132.1.100`.
-    -   **Port:** The port your database server is listening to. The default is `3306`.
-    -   **Database:** The name of the database you want like `analytics_db`.
-    -   **User:** The username with the necessary permissions to access the database.
-    -   **Password:** The password for the user.
-    -   **Schema:** The schema for your database where your tables are located. The default is `public`.
-    -   **Use SSL:** Whether to use SSL for the connection. Default is enabled.
+    - **Host:** The hostname or IP your database server like `db.example.com` or `123.132.1.100`.
+    - **Port:** The port your database server is listening to. The default is `3306`.
+    - **Database:** The name of the database you want like `analytics_db`.
+    - **User:** The username with the necessary permissions to access the database.
+    - **Password:** The password for the user.
+    - **Schema:** The schema for your database where your tables are located. The default is `public`.
+    - **Use SSL:** Whether to use SSL for the connection. Default is enabled.
 4.  If you need to connect through an SSH tunnel, enable and configure it (optional):
-    -   **Tunnel host:** The hostname of your SSH server.
-    -   **Tunnel port:** The port your SSH server is listening on.
-    -   **Authentication type:**
-        -   For password authentication, enter your SSH username and password.
-        -   For key-based authentication, enter your SSH username, private key, and optional passphrase.
+    - **Tunnel host:** The hostname of your SSH server.
+    - **Tunnel port:** The port your SSH server is listening on.
+    - **Authentication type:**
+      - For password authentication, enter your SSH username and password.
+      - For key-based authentication, enter your SSH username, private key, and optional passphrase.
 5.  Click **Next**
 
 The data warehouse then starts syncing your MySQL data. You can see details and progress in the [sources tab](https://app.posthog.com/data-management/sources).
 
 ## Configuration
 
-| Option | Description |
-| --- | --- |
-| `Host` **Type:** text **Required:** True | Must be reachable from the public internet. Add PostHog's egress IP addresses to your firewall allowlist (see the docs above) and use a public host. `localhost` and private IPs (10.x, 172.16-31.x, 192.168.x) can't be reached. For a database that can't be exposed publicly, enable the SSH tunnel below. |
-| `Port` **Type:** number **Required:** True |  |
-| `Database` **Type:** text **Required:** True |  |
-| `User` **Type:** text **Required:** True |  |
-| `Password` **Type:** password **Required:** True |  |
-| `Schema` **Type:** text **Required:** False |  |
-| `Use SSL?` **Type:** select **Required:** True |  |
+| Option                                                               | Description                                                                                                                                                                                                                                                                                                           |
+| -------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Host` **Type:** text **Required:** True                             | Must be reachable from the public internet. Add PostHog's egress IP addresses to your firewall allowlist (see the docs above) and use a public host. `localhost` and private IPs (10.x, 172.16-31.x, 192.168.x) can't be reached. For a database that can't be exposed publicly, enable the SSH tunnel below.         |
+| `Port` **Type:** number **Required:** True                           |                                                                                                                                                                                                                                                                                                                       |
+| `Database` **Type:** text **Required:** True                         |                                                                                                                                                                                                                                                                                                                       |
+| `User` **Type:** text **Required:** True                             |                                                                                                                                                                                                                                                                                                                       |
+| `Password` **Type:** password **Required:** True                     |                                                                                                                                                                                                                                                                                                                       |
+| `Schema` **Type:** text **Required:** False                          |                                                                                                                                                                                                                                                                                                                       |
+| `Use SSL?` **Type:** select **Required:** True                       |                                                                                                                                                                                                                                                                                                                       |
 | `Verify the server certificate?` **Type:** select **Required:** True | Check that your database's TLS certificate comes from a trusted authority. A self-signed certificate or a private authority does not pass, so leave this off if you use one. Through an SSH tunnel we check the certificate chain but not the hostname, because the tunnel presents your database on a local address. |
-| `Use SSH tunnel?` **Type:** ssh-tunnel **Required:** False |  |
+| `Use SSH tunnel?` **Type:** ssh-tunnel **Required:** False           |                                                                                                                                                                                                                                                                                                                       |
 
 ## Selecting columns
 
@@ -74,25 +74,25 @@ You can also change column selection after setup:
 
 When you add columns to a schema using incremental or append sync, PostHog prompts you to choose:
 
--   **Sync forward only** - New columns are populated only for future data. Existing rows show `NULL` for the new columns.
--   **Full resync** - Triggers a complete resync to backfill the new columns for all rows.
+- **Sync forward only** - New columns are populated only for future data. Existing rows show `NULL` for the new columns.
+- **Full resync** - Triggers a complete resync to backfill the new columns for all rows.
 
 **Decimal precision limits**
 
 Numeric or decimal columns with values exceeding a precision of 76 or scale of 32 cannot be synced. If your sync fails with this error, you have three options:
 
--   Constrain the column with a lower precision/scale
--   Cast it to text in a view
--   Round the values at the source
+- Constrain the column with a lower precision/scale
+- Cast it to text in a view
+- Round the values at the source
 
 #### Inbound IP addresses
 
 We use a set of IP addresses to access your instance. To ensure this connector works, add these IPs to your inbound security rules:
 
-| US | EU |
-| --- | --- |
-| 44.205.89.55 | 3.75.65.221 |
-| 52.4.194.122 | 18.197.246.42 |
+| US             | EU            |
+| -------------- | ------------- |
+| 44.205.89.55   | 3.75.65.221   |
+| 52.4.194.122   | 18.197.246.42 |
 | 44.208.188.173 | 3.120.223.253 |
 
 ### Still have questions?

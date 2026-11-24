@@ -187,12 +187,12 @@ Storage: `localStorage["lavega.sidebar"]` = `{"open": boolean, "width": number}`
 
 Scope: the first page of the personal app (`views/Overzicht.tsx`, view id `overview`, label Home). Four fixed blocks in a 2 x 2 group (`.home-fixed` in `styles/modules.css`; one column at a container width of 600px or less), then the optional widgets, then the add area:
 
-| Block              | Code                                    | Rule                                                                                                                                                                             |
-| ------------------ | --------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Block              | Code                                    | Rule                                                                                                                                                                                              |
+| ------------------ | --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Chart slot         | `components/blocks/ChartSlot.tsx`       | One module (span 1 in the group) with a two-option radio group in its header: Totale positie (default) or Cashflow. Choice in `localStorage["lavega.homeChart"]`. Swapping the body has no motion |
-| Statistieken       | `components/blocks/StatistiekBlock.tsx` | Opens on the outflows donut (`initialView` defaults to `"verdeling"`)                                                                                                            |
-| Je kaarten, Travel | `components/blocks/`                    | Always shown                                                                                                                                                                     |
-| Add area           | `components/HomeAddArea.tsx`            | "Voeg toe aan Home" and up to four dashed boxes, one per widget that is off. The boxes and the hide buttons are the only widget control; "Widget toevoegen" in the top bar scrolls here                                                           |
+| Statistieken       | `components/blocks/StatistiekBlock.tsx` | Opens on the outflows donut (`initialView` defaults to `"verdeling"`)                                                                                                                             |
+| Je kaarten, Travel | `components/blocks/`                    | Always shown                                                                                                                                                                                      |
+| Add area           | `components/HomeAddArea.tsx`            | "Voeg toe aan Home" and up to four dashed boxes, one per widget that is off. The boxes and the hide buttons are the only widget control; "Widget toevoegen" in the top bar scrolls here           |
 
 The group is compact on purpose: at a 1440 x 900 window each block should stay near 340px. What decides the height: the `--home-block-min` and `--home-block-pad` overrides and the tighter `.module-head` in the trailing `@layer utilities` block of `styles/modules.css` (they replace the 200px / 360px module minimums for these four blocks), and the chart heights (`height` prop: Saldo 96, Cashflow 112, Statistieken 132). A lone added widget keeps the old rule: full row at a container of 1200px or less.
 
@@ -215,31 +215,31 @@ Scope: `views/Profiel.tsx`. Five cards, in this order: Algemeen (account e-mail 
 
 Scope: the personal app. Selector `:root[data-theme="light"]` in `styles/tokens.css`, right after `:root`. White ground, dark ink, `color-scheme: light`. The brand colour stays: cantaloupe for the one primary action, blue for links and focus, coloured money figures and charts. Every `#rrggbb` token in `:root` is also set in the light block (card faces, swatches and wizard inks repeat their midnight value); `scripts/check-midnight-contrast.mjs` fails otherwise, and `src/contrast-script.test.ts` runs it. Midnight is the default and has no `data-theme` attribute.
 
-| Token                                | Light                                        | Use                                                       |
-| ------------------------------------ | -------------------------------------------- | --------------------------------------------------------- |
-| `--bg` / `--surface` / `--surface-2` | #ffffff / #f3f6f8 / #e8edf0                  | Ground, cards and rail, inset fills and active nav        |
-| `--ink` / `--ink-soft` / `--on-ink`  | #02070a / #1c2830 / #ffffff                  | Text, hover, text on ink. The selected pill is ink on ink |
-| `--muted`                            | #4f5d66                                      | Secondary text, 4.5:1 or better on all three grounds      |
-| `--line`                             | rgba(2,7,10,.1)                              | Hairline                                                  |
-| `--accent` / `--accent-soft`         | #016da3 / rgba(2,151,222,.12)                | Links, active, focus ring                                 |
-| `--cta` / `--on-cta`                 | #fc734d / #02070a                            | The one filled action: cantaloupe pill                    |
-| `--pos` / `--neg` / `--warn`         | #17703f / #b42f25 / #7d5200                  | Darkened for text on white; never the only signal         |
-| `--chart-blue` / `-purple` / `-teal` | #016da3 / #5a45c4 / #0a6f64                  | 3:1 on bg, surface and surface-2                          |
-| `--slice-1..8`, `--slice-rest`       | #3d5ce0 to #6b7983, rest #9aa5ad             | Informational in the script; labels carry meaning         |
-| `--card-face-1..4`, `--card-text`    | same as midnight                             | Bank card faces keep their fixed colours                  |
-| `--scrim` / `--shadow-float`         | rgba(2,7,10,.4) / 0 24px 80px rgba(2,7,10,.16) | Floating layers only                                    |
+| Token                                | Light                                          | Use                                                       |
+| ------------------------------------ | ---------------------------------------------- | --------------------------------------------------------- |
+| `--bg` / `--surface` / `--surface-2` | #ffffff / #f3f6f8 / #e8edf0                    | Ground, cards and rail, inset fills and active nav        |
+| `--ink` / `--ink-soft` / `--on-ink`  | #02070a / #1c2830 / #ffffff                    | Text, hover, text on ink. The selected pill is ink on ink |
+| `--muted`                            | #4f5d66                                        | Secondary text, 4.5:1 or better on all three grounds      |
+| `--line`                             | rgba(2,7,10,.1)                                | Hairline                                                  |
+| `--accent` / `--accent-soft`         | #016da3 / rgba(2,151,222,.12)                  | Links, active, focus ring                                 |
+| `--cta` / `--on-cta`                 | #fc734d / #02070a                              | The one filled action: cantaloupe pill                    |
+| `--pos` / `--neg` / `--warn`         | #17703f / #b42f25 / #7d5200                    | Darkened for text on white; never the only signal         |
+| `--chart-blue` / `-purple` / `-teal` | #016da3 / #5a45c4 / #0a6f64                    | 3:1 on bg, surface and surface-2                          |
+| `--slice-1..8`, `--slice-rest`       | #3d5ce0 to #6b7983, rest #9aa5ad               | Informational in the script; labels carry meaning         |
+| `--card-face-1..4`, `--card-text`    | same as midnight                               | Bank card faces keep their fixed colours                  |
+| `--scrim` / `--shadow-float`         | rgba(2,7,10,.4) / 0 24px 80px rgba(2,7,10,.16) | Floating layers only                                      |
 
 Behaviour rules (they hold in both themes, because they help colour-blind users):
 
-| Rule                                                                                                                                                                  | Where                                                                                  |
-| --------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
-| Signed amounts: sign first, real minus U+2212, zero unsigned ("−€ 5,00", "+€5,00")                                                                                    | `formatSignedEuroIn`, `formatSignedCurrencyIn`, `formatSignedPercentIn` in `format.ts` |
-| Status never by tint alone: warning is a dashed border plus triangle, problem a solid border plus cross, success a solid border plus check                            | `components/ui/StatusLine.tsx`; `Badge` takes `tone`                                   |
-| Dot shapes: positive filled circle, warning hollow ring, negative diamond                                                                                             | `.dot-pos`, `.dot-warn`, `.dot-neg` in `base.css`                                      |
-| Charts with more than 3 series carry a legend with figures or direct labels. Adjacent segments are parted by a 2px `--bg` line                                        | `SpendPie` legend and arc gap, `.proportion-bar span + span` in `base.css`             |
+| Rule                                                                                                                                                                                              | Where                                                                                  |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| Signed amounts: sign first, real minus U+2212, zero unsigned ("−€ 5,00", "+€5,00")                                                                                                                | `formatSignedEuroIn`, `formatSignedCurrencyIn`, `formatSignedPercentIn` in `format.ts` |
+| Status never by tint alone: warning is a dashed border plus triangle, problem a solid border plus cross, success a solid border plus check                                                        | `components/ui/StatusLine.tsx`; `Badge` takes `tone`                                   |
+| Dot shapes: positive filled circle, warning hollow ring, negative diamond                                                                                                                         | `.dot-pos`, `.dot-warn`, `.dot-neg` in `base.css`                                      |
+| Charts with more than 3 series carry a legend with figures or direct labels. Adjacent segments are parted by a 2px `--bg` line                                                                    | `SpendPie` legend and arc gap, `.proportion-bar span + span` in `base.css`             |
 | Focus ring 2px `--accent`. Shell controls draw it inset (offset -2px); the resize handle uses a grip colour change and a `forced-colors` outline; on the selected pill the ring is `currentColor` | `base.css`; `styles/shell.css`; `blocks.css`                                           |
-| Selected segmented option and active nav item: `--ink` ground, `--on-ink` label (white pill in midnight, dark pill in light)                                           | `.module-tab-on`, `.scope-on`, nav items                                               |
-| The landing page stays midnight in both themes                                                                                                                        | `MidnightScope` in `Root.tsx`; `theme-init.js` applies light on `/app` paths only      |
+| Selected segmented option and active nav item: `--ink` ground, `--on-ink` label (white pill in midnight, dark pill in light)                                                                      | `.module-tab-on`, `.scope-on`, nav items                                               |
+| The landing page stays midnight in both themes                                                                                                                                                    | `MidnightScope` in `Root.tsx`; `theme-init.js` applies light on `/app` paths only      |
 
 Persistence: `localStorage["lavega.theme"]` is `"midnight"` or `"light"`. The retired value `"mono"` reads as light and is rewritten on the next save; anything else is midnight. `public/theme-init.js` runs before first paint (the CSP blocks inline script) and sets `data-theme` and `color-scheme`. A `storage` event keeps tabs in step. The switch (Donker / Licht, with a swatch of each ground plus a spot of cantaloupe) is the Weergave part of the Algemeen card in Profiel and is instant, with no colour transition. There is no "follow the system" option. Known gap: input borders at the 12% line are below 3:1 in both themes. Rule for new CSS: no hard-coded colour outside `tokens.css`; add a token in `:root` and in the light block.
 

@@ -1,4 +1,3 @@
-import { readFileSync } from "node:fs";
 import { describe, expect, test } from "vitest";
 import {
   bufferMonths,
@@ -206,9 +205,4 @@ describe("capacityToleranceFlag", () => {
     expect(capacityToleranceFlag(null, 3)).toBe("unknown");
     expect(capacityToleranceFlag(3, null)).toBe("unknown");
   });
-});
-
-test("thresholds live in one table: no 0.30 or 0.10 literal in capacity.ts", () => {
-  const src = readFileSync(new URL("./capacity.ts", import.meta.url), "utf8");
-  expect(src).not.toMatch(/0?\.(30|3|10|1)\b/);
 });

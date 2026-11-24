@@ -25,20 +25,20 @@ To link Postgres:
 1.  Go to the [Data pipeline page](https://app.posthog.com/data-management/sources) and the sources tab in PostHog
 2.  Click **New source** and select Postgres
 3.  Enter your database connection details:
-    -   **Connection string:** An optional PostgreSQL connection string.
-    -   **Host:** The hostname or IP your database server like `db.example.com` or `123.132.1.100`.
-    -   **Port:** The port your database server is listening to. The default is `5432`.
-    -   **Database:** The name of the database you want like `analytics_db`.
-    -   **User:** The username with the necessary permissions to access the database.
-    -   **Password:** The password for the user.
-    -   **Schema:** (Optional) The schema for your database. Leave blank to browse and sync tables from all schemas, or specify one to limit the selection. The default is `public`.
+    - **Connection string:** An optional PostgreSQL connection string.
+    - **Host:** The hostname or IP your database server like `db.example.com` or `123.132.1.100`.
+    - **Port:** The port your database server is listening to. The default is `5432`.
+    - **Database:** The name of the database you want like `analytics_db`.
+    - **User:** The username with the necessary permissions to access the database.
+    - **Password:** The password for the user.
+    - **Schema:** (Optional) The schema for your database. Leave blank to browse and sync tables from all schemas, or specify one to limit the selection. The default is `public`.
 4.  If you need to connect through an SSH tunnel, enable and configure it (optional):
-    -   **Tunnel host:** The hostname of your SSH server.
-    -   **Tunnel port:** The port your SSH server is listening on.
-    -   **Authentication type:**
-        -   For password authentication, enter your SSH username and password.
-        -   For key-based authentication, enter your SSH username, private key, and optional passphrase.
-    -   **Require TLS through tunnel?** - Whether to require TLS encryption through the SSH tunnel. Enabled by default. Disable if your database does not support TLS.
+    - **Tunnel host:** The hostname of your SSH server.
+    - **Tunnel port:** The port your SSH server is listening on.
+    - **Authentication type:**
+      - For password authentication, enter your SSH username and password.
+      - For key-based authentication, enter your SSH username, private key, and optional passphrase.
+    - **Require TLS through tunnel?** - Whether to require TLS encryption through the SSH tunnel. Enabled by default. Disable if your database does not support TLS.
 5.  Optional: enable **Change data capture (CDC)** if your database is prepared for logical replication. You can also [enable CDC later](#enabling-cdc-on-an-existing-source) from the source's Configuration tab.
 6.  Click **Next**, select the tables to sync, choose the sync method for each table, then click **Link**
 
@@ -46,16 +46,16 @@ The data warehouse then starts syncing your Postgres data. You can see details a
 
 ## Configuration
 
-| Option | Description |
-| --- | --- |
-| `Connection string (optional)` **Type:** text **Required:** False |  |
-| `Host` **Type:** text **Required:** True | Must be reachable from the public internet. Add PostHog's egress IP addresses to your firewall allowlist (see the docs above) and use a public host. `localhost` and private IPs (10.x, 172.16-31.x, 192.168.x) can't be reached. For a database that can't be exposed publicly, enable the SSH tunnel below. |
-| `Port` **Type:** number **Required:** True |  |
-| `Database` **Type:** text **Required:** True |  |
-| `User` **Type:** text **Required:** True |  |
-| `Password` **Type:** password **Required:** True |  |
-| `Schema` **Type:** text **Required:** False |  |
-| `Use SSH tunnel?` **Type:** ssh-tunnel **Required:** False |  |
+| Option                                                            | Description                                                                                                                                                                                                                                                                                                   |
+| ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Connection string (optional)` **Type:** text **Required:** False |                                                                                                                                                                                                                                                                                                               |
+| `Host` **Type:** text **Required:** True                          | Must be reachable from the public internet. Add PostHog's egress IP addresses to your firewall allowlist (see the docs above) and use a public host. `localhost` and private IPs (10.x, 172.16-31.x, 192.168.x) can't be reached. For a database that can't be exposed publicly, enable the SSH tunnel below. |
+| `Port` **Type:** number **Required:** True                        |                                                                                                                                                                                                                                                                                                               |
+| `Database` **Type:** text **Required:** True                      |                                                                                                                                                                                                                                                                                                               |
+| `User` **Type:** text **Required:** True                          |                                                                                                                                                                                                                                                                                                               |
+| `Password` **Type:** password **Required:** True                  |                                                                                                                                                                                                                                                                                                               |
+| `Schema` **Type:** text **Required:** False                       |                                                                                                                                                                                                                                                                                                               |
+| `Use SSH tunnel?` **Type:** ssh-tunnel **Required:** False        |                                                                                                                                                                                                                                                                                                               |
 
 ## Selecting columns
 
@@ -75,8 +75,8 @@ You can also change column selection after setup:
 
 When you add columns to a schema using incremental, append, or CDC sync, PostHog prompts you to choose:
 
--   **Sync forward only** - New columns are populated only for future data. Existing rows show `NULL` for the new columns.
--   **Full resync** - Triggers a complete resync to backfill the new columns for all rows.
+- **Sync forward only** - New columns are populated only for future data. Existing rows show `NULL` for the new columns.
+- **Full resync** - Triggers a complete resync to backfill the new columns for all rows.
 
 ## Filtering rows
 
@@ -88,9 +88,9 @@ During source setup:
 
 1.  Click **Columns** next to any table in the table picker.
 2.  Click **Add filter** to add a row filter condition:
-    -   **Column** - Select a column from the table
-    -   **Operator** - Choose a comparison operator (`>`, `>=`, `<`, `<=`, `=`, `!=`, `IN`, or `NOT IN`)
-    -   **Value** - Enter a value that matches the column's type
+    - **Column** - Select a column from the table
+    - **Operator** - Choose a comparison operator (`>`, `>=`, `<`, `<=`, `=`, `!=`, `IN`, or `NOT IN`)
+    - **Value** - Enter a value that matches the column's type
 3.  Add up to 20 filters per table. Multiple filters are ANDed together.
 
 You can also add or edit row filters after setup:
@@ -103,14 +103,14 @@ You can also add or edit row filters after setup:
 
 Row filters validate the value you enter against the column's data type. Columns with unsupported types (like `json` or `jsonb`) are not filterable.
 
-| Type category | Example Postgres types | Value format |
-| --- | --- | --- |
-| Integer | `integer`, `bigint`, `smallint`, `serial` | `100` |
-| Numeric | `decimal`, `numeric`, `real`, `double precision` | `99.99` |
-| String | `varchar`, `text`, `char`, `uuid` | `active` |
-| Boolean | `boolean` | `true` or `false` |
-| Date | `date` | `2024-01-15` |
-| Timestamp | `timestamp`, `timestamptz` | `2024-01-15T10:30:00` |
+| Type category | Example Postgres types                           | Value format          |
+| ------------- | ------------------------------------------------ | --------------------- |
+| Integer       | `integer`, `bigint`, `smallint`, `serial`        | `100`                 |
+| Numeric       | `decimal`, `numeric`, `real`, `double precision` | `99.99`               |
+| String        | `varchar`, `text`, `char`, `uuid`                | `active`              |
+| Boolean       | `boolean`                                        | `true` or `false`     |
+| Date          | `date`                                           | `2024-01-15`          |
+| Timestamp     | `timestamp`, `timestamptz`                       | `2024-01-15T10:30:00` |
 
 For `IN` and `NOT IN` operators, enter a comma-separated list of values (e.g. `1, 2, 3` or `'active', 'pending'`).
 
@@ -128,10 +128,10 @@ PostgreSQL sources created after February 18, 2026 require SSL/TLS encryption fo
 
 We use a set of IP addresses to access your instance. To ensure this connector works, add these IPs to your inbound security rules:
 
-| US | EU |
-| --- | --- |
-| 44.205.89.55 | 3.75.65.221 |
-| 52.4.194.122 | 18.197.246.42 |
+| US             | EU            |
+| -------------- | ------------- |
+| 44.205.89.55   | 3.75.65.221   |
+| 52.4.194.122   | 18.197.246.42 |
 | 44.208.188.173 | 3.120.223.253 |
 
 > **Note:** PostHog egresses over IPv4 and does not support IPv6-only database hosts. If your database host only resolves to an IPv6 address, use a connection pooler or enable your provider's IPv4 add-on. See the [troubleshooting section](#network-is-unreachable-or-no-route-to-host) for details.
@@ -144,9 +144,9 @@ In addition to syncing data on a schedule, you can enable live queries on a sync
 
 When creating a new Postgres source, the source wizard offers three query modes:
 
--   **Sync to PostHog** — Sync selected tables on a schedule. This is the default.
--   **Query live only** — Run queries directly against your database without syncing any data.
--   **Sync and query live** — Sync tables into PostHog and also run live queries against the database from the SQL editor.
+- **Sync to PostHog** — Sync selected tables on a schedule. This is the default.
+- **Query live only** — Run queries directly against your database without syncing any data.
+- **Sync and query live** — Sync tables into PostHog and also run live queries against the database from the SQL editor.
 
 Select **Sync and query live** to enable both scheduled syncs and live queries on the same source.
 
@@ -163,13 +163,13 @@ Once enabled, you can query your Postgres source directly from the SQL editor.
 
 There are two ways to start a live query:
 
--   **From the source page:** Go to the **Schemas** tab on your source and click **Query directly**. This opens the SQL editor with your source connection preselected.
--   **From the SQL editor:** Open the [SQL editor](https://app.posthog.com/sql), click the connection picker in the toolbar, and select your Postgres source. Synced sources with live queries enabled are labeled with `· synced` (e.g., `my_source (Postgres · synced)`) to distinguish them from direct-only connections.
+- **From the source page:** Go to the **Schemas** tab on your source and click **Query directly**. This opens the SQL editor with your source connection preselected.
+- **From the SQL editor:** Open the [SQL editor](https://app.posthog.com/sql), click the connection picker in the toolbar, and select your Postgres source. Synced sources with live queries enabled are labeled with `· synced` (e.g., `my_source (Postgres · synced)`) to distinguish them from direct-only connections.
 
 ### When to use live queries vs scheduled syncs only
 
--   **Live queries** are best for ad-hoc exploration, querying data that changes frequently, or when you want to query your database without waiting for a sync.
--   **Scheduled syncs only** are better when you need faster query performance, want to join external data with PostHog events in dashboards and insights, or need data available across all PostHog features.
+- **Live queries** are best for ad-hoc exploration, querying data that changes frequently, or when you want to query your database without waiting for a sync.
+- **Scheduled syncs only** are better when you need faster query performance, want to join external data with PostHog events in dashboards and insights, or need data available across all PostHog features.
 
 ## Sync methods
 
@@ -181,24 +181,24 @@ CDC sync is currently in **alpha**. We'd love to [hear your feedback](https://ap
 
 Use CDC when you need PostHog to stay close to your source database and you care about deletes. It is especially useful when:
 
--   Your table has inserts, updates, and deletes.
--   You don't have a reliable `updated_at` or other incremental cursor field.
--   Full table refreshes are too expensive for a frequently changing table.
--   You want an optional change-history table for audit or lifecycle analysis.
+- Your table has inserts, updates, and deletes.
+- You don't have a reliable `updated_at` or other incremental cursor field.
+- Full table refreshes are too expensive for a frequently changing table.
+- You want an optional change-history table for audit or lifecycle analysis.
 
 Use incremental or append-only sync instead when your table is append-heavy, has a reliable non-null cursor field, or you don't want to manage logical replication.
 
 Use xmin sync when your table has no reliable incremental cursor field like `updated_at` and you want incremental syncing without setting up CDC. xmin uses PostgreSQL's hidden `xmin` system column (the transaction ID that last modified each row) as a cursor. It's a middle ground between full table refresh and CDC:
 
--   Captures inserts and updates incrementally without requiring you to add a cursor column
--   Lighter than CDC since it doesn't require logical replication or a replication slot
--   Does not capture deletes (use CDC if you need delete tracking)
+- Captures inserts and updates incrementally without requiring you to add a cursor column
+- Lighter than CDC since it doesn't require logical replication or a replication slot
+- Does not capture deletes (use CDC if you need delete tracking)
 
 xmin sync requires:
 
--   PostgreSQL 13 or newer
--   Table must have a primary key
--   Only works on regular (heap) tables and materialized views (not partitioned parents, views, or foreign tables)
+- PostgreSQL 13 or newer
+- Table must have a primary key
+- Only works on regular (heap) tables and materialized views (not partitioned parents, views, or foreign tables)
 
 Because the `xmin` column is not indexed, syncs scan the entire table to find changed rows. For large tables with frequent syncs, this can be slower than indexed incremental sync. PostHog displays a warning when you select xmin sync to flag the unindexed scan.
 
@@ -225,10 +225,10 @@ PostHog reads changes with `pg_logical_slot_peek_binary_changes(...)` and confir
 
 The decoder currently handles Postgres logical replication messages for:
 
--   Inserts
--   Updates
--   Deletes
--   Truncates
+- Inserts
+- Updates
+- Deletes
+- Truncates
 
 Truncates are not replayed as row-by-row deletes. If PostHog sees a `TRUNCATE`, it marks the table for a new snapshot so the destination can recover to the new source state.
 
@@ -246,12 +246,12 @@ Use this when you mainly want a current-state table for analytics.
 
 PostHog creates a `_cdc`\-suffixed table, for example `users_cdc`. It stores change history using SCD type 2-style columns:
 
--   `_ph_cdc_op`: `I`, `U`, or `D`
--   `_ph_cdc_timestamp`: the Postgres commit timestamp
--   `_ph_deleted`: whether the event is a delete
--   `_ph_deleted_at`: delete timestamp for delete events
--   `valid_from`: when this version became valid
--   `valid_to`: when this version stopped being current
+- `_ph_cdc_op`: `I`, `U`, or `D`
+- `_ph_cdc_timestamp`: the Postgres commit timestamp
+- `_ph_deleted`: whether the event is a delete
+- `_ph_deleted_at`: delete timestamp for delete events
+- `valid_from`: when this version became valid
+- `valid_to`: when this version stopped being current
 
 The initial snapshot seeds the `_cdc` table as the starting point. History before the initial snapshot is not available.
 
@@ -394,8 +394,8 @@ PostHog supports two CDC management modes.
 
 PostHog creates and manages both the replication slot and publication. It generates names like:
 
--   Slot: `posthog_<source id prefix>`
--   Publication: `posthog_pub_<source id prefix>`
+- Slot: `posthog_<source id prefix>`
+- Publication: `posthog_pub_<source id prefix>`
 
 PostHog-managed mode is the easiest path if the database user has enough privileges. The user needs `REPLICATION`, `SELECT`, and ownership of the synced tables or superuser-equivalent permissions so PostHog can add and remove tables from the publication.
 
@@ -409,10 +409,10 @@ Use self-managed mode when you don't want to grant table ownership or superuser-
 
 In this mode:
 
--   You or your DBA create the publication as the table owner.
--   PostHog verifies the publication exists.
--   PostHog still creates and manages the replication slot itself.
--   PostHog still needs `REPLICATION`, schema `USAGE`, and table `SELECT`.
+- You or your DBA create the publication as the table owner.
+- PostHog verifies the publication exists.
+- PostHog still creates and manages the replication slot itself.
+- PostHog still needs `REPLICATION`, schema `USAGE`, and table `SELECT`.
 
 After you select CDC tables, PostHog shows a setup SQL dialog. It looks like this:
 
@@ -457,8 +457,8 @@ To enable CDC on a source that was created without it:
 1.  Go to the [sources tab](https://app.posthog.com/data-management/sources) and click your Postgres source.
 2.  Open the **Configuration** tab and scroll to the **Change data capture (CDC)** section.
 3.  Choose a management mode:
-    -   **PostHog-managed** - PostHog creates and manages both the replication slot and publication.
-    -   **Self-managed** - You create the publication yourself. PostHog creates and manages the replication slot.
+    - **PostHog-managed** - PostHog creates and manages both the replication slot and publication.
+    - **Self-managed** - You create the publication yourself. PostHog creates and manages the replication slot.
 4.  Click **Check database prerequisites** to verify your database is ready.
 5.  Click **Enable CDC** (PostHog-managed) or **Set up & enable CDC** (self-managed).
 6.  After enabling, go to the **Schemas** tab and switch individual tables to the CDC sync type.
@@ -473,10 +473,10 @@ To disable CDC on a source, open the **Configuration** tab and click **Disable C
 
 Disabling CDC:
 
--   Cancels running CDC extraction workflows for that source.
--   Drops the replication slot (and publication in PostHog-managed mode) on your source database.
--   Soft-deletes any `_cdc` companion history tables.
--   Clears the sync type on all CDC schemas and pauses them. You must pick a new sync strategy (incremental, append, or full refresh) for each schema before syncing resumes.
+- Cancels running CDC extraction workflows for that source.
+- Drops the replication slot (and publication in PostHog-managed mode) on your source database.
+- Soft-deletes any `_cdc` companion history tables.
+- Clears the sync type on all CDC schemas and pauses them. You must pick a new sync strategy (incremental, append, or full refresh) for each schema before syncing resumes.
 
 **Disabling CDC causes data loss**
 
@@ -515,8 +515,8 @@ PostHog re-probes the source database to confirm the connection now succeeds and
 
 **Resume vs Repair**
 
--   Use **Resume** when the extraction schedule is paused but the slot and publication are intact. This is the cheap path — no data is re-synced.
--   Use **Repair** when the slot or publication is missing. Repair recreates them but requires a full re-sync of all CDC schemas.
+- Use **Resume** when the extraction schedule is paused but the slot and publication are intact. This is the cheap path — no data is re-synced.
+- Use **Repair** when the slot or publication is missing. Repair recreates them but requires a full re-sync of all CDC schemas.
 
 If PostHog detects that the slot or publication is actually gone (or if the connection still fails), Resume is refused and you're directed to use [Repair CDC](#repairing-cdc) instead.
 
@@ -524,9 +524,9 @@ If PostHog detects that the slot or publication is actually gone (or if the conn
 
 While CDC is enabled, you can edit the following settings from the Configuration tab without disabling CDC:
 
--   **Automatic slot protection** - Toggle whether PostHog drops the replication slot when WAL lag exceeds the critical threshold.
--   **WAL lag warning threshold** - The lag level (in MB) that triggers a warning. Default is `512 MB`.
--   **WAL lag critical threshold** - The lag level (in MB) that triggers slot protection. Default is `2048 MB`. Must be greater than the warning threshold.
+- **Automatic slot protection** - Toggle whether PostHog drops the replication slot when WAL lag exceeds the critical threshold.
+- **WAL lag warning threshold** - The lag level (in MB) that triggers a warning. Default is `512 MB`.
+- **WAL lag critical threshold** - The lag level (in MB) that triggers slot protection. Default is `2048 MB`. Must be greater than the warning threshold.
 
 To change the management mode (PostHog-managed vs. self-managed) or slot/publication names, disable CDC and re-enable it with the new settings.
 
@@ -536,8 +536,8 @@ Replication slots retain WAL until the consumer advances the slot. If PostHog st
 
 PostHog stores two lag thresholds on CDC sources:
 
--   Warning threshold: `512 MB` by default
--   Critical threshold: `2048 MB` by default
+- Warning threshold: `512 MB` by default
+- Critical threshold: `2048 MB` by default
 
 For PostHog-managed sources, **automatic slot protection** is enabled by default. If lag exceeds the critical threshold, PostHog attempts to drop the replication slot and publication, then marks the source as broken. This protects your source database from unbounded WAL growth, but it means you must [repair CDC](#repairing-cdc) or resync after fixing the issue. You can [adjust both thresholds](#updating-cdc-settings) from the Configuration tab.
 
@@ -572,16 +572,16 @@ WHERE slot_name = 'posthog_your_slot';
 
 CDC is powerful, but it changes how your production database retains WAL. Keep these constraints in mind:
 
--   Enabling logical replication often requires a database restart.
--   A stuck replication slot can fill your database disk with retained WAL.
--   PostHog CDC only supports tables with primary keys.
--   CDC captures row changes, not a complete history before the initial snapshot.
--   PostgreSQL logical replication doesn't send DDL as normal row changes. Schema changes may require a full resync, especially destructive changes like dropping or changing column types.
--   Large `TOAST`ed values can be omitted from some update messages when they are unchanged. Validate CDC output carefully if your tables include very large `text`, `jsonb`, or `bytea` columns.
--   Disabling a table removes it from the publication in PostHog-managed mode. Changes made while disabled are not recoverable from the slot. [Disabling CDC entirely](#disabling-cdc) drops the slot and requires a full resync if re-enabled.
--   If a publication does not include a selected table, PostHog won't receive changes for that table.
--   If a table is truncated, PostHog triggers a new snapshot instead of replaying the truncate as individual deletes.
--   If PostHog stops consuming changes long enough for PostgreSQL to invalidate the slot (via `max_slot_wal_keep_size`), PostHog auto-recovers by recreating the slot and re-syncing tables. The `_cdc` history has a gap for changes during the outage.
+- Enabling logical replication often requires a database restart.
+- A stuck replication slot can fill your database disk with retained WAL.
+- PostHog CDC only supports tables with primary keys.
+- CDC captures row changes, not a complete history before the initial snapshot.
+- PostgreSQL logical replication doesn't send DDL as normal row changes. Schema changes may require a full resync, especially destructive changes like dropping or changing column types.
+- Large `TOAST`ed values can be omitted from some update messages when they are unchanged. Validate CDC output carefully if your tables include very large `text`, `jsonb`, or `bytea` columns.
+- Disabling a table removes it from the publication in PostHog-managed mode. Changes made while disabled are not recoverable from the slot. [Disabling CDC entirely](#disabling-cdc) drops the slot and requires a full resync if re-enabled.
+- If a publication does not include a selected table, PostHog won't receive changes for that table.
+- If a table is truncated, PostHog triggers a new snapshot instead of replaying the truncate as individual deletes.
+- If PostHog stops consuming changes long enough for PostgreSQL to invalidate the slot (via `max_slot_wal_keep_size`), PostHog auto-recovers by recreating the slot and re-syncing tables. The `_cdc` history has a gap for changes during the outage.
 
 For production databases, we recommend enabling CDC on one or two representative tables first so your team can validate database permissions, WAL settings, monitoring, and internal rollout steps before adding more tables.
 
@@ -711,16 +711,16 @@ This is a non-retryable error — PostHog stops syncing until you fix the underl
 
 Common causes:
 
--   **IPv6-only host** — Your database host only resolves to an IPv6 address, but PostHog egresses over IPv4.
--   **Firewall blocking PostHog's IPs** — Your database server's firewall blocks connections from PostHog's IP addresses.
--   **Private network** — The hostname resolves to a private IP address (like `10.x.x.x`, `172.16.x.x`, or `192.168.x.x`).
+- **IPv6-only host** — Your database host only resolves to an IPv6 address, but PostHog egresses over IPv4.
+- **Firewall blocking PostHog's IPs** — Your database server's firewall blocks connections from PostHog's IP addresses.
+- **Private network** — The hostname resolves to a private IP address (like `10.x.x.x`, `172.16.x.x`, or `192.168.x.x`).
 
 Solutions:
 
--   **Use a connection pooler** — Configure a connection pooler (like PgBouncer, Supabase Supavisor, or Neon's pooler) that's reachable over IPv4, then point PostHog at the pooler's host and port.
--   **Enable IPv4 on your provider** — Many managed Postgres providers offer IPv4 add-ons or dual-stack endpoints (e.g., Supabase IPv4 add-on, Neon's shared pooler).
--   **Allowlist PostHog's IPs** — If your firewall is blocking connections, allowlist PostHog's IP addresses (see the [Inbound IP addresses](#inbound-ip-addresses) section above).
--   **Use an SSH tunnel** — If your database is on a private network, configure an SSH tunnel during source setup.
+- **Use a connection pooler** — Configure a connection pooler (like PgBouncer, Supabase Supavisor, or Neon's pooler) that's reachable over IPv4, then point PostHog at the pooler's host and port.
+- **Enable IPv4 on your provider** — Many managed Postgres providers offer IPv4 add-ons or dual-stack endpoints (e.g., Supabase IPv4 add-on, Neon's shared pooler).
+- **Allowlist PostHog's IPs** — If your firewall is blocking connections, allowlist PostHog's IP addresses (see the [Inbound IP addresses](#inbound-ip-addresses) section above).
+- **Use an SSH tunnel** — If your database is on a private network, configure an SSH tunnel during source setup.
 
 ### Slot invalidated by `max_slot_wal_keep_size`
 

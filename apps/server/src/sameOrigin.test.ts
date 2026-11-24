@@ -50,7 +50,7 @@ test("a trusted origin is allowed (the deployment's own public hostname)", async
   expect(res.status).toBe(200);
 });
 
-test("a loopback origin is allowed — pnpm dev's Vite on :5173 calls :8787", async () => {
+test("a loopback origin is allowed — bun run dev's Vite on :5173 calls :8787", async () => {
   const res = await appWith().request("http://localhost:8787/thing", {
     method: "POST",
     headers: { origin: "http://localhost:5173" },

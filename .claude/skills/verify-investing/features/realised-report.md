@@ -24,7 +24,7 @@ label the user sets; it changes the grouping and nothing else.
 - **Accounts**: every account with its wrapper control, treatment and figures.
 - **Disposals**: date, symbol, quantity, gross proceeds, fee, net proceeds, cost
   basis, realised gain and a broker-cash check (`Reconciled`, `Does not
-  reconcile`, `No broker cash reported`, `FX missing`, `Proceeds unknown`).
+reconcile`, `No broker cash reported`, `FX missing`, `Proceeds unknown`).
 - **Income**: dividend and interest rows grouped by kind, symbol and calendar
   month, plus the tie-out line.
 - **Holdings**: value, cost basis, unrealised gain and treatment per holding.

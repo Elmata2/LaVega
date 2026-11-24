@@ -2,10 +2,7 @@ import { expect, test } from "vitest";
 import type { Account } from "@lavega/core";
 import { CATALOGUE_ENTRIES } from "../catalogue-rates";
 import { buildHeldCards } from "./heldCards";
-import {
-  statedHeldRows,
-  type StatedAnswers,
-} from "./optimalisatieStated";
+import { statedHeldRows, type StatedAnswers } from "./optimalisatieStated";
 
 const AMEX = "american-express-gold-card";
 const ans = (o: Partial<StatedAnswers> = {}): StatedAnswers => ({

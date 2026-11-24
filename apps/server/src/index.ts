@@ -4,7 +4,7 @@ import { Hono, type Context, type Next } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { secureHeaders } from "hono/secure-headers";
 import { fileURLToPath } from "node:url";
-import { existsSync } from "node:fs";
+import { existsSync, realpathSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { loadConfig, maskApplicationId } from "./config.js";
 import { getRates } from "./rates.js";
@@ -37,13 +37,13 @@ import { createPublicAuthLimiter } from "./authLimits.js";
 import { apiGuard, guardIsDisabled, INVESTING_API_ALIAS } from "./apiGuard.js";
 import { mcpRouteDependencies, registerMcpRoutes } from "./mcp/routes.js";
 import { sameOriginGuard } from "./sameOrigin.js";
-import { withRuntimeDatabase } from "@lavega/investing-server/src/credentialStore.js";
+import { withRuntimeDatabase } from "@lavega/database";
 import { LOCAL_TENANT_ID, localeRedirectTarget } from "@lavega/core";
 
 export const PORT = Number(process.env.PORT) || 8787;
 // Absolute path to the built web app, derived from THIS file (apps/server/src)
 // so it resolves the same whether the process runs from the repo root or the
-// package dir (pnpm --filter runs scripts in the package dir). Overridable via env.
+// package dir (bun --filter runs scripts in the package dir). Overridable via env.
 const WEB_DIST =
   process.env.WEB_DIST || resolve(dirname(fileURLToPath(import.meta.url)), "../../web/dist");
 
@@ -274,7 +274,7 @@ for (const path of API_SURFACES) app.use(path, sessionGuard);
 
 /* The external agent endpoint (#285, ADR 0012). It speaks JSON-RPC to machine
  * clients, so it is not on `/api/*`, but it registers the SAME guard: that guard
- * has a bearer branch for `/mcp` and does not honour the `pnpm dev` escape hatch
+ * has a bearer branch for `/mcp` and does not honour the `bun run dev` escape hatch
  * there, because "no token" must always be 401 (ADR 0012 §2). Registered before
  * the static catch-all so the route wins. */
 app.use("/mcp", limitBody);
@@ -487,7 +487,7 @@ app.get("/", async (c, next) => {
  * this door before the way in existed would have trapped everyone, including
  * a legitimate user, behind it. This gate respects the same
  * `guardIsDisabled()` escape hatch as apiGuard for the same reason —
- * `pnpm dev`'s cross-origin Vite page never carries the session cookie either. */
+ * `bun run dev`'s cross-origin Vite page never carries the session cookie either. */
 async function requireAppSession(c: Context, next: Next) {
   if (guardIsDisabled()) return next();
   /* Whether this path answers 302 or the shell is decided by the session
@@ -531,8 +531,17 @@ app.get("/*", (c, next) => {
   return serveStatic({ path: `${WEB_DIST}/${shell}` })(c, next);
 });
 
+function isMainModule(): boolean {
+  if (!process.argv[1]) return false;
+  try {
+    return realpathSync(fileURLToPath(import.meta.url)) === realpathSync(resolve(process.argv[1]));
+  } catch {
+    return false;
+  }
+}
+
 /* Only start listening when run directly (`tsx src/index.ts`), not when imported by tests. */
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (isMainModule()) {
   // Bind 0.0.0.0 so a container host (Railway) can reach it for the health check
   // and public traffic — not just loopback.
   serve({ fetch: serverFetch, port: PORT, hostname: "0.0.0.0" }, (info) => {

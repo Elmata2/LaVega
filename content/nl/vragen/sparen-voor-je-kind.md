@@ -7,12 +7,30 @@ status: published
 author: alexander
 updated: 2026-10-26
 sources:
-  - { title: "Belastingdienst: Hoeveel mag ik mijn kind belastingvrij schenken?", url: "https://www.belastingdienst.nl/wps/wcm/connect/nl/schenken/content/hoeveel-mag-ik-mijn-kind-belastingvrij-schenken", accessed: 2026-10-26 }
-  - { title: "Belastingdienst: Bezittingen en schulden (box 3), handleiding aangifte 2025", url: "https://www.belastingdienst.nl/wps/wcm/connect/fisin/fisin2025/bezittingen_en_schulden_box_3_", accessed: 2026-10-26 }
-  - { title: "Belastingdienst: Hoe is het box 3-inkomen op mijn voorlopige aanslag 2026 berekend?", url: "https://www.belastingdienst.nl/wps/wcm/connect/nl/box-3/content/berekening-box-3-inkomen-2026", accessed: 2026-10-26 }
+  - {
+      title: "Belastingdienst: Hoeveel mag ik mijn kind belastingvrij schenken?",
+      url: "https://www.belastingdienst.nl/wps/wcm/connect/nl/schenken/content/hoeveel-mag-ik-mijn-kind-belastingvrij-schenken",
+      accessed: 2026-10-26,
+    }
+  - {
+      title: "Belastingdienst: Bezittingen en schulden (box 3), handleiding aangifte 2025",
+      url: "https://www.belastingdienst.nl/wps/wcm/connect/fisin/fisin2025/bezittingen_en_schulden_box_3_",
+      accessed: 2026-10-26,
+    }
+  - {
+      title: "Belastingdienst: Hoe is het box 3-inkomen op mijn voorlopige aanslag 2026 berekend?",
+      url: "https://www.belastingdienst.nl/wps/wcm/connect/nl/box-3/content/berekening-box-3-inkomen-2026",
+      accessed: 2026-10-26,
+    }
 faq:
-  - { q: "Hoeveel mag je je kind in 2026 belastingvrij schenken?", a: "Volgens de Belastingdienst is de jaarlijkse vrijstelling 6.908 euro. Voor een kind van 18 tot 40 jaar bestaat daarnaast een eenmalig verhoogde vrijstelling van maximaal 33.129 euro, die in dat jaar in de plaats komt van de jaarlijkse vrijstelling." }
-  - { q: "Telt geld van je kind mee voor je eigen box 3?", a: "Volgens de Belastingdienst geef je in je aangifte ook de bezittingen op van kinderen jonger dan 18 op 1 januari over wie jij of je fiscale partner het ouderlijk gezag heeft. Dit staat in de handleiding voor aangiftejaar 2025." }
+  - {
+      q: "Hoeveel mag je je kind in 2026 belastingvrij schenken?",
+      a: "Volgens de Belastingdienst is de jaarlijkse vrijstelling 6.908 euro. Voor een kind van 18 tot 40 jaar bestaat daarnaast een eenmalig verhoogde vrijstelling van maximaal 33.129 euro, die in dat jaar in de plaats komt van de jaarlijkse vrijstelling.",
+    }
+  - {
+      q: "Telt geld van je kind mee voor je eigen box 3?",
+      a: "Volgens de Belastingdienst geef je in je aangifte ook de bezittingen op van kinderen jonger dan 18 op 1 januari over wie jij of je fiscale partner het ouderlijk gezag heeft. Dit staat in de handleiding voor aangiftejaar 2025.",
+    }
 ---
 
 ## Wat zijn de mogelijkheden?
@@ -62,12 +80,12 @@ Verder:
 
 Schenken is geen derde soort rekening: het bepaalt van wie het geld is, niet waar het staat.
 
-| | Spaarrekening | Beleggingsrekening | Schenken |
-| --- | --- | --- | --- |
-| Waarde schommelt met markten | Nee | Ja | Hangt af van waar het naartoe gaat |
-| Forfaitair rendement box 3, 2026 | 1,28% (voorlopig) | 6,00% | Niet van toepassing op de schenking zelf |
-| Kosten | Per aanbieder | Per aanbieder | Geen kosten, binnen de vrijstelling geen schenkbelasting |
-| Wie bepaalt over het geld | Volgens voorwaarden | Volgens voorwaarden | Het kind, na de schenking |
+|                                  | Spaarrekening       | Beleggingsrekening  | Schenken                                                 |
+| -------------------------------- | ------------------- | ------------------- | -------------------------------------------------------- |
+| Waarde schommelt met markten     | Nee                 | Ja                  | Hangt af van waar het naartoe gaat                       |
+| Forfaitair rendement box 3, 2026 | 1,28% (voorlopig)   | 6,00%               | Niet van toepassing op de schenking zelf                 |
+| Kosten                           | Per aanbieder       | Per aanbieder       | Geen kosten, binnen de vrijstelling geen schenkbelasting |
+| Wie bepaalt over het geld        | Volgens voorwaarden | Volgens voorwaarden | Het kind, na de schenking                                |
 
 ## Wat doet LaVega hiermee?
 

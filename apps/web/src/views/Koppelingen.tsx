@@ -256,7 +256,7 @@ export default function Koppelingen({ fetchImpl, onNavigate }: KoppelingenProps)
           {forwardError && (
             <StatusLine
               tone="problem"
-              
+
               role="alert"
               style={{ margin: "0 0 var(--sp-3)" }}
             >

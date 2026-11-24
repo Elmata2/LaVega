@@ -8,6 +8,7 @@ import {
 } from "../../partnerBudget/PartnerBudget.js";
 import { partnerKey } from "../../partnerBudget/limits.js";
 import { cookieHeaderFromSetCookie } from "./setCookie.js";
+import { retryAfterMsOf } from "../../http/retryAfter.js";
 
 const MAX_RETRIES = 3;
 const RETRY_BASE_MS = 1500;
@@ -35,16 +36,6 @@ export class YahooHttpError extends Error {
     super(`[${status}] ${body.slice(0, 200)}`);
     this.name = "YahooHttpError";
   }
-}
-
-/** Retry-After is seconds or an HTTP date. Returns the wait in ms, or undefined. */
-function retryAfterMsOf(header: string | null, nowMs: number): number | undefined {
-  const raw = header?.trim();
-  if (!raw) return undefined;
-  const seconds = Number(raw);
-  if (Number.isFinite(seconds)) return seconds > 0 ? seconds * 1_000 : undefined;
-  const at = Date.parse(raw);
-  return Number.isFinite(at) && at > nowMs ? at - nowMs : undefined;
 }
 
 export type YahooHttpOptions = {

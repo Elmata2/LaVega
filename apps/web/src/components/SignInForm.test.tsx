@@ -4,6 +4,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import SignInForm from "./SignInForm";
 import { signIn } from "../authClient.js";
+import posthog from "../posthog.js";
 
 (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -17,9 +18,11 @@ let container: HTMLElement | null = null;
 
 beforeEach(() => {
   vi.mocked(signIn).mockReset();
+  vi.spyOn(posthog, "capture").mockReturnValue(undefined);
 });
 
 afterEach(() => {
+  vi.restoreAllMocks();
   if (root) act(() => root!.unmount());
   container?.remove();
   root = null;
@@ -76,6 +79,19 @@ test("a wrong-credentials result shows the matching error text and does not call
   );
   expect(onSuccess).not.toHaveBeenCalled();
 });
+
+test.each(["wrong-credentials", "unverified", "rate-limited", "unreachable"] as const)(
+  "a %s failure captures sign_in_failed with that reason and no success event",
+  async (kind) => {
+    vi.mocked(signIn).mockResolvedValue({ ok: false, kind });
+    const el = render();
+    act(() => setNativeValue(el.querySelector("#account-email") as HTMLInputElement, "x@y.nl"));
+    act(() => setNativeValue(el.querySelector("#account-password") as HTMLInputElement, "secret"));
+    await act(async () => submit(el.querySelector("form") as HTMLFormElement));
+    expect(posthog.capture).toHaveBeenCalledWith("sign_in_failed", { reason: kind });
+    expect(posthog.capture).not.toHaveBeenCalledWith("sign_in_succeeded");
+  },
+);
 
 test("an ok result calls onSuccess once", async () => {
   vi.mocked(signIn).mockResolvedValue({

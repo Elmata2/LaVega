@@ -1,5 +1,5 @@
 import { forwardRef, type InputHTMLAttributes } from "react";
-import { cn } from "./utils.js";
+import { cn } from "@lavega/ui";
 
 /* Extracted from `.saldo-input` (docs/adr/0005) — the fixed-width right-
  * aligned numeric input for entering a balance. A few call sites (Punten,

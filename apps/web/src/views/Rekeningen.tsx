@@ -17,7 +17,7 @@ import { useAppLocale } from "../appLocale";
 import { moneyCopy } from "../copy/money";
 import { shellCopy } from "../copy/shell";
 import type { ConversionMode } from "../settings";
-import Dialog from "../components/ui/Dialog.js";
+import { Dialog } from "@lavega/ui";
 import type { MoneyCopy } from "../copy/money";
 import type { Locale } from "../locale";
 import Badge from "../components/ui/Badge.js";

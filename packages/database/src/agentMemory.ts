@@ -2,6 +2,7 @@ import type { QueryResultRow } from "@neondatabase/serverless";
 import {
   decryptBlob,
   encryptBlob,
+  isUniqueViolation,
   requireUserId,
   withTenant,
   withTenantStatement,
@@ -187,10 +188,6 @@ const iso = (value: unknown): string =>
   value instanceof Date ? value.toISOString() : new Date(String(value)).toISOString();
 const normalizeSymbol = (symbol: string): string => symbol.trim().toUpperCase();
 const open = <T>(blob: unknown): T => decryptBlob<T>(blob as Buffer);
-/** Postgres unique violation. The driver keeps the code on the error object. */
-function isUniqueViolation(error: unknown): boolean {
-  return !!error && typeof error === "object" && (error as { code?: unknown }).code === "23505";
-}
 
 export function isRiskTolerance(value: unknown): value is RiskTolerance {
   return (RISK_TOLERANCES as readonly unknown[]).includes(value);

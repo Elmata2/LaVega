@@ -1,8 +1,4 @@
-import {
-  FEE_PERIOD_MONTHS,
-  readAccountFee,
-  type AccountFeeEntryLike,
-} from "../accountCosts.js";
+import { FEE_PERIOD_MONTHS, readAccountFee, type AccountFeeEntryLike } from "../accountCosts.js";
 import { isIsoDate, daysBetween } from "../advisor/months.js";
 import type { CardBalance, CardRepayment } from "../advisor/profile.js";
 import { mayAssumeNoCashback } from "../assumedCashback.js";
@@ -111,7 +107,11 @@ export type FeeCondition =
 
 export const FEE_CONDITIONS: Readonly<Record<string, FeeCondition>> = {
   // "Bij een minimale besteding van EUR 3.000 per jaar. Anders kost de kaart EUR 35 per jaar."
-  "american-express-blue-card": { kind: "min-spend", thresholdCents: 300_000, otherwiseCents: 3_500 },
+  "american-express-blue-card": {
+    kind: "min-spend",
+    thresholdCents: 300_000,
+    otherwiseCents: 3_500,
+  },
   // "Bovenop de EUR 3,45 per maand van Rabo Standaard."
   "rabobank-creditcard": { kind: "package", name: "Rabo Standaard", yearlyCents: 4_140 },
   "rabo-goldcard": { kind: "package", name: "Rabo Standaard", yearlyCents: 4_140 },
@@ -341,10 +341,7 @@ const byName = (a: { name: string }, b: { name: string }): number => a.name.loca
 
 /** The value of one point for a programme: the user's own examples first, else
  *  the issuer's published rate, else nothing. */
-export function pointValuation(
-  programId: string,
-  preferences: PlanPreferences,
-): PointValuation {
+export function pointValuation(programId: string, preferences: PlanPreferences): PointValuation {
   const own = pointsValueRange(preferences.redemptionExamples, programId);
   if (own !== null)
     return {
@@ -507,7 +504,9 @@ function surplusOf(buffer: BufferInput): number | null {
     buffer.targetMonths === null
   )
     return null;
-  return buffer.liquidSavingsCents - Math.round(buffer.fixedCostsMonthlyCents * buffer.targetMonths);
+  return (
+    buffer.liquidSavingsCents - Math.round(buffer.fixedCostsMonthlyCents * buffer.targetMonths)
+  );
 }
 
 /** Advice per revolving card. The savings above the buffer are one pot: they go
@@ -545,8 +544,7 @@ function interestAdvice(
     const ratePct = b.ratePct ?? null;
     const worthIt = ratePct !== null && (savingsRate === null || ratePct > savingsRate.ratePct);
     const availableCents = surplusCents === null ? null : left;
-    const payoffCents =
-      surplusCents === null || !worthIt ? 0 : Math.min(b.balanceCents, left);
+    const payoffCents = surplusCents === null || !worthIt ? 0 : Math.min(b.balanceCents, left);
     if (worthIt) left -= payoffCents;
     const interestSavedCents = ratePct === null ? null : Math.round((payoffCents * ratePct) / 100);
     const forgoneSavingsCents =
@@ -585,11 +583,13 @@ function interestAdvice(
 export function computeCardAdvice(i: CardAdviceInput): CardAdvice {
   const { spend } = i;
   const short = spend.months < CARD_ADVICE_MIN_MONTHS;
-  const stated = short && i.statedSpend != null && i.statedSpend.annualCents > 0 ? i.statedSpend : null;
+  const stated =
+    short && i.statedSpend != null && i.statedSpend.annualCents > 0 ? i.statedSpend : null;
   const basis: CardAdvice["basis"] = stated === null ? "history" : "stated";
-  const share = stated === null || !Number.isFinite(stated.foreignShare)
-    ? 0
-    : Math.min(1, Math.max(0, stated.foreignShare));
+  const share =
+    stated === null || !Number.isFinite(stated.foreignShare)
+      ? 0
+      : Math.min(1, Math.max(0, stated.foreignShare));
   const annualCents =
     stated !== null
       ? stated.annualCents
@@ -630,7 +630,8 @@ export function computeCardAdvice(i: CardAdviceInput): CardAdvice {
   const blockers: BaselineBlocker[] = [];
   for (const id of heldIds) {
     const o = all.find((x) => x.cardId === id);
-    if (o === undefined) blockers.push({ name: names.get(id) ?? null, reasons: ["not-in-catalogue"] });
+    if (o === undefined)
+      blockers.push({ name: names.get(id) ?? null, reasons: ["not-in-catalogue"] });
     else if (!o.comparable) blockers.push({ name: o.name, reasons: o.reasons });
   }
   if (i.hasOtherCard) blockers.push({ name: null, reasons: ["not-in-catalogue"] });
@@ -639,8 +640,10 @@ export function computeCardAdvice(i: CardAdviceInput): CardAdvice {
     blockers.push({ name: u.label, reasons: ["not-in-catalogue"], accountKey: u.accountKey });
   const heldOptions = options.filter((o) => o.held);
   let baseline: Baseline;
-  if (heldIds.length === 0 && !i.hasOtherCard && unidentified.length === 0) baseline = { kind: "no-card", netCents: 0 };
-  else if (blockers.length > 0 || heldOptions.length === 0) baseline = { kind: "unknown", blockers };
+  if (heldIds.length === 0 && !i.hasOtherCard && unidentified.length === 0)
+    baseline = { kind: "no-card", netCents: 0 };
+  else if (blockers.length > 0 || heldOptions.length === 0)
+    baseline = { kind: "unknown", blockers };
   else {
     const top = heldOptions[0]!;
     baseline = { kind: "best-held", cardId: top.cardId, name: top.name, netCents: top.netCents! };
@@ -706,7 +709,9 @@ export function computeCardAdvice(i: CardAdviceInput): CardAdvice {
               },
         expiresOn,
         expiresSoon:
-          expiresOn !== null && isIsoDate(expiresOn) && daysBetween(i.asOf, expiresOn) <= EXPIRY_WARN_DAYS,
+          expiresOn !== null &&
+          isIsoDate(expiresOn) &&
+          daysBetween(i.asOf, expiresOn) <= EXPIRY_WARN_DAYS,
       };
     })
     .sort((a, b) => a.programId.localeCompare(b.programId));

@@ -28,9 +28,9 @@ You need a Stripe account and either a restricted API key or an OAuth connection
 
 Stripe tables can be synced in one of three modes, and the one you pick has a big impact on cost, freshness, and correctness. We **strongly recommend using webhook syncs** for any Stripe source you care about keeping accurate:
 
--   **Webhook sync (recommended).** Stripe pushes events to PostHog in real time, so inserts, updates, and deletes all land within seconds. This is the only mode that reliably captures mutations to existing rows, and because PostHog only ingests what Stripe sends you, it's also the cheapest to run on an ongoing basis. See [Setting up webhooks for real-time syncing](#setting-up-webhooks-for-real-time-syncing) below.
--   **Append-only (incremental) sync.** PostHog periodically asks Stripe for new rows using Stripe's `created` cursor. This is cheap, but the Stripe API does not expose an "updated since" filter for most resources, so any change to an existing row – a subscription being cancelled, an invoice being marked paid, a customer's email being corrected – is silently missed. Fine for append-only tables you never mutate, dangerous for anything else.
--   **Full refresh sync.** PostHog re-downloads every row every sync. This is the only non-webhook mode that will eventually reflect updates, but it's expensive on both sides (lots of Stripe API calls, lots of warehouse writes) and the larger your Stripe account gets, the slower and more costly it becomes. Treat it as a fallback, not a default.
+- **Webhook sync (recommended).** Stripe pushes events to PostHog in real time, so inserts, updates, and deletes all land within seconds. This is the only mode that reliably captures mutations to existing rows, and because PostHog only ingests what Stripe sends you, it's also the cheapest to run on an ongoing basis. See [Setting up webhooks for real-time syncing](#setting-up-webhooks-for-real-time-syncing) below.
+- **Append-only (incremental) sync.** PostHog periodically asks Stripe for new rows using Stripe's `created` cursor. This is cheap, but the Stripe API does not expose an "updated since" filter for most resources, so any change to an existing row – a subscription being cancelled, an invoice being marked paid, a customer's email being corrected – is silently missed. Fine for append-only tables you never mutate, dangerous for anything else.
+- **Full refresh sync.** PostHog re-downloads every row every sync. This is the only non-webhook mode that will eventually reflect updates, but it's expensive on both sides (lots of Stripe API calls, lots of warehouse writes) and the larger your Stripe account gets, the slower and more costly it becomes. Treat it as a fallback, not a default.
 
 If you only take one thing from this page: connect with a restricted API key (with **Write** on **Webhook**) or OAuth and turn on webhook syncing as soon as your source is created.
 
@@ -45,12 +45,12 @@ If you only take one thing from this page: connect with a restricted API key (wi
 1.  Select **Restricted API key** as the authentication type.
 2.  Head to your Stripe dashboard > **Developers** > **API keys**, under **Restricted keys**, click [\+ Create a restricted key](https://dashboard.stripe.com/apikeys/create). You need to give your API key the following permissions:
 
-| Resource Type | Required Permissions |
-| --- | --- |
-| Core | **Read** on Balance transaction sources, Charges and refunds, Customers, Disputes, Payment methods, Payouts, Products |
-| Billing | **Read** on Coupons, Credit notes, Invoices, Prices, Subscriptions |
-| Connect | Click **Read** in the **Connect** header |
-| Webhooks | **Write** on Webhooks (so PostHog can create the real-time sync webhook for you – see [Setting up webhooks](#setting-up-webhooks-for-real-time-syncing)) |
+| Resource Type | Required Permissions                                                                                                                                     |
+| ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Core          | **Read** on Balance transaction sources, Charges and refunds, Customers, Disputes, Payment methods, Payouts, Products                                    |
+| Billing       | **Read** on Coupons, Credit notes, Invoices, Prices, Subscriptions                                                                                       |
+| Connect       | Click **Read** in the **Connect** header                                                                                                                 |
+| Webhooks      | **Write** on Webhooks (so PostHog can create the real-time sync webhook for you – see [Setting up webhooks](#setting-up-webhooks-for-real-time-syncing)) |
 
 If you aren't concerned with giving us more permissions than necessary, you can also simply click **Read** on the **Core**, **Billing**, and **Connect** headers, plus **Write** on **Webhooks**, to give us the necessary permissions.
 
@@ -59,16 +59,16 @@ The **Webhooks** write permission is only required if you want PostHog to set up
 If your Stripe account is in a language other than English, we suggest you update it to English before following the steps above to guarantee the correct permissions are set.
 
 3.  Paste your API key into PostHog.
-4.  *Optional:* Add your Stripe Account ID. You can find it by going to **Settings** > **Business**, selecting the [Account details](https://dashboard.stripe.com/settings/account) tab, and clicking your **Account ID** or pressing `⌘` + `I` to copy your ID.
-5.  *Optional:* Add a prefix to your table names.
+4.  _Optional:_ Add your Stripe Account ID. You can find it by going to **Settings** > **Business**, selecting the [Account details](https://dashboard.stripe.com/settings/account) tab, and clicking your **Account ID** or pressing `⌘` + `I` to copy your ID.
+5.  _Optional:_ Add a prefix to your table names.
 6.  Click **Next**.
 
 ### Option 2: OAuth connection
 
 1.  Select **OAuth connection** as the authentication type.
 2.  Click the **Connect** button and follow the prompts to authorize PostHog with your Stripe account.
-3.  *Optional:* Add your Stripe Account ID. You can find it by going to **Settings** > **Business**, selecting the [Account details](https://dashboard.stripe.com/settings/account) tab, and clicking your **Account ID** or pressing `⌘` + `I` to copy your ID.
-4.  *Optional:* Add a prefix to your table names.
+3.  _Optional:_ Add your Stripe Account ID. You can find it by going to **Settings** > **Business**, selecting the [Account details](https://dashboard.stripe.com/settings/account) tab, and clicking your **Account ID** or pressing `⌘` + `I` to copy your ID.
+4.  _Optional:_ Add a prefix to your table names.
 5.  Click **Next**.
 
 > For Stripe tables, incremental (append-only) syncs only sync new records and don't update existing ones – this is a limitation of the Stripe API, not PostHog. Full refresh syncs do pick up changes but get expensive fast as your Stripe account grows. We strongly recommend [setting up webhooks](#setting-up-webhooks-for-real-time-syncing) for real-time, change-aware syncing instead.
@@ -77,58 +77,58 @@ The data warehouse then starts syncing your Stripe data. You can see details and
 
 ## Configuration
 
-| Option | Description |
-| --- | --- |
-| `Authentication type` **Type:** select **Required:** True |  |
+| Option                                                     | Description                                                                                                                                                                                                                                                                                    |
+| ---------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Authentication type` **Type:** select **Required:** True  |                                                                                                                                                                                                                                                                                                |
 | `Account id (optional)` **Type:** text **Required:** False | Leave blank in most cases, including when connecting with OAuth. Only set this if you use a Stripe Connect platform key and want to sync a specific connected account. You can find it under Account details in your [Stripe account settings](https://dashboard.stripe.com/settings/account). |
 
 ## Supported tables
 
-| Table | Description | Sync method | Incremental field | Primary key |
-| --- | --- | --- | --- | --- |
-| `BalanceTransaction` | A change to your Stripe account balance — a charge, refund, payout, or fee. | Webhook, Append only, Full refresh | created\_at | — |
-| `Charge` | A single attempt to move money into your Stripe account by charging a payment source. | Webhook, Append only, Full refresh | created\_at | — |
-| `Customer` | A Stripe customer, allowing recurring charges and tracking of payments belonging to the same person. | Webhook, Append only, Full refresh | created\_at | — |
-| `Dispute` | A customer's challenge of a charge with their card issuer (a chargeback) and its resolution. | Webhook, Append only, Full refresh | created\_at | — |
-| `InvoiceItem` | A one-off charge or credit added to a customer's upcoming invoice. | Webhook, Append only, Full refresh | date | — |
-| `Invoice` | A statement of amounts owed by a customer, generated for subscriptions or one-off billing. | Webhook, Append only, Full refresh | created\_at | — |
-| `Payout` | A transfer of funds from your Stripe balance to your bank account or debit card. | Webhook, Append only, Full refresh | created\_at | — |
-| `Price` | How much and how often to charge for a product — its unit cost, currency, and billing interval. | Webhook, Append only, Full refresh | created\_at | — |
-| `Product` | A good or service that you sell, which prices are attached to. | Webhook, Append only, Full refresh | created\_at | — |
-| `Refund` | A refund of all or part of a charge back to the customer. | Webhook, Append only, Full refresh | created\_at | — |
-| `Subscription` | A customer's recurring billing arrangement against one or more prices. | Webhook, Append only, Full refresh | created\_at | — |
-| `CreditNote` | An adjustment to an issued invoice that reduces the amount owed or refunds the customer. | Webhook, Append only, Full refresh | created\_at | — |
-| `CustomerBalanceTransaction` | An adjustment to a single customer's credit balance (used toward or away from future invoices). | Full refresh | — | — |
-| `CustomerPaymentMethod` | A saved payment method (card, bank account, …) attached to a customer. | Webhook, Full refresh | — | — |
-| `CustomerPaymentMethodHistory` | One row per observed state of a customer's payment method — seeded from the attached-payment-methods sweep, then appended from payment\_method.\* webhook events, so detached payment methods stay queryable as they existed historically. | Webhook only | — | — |
-| `Coupon` | A discount you can apply to customers, invoices, or subscriptions. | Webhook, Append only, Full refresh | created\_at | — |
-| `Discount` | An applied coupon — the link between a coupon and the customer, subscription, or invoice it discounts. | Webhook only | start | — |
-| `PaymentIntent` | The full lifecycle of collecting one payment, including attempts that never became a charge. | Webhook, Append only, Full refresh | created\_at | — |
-| `CheckoutSession` | A customer's session paying through Stripe Checkout or a payment link, including sessions that were never completed. | Webhook, Append only, Full refresh | created\_at | — |
-| `SubscriptionItem` | One priced line on a subscription, so multi-product subscriptions can be split by price. | Full refresh | — | — |
-| `SubscriptionSchedule` | A predefined plan of phased changes to a subscription over time. | Webhook, Append only, Full refresh | created\_at | — |
-| `PromotionCode` | A customer-redeemable code for a coupon, so you can see which code was actually used. | Webhook, Append only, Full refresh | created\_at | — |
-| `Plan` | The legacy pricing model for recurring purchases, superseded by Price but still widely used. | Webhook, Append only, Full refresh | created\_at | — |
-| `TaxRate` | A tax rate that can be applied to invoices, subscriptions, and Checkout Sessions. | Webhook, Append only, Full refresh | created\_at | — |
-| `TaxId` | A tax identification number registered on the account (customer-owned tax IDs live on the customer). | Webhook, Full refresh | — | — |
-| `Quote` | A proposed set of prices for a customer that creates an invoice, subscription, or schedule once accepted. | Webhook, Full refresh | — | — |
-| `Event` | Stripe's own log of activity in your account — a generic change feed across every resource. Stripe retains events for 30 days. | Append only, Full refresh | created\_at | — |
-| `BillingMeter` | A definition of how usage events are aggregated over a billing period for usage-based pricing. | Webhook, Full refresh | — | — |
-| `BillingCreditGrant` | An allocation of billing credits to a customer for usage-based billing. | Webhook, Full refresh | — | — |
-| `BillingCreditBalanceTransaction` | A credit or debit against an existing billing credit grant. | Webhook, Full refresh | — | — |
-| `BillingCreditBalanceSummary` | A customer's current billing credit balance, scoped to one credit grant. | Full refresh | — | — |
-| `EntitlementsFeature` | A monetizable capability in your product that customers can be entitled to. | Full refresh | — | — |
-| `EntitlementsActiveEntitlement` | A customer's current access to a feature, granted by the products they have purchased. | Full refresh | — | — |
-| `InvoicePayment` | A payment made against an invoice, mapping the invoice to the payment object that settled it. | Webhook, Append only, Full refresh | created\_at | — |
-| `SetupIntent` | The flow for saving a customer's payment credentials for later payments. | Webhook, Append only, Full refresh | created\_at | — |
-| `SetupAttempt` | One attempt to confirm a SetupIntent, successful or not. | Full refresh | — | — |
-| `PaymentLink` | A shareable URL that opens a hosted payment page and can be used repeatedly. | Webhook, Full refresh | — | — |
-| `Transfer` | A movement of funds between Stripe accounts as part of Connect. | Webhook, Append only, Full refresh | created\_at | — |
-| `ApplicationFee` | A fee a Connect platform earned on a charge made by a connected account. | Webhook, Append only, Full refresh | created\_at | — |
-| `Topup` | A top-up that adds funds to your Stripe balance. | Webhook, Append only, Full refresh | created\_at | — |
-| `Review` | A Radar review of a payment, used to supplement automated fraud detection with human decisions. | Webhook, Append only, Full refresh | created\_at | — |
-| `EarlyFraudWarning` | A notice from the card issuer that a charge may be fraudulent, usually ahead of a dispute. | Webhook, Append only, Full refresh | created\_at | — |
-| `ShippingRate` | The price of shipping presented to customers and applied to a purchase. | Append only, Full refresh | created\_at | — |
+| Table                             | Description                                                                                                                                                                                                                                | Sync method                        | Incremental field | Primary key |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------- | ----------------- | ----------- |
+| `BalanceTransaction`              | A change to your Stripe account balance — a charge, refund, payout, or fee.                                                                                                                                                                | Webhook, Append only, Full refresh | created\_at       | —           |
+| `Charge`                          | A single attempt to move money into your Stripe account by charging a payment source.                                                                                                                                                      | Webhook, Append only, Full refresh | created\_at       | —           |
+| `Customer`                        | A Stripe customer, allowing recurring charges and tracking of payments belonging to the same person.                                                                                                                                       | Webhook, Append only, Full refresh | created\_at       | —           |
+| `Dispute`                         | A customer's challenge of a charge with their card issuer (a chargeback) and its resolution.                                                                                                                                               | Webhook, Append only, Full refresh | created\_at       | —           |
+| `InvoiceItem`                     | A one-off charge or credit added to a customer's upcoming invoice.                                                                                                                                                                         | Webhook, Append only, Full refresh | date              | —           |
+| `Invoice`                         | A statement of amounts owed by a customer, generated for subscriptions or one-off billing.                                                                                                                                                 | Webhook, Append only, Full refresh | created\_at       | —           |
+| `Payout`                          | A transfer of funds from your Stripe balance to your bank account or debit card.                                                                                                                                                           | Webhook, Append only, Full refresh | created\_at       | —           |
+| `Price`                           | How much and how often to charge for a product — its unit cost, currency, and billing interval.                                                                                                                                            | Webhook, Append only, Full refresh | created\_at       | —           |
+| `Product`                         | A good or service that you sell, which prices are attached to.                                                                                                                                                                             | Webhook, Append only, Full refresh | created\_at       | —           |
+| `Refund`                          | A refund of all or part of a charge back to the customer.                                                                                                                                                                                  | Webhook, Append only, Full refresh | created\_at       | —           |
+| `Subscription`                    | A customer's recurring billing arrangement against one or more prices.                                                                                                                                                                     | Webhook, Append only, Full refresh | created\_at       | —           |
+| `CreditNote`                      | An adjustment to an issued invoice that reduces the amount owed or refunds the customer.                                                                                                                                                   | Webhook, Append only, Full refresh | created\_at       | —           |
+| `CustomerBalanceTransaction`      | An adjustment to a single customer's credit balance (used toward or away from future invoices).                                                                                                                                            | Full refresh                       | —                 | —           |
+| `CustomerPaymentMethod`           | A saved payment method (card, bank account, …) attached to a customer.                                                                                                                                                                     | Webhook, Full refresh              | —                 | —           |
+| `CustomerPaymentMethodHistory`    | One row per observed state of a customer's payment method — seeded from the attached-payment-methods sweep, then appended from payment\_method.\* webhook events, so detached payment methods stay queryable as they existed historically. | Webhook only                       | —                 | —           |
+| `Coupon`                          | A discount you can apply to customers, invoices, or subscriptions.                                                                                                                                                                         | Webhook, Append only, Full refresh | created\_at       | —           |
+| `Discount`                        | An applied coupon — the link between a coupon and the customer, subscription, or invoice it discounts.                                                                                                                                     | Webhook only                       | start             | —           |
+| `PaymentIntent`                   | The full lifecycle of collecting one payment, including attempts that never became a charge.                                                                                                                                               | Webhook, Append only, Full refresh | created\_at       | —           |
+| `CheckoutSession`                 | A customer's session paying through Stripe Checkout or a payment link, including sessions that were never completed.                                                                                                                       | Webhook, Append only, Full refresh | created\_at       | —           |
+| `SubscriptionItem`                | One priced line on a subscription, so multi-product subscriptions can be split by price.                                                                                                                                                   | Full refresh                       | —                 | —           |
+| `SubscriptionSchedule`            | A predefined plan of phased changes to a subscription over time.                                                                                                                                                                           | Webhook, Append only, Full refresh | created\_at       | —           |
+| `PromotionCode`                   | A customer-redeemable code for a coupon, so you can see which code was actually used.                                                                                                                                                      | Webhook, Append only, Full refresh | created\_at       | —           |
+| `Plan`                            | The legacy pricing model for recurring purchases, superseded by Price but still widely used.                                                                                                                                               | Webhook, Append only, Full refresh | created\_at       | —           |
+| `TaxRate`                         | A tax rate that can be applied to invoices, subscriptions, and Checkout Sessions.                                                                                                                                                          | Webhook, Append only, Full refresh | created\_at       | —           |
+| `TaxId`                           | A tax identification number registered on the account (customer-owned tax IDs live on the customer).                                                                                                                                       | Webhook, Full refresh              | —                 | —           |
+| `Quote`                           | A proposed set of prices for a customer that creates an invoice, subscription, or schedule once accepted.                                                                                                                                  | Webhook, Full refresh              | —                 | —           |
+| `Event`                           | Stripe's own log of activity in your account — a generic change feed across every resource. Stripe retains events for 30 days.                                                                                                             | Append only, Full refresh          | created\_at       | —           |
+| `BillingMeter`                    | A definition of how usage events are aggregated over a billing period for usage-based pricing.                                                                                                                                             | Webhook, Full refresh              | —                 | —           |
+| `BillingCreditGrant`              | An allocation of billing credits to a customer for usage-based billing.                                                                                                                                                                    | Webhook, Full refresh              | —                 | —           |
+| `BillingCreditBalanceTransaction` | A credit or debit against an existing billing credit grant.                                                                                                                                                                                | Webhook, Full refresh              | —                 | —           |
+| `BillingCreditBalanceSummary`     | A customer's current billing credit balance, scoped to one credit grant.                                                                                                                                                                   | Full refresh                       | —                 | —           |
+| `EntitlementsFeature`             | A monetizable capability in your product that customers can be entitled to.                                                                                                                                                                | Full refresh                       | —                 | —           |
+| `EntitlementsActiveEntitlement`   | A customer's current access to a feature, granted by the products they have purchased.                                                                                                                                                     | Full refresh                       | —                 | —           |
+| `InvoicePayment`                  | A payment made against an invoice, mapping the invoice to the payment object that settled it.                                                                                                                                              | Webhook, Append only, Full refresh | created\_at       | —           |
+| `SetupIntent`                     | The flow for saving a customer's payment credentials for later payments.                                                                                                                                                                   | Webhook, Append only, Full refresh | created\_at       | —           |
+| `SetupAttempt`                    | One attempt to confirm a SetupIntent, successful or not.                                                                                                                                                                                   | Full refresh                       | —                 | —           |
+| `PaymentLink`                     | A shareable URL that opens a hosted payment page and can be used repeatedly.                                                                                                                                                               | Webhook, Full refresh              | —                 | —           |
+| `Transfer`                        | A movement of funds between Stripe accounts as part of Connect.                                                                                                                                                                            | Webhook, Append only, Full refresh | created\_at       | —           |
+| `ApplicationFee`                  | A fee a Connect platform earned on a charge made by a connected account.                                                                                                                                                                   | Webhook, Append only, Full refresh | created\_at       | —           |
+| `Topup`                           | A top-up that adds funds to your Stripe balance.                                                                                                                                                                                           | Webhook, Append only, Full refresh | created\_at       | —           |
+| `Review`                          | A Radar review of a payment, used to supplement automated fraud detection with human decisions.                                                                                                                                            | Webhook, Append only, Full refresh | created\_at       | —           |
+| `EarlyFraudWarning`               | A notice from the card issuer that a charge may be fraudulent, usually ahead of a dispute.                                                                                                                                                 | Webhook, Append only, Full refresh | created\_at       | —           |
+| `ShippingRate`                    | The price of shipping presented to customers and applied to a purchase.                                                                                                                                                                    | Append only, Full refresh          | created\_at       | —           |
 
 ## Setting up webhooks for real-time syncing
 
@@ -182,25 +182,25 @@ We recommend **selecting all events** when creating the webhook manually. It's t
 
 If you'd rather scope the webhook down to just the resources you're syncing, select every event under the prefixes that match your enabled tables:
 
-| PostHog table | Stripe event prefix |
-| --- | --- |
-| Account | `account.*` |
-| BalanceTransaction | `transfer.*` |
-| Charge | `charge.*` |
-| Coupon | `coupon.*` |
-| CreditNote | `credit_note.*` |
-| Customer | `customer.*` |
-| CustomerBalanceTransaction | `billing.*` |
-| CustomerPaymentMethod | `payment_method.*` |
-| Discount | `customer.discount.*` |
-| Dispute | `dispute.*` |
-| Invoice | `invoice.*` |
-| InvoiceItem | `invoiceitem.*` |
-| Payout | `payout.*` |
-| Price | `price.*` |
-| Product | `product.*` |
-| Refund | `refund.*` |
-| Subscription | `customer.subscription.*` |
+| PostHog table              | Stripe event prefix       |
+| -------------------------- | ------------------------- |
+| Account                    | `account.*`               |
+| BalanceTransaction         | `transfer.*`              |
+| Charge                     | `charge.*`                |
+| Coupon                     | `coupon.*`                |
+| CreditNote                 | `credit_note.*`           |
+| Customer                   | `customer.*`              |
+| CustomerBalanceTransaction | `billing.*`               |
+| CustomerPaymentMethod      | `payment_method.*`        |
+| Discount                   | `customer.discount.*`     |
+| Dispute                    | `dispute.*`               |
+| Invoice                    | `invoice.*`               |
+| InvoiceItem                | `invoiceitem.*`           |
+| Payout                     | `payout.*`                |
+| Price                      | `price.*`                 |
+| Product                    | `product.*`               |
+| Refund                     | `refund.*`                |
+| Subscription               | `customer.subscription.*` |
 
 Narrowing events down means you'll need to revisit the webhook any time you enable a new table, which is why we still recommend **All events** unless you have a specific reason not to.
 
