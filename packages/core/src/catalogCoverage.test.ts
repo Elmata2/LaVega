@@ -1,6 +1,15 @@
 import { expect, test } from "vitest";
 import type { CatalogField, CatalogValue } from "./catalog.js";
-import { coverageForRun, nextHeldSince, sweptFieldFor, weeksSince } from "./catalogCoverage.js";
+import {
+  coverageForRun,
+  expectedExtraFieldsFor,
+  extraFieldsFor,
+  missingExtraFields,
+  nextHeldSince,
+  sweptFieldFor,
+  weeksSince,
+  ZERO_FEE_PREFIX,
+} from "./catalogCoverage.js";
 import type { GuardVerdict } from "./catalogGuard.js";
 import type { FieldVerdict } from "./catalogGuardRun.js";
 import type { MergeEntry } from "./catalogMerge.js";
@@ -57,6 +66,14 @@ test("confirm verdict is confirmed, with how", () => {
     confirmedBy: new Map([["a.fxFeePct", "quote-check"]]),
   });
   expect(only(r)).toMatchObject({ status: "confirmed", detail: "quote check", uncheckedWeeks: 0 });
+});
+
+test("a no-programme-found confirm is confirmed, with how", () => {
+  const r = run({
+    verdicts: [fv("a", "fxFeePct", { kind: "confirm" })],
+    confirmedBy: new Map([["a.fxFeePct", "no-programme-found"]]),
+  });
+  expect(only(r)).toMatchObject({ status: "confirmed", detail: "no programme found" });
 });
 
 test("confirm without a recorded route reads as read again", () => {
@@ -423,4 +440,169 @@ test("a held figure carries heldWeeks from the held-since map", () => {
     heldWeeks: 3,
   });
   expect(only(run({ verdicts }))).toMatchObject({ status: "held", heldWeeks: 1 });
+});
+
+const ALL: ReadonlySet<CatalogField> = new Set<CatalogField>([
+  "fxFeePct",
+  "interestPct",
+  "accountFee",
+  "pointsPerEuro",
+  "cashbackPct",
+]);
+
+test("extraFieldsFor returns the held fee, points and cashback fields", () => {
+  expect(
+    extraFieldsFor(
+      new Set<CatalogField>(["fxFeePct", "cashbackPct", "accountFee", "pointsPerEuro"]),
+    ),
+  ).toEqual(["accountFee", "pointsPerEuro", "cashbackPct"]);
+  expect(extraFieldsFor(held("pointsPerEuro"))).toEqual(["pointsPerEuro"]);
+});
+
+test("a package with only a fee is swept for the fee", () => {
+  const h = held("accountFee");
+  expect(sweptFieldFor("betaalpakket", h)).toBeNull();
+  expect(extraFieldsFor(h)).toEqual(["accountFee"]);
+});
+
+test("a product with nothing to ask is still skipped", () => {
+  const h = held();
+  expect(sweptFieldFor("betaalpakket", h)).toBeNull();
+  expect(extraFieldsFor(h)).toEqual([]);
+  expect(extraFieldsFor(held("fxFeePct", "interestPct"))).toEqual([]);
+});
+
+const feeRun = (over: Partial<In> = {}) =>
+  run({
+    entries: [entry("a", { accountFee: val(4, { period: "maand" }) })],
+    expected: [{ id: "a", product: "Product a", field: "accountFee" }],
+    sweptFields: ALL,
+    ...over,
+  });
+
+test("an account fee confirmed by quote check is confirmed", () => {
+  const r = feeRun({
+    verdicts: [fv("a", "accountFee", { kind: "confirm" })],
+    confirmedBy: new Map([["a.accountFee", "quote-check"]]),
+  });
+  expect(only(r)).toMatchObject({
+    field: "accountFee",
+    status: "confirmed",
+    detail: "quote check",
+  });
+});
+
+test("a zero points figure confirmed as no programme found is confirmed by the weak route", () => {
+  const r = run({
+    entries: [entry("a", { pointsPerEuro: val(0) })],
+    expected: [{ id: "a", product: "Product a", field: "pointsPerEuro" }],
+    sweptFields: ALL,
+    verdicts: [fv("a", "pointsPerEuro", { kind: "confirm" })],
+    confirmedBy: new Map([["a.pointsPerEuro", "no-programme-found"]]),
+  });
+  expect(only(r)).toMatchObject({ status: "confirmed", detail: "no programme found" });
+});
+
+test("a fee whose document could not be read is not checked with fetch-failed", () => {
+  const r = feeRun({
+    reached: new Map([
+      ["a", { fetched: true, reason: null }],
+      ["a.accountFee", { fetched: false, reason: "fetch failed" }],
+    ]),
+  });
+  expect(only(r)).toMatchObject({ status: "not-checked", cause: "fetch-failed" });
+});
+
+test("a hand-entered figure is not checked with no-source", () => {
+  const r = feeRun({
+    entries: [entry("a", { accountFee: val(4, { period: "maand", sourceUrl: "hand-entered" }) })],
+    reached: new Map([["a.accountFee", { fetched: false, reason: "no source" }]]),
+  });
+  expect(only(r)).toMatchObject({ status: "not-checked", cause: "no-source" });
+});
+
+test("a fee beside an asked fx question is not 'not asked'", () => {
+  const r = run({
+    entries: [entry("a", { fxFeePct: val(2), accountFee: val(4, { period: "maand" }) })],
+    expected: [
+      { id: "a", product: "Product a", field: "fxFeePct" },
+      { id: "a", product: "Product a", field: "accountFee" },
+    ],
+    sweptFields: ALL,
+  });
+  expect(r.figures.find((f) => f.field === "accountFee")!.cause).toBe("not-found-on-page");
+});
+
+test("a fee whose document is over the model limit is not checked with document-too-large", () => {
+  const r = feeRun({
+    reached: new Map([
+      ["a", { fetched: true, reason: null }],
+      ["a.accountFee", { fetched: true, reason: "document too large: 250k chars" }],
+    ]),
+  });
+  expect(only(r)).toMatchObject({ status: "not-checked", cause: "document-too-large" });
+});
+
+test("a held zero fee the sweep cannot confirm is not checked with zero-fee-needs-person", () => {
+  const r = feeRun({
+    reached: new Map([
+      ["a", { fetched: true, reason: null }],
+      ["a.accountFee", { fetched: true, reason: ZERO_FEE_PREFIX }],
+    ]),
+  });
+  expect(only(r)).toMatchObject({ status: "not-checked", cause: "zero-fee-needs-person" });
+});
+
+test("a fee the stopped run did not reach inside a reached product is stopped-early", () => {
+  const r = feeRun({
+    reached: new Map([["a", { fetched: true, reason: null }]]),
+    stoppedEarlyFigures: new Set(["a.accountFee"]),
+  });
+  expect(only(r)).toMatchObject({ status: "not-checked", cause: "stopped-early" });
+});
+
+test("a credit card is expected to hold fee, points and cashback", () => {
+  expect(expectedExtraFieldsFor("creditcard")).toEqual([
+    "accountFee",
+    "pointsPerEuro",
+    "cashbackPct",
+  ]);
+  expect(expectedExtraFieldsFor("betaalpas")).toEqual(["pointsPerEuro"]);
+});
+
+test("an account is expected to hold a fee", () => {
+  expect(expectedExtraFieldsFor("betaalrekening")).toEqual(["accountFee"]);
+  expect(expectedExtraFieldsFor("betaalpakket")).toEqual(["accountFee"]);
+});
+
+test("a savings account expects none of the three", () => {
+  expect(expectedExtraFieldsFor("spaarrekening")).toEqual([]);
+  expect(expectedExtraFieldsFor("beleggingsrekening")).toEqual([]);
+  expect(expectedExtraFieldsFor("prepaid")).toEqual([]);
+  expect(expectedExtraFieldsFor(undefined)).toEqual([]);
+});
+
+test("missingExtraFields lists the expected figures the catalogue does not hold", () => {
+  expect(missingExtraFields("creditcard", held("pointsPerEuro"))).toEqual([
+    "accountFee",
+    "cashbackPct",
+  ]);
+  expect(missingExtraFields("betaalrekening", held("accountFee"))).toEqual([]);
+});
+
+test("a credit card with no fee on file gets a no-figure-yet row for the fee", () => {
+  const r = run({
+    entries: [entry("a", { fxFeePct: val(1) })],
+    expected: [{ id: "a", product: "Product a", field: "accountFee" }],
+    sweptFields: ALL,
+    reached: new Map([["a.accountFee", { fetched: true, reason: null }]]),
+  });
+  expect(r.figures).toEqual([
+    expect.objectContaining({ field: "fxFeePct" }),
+    expect.objectContaining({
+      field: "accountFee",
+      status: "not-checked",
+      cause: "no-figure-yet",
+    }),
+  ]);
 });

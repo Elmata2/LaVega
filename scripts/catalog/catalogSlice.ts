@@ -115,3 +115,36 @@ export function sliceForExtraction(text: string, opts: SliceOptions = {}): Slice
 
   return { text: sliced, kept: sliced.length / text.length, regions: regions.length, whole: false };
 }
+
+const FIGURE_TERM: Record<"accountFee" | "pointsPerEuro" | "cashbackPct", RegExp> = {
+  accountFee:
+    /per\s+(?:maand|jaar|month|year)|jaarbijdrage|maandbijdrage|annual fee|monthly fee|\bkosten\b/i,
+  pointsPerEuro: /\bpunt|\bpoints?\b|\bmiles\b|\bmijlen\b/i,
+  cashbackPct: /cashback|geld terug|\bterug\b/i,
+};
+
+const MIN_FIGURE_SLICE = 400;
+
+/** The slice for a fee, points or cashback question. The slicer was written for FX rows, so a slice
+ *  that is short or has lost every term of the asked figure is not trusted: the whole document goes. */
+export function sliceForFigure(
+  field: "accountFee" | "pointsPerEuro" | "cashbackPct",
+  text: string,
+): SliceResult {
+  const cut = sliceForExtraction(text);
+  if (cut.whole) return cut;
+  if (cut.text.length < MIN_FIGURE_SLICE || !FIGURE_TERM[field].test(cut.text)) {
+    return { text, kept: 1, regions: 1, whole: true };
+  }
+  return cut;
+}
+
+/** The text of a fee, points or cashback confirm. An absence can only be judged on the whole
+ *  document, so a zero that rests on absence never gets a slice. */
+export function sliceForConfirm(
+  field: "accountFee" | "pointsPerEuro" | "cashbackPct",
+  text: string,
+  zeroByAbsence: boolean | undefined,
+): SliceResult {
+  return zeroByAbsence ? { text, kept: 1, regions: 1, whole: true } : sliceForFigure(field, text);
+}

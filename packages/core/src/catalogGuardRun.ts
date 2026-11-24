@@ -1,6 +1,7 @@
 import type { CatalogField, CatalogValue } from "./catalog.js";
 import { lastConfirmed } from "./catalogAge.js";
 import { isArchiveUrl, judgeField, type GuardVerdict, type PendingFigure } from "./catalogGuard.js";
+import { EXTRA_FIELDS } from "./catalogCoverage.js";
 import type { MergeEntry } from "./catalogMerge.js";
 
 export type FieldVerdict = {
@@ -70,7 +71,16 @@ export function guardRun(input: {
 
       switch (verdict.kind) {
         case "unjudged":
-          fields[field] = found;
+          // A confirm read of an uncovered fee, points or cashback figure carries no conditions text of
+          // its own: the stored text stays while the figure itself is unchanged.
+          fields[field] =
+            before?.conditions &&
+            found.conditions === null &&
+            (EXTRA_FIELDS as readonly CatalogField[]).includes(field) &&
+            Math.round(before.value * 1e4) === Math.round(found.value * 1e4) &&
+            before.period === found.period
+              ? { ...found, conditions: before.conditions }
+              : found;
           break;
         case "confirm":
           // confirm only happens against a covered baseline, so `before` is set.

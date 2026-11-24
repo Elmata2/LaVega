@@ -278,3 +278,64 @@ test("a conditions-only update from an archive copy newer than the last confirma
   const out = run([entry("p", { fxFeePct: stored })], [entry("p", { fxFeePct: found })]);
   expect(out.verdicts[0]!.verdict).toMatchObject({ kind: "publish", conditionsOnly: true });
 });
+
+test("publish carries the found period", () => {
+  const prev = [entry("p", { accountFee: val(4, { period: "maand" }) })];
+  const found = val(48, { period: "jaar", checkedAt: TODAY });
+  const out = run(prev, [entry("p", { accountFee: found })]);
+  expect(out.verdicts[0]!.verdict).toEqual({ kind: "publish", viaPending: false });
+  expect(out.rows[0]!.fields.accountFee).toEqual({ ...found, confirmedAt: TODAY });
+});
+
+test("confirm keeps the stored period", () => {
+  const prev = [entry("p", { accountFee: val(4, { period: "maand" }) })];
+  const found = val(4, { period: "maand", checkedAt: TODAY, conditions: "B" });
+  const out = run(prev, [entry("p", { accountFee: found })]);
+  expect(out.verdicts[0]!.verdict).toEqual({ kind: "confirm" });
+  expect(out.rows[0]!.fields.accountFee).toEqual({
+    ...val(4, { period: "maand" }),
+    confirmedAt: TODAY,
+  });
+});
+
+test("a confirm read of an uncovered stored extra figure keeps the stored conditions text", () => {
+  const stored = val(1, { conditions: "Alleen bij partners", conditionsKnown: false });
+  const prev = [entry("p", { pointsPerEuro: stored })];
+  const read = val(1, {
+    route: "agent",
+    conditions: null,
+    conditionsKnown: false,
+    checkedAt: TODAY,
+  });
+  const out = run(prev, [entry("p", { pointsPerEuro: read })]);
+  expect(out.rows[0]!.fields.pointsPerEuro).toEqual({ ...read, conditions: "Alleen bij partners" });
+});
+
+test("an uncovered read of another value does not keep the stored conditions text", () => {
+  const stored = val(1, { conditions: "Alleen bij partners", conditionsKnown: false });
+  const prev = [entry("p", { pointsPerEuro: stored })];
+  const read = val(2, {
+    route: "agent",
+    conditions: null,
+    conditionsKnown: false,
+    checkedAt: TODAY,
+  });
+  const out = run(prev, [entry("p", { pointsPerEuro: read })]);
+  expect(out.rows[0]!.fields.pointsPerEuro).toEqual(read);
+});
+
+test("a fee read with another period does not keep the stored conditions text", () => {
+  const stored = val(4, { period: "maand", conditions: "Per pakket", conditionsKnown: false });
+  const prev = [entry("p", { accountFee: stored })];
+  const read = val(4, { period: "jaar", route: "agent", conditions: null, conditionsKnown: false });
+  const out = run(prev, [entry("p", { accountFee: read })]);
+  expect(out.rows[0]!.fields.accountFee).toEqual(read);
+});
+
+test("an uncovered FX read keeps behaving as before", () => {
+  const stored = val(1.4, { conditions: "Buiten de eurozone", conditionsKnown: false });
+  const prev = [entry("p", { fxFeePct: stored })];
+  const read = val(1.4, { route: "agent", conditions: null, conditionsKnown: false });
+  const out = run(prev, [entry("p", { fxFeePct: read })]);
+  expect(out.rows[0]!.fields.fxFeePct).toEqual(read);
+});

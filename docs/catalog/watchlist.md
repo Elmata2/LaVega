@@ -1538,13 +1538,16 @@ reviewable git diff instead of a silent overwrite.
 A maintainer can follow this without reading code. The code lives in `packages/core/src/catalogGuard.ts`,
 `catalogGuardRun.ts`, `catalogAge.ts`, `catalogCoverage.ts` and `scripts/catalog/catalogReport.ts`. The sweep is
 `scripts/catalog-sweep.ts`; its model client, reader and confirm step are in `scripts/catalog/mistralClient.ts`,
-`readerFetch.ts` and `catalogConfirm.ts`.
+`readerFetch.ts` and `catalogConfirm.ts`. The per-figure pass (fee, points, cashback) has its decisions in
+`scripts/catalog/extraConfirm.ts` and its open question in `scripts/catalog/catalogFigure.ts`.
 
 ### The order
 
-1. **Question** — each product is asked for one figure (see "Which figure a product is asked for").
-2. **Ladder** — the sweep reads that figure from a source (`scripts/catalog-sweep.ts`), rung by rung, then the
-   confirm step and the cross-check.
+1. **Question** — each product is asked for one FX or interest figure, and for the fee, points and cashback
+   figures it holds or should hold (see "Which figure a product is asked for").
+2. **Ladder** — the sweep reads the FX or interest figure from a source (`scripts/catalog-sweep.ts`), rung by
+   rung, then the confirm step and the cross-check. Fee, points and cashback figures go through the per-figure
+   pass instead (see "Fee, points and cashback: the per-figure pass").
 3. **Guard** — each field the run read is judged on its own.
 4. **Coverage** — every figure gets a status for this run.
 5. **Merge** — the figures that passed go through `mergeCatalogEntries`. A field the guard did not pass is
@@ -1562,8 +1565,8 @@ after 7, 14, 21 or 28 days (a quarter each, from its key; `CATALOG_CACHE_DAYS` s
 off), so about a quarter of the pages are read again every week and that doubles as a check that the key works.
 An entry unused for 42 days is dropped. Reuse is NOT allowed for a product that has a figure waiting for a second
 read or that was held in the last run (`heldLastRun` in `state.json`): the second read must be independent. Only
-answers that settled something are stored: a covered figure (open question), `still_stated` with an accepted quote
-(confirm step), or a clean cross-check (`still-stated` or `gone`). A decline, an uncovered figure, `not_on_page`,
+answers that settled something are stored: a covered figure (open question), `still_stated` with an accepted quote or
+`none_stated` for a zero by absence (confirm step), or a clean cross-check (`still-stated` or `gone`). A decline, an uncovered figure, `not_on_page`,
 `changed`, a rejected reply, an `unresolved` cross-check, an error, a timeout or a cut-off reply is never stored, so a
 product the run could not settle is asked again every week. The cache holds accepted answers only; delete an older
 cache file (written before this rule) once, before the next run.
@@ -1580,15 +1583,25 @@ file; a `--dry` run writes the cache only when that file is outside `docs/catalo
 
 ### Which figure a product is asked for
 
-One figure per product (`sweptFieldFor` in `catalogCoverage.ts`):
+Two kinds of question, both per product (`sweptFieldFor`, `extraFieldsFor`, `expectedExtraFieldsFor` in
+`catalogCoverage.ts`).
+
+The FX or interest question, one per product:
 
 - savings and investment accounts (`spaarrekening`, `beleggingsrekening`): the interest rate (`interestPct`);
 - credit cards, debit cards and prepaid cards (`creditcard`, `betaalpas`, `prepaid`): the foreign-exchange
   surcharge (`fxFeePct`);
 - any other kind: the interest rate or the surcharge if the catalogue already holds one, else nothing.
 
-Account fees, points and cashback are not asked yet; the report lists them as "planned" (slice 3). Accounts and
-packages are skipped until then.
+The fee, points and cashback figures (`accountFee`, `pointsPerEuro`, `cashbackPct`):
+
+- every one of these the catalogue holds for the product is confirmed on its own stored source document;
+- a figure the product should hold but the catalogue does not is looked for with the open question. A product
+  should hold: for a credit card the fee, points and cashback; for a debit card (`betaalpas`) points; for a
+  `betaalrekening` or `betaalpakket` the fee; for any other kind nothing.
+
+A product that holds no FX or interest figure and is not asked for one (an account or package) is still swept for
+its fee. It is not asked the FX or interest question.
 
 ### The rungs
 
@@ -1651,6 +1664,168 @@ host the issuer is known by, and only if it comes from the model route or from t
 figure. The old conditions and source stay: this read proves nothing new. This lets the free rungs and the quote
 check keep `confirmedAt` fresh.
 
+### Fee, points and cashback: the per-figure pass
+
+The sweep runs in three passes, one after the other. Each pass is a pool of four products at a time.
+
+1. **FX and interest**: the question and ladder above, for every product.
+2. **Held figures**: each fee, points and cashback figure the catalogue holds, confirmed on its own stored source.
+3. **Missing figures**: the open question for each expected figure the catalogue does not hold.
+
+The order is deliberate. FX and interest keep their budget and time because they run first. Confirming figures that
+are already published comes before looking for new ones. When the cost ceiling or the time limit stops the run, the
+products and figures not reached are "stopped early" in the report. They are not refuted; they are asked next week.
+
+Passes 2 and 3 stop earlier than pass 1: they start no figure after the deadline minus 20 minutes (130 minutes
+with the workflow's 150, never below half of the deadline; `extraPassDeadlineMin` in `pool.ts`). They also check
+the cost ceiling and that time limit before every single figure, not only when a product starts, so a stop takes
+effect within one figure and the remaining figures of that product are "stopped early". Reason for the margin: the
+Sweep step times out at 165 minutes and writes nothing when it is killed. Pass 1 may start products until minute
+150 and its last products can run on; a figure that is already running can take several minutes (read, reader,
+confirm with fallback, open question with fallback). Stopping the figure passes 20 minutes before the deadline
+keeps the FX and interest results of pass 1 safe. If pass 1 itself ends after minute 130, the figure passes do not
+start at all. There is no SIGTERM handler: a kill ends the step without a write in CI whatever the handler does
+(a partial write is not committed there), so a handler would not save the week.
+
+**Each figure is confirmed on its own stored source** (`sourceUrl` of that figure), never on another document the
+product happens to have. The model gets the stored figure and answers `still_stated` with a verbatim quote,
+`changed` with a quote and the new number, or `not_on_page`. The quote must be in the fetched text, and must pass
+the rules for its kind below (`checkFigureQuote` in `catalogConfirm.ts`). A quote of at least 25 characters is
+required; for points and cashback 15, because "Spaar 1 Mile per 1 euro" is short. A document larger than 200,000
+characters is not sent (cause "document too large"). A stored source that is not a web address is not read
+("no source").
+
+**Quote rules per kind**
+
+- **Fee amount.** The amount must appear as money: `€ 4,00`, `€4,-`, `4 euro`, `EUR 4` all mean 4. `€ 40,00`,
+  `€ 4.000` and `0,40` do not. A fee is a value and a period: the quote must also carry the stored period (per
+  maand or per jaar, also `maandelijks(e)`, `jaarlijks(e)`, `p/m`, `monthly`, `yearly` and similar) near the amount
+  (within 80 characters). The period is decided in this order:
+  1. A "per <unit>" directly after the amount decides. A unit that is not a month or a year (kwartaal, week, dag,
+     transactie, opname, halfjaar, "per 6 maanden", quarter, ...) rejects the amount for both periods: "€ 12 per
+     kwartaal (€ 4 per maand)" confirms neither a stored 12 per maand nor a stored 12 per jaar, but does confirm a
+     stored 4 per maand.
+  2. Otherwise the nearest period word before the amount decides, then the nearest one after it. Words reach back
+     or forward only to the next amount that has a word of its own between (amounts side by side share one header
+     row, "per maand € 4,00 € 7,00 € 15,99").
+  3. Words for other time units (kwartaal, week, wk, p/w, p.w., dag, etmaal, transactie, halfjaar, quarter, ...) are
+     a third kind of period word in steps 1 and 2: when one decides for an amount, the amount is rejected for both
+     months and years ("Per kwartaal: € 12. Per maand: € 4" gives 4 per maand only).
+  4. A stacked header (two different kinds of period word before the amount, or after it, with no amount of its own
+     between them: "Prijs per maand Prijs per jaar ... € 4,00 € 48,00", "per maand per kwartaal") never decides. The amounts are
+     rejected for both periods. The columns are not lined up (the nth header with the nth amount); the figure is
+     not confirmed and shows as not checked.
+     "€ 4,00 per maand" does not confirm a stored "4 per jaar", and "€ 48 per jaar" does not confirm a stored "4 per
+     maand" even though the yearly amounts agree: a period change is a change. A stored non-zero fee with no period on
+     file cannot be confirmed.
+     A **fee of 0** is never confirmed from a quote, and a read of 0 is never published: free-text "free"
+     claims ("gratis", "€ 0 per maand", "geen kosten", ...) are an open grammar, and every rule tried let a wrong
+     one through ("Extra kaart € 0 per maand", "Voor leden is de jaarbijdrage gratis"). `checkFigureQuote` rejects
+     every fee of 0 and the open question drops a reported 0. What the sweep does with a stored zero fee is
+     described under "A stored zero fee".
+- **Points.** The quote must state points per euro and the rate must be the stored figure. The rate is read from
+  the quote as points divided by the euro amount they are earned per: "1 punt per euro", "per € 1" and "per 1 euro"
+  are 1; "1 punt per € 2", "voor elke 2 euro", "for every €2" and "per 2 uitgegeven euro's" are 0,5; "4 punten per
+  € 5" is 0,8. A quote confirms a stored figure only when its own rate equals it, so "1 punt per € 2" does not
+  confirm a stored 1 and does confirm a stored 0,5. The same rule judges the open read and a `changed` answer, so
+  the open question tells the model to report the points divided by the amount when the quote gives points per
+  another amount. The number stands directly before a points word (punten, points, miles; a brand word such as
+  "Membership Rewards" may stand between) and the nearest per-spend phrase (within 80 characters, before or after)
+  gives the euro amount. A per-phrase that is no euro amount ("per maand", "per aankoop") is no spend phrase. A
+  stored zero has no quote rule; see "A zero that rests on absence".
+- **Cashback.** The stored percentage must be the percentage nearest to a cashback word (cashback, geld terug,
+  terug), within 80 characters. A cashback word after "geen", "no", "zonder" or "without" does not count, and a
+  percentage that is directly followed by a fee or rate word (koersopslag, rente, surcharge, ...) is not cashback.
+  A stored zero has no quote rule; see "A zero that rests on absence".
+
+**Product binding.** A quote must name this product when the stored source is shared with other products (another
+catalogue product holds the same field with the same document, for example the four columns of one ING tariff
+table), when a fee quote holds two or more money amounts, and when the quote names another product of the same
+issuer. The "other products" are all catalogue products of the same issuer (`issuerKey`: the issuer text without
+bracket or " — " remarks and legal forms, so "ABN AMRO Bank N.V. — Dutch DGS" and "ABN AMRO Bank N.V." are one
+issuer), whatever their source document, plus the same-document products. A quote that names only another product
+of the issuer is rejected: "ABN AMRO Gold Card € 4,25 per maand" does not confirm or read a fee for the ABN AMRO
+Credit Card. A quote that names this product and another one must line up names and amounts one to one (a header
+row over a row of amounts) and the amount in this product's place must be the stored one; with one figure or no
+amounts it is rejected. A quote that names no product at all still passes for a held figure when the document is
+not shared and the fee quote holds one amount (a page about one product says "Kosten per maand € 2,55"); this holds
+for points and cashback quotes too (they have no amounts to count, so they pass when they name no product and the
+document is not shared). A shortened label of another product counts as naming it: when the quote holds no name of
+this product and holds every word of another product's name that this product's name lacks ("Gold" for "ICS Visa
+World Card Gold" next to "ICS Visa World Card"), it is rejected as "quote names another product".
+The name counts as the full product name or the name without its issuer prefix ("Creditcard More" for "ING
+Creditcard More"); a shorter form counts only when no other product of the issuer or on the same document has that
+form.
+
+**First figures need the name.** A first figure (pass 3) has no stored figure to compare with. When the issuer has
+any other catalogue product of a kind that can hold the field (or that holds it), the quote itself must name this
+product, even when the document is not shared. The open question tells the model so. If the model cannot give such
+a quote the figure stays unknown.
+
+**Range bound.** A number directly after "up to", "tot", "maximaal", "max", "vanaf", "from", "starting at" or "as
+low as" (with "wel", "about", "ca", "circa" allowed between) is a bound of a range, not a standing figure. Such a
+quote does not confirm a fee, points or cashback figure, and an open read with such a quote is discarded. "A
+maximum of" and "een maximum van" after the bound word are allowed between. A stored figure that was entered from
+an "up to" claim therefore shows as not checked.
+
+**A zero that rests on absence.** Points and cashback zeros mean "the provider has no per-euro programme for this
+product". A page cannot be quoted for something it does not say. For a stored zero the question is whether the
+document states a points or cashback rate per euro for this product. The answer "none stated" confirms the zero
+by a separate, weaker route ("no programme found", listed by name in the report). It counts only when the stored
+document was read, is at least 1000 characters long and names the product (full name or name without issuer). If
+the document is shorter, or does not name the product, the zero is not checked. The model gets the WHOLE document
+(up to the 200,000 character limit), never a slice: an absence can only be judged on all of the text. A rate found for the product
+is a `changed` answer; it needs a quote that passes the rules above and goes on as described next. A
+`still_stated` answer is refused for such a zero. The limit: "none stated" is true of one document, not of the
+provider. A programme described on another page is not seen.
+
+**On `changed` or `not on page`.** The sweep asks the open question for that one figure on the same document
+(the prompt names the kind; for a fee it must give the period). The answer goes through the same guard as any
+read. The confirm answer is reused as the cross-check on the stored figure, so no second call is made:
+`not_on_page`, or `changed` to the same number the open read found, counts as "stored figure gone" and the change
+goes on to the guard (a large jump waits for a second read). Any other combination is "unresolved" and the
+change is held as `change-not-cross-checked`. If the open read equals the stored figure after a `changed`
+answer, the two reads conflict: the figure is not checked and nothing is refreshed. If it equals the stored
+figure after `not_on_page`, a read with known conditions confirms the figure ("read again"); an uncovered read
+does not. An open read with a different number but no known conditions is not used.
+
+**A stored zero fee.** A stored account fee of 0 gets no closed question. The sweep reads the stored document as
+for any figure (no source, fetch failed and document too large stop it as before), then asks the open question
+once, for a non-zero fee: the prompt tells the model to report the fee only when the document states a non-zero
+amount for holding the card or account, and not to call the tool when the document says it is free or states no
+fee. A covered, non-zero read with a period and a valid quote goes to the guard as a read on the stored URL; the
+guard treats 0 to any amount as a jump, so it waits as "waiting" and publishes only when a later weekly run (at
+least 6 days later) reads the same value and period. Any other outcome (no read, a rejected reply, a read without
+known conditions) leaves the figure not checked with the cause "A fee of zero cannot be confirmed by the sweep; a
+person must check it". The cost: a zero fee never shows as confirmed, so each week a person must look at it. A
+non-zero stored fee that the confirm says changed to 0 stays "the page was read, but the figure could not be
+established" (the open read cannot be 0) with the note "confirm: changed to 0; a zero fee needs a person". A
+fee that is missing from the catalogue is never filled with 0: a reply of 0 is dropped and the figure stays "no
+figure on file yet". A zero that rests on absence (points, cashback) is a different case, see below.
+
+**A rejected confirm** (a reply whose quote fails the rules, a malformed reply, or a failed call) does NOT trigger
+the open question. The figure is not checked, and the reply is not kept in the answer cache, so the figure is
+asked again every week. The same holds for every "not checked" figure: nothing is remembered that would stop
+next week's question.
+
+**Missing figures** (pass 3). The sweep reads the first document of record that can be read (`docUrl`, `pdfUrl`,
+`foundUrl`, `termsUrl`). The document must be 200,000 characters or less and must name the product. The open
+question is asked once. The result becomes a first figure only when its conditions are known, a fee has a
+period, and its quote passes the rules and the binding rule. A first figure goes through the guard (host, range)
+and is published; it appears in the report under "Changed" with its quote. When nothing is found the figure
+stays unknown: silence is never a zero, and the coverage says "no figure yet".
+
+**Hand-written conditions are kept.** A confirm never replaces or drops a stored conditions text. A confirm is
+recorded as a read of the stored number with no conditions (the guard sees "same figure, conditions vanish" and
+confirms, as for FX and interest). For a stored figure that is not covered (conditions not known) the guard does
+not judge the read; for fee, points and cashback, `guardRun` then keeps the stored conditions text when the read has
+none and the figure (value, and period for a fee) is the same. A conditions text changes only when the figure
+itself changes or when a read adds conditions to a figure that had none.
+
+**Weaker confirmation routes.** A figure confirmed by quote check (still stated), by a same-number read, or by
+"no programme found" is weaker evidence than a full re-read. The report counts them together and lists them
+(at most 30 lines).
+
 ### What the guard decides
 
 The guard looks at a found figure and the figure the catalogue holds now. It gives one verdict per field:
@@ -1693,6 +1868,13 @@ Limits, copied from `FIELD_LIMITS` in `catalogGuard.ts`:
 For the ratio fields (`pointsPerEuro`, `accountFee`), a move between 0 and non-zero also counts as a large jump.
 The guard judges changes only. Figures already in the catalogue are not judged again.
 
+**Fee period.** A fee is a value and a period (`maand` or `jaar`). The guard treats a read as the same figure only
+when value and period both match; a fee with no period on either side equals nothing. The range and the jump test
+apply to the yearly amount (a monthly fee times 12). A read of a fee without a period is held as
+`fee-period-missing`: it would replace or start a figure whose unit is unknown, and the stored fee stays. A
+pending fee keeps its period, and a second read counts only if value and period both equal the pending ones. The
+report prints "per month" or "per year" from the figure.
+
 ### Pending
 
 A large jump does not go live at once. The new value is stored in `state.json` under `pending`, with the
@@ -1712,12 +1894,13 @@ the ranges above and the report are the other defences.
 ### Held
 
 A held change is not published and the old figure stays. Nobody has to act on it, except for `held-for-person`.
-There are seven reasons:
+There are eight reasons:
 
 - `out-of-range` — the value is outside the range for the field.
 - `unknown-host` — the figure came from a website not seen before for that issuer.
 - `comparison-route` — the figure came from a comparison site, not the provider.
 - `bad-source-url` — the source link is missing or cannot be read.
+- `fee-period-missing` — the run read a fee without saying whether it is per month or per year.
 - `conflicting-read` — the run read a different figure, but the cross-check found the stored figure still stated
   (on the stored figure's own document, or on the document the new figure came from).
 - `change-not-cross-checked` — the run read a different figure and the cross-check gave no clear answer.
@@ -1771,10 +1954,17 @@ Every figure in the catalogue, and every figure the sweep expects, gets one stat
 - **changed** — a new figure was published.
 - **waiting** — a large jump, waiting for a second read.
 - **held** — see "Held".
-- **not checked** — nothing was judged. The cause is one of: field not asked yet (slice 3), not on the watch list,
-  not part of this run (`--only`), model step did not run (no key or `--no-agent`) and no other route can read it,
-  no web source on file, page or document could not be read, page read but the figure could not be established,
-  no figure on file yet, run stopped before the product (cost ceiling, time limit or error).
+- **not checked** — nothing was judged. The cause is one of: field not part of the weekly sweep (report text: "This field is not part of the weekly sweep yet"; today only `convertFeePct`), the
+  product is checked for a different figure and this one is not asked, not on the watch list, not part of this run
+  (`--only`), model step did not run (no key or `--no-agent`) and no other route can read it, no web source on
+  file, page or document could not be read, page read but the figure could not be established (this includes a
+  document that does not name the product, and a confirm whose quote was rejected), no figure on file yet,
+  document read but larger than 200,000 characters, a stored zero fee (report text: "A fee of zero cannot be
+  confirmed by the sweep; a person must check it"), run stopped before the figure (cost ceiling, time limit or
+  error).
+
+The expected figures per kind (see "Which figure a product is asked for") get a row even when the catalogue holds
+none, so a missing figure shows as "no figure on file yet" and not as nothing.
 
 "Weeks unchecked": `state.json` keeps `uncheckedSince`, keyed `productId.field`, the date the figure first went
 unchecked. A figure that is checked drops out of the list. Weeks = whole days since that date, divided by 7 and
@@ -1807,15 +1997,26 @@ The text in the issue comes from scraped pages, so it is cleaned of markdown and
 
 - Model: Mistral, `mistral-large-latest` (set `CATALOG_MODEL` to change). No other provider is called.
 - Key: `MISTRAL_API_KEY`, a repository secret, passed to the sweep step only.
-- Run time and cost: four products at a time; measured 45 minutes and $1.77 for a full run with an empty answer
-  cache (2026-11-22); a normal week reuses answers and is shorter.
-- Soft stop: `CATALOG_MAX_USD` is 5 and `CATALOG_DEADLINE_MIN` is 150 in the workflow (0 turns the deadline off).
+- Run time and cost: four products at a time. Measured 45 minutes and $1.77 for the FX and interest questions
+  alone, with an empty answer cache (2026-11-22). The fee, points and cashback passes add roughly 185 questions
+  to the first run with an empty cache; later weeks reuse answers that settled something (a still-stated or
+  none-stated confirm with an accepted quote, a covered open read). Measured on a local full dry run with all
+  three passes (2026-11-24, code before the final rule changes, partly warm answer cache): 65 minutes, about
+  $2.54, of which about $1.32 for 234 fee, points and cashback figures in 141 products; no stop. The first
+  workflow run is not measured yet.
+- What that run confirmed, and what it did not: fee 36 of 118 rows, points 22 of 74, cashback 7 of 51. On 25 fee
+  confirmations from shared documents, 25 quotes were for the right product. With the rules as they are now the
+  same answers give fee 29, points 21, cashback 7. The rules reject about 34 true quotes (a product name written
+  without the issuer, a name wrapped over two lines, period wording, "Membership Rewards punt"), and every stored
+  zero fee shows "needs a person". No wrong figure was published in any run. Recall is the next work; the log
+  does not print the reject reason yet.
+- Soft stop: `CATALOG_MAX_USD` is 8 and `CATALOG_DEADLINE_MIN` is 150 in the workflow (0 turns the deadline off).
   When the spend reaches the ceiling or the run has gone on for the deadline, no new product starts; the products
   already running finish, then the run is written normally through the guard (status `written`), exit 0. Products
   never started are `stopped-early` in the coverage and the report has the warning "Stopped early (cost ceiling |
   time limit): N products were not reached this week." A hard stop stays for a fatal key error (401, 402, 403) and
   for spend of 1.5 times the ceiling while products still run: the run is refused (exit 1). In CI a refused or
-  crashed run commits nothing. Under `--dry` the same stop happens and nothing is written.
+  crashed run commits nothing. Under `--dry` the same stop happens and nothing is written. Passes 2 and 3 (fee, points and cashback) stop 20 minutes earlier and check between figures; the warning then also counts the figures not checked (see "Fee, points and cashback: the per-figure pass").
 - Limits: the Sweep step has its own `timeout-minutes: 165` (the job has 180), so a hung sweep ends as a failed
   step and the Report step still files the crash report. The commit step runs `git pull --rebase --autostash`
   before `git push`.
@@ -1828,7 +2029,37 @@ The text in the issue comes from scraped pages, so it is cleaned of markdown and
 - Three sites also block the reader: Rabobank creditcard, Revolut Plus and Revolut Standard. They may stay "could
   not be read".
 - Discovery search is off: a lost source must be found by hand and set as `termsUrl` or `pdfUrl`.
-- Account fees, points and cashback are not asked yet.
+- A `changed` cashback figure stays "not checked" unless the page gives a read with known conditions; no live run
+  has shown this path yet. It is covered by unit tests only. A first points or cashback figure was also not shown
+  end to end live.
+- ING points pages are JavaScript shells: the fetch returns no text with the figure, so those figures stay not
+  checked until a readable document is on file.
+- ICS Panda's stored source is the World Card page, not its own page. Its figures stay not checked until the
+  source is corrected (the shared-document rule refuses a quote that does not name the product).
+- A product name that is itself a range-bound word (for example "ING Max € 44,99 per maand") is read as a range
+  bound and the quote is rejected. The figure shows as not checked. This fails on the safe side.
+- Bound words with other filler between them and the number ("tot en met 2%", "Up to: 2%") are not caught by the
+  range-bound rule ("up to a maximum of" and "tot een maximum van" are).
+- A points rate that is written in words ("een punt per twee euro") is not read; the figure stays not checked. The
+  per-phrase may stand before or after the number (within 80 characters, "Per 2 euro: 1 punt"), and the nearest one
+  counts, so a quote with two rates is read per number. A rate quoted per another amount is read as points divided
+  by that amount, so the model has to report the converted figure (0,5) for it.
+- The period rule does not line up a stacked header with its amounts: "Prijs per maand Prijs per jaar ... € 4,00 €
+  48,00" confirms nothing. The figure shows as not checked.
+- A zero fee is never confirmed by the sweep (see "A stored zero fee"): every stored zero fee shows as "not
+  checked: needs a person" each week, however plainly the document says it is free.
+- Two issuers that are written differently in `state.json` count as two (the "other products" are matched on the
+  issuer text without remarks, legal forms and generic words such as bank, nederland, europe): ASN Bank, SNS Bank and
+  RegioBank (all de Volksbank) are three issuers for the binding rule, so a quote for one that names a product of another is not caught by the issuer set.
+- The name of a card can match a differently named product ("Flying Blue Gold Card" and the stripped form
+  "gold card" of Amex Gold Card). The issuer-wide name set makes the Flying Blue cards known other names and closes
+  most of it.
+- The open read of a missing figure uses only the first document of record that can be read.
+- The model health check (`modelHealth`) pools the answers of all three passes. A failure that hit only pass 1
+  can be hidden by good answers in passes 2 and 3 for the refuse rule. With one key and one model this is unlikely.
+- `sameDocument` lowercases the host and drops the fragment (it now serves the fee, points and cashback confirm
+  too). The FX and interest cross-check (`storedCheckOf`) uses it as well, so a `#anchor` variant of the stored URL
+  counts as the stored document there. The direction is benign.
 
 ### Dry run on your machine
 
@@ -1845,7 +2076,8 @@ CATALOG_MAX_USD=2 pnpm exec tsx --env-file=<path to env file> scripts/catalog-sw
 ```
 
 Flags: `--dry` writes nothing but the summary; `--only <text>` is a substring match on the product id (`--only ing`
-also matches every `...rekening`; name the id you mean); `--no-agent` runs the free rungs only; `--summary-out
+also matches every `...rekening`; name the id you mean). A token ending in `$` is an exact id: `--only ing-go$`
+selects `ing-go` and not `ing-gold-...`; `--no-agent` runs the free rungs only; `--summary-out
 <path>` writes the run summary the report reads. `--search` is switched off. The report script takes `--summary
 <path>`, `--dry` (prints the issue and the issues it would close, creates nothing) and `--push-failed`.
 

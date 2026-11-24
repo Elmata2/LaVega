@@ -1,8 +1,14 @@
+import { FEE_PERIOD_MONTHS, type FeePeriod } from "./accountCosts.js";
 import { isCovered, type CatalogField, type CatalogValue } from "./catalog.js";
 import type { MergeEntry } from "./catalogMerge.js";
 
 /** A figure that jumped and waits for a second read. seenAt = YYYY-MM-DD of first read. */
-export type PendingFigure = { value: number; seenAt: string };
+export type PendingFigure = {
+  value: number;
+  /** accountFee only. Absent in state written before fees were swept. */
+  period?: FeePeriod;
+  seenAt: string;
+};
 
 export type HoldReason =
   | "out-of-range"
@@ -10,6 +16,7 @@ export type HoldReason =
   | "comparison-route"
   | "bad-source-url"
   | "conflicting-read"
+  | "fee-period-missing"
   | "change-not-cross-checked"
   | "held-for-person";
 
@@ -41,6 +48,20 @@ export const FIELD_LIMITS: Readonly<
 };
 
 const round4 = (n: number) => Math.round(n * 1e4) / 1e4;
+
+/** The amount the limits and the jump test apply to: a fee per year, any other field as is.
+ *  A fee without a period cannot be annualised and is taken as stated. */
+function limitValue(field: CatalogField, v: CatalogValue): number {
+  return field === "accountFee" && v.period
+    ? v.value * (12 / FEE_PERIOD_MONTHS[v.period])
+    : v.value;
+}
+
+/** Same figure: value equal, and for a fee the period equal too. A fee with no period on either side equals nothing. */
+function sameFigure(field: CatalogField, a: CatalogValue, b: CatalogValue): boolean {
+  if (round4(a.value) !== round4(b.value)) return false;
+  return field !== "accountFee" || (a.period !== undefined && a.period === b.period);
+}
 
 const ARCHIVE = /^https?:\/\/web\.archive\.org\/web\/\d+[a-z_]*\/(https?:\/\/.+)$/i;
 const JINA = /^https?:\/\/r\.jina\.ai\/(https?:\/\/.+)$/i;
@@ -112,11 +133,7 @@ export function judgeField(input: {
   if (!isCovered(found)) {
     // An uncovered read of the very number we already hold, from a host the issuer is known by,
     // re-confirms it. The stored conditions and source stay: this read proves nothing new.
-    if (
-      isCovered(current) &&
-      Number.isFinite(found.value) &&
-      round4(current!.value) === round4(found.value)
-    ) {
+    if (isCovered(current) && Number.isFinite(found.value) && sameFigure(field, current!, found)) {
       // A regex read counts only on the page the stored figure came from; the model's
       // confirm step (route "agent") may use any document of the issuer.
       const host = sourceHost(found.sourceUrl);
@@ -130,7 +147,7 @@ export function judgeField(input: {
   // Same value: only conditions appearing (null -> text) is new information and publishes, so
   // "unconditional" does not outlive a cap that was added. Text -> null never drops a stored
   // condition on one read that did not mention it. Wording differences are not changes.
-  const sameValue = !!baseline && round4(baseline.value) === round4(found.value);
+  const sameValue = !!baseline && sameFigure(field, baseline, found);
   if (
     baseline &&
     sameValue &&
@@ -142,6 +159,11 @@ export function judgeField(input: {
 
   if (input.manualHold) return { kind: "hold", reason: "held-for-person" };
 
+  // A fee without its period cannot be published: it would replace or start a figure whose unit is unknown.
+  if (field === "accountFee" && found.period === undefined) {
+    return { kind: "hold", reason: "fee-period-missing" };
+  }
+
   if (found.route === "comparison") return { kind: "hold", reason: "comparison-route" };
 
   const host = sourceHost(found.sourceUrl);
@@ -149,7 +171,8 @@ export function judgeField(input: {
   if (!knownHosts.has(host)) return { kind: "hold", reason: "unknown-host" };
 
   const limits = FIELD_LIMITS[field];
-  if (found.value < limits.min || found.value > limits.max) {
+  const foundLimit = limitValue(field, found);
+  if (foundLimit < limits.min || foundLimit > limits.max) {
     return { kind: "hold", reason: "out-of-range" };
   }
 
@@ -163,14 +186,21 @@ export function judgeField(input: {
     return { kind: "hold", reason: "change-not-cross-checked" };
   }
 
-  if (isJump(limits.jump, baseline.value, found.value)) {
-    const same = pending !== undefined && round4(pending.value) === round4(found.value);
+  if (isJump(limits.jump, limitValue(field, baseline), foundLimit)) {
+    const same =
+      pending !== undefined &&
+      round4(pending.value) === round4(found.value) &&
+      (field !== "accountFee" || pending.period === found.period);
     const days = same ? wholeDaysBetween(pending.seenAt, today) : null;
     if (same && days !== null && days >= MIN_DAYS_BETWEEN_READS)
       return { kind: "publish", viaPending: true };
     return {
       kind: "pending",
-      pending: { value: found.value, seenAt: same ? pending.seenAt : today },
+      pending: {
+        value: found.value,
+        ...(found.period ? { period: found.period } : {}),
+        seenAt: same ? pending.seenAt : today,
+      },
     };
   }
   return { kind: "publish", viaPending: false };
