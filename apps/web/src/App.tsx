@@ -26,7 +26,6 @@ import {
   capacityFor,
   computeRoom,
   emptyProfile,
-  planProfileOf,
   resolveRoom,
   type CardFileInput,
 } from "@lavega/core";
@@ -118,6 +117,7 @@ import { AccountSidebar } from "./components/AccountSidebar.js";
 import { SHOW_INVOICE_FORWARDING, initialScope, isArchivedView, isArchivedWidget } from "./archive";
 import { pathForView, takePendingEbParams, viewFromPathname, type View } from "./appRoutes";
 import { gateState } from "./vault-gate.js";
+import { wizardFirst } from "./intake/wizardGate";
 import type { GateState } from "./vault-gate.js";
 import { hasLegacyData, migrateToVault } from "./migrate.js";
 import { loadVaultKey, vaultOwnerName, VaultKeyUnavailable, type VaultOwner } from "./vaultKey.js";
@@ -1509,7 +1509,7 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
     profileRead !== "loading" &&
     profileRead !== "error" &&
     profileRead.kind === "ok" &&
-    planProfileOf(profileRead.store).intakeBlocksDone >= 1;
+    !wizardFirst(profileRead.store);
 
   // Show just this account's transactions: clear the other filters so the list
   // isn't silently narrowed by a stale one. Rekeningen and the account sidebar
@@ -2840,6 +2840,7 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
               facts={facts}
               stated={cardAnswersOf(profileRead)}
               onOpenAccounts={() => setView("accounts")}
+              onStartIntake={() => setView("intake")}
               onRateCommit={handleRateCommit}
             />
           )}

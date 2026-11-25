@@ -15,6 +15,7 @@ import type { View } from "../App";
 import { useAppLocale } from "../appLocale.js";
 import { ConnectChecklist } from "../components/blocks/ConnectChecklist.js";
 import { inviteState } from "../intake/inviteState.js";
+import { wizardFirst } from "../intake/wizardGate.js";
 import Button from "../components/ui/Button.js";
 import Card from "../components/ui/Card.js";
 import StatusLine from "../components/ui/StatusLine.js";
@@ -121,7 +122,7 @@ export default function Plan({
       </StatusLine>
     );
   }
-  if (planProfileOf(store).intakeBlocksDone < 1) {
+  if (wizardFirst(store)) {
     const invite = inviteState(store, asOf, hasTransactions);
     const steps = intakeCopy[locale].home.invite;
     const resume =

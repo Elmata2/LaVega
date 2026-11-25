@@ -338,6 +338,10 @@ export type OptimalisatieCopy = {
       invite: (names: string) => string;
       /** Link text next to the invite; leads to Rekeningen. */
       openAccounts: string;
+      /** Card advice waits until the intake questions are answered. */
+      wizardFirst: string;
+      /** Same words as the button on "Jouw plan". */
+      startQuestions: string;
       /** The wizard's "no credit card" answer: a first CREDIT card. */
       firstCard: {
         notWorthIt: (threshold: string) => string;
@@ -848,6 +852,8 @@ const optimalisatieCopy_nl: OptimalisatieCopy = {
       invite: (names) =>
         `Voor ${names} kent LaVega je uitgaven niet. Verbind die rekening of upload een bestand, dan rekent LaVega het uit.`,
       openAccounts: "Naar Rekeningen",
+      wizardFirst: "Beantwoord eerst de vragen, dan toont LaVega hier je kaartadvies.",
+      startQuestions: "Begin met de vragen",
       firstCard: {
         notWorthIt: (threshold) =>
           `Je hebt geen creditcard. Op je uitgaven haalt geen creditcard ${threshold} per jaar na kosten, dus een creditcard nemen loont nu niet.`,
@@ -1361,6 +1367,8 @@ const optimalisatieCopy_en: OptimalisatieCopy = {
       invite: (names) =>
         `LaVega does not know what you spend on ${names}. Connect that account or upload a file, and LaVega will calculate it.`,
       openAccounts: "Go to Accounts",
+      wizardFirst: "Answer the questions first, then LaVega shows your card advice here.",
+      startQuestions: "Start with the questions",
       firstCard: {
         notWorthIt: (threshold) =>
           `You have no credit card. On your spending no credit card reaches ${threshold} a year after costs, so taking a credit card does not pay off now.`,

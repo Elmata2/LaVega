@@ -77,6 +77,7 @@ import ToonMeer from "../components/ToonMeer";
 import Badge from "../components/ui/Badge.js";
 import { planShellCopy } from "../copy/plan/index.js";
 import { statedHeldRows, type StatedAnswers } from "../plan/optimalisatieStated";
+import Button from "../components/ui/Button.js";
 import CardLink from "../components/ui/CardLink.js";
 import OptimalisatieCardVerdict from "../plan/OptimalisatieCardVerdict.js";
 import SaldoInput from "../components/ui/SaldoInput.js";
@@ -163,6 +164,11 @@ type OptimalisatieProps = {
   /** Stores the card the user names for a connected card account (the plan's
    *  writer). Absent: the "Welke kaart is dit?" question is not asked. */
   onSaveStatedCard?: (accountKey: string, cardId: string) => Promise<void>;
+  /** The intake wizard is not started (`wizardFirst`): the card advice waits and
+   *  an invitation to the questions stands in its place, as on "Jouw plan". */
+  wizardFirst?: boolean;
+  /** Opens the intake wizard. */
+  onStartIntake?: () => void;
   onRateCommit: (key: string, value: string) => void;
 };
 
@@ -726,6 +732,8 @@ export default function Optimalisatie({
   onOpenAccounts,
   cardAdvice,
   onSaveStatedCard,
+  wizardFirst = false,
+  onStartIntake,
   onRateCommit,
 }: OptimalisatieProps) {
   const [locale] = useAppLocale();
@@ -1006,7 +1014,9 @@ export default function Optimalisatie({
      `advice.ignoresInterest`. Offers are no longer hidden by it; only the
      "route your spending to another card" lines still step aside, because
      moving spending onto a card is the wrong nudge while a balance is carried. */
-  const showCardAdvice = entityScope !== "business" && cardAdvice != null;
+  const cardsInScope = entityScope !== "business";
+  const waitsForWizard = cardsInScope && wizardFirst;
+  const showCardAdvice = cardsInScope && !waitsForWizard && cardAdvice != null;
   const carriesDebt = showCardAdvice && cardAdvice.ignoresInterest;
 
   const rankable = heldCashback.filter((h) => cashbackPctOf(h.k) !== null);
@@ -1129,7 +1139,7 @@ export default function Optimalisatie({
      about cards. While the card block prints the plan's verdict it steps aside:
      "je zit al goed" must not sit above a verdict that recommends another card. */
   const suppressEmpty =
-    showCardAdvice &&
+    (showCardAdvice || waitsForWizard) &&
     !inviteOnly &&
     (spendable.length === 0 ||
       (bestHeldCashback !== null && monthlyBaseCents !== null && cashbackOffers.length > 0));
@@ -2310,6 +2320,15 @@ export default function Optimalisatie({
                 )}
               </p>
             )
+          )}
+
+          {waitsForWizard && (
+            <div data-testid="optimalisatie-wizard-invite" style={{ marginTop: "var(--sp-4)" }}>
+              <p className="block-empty">{c.cashback.stated.wizardFirst}</p>
+              {onStartIntake && (
+                <Button onClick={onStartIntake}>{c.cashback.stated.startQuestions}</Button>
+              )}
+            </div>
           )}
 
           {showCardAdvice && (
