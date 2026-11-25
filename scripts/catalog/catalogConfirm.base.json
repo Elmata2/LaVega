@@ -1,0 +1,33 @@
+{
+  "fx": {
+    "system": "You re-check ONE figure we already hold about ONE money product against ONE document.\nThe figure is the surcharge charged on a foreign-currency payment (koersopslag, wisselkoersopslag, valutakoersopslag), as a percentage.\n\nAnswer by calling the confirm_figure tool.\n\nThe question is closed: does THIS document still state the stored figure as the one\nthat applies to this product, or to the product family it belongs to?\n\n- The document may be a general one that covers the product without naming it: a\n  cardholder agreement for all consumer cards of an issuer, or a general tariff sheet of\n  a bank. Such a document counts when its figure applies to this product or to the family\n  the product belongs to.\n- Answer still_stated only when you can quote a sentence or table row that shows the\n  stored figure, and the quote must contain the number itself (a zero must be quoted too,\n  as '0%', 'gratis', 'geen kosten' or similar, and the quote must say what it is free for:\n  foreign currency or exchange for a surcharge, interest for a savings rate).\n- Answer changed when the document states a DIFFERENT figure for this product or its\n  family, and quote it. Do not guess a figure.\n- Answer not_on_page when the document does not show the figure, or shows it only for a\n  clearly different product or a different kind of transaction (cash withdrawal,\n  transfers). not_on_page is the right answer when you are not sure. Never stretch a\n  number from a neighbouring row to fit.\n- The quote must be copied verbatim from the document, as ONE contiguous passage copied\n  exactly from the page, not several passages joined.",
+    "user": "Product: P\nStored figure: 1,4%\nStored conditions: buiten de eurolanden\n\nDocument:\n<<<\nDOC\n>>>"
+  },
+  "int": {
+    "system": "You re-check ONE figure we already hold about ONE money product against ONE document.\nThe figure is the savings interest rate, as a percentage.\n\nAnswer by calling the confirm_figure tool.\n\nThe question is closed: does THIS document still state the stored figure as the one\nthat applies to this product, or to the product family it belongs to?\n\n- The document may be a general one that covers the product without naming it: a\n  cardholder agreement for all consumer cards of an issuer, or a general tariff sheet of\n  a bank. Such a document counts when its figure applies to this product or to the family\n  the product belongs to.\n- Answer still_stated only when you can quote a sentence or table row that shows the\n  stored figure, and the quote must contain the number itself (a zero must be quoted too,\n  as '0%', 'gratis', 'geen kosten' or similar, and the quote must say what it is free for:\n  foreign currency or exchange for a surcharge, interest for a savings rate).\n- Answer changed when the document states a DIFFERENT figure for this product or its\n  family, and quote it. Do not guess a figure.\n- Answer not_on_page when the document does not show the figure, or shows it only for a\n  clearly different product or a different kind of transaction (cash withdrawal,\n  transfers). not_on_page is the right answer when you are not sure. Never stretch a\n  number from a neighbouring row to fit.\n- The quote must be copied verbatim from the document, as ONE contiguous passage copied\n  exactly from the page, not several passages joined.",
+    "user": "Product: P\nStored figure: 2,5%\nStored conditions: none recorded\n\nDocument:\n<<<\nDOC\n>>>"
+  },
+  "tool": {
+    "name": "confirm_figure",
+    "description": "Say whether the document still states the stored figure for this product (or the product family it belongs to), with the sentence it was read from. Use not_on_page when the document does not show it.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": ["still_stated", "changed", "not_on_page"],
+          "description": "still_stated: the document states the stored figure as the one that applies to this product or its family. changed: the document states a DIFFERENT figure for it. not_on_page: the document does not show the figure, or shows it only for a clearly different product."
+        },
+        "quote": {
+          "type": "string",
+          "description": "Verbatim sentence or table row from the document that shows the figure. Required for still_stated and changed. Copy it exactly; do not paraphrase."
+        },
+        "newValue": {
+          "type": "number",
+          "description": "Only for changed: the figure the document states instead, in percent."
+        }
+      },
+      "required": ["status"]
+    }
+  }
+}

@@ -211,15 +211,59 @@ test("second read with another value restarts pending", () => {
   });
 });
 
+const fee = (value: number, period?: "maand" | "jaar"): CatalogValue =>
+  val(value, period ? { period } : {});
+
 test("ratio jump", () => {
-  expect(judge("accountFee", val(24), val(60)).kind).toBe("pending");
-  expect(judge("accountFee", val(24), val(40))).toEqual({ kind: "publish", viaPending: false });
-  expect(judge("accountFee", val(24), val(10)).kind).toBe("pending");
+  expect(judge("accountFee", fee(24, "jaar"), fee(60, "jaar")).kind).toBe("pending");
+  expect(judge("accountFee", fee(24, "jaar"), fee(40, "jaar"))).toEqual({
+    kind: "publish",
+    viaPending: false,
+  });
+  expect(judge("accountFee", fee(24, "jaar"), fee(10, "jaar")).kind).toBe("pending");
 });
 
 test("zero baseline on a ratio field is a jump", () => {
-  expect(judge("accountFee", val(0), val(24)).kind).toBe("pending");
+  expect(judge("accountFee", fee(0, "jaar"), fee(24, "jaar")).kind).toBe("pending");
   expect(judge("pointsPerEuro", val(0), val(1)).kind).toBe("pending");
+});
+
+test("a fee with the same value and another period is not equal", () => {
+  expect(judge("accountFee", fee(4, "maand"), fee(4, "jaar")).kind).toBe("pending");
+  expect(judge("accountFee", fee(0, "maand"), fee(0, "jaar"))).toEqual({
+    kind: "publish",
+    viaPending: false,
+  });
+  expect(judge("accountFee", fee(4, "maand"), fee(4, "maand")).kind).toBe("confirm");
+});
+
+test("€4 per month to €48 per year publishes as a change and is not a jump", () => {
+  expect(judge("accountFee", fee(4, "maand"), fee(48, "jaar"))).toEqual({
+    kind: "publish",
+    viaPending: false,
+  });
+});
+
+test("fee range is checked on the yearly amount", () => {
+  expect(judge("accountFee", fee(10, "maand"), fee(100, "maand")).kind).toBe("hold");
+  expect(judge("accountFee", fee(60, "maand"), fee(80, "maand")).kind).toBe("publish");
+});
+
+test("fee jump is checked on the yearly amount", () => {
+  expect(judge("accountFee", fee(2, "maand"), fee(5, "maand")).kind).toBe("pending");
+  expect(judge("accountFee", fee(4, "maand"), fee(5, "maand"))).toEqual({
+    kind: "publish",
+    viaPending: false,
+  });
+  expect(judge("accountFee", fee(40, "jaar"), fee(5, "maand")).kind).toBe("publish");
+});
+
+test("a fee without a period never confirms", () => {
+  expect(judge("accountFee", fee(4), fee(4)).kind).not.toBe("confirm");
+  expect(judge("accountFee", fee(4, "maand"), fee(4)).kind).not.toBe("confirm");
+  expect(judge("accountFee", fee(4), fee(4, "maand")).kind).not.toBe("confirm");
+  const uncovered = val(4, { conditionsKnown: false, period: "maand" });
+  expect(judge("accountFee", fee(4), uncovered).kind).toBe("unjudged");
 });
 
 test("knownHostsByIssuer gathers state urls and catalogue sources per issuer", () => {
@@ -458,4 +502,54 @@ test("a manual hold blocks a first figure", () => {
     kind: "hold",
     reason: "held-for-person",
   });
+});
+
+test("a fee read without a period holds against a stored fee", () => {
+  expect(judge("accountFee", fee(4, "maand"), fee(4))).toEqual({
+    kind: "hold",
+    reason: "fee-period-missing",
+  });
+});
+
+test("a first-time fee without a period is held", () => {
+  expect(judge("accountFee", undefined, fee(4))).toEqual({
+    kind: "hold",
+    reason: "fee-period-missing",
+  });
+  expect(judge("accountFee", undefined, fee(4, "maand"))).toEqual({
+    kind: "publish",
+    viaPending: false,
+  });
+});
+
+test("a manually held fee without a period reports held-for-person", () => {
+  expect(
+    judgeField({
+      field: "accountFee",
+      current: fee(4, "maand"),
+      found: fee(5),
+      knownHosts: hosts,
+      pending: undefined,
+      today: "2026-11-23",
+      manualHold: true,
+    }),
+  ).toEqual({ kind: "hold", reason: "held-for-person" });
+});
+
+test("a second read with another period restarts pending", () => {
+  const first = judge("accountFee", fee(2, "maand"), fee(60, "jaar"), { today: "2026-11-16" });
+  expect(first).toEqual({
+    kind: "pending",
+    pending: { value: 60, period: "jaar", seenAt: "2026-11-16" },
+  });
+  const pending = (first as { pending: PendingFigure }).pending;
+  expect(
+    judge("accountFee", fee(2, "maand"), fee(60, "maand"), { pending, today: "2026-11-23" }),
+  ).toEqual({
+    kind: "pending",
+    pending: { value: 60, period: "maand", seenAt: "2026-11-23" },
+  });
+  expect(
+    judge("accountFee", fee(2, "maand"), fee(60, "jaar"), { pending, today: "2026-11-23" }),
+  ).toEqual({ kind: "publish", viaPending: true });
 });

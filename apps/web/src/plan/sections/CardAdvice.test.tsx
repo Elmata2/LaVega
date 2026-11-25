@@ -484,6 +484,32 @@ test("picking a card calls the account writer with the account key and the card 
   expect(calls).toEqual([["CC1", "ing-creditcard"]]);
 });
 
+test("#369-2: the other-card tile stores the answer other on the account", () => {
+  const calls: [string, string][] = [];
+  const c = mount(unidentified(), (key, id) => void calls.push([key, id]));
+  const input = q(c, "plan-card-identify")!.querySelector<HTMLInputElement>("input[type=search]")!;
+  const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
+  act(() => {
+    set.call(input, "zzzz");
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  const box = [...c.querySelectorAll<HTMLElement>('[role="checkbox"]')].find(
+    (b) => b.textContent === "Een andere kaart",
+  )!;
+  act(() => box.click());
+  expect(calls).toEqual([["CC1", "other"]]);
+});
+
+test("#369-2: there is an answer that the account is not a credit card", () => {
+  const calls: [string, string][] = [];
+  const c = mount(unidentified(), (key, id) => void calls.push([key, id]));
+  const btn = [...q(c, "plan-card-identify")!.querySelectorAll<HTMLButtonElement>("button")].find(
+    (b) => b.textContent === "Dit is geen creditcard",
+  )!;
+  act(() => btn.click());
+  expect(calls).toEqual([["CC1", "not-credit"]]);
+});
+
 test("no question without a writer, and none for a stated other card", () => {
   expect(q(mount(unidentified()), "plan-card-identify")).toBeNull();
   act(() => root!.unmount());
@@ -495,4 +521,25 @@ test("no question without a writer, and none for a stated other card", () => {
       "plan-card-identify",
     ),
   ).toBeNull();
+});
+
+const fmtStub = { eur: (v: number) => String(v), plain: String, count: String } as never;
+const verdictWith = (n: number, locale: "nl" | "en") =>
+  cardAdviceCopy[locale].verdict(
+    computeCardAdvice({
+      ...base,
+      heldIds: [],
+      unidentifiedCards: Array.from({ length: n }, (_, i) => ({
+        accountKey: `CC${i}`,
+        label: `Kaart ${i}`,
+      })),
+    }),
+    fmtStub,
+  );
+
+test("unknown-baseline verdict: singular noun takes a singular verb, plural takes plural", () => {
+  expect(verdictWith(1, "nl")).toMatch(/^Je huidige kaart is niet te vergelijken: /);
+  expect(verdictWith(2, "nl")).toMatch(/^Je huidige kaarten zijn niet te vergelijken: /);
+  expect(verdictWith(1, "en")).toMatch(/^Your current card cannot be compared: /);
+  expect(verdictWith(2, "en")).toMatch(/^Your current cards cannot be compared: /);
 });

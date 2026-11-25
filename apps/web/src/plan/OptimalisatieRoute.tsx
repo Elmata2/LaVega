@@ -1,3 +1,4 @@
+import { wizardFirst } from "../intake/wizardGate.js";
 import Optimalisatie from "../views/Optimalisatie.js";
 import { usePlan, type UsePlanInput } from "./usePlan.js";
 
@@ -13,7 +14,7 @@ export default function OptimalisatieRoute({
   planInput,
   profileLoaded,
   ...props
-}: Omit<OptimalisatieProps, "cardAdvice"> & {
+}: Omit<OptimalisatieProps, "cardAdvice" | "wizardFirst"> & {
   planInput: UsePlanInput;
   /** The adviser profile has been read; the plan is not trusted before. */
   profileLoaded: boolean;
@@ -27,5 +28,13 @@ export default function OptimalisatieRoute({
   // could still change, so the block shows nothing rather than a wrong line.
   const cardAdvice =
     profileLoaded && plan.loaded ? plan.result.sections.cards.figures.advice : null;
-  return <Optimalisatie {...props} cardAdvice={cardAdvice} />;
+  // The same rule "Jouw plan" uses; not asked before the profile is read, so a
+  // person who did the wizard never sees the invitation flash.
+  return (
+    <Optimalisatie
+      {...props}
+      cardAdvice={cardAdvice}
+      wizardFirst={profileLoaded && wizardFirst(planInput.store)}
+    />
+  );
 }

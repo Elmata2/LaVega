@@ -338,6 +338,10 @@ export type OptimalisatieCopy = {
       invite: (names: string) => string;
       /** Link text next to the invite; leads to Rekeningen. */
       openAccounts: string;
+      /** Card advice waits until the intake questions are answered. */
+      wizardFirst: string;
+      /** Same words as the button on "Jouw plan". */
+      startQuestions: string;
       /** The wizard's "no credit card" answer: a first CREDIT card. */
       firstCard: {
         notWorthIt: (threshold: string) => string;
@@ -439,6 +443,7 @@ export type OptimalisatieCopy = {
     unknownAccountLead: (bank: string, accountName: string) => string;
     unknownReasons: {
       noBank: string;
+      statedCardNoFee: string;
       providerUnknown: (bank: string) => string;
       noCandidates: (bank: string) => string;
       unclearProduct: (bank: string) => string;
@@ -845,6 +850,8 @@ const optimalisatieCopy_nl: OptimalisatieCopy = {
       invite: (names) =>
         `Voor ${names} kent LaVega je uitgaven niet. Verbind die rekening of upload een bestand, dan rekent LaVega het uit.`,
       openAccounts: "Naar Rekeningen",
+      wizardFirst: "Beantwoord eerst de vragen, dan toont LaVega hier je kaartadvies.",
+      startQuestions: "Begin met de vragen",
       firstCard: {
         notWorthIt: (threshold) =>
           `Je hebt geen creditcard. Op je uitgaven haalt geen creditcard ${threshold} per jaar na kosten, dus een creditcard nemen loont nu niet.`,
@@ -957,6 +964,7 @@ const optimalisatieCopy_nl: OptimalisatieCopy = {
       `${bank} — ${accountName}: kosten onbekend, en dat is geen nul.`,
     unknownReasons: {
       noBank: "Deze rekening draagt geen banknaam, dus er valt niets op te zoeken.",
+      statedCardNoFee: "LaVega kent de kosten van de kaart die je hebt gekozen niet.",
       providerUnknown: (bank) => `LaVega kent geen tarief van ${bank}.`,
       noCandidates: (bank) => `Bij ${bank} kent LaVega geen tarief voor dit soort rekening.`,
       unclearProduct: (bank) =>
@@ -1352,6 +1360,8 @@ const optimalisatieCopy_en: OptimalisatieCopy = {
       invite: (names) =>
         `LaVega does not know what you spend on ${names}. Connect that account or upload a file, and LaVega will calculate it.`,
       openAccounts: "Go to Accounts",
+      wizardFirst: "Answer the questions first, then LaVega shows your card advice here.",
+      startQuestions: "Start with the questions",
       firstCard: {
         notWorthIt: (threshold) =>
           `You have no credit card. On your spending no credit card reaches ${threshold} a year after costs, so taking a credit card does not pay off now.`,
@@ -1459,6 +1469,7 @@ const optimalisatieCopy_en: OptimalisatieCopy = {
       `${bank} — ${accountName}: fee unknown, and that's not a zero.`,
     unknownReasons: {
       noBank: "This account has no bank name, so there's nothing to look up.",
+      statedCardNoFee: "LaVega doesn't know the fee of the card you chose.",
       providerUnknown: (bank) => `LaVega doesn't know a fee for ${bank}.`,
       noCandidates: (bank) => `LaVega doesn't know a fee for this kind of account at ${bank}.`,
       unclearProduct: (bank) =>
@@ -3266,6 +3277,8 @@ export type TravelCopy = {
     homeAssumedNote: string;
     /** The link that follows `homeAssumedNote`, to the Profiel country picker. */
     homeAssumedChange: string;
+    /** Shown instead of the plan when the chosen home currency is not the euro. */
+    homeCurrencyNote: string;
   };
   /** Shown before a destination is picked. */
   empty: string;
@@ -3491,9 +3504,7 @@ export type TravelCopy = {
     unknownNotZero: string;
     /** Appended only when there is a benefit to caveat as gross. */
     unknownGrossHint: string;
-    /** "Kaartkosten: {price} — de bron zegt dat {product} niets kost om aan te houden." */
-    free: string;
-    /** "Kaartkosten: {price}." — no benefit to compare the price against. */
+    /** "Kaartkosten: {price}." — no benefit to compare against, or a price of zero. */
     priceOnly: string;
     /** "Kaartkosten: {price} — gerekend {span}" (no total add-on). */
     calculated: string;
@@ -3704,6 +3715,8 @@ const travelCopy_nl: TravelCopy = {
     payingIn: "je betaalt daar in {currency}",
     homeAssumedNote: "Nog geen thuisland gekozen: deze uitkomsten gaan uit van Nederland.",
     homeAssumedChange: "Kies je eigen land",
+    homeCurrencyNote:
+      "Kosten en routes gaan uit van een euro-rekening. Voor een andere thuisvaluta rekent LaVega dit nog niet door.",
   },
   empty: "Kies een land voor je beste kaart.",
   badge: {
@@ -3861,7 +3874,6 @@ const travelCopy_nl: TravelCopy = {
     unknownReasonNoSource: "wat {product} zelf kost, staat niet in onze bronnen",
     unknownNotZero: "Dat is geen nul.",
     unknownGrossHint: " Het bedrag hierboven is dus bruto: wat deze kaart kost, gaat er nog af.",
-    free: "Kaartkosten: {price} — de bron zegt dat {product} niets kost om aan te houden.",
     priceOnly: "Kaartkosten: {price}.",
     calculated: "Kaartkosten: {price} — gerekend {span}",
     calculatedTotalSuffix: ": {total}",
@@ -4038,6 +4050,8 @@ const travelCopy_en: TravelCopy = {
     payingIn: "you'll pay there in {currency}",
     homeAssumedNote: "No home country chosen yet: these results assume the Netherlands.",
     homeAssumedChange: "Choose your own country",
+    homeCurrencyNote:
+      "Costs and routes assume a euro account. LaVega does not work this out for another home currency yet.",
   },
   empty: "Pick a country for your best card.",
   badge: {
@@ -4195,7 +4209,6 @@ const travelCopy_en: TravelCopy = {
     unknownReasonNoSource: "what {product} itself costs isn't in our sources",
     unknownNotZero: "That isn't zero.",
     unknownGrossHint: " So the amount above is gross: this card's cost still comes off it.",
-    free: "Card cost: {price} — the source says {product} costs nothing to hold.",
     priceOnly: "Card cost: {price}.",
     calculated: "Card cost: {price} — calculated {span}",
     calculatedTotalSuffix: ": {total}",

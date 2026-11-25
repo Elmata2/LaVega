@@ -42,7 +42,8 @@ describe("the card verdict and the Instinct offer come from one plan", () => {
       v.kind === "switch" &&
       advice.baseline.kind === "best-held" &&
       advice.basis === "history" &&
-      !advice.ignoresInterest;
+      !advice.ignoresInterest &&
+      v.gainCents - v.parts.pointsCents > 0;
     expect(offer !== null).toBe(mayOffer);
   });
 
@@ -55,5 +56,32 @@ describe("the card verdict and the Instinct offer come from one plan", () => {
       withheld.some((c) => c.expect.verdictKind === "switch" && c.expect.heldIds.length === 0),
     ).toBe(true);
     expect(CARD_VERDICT_CASES.some((c) => c.expect.offer !== null)).toBe(true);
+  });
+});
+
+describe("a connected card answered as another credit card", () => {
+  test("is no longer asked about: the blocker carries no account", () => {
+    const c = CARD_VERDICT_CASES.find((x) =>
+      x.name.startsWith("connected card answered as another"),
+    )!;
+    const { baseline } = computePlan(c.input).sections.cards.figures.advice;
+    expect(baseline.kind).toBe("unknown");
+    if (baseline.kind === "unknown") {
+      expect(baseline.blockers.length).toBeGreaterThan(0);
+      expect(baseline.blockers.every((b) => b.accountKey === undefined)).toBe(true);
+    }
+  });
+});
+
+describe("held cards the advice already covers", () => {
+  test("#369-9: a net line is marked covered only for a card in advice.options", () => {
+    const ics = CARD_VERDICT_CASES.find((x) => x.name === "ICS Mastercard Classic holder")!;
+    const covered = computePlan(ics.input).sections.cards.figures;
+    expect(covered.nets.length).toBeGreaterThan(0);
+    expect(covered.nets.every((n) => n.inAdvice === true)).toBe(true);
+    const mys = CARD_VERDICT_CASES.find((x) => x.name === "unidentified connected credit card")!;
+    const open = computePlan(mys.input).sections.cards.figures;
+    expect(open.nets.length).toBeGreaterThan(0);
+    expect(open.nets.every((n) => n.inAdvice === false)).toBe(true);
   });
 });

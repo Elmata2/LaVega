@@ -528,6 +528,9 @@ describe("which answers settle something", () => {
   it("still_stated with an accepted quote is accepted", () => {
     expect(confirmAccepted(stated, null)).toBe(true);
   });
+  it("none_stated in the confirm step is accepted", () => {
+    expect(confirmAccepted({ kind: "reply", reply: { status: "none_stated" } }, null)).toBe(true);
+  });
   it("not_on_page in the confirm step is not", () => {
     expect(confirmAccepted(notOnPage, null)).toBe(false);
   });

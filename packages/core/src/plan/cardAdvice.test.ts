@@ -205,6 +205,24 @@ describe("stated spend when history is short", () => {
     expect(a.options.length).toBeGreaterThan(0);
   });
 
+  test("#369-6: real spend over a short history wins when it is higher than the stated figure", () => {
+    // EUR 2.000 in 2 months = EUR 12.000 a year real; stated EUR 6.000 (an upper bound that was too low)
+    const real = { ...SPEND, months: 2, windowCents: 200_000, foreignCents: 40_000 };
+    const a = computeCardAdvice(
+      input({ spend: real, statedSpend: { annualCents: 600_000, foreignShare: 0.1 } }),
+    );
+    expect(a.basis).toBe("stated");
+    expect(a.spend.annualCents).toBe(1_200_000);
+    expect(a.spend.annualForeignCents).toBe(240_000);
+  });
+
+  test("#369-6: real spend over a short history that is lower keeps the stated figure", () => {
+    const real = { ...SPEND, months: 2, windowCents: 20_000, foreignCents: 0 };
+    const a = computeCardAdvice(input({ spend: real, statedSpend: STATED }));
+    expect(a.spend.annualCents).toBe(1_200_000);
+    expect(a.spend.annualForeignCents).toBe(120_000);
+  });
+
   test("short history with no stated spend stays short-history", () => {
     for (const statedSpend of [undefined, null, { annualCents: 0, foreignShare: 0.1 }]) {
       const a = computeCardAdvice(input({ spend: SHORT, statedSpend }));
@@ -634,6 +652,19 @@ describe("review fixes", () => {
       .options[0]!;
     expect(held.feeCents).toBe(2_400);
     expect(held.feeNote).toMatchObject({ applied: false });
+  });
+
+  test("#369-4: a package the user already pays through a held card is not added again", () => {
+    const cat = [
+      entry("ing-creditcard", { fee: [2, "maand"], fx: 0, ppe: 0 }),
+      entry("ing-platinumcard", { fee: [10, "maand"], fx: 0, ppe: 0 }),
+      entry("rabobank-creditcard", { fee: [2, "maand"], fx: 0, ppe: 0 }),
+    ];
+    const a = computeCardAdvice(input({ catalogue: cat, heldIds: ["ing-platinumcard"] }));
+    const ing = find(a, "ing-creditcard")!;
+    expect(ing.feeCents).toBe(2_400);
+    expect(ing.feeNote).toMatchObject({ kind: "package", applied: false });
+    expect(find(a, "rabobank-creditcard")!.feeCents).toBe(2_400 + 4_140);
   });
 
   test("M4: a fee that depends on something the catalogue does not price is not comparable", () => {

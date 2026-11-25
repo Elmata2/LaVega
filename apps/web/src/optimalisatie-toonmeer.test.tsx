@@ -504,3 +504,63 @@ test("kosten: de pakketlijst van een onherkende rekening zit in de plooi, de oor
   // ...maar de reden dat we het niet weten staat vooraan.
   staatVooraan(byTestId(el, "kosten-onbekend-B1"), "de oorzaak");
 });
+
+/* ══════════════ KOSTEN — een door de gebruiker benoemde kaart ══════════════ */
+
+const amexEntry = (id: string, product: string, value: number): CatalogueEntryLike =>
+  withFee(
+    offer({ id, product, issuer: "American Express", kind: "creditcard", pct: 0 }),
+    value,
+    "jaar",
+  );
+const AMEX_ENTRIES = [
+  amexEntry("american-express-blue-card", "American Express Blue Card", 36),
+  amexEntry("american-express-gold-card", "American Express Gold Card", 240),
+];
+const amexAccount = (statedCardId?: string): Account[] => [
+  acc({
+    key: "AMEX-33333",
+    name: "AMEX-33333",
+    bank: "American Express",
+    type: "Creditcard",
+    balance: 0,
+    ...(statedCardId === undefined ? {} : { statedCardId }),
+  }),
+];
+const amexCosts = (statedCardId?: string) =>
+  mount({ accounts: amexAccount(statedCardId), entries: AMEX_ENTRIES, txs: [] });
+
+test("kosten: een kaart die de gebruiker heeft benoemd toont de kosten van die kaart, niet 'welk product dit is'", async () => {
+  const el = await amexCosts("american-express-blue-card");
+  expect(el.querySelector('[data-testid="kosten-onbekend-AMEX-33333"]')).toBeNull();
+  expect(el.querySelector(".toonmeer-panel table")!.textContent).toContain(
+    "American Express Blue Card",
+  );
+  expect(el.querySelector('[data-testid="kosten-totaal"]')!.textContent).toContain("36");
+});
+
+test("kosten: een onbenoemde kaart van dezelfde bank stelt de vraag nog", async () => {
+  const el = await amexCosts();
+  expect(byTestId(el, "kosten-onbekend-AMEX-33333").textContent).toContain(
+    "niet welk van deze producten dit is",
+  );
+});
+
+test("kosten: 'geen creditcard' staat niet als kaart met onbekende kosten in de lijst", async () => {
+  const el = await amexCosts("not-credit");
+  expect(el.querySelector('[data-testid="kosten-onbekend-AMEX-33333"]')).toBeNull();
+  expect(el.textContent).not.toContain("not-credit");
+});
+
+test("kosten: 'een andere kaart' wordt nooit als kaartnaam of catalogus-id getoond", async () => {
+  const el = await amexCosts("other");
+  const onbekend = byTestId(el, "kosten-onbekend-AMEX-33333");
+  expect(onbekend.textContent).not.toMatch(/\bother\b/);
+});
+
+test("kosten: een benoemde kaart zonder prijs zegt dat die kaart onbekend is, niet 'welk product dit is'", async () => {
+  const el = await amexCosts("american-express-green-card");
+  const onbekend = byTestId(el, "kosten-onbekend-AMEX-33333").textContent!;
+  expect(onbekend).toContain("kosten van de kaart die je hebt gekozen niet");
+  expect(onbekend).not.toContain("niet welk van deze producten dit is");
+});

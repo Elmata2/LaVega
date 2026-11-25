@@ -15,20 +15,34 @@ export type NotCheckedCause =
   | "fetch-failed"
   | "not-found-on-page"
   | "no-figure-yet"
+  | "document-too-large"
+  | "zero-fee-needs-person"
   | "stopped-early";
 
 /** How a confirmed figure was confirmed. */
-export type ConfirmedBy = "read-again" | "same-number" | "quote-check" | "conditions-updated";
+export type ConfirmedBy =
+  | "read-again"
+  | "same-number"
+  | "quote-check"
+  | "conditions-updated"
+  | "no-programme-found";
 
 export const CONFIRMED_DETAIL: Record<ConfirmedBy, string> = {
   "read-again": "read again",
   "same-number": "same number read",
   "quote-check": "quote check",
   "conditions-updated": "conditions updated",
+  "no-programme-found": "no programme found",
 };
 
 /** The reason text of a product that had no route wired. The sweep writes it, the coverage reads it. */
 export const NO_ROUTE_PREFIX = "no route wired";
+
+/** The reason text of a figure whose document was read but is larger than the model limit. */
+export const TOO_LARGE_PREFIX = "document too large";
+
+/** The reason text of a held zero fee the sweep cannot confirm: only a person can. */
+export const ZERO_FEE_PREFIX = "zero fee needs a person";
 
 export type FigureCoverage = {
   id: string;
@@ -74,12 +88,47 @@ export function sweptFieldFor(
   return null;
 }
 
+/** The figures the sweep confirms on their own stored document, beside the FX or interest question. */
+export const EXTRA_FIELDS = ["accountFee", "pointsPerEuro", "cashbackPct"] as const;
+export type ExtraField = (typeof EXTRA_FIELDS)[number];
+
+/** Every field the sweep measures. */
+export const SWEPT_FIELDS: readonly CatalogField[] = ["fxFeePct", "interestPct", ...EXTRA_FIELDS];
+
+/** The fee, points and cashback figures a product holds in the start-of-run catalogue. */
+export function extraFieldsFor(held: ReadonlySet<CatalogField>): ExtraField[] {
+  return EXTRA_FIELDS.filter((f) => held.has(f));
+}
+
+/** The figures a product of this kind should hold, whether or not the catalogue holds them yet. */
+export function expectedExtraFieldsFor(kind: string | undefined): ExtraField[] {
+  switch (kind) {
+    case "creditcard":
+      return ["accountFee", "pointsPerEuro", "cashbackPct"];
+    case "betaalpas":
+      return ["pointsPerEuro"];
+    case "betaalrekening":
+    case "betaalpakket":
+      return ["accountFee"];
+    default:
+      return [];
+  }
+}
+
+/** The expected figures of a product that the catalogue does not hold. */
+export function missingExtraFields(
+  kind: string | undefined,
+  held: ReadonlySet<CatalogField>,
+): ExtraField[] {
+  return expectedExtraFieldsFor(kind).filter((f) => !held.has(f));
+}
+
 const isWebUrl = (url: string): boolean => /^https?:\/\//i.test(url.trim());
 
 export function coverageForRun(input: {
   /** The catalogue before the run. */
   entries: readonly MergeEntry[];
-  /** The one figure the sweep asks of each product on its watch list. */
+  /** The figures the sweep asks of each product on its watch list. */
   expected: readonly { id: string; product: string; field: CatalogField }[];
   verdicts: readonly FieldVerdict[];
   sweptFields: ReadonlySet<CatalogField>;
@@ -87,9 +136,11 @@ export function coverageForRun(input: {
   watchedIds: ReadonlySet<string>;
   /** Products this run was set to visit. */
   sweptIds: ReadonlySet<string>;
-  /** Products the loop reached, by id. */
+  /** Products the loop reached, by id; a figure read on its own document by "id.field". */
   reached: ReadonlyMap<string, { fetched: boolean; reason: string | null }>;
   stoppedEarlyIds: ReadonlySet<string>;
+  /** "id.field" of figures a stopped run did not reach inside a product it did reach. */
+  stoppedEarlyFigures?: ReadonlySet<string>;
   /** "id.field" to the first date the figure went unchecked, from state.json. */
   uncheckedSince: Readonly<Record<string, string>>;
   /** "id.field" to how a confirm verdict was reached. */
@@ -106,17 +157,26 @@ export function coverageForRun(input: {
 
   const causeOf = (id: string, field: CatalogField, stored: CatalogValue | undefined) => {
     if (!input.sweptFields.has(field)) return "field-not-swept" as const;
-    const asked = input.expected.find((x) => x.id === id)?.field;
-    if (asked && asked !== field) return "not-asked" as const;
+    const asked = input.expected.filter((x) => x.id === id);
+    if (asked.length > 0 && !asked.some((x) => x.field === field)) return "not-asked" as const;
     if (!input.watchedIds.has(id)) return "not-tracked" as const;
     if (!input.sweptIds.has(id)) return "not-in-this-run" as const;
-    const reached = input.reached.get(id);
+    // A figure the sweep read on its own document has its own entry, keyed "id.field".
+    const reached = input.reached.get(`${id}.${field}`) ?? input.reached.get(id);
     const noRoute = !!reached?.reason?.startsWith(NO_ROUTE_PREFIX);
     const webSource = !stored || isWebUrl(stored.sourceUrl);
     if (noRoute && !input.modelOn && webSource) return "model-off" as const;
     if (noRoute || !webSource) return "no-source" as const;
-    if (!reached || input.stoppedEarlyIds.has(id)) return "stopped-early" as const;
+    if (
+      !reached ||
+      input.stoppedEarlyIds.has(id) ||
+      input.stoppedEarlyFigures?.has(`${id}.${field}`)
+    ) {
+      return "stopped-early" as const;
+    }
     if (!reached.fetched) return "fetch-failed" as const;
+    if (reached.reason?.startsWith(TOO_LARGE_PREFIX)) return "document-too-large" as const;
+    if (reached.reason?.startsWith(ZERO_FEE_PREFIX)) return "zero-fee-needs-person" as const;
     return stored ? ("not-found-on-page" as const) : ("no-figure-yet" as const);
   };
 

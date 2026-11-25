@@ -1,3 +1,4 @@
+import { hasStatedCatalogueCard } from "../model.js";
 /** Brand id to the lower-case name fragments an account's `bank` may carry.
  *  Each fragment matches as a whole word, so "ing" does not match "Leasing". */
 export const BANK_ALIASES: Record<string, readonly string[]> = {
@@ -59,7 +60,7 @@ export const countsAsLinked = (a: {
   linkedAt?: string;
   source?: "file";
   statedCardId?: string;
-}): boolean => (a.linkedAt !== undefined && a.source !== "file") || a.statedCardId !== undefined;
+}): boolean => (a.linkedAt !== undefined && a.source !== "file") || hasStatedCatalogueCard(a);
 
 /** The banks the person says they use (stated, or implied by a card), and
  *  whether a link already covers each. "other" is never listed. A bank-route
@@ -79,8 +80,7 @@ export function connectChecklist(i: ConnectChecklistInput): ConnectItem[] {
   // stamped (`linkedAt` set, never a live link) counts.
   const filed = i.accounts.filter(
     (a) =>
-      a.statedCardId !== undefined ||
-      (a.linkedAt !== undefined && a.balanceFetchedAt === undefined),
+      hasStatedCatalogueCard(a) || (a.linkedAt !== undefined && a.balanceFetchedAt === undefined),
   );
   return [
     ...brands.map((brand) => ({
@@ -90,10 +90,9 @@ export function connectChecklist(i: ConnectChecklistInput): ConnectItem[] {
     })),
     ...fileBrands.map((brand) => ({
       brand,
-      connected: (brand === "amex"
-        ? filed
-        : filed.filter((a) => a.statedCardId !== undefined)
-      ).some((a) => bankMatchesBrand(a.bank, brand)),
+      connected: (brand === "amex" ? filed : filed.filter(hasStatedCatalogueCard)).some((a) =>
+        bankMatchesBrand(a.bank, brand),
+      ),
       route: "file" as const,
     })),
   ];

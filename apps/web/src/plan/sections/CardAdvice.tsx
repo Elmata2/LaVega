@@ -1,4 +1,11 @@
-import type { CardAdvice, CardOption, SourceRef, Verdict } from "@lavega/core";
+import {
+  STATED_CARD_NOT_CREDIT,
+  STATED_CARD_OTHER,
+  type CardAdvice,
+  type CardOption,
+  type SourceRef,
+  type Verdict,
+} from "@lavega/core";
 import { useState } from "react";
 import { cardAdviceCopy } from "../../copy/cardAdvice.js";
 import { wizardCopy } from "../../copy/wizard.js";
@@ -95,7 +102,9 @@ export function CardCaveats() {
   );
 }
 
-function Ranked({ advice }: { advice: CardAdvice }) {
+/** The ranked list the unknown-baseline sentence announces. Exported so Optimalisatie
+ *  prints the same list under the same sentence. */
+export function Ranked({ advice }: { advice: CardAdvice }) {
   const { locale, fmt } = useSectionCopy();
   const c = cardAdviceCopy[locale];
   const top = advice.options.slice(0, SHOWN);
@@ -155,6 +164,13 @@ export function Identify({
   const c = cardAdviceCopy[locale];
   const [failed, setFailed] = useState(false);
   const [busy, setBusy] = useState(false);
+  const save = (cardId: string) => {
+    setBusy(true);
+    setFailed(false);
+    Promise.resolve(onIdentify(accountKey, cardId))
+      .catch(() => setFailed(true))
+      .finally(() => setBusy(false));
+  };
   return (
     <div className="mt-2" data-testid="plan-card-identify">
       <h5 className="m-0 mb-1 text-[0.85rem] font-semibold">{c.identifyTitle}</h5>
@@ -165,15 +181,19 @@ export function Identify({
         picked={[]}
         disabled={busy}
         onChange={(ids) => {
-          const id = ids.find((x) => x !== OTHER_CARD);
+          const id = ids[0];
           if (id === undefined) return;
-          setBusy(true);
-          setFailed(false);
-          Promise.resolve(onIdentify(accountKey, id))
-            .catch(() => setFailed(true))
-            .finally(() => setBusy(false));
+          save(id === OTHER_CARD ? STATED_CARD_OTHER : id);
         }}
       />
+      <button
+        type="button"
+        className="mt-1 text-[0.85rem] underline"
+        disabled={busy}
+        onClick={() => save(STATED_CARD_NOT_CREDIT)}
+      >
+        {c.identifyNotCredit}
+      </button>
       {failed && <StatusLine tone="problem">{c.identifyFailed}</StatusLine>}
     </div>
   );

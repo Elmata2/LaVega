@@ -865,6 +865,7 @@ describe("computeCards", () => {
         netCents: 0,
         pointsEarned: null,
         pointsValueRange: null,
+        inAdvice: false,
       });
     });
   });
@@ -1036,6 +1037,50 @@ describe("computeCards: advice", () => {
         blockers: [{ name: "Mystery card", reasons: ["not-in-catalogue"], accountKey: "CC1" }],
       });
       expect(a.verdict.kind).toBe("unknown-baseline");
+    });
+
+    test("two unidentified accounts of one brand are asked about under different names", () => {
+      const a1 = acct("AMEX-11111", {
+        type: "Creditcard",
+        name: "AMEX-11111",
+        bank: "American Express",
+      });
+      const a2 = acct("AMEX-22222", {
+        type: "Creditcard",
+        name: "AMEX-22222",
+        bank: "American Express",
+      });
+      const a = adviceRun({
+        accounts: [cur, a1, a2],
+        heldCards: [
+          card("AMEX-11111", { label: "American Express", catalogueId: null }),
+          card("AMEX-22222", { label: "American Express", catalogueId: null }),
+        ],
+        profile: { statedCardIds: [], cardBalances: [] },
+      });
+      const names = a.baseline.kind === "unknown" ? a.baseline.blockers.map((b) => b.name) : [];
+      expect(names).toHaveLength(2);
+      expect(names[0]).toContain("AMEX-11111");
+      expect(names[1]).toContain("AMEX-22222");
+      expect(names[0]).toContain("American Express");
+    });
+
+    test("the ask label shows the brand once when the account name repeats it, and survives a missing name", () => {
+      const run2 = (name: string | undefined) => {
+        const a1 = acct("G1", {
+          type: "Creditcard",
+          name: name as string,
+          bank: "American Express",
+        });
+        const a = adviceRun({
+          accounts: [cur, a1],
+          heldCards: [card("G1", { label: "American Express Gold", catalogueId: null })],
+          profile: { statedCardIds: [], cardBalances: [] },
+        });
+        return a.baseline.kind === "unknown" ? a.baseline.blockers[0]!.name : null;
+      };
+      expect(run2("Gold")).toBe("American Express Gold");
+      expect(run2(undefined)).toBe("American Express Gold");
     });
 
     test("one identified and one unidentified card: verdict is unknown-baseline", () => {
