@@ -318,3 +318,29 @@ test("english: the label and the converted line", () => {
     "Amounts converted to NZD at the ECB rate of",
   );
 });
+
+test("the small-withdrawal example is a round local amount, priced on that amount", () => {
+  const el = render("NZ", { fxHistory: FX });
+  const caution = text(el, '[data-testid="travel-pin-caution"]');
+  expect(caution).toMatch(/≈NZ\$\s?100\b/);
+  expect(caution).not.toContain("92");
+  const small = planTravel({
+    accounts,
+    txs: [],
+    rates: [],
+    facts: FACTS,
+    destination: "NZ",
+    asOf: ASOF,
+    catalogue: CATALOGUE,
+    smallWithdrawalRate: 1.85,
+  });
+  const pct = small.withdraw[0].smallEffectivePct!;
+  expect(caution).toContain(pct.toFixed(2).replace(".", ","));
+  act(() => switchButtons(el)[1].dispatchEvent(new MouseEvent("click", { bubbles: true })));
+  expect(text(el, '[data-testid="travel-pin-caution"]')).toContain("€ 50");
+});
+
+test("JPY example is ¥ 10.000", () => {
+  const el = render("JP", { fxHistory: FX });
+  expect(nums(text(el, '[data-testid="travel-pin-caution"]'))).toContain(10_000);
+});

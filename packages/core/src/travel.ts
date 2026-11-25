@@ -119,6 +119,48 @@ const COUNTRY_CURRENCY: Record<string, string> = {
   SI: "EUR",
 };
 
+/** Euro-using countries and territories the table above does not list. */
+const EXTRA_EURO_COUNTRIES = [
+  "EE",
+  "LV",
+  "LT",
+  "MT",
+  "CY",
+  "BG",
+  "AD",
+  "MC",
+  "SM",
+  "VA",
+  "ME",
+  "XK",
+  "GP",
+  "MQ",
+  "RE",
+  "GF",
+  "YT",
+  "PM",
+  "BL",
+  "MF",
+  "AX",
+];
+const EURO_COUNTRIES: ReadonlySet<string> = new Set([
+  ...Object.entries(COUNTRY_CURRENCY)
+    .filter(([, currency]) => currency === "EUR")
+    .map(([code]) => code),
+  ...EXTRA_EURO_COUNTRIES,
+]);
+
+/** True only for a country known to use the euro; any other code is not a euro
+ *  home. The inverse of `countryCurrency(...) !== null`, which cannot tell an
+ *  unmapped euro country from an unmapped foreign one. */
+export function usesEuro(countryCode: string): boolean {
+  return EURO_COUNTRIES.has(
+    String(countryCode ?? "")
+      .trim()
+      .toUpperCase(),
+  );
+}
+
 export function countryCurrency(code: string): string | null {
   return (
     COUNTRY_CURRENCY[
@@ -239,6 +281,8 @@ export type TravelPlan = {
   /** HIS cards, priced for taking out physical cash — a separate and usually
    *  much worse row in every tariff document we read (review item 6). */
   withdraw: WithdrawOption[];
+  /** The small-withdrawal example the `withdraw` rows are priced on. */
+  smallWithdrawal: { euros: number; local: number | null };
   /** The one sentence about cash, in euros on one € 200 withdrawal. */
   withdrawHeadline: WithdrawalHeadline;
   /** Cards from the CATALOGUE, cheapest surcharge first, each marked `held`.
@@ -936,6 +980,9 @@ export function planTravel(input: {
    *  niet afnemen. Niet weglaten uit de rekensom — een kaartprijs die nul wordt
    *  omdat niemand een periode noemde is precies de fout die dit veld voorkomt. */
   tripMonths?: number;
+  /** Units of the destination currency per euro, when the amounts are shown in
+   *  that currency. Makes the small-withdrawal example a round local amount. */
+  smallWithdrawalRate?: number | null;
 }): TravelPlan {
   const { accounts, txs, rates, facts, destination, asOf } = input;
   const catalogue = input.catalogue ?? [];
@@ -990,7 +1037,9 @@ export function planTravel(input: {
 
   // Cash, and the rest of the market. Both read the catalogue that was passed
   // in; with none, both come back empty rather than guessed.
-  const withdraw = currency === "EUR" ? [] : rankWithdrawOptions(spend, catalogue);
+  const smallExample = smallWithdrawal(input.smallWithdrawalRate);
+  const withdraw =
+    currency === "EUR" ? [] : rankWithdrawOptions(spend, catalogue, smallExample.euros);
   // The whole market, priced for cash. His ING betaalpas is 4,9% on € 100 and he
   // is right that it is not the answer; the answer is a proven zero he does not
   // hold yet, and the cards we have NO withdrawal figure for get named rather
@@ -1026,6 +1075,7 @@ export function planTravel(input: {
     ],
     unidentifiedCount,
     withdraw,
+    smallWithdrawal: smallExample,
     withdrawHeadline: withdrawalHeadline(withdraw, currency, cashOffers),
     offers,
     pay,
@@ -1050,6 +1100,28 @@ export function planTravel(input: {
  *  is quoted beside it precisely to show the difference. */
 export const TRAVEL_REFERENCE_WITHDRAWAL = 200;
 export const TRAVEL_SMALL_WITHDRAWAL = 50;
+
+/** The small withdrawal as a cash machine abroad would offer it. In euro it is
+ *  € 50. Converted, € 50 is "NZ$ 97,50", which no machine pays out, so the
+ *  example becomes the nearest round note value on a 1-2-5 ladder (NZ$ 100,
+ *  ¥ 10.000, Rp 1.000.000; US$ 50 for a rate near 1). `euros` is what that
+ *  local amount is worth, so the fee is priced on the amount that is shown. */
+export function smallWithdrawal(rate: number | null | undefined): {
+  euros: number;
+  local: number | null;
+} {
+  if (typeof rate !== "number" || !Number.isFinite(rate) || rate <= 0)
+    return { euros: TRAVEL_SMALL_WITHDRAWAL, local: null };
+  const target = TRAVEL_SMALL_WITHDRAWAL * rate;
+  const magnitude = 10 ** Math.floor(Math.log10(target));
+  let local = magnitude;
+  for (const step of [1, 2, 5, 10]) {
+    const candidate = step * magnitude;
+    if (Math.abs(Math.log(candidate / target)) < Math.abs(Math.log(local / target)))
+      local = candidate;
+  }
+  return { euros: local / rate, local };
+}
 
 /** A withdrawal price has TWO SHAPES and a single percentage cannot express it.
  *  ING's betaalpas is "€ 3,50 + 1,40%"; its creditcard is "4,00% van het
@@ -1412,6 +1484,7 @@ export type WithdrawOption = {
 export function rankWithdrawOptions(
   spend: readonly SpendOption[],
   entries: readonly CatalogueEntryLike[],
+  smallEuros: number = TRAVEL_SMALL_WITHDRAWAL,
 ): WithdrawOption[] {
   const options = spend.map((s): WithdrawOption => {
     const { entry, ambiguous } = catalogueProductFor(entries, s.provider, s.fxFeePct);
@@ -1436,8 +1509,8 @@ export function rankWithdrawOptions(
       fee,
       costOnReference: withdrawalCost(fee, TRAVEL_REFERENCE_WITHDRAWAL),
       effectivePct: withdrawalEffectivePct(fee, TRAVEL_REFERENCE_WITHDRAWAL),
-      costOnSmall: withdrawalCost(fee, TRAVEL_SMALL_WITHDRAWAL),
-      smallEffectivePct: withdrawalEffectivePct(fee, TRAVEL_SMALL_WITHDRAWAL),
+      costOnSmall: withdrawalCost(fee, smallEuros),
+      smallEffectivePct: withdrawalEffectivePct(fee, smallEuros),
       penalisesSmall:
         fee.known && fee.components.some((c) => c.kind === "fixed" || c.minEur !== null),
       catalogueProduct: entry?.product ?? null,

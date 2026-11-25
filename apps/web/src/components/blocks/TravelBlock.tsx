@@ -1,3 +1,4 @@
+import { DateTime } from "effect";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { View } from "../../App";
 import type {
@@ -34,13 +35,14 @@ import {
   planTravel,
   rateOn,
   countryCurrency,
+  usesEuro,
   makeFact,
   costOnReferenceSpend,
   netBenefit,
   TRAVEL_AGENT,
   TRAVEL_REFERENCE_SPEND,
   TRAVEL_REFERENCE_WITHDRAWAL,
-  TRAVEL_SMALL_WITHDRAWAL,
+  smallWithdrawal,
   nameSome,
   splitProductName,
 } from "@lavega/core";
@@ -54,6 +56,7 @@ import {
   formatDate,
 } from "../../format.js";
 import { useAppLocale, pick, readAppLocale } from "../../appLocale.js";
+import { countryNameIn } from "../../countries.js";
 import { optimiseCopy, formatPercentIn, type TravelCopy } from "../../copy/optimise.js";
 import type { Locale } from "../../locale.js";
 import Module from "../Module.js";
@@ -219,7 +222,7 @@ function FactCorrection({
                 key: factKey,
                 value: trimmed,
                 source: "user",
-                updatedAt: new Date().toISOString().slice(0, 10),
+                updatedAt: DateTime.formatIso(DateTime.nowUnsafe()).slice(0, 10),
               }),
             );
           }
@@ -329,6 +332,14 @@ function travelEuro(locale: Locale, n: number): string {
   return locale === "nl" ? `€ ${n.toFixed(2).replace(".", ",")}` : formatEuroIn(locale, n);
 }
 
+/** The small-withdrawal example: a round local amount when converted (see core's
+ *  `smallWithdrawal`), € 50 otherwise. */
+function smallExample(locale: Locale, conv: Conv | null): string {
+  const { euros, local } = smallWithdrawal(conv?.rate);
+  return conv && local !== null
+    ? `≈${formatCurrencyWholeIn(locale, local, conv.code)}`
+    : travelEuro(locale, euros);
+}
 /** A round reference amount without its cents ("€ 200"), so the short line reads
  *  "€ 3,50 per € 200". Not a round number keeps its cents. */
 function referenceEuro(locale: Locale, n: number): string {
@@ -365,13 +376,20 @@ export function destinationConv(
   const rate = rateOn(history, code, asOf);
   if (rate === null) return null;
   const byDate = history[code];
-  const cursor = new Date(`${asOf}T00:00:00Z`);
+  const asOfDay = DateTime.makeUnsafe(`${asOf}T00:00:00Z`);
   for (let i = 0; i < 11; i++) {
-    const iso = cursor.toISOString().slice(0, 10);
+    const iso = DateTime.formatIso(DateTime.subtract(asOfDay, { days: i })).slice(0, 10);
     if (typeof byDate[iso] === "number" && byDate[iso] > 0) return { code, rate, date: iso };
-    cursor.setUTCDate(cursor.getUTCDate() - 1);
   }
   return null;
+}
+
+/** Days from `from` to `to` (negative when `to` is earlier); NaN for an unreadable date. */
+function daysBetween(from: string, to: string): number {
+  const a = DateTime.make(from);
+  const b = DateTime.make(to);
+  if (a._tag === "None" || b._tag === "None") return Number.NaN;
+  return (DateTime.toEpochMillis(b.value) - DateTime.toEpochMillis(a.value)) / 86_400_000;
 }
 
 /** The same, from the live ECB table (`liveFxRate.ts`), for a currency the vault's
@@ -381,8 +399,7 @@ export function liveConv(live: LiveEcb | null, destination: string, asOf: string
   const code = countryCurrency(destination);
   const rate = code && live ? live.rates[code] : undefined;
   if (!live || !code || !(typeof rate === "number" && rate > 0)) return null;
-  const days =
-    (Date.parse(`${asOf}T00:00:00Z`) - Date.parse(`${live.date}T00:00:00Z`)) / 86_400_000;
+  const days = daysBetween(`${live.date}T00:00:00Z`, `${asOf}T00:00:00Z`);
   return Number.isFinite(days) && days >= 0 && days <= 10 ? { code, rate, date: live.date } : null;
 }
 
@@ -778,7 +795,7 @@ function smallWithdrawalPenaltySentence(
   if (p.kind === "none") return "";
   return c.answer.pin.flatFee(
     displayProduct(p.provider, c),
-    amountLine(locale, TRAVEL_SMALL_WITHDRAWAL, conv),
+    smallExample(locale, conv),
     formatPercentIn(locale, p.smallEffectivePct),
   );
 }
@@ -1077,16 +1094,12 @@ export function Kaartkosten({
   }
 
   const price = feeLabel(locale, cost.amount, c);
-  // EEN UITGESPROKEN NUL IS EEN BEKENDE NUL — de keerzijde van "onbekend is geen
-  // nul". Zegt een bron letterlijk dat de kaart niets kost, dan is dat een
-  // gemeten feit en scheelt het hem de vraag of we het gewoon niet weten. Zonder
-  // rekensom: er is niets om over een periode uit te smeren, en "€ 0,00 per maand
-  // en dat betaal je minstens één maand" is waar en onleesbaar.
+  // EEN UITGESPROKEN NUL IS EEN BEKENDE NUL, en het bedrag zegt dat zelf: geen
+  // bronzin erbij. Zonder rekensom: er is niets om over een periode uit te smeren.
   if (cost.amount.cents === 0) {
-    const [heading, rest] = splitBold(fill(c.cardCost.free, { price, product }));
     return (
       <p className="cell-sub travel-note" data-testid={testId}>
-        <strong>{heading}</strong> — {rest}
+        <strong>{fill(c.cardCost.priceOnly, { price })}</strong>
       </p>
     );
   }
@@ -1686,7 +1699,7 @@ export function CashSection({
               <p className="cell-sub travel-note">
                 {fill(c.cash.smallWithdrawalNote, {
                   provider: productLabel(o.bank, o.productKind, c),
-                  amount: amountList(locale, TRAVEL_SMALL_WITHDRAWAL, conv),
+                  amount: smallExample(locale, conv),
                   pctSmall: formatPercentIn(locale, o.smallEffectivePct),
                   pctNormal: formatPercentIn(locale, o.effectivePct ?? 0),
                 })}
@@ -1844,7 +1857,7 @@ export function OffersSection({
 export function figureAge(updatedAt: string, asOf: string): string {
   const locale = readAppLocale();
   const c = optimiseCopy[locale].travel.figureAge;
-  const days = Math.round((Date.parse(asOf) - Date.parse(updatedAt)) / 86_400_000);
+  const days = Math.round(daysBetween(updatedAt, asOf));
   if (!Number.isFinite(days)) return fill(c.fallback, { date: updatedAt });
   if (days <= 0) return c.today;
   if (days === 1) return c.yesterday;
@@ -1880,6 +1893,9 @@ export default function TravelBlock({
   // the neutral rail rather than repeating that specific guess.
   const rail = c.railFor(homeCountryChosen ? homeCountry : "");
   const [destination, setDestination] = useState("");
+  /* A chosen home outside the explicit euro set: every fee and route claim below
+   * is euro-referenced, so they are replaced by one note. */
+  const foreignHome = homeCountryChosen && !usesEuro(homeCountry);
   /* "NZD | EUR": default is the destination currency. A choice for EUR is kept
    * for the session, per viewer, so it survives switching country and a re-mount.
    * Storage can be absent or throw (private window), and then the default holds. */
@@ -1947,14 +1963,23 @@ export default function TravelBlock({
     onRefreshTerms(destination);
   }
 
-  const plan: TravelPlan | null = destination
-    ? planTravel({ accounts, txs, rates, facts, destination, asOf, catalogue })
-    : null;
-
   /* The rate the destination can be converted at, or null (no switch, all euro).
    * `conv` is what is IN FORCE: null when he chose EUR. */
   const available = historyConv ?? (destination ? liveConv(live, destination, asOf) : null);
   const conv = available && !showEuro ? available : null;
+
+  const plan: TravelPlan | null = destination
+    ? planTravel({
+        accounts,
+        txs,
+        rates,
+        facts,
+        destination,
+        asOf,
+        catalogue,
+        smallWithdrawalRate: conv?.rate ?? null,
+      })
+    : null;
 
   const bestJourney = plan?.journeys.find((j) => j.known) ?? null;
   /* Zijn beste BEPRIJSDE route, met dezelfde test als core's `bestPayAdvice`
@@ -2078,24 +2103,28 @@ export default function TravelBlock({
     <Module title="Travel" span={3} height="tall">
       <div className="travel-controls">
         <label>
-          <span className="eyebrow">{fill(c.controls.from, { country: homeCountry })}</span>
+          <span className="eyebrow">
+            {fill(c.controls.from, { country: countryNameIn(locale, homeCountry) })}
+          </span>
           <select
             value={destination}
             onChange={(e) => setDestination(e.target.value)}
             disabled={busy}
           >
             <option value="">{c.controls.countryPlaceholder}</option>
-            {c.countries.map((country) => (
-              <option key={country.code} value={country.code}>
-                {pick(locale, country.nl, country.en)}
-              </option>
-            ))}
+            {c.countries
+              .filter((country) => country.code.toUpperCase() !== homeCountry.trim().toUpperCase())
+              .map((country) => (
+                <option key={country.code} value={country.code}>
+                  {pick(locale, country.nl, country.en)}
+                </option>
+              ))}
           </select>
         </label>
         {plan?.currency && (
           <span className="eyebrow">{fill(c.controls.payingIn, { currency: plan.currency })}</span>
         )}
-        {available && (
+        {available && !foreignHome && (
           <div className="travel-ccy" role="group" aria-label={c.answer.showAmountsIn}>
             <button type="button" aria-pressed={!showEuro} onClick={() => chooseCurrency(false)}>
               {available.code}
@@ -2115,6 +2144,10 @@ export default function TravelBlock({
 
       {!plan ? (
         <p className="block-empty">{c.empty}</p>
+      ) : foreignHome ? (
+        <p className="cell-sub" data-testid="travel-home-currency-note">
+          {c.controls.homeCurrencyNote}
+        </p>
       ) : (
         <>
           {/* DE SAMENVATTING. Twee antwoorden — waarmee betaal je, waar kun je

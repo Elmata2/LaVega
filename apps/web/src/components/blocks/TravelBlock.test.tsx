@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
+import { resolved } from "../../test-support/resolveStyle";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
-import { afterEach, expect, test } from "vitest";
+import { afterEach, describe, expect, test } from "vitest";
 import type { Account, CatalogValue, LearnedFact } from "@lavega/core";
 import { makeFact, planTravel, TRAVEL_AGENT } from "@lavega/core";
 import TravelBlock, {
@@ -51,7 +52,7 @@ test("TravelBlock renders as a module and asks for a destination first", () => {
   // (review 3, item 4). The Module puts the title in its aria-label too.
   expect(html).toContain("Travel");
   expect(html).not.toContain("reisagent");
-  expect(html).toContain("Ik reis vanuit NL naar");
+  expect(html).toContain("Ik reis vanuit Nederland naar");
   expect(html).toContain("Kies een land");
   // No destination picked, so there is no plan and no terms notice yet.
   expect(html).not.toContain("travel-terms");
@@ -271,6 +272,35 @@ test("a DE home country never says iDEAL — it gets its own rail", () => {
   const de = renderWithDestination({ homeCountry: "DE", homeCountryChosen: true });
   expect(de.textContent).not.toContain("iDEAL");
   expect(de.textContent).toContain("SEPA instant");
+});
+
+describe.each([
+  ["DE", "a euro country", "Duitsland", "SEPA instant"],
+  ["GB", "a non-euro country", "Verenigd Koninkrijk", "Faster Payments"],
+])("home country %s (%s)", (code, _kind, name, rail) => {
+  test("the eyebrow names the country, not its code", () => {
+    const el = renderWithDestination({ homeCountry: code, homeCountryChosen: true });
+    expect(el.querySelector(".travel-controls .eyebrow")!.textContent).toBe(
+      `Ik reis vanuit ${name} naar`,
+    );
+  });
+
+  test("the destination list never offers the home country", () => {
+    const el = renderWithDestination({ homeCountry: code, homeCountryChosen: true });
+    const values = [...el.querySelectorAll("select option")].map(
+      (o) => (o as HTMLOptionElement).value,
+    );
+    expect(values).not.toContain(code);
+    expect(values).toContain("US");
+  });
+
+  test("the assumed-country note is gone and the rail follows the country", () => {
+    const el = renderWithDestination({ homeCountry: code, homeCountryChosen: true });
+    expect(el.textContent).not.toContain(optimiseCopy.nl.travel.controls.homeAssumedNote);
+    if (code === "GB")
+      expect(el.textContent).toContain(optimiseCopy.nl.travel.controls.homeCurrencyNote);
+    else expect(el.textContent).toContain(rail);
+  });
 });
 
 test("de uitklap toont de gerangschikte routes, elk met hun drie stappen", () => {
@@ -1749,6 +1779,120 @@ test("pin met dezelfde kaart als de betaalregel: 'Pin met', geen tweede chip en 
   expect(el.querySelector('.travel-winner [data-testid="badge"]')).toBeNull();
   expect(el.querySelector('[data-testid="travel-pay-kosten"]')).not.toBeNull();
   expect(el.querySelector('[data-testid="travel-pin-kosten"]')).toBeNull();
+});
+
+test("pin met dezelfde kaart maar een ander pinvoordeel dan de betaalregel houdt de tweede Kaartkosten-rij", () => {
+  // Zijn eigen ING betaalpas heeft een bekend opnametarief, dus de pinregel heeft
+  // een EIGEN netto. Dezelfde kaart, dezelfde prijs, een ander voordeel: die
+  // getallen staan nergens anders, dus de rij blijft.
+  const ing = CATALOGUE.filter((e) => e.product === "ING betaalpas");
+  const cards = [
+    ...ing,
+    marketCard(
+      "een",
+      "Testkaart Een",
+      "Eenbank N.V.",
+      0,
+      { value: 1, period: "maand" },
+      "Geldt bij betalen; bij geldopname in vreemde valuta geldt een apart tarief (€ 1,00 + 0,10%).",
+    ),
+  ];
+  const el = renderWithDestination({ facts: DEARER_OWN, catalogue: cards });
+  const plan = realPlan(DEARER_OWN, cards);
+  expect(plan.pay!.product).toBe(plan.withdrawAdvice!.product);
+  expect(plan.pay!.held).toBe(false);
+  expect(plan.withdrawAdvice!.held).toBe(false);
+  expect(plan.withdrawAdvice!.benefit).not.toBeNull();
+  expect(JSON.stringify(plan.withdrawAdvice!.benefit)).not.toBe(JSON.stringify(plan.pay!.benefit));
+  expect(el.querySelector(".travel-winner-pin")!.textContent).toMatch(/^Pin met Testkaart Een: /);
+  expect(el.querySelector('[data-testid="travel-pay-kosten"]')).not.toBeNull();
+  expect(el.querySelector('[data-testid="travel-pin-kosten"]')).not.toBeNull();
+});
+
+test("een kaart die niets kost om aan te houden zegt alleen het bedrag, zonder bronzin", () => {
+  const gratis = [
+    marketCard(
+      "gratis",
+      "Testkaart Gratis",
+      "Gratisbank N.V.",
+      0,
+      { value: 0, period: "maand" },
+      "Geen opslag.",
+    ),
+  ];
+  const el = renderWithDestination({ facts: DEARER_OWN, catalogue: gratis });
+  const kosten = el.querySelector('[data-testid="travel-pay-kosten"]')!;
+  expect((kosten.textContent ?? "").replace(/\u00a0/g, " ")).toBe(
+    `Kaartkosten: ${formatEuro(0)} per maand.`.replace(/\u00a0/g, " "),
+  );
+  expect(kosten.textContent).not.toContain("bron");
+});
+
+test("de Let op-regel onder de pinregel heeft lucht uit de spacing-schaal", () => {
+  const el = renderWithCatalogue();
+  const caution = el.querySelector('[data-testid="travel-pin-caution"]')!;
+  expect(resolved([...caution.classList], "margin-top")).toBe("var(--sp-2)");
+});
+
+describe("a home country with another currency than the euro", () => {
+  const NO_ROUTE = optimiseCopy.nl.travel.journeys.noRouteEuro;
+  const NOTE = optimiseCopy.nl.travel.controls.homeCurrencyNote;
+  const pick = (code: string, home: string, chosen = true) => {
+    const el = renderWithDestination({ homeCountry: home, homeCountryChosen: chosen });
+    act(() => setNativeValue(el.querySelector("select")!, code));
+    return el;
+  };
+
+  test("GB home + DE destination: the note, not the no-route claim", () => {
+    const el = pick("DE", "GB");
+    expect(el.textContent).toContain(NOTE);
+    expect(el.textContent).not.toContain(NO_ROUTE);
+    expect(el.querySelector("select")!.disabled).toBe(false);
+  });
+
+  test("GB home + US destination: the note and no fee percentage", () => {
+    const el = pick("US", "GB");
+    expect(el.textContent).toContain(NOTE);
+    expect(el.textContent).not.toMatch(/\d%/);
+    expect(el.querySelector(".travel-winner")).toBeNull();
+  });
+
+  test("DE and NL home stay unchanged", () => {
+    for (const home of ["DE", "NL"]) {
+      const el = pick("US", home);
+      expect(el.textContent).not.toContain(NOTE);
+      expect(el.querySelector(".travel-winner")).not.toBeNull();
+    }
+    expect(pick("US", "GB", false).textContent).not.toContain(NOTE);
+  });
+
+  test("a home outside the explicit euro set is foreign, mapped or not (IS, RO)", () => {
+    for (const [home, dest] of [
+      ["IS", "DE"],
+      ["RO", "US"],
+    ]) {
+      const el = pick(dest, home);
+      expect(el.textContent, home).toContain(NOTE);
+      expect(el.textContent, home).not.toContain(NO_ROUTE);
+      expect(el.querySelector(".travel-winner"), home).toBeNull();
+    }
+  });
+
+  test("euro homes missing from the currency table stay unchanged (EE, BG, MC)", () => {
+    for (const home of ["EE", "BG", "MC"]) {
+      const el = pick("US", home);
+      expect(el.textContent, home).not.toContain(NOTE);
+      expect(el.querySelector(".travel-winner"), home).not.toBeNull();
+    }
+  });
+
+  test("the home country is removed from the list whatever its case", () => {
+    const el = renderWithDestination({ homeCountry: "de", homeCountryChosen: true });
+    const values = [...el.querySelectorAll("select option")].map(
+      (o) => (o as HTMLOptionElement).value,
+    );
+    expect(values).not.toContain("DE");
+  });
 });
 
 test("pin met een kaart die hij heeft blijft ongewijzigd", () => {

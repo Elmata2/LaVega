@@ -1169,4 +1169,7 @@
   .travel-note {
     line-height: 1.5;
   }
+  .travel-winner-caution {
+    margin-top: var(--sp-2);
+  }
 }
