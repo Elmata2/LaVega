@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { StatedAnswers } from "./plan/optimalisatieStated";
 import type {
   Account,
@@ -107,7 +107,8 @@ import { HomePopups } from "./components/HomePopups.js";
 import CardFileDialog from "./components/import/CardFileDialog.js";
 import { CardFileContext, type OpenCardFile } from "./components/import/CardFileContext.js";
 import type { CardTarget } from "./lib/cardFileImport.js";
-import { saveBalance } from "./lib/saveBalance.js";
+import { createAccountEditor } from "./lib/accountPatch.js";
+import { balancePatch } from "./lib/saveBalance.js";
 import { commitToStorage, type FoldRefsState } from "./lib/commitCardFiles.js";
 import { focusAfterFileDialog } from "./lib/focusAfterFile.js";
 import { statedCardPlaceholders } from "./plan/statedPlaceholders";
@@ -305,6 +306,21 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
   const [gate, setGate] = useState<GateState>("loading");
   const [openAttempt, setOpenAttempt] = useState(0);
   const [accounts, setAccounts] = useState<Account[]>([]);
+  // The latest list for handlers that edit one account: a render's `accounts` can be
+  // one edit behind when two edits land in the same moment.
+  const accountsRef = useRef<readonly Account[]>(accounts);
+  useLayoutEffect(() => {
+    accountsRef.current = accounts;
+  }, [accounts]);
+  const accountEditor = useMemo(
+    () =>
+      createAccountEditor({
+        ref: accountsRef,
+        setState: setAccounts,
+        put: (a) => storage.putAccounts(a),
+      }),
+    [],
+  );
   const [txs, setTxs] = useState<Tx[]>([]);
   const [busy, setBusy] = useState(false);
   const [locale] = useAppLocale();
@@ -1870,12 +1886,12 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
   // rename cell so a later re-import knows this bank/name was typed by hand.
   function handleAccountFieldChange(key: string, patch: Partial<Account>) {
     if ("bank" in patch || "type" in patch || "name" in patch) {
-      const current = accounts.find((a) => a.key === key);
+      const current = accountsRef.current.find((a) => a.key === key);
       const product = current ? productOf(current) : "";
       if (product && !productBeforeEdit.current.has(key))
         productBeforeEdit.current.set(key, product);
     }
-    setAccounts(accounts.map((a) => (a.key === key ? { ...a, ...patch } : a)));
+    void accountEditor.edit(key, patch);
   }
 
   // Manually set an account's current saldo (CSV imports carry none). Accepts a
@@ -1884,31 +1900,23 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
   // value is "current as of today", so it also anchors balanceDate to asOf;
   // blank clears both back to unknown/unanchored.
   async function handleSaldoCommit(key: string, value: string) {
-    const account = accounts.find((a) => a.key === key);
+    const account = accountsRef.current.find((a) => a.key === key);
     if (!account) return;
-    // Write first, update the screen only after it is stored: a failed write
-    // rethrows, so the caller can say so, and no balance shows that is not saved.
-    const changed = await saveBalance(storage, account, value, asOf);
-    if (changed) setAccounts((cur) => cur.map((a) => (a.key === key ? changed : a)));
+    const patch = balancePatch(account, value, asOf);
+    if (patch === null) return;
+    // A failed write puts the old balance back and rethrows, so the caller can say so.
+    await accountEditor.edit(key, patch, { persist: true });
   }
 
   // Set an account's soort (type) — a select commits immediately (no draft/blur
-  // needed, unlike free-text saldo/entiteit), same persist pattern as the others.
+  // needed, unlike free-text saldo/entiteit).
   async function handleTypeCommit(key: string, type: string) {
-    const next = accounts.map((a) => (a.key === key ? { ...a, type } : a));
-    setAccounts(next);
-    const changed = next.find((a) => a.key === key);
-    if (changed) await storage.putAccounts([changed]);
+    await accountEditor.edit(key, { type }, { persist: true });
   }
 
-  // The card a person names for a connected card account the app could not
-  // identify. Same persist pattern as the type: state first, then the store.
+  // The card a person names for a connected card account the app could not identify.
   async function handleStatedCardCommit(key: string, cardId: string) {
-    const account = accounts.find((a) => a.key === key);
-    if (!account) return;
-    const changed = { ...account, statedCardId: cardId };
-    await storage.putAccounts([changed]);
-    setAccounts((cur) => cur.map((a) => (a.key === key ? changed : a)));
+    await accountEditor.edit(key, { statedCardId: cardId }, { persist: true });
   }
 
   // WS3.1: one half of the opening anchor. A liability owner types the amount

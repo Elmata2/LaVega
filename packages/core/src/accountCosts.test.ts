@@ -663,3 +663,102 @@ test("accountNamesProduct: op hele woorden, en minstens twee", () => {
   expect(accountNamesProduct(account({ bank: "ING", name: "ING Go" }), ingGo)).toBe(true);
   expect(accountNamesProduct(account({ bank: "ING", name: "Betaalrekening" }), ingGo)).toBe(false);
 });
+
+describe("een kaart die de gebruiker zelf heeft benoemd (statedCardId)", () => {
+  const amex = (id: string, product: string, value: number) =>
+    entry({
+      id,
+      product,
+      issuer: "American Express",
+      kind: "creditcard",
+      fee: { value, period: "jaar", conditions: null },
+    });
+  const BLUE = amex("american-express-blue-card", "American Express Blue Card", 0);
+  const GOLD = amex("american-express-gold-card", "American Express Gold Card", 240);
+  const cc = (over: Partial<Account> = {}): Account =>
+    account({
+      key: "AMEX-33333",
+      name: "AMEX-33333",
+      bank: "American Express",
+      type: "Creditcard",
+      ...over,
+    });
+
+  test("een benoemde kaart krijgt de kosten van die kaart, ook als de naam niets zegt", () => {
+    const { rows } = accountCosts(
+      [cc({ statedCardId: "american-express-gold-card" })],
+      [BLUE, GOLD],
+    );
+    expect(rows[0]!.cost).toMatchObject({
+      kind: "known",
+      matchedBy: "product-name",
+      amount: { perYearCents: 24000 },
+    });
+  });
+
+  test("een onbenoemde kaart van dezelfde bank blijft onbekend: welk product valt niet af te leiden", () => {
+    const { rows } = accountCosts([cc()], [BLUE, GOLD]);
+    expect(rows[0]!.cost).toEqual({ kind: "unknown", reason: "product-unknown" });
+  });
+
+  test("'other' wordt nooit als catalogus-id opgezocht", () => {
+    const { rows } = accountCosts([cc({ statedCardId: "other" })], [BLUE, GOLD]);
+    expect(rows[0]!.cost).toEqual({ kind: "unknown", reason: "product-unknown" });
+  });
+
+  test("een benoemde kaart zonder prijsrij is onbekend, ook als de naam een ander product raakt en de zusters het eens zijn", () => {
+    const SILVER = amex("american-express-silver-card", "American Express Silver Card", 60);
+    const PLAT = amex("american-express-platinum-card", "American Express Platinum Card", 60);
+    const NOFEE: AccountFeeEntryLike = {
+      id: "american-express-green-card",
+      product: "American Express Green Card",
+      issuer: "American Express",
+      kind: "creditcard",
+      fields: {},
+    };
+    const report = accountCosts(
+      [cc({ name: "American Express Silver Card", statedCardId: "american-express-green-card" })],
+      [SILVER, PLAT, NOFEE],
+    );
+    expect(report.rows[0]!.cost).toEqual({ kind: "unknown", reason: "stated-card-unknown" });
+    expect(report.total).toEqual({ kind: "none" });
+  });
+
+  test("een benoemde kaart zonder prijsrij naast een bekende rekening: totaal onvolledig", () => {
+    const NOFEE: AccountFeeEntryLike = {
+      id: "american-express-green-card",
+      product: "American Express Green Card",
+      issuer: "American Express",
+      kind: "creditcard",
+      fields: {},
+    };
+    const report = accountCosts(
+      [
+        cc({ statedCardId: "american-express-green-card" }),
+        account({ key: "ing-go", name: "ING Go" }),
+      ],
+      [NOFEE, ING_GO],
+    );
+    expect(report.total).toMatchObject({ kind: "incomplete", known: 1, unknown: 1 });
+  });
+
+  test("een benoemde id van een rij uit een andere groep telt niet als kaartprijs", () => {
+    const { rows } = accountCosts([cc({ statedCardId: "ing-go" })], [BLUE, GOLD, ING_GO]);
+    expect(rows[0]!.cost).toEqual({ kind: "unknown", reason: "stated-card-unknown" });
+  });
+
+  test("'geen creditcard' op een betaalrekening haalt de kostenrij niet weg", () => {
+    const { rows } = accountCosts(
+      [account({ name: "ING Go", statedCardId: "not-credit" })],
+      [ING_GO],
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.cost.kind).toBe("known");
+  });
+
+  test("een rekening die 'geen creditcard' is, staat niet als kaart met onbekende kosten in de lijst", () => {
+    const report = accountCosts([cc({ statedCardId: "not-credit" })], [BLUE, GOLD]);
+    expect(report.rows).toEqual([]);
+    expect(report.total).toEqual({ kind: "none" });
+  });
+});

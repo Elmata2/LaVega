@@ -7,6 +7,7 @@ import {
   type CardFileInput,
   type CardFilePlan,
   type Tx,
+  hasStatedCatalogueCard,
 } from "@lavega/core";
 import { useAppLocale } from "../../appLocale.js";
 import { cardFileCopy } from "../../copy/cardFile.js";
@@ -570,7 +571,7 @@ function BalanceField(p: {
   const [saving, setSaving] = useState(false);
   const a = p.account;
   const credit = balanceAskKind(a) === "owed";
-  const t212Card = a.statedCardId !== undefined && !credit;
+  const t212Card = hasStatedCatalogueCard(a) && !credit;
   const label = credit ? c.balanceCredit : t212Card ? c.balanceDebit : c.balanceOther(a.name);
   const helper = credit
     ? /american express|amex/i.test(a.bank)

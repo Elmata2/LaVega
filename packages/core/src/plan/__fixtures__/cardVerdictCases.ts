@@ -161,6 +161,204 @@ export const CARD_VERDICT_CASES: CardVerdictCase[] = [
     },
   },
   {
+    name: "wizard answer other card, then the connected card was identified",
+    input: build({
+      accounts: [
+        creditAccount("MYS", "Mystery Visa", "Onbekende Bank", {
+          statedCardId: "ics-visa-world-card",
+        }),
+      ],
+      txs: spendOn("MYS", 100_000, FULL_YEAR),
+      heldCards: [held("MYS", "Mystery Visa", "ics-visa-world-card")],
+      profile: { statedCardIds: ["other"] },
+    }),
+    expect: {
+      verdictKind: "switch",
+      bestCardId: "american-express-blue-card",
+      gainCents: 6095,
+      basis: "history",
+      heldIds: ["ics-visa-world-card"],
+      offer: { name: "American Express Blue Card", yearlyGainCents: 6095 },
+    },
+  },
+  {
+    name: "wizard other card, only a debit card was identified on an account",
+    input: build({
+      accounts: [account("DEB", { name: "ING betaalpas", bank: "ING", statedCardId: "ing-betaalpas" })],
+      txs: spendOn("DEB", 100_000, FULL_YEAR),
+      heldCards: [held("DEB", "ING betaalpas", "ing-betaalpas")],
+      profile: { statedCardIds: ["other"] },
+    }),
+    expect: {
+      verdictKind: "unknown-baseline",
+      bestCardId: null,
+      gainCents: null,
+      basis: "history",
+      heldIds: [],
+      offer: null,
+    },
+  },
+  {
+    name: "wizard names a card and other, one other listed card is identified: other stays",
+    input: build({
+      accounts: [
+        creditAccount("MYS", "Mystery Visa", "Onbekende Bank", {
+          statedCardId: "ics-visa-world-card",
+        }),
+      ],
+      txs: spendOn("MYS", 100_000, FULL_YEAR),
+      heldCards: [held("MYS", "Mystery Visa", "ics-visa-world-card")],
+      profile: { statedCardIds: ["ing-creditcard", "other"] },
+    }),
+    expect: {
+      verdictKind: "unknown-baseline",
+      bestCardId: null,
+      gainCents: null,
+      basis: "history",
+      heldIds: ["ics-visa-world-card", "ing-creditcard"],
+      offer: null,
+    },
+  },
+  {
+    name: "wizard other card, one connected card identified and another not: stays unknown",
+    input: build({
+      accounts: [
+        creditAccount("MYS", "Mystery Visa", "Onbekende Bank", {
+          statedCardId: "ics-visa-world-card",
+        }),
+        creditAccount("ZZZ", "Zwarte Kaart", "Onbekende Bank"),
+      ],
+      txs: [...spendOn("MYS", 100_000, FULL_YEAR), ...spendOn("ZZZ", 50_000, FULL_YEAR)],
+      heldCards: [
+        held("MYS", "Mystery Visa", "ics-visa-world-card"),
+        held("ZZZ", "Zwarte Kaart", null),
+      ],
+      profile: { statedCardIds: ["other"] },
+    }),
+    expect: {
+      verdictKind: "unknown-baseline",
+      bestCardId: null,
+      gainCents: null,
+      basis: "history",
+      heldIds: ["ics-visa-world-card"],
+      offer: null,
+    },
+  },
+  {
+    name: "wizard card and other, two listed cards identified: other resolves",
+    input: build({
+      accounts: [
+        creditAccount("M1", "Kaart M1", "Onbekende Bank", { statedCardId: "ing-creditcard" }),
+        creditAccount("M2", "Kaart M2", "Onbekende Bank", { statedCardId: "ics-visa-world-card" }),
+      ],
+      txs: [
+        ...spendOn("M1", 50_000, FULL_YEAR),
+        ...spendOn("M2", 50_000, FULL_YEAR),
+      ],
+      heldCards: [
+        held("M1", "Kaart M1", "ing-creditcard"),
+        held("M2", "Kaart M2", "ics-visa-world-card"),
+      ],
+      profile: { statedCardIds: ["ing-creditcard", "other"] },
+    }),
+    expect: {
+      verdictKind: "switch",
+      bestCardId: "american-express-blue-card",
+      gainCents: 4200,
+      basis: "history",
+      heldIds: ["ics-visa-world-card", "ing-creditcard"],
+      offer: { name: "American Express Blue Card", yearlyGainCents: 4200 },
+    },
+  },
+  {
+    name: "wizard card and other, the named card identified on two accounts: other stays",
+    input: build({
+      accounts: [
+        creditAccount("M1", "Kaart M1", "Onbekende Bank", { statedCardId: "ing-creditcard" }),
+        creditAccount("M2", "Kaart M2", "Onbekende Bank", { statedCardId: "ing-creditcard" }),
+      ],
+      txs: [
+        ...spendOn("M1", 50_000, FULL_YEAR),
+        ...spendOn("M2", 50_000, FULL_YEAR),
+      ],
+      heldCards: [
+        held("M1", "Kaart M1", "ing-creditcard"),
+        held("M2", "Kaart M2", "ing-creditcard"),
+      ],
+      profile: { statedCardIds: ["ing-creditcard", "other"] },
+    }),
+    expect: {
+      verdictKind: "unknown-baseline",
+      bestCardId: null,
+      gainCents: null,
+      basis: "history",
+      heldIds: ["ing-creditcard"],
+      offer: null,
+    },
+  },
+  {
+    name: "wizard two cards and other, one named card and one other identified: other stays",
+    input: build({
+      accounts: [
+        creditAccount("M1", "Kaart M1", "Onbekende Bank", { statedCardId: "ing-creditcard" }),
+        creditAccount("M2", "Kaart M2", "Onbekende Bank", { statedCardId: "ics-visa-world-card" }),
+      ],
+      txs: [
+        ...spendOn("M1", 50_000, FULL_YEAR),
+        ...spendOn("M2", 50_000, FULL_YEAR),
+      ],
+      heldCards: [
+        held("M1", "Kaart M1", "ing-creditcard"),
+        held("M2", "Kaart M2", "ics-visa-world-card"),
+      ],
+      profile: { statedCardIds: ["ing-creditcard", "ics-mastercard-classic", "other"] },
+    }),
+    expect: {
+      verdictKind: "unknown-baseline",
+      bestCardId: null,
+      gainCents: null,
+      basis: "history",
+      heldIds: ["ics-mastercard-classic", "ics-visa-world-card", "ing-creditcard"],
+      offer: null,
+    },
+  },
+  {
+    name: "connected card answered as another credit card: still unknown, no question left",
+    input: build({
+      accounts: [
+        creditAccount("MYS", "Mystery Visa", "Onbekende Bank", { statedCardId: "other" }),
+      ],
+      txs: spendOn("MYS", 100_000, FULL_YEAR),
+      heldCards: [held("MYS", "Mystery Visa", null)],
+    }),
+    expect: {
+      verdictKind: "unknown-baseline",
+      bestCardId: null,
+      gainCents: null,
+      basis: "history",
+      heldIds: [],
+      offer: null,
+    },
+  },
+  {
+    name: "connected card answered as not a credit card, though its name matched one",
+    input: build({
+      accounts: [
+        creditAccount("DEB", "ING creditcard", "ING", { statedCardId: "not-credit" }),
+      ],
+      txs: spendOn("DEB", 100_000, FULL_YEAR),
+      heldCards: [held("DEB", "ING creditcard", "ing-creditcard")],
+    }),
+    expect: {
+      verdictKind: "no-card-worth-it",
+      bestCardId: null,
+      gainCents: null,
+      basis: "history",
+      heldIds: [],
+      offer: null,
+    },
+  },
+  {
     name: "card debt carried while a switch is otherwise available",
     input: build({
       accounts: [creditAccount("AMEX", "American Express Gold Card", "American Express")],

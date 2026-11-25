@@ -439,6 +439,7 @@ export type OptimalisatieCopy = {
     unknownAccountLead: (bank: string, accountName: string) => string;
     unknownReasons: {
       noBank: string;
+      statedCardNoFee: string;
       providerUnknown: (bank: string) => string;
       noCandidates: (bank: string) => string;
       unclearProduct: (bank: string) => string;
@@ -960,6 +961,7 @@ const optimalisatieCopy_nl: OptimalisatieCopy = {
       `${bank} — ${accountName}: kosten onbekend, en dat is geen nul.`,
     unknownReasons: {
       noBank: "Deze rekening draagt geen banknaam, dus er valt niets op te zoeken.",
+      statedCardNoFee: "LaVega kent de kosten van de kaart die je hebt gekozen niet.",
       providerUnknown: (bank) => `LaVega kent geen tarief van ${bank}.`,
       noCandidates: (bank) => `Bij ${bank} kent LaVega geen tarief voor dit soort rekening.`,
       unclearProduct: (bank) =>
@@ -1468,6 +1470,7 @@ const optimalisatieCopy_en: OptimalisatieCopy = {
       `${bank} — ${accountName}: fee unknown, and that's not a zero.`,
     unknownReasons: {
       noBank: "This account has no bank name, so there's nothing to look up.",
+      statedCardNoFee: "LaVega doesn't know the fee of the card you chose.",
       providerUnknown: (bank) => `LaVega doesn't know a fee for ${bank}.`,
       noCandidates: (bank) => `LaVega doesn't know a fee for this kind of account at ${bank}.`,
       unclearProduct: (bank) =>

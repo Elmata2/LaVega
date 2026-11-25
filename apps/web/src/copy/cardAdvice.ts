@@ -65,6 +65,8 @@ export type CardAdviceCopy = {
   identifyTitle: string;
   identifyCardLabel: string;
   identifyFailed: string;
+  /** The answer for an account the app took for a credit card but is not one. */
+  identifyNotCredit: string;
 };
 
 const cents = (v: number, f: PlanFmt) => f.eur(v);
@@ -100,6 +102,7 @@ const nl: CardAdviceCopy = {
   identifyTitle: "Welke kaart is dit?",
   identifyCardLabel: "Kies de kaart",
   identifyFailed: "Opslaan lukte niet. Probeer het opnieuw.",
+  identifyNotCredit: "Dit is geen creditcard",
   noAdvice: (a) =>
     a.state === "short-history"
       ? `Er zijn minder dan ${CARD_ADVICE_MIN_MONTHS} volle maanden aan uitgaven. Voor een jaarcijfer is dat te weinig. Er is niets geschat.`
@@ -122,7 +125,7 @@ const nl: CardAdviceCopy = {
     if (v.kind === "no-card-worth-it")
       return "Zonder creditcard betaal je niets. Geen kaart in de catalogus levert bij jouw uitgaven genoeg op om dat te veranderen.";
     if (v.kind === "unknown-baseline")
-      return `Je huidige ${a.baseline.kind === "unknown" && a.baseline.blockers.length === 1 ? "kaart" : "kaarten"} is niet te vergelijken: ${blockerText(a, nl)}. Er is dus geen aanbeveling om over te stappen. Dit zijn de kaarten met de hoogste nettowaarde bij jouw uitgaven.`;
+      return `Je huidige ${a.baseline.kind === "unknown" && a.baseline.blockers.length === 1 ? "kaart is" : "kaarten zijn"} niet te vergelijken: ${blockerText(a, nl)}. Er is dus geen aanbeveling om over te stappen. Dit zijn de kaarten met de hoogste nettowaarde bij jouw uitgaven.`;
     return "";
   },
   gainOfWhichPoints: (amount, cpp) =>
@@ -344,6 +347,7 @@ const en: CardAdviceCopy = {
   identifyTitle: "Which card is this?",
   identifyCardLabel: "Choose the card",
   identifyFailed: "Could not save. Try again.",
+  identifyNotCredit: "This is not a credit card",
   noAdvice: (a) =>
     a.state === "short-history"
       ? `There are fewer than ${CARD_ADVICE_MIN_MONTHS} full months of spending. That is too little for a yearly figure. Nothing has been estimated.`

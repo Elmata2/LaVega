@@ -34,7 +34,7 @@
  * Puur, zoals alles in packages/core: geen fetch, geen klok. De peildatum die
  * telt is de datum die het BRONDOCUMENT noemt, en die reist mee in `asOf`.
  */
-import type { Account } from "./model.js";
+import { STATED_CARD_NOT_CREDIT, hasStatedCatalogueCard, type Account } from "./model.js";
 import { accountType } from "./balance.js";
 import { bankNameMatches, splitProductName } from "./bankNl.js";
 import type { CatalogRoute, CatalogValue } from "./catalog.js";
@@ -516,7 +516,10 @@ export type UnknownCostReason =
   | "provider-unknown"
   /** De aanbieder staat er wél in, maar welk van zijn producten dit is valt niet
    *  vast te stellen — en ze kosten niet allemaal hetzelfde. */
-  | "product-unknown";
+  | "product-unknown"
+  /** De gebruiker benoemde een kaart, maar de catalogus heeft geen prijs voor
+   *  precies die kaart. De prijs van een zusterproduct is dan niet de hare. */
+  | "stated-card-unknown";
 
 type KnownCost = {
   kind: "known";
@@ -619,12 +622,13 @@ export function accountCosts(
   for (const account of accounts) {
     const group = accountGroup(account);
     if (group === null) continue;
+    if (group === "creditcard" && account.statedCardId === STATED_CARD_NOT_CREDIT) continue;
 
     const bank = String(account.bank ?? "").trim();
     const providerFees = bank === "" ? [] : fees.filter((f) => namesSameProvider(f, bank));
     const candidates = providerFees.filter((f) => f.group === group);
 
-    const cost = resolveCost(account, bank, providerFees, candidates);
+    const cost = resolveCost(account, bank, providerFees, candidates, fees, group);
     const row: AccountCostRow = {
       account,
       cost,
@@ -671,7 +675,26 @@ function resolveCost(
   bank: string,
   providerFees: readonly ProductFee[],
   candidates: readonly ProductFee[],
+  allFees: readonly ProductFee[],
+  group: FeeGroup,
 ): AccountCost {
+  // The card the person named for this account is that card, whatever the account
+  // is called. Sentinels ("other", "not-credit") name no row and are never looked up.
+  // When the named card has no fee row of its own the answer is unknown: a sibling
+  // product's fee is not this card's cost.
+  if (hasStatedCatalogueCard(account)) {
+    const stated = allFees.find((f) => f.productId === account.statedCardId && f.group === group);
+    if (stated === undefined) return { kind: "unknown", reason: "stated-card-unknown" };
+    return {
+      kind: "known",
+      matchedBy: "product-name",
+      fee: stated,
+      amount: stated.amount,
+      conditions: stated.conditions,
+      sourceUrl: stated.sourceUrl,
+      asOf: stated.asOf,
+    };
+  }
   if (bank === "") return { kind: "unknown", reason: "no-bank" };
   if (providerFees.length === 0) return { kind: "unknown", reason: "provider-unknown" };
   if (candidates.length === 0) return { kind: "unknown", reason: "product-unknown" };

@@ -287,6 +287,17 @@ function cardsCtx(): { ctx: PlanCtx; result: SectionResult<CardsFigures> } {
 const rowNames = (c: HTMLElement) =>
   qa(c, "plan-cards-row").map((r) => r.querySelector("th,td")!.textContent!.trim());
 
+test("a section body is one shrinkable column: a wide table cannot stretch the picker tiles past the card", () => {
+  const { ctx, result } = cardsCtx();
+  const c = mount(<CardsSection result={result} ctx={ctx} />);
+  openAll(c);
+  const body = q(c, "plan-card-body")!;
+  // minmax(0,1fr), not the implicit auto track: an auto track grows to the widest
+  // min-content inside it (the cards table), and every width:100% tile follows.
+  expect(body.style.gridTemplateColumns).toBe("minmax(0, 1fr)");
+  unmount();
+});
+
 test("cards table: default sorted by name, clicking a column sorts, no element has a highlight/selected/best class; Keep/Review/Cancel start unselected", () => {
   const { ctx, result } = cardsCtx();
   const c = mount(<CardsSection result={result} ctx={ctx} />);

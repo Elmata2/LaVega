@@ -2756,11 +2756,13 @@ export default function Optimalisatie({
                     {c.costs.unknownAccountLead(bank, row.account.name)}{" "}
                     {cost.reason === "no-bank"
                       ? c.costs.unknownReasons.noBank
-                      : cost.reason === "provider-unknown"
-                        ? c.costs.unknownReasons.providerUnknown(bank)
-                        : row.candidates.length === 0
-                          ? c.costs.unknownReasons.noCandidates(bank)
-                          : c.costs.unknownReasons.unclearProduct(bank)}
+                      : cost.reason === "stated-card-unknown"
+                        ? c.costs.unknownReasons.statedCardNoFee
+                        : cost.reason === "provider-unknown"
+                          ? c.costs.unknownReasons.providerUnknown(bank)
+                          : row.candidates.length === 0
+                            ? c.costs.unknownReasons.noCandidates(bank)
+                            : c.costs.unknownReasons.unclearProduct(bank)}
                   </p>
                   {free.length > 0 && (
                     <div className="cell-sub" data-testid={`gratis-bij-${row.account.key}`}>
