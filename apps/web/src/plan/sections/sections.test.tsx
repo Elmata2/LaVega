@@ -1322,6 +1322,7 @@ test("card details editor: balance goes to the profile, points to the Punten sto
   );
   openAll(c);
   const form = q(c, "plan-card-details")!;
+  expect(form.textContent!.match(/Leave a card empty/g)).toHaveLength(1);
   const input = (re: RegExp) =>
     [...form.querySelectorAll<HTMLLabelElement>("label")].find((l) => re.test(l.textContent ?? ""))!
       .control as HTMLInputElement;

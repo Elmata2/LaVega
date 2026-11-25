@@ -144,7 +144,7 @@ export type ShellCopy = {
     /** The card at the top of Profiel: the only way into the plan view. The
      *  title is `nav.moduleLabels.plan`; locked, the card reuses the intake
      *  invitation's own copy. */
-    plan: { line: string; open: string };
+    plan: { open: string };
     languageSwitch: { cardLabel: string; nl: string; en: string; ariaLabel: string };
     appearance: {
       ariaLabel: string;
@@ -303,8 +303,6 @@ export type ShellCopy = {
        *  turned on in. */
       perDeviceNote: string;
       toggleLabel: string;
-      onStatus: string;
-      offStatus: string;
       /** Shown when turning the switch off could not remove the account's
        *  stored totals; LaVega keeps retrying on its own. */
       pendingDeleteStatus: string;
@@ -484,7 +482,7 @@ const nl: ShellCopy = {
         case "camt-not-supported":
           return "CAMT.053 wordt nog niet ondersteund.";
         case "spreadsheet-not-supported":
-          return `Dit is een Excel-bestand (.${p.format}). LaVega leest CSV, MT940 en .STA — sla het in Excel op via Bestand → Opslaan als → CSV, of download het afschrift bij je bank als CSV.`;
+          return `Dit Excel-bestand (.${p.format}) kunnen we niet lezen. LaVega leest CSV, MT940 en .STA: kies CSV.`;
         case "spreadsheet-unrecognised":
           return `Dit Excel-bestand (.${p.format}) heeft kolommen die we niet kennen. Probeer CSV, of een bestand rechtstreeks van je bank.`;
         case "pdf-not-supported":
@@ -505,11 +503,11 @@ const nl: ShellCopy = {
       case "bank-refresh-failed":
         switch (n.reason) {
           case "rate-limited":
-            return `${n.aspsp} laat even niet meer verversen — wacht even en probeer het later opnieuw.`;
+            return `${n.aspsp} laat nu niet verversen. Probeer het later opnieuw.`;
           case "bank-down":
-            return `${n.aspsp} reageert nu niet — wacht even en probeer het later opnieuw.`;
+            return `${n.aspsp} reageert nu niet. Probeer het later opnieuw.`;
           case "unknown":
-            return `${n.aspsp} verversen lukte niet — probeer het later opnieuw of koppel de bank opnieuw.`;
+            return `Verversen van ${n.aspsp} lukte niet. Probeer het later opnieuw of koppel de bank opnieuw.`;
         }
       case "bank-linked":
         return `Bank gekoppeld: ${n.accounts} rekening${n.accounts === 1 ? "" : "en"}${n.aspsp ? ` via ${n.aspsp}` : ""}, ${n.txs} transactie${n.txs === 1 ? "" : "s"}.`;
@@ -518,14 +516,13 @@ const nl: ShellCopy = {
       case "terms-lookup-failed":
         return `Voorwaarden opzoeken mislukt: ${n.detail}`;
       case "bank-consent-expired":
-        return `De toestemming voor ${n.aspsp} is verlopen — koppel de bank opnieuw om weer bij te werken.`;
+        return `De toestemming voor ${n.aspsp} is verlopen. Koppel de bank opnieuw.`;
       case "bank-nothing-to-refresh":
         return "Er is nog geen bankkoppeling om te verversen.";
     }
   },
   profiel: {
     plan: {
-      line: "Je maand, buffer, schulden en doelen, met de uitleg erbij.",
       open: "Open je plan",
     },
     languageSwitch: {
@@ -544,9 +541,8 @@ const nl: ShellCopy = {
     account: {
       ariaLabel: "Account",
       heading: "Account",
-      unconfigured:
-        "Deze installatie heeft geen serveraccount ingesteld, dus alles blijft lokaal in deze browser.",
-      signedOutIntro: "Log in op de geconfigureerde LaVega-server om de bankkoppeling te testen.",
+      unconfigured: "Geen account ingesteld: alles blijft in deze browser.",
+      signedOutIntro: "Log in met je LaVega-account.",
       emailLabel: "E-mailadres",
       passwordLabel: "Wachtwoord",
       signIn: "Inloggen",
@@ -568,8 +564,7 @@ const nl: ShellCopy = {
       },
       reset: {
         requestTitle: "Wachtwoord vergeten",
-        requestIntro:
-          "Vul het e-mailadres van je account in. We sturen je een link om een nieuw wachtwoord te kiezen.",
+        requestIntro: "We sturen je een link om een nieuw wachtwoord te kiezen.",
         requestSubmit: "Stuur resetlink",
         sentBody: (email) =>
           `Als ${email} bij een LaVega-account hoort, staat er nu een link in je inbox. De link werkt een uur.`,
@@ -594,7 +589,7 @@ const nl: ShellCopy = {
         termsLink: "voorwaarden",
         doneTitle: "Controleer je e-mail",
         doneBody: (email) =>
-          `We hebben een bevestigingslink gestuurd naar ${email}. Open die link om je account te bevestigen. De link werkt een uur.`,
+          `We stuurden een bevestigingslink naar ${email}. De link werkt een uur.`,
         passwordHint: "Minimaal 8 tekens.",
         resend: "Stuur de e-mail opnieuw",
         resendIn: (seconds) => `Opnieuw sturen kan over ${seconds} s`,
@@ -614,7 +609,7 @@ const nl: ShellCopy = {
     head: {
       ariaLabel: "Profiel",
       noName: "Nog geen naam ingevuld",
-      note: "Alleen voor dit scherm. Je naam blijft in deze browser — niet in de kluis, niet in een back-up, en hij wordt nooit meegestuurd naar een model.",
+      note: "Blijft in deze browser: niet in je kluis, back-up of bij een model.",
       firstName: "Voornaam",
       lastName: "Achternaam",
     },
@@ -651,8 +646,7 @@ const nl: ShellCopy = {
     countryRegion: {
       ariaLabel: "Land en regio",
       heading: "Land en regio",
-      purpose:
-        "Bepaalt in welke markt LaVega kaartvoorwaarden opzoekt. Je vult dit zelf in; LaVega leidt nooit af waar je bent.",
+      purpose: "Bepaalt welke kaartvoorwaarden LaVega opzoekt. LaVega leidt je locatie nooit af.",
       neverInferred:
         "Je vult dit zelf in. LaVega leidt nooit af waar je bent — geen locatie, geen IP, geen tijdzone.",
       countryLabel: "Land",
@@ -677,7 +671,7 @@ const nl: ShellCopy = {
       ariaLabel: "Uitloggen",
       heading: "Uitloggen",
       description:
-        "Logt je uit en wist alles uit het geheugen van deze browser. Na 15 minuten zonder activiteit gebeurt dit vanzelf.",
+        "Logt je uit en wist het geheugen van deze browser. Gebeurt ook na 15 minuten zonder activiteit.",
       button: "Uitloggen",
     },
     cashback: {
@@ -719,15 +713,12 @@ const nl: ShellCopy = {
       ariaLabel: "Delen met LaVega Investing",
       heading: "Delen met LaVega Investing",
       description:
-        "Staat standaard aan. Deelt elke dag je Totale positie (het bedrag bovenaan Home) met LaVega Investing: het totaal van alle bankrekeningen, zakelijke rekeningen inbegrepen en beleggingsrekeningen niet, zodat je nettowaarde daar je bankgeld meetelt naast je beleggingen.",
+        "Staat standaard aan. Deelt elke dag je Totale positie (het bedrag bovenaan Home) met LaVega Investing, zodat je nettowaarde daar je bankgeld meetelt.",
       privacyNote:
-        "Er gaat alleen je dagtotaal mee, geen rekeningen of transacties en geen bedrijfsnaam: één bedrag per dag, en alleen op een dag dat minstens één saldo bekend is. Het gaat alleen naar de Investing-kant van jouw account. Je kunt het altijd uitzetten; dan verwijdert LaVega de eerder gedeelde bedragen (en probeert het opnieuw als de server niet bereikbaar is).",
+        "Alleen dat dagtotaal gaat mee: geen rekeningen, transacties of bedrijfsnamen. Je kunt het altijd uitzetten; LaVega verwijdert dan de gedeelde bedragen.",
       perDeviceNote:
-        "Deze schakelaar geldt per apparaat: alleen bezoeken vanaf DIT apparaat delen een bedrag. Eerder gedeelde bedragen blijven bij LaVega Investing staan totdat je de schakelaar uitzet op een apparaat waar hij aanstaat.",
+        "Geldt per apparaat. Eerder gedeelde bedragen blijven staan tot je het uitzet op een apparaat waar het aanstaat.",
       toggleLabel: "Deel mijn Totale positie met LaVega Investing",
-      onStatus:
-        "Staat aan. Elke dag dat je kluis open is en er minstens één saldo bekend is, gaat het bedrag naar Investing.",
-      offStatus: "Staat uit. Zet hem aan om je Totale positie in Investing's nettowaarde te zien.",
       pendingDeleteStatus: "Kon je gedeelde bedragen niet verwijderen — we proberen het opnieuw.",
     },
   },
@@ -904,7 +895,7 @@ const en: ShellCopy = {
         case "camt-not-supported":
           return "CAMT.053 isn't supported yet.";
         case "spreadsheet-not-supported":
-          return `This is an Excel file (.${p.format}). LaVega reads CSV, MT940 and .STA — save it from Excel with File → Save As → CSV, or download the statement from your bank as CSV.`;
+          return `We cannot read this Excel file (.${p.format}). LaVega reads CSV, MT940 and .STA: choose CSV.`;
         case "spreadsheet-unrecognised":
           return `This Excel file (.${p.format}) has columns we do not know. Try CSV, or a file straight from your bank.`;
         case "pdf-not-supported":
@@ -925,11 +916,11 @@ const en: ShellCopy = {
       case "bank-refresh-failed":
         switch (n.reason) {
           case "rate-limited":
-            return `${n.aspsp} is temporarily rate-limiting refreshes — wait a while and try again later.`;
+            return `${n.aspsp} is not accepting refreshes right now. Try again later.`;
           case "bank-down":
-            return `${n.aspsp} isn't responding right now — wait a moment and try again later.`;
+            return `${n.aspsp} isn't responding right now. Try again later.`;
           case "unknown":
-            return `Refreshing ${n.aspsp} failed — try again later or reconnect the bank.`;
+            return `Refreshing ${n.aspsp} failed. Try again later or reconnect the bank.`;
         }
       case "bank-linked":
         return `Bank connected: ${n.accounts} account${n.accounts === 1 ? "" : "s"}${n.aspsp ? ` via ${n.aspsp}` : ""}, ${n.txs} transaction${n.txs === 1 ? "" : "s"}.`;
@@ -938,14 +929,13 @@ const en: ShellCopy = {
       case "terms-lookup-failed":
         return `Looking up the terms failed: ${n.detail}`;
       case "bank-consent-expired":
-        return `Your consent for ${n.aspsp} has expired — reconnect the bank to keep it up to date.`;
+        return `Your consent for ${n.aspsp} has expired. Reconnect the bank.`;
       case "bank-nothing-to-refresh":
         return "There's no bank connection to refresh yet.";
     }
   },
   profiel: {
     plan: {
-      line: "Your month, buffer, debts and goals, with the explanation next to each.",
       open: "Open your plan",
     },
     languageSwitch: {
@@ -964,9 +954,8 @@ const en: ShellCopy = {
     account: {
       ariaLabel: "Account",
       heading: "Account",
-      unconfigured:
-        "This installation has no server account configured, so everything stays local to this browser.",
-      signedOutIntro: "Sign in to the configured LaVega server to test the bank connection.",
+      unconfigured: "No account set up: everything stays in this browser.",
+      signedOutIntro: "Sign in with your LaVega account.",
       emailLabel: "Email address",
       passwordLabel: "Password",
       signIn: "Sign in",
@@ -987,8 +976,7 @@ const en: ShellCopy = {
       },
       reset: {
         requestTitle: "Forgot password",
-        requestIntro:
-          "Enter the email address of your account. We will send you a link to choose a new password.",
+        requestIntro: "We will send you a link to choose a new password.",
         requestSubmit: "Send reset link",
         sentBody: (email) =>
           `If ${email} belongs to a LaVega account, a link is now in your inbox. It works for one hour.`,
@@ -1012,8 +1000,7 @@ const en: ShellCopy = {
         consentBetween: " and ",
         termsLink: "terms",
         doneTitle: "Check your email",
-        doneBody: (email) =>
-          `We sent a confirmation link to ${email}. Open it to confirm your account. The link works for one hour.`,
+        doneBody: (email) => `We sent a confirmation link to ${email}. It works for one hour.`,
         passwordHint: "At least 8 characters.",
         resend: "Send the email again",
         resendIn: (seconds) => `You can resend in ${seconds} s`,
@@ -1033,7 +1020,7 @@ const en: ShellCopy = {
     head: {
       ariaLabel: "Profile",
       noName: "No name entered yet",
-      note: "For this screen only. Your name stays in this browser — never in the vault, never in a backup, and never sent to a model.",
+      note: "Stays in this browser: not in your vault, a backup or sent to a model.",
       firstName: "First name",
       lastName: "Last name",
     },
@@ -1070,8 +1057,7 @@ const en: ShellCopy = {
     countryRegion: {
       ariaLabel: "Country and region",
       heading: "Country and region",
-      purpose:
-        "Determines which market LaVega looks up card terms in. You fill this in yourself; LaVega never infers where you are.",
+      purpose: "Decides which card terms LaVega looks up. LaVega never infers your location.",
       neverInferred:
         "You fill this in yourself. LaVega never infers where you are — no location, no IP, no time zone.",
       countryLabel: "Country",
@@ -1095,7 +1081,7 @@ const en: ShellCopy = {
       ariaLabel: "Sign out",
       heading: "Sign out",
       description:
-        "Signs you out and clears everything from this browser's memory. This happens by itself after 15 minutes without activity.",
+        "Signs you out and clears this browser's memory. Also happens after 15 minutes without activity.",
       button: "Sign out",
     },
     cashback: {
@@ -1136,15 +1122,12 @@ const en: ShellCopy = {
       ariaLabel: "Share with LaVega Investing",
       heading: "Share with LaVega Investing",
       description:
-        "On by default. Shares your Totale positie (the figure at the top of Home) with LaVega Investing every day: the total of all your bank accounts, business accounts included and investment accounts left out, so its net worth counts your bank money alongside your investments.",
+        "On by default. Shares your Totale positie (the figure at the top of Home) with LaVega Investing every day, so its net worth counts your bank money.",
       privacyNote:
-        "Only your daily total goes, no accounts or transactions and no company name: one figure per day, and only on a day at least one balance is known. It goes only to the Investing side of your own account. You can switch it off at any time; LaVega then removes the totals shared before (and retries if it cannot reach the server).",
+        "Only that daily total goes: no accounts, transactions or company names. You can switch it off at any time; LaVega then removes the shared totals.",
       perDeviceNote:
-        "This switch is per device: only visits from THIS device share a figure. Totals already shared stay with LaVega Investing until you turn the switch off on a device where it's on.",
+        "Applies per device. Totals already shared stay until you turn it off on a device where it is on.",
       toggleLabel: "Share my Totale positie with LaVega Investing",
-      onStatus:
-        "On. Every day your vault is open and at least one balance is known, the figure goes to Investing.",
-      offStatus: "Off. Turn it on to see your Totale positie inside Investing's net worth.",
       pendingDeleteStatus: "Couldn't remove your shared total — we'll retry.",
     },
   },

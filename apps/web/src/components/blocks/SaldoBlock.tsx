@@ -85,6 +85,11 @@ export type SaldoBlockProps = {
   headerControl?: ReactNode;
 };
 
+/** Names for a sentence: accounts that share a name are listed once. */
+function joinUnique(names: string[]): string {
+  return [...new Set(names)].join(", ");
+}
+
 export function useSaldoParts({
   accounts,
   txs,
@@ -106,11 +111,12 @@ export function useSaldoParts({
   const unknownCount = series.excluded;
   const currencyCount = series.excludedCurrencyKeys.length;
   const noBalanceCount = unknownCount - currencyCount;
-  const currencyNames = series.excludedCurrencyKeys
-    .map((key) => accounts.find((a) => a.key === key))
-    .filter((a): a is NonNullable<typeof a> => a != null)
-    .map((a) => a.bank || a.name || a.key)
-    .join(", ");
+  const currencyNames = joinUnique(
+    series.excludedCurrencyKeys
+      .map((key) => accounts.find((a) => a.key === key))
+      .filter((a): a is NonNullable<typeof a> => a != null)
+      .map((a) => a.bank || a.name || a.key),
+  );
   const knownSum = series.current;
   // Something WAS actually converted: a non-EUR account with a balance that
   // is not on the excluded list, so it fed the total via eurBalanceOf.
@@ -128,7 +134,7 @@ export function useSaldoParts({
   const gaps = useMemo(() => accountGaps(accounts), [accounts]);
   const missingIban = gaps.filter((g) => g.gaps.includes("iban"));
   const missingType = gaps.filter((g) => g.gaps.includes("type"));
-  const nameList = (rows: typeof gaps) => rows.map((g) => g.name).join(", ");
+  const nameList = (rows: typeof gaps) => joinUnique(rows.map((g) => g.name));
 
   // Money already earmarked for unpaid BTW. Only worth a line when there is
   // some — otherwise "beschikbaar" would just repeat the number above it.
@@ -136,11 +142,12 @@ export function useSaldoParts({
 
   // Which account is holding the comparison back, by its own name — "wait for
   // more data" is useless advice; "import Amex" is actionable.
-  const limitLabel = series.limitedBy
-    .map((key) => accounts.find((a) => a.key === key))
-    .filter((a): a is NonNullable<typeof a> => a != null)
-    .map((a) => a.bank || a.name || a.key)
-    .join(", ");
+  const limitLabel = joinUnique(
+    series.limitedBy
+      .map((key) => accounts.find((a) => a.key === key))
+      .filter((a): a is NonNullable<typeof a> => a != null)
+      .map((a) => a.bank || a.name || a.key),
+  );
   const hasGraph = series.coverageDays >= MIN_HISTORY_DAYS && series.points.length >= 2;
   /** The pill beside the big number: the move against ONE WEEK AGO. Null when
    *  the history does not reach back a week — then nothing is shown. */

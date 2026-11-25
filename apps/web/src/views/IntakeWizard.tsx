@@ -727,7 +727,6 @@ export default function IntakeWizard(props: IntakeWizardProps) {
                 <BankLink
                   compact
                   busy={busy}
-                  defaultPsuType="personal"
                   onRefresh={link.onRefresh}
                   onBeforeRedirect={async () => {
                     // Done and stored before the browser leaves, so the return

@@ -4,6 +4,7 @@ import { expect, test } from "vitest";
 import type { Account, CatalogueEntryLike, CatalogValue, Tx } from "@lavega/core";
 import { makeFact, ownAccounts, TRAVEL_AGENT } from "@lavega/core";
 import Optimalisatie from "./views/Optimalisatie";
+import { optimiseCopy } from "./copy/optimise";
 
 /* The Cashback module, reshaped like the Rente one (app review 2, item 9).
  *
@@ -152,10 +153,10 @@ test("de openstaande vraag gaat alleen nog over de kaarten waar niets mag worden
   expect(open).toContain("Cashback onbekend voor");
   expect(open).toContain("Trading 212 betaalpas");
   expect(open).not.toContain("ING betaalpas");
-  // Twee wegen die allebei bestaan, en de tweede is nieuw: het veld in Profiel.
+  // Het veld in Profiel is verborgen (archive.ts), dus er wijst niets naartoe.
   expect(open).toContain("reisblok op Home");
   expect(open).toContain("Zoek voorwaarden");
-  expect(open).toContain("Profiel");
+  expect(open).not.toContain("Profiel");
 });
 
 /* --- The reshape: what you get now, what the best card gives, the difference */
@@ -177,6 +178,17 @@ test("the module shows what you get now, what the best card gives and the differ
   expect(html).toContain("13,66");
   expect(html).toContain("163,92");
   expect(html).toContain("per maand");
+  // The difference is a comparison of rates, so the screen calls it a minimum.
+  expect(html).toContain("Het verschil is een ondergrens.");
+});
+
+test("the cashback explanation says the difference is a minimum, in both languages", () => {
+  expect(optimiseCopy.nl.optimalisatie.cashback.onderbouwing.explanation).toContain(
+    "Het verschil is een ondergrens.",
+  );
+  expect(optimiseCopy.en.optimalisatie.cashback.onderbouwing.explanation).toContain(
+    "The difference is a minimum.",
+  );
 });
 
 test("the base is the monthly average, and the screen says over how much afschrift it was measured", () => {
@@ -210,7 +222,7 @@ test("no euro figure when his own cashback is unknown, and it says which half is
     accounts: [acc({ key: "t212", bank: "Trading 212", balance: 0 })],
     facts: [],
   });
-  expect(html).toContain("bij deze kaarten mag er geen nul worden aangenomen");
+  expect(html).toContain("de cashback van deze kaarten is onbekend");
   expect(html).not.toContain("Op je beste eigen kaart");
   // The euro row by its own testid, because the Rente module prints euros per
   // month too — a bare "per maand" would pass or fail for the wrong reason.
@@ -221,7 +233,7 @@ test("no euro figure when the spend base cannot be measured, and it says which h
   // Two rates, no afschrift: there is no base to multiply, so there is no euro
   // figure — and the reason is the missing history, not a tie.
   const html = render({ txs: [] });
-  expect(html).toContain("te weinig afschrift");
+  expect(html).toContain("te weinig afschrift voor je uitgaven");
   expect(html).toContain("60 dagen");
   expect(html).not.toContain("Je betaalt al met de kaart");
   expect(html).not.toContain('data-testid="cashback-verschil"');
@@ -235,7 +247,7 @@ test("a card that does not beat his own is said plainly, with no euro figure", (
 
 test("no proven cashback anywhere in the market is a stated absence, not an empty block", () => {
   const html = render({ entries: [] });
-  expect(html).toContain("Geen enkele kaart in de catalogus");
+  expect(html).toContain("Geen kaart in de catalogus");
   expect(html).not.toContain('data-testid="cashback-verschil"');
 });
 

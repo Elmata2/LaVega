@@ -82,7 +82,7 @@ export type InstinctSettingsCopy = {
     conversationDeleted: string;
     conversationDeleteFailed: string;
   };
-  overview: { title: string; body: string; open: string };
+  overview: { title: string; open: string };
 };
 
 export const instinctCopy: Record<Locale, InstinctSettingsCopy> = {
@@ -168,7 +168,6 @@ export const instinctCopy: Record<Locale, InstinctSettingsCopy> = {
     },
     overview: {
       title: "Meldingen",
-      body: "Lees wat LaVega je de laatste dagen heeft gemeld.",
       open: "Bekijk meldingen",
     },
   },
@@ -254,7 +253,6 @@ export const instinctCopy: Record<Locale, InstinctSettingsCopy> = {
     },
     overview: {
       title: "Alerts",
-      body: "Read what LaVega has told you over the last days.",
       open: "View alerts",
     },
   },

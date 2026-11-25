@@ -164,7 +164,7 @@ test("Account: zonder serveraccount staat er alleen de ene zin, geen formulier",
   );
   await render();
   const account = section("Algemeen").querySelector('[data-testid="general-account"]')!;
-  expect(account.textContent).toContain("geen serveraccount ingesteld");
+  expect(account.textContent).toContain("Geen account ingesteld");
   expect(account.querySelector("form")).toBeNull();
   expect(account.querySelector("input")).toBeNull();
 });
@@ -325,7 +325,7 @@ test("the country that sets the card-terms market is set here, and says what it 
   const select = section("Algemeen").querySelector("select") as HTMLSelectElement;
   expect(select.value).toBe("NL");
   expect(getHomeCountry()).toBe("NL"); // the same preference App reads
-  expect(section("Algemeen").textContent).toContain("kaartvoorwaarden opzoekt");
+  expect(section("Algemeen").textContent).toContain("welke kaartvoorwaarden LaVega opzoekt");
 
   act(() => {
     select.value = "BE";
@@ -368,7 +368,7 @@ test("the region is typed by hand, and the app never infers where he is", async 
   const input = section("Algemeen").querySelector('input[list="home-regions"]') as HTMLInputElement;
   act(() => setNativeValue(input, "Texas"));
   expect(onHomeRegionChange).toHaveBeenCalledWith("Texas");
-  expect(section("Algemeen").textContent).toContain("LaVega leidt nooit af waar je bent");
+  expect(section("Algemeen").textContent).toContain("LaVega leidt je locatie nooit af");
 });
 
 test("Algemeen holds the name fields, and says the name stays here", async () => {
@@ -380,7 +380,7 @@ test("Algemeen holds the name fields, and says the name stays here", async () =>
   expect((general.querySelector('input[aria-label="Achternaam"]') as HTMLInputElement).value).toBe(
     "Steunenberg",
   );
-  expect(general.textContent).toContain("nooit meegestuurd naar een model");
+  expect(general.textContent).toContain("niet in je kluis, back-up of bij een model");
 });
 
 test("typing a name reports both halves back, unmangled", async () => {
@@ -599,20 +599,20 @@ test("zonder account (alleen dit apparaat) is er geen deel-kaart: er gaat niets 
   expect(container!.textContent).not.toContain("Delen met LaVega Investing");
 });
 
-test("de uitleg zegt dat het het totaal van al je bankrekeningen is, zakelijke rekeningen inbegrepen", async () => {
+test("de uitleg zegt dat het je Totale positie is en dat je bankgeld meetelt", async () => {
   await render({ owner: ACCOUNT, shareNetWorthEnabled: true });
   const text = container!.textContent ?? "";
-  expect(text).toContain("alle bankrekeningen");
-  expect(text).toContain("zakelijke");
+  expect(text).toContain("je Totale positie");
+  expect(text).toContain("je bankgeld meetelt");
 });
 
 test("de uitleg bij de schakelaar zegt dat hij standaard aan staat, wat er gaat en dat uitzetten kan", async () => {
   await render({ owner: ACCOUNT, shareNetWorthEnabled: true });
   const text = container!.textContent ?? "";
   expect(text).toContain("Staat standaard aan");
-  expect(text).toContain("alleen je dagtotaal");
-  expect(text).toContain("geen rekeningen of transacties");
-  expect(text).toContain("jouw account");
+  expect(text).toContain("Alleen dat dagtotaal gaat mee");
+  expect(text).toContain("geen rekeningen, transacties of bedrijfsnamen");
+  expect(text).toContain("Geldt per apparaat");
   expect(text).toContain("uitzetten");
 });
 

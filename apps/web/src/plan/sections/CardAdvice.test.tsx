@@ -139,7 +139,7 @@ test("every option opens a 'Zo is het berekend' with the calculation and a dated
 test("cards with missing catalogue values are listed as not comparable with the reason, never ranked", () => {
   const c = mount(computeCardAdvice(base));
   const list = q(c, "plan-card-not-comparable")!;
-  expect(list.textContent).toContain("NO-FEE: jaarkosten niet in de catalogus");
+  expect(list.textContent).toContain("NO-FEE: jaarkosten onbekend");
   expect(qa(c, "plan-card-option").some((o) => o.textContent!.includes("NO-FEE"))).toBe(false);
 });
 
@@ -312,9 +312,11 @@ test("not comparable without any named reason prints no empty parentheses, in NL
     expect(text).not.toContain("()");
     expect(text).not.toMatch(/ \.|\s\(\s*\)/);
   }
-  expect(cardAdviceCopy.nl.noAdvice(advice, fmt)).toContain("te vergelijken. Er is niets geschat.");
-  expect(cardAdviceCopy.en.noAdvice(advice, fmt)).toContain(
-    "compared in full. Nothing has been estimated.",
+  expect(cardAdviceCopy.nl.noAdvice(advice, fmt)).toBe(
+    "Nog geen kaartadvies: van deze kaarten ontbreken gegevens.",
+  );
+  expect(cardAdviceCopy.en.noAdvice(advice, fmt)).toBe(
+    "No card advice yet: data missing for these cards.",
   );
 });
 

@@ -688,7 +688,7 @@ export default function Profiel({
 
       <Card as="section" aria-label={c.nav.moduleLabels.plan} className="profiel-plan">
         <h2>{c.nav.moduleLabels.plan}</h2>
-        <p>{planUnlocked ? c.profiel.plan.line : invite.intro}</p>
+        {!planUnlocked && <p>{invite.intro}</p>}
         <Button variant="primary" onClick={() => onNavigate?.(planUnlocked ? "plan" : "intake")}>
           {planUnlocked ? c.profiel.plan.open : resuming ? invite.resume : invite.start}
         </Button>
@@ -730,11 +730,6 @@ export default function Profiel({
               />{" "}
               {c.profiel.netWorthShare.toggleLabel}
             </label>
-            <p className="cell-sub">
-              {shareNetWorthEnabled
-                ? c.profiel.netWorthShare.onStatus
-                : c.profiel.netWorthShare.offStatus}
-            </p>
             {shareNetWorthPendingDelete && (
               <StatusLine tone="warning" role="alert">
                 {c.profiel.netWorthShare.pendingDeleteStatus}

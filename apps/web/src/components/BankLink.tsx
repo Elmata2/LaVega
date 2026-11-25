@@ -12,7 +12,7 @@ import StatusLine from "./ui/StatusLine.js";
 type Aspsp = { name: string; country: string; logo?: string };
 type PsuType = "business" | "personal";
 
-const PSU_TYPE_ORDER: PsuType[] = ["business", "personal"];
+const PSU_TYPE_ORDER: PsuType[] = ["personal", "business"];
 
 /** `https:` with a host, and nothing else.
  *
@@ -36,7 +36,7 @@ export default function BankLink({
   busy,
   onRefresh,
   onBeforeRedirect,
-  defaultPsuType = "business",
+  defaultPsuType = "personal",
   compact = false,
 }: {
   busy: boolean;
@@ -152,25 +152,27 @@ export default function BankLink({
           <Button disabled={busy} onClick={onRefresh}>
             {c.bankLink.ververs}
           </Button>
-          <span className="cell-sub">{c.bankLink.ververshHint}</span>
         </div>
       )}
       {!compact && (
-        <div className="scope-switch" role="group" aria-label={c.bankLink.typeRekeningAria}>
-          {PSU_TYPE_ORDER.map((t, i) => (
-            <Fragment key={t}>
-              {i > 0 && <span className="scope-rule" aria-hidden="true" />}
-              <button
-                type="button"
-                className={`scope-option${psuType === t ? " scope-on" : ""}`}
-                aria-pressed={psuType === t}
-                disabled={busy || loading}
-                onClick={() => pickPsuType(t)}
-              >
-                {psuTypeLabels[t]}
-              </button>
-            </Fragment>
-          ))}
+        // The switch is inline-flex; without its own row the connect button lands beside it.
+        <div style={{ marginBottom: "var(--sp-3)" }}>
+          <div className="scope-switch" role="group" aria-label={c.bankLink.typeRekeningAria}>
+            {PSU_TYPE_ORDER.map((t, i) => (
+              <Fragment key={t}>
+                {i > 0 && <span className="scope-rule" aria-hidden="true" />}
+                <button
+                  type="button"
+                  className={`scope-option${psuType === t ? " scope-on" : ""}`}
+                  aria-pressed={psuType === t}
+                  disabled={busy || loading}
+                  onClick={() => pickPsuType(t)}
+                >
+                  {psuTypeLabels[t]}
+                </button>
+              </Fragment>
+            ))}
+          </div>
         </div>
       )}
       {aspsps === null ? (

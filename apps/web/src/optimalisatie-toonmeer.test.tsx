@@ -278,8 +278,8 @@ test("cashback: 'geen aanbeveling' is een uitkomst en staat vooraan", async () =
 
 test("cashback: is er niets te vergelijken, dan staat de reden vooraan en niet in de plooi", async () => {
   const el = await mount({ entries: [] });
-  const leeg = node(el, "Geen enkele kaart in de catalogus");
-  staatVooraan(leeg, "niets om mee te vergelijken");
+  const leeg = node(el, "Geen kaart in de catalogus");
+  staatVooraan(leeg, "om mee te vergelijken");
 });
 
 test("cashback: de openstaande vraag is een weigering en staat vooraan", async () => {
@@ -390,8 +390,8 @@ test("cashback: is er niets te onderbouwen, dan is er ook geen plooi die dat bel
      rekeningen is er geen enkele kaart om iets over te zeggen, dus hoort de
      module alleen de reden te tonen. */
   const el = await mount({ accounts: [], own: ownAccounts([]), txs: [], entries: [] });
-  const leeg = node(el, "Nog geen betaalrekening of creditcard in beeld");
-  staatVooraan(leeg, "er is nog niets om mee te vergelijken");
+  const leeg = node(el, "Nog geen betaalrekening of creditcard om te vergelijken");
+  staatVooraan(leeg, "om te vergelijken");
 
   const labels = [...el.querySelectorAll(".toonmeer-label")].map((n) => n.textContent ?? "");
   expect(labels.some((l) => l.includes("Waar deze cijfers vandaan komen"))).toBe(false);

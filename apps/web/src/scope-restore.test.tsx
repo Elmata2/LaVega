@@ -14,6 +14,7 @@ vi.mock("./archive", () => ({
   SHOW_SCOPE_SWITCH: true,
   SHOW_INVOICE_FORWARDING: true,
   SHOW_ENTITY_CLASSIFIER: true,
+  SHOW_CASHBACK_CORRECTION: false,
   isArchivedView: () => false,
   isArchivedWidget: () => false,
   initialScope: () =>

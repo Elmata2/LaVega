@@ -328,7 +328,7 @@ export const wizardCopy: Record<Locale, WizardCopy> = {
       payYes: "Ja, elke maand",
       payNo: "Nee, een deel blijft staan",
       rate: "Rente op het openstaande saldo (% per jaar)",
-      rateHint: "Weet je de rente niet? Laat dit leeg. Er wordt dan niets geschat.",
+      rateHint: "Onbekend? Laat leeg: er wordt niets geschat.",
       points: (program) => `Puntensaldo ${program}`,
       pointsHint: "Het saldo uit je Amex-app of online account.",
       skipHint: "Laat een kaart leeg om die over te slaan.",
@@ -343,7 +343,7 @@ export const wizardCopy: Record<Locale, WizardCopy> = {
     },
     upload: {
       connectBody:
-        "De koppeling is alleen-lezen: LaVega kan niets betalen of verplaatsen. Een bestand uploaden kan ook.",
+        "Alleen lezen: LaVega kan niets betalen of verplaatsen. Een bestand uploaden kan ook.",
       button: "Bankafschrift uploaden",
       later: "Later",
       toPlan: "Naar je plan",
@@ -520,7 +520,7 @@ export const wizardCopy: Record<Locale, WizardCopy> = {
       payYes: "Yes, every month",
       payNo: "No, part of it stays",
       rate: "Interest on the outstanding balance (% a year)",
-      rateHint: "Do not know the rate? Leave it empty. Nothing will be estimated.",
+      rateHint: "Unknown? Leave empty: nothing will be estimated.",
       points: (program) => `Points balance ${program}`,
       pointsHint: "The balance from your Amex app or online account.",
       skipHint: "Leave a card empty to skip it.",
@@ -534,8 +534,7 @@ export const wizardCopy: Record<Locale, WizardCopy> = {
       },
     },
     upload: {
-      connectBody:
-        "The link is read-only: LaVega cannot pay or move anything. Uploading a file works too.",
+      connectBody: "Read-only: LaVega cannot pay or move anything. Uploading a file works too.",
       button: "Upload bank statement",
       later: "Later",
       toPlan: "Go to your plan",

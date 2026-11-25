@@ -81,8 +81,8 @@ export const cardFileCopy: Record<Locale, CardFileCopy> = {
     otherChoice: "Andere bank of kaart",
     otherName: "je rekeningen",
     stepsHeading: "Zo haal je het bestand op",
-    dropHint: "Sleep je bestanden hierheen, of kies ze. Meerdere bestanden mag.",
-    typesHint: "CSV of Excel (.xlsx)",
+    dropHint: "Sleep bestanden hierheen.",
+    typesHint: "CSV, Excel (.xlsx) of MT940",
     chooseButton: "Kies bestand",
     removeFile: (name) => `${name} verwijderen`,
     reading: "Bestand lezen...",
@@ -101,7 +101,7 @@ export const cardFileCopy: Record<Locale, CardFileCopy> = {
     failedPartialFold:
       "Niet alles is opgeslagen. Importeer het bestand opnieuw om het af te maken.",
     unmatchedExisting:
-      "We konden je bestaande American Express-gegevens niet aan dit bestand koppelen. Controleer na het toevoegen of er dubbele transacties staan.",
+      "Dit bestand sluit niet aan op je Amex-gegevens. Controleer daarna op dubbele transacties.",
     xls: "Dit is een oud Excel-bestand (.xls). Kies CSV of .xlsx.",
     unreadableFile: "Dit bestand konden we niet lezen. Probeer CSV of Excel (.xlsx).",
     failedPartial: "Niet alles is opgeslagen. Controleer je rekeningen en probeer het opnieuw.",
@@ -132,7 +132,7 @@ export const cardFileCopy: Record<Locale, CardFileCopy> = {
     noTransactions: "Geen transacties gevonden.",
     wrongIssuer: (picked, found) =>
       `Je koos ${picked}, maar dit bestand lijkt van ${found}. Controleer of je het juiste bestand hebt.`,
-    continueAnyway: "Toch toevoegen, los van deze kaart",
+    continueAnyway: "Toch toevoegen",
     continueAnywayDone: "Wordt toegevoegd, los van deze kaart.",
     problem: (p) => {
       switch (p.kind) {
@@ -155,8 +155,7 @@ export const cardFileCopy: Record<Locale, CardFileCopy> = {
     cancel: "Annuleren",
     failed: "Toevoegen lukte niet. Er is niets opgeslagen. Probeer het nog eens.",
     done: (c, name) => `${c === 1 ? "1 transactie" : `${c} transacties`} toegevoegd aan ${name}.`,
-    doneNothing: (name) =>
-      `Deze transacties stonden er al bij ${name}. Er is niets nieuws toegevoegd.`,
+    doneNothing: (name) => `Niets nieuws: deze transacties stonden er al bij ${name}.`,
     doneClose: "Sluiten",
     upload: "Bestand uploaden",
     uploadFor: (name) => `Bestand uploaden voor ${name}`,
@@ -171,8 +170,8 @@ export const cardFileCopy: Record<Locale, CardFileCopy> = {
     otherChoice: "Other bank or card",
     otherName: "your accounts",
     stepsHeading: "How to get the file",
-    dropHint: "Drop your files here, or choose them. More than one file is fine.",
-    typesHint: "CSV or Excel (.xlsx)",
+    dropHint: "Drop files here.",
+    typesHint: "CSV, Excel (.xlsx) or MT940",
     chooseButton: "Choose file",
     removeFile: (name) => `Remove ${name}`,
     reading: "Reading file...",
@@ -187,7 +186,7 @@ export const cardFileCopy: Record<Locale, CardFileCopy> = {
     foldBlocked: "Your Trading 212 accounts belong to different profiles and are not merged.",
     failedPartialFold: "Not everything was saved. Import the file again to finish it.",
     unmatchedExisting:
-      "We could not match your existing American Express data to this file. After adding, check for duplicate transactions.",
+      "This file does not match your Amex data. Check for duplicate transactions afterwards.",
     xls: "This is an old Excel file (.xls). Choose CSV or .xlsx.",
     unreadableFile: "We could not read this file. Try CSV or Excel (.xlsx).",
     failedPartial: "Not everything was saved. Check your accounts and try again.",
@@ -218,7 +217,7 @@ export const cardFileCopy: Record<Locale, CardFileCopy> = {
     noTransactions: "No transactions found.",
     wrongIssuer: (picked, found) =>
       `You chose ${picked}, but this file looks like ${found}. Check that you have the right file.`,
-    continueAnyway: "Add anyway, apart from this card",
+    continueAnyway: "Add anyway",
     continueAnywayDone: "Will be added apart from this card.",
     problem: (p) => {
       switch (p.kind) {
@@ -241,7 +240,7 @@ export const cardFileCopy: Record<Locale, CardFileCopy> = {
     cancel: "Cancel",
     failed: "Adding failed. Nothing was saved. Try again.",
     done: (c, name) => `${c === 1 ? "1 transaction" : `${c} transactions`} added to ${name}.`,
-    doneNothing: (name) => `These transactions were already in ${name}. Nothing new was added.`,
+    doneNothing: (name) => `Nothing new: these transactions were already in ${name}.`,
     doneClose: "Close",
     upload: "Upload file",
     uploadFor: (name) => `Upload file for ${name}`,
