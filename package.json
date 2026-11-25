@@ -20,7 +20,7 @@
     "db:migrate": "tsx --env-file-if-exists=apps/server/.env scripts/migrate.ts apply",
     "db:migrate:prod": "MIGRATION_DATABASE_URL=\"$(neonctl connection-string main --project-id royal-surf-52181032 --role-name lavega_owner)\" tsx scripts/migrate.ts apply",
     "db:migrate:preview": "MIGRATION_DATABASE_URL=\"$(neonctl connection-string preview --project-id royal-surf-52181032 --role-name lavega_owner)\" tsx scripts/migrate.ts apply",
-    "db:migrate:all": "bun run db:migrate:prod && bun run db:migrate:preview",
+    "db:migrate:all": "node scripts/migrate-all.mjs",
     "db:migrate:check": "tsx --env-file-if-exists=apps/server/.env scripts/migrate.ts check",
     "db:migrate:status": "tsx --env-file-if-exists=apps/server/.env scripts/migrate.ts status",
     "db:migrate:baseline": "tsx --env-file-if-exists=apps/server/.env scripts/migrate.ts baseline",
