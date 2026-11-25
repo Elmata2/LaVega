@@ -343,7 +343,7 @@ export const wizardCopy: Record<Locale, WizardCopy> = {
     },
     upload: {
       connectBody:
-        "De koppeling is alleen-lezen: LaVega kan niets betalen of verplaatsen. Een bestand uploaden kan ook.",
+        "Alleen lezen: LaVega kan niets betalen of verplaatsen. Een bestand uploaden kan ook.",
       button: "Bankafschrift uploaden",
       later: "Later",
       toPlan: "Naar je plan",
@@ -534,8 +534,7 @@ export const wizardCopy: Record<Locale, WizardCopy> = {
       },
     },
     upload: {
-      connectBody:
-        "The link is read-only: LaVega cannot pay or move anything. Uploading a file works too.",
+      connectBody: "Read-only: LaVega cannot pay or move anything. Uploading a file works too.",
       button: "Upload bank statement",
       later: "Later",
       toPlan: "Go to your plan",

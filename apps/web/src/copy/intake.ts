@@ -157,7 +157,7 @@ export const intakeCopy: Record<Locale, IntakeCopy> = {
       invite: {
         title: "Vertel LaVega over je situatie",
         intro:
-          "Beantwoord een paar vragen en LaVega rekent met jouw cijfers. Alles blijft in je eigen kluis en je kunt het later aanpassen.",
+          "Beantwoord een paar vragen, dan rekent LaVega met jouw cijfers. Alles blijft in je eigen kluis.",
         start: "Begin",
         resume: "Ga verder",
         resumed: "Je bent gestart; ga verder waar je bleef.",
@@ -245,8 +245,7 @@ export const intakeCopy: Record<Locale, IntakeCopy> = {
         capacity: (n) => `Draagkracht uit je cijfers (schaal 1 tot 5): ${n}`,
         toleranceUnknown: "Beantwoord minstens vier risicovragen om dit te zien.",
         capacityUnknown: "Er zijn nog te weinig gegevens om dit uit te rekenen.",
-        disagree:
-          "Deze twee liggen twee punten of meer uit elkaar. Dat laten we zien en we lossen het niet voor je op.",
+        disagree: "Deze twee liggen twee punten of meer uit elkaar.",
         agree: "Deze twee liggen dicht bij elkaar.",
       },
     },
@@ -395,7 +394,7 @@ export const intakeCopy: Record<Locale, IntakeCopy> = {
       invite: {
         title: "Tell LaVega about your situation",
         intro:
-          "Answer a few questions and LaVega works with your own numbers. Everything stays in your own vault and you can change it later.",
+          "Answer a few questions, then LaVega works with your own numbers. Everything stays in your own vault.",
         start: "Start",
         resume: "Continue",
         resumed: "You have started; pick up where you stopped.",
@@ -483,8 +482,7 @@ export const intakeCopy: Record<Locale, IntakeCopy> = {
         capacity: (n) => `Capacity from your figures (scale 1 to 5): ${n}`,
         toleranceUnknown: "Answer at least four risk questions to see this.",
         capacityUnknown: "There is not enough data yet to work this out.",
-        disagree:
-          "These two are two points or more apart. We show it and do not settle it for you.",
+        disagree: "These two are two points or more apart.",
         agree: "These two are close together.",
       },
     },

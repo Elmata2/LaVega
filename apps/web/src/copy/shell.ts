@@ -303,8 +303,6 @@ export type ShellCopy = {
        *  turned on in. */
       perDeviceNote: string;
       toggleLabel: string;
-      onStatus: string;
-      offStatus: string;
       /** Shown when turning the switch off could not remove the account's
        *  stored totals; LaVega keeps retrying on its own. */
       pendingDeleteStatus: string;
@@ -611,7 +609,7 @@ const nl: ShellCopy = {
     head: {
       ariaLabel: "Profiel",
       noName: "Nog geen naam ingevuld",
-      note: "Alleen voor dit scherm. Je naam blijft in deze browser — niet in de kluis, niet in een back-up, en hij wordt nooit meegestuurd naar een model.",
+      note: "Blijft in deze browser: niet in je kluis, back-up of bij een model.",
       firstName: "Voornaam",
       lastName: "Achternaam",
     },
@@ -648,8 +646,7 @@ const nl: ShellCopy = {
     countryRegion: {
       ariaLabel: "Land en regio",
       heading: "Land en regio",
-      purpose:
-        "Bepaalt in welke markt LaVega kaartvoorwaarden opzoekt. Je vult dit zelf in; LaVega leidt nooit af waar je bent.",
+      purpose: "Bepaalt welke kaartvoorwaarden LaVega opzoekt. LaVega leidt je locatie nooit af.",
       neverInferred:
         "Je vult dit zelf in. LaVega leidt nooit af waar je bent — geen locatie, geen IP, geen tijdzone.",
       countryLabel: "Land",
@@ -716,15 +713,12 @@ const nl: ShellCopy = {
       ariaLabel: "Delen met LaVega Investing",
       heading: "Delen met LaVega Investing",
       description:
-        "Staat standaard aan. Deelt elke dag je Totale positie (het bedrag bovenaan Home) met LaVega Investing: het totaal van alle bankrekeningen, zakelijke rekeningen inbegrepen en beleggingsrekeningen niet, zodat je nettowaarde daar je bankgeld meetelt naast je beleggingen.",
+        "Staat standaard aan. Deelt elke dag je Totale positie (het bedrag bovenaan Home) met LaVega Investing, zodat je nettowaarde daar je bankgeld meetelt.",
       privacyNote:
-        "Er gaat alleen je dagtotaal mee, geen rekeningen of transacties en geen bedrijfsnaam: één bedrag per dag, en alleen op een dag dat minstens één saldo bekend is. Het gaat alleen naar de Investing-kant van jouw account. Je kunt het altijd uitzetten; dan verwijdert LaVega de eerder gedeelde bedragen (en probeert het opnieuw als de server niet bereikbaar is).",
+        "Alleen dat dagtotaal gaat mee: geen rekeningen, transacties of bedrijfsnamen. Je kunt het altijd uitzetten; LaVega verwijdert dan de gedeelde bedragen.",
       perDeviceNote:
-        "Deze schakelaar geldt per apparaat: alleen bezoeken vanaf DIT apparaat delen een bedrag. Eerder gedeelde bedragen blijven bij LaVega Investing staan totdat je de schakelaar uitzet op een apparaat waar hij aanstaat.",
+        "Geldt per apparaat. Eerder gedeelde bedragen blijven staan tot je het uitzet op een apparaat waar het aanstaat.",
       toggleLabel: "Deel mijn Totale positie met LaVega Investing",
-      onStatus:
-        "Staat aan. Elke dag dat je kluis open is en er minstens één saldo bekend is, gaat het bedrag naar Investing.",
-      offStatus: "Staat uit. Zet hem aan om je Totale positie in Investing's nettowaarde te zien.",
       pendingDeleteStatus: "Kon je gedeelde bedragen niet verwijderen — we proberen het opnieuw.",
     },
   },
@@ -1026,7 +1020,7 @@ const en: ShellCopy = {
     head: {
       ariaLabel: "Profile",
       noName: "No name entered yet",
-      note: "For this screen only. Your name stays in this browser — never in the vault, never in a backup, and never sent to a model.",
+      note: "Stays in this browser: not in your vault, a backup or sent to a model.",
       firstName: "First name",
       lastName: "Last name",
     },
@@ -1063,8 +1057,7 @@ const en: ShellCopy = {
     countryRegion: {
       ariaLabel: "Country and region",
       heading: "Country and region",
-      purpose:
-        "Determines which market LaVega looks up card terms in. You fill this in yourself; LaVega never infers where you are.",
+      purpose: "Decides which card terms LaVega looks up. LaVega never infers your location.",
       neverInferred:
         "You fill this in yourself. LaVega never infers where you are — no location, no IP, no time zone.",
       countryLabel: "Country",
@@ -1129,15 +1122,12 @@ const en: ShellCopy = {
       ariaLabel: "Share with LaVega Investing",
       heading: "Share with LaVega Investing",
       description:
-        "On by default. Shares your Totale positie (the figure at the top of Home) with LaVega Investing every day: the total of all your bank accounts, business accounts included and investment accounts left out, so its net worth counts your bank money alongside your investments.",
+        "On by default. Shares your Totale positie (the figure at the top of Home) with LaVega Investing every day, so its net worth counts your bank money.",
       privacyNote:
-        "Only your daily total goes, no accounts or transactions and no company name: one figure per day, and only on a day at least one balance is known. It goes only to the Investing side of your own account. You can switch it off at any time; LaVega then removes the totals shared before (and retries if it cannot reach the server).",
+        "Only that daily total goes: no accounts, transactions or company names. You can switch it off at any time; LaVega then removes the shared totals.",
       perDeviceNote:
-        "This switch is per device: only visits from THIS device share a figure. Totals already shared stay with LaVega Investing until you turn the switch off on a device where it's on.",
+        "Applies per device. Totals already shared stay until you turn it off on a device where it is on.",
       toggleLabel: "Share my Totale positie with LaVega Investing",
-      onStatus:
-        "On. Every day your vault is open and at least one balance is known, the figure goes to Investing.",
-      offStatus: "Off. Turn it on to see your Totale positie inside Investing's net worth.",
       pendingDeleteStatus: "Couldn't remove your shared total — we'll retry.",
     },
   },

@@ -730,11 +730,6 @@ export default function Profiel({
               />{" "}
               {c.profiel.netWorthShare.toggleLabel}
             </label>
-            <p className="cell-sub">
-              {shareNetWorthEnabled
-                ? c.profiel.netWorthShare.onStatus
-                : c.profiel.netWorthShare.offStatus}
-            </p>
             {shareNetWorthPendingDelete && (
               <StatusLine tone="warning" role="alert">
                 {c.profiel.netWorthShare.pendingDeleteStatus}
