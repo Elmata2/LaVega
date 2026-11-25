@@ -29,6 +29,7 @@ import {
 import type { PriceSyncTarget } from "./priceOrchestrator.js";
 import { createInMemorySectorProfileStore } from "./inMemorySectorProfileStore.js";
 import { createInMemoryAccountWrapperStore } from "./accountWrapperStore.js";
+import { createInMemoryDisposalLabelStore } from "./disposalLabelStore.js";
 import { createInMemorySectorCorrectionStore } from "./sectorCorrectionStore.js";
 import { createInMemorySectorInferenceSettingStore } from "./sectorInferenceSetting.js";
 
@@ -2821,6 +2822,40 @@ test("account-wrapper route persists labels, drops unknown ones and rejects a no
   });
 
   const rejected = await investingApp.request("/api/investing/account-wrappers", {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ entries: "nope" }),
+  });
+  expect(rejected.status).toBe(400);
+});
+
+test("disposal-labels route persists labels, drops invalid ones and rejects a non-array body", async () => {
+  const disposalLabelStore = createInMemoryDisposalLabelStore();
+  const investingApp = createApp({ disposalLabelStore });
+
+  const put = await investingApp.request("/api/investing/disposal-labels", {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      entries: [
+        { disposalId: "sell-1", category: "fx-difference", note: "  Spot FX rate  " },
+        { disposalId: "sell-2", category: "not-a-category" },
+      ],
+    }),
+  });
+  expect(put.status).toBe(200);
+  expect(await put.json()).toEqual({
+    tenantId: "local",
+    entries: [{ disposalId: "sell-1", category: "fx-difference", note: "Spot FX rate" }],
+  });
+
+  const get = await investingApp.request("/api/investing/disposal-labels");
+  expect(await get.json()).toEqual({
+    tenantId: "local",
+    entries: [{ disposalId: "sell-1", category: "fx-difference", note: "Spot FX rate" }],
+  });
+
+  const rejected = await investingApp.request("/api/investing/disposal-labels", {
     method: "PUT",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ entries: "nope" }),

@@ -28,6 +28,10 @@ import {
   createFileAccountWrapperStore,
   runtimeAccountWrapperFile,
 } from "./fileAccountWrapperStore.js";
+import {
+  createFileDisposalLabelStore,
+  runtimeDisposalLabelFile,
+} from "./fileDisposalLabelStore.js";
 import { createDevFixturePersonalNetWorthSeed } from "./devFixture.js";
 import { createInMemoryAgentMemoryStore } from "./inMemoryAgentMemory.js";
 import { createInMemoryPersonalNetWorthStore } from "./personalNetWorthStore.js";
@@ -111,6 +115,7 @@ if (isMainModule()) {
     ),
     identifierOverrideStore: createFileIdentifierOverrideStore(runtimeIdentifierOverrideFile()),
     accountWrapperStore: createFileAccountWrapperStore(runtimeAccountWrapperFile()),
+    disposalLabelStore: createFileDisposalLabelStore(runtimeDisposalLabelFile()),
     // The dev fixture answers the Personal side of the net-worth bridge too, so
     // a local run can show the combined figure (WS4.7 #298). Never production:
     // this only mounts when the fixture itself is on.

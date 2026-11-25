@@ -44,6 +44,7 @@ import {
   type AccountWrapperStore,
   type FundamentalsProvider,
   type BenchmarkSelectionStore,
+  type DisposalLabelStore,
   type InvestingLayoutStore,
 } from "@lavega/core";
 import {
@@ -79,6 +80,7 @@ import {
   createNeonPriceSyncProgressStore,
 } from "./neonStores.js";
 import { createInMemoryAccountWrapperStore } from "./accountWrapperStore.js";
+import { createInMemoryDisposalLabelStore } from "./disposalLabelStore.js";
 import {
   createFileBrokerSyncStateStore,
   runtimeBrokerSyncStateFile,
@@ -264,6 +266,7 @@ export type RuntimeAppOptions = {
   /** Account tax-treatment labels (WS4.4, #296). Defaults to Neon with a
    *  database, in-memory without one. */
   accountWrapperStore?: AccountWrapperStore;
+  disposalLabelStore?: DisposalLabelStore;
   benchmarkSymbols?: (tenantId: string) => Promise<string[]> | string[];
   marketDataConsentStore?: MarketDataConsentStore;
   personalNetWorthStore?: PersonalNetWorthStore;
@@ -334,6 +337,7 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
    * test still answer the same empty map instead of reaching for a database
    * it may not have. */
   const accountWrapperStore = options.accountWrapperStore ?? createInMemoryAccountWrapperStore();
+  const disposalLabelStore = options.disposalLabelStore ?? createInMemoryDisposalLabelStore();
   let priceDataVersion = 0;
   const onPriceDataChanged = () => {
     priceDataVersion += 1;
@@ -1212,6 +1216,7 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
         benchmarkSelectionStore,
         investingLayoutStore,
         accountWrapperStore,
+        disposalLabelStore,
         marketDataConsentStore,
         personalNetWorthStore,
         dashboardReader,
@@ -1278,6 +1283,7 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
       benchmarkSelectionStore,
       investingLayoutStore,
       accountWrapperStore,
+      disposalLabelStore,
       marketDataConsentStore,
       personalNetWorthStore,
       dashboardReader,

@@ -11,6 +11,9 @@ export type PreferencesRepository = {
   /** Account tax-treatment labels (plan §3 WS4.4, #296). */
   getAccountWrappers(): Promise<unknown | null>;
   setAccountWrappers(entries: unknown): Promise<void>;
+  /** Owner-assigned labels and notes for realized disposals. */
+  getDisposalLabels(): Promise<unknown | null>;
+  setDisposalLabels(entries: unknown): Promise<void>;
   /** The owner's switch for identifier candidate selection (Jev-03, #136). */
   getIdentifierSelectionEnabled(): Promise<boolean>;
   setIdentifierSelectionEnabled(enabled: boolean): Promise<void>;
@@ -78,6 +81,8 @@ export function createPreferencesRepository(
     setLayout: (layout) => write("layout", layout),
     getAccountWrappers: () => read<unknown | null>("account_wrappers", null),
     setAccountWrappers: (entries) => write("account_wrappers", entries),
+    getDisposalLabels: () => read<unknown | null>("disposal_labels", null),
+    setDisposalLabels: (entries) => write("disposal_labels", entries),
     getIdentifierSelectionEnabled: () => read<boolean>("identifier_selection_enabled", false),
     setIdentifierSelectionEnabled: (enabled) =>
       writeBoolean("identifier_selection_enabled", enabled),

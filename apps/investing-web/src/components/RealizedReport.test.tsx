@@ -5,6 +5,7 @@ import { afterEach, expect, test, vi } from "vitest";
 import {
   buildRealizedReport,
   type AccountWrapperEntry,
+  type DisposalLabelEntry,
   type Dividend,
   type FxRate,
   type RealizedIncomeReportData,
@@ -164,5 +165,108 @@ test("groups realised and unrealised by treatment and offers an account-type con
     broker: "trading212",
     account: "ISA",
     wrapper: "sipp",
+  });
+});
+
+test("shows inline broker cash difference, account context, filters, and lets the user label or fix a disposal", () => {
+  const mismatchSell: Trade = {
+    ...SELL,
+    id: "sell-mismatch",
+    symbol: "MSFT",
+    settlement: { currency: "USD", amount: 550 },
+  };
+  const msftBuy: Trade = {
+    ...BUY,
+    id: "buy-msft",
+    symbol: "MSFT",
+  };
+  const customReport = buildRealizedReport({
+    positions: [],
+    trades: [BUY, SELL, msftBuy, mismatchSell, CHF_BUY, CHF_SELL],
+    dividends: [],
+    cashFlows: [],
+    priceBars: [],
+    presentationCurrency: EUR,
+    fxRates: FX,
+    accountWrappers: WRAPPERS,
+    today: "2026-06-01",
+  });
+
+  const onSaveDisposalLabel = vi.fn();
+  const onClearDisposalLabel = vi.fn();
+  const onSetWrapper = vi.fn();
+  const labels: DisposalLabelEntry[] = [
+    {
+      disposalId: "sell-chf",
+      category: "verified",
+      note: "CHF rate pending",
+    },
+  ];
+
+  const container = document.createElement("div");
+  document.body.append(container);
+  act(() =>
+    createRoot(container).render(
+      <RealizedReport
+        report={customReport}
+        disposalLabels={labels}
+        onSaveDisposalLabel={onSaveDisposalLabel}
+        onClearDisposalLabel={onClearDisposalLabel}
+        onSetWrapper={onSetWrapper}
+      />,
+    ),
+  );
+
+  const text = container.textContent ?? "";
+  // Inline broker cash vs proceeds difference is visible without hover.
+  expect(text).toContain("Does not reconcile");
+  expect(text).toContain("Broker cash €500.00 vs proceeds €544.55");
+  expect(text).toContain("Interactive Brokers · Main");
+  expect(text).toContain("CHF rate pending");
+
+  // Filter: Needs attention excludes both Reconciled (AAPL) and Verified (NESN).
+  const buttons = Array.from(container.querySelectorAll("button"));
+  const attentionButton = buttons.find((button) =>
+    button.textContent?.includes("Needs attention (1)"),
+  );
+  expect(attentionButton).toBeDefined();
+  act(() => {
+    attentionButton!.click();
+  });
+  const disposalsTable = container.querySelector('table[aria-label="Disposals"]')!;
+  expect(disposalsTable.textContent).toContain("MSFT");
+  expect(disposalsTable.textContent).not.toContain("AAPL");
+  expect(disposalsTable.textContent).not.toContain("NESN");
+
+  // Open the inline label editor on MSFT and save a category + note.
+  const labelButton = Array.from(disposalsTable.querySelectorAll("button")).find(
+    (button) => button.textContent === "Label",
+  )!;
+  act(() => {
+    labelButton.click();
+  });
+  const categorySelect = disposalsTable.querySelector<HTMLSelectElement>(
+    'select[aria-label^="Label category for MSFT"]',
+  )!;
+  const noteInput = disposalsTable.querySelector<HTMLInputElement>(
+    'input[aria-label^="Note for MSFT"]',
+  )!;
+  const nativeSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
+  act(() => {
+    categorySelect.value = "fx-difference";
+    categorySelect.dispatchEvent(new Event("change", { bubbles: true }));
+    nativeSetter.call(noteInput, "Withholding tax deducted");
+    noteInput.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  const saveButton = Array.from(disposalsTable.querySelectorAll("button")).find(
+    (button) => button.textContent === "Save label",
+  )!;
+  act(() => {
+    saveButton.click();
+  });
+  expect(onSaveDisposalLabel).toHaveBeenCalledWith({
+    disposalId: "sell-mismatch",
+    category: "fx-difference",
+    note: "Withholding tax deducted",
   });
 });

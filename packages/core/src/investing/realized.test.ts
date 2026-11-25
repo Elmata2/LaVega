@@ -6,7 +6,7 @@ import { calculatePositionReturn } from "./positions.js";
 import { toCents } from "../money.js";
 import type { Dividend } from "./dividend.js";
 import type { FxRate } from "../fx.js";
-import type { CashFlow, Position, PriceBar, Trade } from "./model.js";
+import { validateDisposalLabels, type CashFlow, type Position, type PriceBar, type Trade } from "./model.js";
 
 /* WS4.3/WS4.4 acceptance (#296):
  *  - every disposal reconciles to broker-reported cash minus fees where the
@@ -386,5 +386,31 @@ describe("dashboard integration", () => {
     expect((encoded as { realized?: { disposals: unknown[] } }).realized?.disposals).toHaveLength(
       1,
     );
+  });
+});
+
+describe("disposal labels", () => {
+  test("normalizes valid disposal labels, deduplicates by disposalId, trims notes, and drops invalid entries", () => {
+    expect(
+      validateDisposalLabels([
+        {
+          disposalId: " sell-1 ",
+          category: "fx-difference",
+          note: "  Broker converted at spot  ",
+          updatedAt: "2026-04-02T10:00:00.000Z",
+        },
+        { disposalId: "sell-1", category: "verified" },
+        { disposalId: "", category: "verified" },
+        { disposalId: "sell-2", category: "not-a-category" },
+        null,
+      ]),
+    ).toEqual([
+      {
+        disposalId: "sell-1",
+        category: "fx-difference",
+        note: "Broker converted at spot",
+        updatedAt: "2026-04-02T10:00:00.000Z",
+      },
+    ]);
   });
 });

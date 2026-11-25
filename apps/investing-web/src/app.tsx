@@ -14,6 +14,8 @@ import {
 } from "react-router-dom";
 import {
   findMentions,
+  type DisposalLabelCategory,
+  type DisposalLabelEntry,
   type InvestingDashboardData,
   type InvestingPositionDetail,
   type RiskRange,
@@ -44,6 +46,12 @@ import { PositionPriceChart } from "./components/PositionPriceChart";
 import { PositionSectorControl } from "./components/PositionSectorControl.js";
 import { RealizedReport } from "./components/RealizedReport.js";
 import { saveAccountWrappers, withWrapper } from "./lib/accountWrappers.js";
+import {
+  fetchDisposalLabels,
+  saveDisposalLabels,
+  withDisposalLabel,
+  withoutDisposalLabel,
+} from "./lib/disposalLabels.js";
 import { useScrollFade } from "./lib/useScrollFade.js";
 import { PortfolioBenchmarkChart } from "./components/PortfolioBenchmarkChart";
 import { PortfolioSummaryCard, type SummaryState } from "./components/PortfolioSummaryCard";
@@ -1268,6 +1276,16 @@ function Positions() {
 function Reports() {
   const state = useDashboard();
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [disposalLabels, setDisposalLabels] = useState<DisposalLabelEntry[]>([]);
+  useEffect(() => {
+    let active = true;
+    void fetchDisposalLabels().then((entries) => {
+      if (active) setDisposalLabels(entries);
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
   if (state.status === "loading") return <DashboardLoading />;
   if (state.status === "error") return <DashboardError message={state.message} />;
   const report = state.data.realized;
@@ -1298,6 +1316,36 @@ function Reports() {
     setSaveError(null);
     readDashboard();
   };
+  const saveLabel = async (input: {
+    disposalId: string;
+    category: DisposalLabelCategory;
+    note?: string;
+  }) => {
+    const next = withDisposalLabel(
+      disposalLabels,
+      input.disposalId,
+      input.category,
+      input.note,
+      new Date().toISOString(),
+    );
+    const saved = await saveDisposalLabels(next);
+    if (!saved) {
+      setSaveError("Could not save the disposal label. Try again.");
+      return;
+    }
+    setSaveError(null);
+    setDisposalLabels(next);
+  };
+  const clearLabel = async (disposalId: string) => {
+    const next = withoutDisposalLabel(disposalLabels, disposalId);
+    const saved = await saveDisposalLabels(next);
+    if (!saved) {
+      setSaveError("Could not clear the disposal label. Try again.");
+      return;
+    }
+    setSaveError(null);
+    setDisposalLabels(next);
+  };
   return (
     <div className="space-y-6">
       <DashboardStatus data={state.data} refreshError={state.refreshError} />
@@ -1309,7 +1357,13 @@ function Reports() {
           {saveError}
         </p>
       )}
-      <RealizedReport report={report} onSetWrapper={setWrapper} />
+      <RealizedReport
+        report={report}
+        onSetWrapper={setWrapper}
+        disposalLabels={disposalLabels}
+        onSaveDisposalLabel={saveLabel}
+        onClearDisposalLabel={clearLabel}
+      />
     </div>
   );
 }

@@ -325,6 +325,27 @@ test("investing.preferences gains an account_wrappers array column with an empty
   ]);
 });
 
+test("investing.preferences gains a disposal_labels array column with an empty default", async () => {
+  const rows = await db.query<{
+    column_name: string;
+    data_type: string;
+    column_default: string | null;
+    is_nullable: string;
+  }>(
+    `SELECT column_name, data_type, column_default, is_nullable FROM information_schema.columns
+     WHERE table_schema = 'investing' AND table_name = 'preferences'
+       AND column_name = 'disposal_labels'`,
+  );
+  expect(rows.rows).toEqual([
+    {
+      column_name: "disposal_labels",
+      data_type: "jsonb",
+      column_default: "'[]'::jsonb",
+      is_nullable: "NO",
+    },
+  ]);
+});
+
 test("investing.preferences gains the identifier-selection switch and override map (#136)", async () => {
   const rows = await db.query<{
     column_name: string;

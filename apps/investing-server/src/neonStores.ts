@@ -17,9 +17,11 @@ import type { CashFlowStore } from "./cashFlowSuggestions.js";
 import {
   validateAccountWrapperMap,
   validateBenchmarkSymbols,
+  validateDisposalLabels,
   validateInvestingLayout,
   type AccountWrapperStore,
   type BenchmarkSelectionStore,
+  type DisposalLabelStore,
   type InvestingLayoutStore,
 } from "@lavega/core";
 import {
@@ -162,6 +164,20 @@ export function createNeonAccountWrapperStore(db: Database): AccountWrapperStore
     async set(selection) {
       await createPreferencesRepository(db, selection.tenantId).setAccountWrappers(
         validateAccountWrapperMap(selection.entries),
+      );
+    },
+  };
+}
+
+export function createNeonDisposalLabelStore(db: Database): DisposalLabelStore {
+  return {
+    async get(tenantId) {
+      const stored = await createPreferencesRepository(db, tenantId).getDisposalLabels();
+      return validateDisposalLabels(stored);
+    },
+    async set(selection) {
+      await createPreferencesRepository(db, selection.tenantId).setDisposalLabels(
+        validateDisposalLabels(selection.entries),
       );
     },
   };

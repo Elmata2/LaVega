@@ -13,6 +13,7 @@ import {
   PersonalNetWorthTotalsSchema,
   validateAccountWrapperMap,
   validateBenchmarkSymbols,
+  validateDisposalLabels,
   validateInvestingLayout,
   RealizedIncomeReportSchema,
   suggestionSignChange,
@@ -26,6 +27,7 @@ import {
   type InvestingLayoutStore,
   type RiskRange,
   type AccountWrapperStore,
+  type DisposalLabelStore,
 } from "@lavega/core";
 import { createProblemReporter, type ProblemReporter } from "./observability.js";
 import {
@@ -118,6 +120,7 @@ import {
   type IdentifierSelectionSettingStore,
 } from "./identifierSelectionStore.js";
 import { createInMemoryAccountWrapperStore } from "./accountWrapperStore.js";
+import { createInMemoryDisposalLabelStore } from "./disposalLabelStore.js";
 
 /** The read model crosses the wire through its shared schema, so a field the
  *  contract declares is always present in the response. */
@@ -204,6 +207,7 @@ type PriceDependencies = {
   benchmarkSelectionStore: BenchmarkSelectionStore;
   investingLayoutStore: InvestingLayoutStore;
   accountWrapperStore: AccountWrapperStore;
+  disposalLabelStore: DisposalLabelStore;
   benchmarkSearch: (
     query: string,
   ) => Promise<{ results: BenchmarkInstrument[]; fallback: boolean; problems: string[] }>;
@@ -272,6 +276,8 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
   const sharedPriceStore = dependencies.sharedPriceStore ?? false;
   const accountWrapperStore =
     dependencies.accountWrapperStore ?? createInMemoryAccountWrapperStore();
+  const disposalLabelStore =
+    dependencies.disposalLabelStore ?? createInMemoryDisposalLabelStore();
   /* One budget for every partner call this app makes. Hosted, it is Neon's, so
    * the limit holds across invocations and users; elsewhere it is this process's. */
   const partnerBudget =
@@ -1001,6 +1007,19 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
     const selection = { tenantId, entries: validateAccountWrapperMap(body.entries) };
     await accountWrapperStore.set(selection);
     dependencies.onAccountWrappersChanged?.();
+    return c.json(selection);
+  });
+  investingApp.get("/api/investing/disposal-labels", async (c) => {
+    const tenantId = await resolveTenantId();
+    return c.json({ tenantId, entries: await disposalLabelStore.get(tenantId) });
+  });
+  investingApp.put("/api/investing/disposal-labels", async (c) => {
+    const body: { entries?: unknown } = await c.req.json<{ entries?: unknown }>().catch(() => ({}));
+    if (!Array.isArray(body.entries))
+      return c.json({ problems: ["entries must be an array"] }, 400);
+    const tenantId = await resolveTenantId();
+    const selection = { tenantId, entries: validateDisposalLabels(body.entries) };
+    await disposalLabelStore.set(selection);
     return c.json(selection);
   });
   /* Jev-04 (#137): cash-flow vocabulary suggestions and owner-confirmed rules.

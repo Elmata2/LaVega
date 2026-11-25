@@ -219,6 +219,78 @@ export interface AccountWrapperStore {
   set(selection: AccountWrapperSelection): Promise<void>;
 }
 
+export const DISPOSAL_LABEL_CATEGORIES = [
+  "verified",
+  "fx-difference",
+  "corporate-action",
+  "partial-history",
+  "tax-loss-harvest",
+  "needs-review",
+  "other",
+] as const;
+
+export type DisposalLabelCategory = (typeof DISPOSAL_LABEL_CATEGORIES)[number];
+
+/** Owner-assigned classification and optional note for a realized disposal. */
+export type DisposalLabelEntry = {
+  disposalId: string;
+  category: DisposalLabelCategory;
+  note?: string;
+  updatedAt?: string;
+};
+
+export function isDisposalLabelCategory(value: unknown): value is DisposalLabelCategory {
+  return (
+    typeof value === "string" &&
+    (DISPOSAL_LABEL_CATEGORIES as readonly string[]).includes(value)
+  );
+}
+
+const MAX_DISPOSAL_NOTE_LENGTH = 500;
+
+/** Normalizes any JSON value into a well-formed disposal label list: invalid
+ *  categories or empty disposal IDs are dropped, never rejected, so GET and PUT
+ *  agree on what valid means. */
+export function validateDisposalLabels(input: unknown): DisposalLabelEntry[] {
+  if (!Array.isArray(input)) return [];
+  const seen = new Set<string>();
+  const entries: DisposalLabelEntry[] = [];
+  for (const row of input) {
+    if (!row || typeof row !== "object") continue;
+    const record = row as {
+      disposalId?: unknown;
+      category?: unknown;
+      note?: unknown;
+      updatedAt?: unknown;
+    };
+    if (typeof record.disposalId !== "string") continue;
+    const disposalId = record.disposalId.trim();
+    if (!disposalId || seen.has(disposalId)) continue;
+    if (!isDisposalLabelCategory(record.category)) continue;
+    seen.add(disposalId);
+    const note =
+      typeof record.note === "string" ? record.note.trim().slice(0, MAX_DISPOSAL_NOTE_LENGTH) : "";
+    const updatedAt =
+      typeof record.updatedAt === "string" && record.updatedAt.trim()
+        ? record.updatedAt.trim()
+        : undefined;
+    entries.push({
+      disposalId,
+      category: record.category,
+      ...(note ? { note } : {}),
+      ...(updatedAt ? { updatedAt } : {}),
+    });
+  }
+  return entries;
+}
+
+export type DisposalLabelSelection = { tenantId: string; entries: DisposalLabelEntry[] };
+
+export interface DisposalLabelStore {
+  get(tenantId: string): Promise<DisposalLabelEntry[]>;
+  set(selection: DisposalLabelSelection): Promise<void>;
+}
+
 export type TradeSide = "buy" | "sell" | "other";
 
 /** A broker-reported execution. `quantity` is a positive magnitude; `side`

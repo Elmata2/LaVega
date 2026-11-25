@@ -226,26 +226,37 @@ export class PortfolioRead extends Context.Service<
               today,
             );
           const refreshProblems: string[] = [];
-          try {
-            await timing.measure("broker", async () => {
+          const brokerRead = timing.measure("broker", async () => {
+            try {
               await loadBrokerData();
               await brokerSnapshot.read("cached");
-            });
-          } catch (error) {
-            const snapshot = brokerData.read();
-            if (
-              snapshot.positions.length +
-                snapshot.trades.length +
-                snapshot.dividends.length +
-                snapshot.cashBalances.length +
-                snapshot.cashFlows.length ===
-              0
-            )
-              throw error;
-            refreshProblems.push(
-              "Broker data could not be refreshed. Showing the last loaded data.",
-            );
-          }
+            } catch (error) {
+              const snapshot = brokerData.read();
+              if (
+                snapshot.positions.length +
+                  snapshot.trades.length +
+                  snapshot.dividends.length +
+                  snapshot.cashBalances.length +
+                  snapshot.cashFlows.length ===
+                0
+              )
+                throw error;
+              refreshProblems.push(
+                "Broker data could not be refreshed. Showing the last loaded data.",
+              );
+            }
+          });
+          // `problems` below lives only in this invocation's in-memory cache: a sync's
+          // row-level problem (an unclassifiable transaction, say) never reaches a
+          // later invocation that did not run that sync. The sync's own durable
+          // progress record does survive, so a stored "problem" status is read back
+          // here the same way `/api/brokers/sync/status` already reads it.
+          const [storedBrokerProgress, selectedBenchmarks, wrappers] = await Promise.all([
+            Promise.all(SCHEDULED_BROKERS.map((broker) => syncState.progress(broker))),
+            benchmarks(tenantId),
+            accountWrappers(tenantId),
+            brokerRead,
+          ]);
           const {
             positions,
             trades,
@@ -270,19 +281,10 @@ export class PortfolioRead extends Context.Service<
                   ...(deGiroLastImport ? { lastImport: deGiroLastImport } : {}),
                 })
               : null;
-          // `problems` above lives only in this invocation's in-memory cache: a sync's
-          // row-level problem (an unclassifiable transaction, say) never reaches a
-          // later invocation that did not run that sync. The sync's own durable
-          // progress record does survive, so a stored "problem" status is read back
-          // here the same way `/api/brokers/sync/status` already reads it.
-          const storedBrokerProblems = (
-            await Promise.all(SCHEDULED_BROKERS.map((broker) => syncState.progress(broker)))
-          ).flatMap((entry) =>
+          const storedBrokerProblems = storedBrokerProgress.flatMap((entry) =>
             entry?.status === "problem" && entry.message ? [entry.message] : [],
           );
           const version = dataVersion + priceDataVersion();
-          const selectedBenchmarks = await benchmarks(tenantId);
-          const wrappers = await accountWrappers(tenantId);
           /* The wrapper map is part of the cache identity: relabelling an
            * account must regroup the report, not serve the old grouping. */
           const cacheKey = `${symbol?.trim().toUpperCase() ?? ""}\u0000${selectedBenchmarks.join("\u0000")}\u0000${JSON.stringify(wrappers)}`;
@@ -326,10 +328,16 @@ export class PortfolioRead extends Context.Service<
                 .map((value) => value.toUpperCase())
                 .includes(entry.symbol.toUpperCase()),
             );
-            const [prices, benches] = await timing.measure("prices", async () => [
-              await readPriceBars(priceStore, positionKeys, (key) => symbolsForKey.get(key) ?? []),
-              await readPriceBars(priceStore, benchmarkKeys, (key) => symbolsForKey.get(key) ?? []),
-            ]);
+            const latestFxPromise = fxProvider
+              .getLatestRate()
+              .catch(() => ({ rate: undefined, problems: ["FX rate could not be loaded"] }));
+            const trading212SyncPromise = syncState.get("trading212");
+            const [prices, benches] = await timing.measure("prices", () =>
+              Promise.all([
+                readPriceBars(priceStore, positionKeys, (key) => symbolsForKey.get(key) ?? []),
+                readPriceBars(priceStore, benchmarkKeys, (key) => symbolsForKey.get(key) ?? []),
+              ]),
+            );
             const keysRead = [...new Set(allKeys.map((key) => key.key))];
             const priceProblems =
               prices.failed + benches.failed > 0 ? ["Price data could not be fully loaded"] : [];
@@ -342,21 +350,19 @@ export class PortfolioRead extends Context.Service<
               ...prices.bars.map((bar) => bar.date),
             ].filter((date) => date <= today);
             const historyFrom = historyDates.sort()[0] ?? today;
-            const [latestFx, historicalFx] = await timing.measure("fx", () =>
+            const [latestFx, historicalFx, trading212SyncState] = await timing.measure("fx", () =>
               Promise.all([
-                fxProvider
-                  .getLatestRate()
-                  .catch(() => ({ rate: undefined, problems: ["FX rate could not be loaded"] })),
+                latestFxPromise,
                 fxProvider
                   .getHistoricalRates(historyFrom, today)
                   .catch(() => ({ rates: [], problems: ["Historical FX could not be loaded"] })),
+                trading212SyncPromise,
               ]),
             );
             /* Trading 212 reports no statement period, so its cash window is proven
              * from the merged history here, where every resumed page has landed.
              * The adapter sees one page-set per invocation and cannot reconcile.
              * Only a finished pagination may prove: a short read can look complete. */
-            const trading212SyncState = await syncState.get("trading212");
             const trading212Balances = cashBalances.filter(
               (balance) => balance.broker === "trading212",
             );
