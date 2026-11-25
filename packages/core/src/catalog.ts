@@ -1,3 +1,5 @@
+import type { FeePeriod } from "./accountCosts.js";
+
 /** How a figure was obtained, best first. The tier travels WITH the value
  *  because "99% covered" that is half model-derived is a different product from
  *  99% primary, and one number would hide that. */
@@ -17,6 +19,9 @@ export type CatalogField =
 
 export type CatalogValue = {
   value: number;
+  /** accountFee only: the unit of `value`. A fee is a value and a period; a read
+   *  equals the stored figure only when both match. */
+  period?: FeePeriod;
   route: CatalogRoute;
   /** Where it came from. A number without one is a rumour. */
   sourceUrl: string;

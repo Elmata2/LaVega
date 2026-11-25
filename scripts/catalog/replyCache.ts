@@ -218,7 +218,8 @@ export function openAnswerAccepted(value: CatalogValue | null | undefined): bool
   return isCovered(value ?? undefined);
 }
 
-/** Confirm step: only a still_stated reply (the parser already checked its quote). Cross-check
+/** Confirm step: only a still_stated reply (the parser already checked its quote) or a none_stated
+ *  reply (the parser only lets it through for a zero that rests on absence). Cross-check
  *  (`cross` set, a covered read differs from the stored figure): the two clean outcomes. */
 export function confirmAccepted(
   outcome: ConfirmOutcome,
@@ -227,7 +228,10 @@ export function confirmAccepted(
   if (cross) {
     return storedCheckOf(outcome, cross.foundValue, cross.onStoredDocument) !== "unresolved";
   }
-  return outcome.kind === "reply" && outcome.reply.status === "still_stated";
+  return (
+    outcome.kind === "reply" &&
+    (outcome.reply.status === "still_stated" || outcome.reply.status === "none_stated")
+  );
 }
 
 const MAX_DECLINED_CHARS = 300;

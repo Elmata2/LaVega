@@ -21,8 +21,8 @@ jobs:
       contents: write
       issues: write
     # Four products are read at the same time (CATALOG_CONCURRENCY). Measured 45 minutes
-    # and $1.77 for a full run with an empty answer cache (2026-11-22); a normal week
-    # reuses answers and is shorter. See docs/catalog/watchlist.md.
+    # and $1.77 for the FX and interest questions alone with an empty answer cache (2026-11-22);
+    # the fee, points and cashback passes add to that. See docs/catalog/watchlist.md.
     # The default limit is six hours, which is a long time to hold a runner for a
     # job that has already hung.
     timeout-minutes: 180
@@ -40,11 +40,13 @@ jobs:
         timeout-minutes: 165
         env:
           MISTRAL_API_KEY: ${{ secrets.MISTRAL_API_KEY }}
-          CATALOG_MAX_USD: "5"
+          CATALOG_MAX_USD: "8"
           CATALOG_MODEL: mistral-large-latest
           CATALOG_FALLBACK_MODEL: mistral-medium-latest
           CATALOG_CONCURRENCY: "4"
           # No new product starts after 150 minutes; the ones running finish and the run is written.
+          # The fee, points and cashback passes stop starting figures 20 minutes earlier (130), so the FX and
+          # interest results are written before the step timeout.
           CATALOG_DEADLINE_MIN: "150"
         run: bun run catalog:sweep -- --summary-out "$RUNNER_TEMP/catalog-summary.json"
       - name: Commit whatever changed

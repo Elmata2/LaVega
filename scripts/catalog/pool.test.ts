@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { runPool, stopReason } from "./pool.js";
+import {
+  EXTRA_PASS_MARGIN_MIN,
+  extraPassDeadlineMin,
+  forEachWhile,
+  runPool,
+  stopReason,
+} from "./pool.js";
 
 const tick = (ms = 1) => new Promise<void>((r) => setTimeout(r, ms));
 
@@ -120,5 +126,61 @@ describe("stopReason", () => {
   });
   it("the cost ceiling wins when both are reached", () => {
     expect(stopReason(6, 5, 200, 150)).toBe("cost ceiling");
+  });
+});
+
+describe("extraPassDeadlineMin", () => {
+  it("is the deadline minus the margin", () => {
+    expect(EXTRA_PASS_MARGIN_MIN).toBe(20);
+    expect(extraPassDeadlineMin(150)).toBe(130);
+  });
+  it("never goes below half the deadline", () => {
+    expect(extraPassDeadlineMin(30)).toBe(15);
+    expect(extraPassDeadlineMin(10)).toBe(5);
+  });
+  it("0 stays off", () => {
+    expect(extraPassDeadlineMin(0)).toBe(0);
+  });
+  it("stops the later passes before pass 1", () => {
+    expect(stopReason(1, 5, 135, 150)).toBeNull();
+    expect(stopReason(1, 5, 135, extraPassDeadlineMin(150))).toBe("time limit");
+  });
+});
+
+describe("forEachWhile", () => {
+  it("runs every item while the check holds", async () => {
+    const seen: number[] = [];
+    const left = await forEachWhile(
+      [1, 2, 3],
+      () => true,
+      async (n) => void seen.push(n),
+    );
+    expect(seen).toEqual([1, 2, 3]);
+    expect(left).toEqual([]);
+  });
+  it("checks before every item and returns the ones it did not reach", async () => {
+    const seen: number[] = [];
+    let stop = false;
+    const left = await forEachWhile(
+      [1, 2, 3, 4],
+      () => !stop,
+      async (n) => {
+        seen.push(n);
+        if (n === 2) stop = true;
+      },
+    );
+    expect(seen).toEqual([1, 2]);
+    expect(left).toEqual([3, 4]);
+  });
+  it("an item that throws throws out", async () => {
+    await expect(
+      forEachWhile(
+        [1, 2],
+        () => true,
+        async () => {
+          throw new Error("boom");
+        },
+      ),
+    ).rejects.toThrow("boom");
   });
 });

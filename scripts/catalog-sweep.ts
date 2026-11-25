@@ -32,7 +32,7 @@
  * --no-agent, so a run without a key is the free sweep. There is no discovery
  * search: a `foundUrl` already in state.json is still read like any other source.
  *
- * NOTE on --only: it is a plain substring match on the product id, so `--only ing`
+ * NOTE on --only: it is a plain substring match on the product id (a token ending in "$" is an exact id), so `--only ing`
  * also selects every *spaarrekening* (the word "rekening" ends in "ing"). Name the
  * id you actually mean.
  */
@@ -54,8 +54,13 @@ import {
   isOlderThanMaxAge,
   coverageForRun,
   sweptFieldFor,
+  extraFieldsFor,
+  missingExtraFields,
+  SWEPT_FIELDS,
+  type ExtraField,
   nextHeldSince,
   NO_ROUTE_PREFIX,
+  ZERO_FEE_PREFIX,
   type ConfirmedBy,
   type CatalogValue,
   type CatalogRoute,
@@ -86,19 +91,43 @@ import {
   parseInterestReply,
   type ExtractedRate,
 } from "./catalog/catalogInterest.js";
-import { sliceForExtraction } from "./catalog/catalogSlice.js";
+import { sliceForConfirm, sliceForExtraction, sliceForFigure } from "./catalog/catalogSlice.js";
+import {
+  buildFigurePrompt,
+  FIGURE_TOOL,
+  parseFigureReply,
+  type FigureRequest,
+} from "./catalog/catalogFigure.js";
+import {
+  decideExtra,
+  decideMissing,
+  decideOpen,
+  decideZeroFee,
+  firstFigureNeedsName,
+  judgeMissingDocument,
+  otherIssuerProducts,
+  recordUrls,
+  siblingsOnRecord,
+  isHeldZeroFee,
+  judgeDocument,
+  stopBeforeRead,
+  wantsOpenQuestion,
+} from "./catalog/extraConfirm.js";
 import {
   buildConfirmPrompt,
-  CONFIRM_TOOL,
+  confirmToolFor,
   confirmRead,
   sameDocument,
+  snapshotDateOf,
   storedCheckOf,
+  type ConfirmField,
   type ConfirmOutcome,
+  type ConfirmRequest,
   parseConfirmReply,
   type ConfirmReply,
 } from "./catalog/catalogConfirm.js";
 import type { RunSummary } from "./catalog/catalogReport.js";
-import { runPool, stopReason } from "./catalog/pool.js";
+import { extraPassDeadlineMin, forEachWhile, runPool, stopReason } from "./catalog/pool.js";
 import {
   cacheKey,
   cachedCall,
@@ -143,7 +172,9 @@ const onlyList = (args.includes("--only") ? args[args.indexOf("--only") + 1] : "
   .map((t) => t.trim())
   .filter(Boolean);
 const only = onlyList.length ? onlyList.join(",") : null;
-const matchesOnly = (id: string) => onlyList.some((t) => id.includes(t));
+// A token ending in "$" is an exact id (`--only ing-go$`): without it `ing-go` also selects `ing-gold-...`.
+const matchesOnly = (id: string) =>
+  onlyList.some((t) => (t.endsWith("$") ? id === t.slice(0, -1) : id.includes(t)));
 const dry = args.includes("--dry");
 /** Where to leave a RunSummary for scripts/catalog-report.ts. Absent = no summary. */
 const summaryOut = args.includes("--summary-out") ? args[args.indexOf("--summary-out") + 1] : null;
@@ -839,10 +870,16 @@ async function askRateModel(
  *  malformed reply is a rejection, not a confirmation. */
 async function askConfirm(
   product: string,
-  field: "fxFeePct" | "interestPct",
+  field: ConfirmField,
   stored: CatalogValue,
   text: string,
   log: Log,
+  binding: {
+    zeroByAbsence?: boolean;
+    siblings?: readonly string[];
+    others?: readonly string[];
+    issuer?: string;
+  } = {},
 ): Promise<
   | { reply: ConfirmReply; accept: () => void }
   | { rejected: string; raw: unknown; accept: () => void }
@@ -852,16 +889,31 @@ async function askConfirm(
       `document is ${Math.round(text.length / 1000)}k chars — refusing to send a truncated one`,
     );
   }
-  const cut = sliceForExtraction(text);
-  const req = {
+  const figure = field === "fxFeePct" || field === "interestPct" ? null : field;
+  const cut = figure
+    ? sliceForConfirm(figure, text, binding.zeroByAbsence)
+    : sliceForExtraction(text);
+  if (figure) {
+    log(
+      cut.whole
+        ? `    ${figure}: whole document, ${Math.round(text.length / 1000)}k chars`
+        : `    ${figure}: sliced ${Math.round(text.length / 1000)}k -> ${Math.round(cut.text.length / 1000)}k chars (${cut.regions} regions)`,
+    );
+  }
+  const req: ConfirmRequest = {
     product,
     field,
     storedValue: stored.value,
     storedConditions: stored.conditions,
     text: cut.text,
+    ...(figure && stored.period ? { storedPeriod: stored.period } : {}),
+    ...(binding.zeroByAbsence ? { zeroByAbsence: true } : {}),
+    ...(figure
+      ? { siblings: binding.siblings ?? [], others: binding.others ?? [], issuer: binding.issuer }
+      : {}),
   };
   const { system, user } = buildConfirmPrompt(req);
-  const { res, accept } = await ask(system, user, CONFIRM_TOOL);
+  const { res, accept } = await ask(system, user, confirmToolFor(req));
   if (res.kind === "declined") return { rejected: "model declined", raw: null, accept };
   const reply = parseConfirmReply(res.input, req);
   if (!reply) log(`    rejected reply: ${JSON.stringify(res.input).slice(0, 300)}`);
@@ -872,6 +924,43 @@ async function askConfirm(
         raw: res.input,
         accept,
       };
+}
+
+/** THE OPEN QUESTION for a fee, points or cashback figure, on a document the run already holds. Same
+ *  size refusal, slice and `ask` wrapper as the confirm. The value is read from the stored figure's
+ *  own document, so its source is that figure's URL. Null when the model declined or the reply failed
+ *  the quote rule; a reply the parser kept without known conditions is returned uncovered. */
+async function askFigure(
+  req: Omit<FigureRequest, "text">,
+  text: string,
+  log: Log,
+): Promise<{ value: CatalogValue | null; accept: () => void }> {
+  if (text.length > MAX_MODEL_CHARS) {
+    throw new Error(
+      `document is ${Math.round(text.length / 1000)}k chars — refusing to send a truncated one`,
+    );
+  }
+  const cut = sliceForFigure(req.field, text);
+  const full: FigureRequest = { ...req, text: cut.text };
+  const { system, user } = buildFigurePrompt(full);
+  const { res, accept } = await ask(system, user, FIGURE_TOOL);
+  if (res.kind === "declined") return { value: null, accept };
+  const figure = parseFigureReply(res.input, full);
+  if (!figure) {
+    log(`    rejected open reply: ${JSON.stringify(res.input).slice(0, 300)}`);
+    return { value: null, accept };
+  }
+  const value: CatalogValue = {
+    value: figure.value,
+    ...(figure.period ? { period: figure.period } : {}),
+    route: "agent",
+    sourceUrl: req.sourceUrl,
+    checkedAt: snapshotDateOf(req.sourceUrl) ?? readDocumentDate(cut.text) ?? today,
+    conditions: capConditions(figure.conditions),
+    conditionsKnown: figure.conditionsKnown,
+  };
+  valueQuotes.set(value, figure.quote);
+  return { value, accept };
 }
 
 const state = JSON.parse(readFileSync(STATE, "utf8"));
@@ -1071,21 +1160,33 @@ const confirmedBy = new Map<string, ConfirmedBy>();
 
 /** The one question a product is asked, or null when none applies (see sweptFieldFor).
  *  Decided from the catalogue as it was at the start of the run. */
+const heldFieldsAtStart = (id: string): Set<CatalogField> =>
+  new Set(
+    Object.entries(catalogAtStart.find((e) => e.id === id)?.fields ?? {})
+      .filter(([, v]) => v)
+      .map(([f]) => f as CatalogField),
+  );
 const fieldPlan = new Map<string, "fxFeePct" | "interestPct" | null>(
   Object.entries(state.products).map(([id, p]) => [
     id,
-    sweptFieldFor(
-      (p as { kind?: string }).kind,
-      new Set(
-        Object.entries(catalogAtStart.find((e) => e.id === id)?.fields ?? {})
-          .filter(([, v]) => v)
-          .map(([f]) => f as CatalogField),
-      ),
-    ),
+    sweptFieldFor((p as { kind?: string }).kind, heldFieldsAtStart(id)),
+  ]),
+);
+/** Per product the fee, points and cashback figures it holds: each is confirmed on its own stored document. */
+const extraPlan = new Map<string, ExtraField[]>(
+  Object.keys(state.products).map((id) => [id, extraFieldsFor(heldFieldsAtStart(id))]),
+);
+/** Per product the figures it should hold but the catalogue does not: the open question is asked on its document of record. */
+const missingPlan = new Map<string, ExtraField[]>(
+  Object.keys(state.products).map((id) => [
+    id,
+    missingExtraFields((state.products[id] as { kind?: string }).kind, heldFieldsAtStart(id)),
   ]),
 );
 /** Products on this run's list that a question applies to. */
-const sweptList = ids.filter((id) => fieldPlan.get(id));
+const sweptList = ids.filter(
+  (id) => fieldPlan.get(id) || extraPlan.get(id)?.length || missingPlan.get(id)?.length,
+);
 const skippedCount = ids.length - sweptList.length;
 
 /** The coverage contract: every catalogue figure gets a status. `early` marks a run that stopped
@@ -1102,14 +1203,28 @@ function buildCoverage(verdicts: readonly FieldVerdict[], early: boolean) {
     entries: catalogAtStart,
     verdicts,
     expected: Object.entries(state.products).flatMap(([id, p]) => {
-      const field = fieldPlan.get(id);
-      return field ? [{ id, product: (p as { product: string }).product, field }] : [];
+      const product = (p as { product: string }).product;
+      const fields: CatalogField[] = [
+        fieldPlan.get(id),
+        ...(extraPlan.get(id) ?? []),
+        ...(missingPlan.get(id) ?? []),
+      ].filter((f): f is NonNullable<typeof f> => !!f);
+      return fields.map((field) => ({ id, product, field }));
     }),
-    sweptFields: new Set<CatalogField>(["fxFeePct", "interestPct"]),
+    sweptFields: new Set<CatalogField>(SWEPT_FIELDS),
     watchedIds: new Set(Object.keys(state.products)),
     sweptIds: new Set(sweptList),
     reached,
     stoppedEarlyIds: new Set(early ? sweptList.filter((id) => !reached.has(id)) : []),
+    stoppedEarlyFigures: new Set(
+      early
+        ? sweptList.flatMap((id) =>
+            [...(extraPlan.get(id) ?? []), ...(missingPlan.get(id) ?? [])]
+              .map((f) => `${id}.${f}`)
+              .filter((k) => !reached.has(k)),
+          )
+        : [],
+    ),
     uncheckedSince: state.uncheckedSince ?? {},
     confirmedBy,
     modelOn: useAgent,
@@ -1130,6 +1245,440 @@ const quoteSlots: (ConfirmQuote | undefined)[] = Array.from(
   { length: ids.length },
   () => undefined,
 );
+/** Confirm quotes of the fee, points and cashback figures, per product slot. */
+const extraQuoteSlots: ConfirmQuote[][] = Array.from({ length: ids.length }, () => []);
+const EXTRA_LABEL: Record<ExtraField, string> = {
+  accountFee: "fee",
+  pointsPerEuro: "points",
+  cashbackPct: "cashback",
+};
+const messageOf = (e: unknown) => (e instanceof Error ? e.message : String(e));
+
+/** The stored source document of a figure, read with the run's readers and caches: plain fetch
+ *  (PDF or page, an archive address as it is), then the reader when plain fails and the breaker is closed. */
+async function readStoredDocument(url: string): Promise<string> {
+  let plain: unknown;
+  try {
+    const text = await readPage(url, /\.pdf(?:[?#]|$)/i.test(url) ? "pdf" : "html");
+    const doc = looksLikeDocument(text);
+    if (doc.ok) return text;
+    // A page that renders its content in the browser reads as a few words: that is no document.
+    plain = new Error(`plain read is no document (${doc.reason})`);
+  } catch (e) {
+    plain = e;
+  }
+  if (readerBreaker.open) throw plain;
+  try {
+    return await readViaReader(url);
+  } catch (viaReader) {
+    throw new Error(`${messageOf(plain)}; reader: ${messageOf(viaReader)}`);
+  }
+}
+
+/** The other products whose stored figure of this field has the same source document. */
+function siblingNames(id: string, field: ExtraField, sourceUrl: string): string[] {
+  return catalogAtStart
+    .filter(
+      (e) =>
+        e.id !== id && !!e.fields[field] && sameDocument(e.fields[field]!.sourceUrl, sourceUrl),
+    )
+    .map((e) => e.product);
+}
+
+/** The other catalogue products of the same issuer, with the figures each held at the start of the run. */
+const issuerOthers = (id: string) =>
+  otherIssuerProducts(id, state.products, (otherId) => [...heldFieldsAtStart(otherId)]);
+
+/** A stored fee of 0 gets no closed question: the open question is asked once for a non-zero fee. */
+async function findFeeAboveZero(
+  id: string,
+  productName: string,
+  stored: CatalogValue,
+  text: string,
+  names: { siblings: string[]; others: string[]; issuer: string | undefined },
+  log: Log,
+): Promise<{ value: CatalogValue | null; note: string }> {
+  const key = `${id}.accountFee`;
+  let opened: { value: CatalogValue | null; accept: () => void } = {
+    value: null,
+    accept: () => {},
+  };
+  let openFailed = "";
+  try {
+    opened = await askFigure(
+      {
+        product: productName,
+        issuer: names.issuer ?? "",
+        field: "accountFee",
+        sourceUrl: stored.sourceUrl,
+        siblings: names.siblings,
+        others: names.others,
+      },
+      text,
+      log,
+    );
+  } catch (e) {
+    openFailed = ` (open call failed: ${messageOf(e)})`;
+  }
+  const found = opened.value;
+  settle(opened.accept, openAnswerAccepted(found));
+  const decision = decideZeroFee({
+    label: EXTRA_LABEL.accountFee,
+    found: found ? { value: found.value, period: found.period, covered: isCovered(found) } : null,
+  });
+  log(`  confirm ${productName} ${decision.note}${openFailed}`);
+  if (decision.kind === "not-checked") {
+    reached.set(key, { fetched: true, reason: ZERO_FEE_PREFIX });
+    return { value: null, note: `${decision.note}${openFailed}` };
+  }
+  const quote = found ? valueQuotes.get(found) : undefined;
+  if (quote) {
+    readQuotes.set(key, quote);
+    log(
+      `  open ${productName} fee: ${found!.value} per ${found!.period} (conditions ${found!.conditionsKnown ? "known" : "not known"})  "${quote.slice(0, 300)}"`,
+    );
+  }
+  storedChecks.set(key, decision.storedCheck);
+  return { value: found, note: decision.note };
+}
+
+/** ONE CONFIRM CALL for one stored fee, points or cashback figure, asked on that figure's own
+ *  stored source document and nowhere else: a figure is never confirmed from another document. */
+async function confirmFigure(
+  id: string,
+  productName: string,
+  field: ExtraField,
+  stored: CatalogValue,
+  index: number,
+  log: Log,
+): Promise<{ value: CatalogValue | null; note: string }> {
+  const key = `${id}.${field}`;
+  const label = EXTRA_LABEL[field];
+  const stop = (s: { fetched: boolean; reason: string; note: string }) => {
+    reached.set(key, { fetched: s.fetched, reason: s.reason });
+    log(`  confirm ${productName} ${label}: ${s.note.replace(`${label}: `, "")}`);
+    return { value: null, note: s.note };
+  };
+  const early = stopBeforeRead({ label, useAgent, sourceUrl: stored.sourceUrl });
+  if (early) return stop(early);
+  let text: string;
+  try {
+    text = await readStoredDocument(stored.sourceUrl);
+  } catch (e) {
+    return stop({
+      fetched: false,
+      reason: `fetch failed: ${messageOf(e)}`,
+      note: `${label}: document not read (${messageOf(e)})`,
+    });
+  }
+  const issuer = (state.products[id] as { issuer?: string }).issuer;
+  const siblings = siblingNames(id, field, stored.sourceUrl);
+  const others = issuerOthers(id).map((o) => o.product);
+  const doc = judgeDocument({
+    label,
+    field,
+    value: stored.value,
+    product: productName,
+    issuer,
+    siblings: [...siblings, ...others],
+    text,
+    maxChars: MAX_MODEL_CHARS,
+  });
+  if (doc.stop) return stop(doc.stop);
+  reached.set(key, { fetched: true, reason: null });
+  if (isHeldZeroFee(field, stored.value)) {
+    return findFeeAboveZero(id, productName, stored, text, { siblings, others, issuer }, log);
+  }
+  let outcome: ConfirmOutcome;
+  let why = "";
+  let acceptReply = (): void => {};
+  try {
+    const res = await askConfirm(productName, field, stored, text, log, {
+      zeroByAbsence: doc.zeroByAbsence,
+      siblings,
+      others,
+      issuer,
+    });
+    acceptReply = res.accept;
+    if ("rejected" in res) {
+      outcome = { kind: "rejected", raw: res.raw };
+      why = `reply rejected (${res.rejected})`;
+    } else {
+      outcome = { kind: "reply", reply: res.reply };
+    }
+  } catch (e) {
+    outcome = { kind: "failed" };
+    why = `call failed (${messageOf(e)})`;
+  }
+  const decision = decideExtra({ label, outcome, why });
+  if (outcome.kind === "reply") {
+    const { reply } = outcome;
+    const quote = "quote" in reply ? reply.quote : "";
+    extraQuoteSlots[index]!.push({ id, field, status: reply.status, quote: quote.slice(0, 1000) });
+    log(
+      `  confirm ${productName} ${label}: ${reply.status}${quote ? `  "${quote.slice(0, 160)}"` : ""}${reply.status === "changed" ? ` -> ${reply.newValue}` : ""}`,
+    );
+  } else {
+    log(`  confirm ${productName} ${label}: ${why}`);
+  }
+  if (wantsOpenQuestion(outcome)) {
+    // The closed question says the stored figure is not on the page as held: ask the open one on
+    // the same document. Its answer is judged against the confirm outcome; no second cross-check.
+    let opened: { value: CatalogValue | null; accept: () => void } = {
+      value: null,
+      accept: () => {},
+    };
+    let openFailed = "";
+    try {
+      opened = await askFigure(
+        {
+          product: productName,
+          issuer: issuer ?? "",
+          field,
+          sourceUrl: stored.sourceUrl,
+          siblings,
+          others,
+        },
+        text,
+        log,
+      );
+    } catch (e) {
+      openFailed = ` (open call failed: ${messageOf(e)})`;
+    }
+    const found = opened.value;
+    const open = decideOpen({
+      label,
+      field,
+      stored: { value: stored.value, period: stored.period },
+      outcome,
+      found: found ? { value: found.value, period: found.period, covered: isCovered(found) } : null,
+    });
+    const differs = open.kind === "read" && open.storedCheck !== null;
+    settle(
+      acceptReply,
+      confirmAccepted(
+        outcome,
+        differs && found ? { foundValue: found.value, onStoredDocument: true } : null,
+      ),
+    );
+    settle(opened.accept, openAnswerAccepted(found));
+    if (open.kind === "not-checked") return { value: null, note: `${open.note}${openFailed}` };
+    const quote = found ? valueQuotes.get(found) : undefined;
+    if (quote) {
+      readQuotes.set(key, quote);
+      log(
+        `  open ${productName} ${label}: ${found!.value}${found!.period ? ` per ${found!.period}` : ""} (conditions ${found!.conditionsKnown ? "known" : "not known"})  "${quote.slice(0, 300)}"`,
+      );
+    }
+    if (open.storedCheck) storedChecks.set(key, open.storedCheck);
+    if (open.confirmedBy) confirmedBy.set(key, open.confirmedBy);
+    return { value: found, note: open.note };
+  }
+  settle(acceptReply, confirmAccepted(outcome, null));
+  if (decision.kind === "not-checked") return { value: null, note: decision.note };
+  confirmedBy.set(key, decision.by);
+  return {
+    value: confirmRead({
+      storedValue: stored.value,
+      period: stored.period,
+      url: stored.sourceUrl,
+      snapshotDate: snapshotDateOf(stored.sourceUrl),
+      today,
+    }),
+    note: decision.note,
+  };
+}
+
+/** THE OPEN QUESTION for a figure the product should hold but the catalogue does not: asked once
+ *  on the first document of record that reads. The siblings are the products listing the same
+ *  document, so a first figure is bound to this product by its quote. Never a confirm: there is
+ *  no stored figure to confirm. */
+async function findFigure(
+  id: string,
+  productName: string,
+  field: ExtraField,
+  log: Log,
+): Promise<{ value: CatalogValue | null; note: string }> {
+  const key = `${id}.${field}`;
+  const label = EXTRA_LABEL[field];
+  const p = state.products[id] as Parameters<typeof recordUrls>[0] & { issuer?: string };
+  const stop = (s: { fetched: boolean; reason: string; note: string }) => {
+    reached.set(key, { fetched: s.fetched, reason: s.reason });
+    log(`  find ${productName} ${label}: ${s.note.replace(`${label}: `, "")}`);
+    return { value: null, note: s.note };
+  };
+  const urls = recordUrls(p).filter((u) => /^https?:\/\//i.test(u));
+  if (!useAgent) {
+    return stop({
+      fetched: false,
+      reason: `${NO_ROUTE_PREFIX} (model off)`,
+      note: `${label}: not checked, model off`,
+    });
+  }
+  if (urls.length === 0) {
+    return stop({
+      fetched: false,
+      reason: `${NO_ROUTE_PREFIX} (no document of record)`,
+      note: `${label}: no figure on file, no document of record`,
+    });
+  }
+  let sourceUrl = "";
+  let text = "";
+  const errors: string[] = [];
+  for (const url of urls) {
+    try {
+      text = await readStoredDocument(url);
+      sourceUrl = url;
+      break;
+    } catch (e) {
+      errors.push(messageOf(e));
+    }
+  }
+  if (!sourceUrl) {
+    return stop({
+      fetched: false,
+      reason: `fetch failed: ${errors.join("; ")}`,
+      note: `${label}: no figure on file, document not read (${errors[0]})`,
+    });
+  }
+  const siblings = siblingsOnRecord(id, sourceUrl, state.products);
+  const rivals = issuerOthers(id);
+  const others = rivals.map((o) => o.product);
+  const docStop = judgeMissingDocument({
+    label,
+    product: productName,
+    issuer: p.issuer,
+    siblings: [...siblings, ...others],
+    text,
+    maxChars: MAX_MODEL_CHARS,
+  });
+  if (docStop) return stop(docStop);
+  reached.set(key, { fetched: true, reason: null });
+  let opened: { value: CatalogValue | null; accept: () => void } = {
+    value: null,
+    accept: () => {},
+  };
+  let openFailed = "";
+  try {
+    opened = await askFigure(
+      {
+        product: productName,
+        issuer: p.issuer ?? "",
+        field,
+        sourceUrl,
+        siblings,
+        others,
+        requireName: firstFigureNeedsName(field, rivals),
+      },
+      text,
+      log,
+    );
+  } catch (e) {
+    openFailed = ` (open call failed: ${messageOf(e)})`;
+  }
+  const found = opened.value;
+  settle(opened.accept, openAnswerAccepted(found));
+  const decision = decideMissing({
+    label,
+    field,
+    found: found ? { value: found.value, period: found.period, covered: isCovered(found) } : null,
+  });
+  const quote = found ? valueQuotes.get(found) : undefined;
+  if (found && quote) {
+    log(
+      `  open ${productName} ${label}: ${found.value}${found.period ? ` per ${found.period}` : ""} (conditions ${found.conditionsKnown ? "known" : "not known"})  "${quote.slice(0, 300)}"`,
+    );
+  }
+  log(`  find ${productName} ${decision.note}${openFailed}`);
+  if (decision.kind === "not-checked")
+    return { value: null, note: `${decision.note}${openFailed}` };
+  if (quote) readQuotes.set(key, quote);
+  return { value: found, note: decision.note };
+}
+
+/** Adds what a second-pass step found to the product's entry and its notes. */
+function addToEntry(
+  id: string,
+  index: number,
+  found: { fields: Partial<Record<CatalogField, CatalogValue>>; notes: string[]; fetched: boolean },
+  log: Log,
+): void {
+  const p = state.products[id];
+  const { fields, notes, fetched } = found;
+  const slot = entrySlots[index];
+  if (slot) {
+    Object.assign(slot.fields, fields);
+  } else {
+    reached.set(id, { fetched, reason: null });
+    entrySlots[index] = { id, product: p.product, issuer: p.issuer, kind: p.kind, fields };
+  }
+  state.products[id].lastChecked = today;
+  const lastReason = [slot ? state.products[id].lastReason : null, ...notes]
+    .filter(Boolean)
+    .join(" · ");
+  state.products[id].lastReason = lastReason || null;
+  if (!slot) {
+    log(
+      `${Object.keys(fields).length ? "✓" : "·"} ${p.product.slice(0, 40).padEnd(42)} ${"confirm".padEnd(26)} ${notes.join(" · ")}`,
+    );
+  }
+}
+
+/** Notes the figures a stop left unchecked. False when no figure of the product ran: nothing is added
+ *  to its entry then, and its figures stay "stopped early" in the coverage. */
+function finishExtras(
+  product: string,
+  planned: readonly ExtraField[],
+  unreached: readonly ExtraField[],
+  notes: string[],
+  log: Log,
+): boolean {
+  for (const field of unreached) {
+    notes.push(`${EXTRA_LABEL[field]}: not checked, stopped early (${stoppedEarlyReason})`);
+    log(`  ${product} ${EXTRA_LABEL[field]}: not reached, stopped early (${stoppedEarlyReason})`);
+  }
+  return unreached.length < planned.length;
+}
+
+/** THE SECOND PASS, one product: each held fee, points and cashback figure, one after the other.
+ *  It runs after every product's FX or interest work is done and only adds to the product's entry. */
+async function sweepExtras(id: string, index: number, log: Log): Promise<void> {
+  const p = state.products[id];
+  const fields: Partial<Record<CatalogField, CatalogValue>> = {};
+  const notes: string[] = [];
+  let fetched = false;
+  const start = catalogAtStart.find((e) => e.id === id);
+  const planned = (extraPlan.get(id) ?? []).filter((f) => start?.fields[f]);
+  const unreached = await forEachWhile(planned, shouldContinueExtras, async (field) => {
+    const r = await confirmFigure(id, p.product, field, start!.fields[field]!, index, log);
+    if (r.value) fields[field] = r.value;
+    notes.push(r.note);
+    fetched ||= reached.get(`${id}.${field}`)?.fetched ?? false;
+  });
+  if (finishExtras(p.product, planned, unreached, notes, log)) {
+    addToEntry(id, index, { fields, notes, fetched }, log);
+  }
+}
+
+/** THE THIRD PASS, one product: the figures it should hold but the catalogue does not. It runs after
+ *  every held figure of every product is confirmed: confirming published figures has budget priority. */
+async function sweepMissing(id: string, index: number, log: Log): Promise<void> {
+  const p = state.products[id];
+  const fields: Partial<Record<CatalogField, CatalogValue>> = {};
+  const notes: string[] = [];
+  let fetched = false;
+  const planned = missingPlan.get(id) ?? [];
+  const unreached = await forEachWhile(planned, shouldContinueExtras, async (field) => {
+    const r = await findFigure(id, p.product, field, log);
+    if (r.value) fields[field] = r.value;
+    notes.push(r.note);
+    fetched ||= reached.get(`${id}.${field}`)?.fetched ?? false;
+  });
+  if (finishExtras(p.product, planned, unreached, notes, log)) {
+    addToEntry(id, index, { fields, notes, fetched }, log);
+  }
+}
+
 /** One product, start to finish. Everything it keeps for itself is declared in here;
  *  what it shares is keyed by product id or written to its own slot (`index`). */
 async function sweepProduct(id: string, index: number, log: Log): Promise<void> {
@@ -1461,9 +2010,9 @@ async function sweepProduct(id: string, index: number, log: Log): Promise<void> 
         line = `rejected: ${res.rejected}`;
       } else {
         outcome = { kind: "reply", reply: res.reply };
-        if (res.reply.status === "not_on_page") {
-          status = "not_on_page";
-          line = "not_on_page";
+        if (res.reply.status === "not_on_page" || res.reply.status === "none_stated") {
+          status = res.reply.status;
+          line = res.reply.status;
         } else {
           status = res.reply.status;
           quote = res.reply.quote;
@@ -1572,36 +2121,67 @@ async function sweepProduct(id: string, index: number, log: Log): Promise<void> 
 
 /** Set when the ceiling or the deadline stopped the run from starting more products. */
 let stoppedEarlyReason: "cost ceiling" | "time limit" | null = null;
+function keepGoing(deadlineMin: number, running: string): boolean {
+  const reason = stopReason(spendTotalUsd(), MAX_USD, minutesSinceStart(), deadlineMin);
+  if (reason && !stoppedEarlyReason) {
+    stoppedEarlyReason = reason;
+    console.log(
+      `\nSTOP STARTING: ${reason} reached (spend ≈ $${spendTotalUsd().toFixed(2)}, ${minutesSinceStart()} min). ${running} already running finish.`,
+    );
+  }
+  return !stoppedEarlyReason;
+}
+function shouldStartNext(): boolean {
+  return keepGoing(DEADLINE_MIN, "Products");
+}
+/** Passes 2 and 3 stop earlier than pass 1 and check between the figures of one product. */
+function shouldContinueExtras(): boolean {
+  return keepGoing(extraPassDeadlineMin(DEADLINE_MIN), "Figures");
+}
+/** One product through the pool: its own log buffer, printed together when it ends. */
+async function inProductBuffer(id: string, work: (log: Log) => Promise<void>): Promise<void> {
+  if (concurrency === 1) return productContext.run(id, () => work(console.log));
+  const buffer = { product: state.products[id].product as string, lines: [] as string[] };
+  openBuffers.add(buffer);
+  try {
+    await productContext.run(id, () => work((l) => buffer.lines.push(l)));
+  } finally {
+    // A buffer already flushed by an exit is no longer in the set.
+    if (openBuffers.delete(buffer) && buffer.lines.length) console.log(buffer.lines.join("\n"));
+  }
+}
+// PASS 1: the FX or interest question of every product. Nothing of the per-figure pass runs before
+// all of it is done, so the extra figures cannot starve it of budget or time.
 await runPool(
   ids,
   concurrency,
-  async (id, index) => {
-    if (concurrency === 1) {
-      return productContext.run(id, () => sweepProduct(id, index, console.log));
-    }
-    const buffer = { product: state.products[id].product as string, lines: [] as string[] };
-    openBuffers.add(buffer);
-    try {
-      await productContext.run(id, () => sweepProduct(id, index, (l) => buffer.lines.push(l)));
-    } finally {
-      // A buffer already flushed by an exit is no longer in the set.
-      if (openBuffers.delete(buffer) && buffer.lines.length) console.log(buffer.lines.join("\n"));
-    }
-  },
-  () => {
-    const reason = stopReason(spendTotalUsd(), MAX_USD, minutesSinceStart(), DEADLINE_MIN);
-    if (reason && !stoppedEarlyReason) {
-      stoppedEarlyReason = reason;
-      console.log(
-        `\nSTOP STARTING: ${reason} reached (spend ≈ $${spendTotalUsd().toFixed(2)}, ${minutesSinceStart()} min). Products already running finish.`,
-      );
-    }
-    return !stoppedEarlyReason;
-  },
+  (id, index) => inProductBuffer(id, (log) => sweepProduct(id, index, log)),
+  shouldStartNext,
 );
+// PASS 2: each held fee, points and cashback figure on its own stored document. A stop here leaves
+// the figures it did not reach unchecked (stopped early) and touches no FX or interest result.
+const extraSpendBefore = spendTotalUsd();
+const extraItems = ids.flatMap((id, index) => (extraPlan.get(id)?.length ? [{ id, index }] : []));
+await runPool(
+  extraItems,
+  concurrency,
+  ({ id, index }) => inProductBuffer(id, (log) => sweepExtras(id, index, log)),
+  shouldContinueExtras,
+);
+// PASS 3: the figures the catalogue does not hold yet, after every held figure is confirmed.
+const missingItems = ids.flatMap((id, index) =>
+  missingPlan.get(id)?.length ? [{ id, index }] : [],
+);
+await runPool(
+  missingItems,
+  concurrency,
+  ({ id, index }) => inProductBuffer(id, (log) => sweepMissing(id, index, log)),
+  shouldContinueExtras,
+);
+const extraSpendUsd = spendTotalUsd() - extraSpendBefore;
 syncEntries();
 changes.push(...changeSlots.filter((c): c is string => !!c));
-confirmQuotes.push(...quoteSlots.filter((q): q is ConfirmQuote => !!q));
+confirmQuotes.push(...quoteSlots.filter((q): q is ConfirmQuote => !!q), ...extraQuoteSlots.flat());
 
 // Coverage is per FIELD, and a sweep can now mix both kinds in one run, so the
 // two are counted separately and added rather than asked of one field.
@@ -1609,7 +2189,7 @@ const cFx = coverage(entries, "fxFeePct");
 const cInt = coverage(entries, "interestPct");
 const c = {
   covered: cFx.covered + cInt.covered,
-  total: entries.length,
+  total: entries.filter((e) => fieldPlan.get(e.id)).length,
   byRoute: Object.fromEntries(
     (Object.keys(cFx.byRoute) as (keyof typeof cFx.byRoute)[]).map((k) => [
       k,
@@ -1619,7 +2199,7 @@ const c = {
 };
 if (skippedCount) {
   console.log(
-    `\n${skippedCount} products skipped: no FX or interest figure applies (account fee, points and cashback come later)`,
+    `\n${skippedCount} products skipped: no FX or interest question applies and no fee, points or cashback figure is held or expected`,
   );
 }
 console.log(`\ncovered ${c.covered}/${c.total}  by route: ${JSON.stringify(c.byRoute)}`);
@@ -1644,6 +2224,14 @@ console.log(
 // What the run cost, from the API's own usage numbers. A rung that spends money
 // and reports only coverage is a rung nobody can set a cadence for.
 if (spend.size) console.log(`spend:\n${spendLines().join("\n")}`);
+const perFigureIds = new Set([...extraItems, ...missingItems].map(({ id }) => id));
+const extraFigureCount = [...perFigureIds].reduce(
+  (n, id) => n + (extraPlan.get(id)?.length ?? 0) + (missingPlan.get(id)?.length ?? 0),
+  0,
+);
+console.log(
+  `per-figure passes: ${extraFigureCount} figure(s) in ${perFigureIds.size} product(s), about $${extraSpendUsd.toFixed(3)} (second and third pass, list prices)`,
+);
 console.log(`run time: ${minutesSinceStart()} minutes  ·  concurrency: ${concurrency}`);
 console.log(`model retries: 429 ×${modelRetries.rateLimited}, 5xx ×${modelRetries.serverError}`);
 
@@ -1653,6 +2241,19 @@ const runWarnings: string[] = [];
   if (stoppedEarlyReason && notReached > 0) {
     runWarnings.push(
       `Stopped early (${stoppedEarlyReason}): ${notReached} products were not reached this week.`,
+    );
+  }
+  const figuresLeft = sweptList.reduce(
+    (n, id) =>
+      n +
+      [...(extraPlan.get(id) ?? []), ...(missingPlan.get(id) ?? [])].filter(
+        (f) => !reached.has(`${id}.${f}`),
+      ).length,
+    0,
+  );
+  if (stoppedEarlyReason && figuresLeft > 0) {
+    runWarnings.push(
+      `Stopped early (${stoppedEarlyReason}): ${figuresLeft} fee, points or cashback figures were not checked this week.`,
     );
   }
 }

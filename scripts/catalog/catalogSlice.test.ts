@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { sliceForExtraction } from "./catalogSlice.js";
+import { sliceForConfirm, sliceForExtraction, sliceForFigure } from "./catalogSlice.js";
 
 /** A sheet shaped like ING's: a debit row with no qualifier, a creditcard row
  *  that IS capped, a disqualifying footnote, and a lot of unrelated tariff. */
@@ -98,5 +98,53 @@ describe("sliceForExtraction", () => {
     const r = sliceForExtraction(doc);
     expect(r.text).toContain("1,4% van het betaalde bedrag");
     expect(r.text).toContain("2% valutawisselkosten");
+  });
+});
+
+describe("sliceForFigure", () => {
+  const filler = (label: string) => `${label} algemene tekst zonder bedragen `.repeat(80);
+  test("keeps the whole document when the slice is empty or too short", () => {
+    const text = [filler("a"), "Kosten per maand € 4,00", filler("b")].join("\n");
+    const r = sliceForFigure("accountFee", text);
+    expect(r.whole).toBe(true);
+    expect(r.text).toBe(text);
+  });
+  test("keeps the whole document when the slice lost every term of the figure", () => {
+    const text = [
+      filler("a"),
+      "x".repeat(900),
+      "koersopslag 1,4%",
+      "x".repeat(900),
+      filler("Punten: 1 punt per euro"),
+    ].join("\n");
+    expect(sliceForFigure("pointsPerEuro", text).text).toBe(text);
+  });
+});
+
+describe("sliceForConfirm", () => {
+  const filler = (n: number) => "Lorem ipsum dolor sit amet consectetur. ".repeat(n);
+  const doc =
+    "X Creditcard. " +
+    filler(30) +
+    "Je spaart 1 punt per € 1 besteed met de X Creditcard. " +
+    filler(60) +
+    "Betalen in vreemde valuta: 2% koersopslag. Maximaal 2 kaarten. Punten vervallen nooit. " +
+    filler(60);
+
+  test("a zero that rests on absence is judged on the whole document", () => {
+    const sliced = sliceForFigure("pointsPerEuro", doc);
+    expect(sliced.whole).toBe(false);
+    expect(sliced.text).not.toContain("1 punt per € 1 besteed");
+    const whole = sliceForConfirm("pointsPerEuro", doc, true);
+    expect(whole.whole).toBe(true);
+    expect(whole.text).toBe(doc);
+  });
+  test("any other confirm keeps the figure slice", () => {
+    expect(sliceForConfirm("pointsPerEuro", doc, false)).toEqual(
+      sliceForFigure("pointsPerEuro", doc),
+    );
+    expect(sliceForConfirm("pointsPerEuro", doc, undefined)).toEqual(
+      sliceForFigure("pointsPerEuro", doc),
+    );
   });
 });

@@ -195,7 +195,7 @@ describe("buildReport", () => {
         verdicts: [
           verdict(
             { kind: "publish", viaPending: false },
-            { field: "accountFee", before: undefined, found: value(36) },
+            { field: "accountFee", before: undefined, found: value(36, { period: "jaar" }) },
           ),
           verdict(
             { kind: "publish", viaPending: false },
@@ -206,6 +206,67 @@ describe("buildReport", () => {
     )!;
     expect(r.body).toContain("— → €36,00 per year");
     expect(r.body).toContain("1 point per euro → 2 points per euro");
+  });
+
+  it("a monthly fee prints per month", () => {
+    const r = buildReport(
+      summary({
+        verdicts: [
+          verdict(
+            { kind: "publish", viaPending: false },
+            { field: "accountFee", before: undefined, found: value(4, { period: "maand" }) },
+          ),
+        ],
+      }),
+    )!;
+    expect(r.body).toContain("— → €4,00 per month");
+    expect(r.body).not.toContain("per year");
+  });
+
+  it("a yearly fee prints per year", () => {
+    const r = buildReport(
+      summary({
+        verdicts: [
+          verdict(
+            { kind: "publish", viaPending: false },
+            { field: "accountFee", before: undefined, found: value(48, { period: "jaar" }) },
+          ),
+        ],
+      }),
+    )!;
+    expect(r.body).toContain("— → €48,00 per year");
+  });
+
+  it("a changed fee shows both periods", () => {
+    const r = buildReport(
+      summary({
+        verdicts: [
+          verdict(
+            { kind: "publish", viaPending: false },
+            {
+              field: "accountFee",
+              before: value(4, { period: "maand" }),
+              found: value(48, { period: "jaar" }),
+            },
+          ),
+        ],
+      }),
+    )!;
+    expect(r.body).toContain("€4,00 per month → €48,00 per year");
+  });
+
+  it("a fee without a period says so", () => {
+    const r = buildReport(
+      summary({
+        verdicts: [
+          verdict(
+            { kind: "publish", viaPending: false },
+            { field: "accountFee", before: value(4), found: value(5, { period: "maand" }) },
+          ),
+        ],
+      }),
+    )!;
+    expect(r.body).toContain("€4,00 (period not on file) → €5,00 per month");
   });
 
   it("publish after pending is marked as second read", () => {
@@ -316,7 +377,11 @@ describe("buildReport", () => {
           ),
           verdict(
             { kind: "publish", viaPending: false },
-            { field: "accountFee", before: value(36.5), found: value(0) },
+            {
+              field: "accountFee",
+              before: value(36.5, { period: "jaar" }),
+              found: value(0, { period: "jaar" }),
+            },
           ),
           verdict(
             { kind: "publish", viaPending: false },
@@ -505,7 +570,7 @@ describe("coverage in the report", () => {
     expect(r.body).toContain(
       "Checked this run: 5 of 6 figures (2 confirmed, 1 changed, 1 waiting, 1 held).",
     );
-    expect(r.body).not.toContain("quote check or a same-number read");
+    expect(r.body).not.toContain("quote check, a same-number read or a no-programme-found check");
     expect(r.body).not.toContain("older than 12 months.\n\nChecked");
   });
 
@@ -553,7 +618,7 @@ describe("coverage in the report", () => {
       }),
     )!;
     expect(r.body).toContain(
-      "Of the confirmed figures, 2 were confirmed by a quote check or a same-number read, not by a full re-read.",
+      "Of the confirmed figures, 2 were confirmed by a quote check, a same-number read or a no-programme-found check, not by a full re-read.",
     );
   });
 
@@ -599,9 +664,7 @@ describe("coverage in the report", () => {
         ),
       }),
     )!;
-    expect(r.body).toContain(
-      "Not checked yet by the weekly run: account fees, points and cashback (planned): 12 figures",
-    );
+    expect(r.body).toContain("This field is not part of the weekly sweep yet: 12 figures");
     expect(r.body).not.toContain("Card 3");
   });
 
@@ -693,6 +756,33 @@ describe("coverage in the report", () => {
     ]);
   });
 
+  it("a zero fee needing a person is listed under not checked with its own sentence, after not-found-on-page", () => {
+    const r = buildReport(
+      summary({
+        coverage: [
+          fig({
+            id: "z",
+            product: "Card Z",
+            field: "accountFee",
+            status: "not-checked",
+            cause: "zero-fee-needs-person",
+            uncheckedWeeks: 1,
+          }),
+          fig({ id: "n", status: "not-checked", cause: "not-found-on-page", uncheckedWeeks: 1 }),
+        ],
+      }),
+    )!;
+    expect(r.body).toContain(
+      "A fee of zero cannot be confirmed by the sweep; a person must check it",
+    );
+    const heads = r.body.split("\n").filter((l) => l.startsWith("### "));
+    expect(heads.map((h) => h.slice(4))).toEqual([
+      "The page was read, but the figure could not be established from it",
+      "A fee of zero cannot be confirmed by the sweep; a person must check it",
+    ]);
+    expect(r.body).toContain("Card Z");
+  });
+
   it("the weaker-route sentence has correct grammar for one and many", () => {
     const one = buildReport(summary({ coverage: [fig({ detail: "quote check" })] }))!;
     expect(one.body).toContain("Of the confirmed figures, 1 was confirmed by a quote check");
@@ -700,6 +790,22 @@ describe("coverage in the report", () => {
       summary({ coverage: [fig({ detail: "quote check" }), fig({ detail: "same number read" })] }),
     )!;
     expect(two.body).toContain("Of the confirmed figures, 2 were confirmed by a quote check");
+  });
+
+  it("a no-programme-found confirmation counts as weaker and is listed by name", () => {
+    const r = buildReport(
+      summary({
+        coverage: [
+          fig({ id: "a", product: "Card Z", field: "pointsPerEuro", detail: "no programme found" }),
+          fig({ id: "b", product: "Card Y", detail: "read again" }),
+        ],
+      }),
+    )!;
+    expect(r.body).toContain("Of the confirmed figures, 1 was confirmed by a quote check");
+    const title =
+      "## Confirmed by quote check, same-number read or no programme found (weaker than a full re-read)";
+    expect(r.body.split(title)[1]!.split("\n## ")[0]).toContain("- Card Z, ");
+    expect(r.body.split(title)[1]!.split("\n## ")[0]).not.toContain("Card Y");
   });
 
   it("the agent route reads as read by the model", () => {
@@ -874,6 +980,24 @@ describe("final fix wave", () => {
     expect(noQuote.body).not.toContain("Quote:");
   });
 
+  it("a first figure with no stored value shows as — to value with its quote under Changed", () => {
+    const r = buildReport(
+      summary({
+        verdicts: [
+          verdict(
+            { kind: "publish", viaPending: false },
+            { field: "accountFee", before: undefined, found: value(6.5, { period: "maand" }) },
+          ),
+        ],
+        evidenceQuotes: { "card-a.accountFee": "The Green Card € 6,50 per maand" },
+      }),
+    )!;
+    const sec = r.body.split("## Changed")[1]!.split("\n## ")[0]!;
+    expect(sec).toContain("Card A, ");
+    expect(sec).toContain("— → €6,50 per month");
+    expect(sec).toContain('Quote: "The Green Card € 6,50 per maand"');
+  });
+
   it("lists the weaker confirmations after Held, sorted, capped at 30", () => {
     const weak = Array.from({ length: 32 }, (_, i) =>
       fig({
@@ -888,7 +1012,8 @@ describe("final fix wave", () => {
         coverage: [...weak, fig({ id: "z", product: "Full", detail: "read again" })],
       }),
     )!;
-    const title = "## Confirmed by quote check or same-number read (weaker than a full re-read)";
+    const title =
+      "## Confirmed by quote check, same-number read or no programme found (weaker than a full re-read)";
     expect(r.body).toContain(title);
     expect(r.body.indexOf("## Held back")).toBeLessThan(r.body.indexOf(title));
     const sec = r.body.split(title)[1]!.split("\n## ")[0]!;

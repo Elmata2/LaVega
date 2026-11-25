@@ -70,12 +70,13 @@ const CAUSE_ORDER: readonly NotCheckedCause[] = [
   "fetch-failed",
   "not-found-on-page",
   "no-figure-yet",
+  "document-too-large",
+  "zero-fee-needs-person",
   "stopped-early",
 ];
 
 const CAUSE_TEXT: Record<NotCheckedCause, string> = {
-  "field-not-swept":
-    "Not checked yet by the weekly run: account fees, points and cashback (planned)",
+  "field-not-swept": "This field is not part of the weekly sweep yet",
   "not-asked": "This product is checked for a different figure; this one is not asked yet",
   "not-tracked": "In the catalogue but not on the weekly run's watch list",
   "not-in-this-run": "Not part of this run",
@@ -85,6 +86,8 @@ const CAUSE_TEXT: Record<NotCheckedCause, string> = {
   "fetch-failed": "The provider's page or document could not be read",
   "not-found-on-page": "The page was read, but the figure could not be established from it",
   "no-figure-yet": "No figure on file yet for this product",
+  "document-too-large": "The document was read but is too large to send to the model",
+  "zero-fee-needs-person": "A fee of zero cannot be confirmed by the sweep; a person must check it",
   "stopped-early":
     "The run stopped before it reached this product (cost ceiling, time limit or error)",
 };
@@ -92,6 +95,7 @@ const CAUSE_TEXT: Record<NotCheckedCause, string> = {
 const WEAKER_ROUTES: ReadonlySet<string> = new Set([
   CONFIRMED_DETAIL["quote-check"],
   CONFIRMED_DETAIL["same-number"],
+  CONFIRMED_DETAIL["no-programme-found"],
 ]);
 
 const FIELD_LABEL: Record<CatalogField, string> = {
@@ -120,6 +124,8 @@ const HOLD_REASON: Record<HoldReason, string> = {
     "the page showed a different value, and the check on the stored value did not give a clear answer; the stored value stays and the next run checks again",
   "conflicting-read":
     "the page shows both the stored value and a different one; the stored value stays until a person or a later run settles it",
+  "fee-period-missing":
+    "the read gave a fee without saying whether it is per month or per year; the stored fee stays",
   "held-for-person": "a person must decide this figure; it is on the manual hold list",
 };
 
@@ -144,10 +150,14 @@ const label = (field: string): string => FIELD_LABEL[field as CatalogField] ?? p
 /** At most 2 decimals, Dutch decimal comma, trailing zeros dropped. */
 const dutch = (n: number): string => String(Math.round(n * 100) / 100).replace(".", ",");
 
-function figure(field: CatalogField, n: number): string {
+const FEE_PERIOD_TEXT = { maand: "per month", jaar: "per year" } as const;
+
+function figure(field: CatalogField, n: number, period?: CatalogValue["period"]): string {
   switch (field) {
-    case "accountFee":
-      return `€${(Math.round(n * 100) / 100).toFixed(2).replace(".", ",")} per year`;
+    case "accountFee": {
+      const amount = `€${(Math.round(n * 100) / 100).toFixed(2).replace(".", ",")}`;
+      return `${amount} ${period ? FEE_PERIOD_TEXT[period] : "(period not on file)"}`;
+    }
     case "pointsPerEuro":
       return `${dutch(n)} ${Math.round(n * 100) / 100 === 1 ? "point" : "points"} per euro`;
     default:
@@ -155,7 +165,8 @@ function figure(field: CatalogField, n: number): string {
   }
 }
 
-const before = (v: FieldVerdict): string => (v.before ? figure(v.field, v.before.value) : "—");
+const before = (v: FieldVerdict): string =>
+  v.before ? figure(v.field, v.before.value, v.before.period) : "—";
 const source = (v: CatalogValue): string => link(v.sourceUrl);
 
 /** "From the provider page: <url>" or, for the model, "Read by the model from: <url>". */
@@ -175,7 +186,7 @@ function quoteTail(summary: RunSummary, v: FieldVerdict): string {
 
 function changedLine(summary: RunSummary, v: FieldVerdict, viaPending: boolean): string {
   const tail = viaPending ? " (after second read)" : "";
-  return `- ${plain(v.product)}, ${label(v.field)}: ${before(v)} → ${figure(v.field, v.found.value)}${tail}. ${from(v)}${quoteTail(summary, v)}`;
+  return `- ${plain(v.product)}, ${label(v.field)}: ${before(v)} → ${figure(v.field, v.found.value, v.found.period)}${tail}. ${from(v)}${quoteTail(summary, v)}`;
 }
 
 const MAX_CONDITIONS_LINES = 30;
@@ -185,7 +196,7 @@ const MAX_CONDITIONS_CHARS = 200;
 function conditionsLine(v: FieldVerdict): string {
   const now = v.found.conditions ? plain(v.found.conditions.slice(0, MAX_CONDITIONS_CHARS)) : "";
   const tail = v.before?.conditions === null ? `, was listed as unconditional; now: ${now}` : "";
-  return `- ${plain(v.product)}, ${label(v.field)}: ${figure(v.field, v.found.value)}. ${from(v)}${tail}`;
+  return `- ${plain(v.product)}, ${label(v.field)}: ${figure(v.field, v.found.value, v.found.period)}. ${from(v)}${tail}`;
 }
 
 function section(title: string, intro: string | null, lines: string[]): string[] {
@@ -223,7 +234,7 @@ function coverageHead(coverage: FigureCoverage[]): string[] {
   ).length;
   if (weaker > 0) {
     lines.push(
-      `Of the confirmed figures, ${weaker} ${weaker === 1 ? "was" : "were"} confirmed by a quote check or a same-number read, not by a full re-read.`,
+      `Of the confirmed figures, ${weaker} ${weaker === 1 ? "was" : "were"} confirmed by a quote check, a same-number read or a no-programme-found check, not by a full re-read.`,
     );
   }
   return lines;
@@ -330,7 +341,7 @@ export function buildReport(summary: RunSummary): { title: string; body: string 
   const waiting = summary.verdicts.flatMap((v) =>
     v.verdict.kind === "pending"
       ? [
-          `- ${plain(v.product)}, ${label(v.field)}: ${before(v)} → ${figure(v.field, v.verdict.pending.value)}. First seen ${plain(v.verdict.pending.seenAt)}. ${from(v)}${quoteTail(summary, v)}. Goes live if next week's run reads the same value.`,
+          `- ${plain(v.product)}, ${label(v.field)}: ${before(v)} → ${figure(v.field, v.verdict.pending.value, v.found.period)}. First seen ${plain(v.verdict.pending.seenAt)}. ${from(v)}${quoteTail(summary, v)}. Goes live if next week's run reads the same value.`,
         ]
       : [],
   );
@@ -349,7 +360,7 @@ export function buildReport(summary: RunSummary): { title: string; body: string 
         ? ` Reason on the list: ${plain(listed.slice(0, MAX_HOLD_REASON_CHARS))}`
         : "";
     return [
-      `- ${plain(v.product)}, ${label(v.field)}: ${before(v)} → ${figure(v.field, v.found.value)} not used, because ${HOLD_REASON[v.verdict.reason]}${weeksHeld !== undefined ? ` (held for ${weeks(weeksHeld)})` : ""}. Source: ${source(v.found)}${reasonTail}`,
+      `- ${plain(v.product)}, ${label(v.field)}: ${before(v)} → ${figure(v.field, v.found.value, v.found.period)} not used, because ${HOLD_REASON[v.verdict.reason]}${weeksHeld !== undefined ? ` (held for ${weeks(weeksHeld)})` : ""}. Source: ${source(v.found)}${reasonTail}`,
     ];
   });
   const weakConfirmed = (summary.coverage ?? [])
@@ -421,7 +432,7 @@ export function buildReport(summary: RunSummary): { title: string; body: string 
     ...section("Waiting for a second read", "The old figure stays in place until then.", waiting),
     ...section("Held back", "The old figure stays in place for all of these.", held),
     ...section(
-      "Confirmed by quote check or same-number read (weaker than a full re-read)",
+      "Confirmed by quote check, same-number read or no programme found (weaker than a full re-read)",
       null,
       weakLines,
     ),

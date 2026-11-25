@@ -1534,8 +1534,8 @@ const CAT_N26_METAL_PLAN: CatalogueEntryLike = {
       conditionsKnown: true,
       conditions:
         "Membership fee. N26 kan korting geven bij vooruitbetaling per jaar of half jaar; de hoogte daarvan staat niet in de prijslijst.",
-      // `CatalogValue` kent geen `period`, de accountFee-rij wel — `readAccountFee`
-      // valideert hem apart. Vandaar de cast: het veld is echt, het type hier niet.
+      // `readAccountFee` valideert `period` apart; de cast laat de fixture een rij
+      // zonder de verplichte velden van een gewone CatalogValue nabootsen.
     } as unknown as import("./catalog.js").CatalogValue,
   },
 };
