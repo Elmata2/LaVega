@@ -1,3 +1,4 @@
+import { DateTime } from "effect";
 import { parseFxRatePayload } from "@lavega/core";
 import { API_BASE } from "./api.js";
 
@@ -42,24 +43,33 @@ export function ecbRatesFrom(raw: unknown): LiveEcb | null {
   return Object.keys(rates).length === 0 ? null : { rates, date: ecb.date };
 }
 
-/* One request per session. A success is kept; a failure is tried at most once
- * more (the next time the block asks, e.g. after the destination changed back),
- * never in a loop. */
+/* One request per session. A success is kept. A failure is tried once more at
+ * the next ask (the block asks when the destination changes), never in a loop.
+ * After that the block no longer stays in euro until a reload: a further attempt
+ * is allowed on the next ask once RETRY_AFTER_MS has passed since the last
+ * failure. Asking is always a user action, so there is no timer and no loop. */
+export const RETRY_AFTER_MS = 60_000;
+const nowMs = () => DateTime.toEpochMillis(DateTime.nowUnsafe());
 let cached: LiveEcb | null = null;
 let inflight: Promise<LiveEcb | null> | null = null;
 let attempts = 0;
+let lastFailureAt = 0;
 
-export function getLiveEcb(): Promise<LiveEcb | null> {
+export function getLiveEcb(now: number = nowMs()): Promise<LiveEcb | null> {
   if (cached) return Promise.resolve(cached);
   if (inflight) return inflight;
-  if (attempts >= 2) return Promise.resolve(null);
+  if (attempts >= 2 && now - lastFailureAt < RETRY_AFTER_MS) return Promise.resolve(null);
   attempts += 1;
   inflight = fetchFxRatePayload()
     .then((raw) => {
       cached = ecbRatesFrom(raw);
+      if (!cached) lastFailureAt = now;
       return cached;
     })
-    .catch(() => null)
+    .catch(() => {
+      lastFailureAt = now;
+      return null;
+    })
     .finally(() => {
       inflight = null;
     });
@@ -70,4 +80,5 @@ export function resetLiveFxForTests(): void {
   cached = null;
   inflight = null;
   attempts = 0;
+  lastFailureAt = 0;
 }

@@ -22,6 +22,9 @@ import {
   compareCardOffers,
   offerSwitchGain,
   TRAVEL_TRIP_MONTHS,
+  TRAVEL_SMALL_WITHDRAWAL,
+  smallWithdrawal,
+  usesEuro,
 } from "./travel.js";
 import { describeNetBenefit } from "./netBenefit.js";
 import type { CatalogueEntryLike } from "./catalogRates.js";
@@ -1988,5 +1991,88 @@ test("een kaart die niets kost krijgt geen rekensom over een periode", () => {
     savingOnReference: 14,
     ownProduct: "ING betaalpas",
     holdingCost: { kind: "free-to-hold", product: "Trade Republic betaalpas", grossCents: 1400 },
+  });
+});
+
+describe("the small-withdrawal example is a round local amount", () => {
+  test("without a rate it stays the euro example", () => {
+    expect(smallWithdrawal(null)).toEqual({ euros: TRAVEL_SMALL_WITHDRAWAL, local: null });
+    expect(smallWithdrawal(0)).toEqual({ euros: TRAVEL_SMALL_WITHDRAWAL, local: null });
+    expect(smallWithdrawal(Number.NaN)).toEqual({ euros: TRAVEL_SMALL_WITHDRAWAL, local: null });
+  });
+
+  test.each([
+    ["EUR-like (rate 1)", 1, 50],
+    ["USD (1,10)", 1.1, 50],
+    ["GBP (0,86)", 0.86, 50],
+    ["CHF (0,93)", 0.93, 50],
+    ["NZD (1,95): not NZ$ 97,50", 1.95, 100],
+    ["JPY (165)", 165, 10_000],
+    ["IDR (18.000)", 18_000, 1_000_000],
+    ["THB (38)", 38, 2_000],
+  ])("%s", (_name, rate, local) => {
+    const s = smallWithdrawal(rate);
+    expect(s.local).toBe(local);
+    expect(s.euros).toBeCloseTo(local / rate, 10);
+  });
+
+  test("rankWithdrawOptions prices the fee on the example amount it is given", () => {
+    const accounts = [acc({ key: "ingp", bank: "ING", type: "Betaalrekening", balance: 4000 })];
+    const facts = upsertFacts([], [fact("ING betaalpas", "fxFeePct", "1.4")]);
+    const spend = rankSpendOptions(accounts, facts);
+    const euros = smallWithdrawal(1.95).euros;
+    const [o] = rankWithdrawOptions(spend, CATALOGUE, euros);
+    expect(o.costOnSmall).toBeCloseTo(3.5 + euros * 0.014, 2);
+    expect(rankWithdrawOptions(spend, CATALOGUE)[0].costOnSmall).toBe(4.2);
+  });
+
+  test("planTravel carries the example amount for the rate it was asked with", () => {
+    const base = {
+      accounts: [],
+      txs: [],
+      rates: [],
+      facts: [],
+      destination: "NZ",
+      asOf: "2026-11-25",
+    };
+    expect(planTravel(base).smallWithdrawal).toEqual({ euros: 50, local: null });
+    const plan = planTravel({ ...base, smallWithdrawalRate: 1.95 });
+    expect(plan.smallWithdrawal.local).toBe(100);
+  });
+});
+
+describe("usesEuro: an explicit set of euro-using countries", () => {
+  test.each([
+    "NL",
+    "DE",
+    "ES",
+    "EE",
+    "LV",
+    "LT",
+    "MT",
+    "CY",
+    "BG",
+    "AD",
+    "MC",
+    "SM",
+    "VA",
+    "ME",
+    "XK",
+    "GP",
+    "MQ",
+    "RE",
+    "GF",
+    "YT",
+    "PM",
+    "BL",
+    "MF",
+    "AX",
+  ])("%s is a euro home", (code) => expect(usesEuro(code)).toBe(true));
+  test.each(["GB", "IS", "CH", "RO", "UA", "XX", "", "US"])("%s is not", (code) =>
+    expect(usesEuro(code)).toBe(false),
+  );
+  test("case-insensitive and trimmed", () => {
+    expect(usesEuro(" ee ")).toBe(true);
+    expect(usesEuro("gb")).toBe(false);
   });
 });

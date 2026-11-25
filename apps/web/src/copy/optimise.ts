@@ -3277,6 +3277,8 @@ export type TravelCopy = {
     homeAssumedNote: string;
     /** The link that follows `homeAssumedNote`, to the Profiel country picker. */
     homeAssumedChange: string;
+    /** Shown instead of the plan when the chosen home currency is not the euro. */
+    homeCurrencyNote: string;
   };
   /** Shown before a destination is picked. */
   empty: string;
@@ -3502,9 +3504,7 @@ export type TravelCopy = {
     unknownNotZero: string;
     /** Appended only when there is a benefit to caveat as gross. */
     unknownGrossHint: string;
-    /** "Kaartkosten: {price} — de bron zegt dat {product} niets kost om aan te houden." */
-    free: string;
-    /** "Kaartkosten: {price}." — no benefit to compare the price against. */
+    /** "Kaartkosten: {price}." — no benefit to compare against, or a price of zero. */
     priceOnly: string;
     /** "Kaartkosten: {price} — gerekend {span}" (no total add-on). */
     calculated: string;
@@ -3715,6 +3715,8 @@ const travelCopy_nl: TravelCopy = {
     payingIn: "je betaalt daar in {currency}",
     homeAssumedNote: "Nog geen thuisland gekozen: deze uitkomsten gaan uit van Nederland.",
     homeAssumedChange: "Kies je eigen land",
+    homeCurrencyNote:
+      "Kosten en routes gaan uit van een euro-rekening. Voor een andere thuisvaluta rekent LaVega dit nog niet door.",
   },
   empty: "Kies een land voor je beste kaart.",
   badge: {
@@ -3872,7 +3874,6 @@ const travelCopy_nl: TravelCopy = {
     unknownReasonNoSource: "wat {product} zelf kost, staat niet in onze bronnen",
     unknownNotZero: "Dat is geen nul.",
     unknownGrossHint: " Het bedrag hierboven is dus bruto: wat deze kaart kost, gaat er nog af.",
-    free: "Kaartkosten: {price} — de bron zegt dat {product} niets kost om aan te houden.",
     priceOnly: "Kaartkosten: {price}.",
     calculated: "Kaartkosten: {price} — gerekend {span}",
     calculatedTotalSuffix: ": {total}",
@@ -4049,6 +4050,8 @@ const travelCopy_en: TravelCopy = {
     payingIn: "you'll pay there in {currency}",
     homeAssumedNote: "No home country chosen yet: these results assume the Netherlands.",
     homeAssumedChange: "Choose your own country",
+    homeCurrencyNote:
+      "Costs and routes assume a euro account. LaVega does not work this out for another home currency yet.",
   },
   empty: "Pick a country for your best card.",
   badge: {
@@ -4206,7 +4209,6 @@ const travelCopy_en: TravelCopy = {
     unknownReasonNoSource: "what {product} itself costs isn't in our sources",
     unknownNotZero: "That isn't zero.",
     unknownGrossHint: " So the amount above is gross: this card's cost still comes off it.",
-    free: "Card cost: {price} — the source says {product} costs nothing to hold.",
     priceOnly: "Card cost: {price}.",
     calculated: "Card cost: {price} — calculated {span}",
     calculatedTotalSuffix: ": {total}",
