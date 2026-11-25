@@ -144,3 +144,22 @@ test("a live-linked account does not count for a file-route brand through the le
   });
   expect(r[0]!.connected).toBe(false);
 });
+
+test("#369-2: an account answered other or not-credit does not count as a connected card", () => {
+  for (const statedCardId of ["other", "not-credit"]) {
+    expect(
+      connectChecklist({
+        ...none,
+        statedBanks: ["amex"],
+        accounts: [{ bank: "American Express", statedCardId }],
+      }),
+    ).toEqual([{ brand: "amex", connected: false, route: "file" }]);
+    expect(
+      connectChecklist({
+        ...none,
+        statedBanks: ["ing"],
+        accounts: [{ bank: "ING", statedCardId }],
+      }),
+    ).toEqual([{ brand: "ing", connected: false, route: "bank" }]);
+  }
+});

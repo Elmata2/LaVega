@@ -18,12 +18,10 @@ import {
   type BufferInput,
   type CardAdvice,
 } from "./cardAdvice.js";
-import type { Tx } from "../model.js";
+import { STATED_CARD_NOT_CREDIT, STATED_CARD_OTHER, type Tx } from "../model.js";
 import type { ForeignSpend, SpendArea } from "../advisor/profile.js";
 import { fig } from "./internal.js";
 import { spendHistory, type SpendHistory, type SpendHistoryInput } from "./spending.js";
-import type { PlanPreferences } from "./preferences.js";
-import type { CatalogueEntryLike } from "../catalogRates.js";
 import { pointsValueRange, type PointsValueRange } from "./pointsValue.js";
 import { PLAN_THRESHOLDS } from "./thresholds.js";
 import type {
@@ -176,6 +174,9 @@ export type CardNet = {
     medianCents: number;
     highCents: number;
   } | null;
+  /** The advice ranks this card (`advice.options`) and shows its figure, so the
+   *  screen does not print this per-card line a second time. Set by `computeCards`. */
+  inAdvice?: boolean;
 };
 
 export type CardsFigures = {
@@ -313,41 +314,6 @@ function cardableHistory(
   });
 }
 
-export type NoCardAdviceInput = Omit<
-  SpendHistoryInput,
-  "skip" | "windowMonths" | "includeCurrentMonth" | "accountKeys"
-> & {
-  catalogue: readonly CatalogueEntryLike[];
-  preferences: PlanPreferences;
-};
-
-/** The plan's own answer to "would a first credit card pay off": the same spend
- *  history and the same `computeCardAdvice` the cards section uses, with no card
- *  held. Fewer than `CARD_ADVICE_MIN_MONTHS` full months gives no figure. */
-export function noCardAdvice(i: NoCardAdviceInput): CardAdvice {
-  const h = cardableHistory(i);
-  let windowCents = 0;
-  for (const per of h.byCategory.values()) for (const c of per.values()) windowCents += c;
-  return computeCardAdvice({
-    spend: {
-      windowCents,
-      months: h.months.length,
-      foreignCents: h.foreignCents,
-      excludedForeignCount: h.excludedForeignCount,
-    },
-    catalogue: i.catalogue,
-    heldIds: [],
-    hasOtherCard: false,
-    cardBalances: [],
-    cardRepayment: null,
-    rewards: [],
-    preferences: i.preferences,
-    rates: [],
-    buffer: null,
-    asOf: i.asOf,
-  });
-}
-
 export function computeCards(
   i: PlanInput,
   buffer: BufferInput = null,
@@ -365,7 +331,15 @@ export function computeCards(
         return true;
       })
       .sort(byLabel);
-  const held = dedupe(i.heldCards, (c) => !isStatedCard(c) && personalKeys.has(c.accountKey));
+  // An account the user said is not a credit card is no card at all, whatever its
+  // name matched.
+  const notCredit = new Set(
+    view.accounts.filter((a) => a.statedCardId === STATED_CARD_NOT_CREDIT).map((a) => a.key),
+  );
+  const held = dedupe(
+    i.heldCards,
+    (c) => !isStatedCard(c) && personalKeys.has(c.accountKey) && !notCredit.has(c.accountKey),
+  );
   const stated = dedupe(i.heldCards, isStatedCard);
   const candidates = [...held, ...stated].sort(byLabel);
 
@@ -591,6 +565,32 @@ export function computeCards(
   // The card the user (or a file import) named for the account. A named debit card is that
   // debit card, not an unknown credit card, so it is not asked about.
   const statedByKey = new Map(view.accounts.map((a) => [a.key, a.statedCardId]));
+  // Two accounts of one brand share the held-card label (the bank); the question
+  // adds what tells them apart: the account's own name or its last digits.
+  const nameByKey = new Map(view.accounts.map((a) => [a.key, (a.name ?? "").trim()]));
+  const askLabel = (c: HeldCardInput): string => {
+    const name = nameByKey.get(c.accountKey) ?? "";
+    const lower = (s: string) => s.toLowerCase();
+    if (name === "" || lower(name) === lower(c.label)) return c.label;
+    if (lower(name).includes(lower(c.label))) return name;
+    return lower(c.label).includes(lower(name)) ? c.label : `${c.label} ${name}`;
+  };
+  const wizardIds = i.profile.statedCardIds.filter((id) => id !== STATED_CARD_OTHER);
+  // The wizard's "other card" is one card beyond the cards it named. It is resolved
+  // only when the connected accounts hold more identified credit cards than the
+  // wizard named: then one of them must be the card that was missing. Fewer, and
+  // the unlisted card is still unaccounted for. Debit cards never count.
+  const identifiedCredit = new Set(
+    held.flatMap((c) =>
+      c.catalogueId && i.catalogue.some((e) => e.id === c.catalogueId && e.kind === "creditcard")
+        ? [c.catalogueId]
+        : [],
+    ),
+  );
+  const identifiedOnAccount = identifiedCredit.size > wizardIds.length;
+  const hasOtherCard =
+    (i.profile.statedCardIds.includes(STATED_CARD_OTHER) && !identifiedOnAccount) ||
+    [...statedByKey.values()].includes(STATED_CARD_OTHER);
   const advice = computeCardAdvice({
     spend: {
       windowCents: totalOf(adviceSpend),
@@ -600,12 +600,9 @@ export function computeCards(
     },
     catalogue: i.catalogue,
     heldIds: [
-      ...new Set([
-        ...i.profile.statedCardIds.filter((id) => id !== "other"),
-        ...held.flatMap((c) => (c.catalogueId ? [c.catalogueId] : [])),
-      ]),
+      ...new Set([...wizardIds, ...held.flatMap((c) => (c.catalogueId ? [c.catalogueId] : []))]),
     ],
-    hasOtherCard: i.profile.statedCardIds.includes("other"),
+    hasOtherCard,
     // A connected credit card with no catalogue row: asked about, never ignored.
     // A debit card or current account without a match is not a credit card. A credit
     // account whose catalogue row is not a credit card (betaalpas, prepaid ...) is a
@@ -614,10 +611,11 @@ export function computeCards(
       .filter(
         (c) =>
           creditKeys.has(c.accountKey) &&
+          statedByKey.get(c.accountKey) !== STATED_CARD_OTHER &&
           (!c.catalogueId ||
             (isNonCreditRow(c.catalogueId) && statedByKey.get(c.accountKey) !== c.catalogueId)),
       )
-      .map((c) => ({ accountKey: c.accountKey, label: c.label })),
+      .map((c) => ({ accountKey: c.accountKey, label: askLabel(c) })),
     cardBalances: i.profile.cardBalances,
     cardRepayment: i.profile.cardRepayment,
     rewards: i.rewards,
@@ -634,9 +632,14 @@ export function computeCards(
     asOf: i.asOf,
   });
 
+  const advised = new Set(advice.options.map((o) => o.cardId));
+  const catalogueOf = new Map(candidates.map((c) => [c.accountKey, c.catalogueId ?? null]));
   const figures: CardsFigures = {
     criteria,
-    nets,
+    nets: nets.map((n) => {
+      const id = catalogueOf.get(n.cardKey) ?? null;
+      return { ...n, inAdvice: id !== null && advised.has(id) };
+    }),
     cardInUseKey,
     cardableSpendCents,
     notCardableSpendCents,

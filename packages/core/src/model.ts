@@ -76,6 +76,12 @@ export type Account = {
   statedCardId?: string;
 };
 
+/** `statedCardId` values that name no catalogue row. "other": a credit card the
+ *  catalogue does not list. "not-credit": the account is not a credit card, though
+ *  its name looked like one. */
+export const STATED_CARD_OTHER = "other";
+export const STATED_CARD_NOT_CREDIT = "not-credit";
+
 /** Het KOPPELMOMENT stempelen, en alleen daar waar dat te bewijzen valt.
  *
  *  Aanroepen NA het samenvoegen van een import, met de lijst zoals hij VÓÓR die
@@ -326,3 +332,10 @@ export type VatSettings = {
 /** What `VatSettings` has grown into. Same type, honest name — use this one in
  *  new code; the old name stays because the vault and the web lane use it. */
 export type TaxSettings = VatSettings;
+
+/** The account stands in for a catalogue card: `statedCardId` is set and is not one
+ *  of the two answers that name no card. */
+export const hasStatedCatalogueCard = (a: { statedCardId?: string }): boolean =>
+  a.statedCardId !== undefined &&
+  a.statedCardId !== STATED_CARD_OTHER &&
+  a.statedCardId !== STATED_CARD_NOT_CREDIT;

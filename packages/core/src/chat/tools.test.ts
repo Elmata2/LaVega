@@ -436,7 +436,12 @@ describe("subscriptions, monthly_totals, upcoming_bills, plan_summary", () => {
               basis: "history",
               ignoresInterest: false,
               baseline: { kind: "best-held", cardId: "k1", name: "Mijn kaart", netCents: 1000 },
-              verdict: { kind: "switch", best: { name: "Kaart B" }, gainCents: 8000 },
+              verdict: {
+                kind: "switch",
+                best: { name: "Kaart B" },
+                gainCents: 8000,
+                parts: { pointsCents: 0 },
+              },
             },
           },
         },

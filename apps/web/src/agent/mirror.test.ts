@@ -95,12 +95,19 @@ const offerOf = (p: PlanResult) =>
   buildMirror({ rules: [], flows: [], plan: p, now: NOW }).cardOffer;
 
 test("the card offer is the plan's verdict: best card and its yearly gain", () => {
-  const p = advicePlan({ verdict: { kind: "switch", best: { name: "Kaart B" }, gainCents: 8000 } });
+  const p = advicePlan({
+    verdict: {
+      kind: "switch",
+      best: { name: "Kaart B" },
+      gainCents: 8000,
+      parts: { pointsCents: 0 },
+    },
+  });
   expect(offerOf(p)).toEqual({ name: "Kaart B", yearlyGainCents: 8000, computedAt: "2026-11-10" });
 });
 
 test("no card offer unless the verdict is a switch on history without carried card debt", () => {
-  const sw = { kind: "switch", best: { name: "B" }, gainCents: 6000 };
+  const sw = { kind: "switch", best: { name: "B" }, gainCents: 6000, parts: { pointsCents: 0 } };
   expect(offerOf(advicePlan({ verdict: { kind: "keep", gainCents: 0 } }))).toBeNull();
   expect(offerOf(advicePlan({ verdict: { kind: "unknown-baseline" } }))).toBeNull();
   expect(offerOf(advicePlan({ verdict: sw, ignoresInterest: true }))).toBeNull();

@@ -194,6 +194,19 @@ test("a statedCardId that names no catalogue row falls through to the name match
   expect(card!.catalogueId).toBe("abn-amro-creditcard");
 });
 
+test("#369-2: an account answered as another or not a credit card is not matched by name", () => {
+  for (const statedCardId of ["other", "not-credit"]) {
+    const named = acct("named", {
+      name: "creditcard",
+      bank: "ABN AMRO",
+      type: "Creditcard",
+      statedCardId,
+    });
+    const [card] = buildHeldCards({ ...base, accounts: [named], facts: [], assumptionOn: false });
+    expect(card!.catalogueId).toBeNull();
+  }
+});
+
 test("a card account with no match has catalogueId null", () => {
   const odd = acct("odd", { name: "Pas", bank: "Onbekende Bank" });
   const [card] = buildHeldCards({ ...base, accounts: [odd], facts: [], assumptionOn: false });

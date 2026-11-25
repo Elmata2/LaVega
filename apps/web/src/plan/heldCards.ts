@@ -1,5 +1,7 @@
 import {
   CATALOGUE_KINDS_FOR,
+  STATED_CARD_NOT_CREDIT,
+  STATED_CARD_OTHER,
   STATED_CARD_PREFIX,
   accountFees,
   TRAVEL_AGENT,
@@ -58,6 +60,7 @@ function catalogueIdOf(
   feeProductId: string | null,
 ): string | null {
   const stated = account.statedCardId;
+  if (stated === STATED_CARD_OTHER || stated === STATED_CARD_NOT_CREDIT) return null;
   if (stated !== undefined && entries.some((e) => e.id === stated)) return stated;
   return entryFor(account, entries, feeProductId)?.id ?? null;
 }

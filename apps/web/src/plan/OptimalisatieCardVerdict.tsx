@@ -3,7 +3,13 @@ import type { ReactNode } from "react";
 import { cardAdviceCopy } from "../copy/cardAdvice.js";
 import { optimiseCopy } from "../copy/optimise.js";
 import { formatEuroIn } from "../format.js";
-import { CardCaveats, CardInterest, CardVerdictLines, Identify } from "./sections/CardAdvice.js";
+import {
+  CardCaveats,
+  CardInterest,
+  CardVerdictLines,
+  Identify,
+  Ranked,
+} from "./sections/CardAdvice.js";
 import { useSectionCopy } from "./sections/common.js";
 
 /** The credit-card part of Optimalisatie. It prints the plan's own card advice
@@ -37,6 +43,7 @@ export default function OptimalisatieCardVerdict({
       {c.basisStated}
     </p>
   );
+  const showsRanking = hasOptions && v.kind === "unknown-baseline";
   let body: ReactNode;
   if (!hasOptions || v.kind === "no-options") {
     body = (
@@ -64,8 +71,18 @@ export default function OptimalisatieCardVerdict({
         {statedLine}
       </>
     );
+  } else if (v.kind === "unknown-baseline") {
+    // The plan's sentence ends by announcing the ranking, so the ranking follows it.
+    body = (
+      <>
+        <p className="block-empty" data-testid="plan-card-verdict">
+          {c.verdict(advice, fmt)}
+        </p>
+        {statedLine}
+        <Ranked advice={advice} />
+      </>
+    );
   } else {
-    // keep, unknown-baseline: the plan's own sentence.
     body = (
       <>
         <p className="block-empty" data-testid="plan-card-verdict">
@@ -87,7 +104,7 @@ export default function OptimalisatieCardVerdict({
       )}
       {/* The "geen financieel advies" line is the page's own footer (Optimalisatie.tsx,
           `optimalisatie-disclaimer`); it is not repeated here. */}
-      {hasOptions && <CardCaveats />}
+      {hasOptions && !showsRanking && <CardCaveats />}
       {toIdentify.map((u) => (
         <Identify key={u.accountKey} {...u} onIdentify={onIdentify!} />
       ))}

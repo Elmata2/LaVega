@@ -374,6 +374,7 @@ function optionFor(
   annualCents: number,
   annualForeignCents: number,
   preferences: PlanPreferences,
+  paidPackages: ReadonlySet<string>,
 ): CardOption {
   const reasons: NotComparableReason[] = [];
   const sources: SourceRef[] = [];
@@ -398,10 +399,11 @@ function optionFor(
         met,
       };
     } else if (cond?.kind === "package") {
-      // A package the user already has is a cost he pays anyway: only a card he
-      // does not hold brings it along.
-      feeCents = held ? base : base + cond.yearlyCents;
-      feeNote = { kind: "package", name: cond.name, yearlyCents: cond.yearlyCents, applied: !held };
+      // A package the user already pays (through this card or another held card on
+      // the same package) is a cost he has anyway: only a new package is added.
+      const applied = !held && !paidPackages.has(cond.name);
+      feeCents = applied ? base + cond.yearlyCents : base;
+      feeNote = { kind: "package", name: cond.name, yearlyCents: cond.yearlyCents, applied };
     } else if (cond?.kind === "unknown") {
       feeNote = { kind: "unknown", why: cond.why };
       reasons.push("fee-condition-unknown");
@@ -590,18 +592,23 @@ export function computeCardAdvice(i: CardAdviceInput): CardAdvice {
     stated === null || !Number.isFinite(stated.foreignShare)
       ? 0
       : Math.min(1, Math.max(0, stated.foreignShare));
+  // The stated figure is an upper bound (stated spend minus housing), yet a few real
+  // months can show more: the real figure then wins, so the advice is never priced
+  // on less spend than the user was seen to make.
+  const realAnnual = (cents: number): number =>
+    spend.months > 0 ? Math.round((cents * FULL_YEAR_MONTHS) / spend.months) : 0;
   const annualCents =
     stated !== null
-      ? stated.annualCents
+      ? Math.max(stated.annualCents, realAnnual(spend.windowCents))
       : short
         ? 0
-        : Math.round((spend.windowCents * FULL_YEAR_MONTHS) / spend.months);
+        : realAnnual(spend.windowCents);
   const annualForeignCents =
     stated !== null
-      ? Math.round(stated.annualCents * share)
+      ? Math.max(Math.round(stated.annualCents * share), realAnnual(spend.foreignCents))
       : short
         ? 0
-        : Math.round((spend.foreignCents * FULL_YEAR_MONTHS) / spend.months);
+        : realAnnual(spend.foreignCents);
   const state: CardAdvice["state"] =
     stated !== null ? "ok" : short ? "short-history" : annualCents <= 0 ? "no-spend" : "ok";
 
@@ -611,13 +618,26 @@ export function computeCardAdvice(i: CardAdviceInput): CardAdvice {
     return kind === undefined || kind === "creditcard";
   });
   const held = new Set(heldIds);
+  const paidPackages = new Set(
+    heldIds.flatMap((id) => {
+      const cond = FEE_CONDITIONS[id];
+      return cond?.kind === "package" ? [cond.name] : [];
+    }),
+  );
   const universe = i.catalogue.filter((e) => e.kind === "creditcard" && isConsumerCard(e));
   const names = new Map(i.catalogue.map((e) => [e.id, e.product]));
 
   const all =
     state === "ok"
       ? universe.map((e) =>
-          optionFor(e, held.has(e.id), annualCents, annualForeignCents, i.preferences),
+          optionFor(
+            e,
+            held.has(e.id),
+            annualCents,
+            annualForeignCents,
+            i.preferences,
+            paidPackages,
+          ),
         )
       : [];
   const options = all

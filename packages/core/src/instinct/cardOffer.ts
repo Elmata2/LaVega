@@ -27,6 +27,11 @@ export function cardOfferOf(plan: PlanResult | null, today: string): AgentMirror
   if (advice.baseline.kind !== "best-held") return null;
   const gain = advice.verdict.gainCents;
   if (!Number.isInteger(gain) || gain <= 0) return null;
+  // Points are priced at the issuer's reference value, which a shop may not honour.
+  // An unprompted message needs a gain that holds without them: fee, cashback or
+  // currency savings.
+  const cash = gain - advice.verdict.parts.pointsCents;
+  if (!Number.isFinite(cash) || cash <= 0) return null;
   // The server refuses the whole mirror on an empty name, so a nameless card gives no offer.
   const name = advice.verdict.best.name.trim().slice(0, NAME_MAX);
   if (name === "") return null;

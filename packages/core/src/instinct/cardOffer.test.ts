@@ -21,11 +21,11 @@ const plan = (advice: Partial<CardAdvice>): PlanResult =>
     },
   }) as unknown as PlanResult;
 
-const switchTo = (name: string, gainCents: number): Verdict => ({
+const switchTo = (name: string, gainCents: number, pointsCents = 0): Verdict => ({
   kind: "switch",
   best: best(name),
   gainCents,
-  parts: {} as never,
+  parts: { pointsCents } as never,
 });
 
 describe("cardOfferOf", () => {
@@ -44,6 +44,28 @@ describe("cardOfferOf", () => {
     expect(cardOfferOf(plan({ verdict: switchTo("  Kaart B ", 8000) }), "2026-11-10")?.name).toBe(
       "Kaart B",
     );
+  });
+
+  it("#369-5: a gain that rests only on points is not sent", () => {
+    expect(
+      cardOfferOf(plan({ verdict: switchTo("Kaart B", 5000, 5000) }), "2026-11-10"),
+    ).toBeNull();
+    expect(
+      cardOfferOf(plan({ verdict: switchTo("Kaart B", 5000, 6000) }), "2026-11-10"),
+    ).toBeNull();
+  });
+
+  it("#369-5: a missing points figure withholds the offer instead of sending it", () => {
+    const v = { ...switchTo("Kaart B", 5000), parts: {} as never };
+    expect(cardOfferOf(plan({ verdict: v }), "2026-11-10")).toBeNull();
+  });
+
+  it("#369-5: a gain with a positive cash part is still sent, at the full gain", () => {
+    expect(cardOfferOf(plan({ verdict: switchTo("Kaart B", 5000, 1800) }), "2026-11-10")).toEqual({
+      name: "Kaart B",
+      yearlyGainCents: 5000,
+      computedAt: "2026-11-10",
+    });
   });
 
   it("offer is the verdict's best card and gain", () => {

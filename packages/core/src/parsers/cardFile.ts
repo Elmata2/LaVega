@@ -1,5 +1,5 @@
 import type { Account, Tx } from "../model.js";
-import { withLinkedAt } from "../model.js";
+import { hasStatedCatalogueCard, withLinkedAt } from "../model.js";
 import { ingest } from "../ingest.js";
 import { mergeImportedAccounts } from "../views.js";
 import { mergeAccounts } from "../accounts.js";
@@ -185,7 +185,7 @@ const isFoldCandidateT212 = (a: Account, txs: readonly Tx[]): boolean =>
   a.key !== T212_ACCOUNT_KEY &&
   isT212Bank(a.bank) &&
   a.balanceFetchedAt === undefined &&
-  (a.source === "file" || a.statedCardId !== undefined || isT212ExportKey(a.key)) &&
+  (a.source === "file" || hasStatedCatalogueCard(a) || isT212ExportKey(a.key)) &&
   !isNonCashType(a) &&
   !txs.some((t) => t.accountKey === a.key && t.manual);
 

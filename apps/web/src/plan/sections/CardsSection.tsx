@@ -12,6 +12,7 @@ import CardLink from "../../components/ui/CardLink.js";
 import { Table, TableWrap, Td, Th } from "../../components/ui/Table.js";
 import StatusLine from "../../components/ui/StatusLine.js";
 import { cardsCopy, factLine } from "../../copy/plan/index.js";
+import { notInAdvice } from "../../copy/plan/cards.js";
 import { CATALOGUE_ENTRIES } from "../../catalogue-rates.js";
 import { heldCatalogueIds } from "../heldCards.js";
 import {
@@ -106,6 +107,7 @@ export default function CardsSection({ result, ctx }: SectionProps<CardsFigures>
     f.interest === undefined
       ? [...f.nets].sort((x, y) => x.name.localeCompare(y.name, locale))
       : f.nets;
+  const unadvisedNets = nets.filter(notInAdvice);
   const programs = [
     ...new Set([
       ...f.balances.map((b) => b.programId),
@@ -273,7 +275,7 @@ export default function CardsSection({ result, ctx }: SectionProps<CardsFigures>
             <Lines
               lines={[
                 f.cardableSpendCents > 0 ? copy.feeShareNote(f.months) : null,
-                ...nets.flatMap((n) => {
+                ...unadvisedNets.flatMap((n) => {
                   const lines = [copy.netLine(n, fmt), copy.pointsLine(n.name, n, fmt)];
                   return n.cardKey.startsWith(STATED_CARD_PREFIX)
                     ? lines.map((l) =>

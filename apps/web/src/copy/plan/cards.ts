@@ -72,6 +72,9 @@ export type CardsCopy = SectionCopy<CardsFigures, CardsReasonKey, CardsMissingKi
   facts: { cardTerms: FactSlot };
 };
 
+/** The advice block shows the figure of a card it ranks; the per-card line is for the rest. */
+export const notInAdvice = (n: CardNet): boolean => n.inAdvice !== true;
+
 /** The reason line never compares the cards: it names what the rows below
  *  show. Which card nets more is for the reader to see in the figures. */
 const NET_PER_CARD_NL = "Nettowaarde per kaart bij dezelfde uitgaven:";
@@ -191,7 +194,7 @@ const nl: CardsCopy = {
         out.push(
           `Over ${f.months} maanden was ${fmt.eur(f.cardableSpendCents)} aan uitgaven met een kaart te betalen.`,
         );
-      for (const n of f.nets) out.push(nl.netLine(n, fmt));
+      for (const n of f.nets.filter(notInAdvice)) out.push(nl.netLine(n, fmt));
       return out;
     },
     detailed: (f, fmt) => {
@@ -202,7 +205,7 @@ const nl: CardsCopy = {
         );
         out.push(nl.feeShareNote(f.months));
       }
-      for (const n of f.nets) {
+      for (const n of f.nets.filter(notInAdvice)) {
         out.push(nl.netLine(n, fmt));
         const p = nl.pointsLine(n.name, n, fmt);
         if (p !== null) out.push(p);
@@ -358,7 +361,7 @@ const en: CardsCopy = {
         out.push(
           `Over ${f.months} months, ${fmt.eur(f.cardableSpendCents)} of spending fit on a card.`,
         );
-      for (const n of f.nets) out.push(en.netLine(n, fmt));
+      for (const n of f.nets.filter(notInAdvice)) out.push(en.netLine(n, fmt));
       return out;
     },
     detailed: (f, fmt) => {
@@ -369,7 +372,7 @@ const en: CardsCopy = {
         );
         out.push(en.feeShareNote(f.months));
       }
-      for (const n of f.nets) {
+      for (const n of f.nets.filter(notInAdvice)) {
         out.push(en.netLine(n, fmt));
         const p = en.pointsLine(n.name, n, fmt);
         if (p !== null) out.push(p);

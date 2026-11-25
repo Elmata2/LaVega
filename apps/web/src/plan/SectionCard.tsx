@@ -124,7 +124,11 @@ export default function SectionCard({ section, result, children }: SectionCardPr
       </h3>
       <div id={bodyId} hidden={!open}>
         {open && (
-          <div data-testid="plan-card-body" className="mt-4 grid gap-4">
+          <div
+            data-testid="plan-card-body"
+            className="mt-4 grid gap-4"
+            style={{ gridTemplateColumns: "minmax(0, 1fr)" }}
+          >
             {parts.map(([key, node]) =>
               filled(node) ? (
                 <div key={key} data-testid={`plan-part-${key}`}>
