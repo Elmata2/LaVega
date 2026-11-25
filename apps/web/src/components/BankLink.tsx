@@ -12,7 +12,7 @@ import StatusLine from "./ui/StatusLine.js";
 type Aspsp = { name: string; country: string; logo?: string };
 type PsuType = "business" | "personal";
 
-const PSU_TYPE_ORDER: PsuType[] = ["business", "personal"];
+const PSU_TYPE_ORDER: PsuType[] = ["personal", "business"];
 
 /** `https:` with a host, and nothing else.
  *
@@ -36,7 +36,7 @@ export default function BankLink({
   busy,
   onRefresh,
   onBeforeRedirect,
-  defaultPsuType = "business",
+  defaultPsuType = "personal",
   compact = false,
 }: {
   busy: boolean;

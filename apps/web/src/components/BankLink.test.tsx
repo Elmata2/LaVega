@@ -71,7 +71,7 @@ function click(el: Element) {
   });
 }
 
-test("the Zakelijk | Particulier toggle sits on its own row, with the refresh row's gap above the connect button", async () => {
+test("the Particulier | Zakelijk toggle sits on its own row, with the refresh row's gap above the connect button", async () => {
   const m = mockFetch([{ name: "ING", country: "NL" }]);
   try {
     await render();
@@ -84,29 +84,41 @@ test("the Zakelijk | Particulier toggle sits on its own row, with the refresh ro
   }
 });
 
-test("initial load fetches the bank list with psu_type=business, the default", async () => {
+test("initial load fetches the bank list with psu_type=personal, the default", async () => {
   const mock = mockFetch([{ name: "ING", country: "NL" }]);
   try {
     await render();
     click(byText("button", "Koppel je bank"));
     await flush();
     expect(mock.calls).toHaveLength(1);
-    expect(mock.calls[0].url).toContain("psu_type=business");
+    expect(mock.calls[0].url).toContain("psu_type=personal");
   } finally {
     mock.restore();
   }
 });
 
-test("clicking Particulier refetches the bank list with psu_type=personal", async () => {
+test("Particulier is pressed by default and listed before Zakelijk", async () => {
+  const m = mockFetch([{ name: "ING", country: "NL" }]);
+  try {
+    await render();
+    const buttons = [...container!.querySelectorAll<HTMLElement>(".scope-switch button")];
+    expect(buttons.map((b) => b.textContent)).toEqual(["Particulier", "Zakelijk"]);
+    expect(buttons.map((b) => b.getAttribute("aria-pressed"))).toEqual(["true", "false"]);
+  } finally {
+    m.restore();
+  }
+});
+
+test("clicking Zakelijk refetches the bank list with psu_type=business", async () => {
   const mock = mockFetch([{ name: "ING", country: "NL" }]);
   try {
     await render();
     click(byText("button", "Koppel je bank"));
     await flush();
-    click(byText("button", "Particulier"));
+    click(byText("button", "Zakelijk"));
     await flush();
     expect(mock.calls).toHaveLength(2);
-    expect(mock.calls[1].url).toContain("psu_type=personal");
+    expect(mock.calls[1].url).toContain("psu_type=business");
   } finally {
     mock.restore();
   }
@@ -131,7 +143,7 @@ test("a failed refetch after switching type clears the stale list instead of lea
     click(byText("button", "Koppel je bank"));
     await flush();
     expect(() => byText("button", "Autoriseer")).not.toThrow();
-    click(byText("button", "Particulier"));
+    click(byText("button", "Zakelijk"));
     await flush();
     expect(() => byText("button", "Autoriseer")).toThrow();
     expect(() => byText("button", "Koppel je bank")).not.toThrow();
@@ -140,20 +152,20 @@ test("a failed refetch after switching type clears the stale list instead of lea
   }
 });
 
-test("connecting a bank after switching to Particulier sends psuType personal", async () => {
+test("connecting a bank after switching to Zakelijk sends psuType business", async () => {
   const mock = mockFetch([{ name: "ING", country: "NL" }]);
   try {
     await render();
     click(byText("button", "Koppel je bank"));
     await flush();
-    click(byText("button", "Particulier"));
+    click(byText("button", "Zakelijk"));
     await flush();
     click(byText("button", "Autoriseer"));
     await flush();
     const auth = mock.calls.find((c) => c.url.includes("/api/eb/auth"));
     expect(auth).toBeDefined();
     const body = JSON.parse(auth!.init!.body as string);
-    expect(body).toEqual({ name: "ING", country: "NL", psuType: "personal" });
+    expect(body).toEqual({ name: "ING", country: "NL", psuType: "business" });
   } finally {
     mock.restore();
   }
@@ -199,3 +211,22 @@ for (const badUrl of BAD_AUTH_URLS) {
     }
   });
 }
+
+test("connecting a bank without touching the toggle sends psuType personal", async () => {
+  const mock = mockFetch([{ name: "ING", country: "NL" }]);
+  try {
+    await render();
+    click(byText("button", "Koppel je bank"));
+    await flush();
+    click(byText("button", "Autoriseer"));
+    await flush();
+    const auth = mock.calls.find((c) => c.url.includes("/api/eb/auth"));
+    expect(JSON.parse(auth!.init!.body as string)).toEqual({
+      name: "ING",
+      country: "NL",
+      psuType: "personal",
+    });
+  } finally {
+    mock.restore();
+  }
+});
