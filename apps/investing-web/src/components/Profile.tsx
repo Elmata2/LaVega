@@ -442,6 +442,7 @@ export function Profile() {
 
   return (
     <div className="space-y-6">
+      <h2 className="sr-only">Profile</h2>
       <section id="brokers" aria-label="Brokers">
         <Card>
           <CardHeader>

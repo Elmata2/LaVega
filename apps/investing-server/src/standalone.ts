@@ -29,6 +29,7 @@ import {
   runtimeAccountWrapperFile,
 } from "./fileAccountWrapperStore.js";
 import { createDevFixturePersonalNetWorthSeed } from "./devFixture.js";
+import { createInMemoryAgentMemoryStore } from "./inMemoryAgentMemory.js";
 import { createInMemoryPersonalNetWorthStore } from "./personalNetWorthStore.js";
 
 const port = Number(process.env.PORT) || 8788;
@@ -115,6 +116,7 @@ if (isMainModule()) {
     // this only mounts when the fixture itself is on.
     ...(process.env.INVESTING_DEV_FIXTURE === "1"
       ? {
+          agentMemory: createInMemoryAgentMemoryStore(),
           personalNetWorthStore: createInMemoryPersonalNetWorthStore(
             createDevFixturePersonalNetWorthSeed(),
           ),

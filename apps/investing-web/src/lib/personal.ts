@@ -7,22 +7,27 @@
  * in production — which is what the investing link did before it became
  * configuration.
  *
- *   - `VITE_PERSONAL_URL` set to an origin (`https://www.lavega.dev/app`) or a
- *     same-origin path (`/app`) — that, minus any trailing slash.
+ *   - `VITE_PERSONAL_URL` (or `VITE_PERSONAL_APP_URL`) set to an origin
+ *     (`https://www.lavega.dev/app`) or a same-origin path (`/app`) — that,
+ *     minus any trailing slash.
  *   - set but blank — off; no link is rendered.
- *   - unset, dev — the personal app's Vite port.
+ *   - unset, dev — the personal app's Vite port (`http://127.0.0.1:5174/app`).
  *   - unset, production — `/app` on this origin, which is where the all-in-one
  *     deploy serves it. */
 
-export type PersonalEnv = { VITE_PERSONAL_URL?: string; DEV?: boolean };
+export type PersonalEnv = {
+  VITE_PERSONAL_URL?: string;
+  VITE_PERSONAL_APP_URL?: string;
+  DEV?: boolean;
+};
 
 export function resolvePersonalUrl(env: PersonalEnv): string | null {
-  const configured = env.VITE_PERSONAL_URL;
+  const configured = env.VITE_PERSONAL_URL ?? env.VITE_PERSONAL_APP_URL;
   if (configured !== undefined) {
     const trimmed = configured.trim().replace(/\/+$/, "");
     return trimmed === "" ? null : trimmed;
   }
-  return env.DEV ? "http://127.0.0.1:5173/app" : "/app";
+  return env.DEV ? "http://127.0.0.1:5174/app" : "/app";
 }
 
 export const PERSONAL_URL: string | null = resolvePersonalUrl(

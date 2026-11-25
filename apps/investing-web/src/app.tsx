@@ -204,6 +204,7 @@ function PositionList({
   positions: InvestingDashboardData["positions"];
   currency: string;
 }) {
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const requestedSort = searchParams.get("sort");
   const sort: PositionSort = POSITION_SORTS.some(({ key }) => key === requestedSort)
@@ -288,24 +289,34 @@ function PositionList({
           ))}
         </div>
         <div role="rowgroup" className="divide-y divide-border">
-          {sorted.map((position) => (
-            <Link
-              role="row"
-              key={`${position.symbol}-${position.entity}`}
-              to={{
-                pathname: `/positions/${encodeURIComponent(position.symbol)}`,
-                search: query ? `?${query}` : "",
-              }}
-              className="group grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 px-4 py-4 outline-hidden sm:grid-cols-[minmax(220px,1.35fr)_minmax(130px,.8fr)_minmax(130px,.7fr)_minmax(220px,1fr)] sm:gap-0 sm:px-5 hover:bg-secondary/40 focus-visible:bg-secondary/40 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
-            >
-              <div role="cell" className="min-w-0 sm:pr-4">
-                <span className="block truncate font-semibold text-accent">
-                  {position.description ?? position.symbol}
-                </span>
-                <span className="block truncate text-xs text-muted-foreground">
-                  {holdingIdentityLine(position)}
-                </span>
-              </div>
+          {sorted.map((position) => {
+            const positionTo = {
+              pathname: `/positions/${encodeURIComponent(position.symbol)}`,
+              search: query ? `?${query}` : "",
+            };
+            return (
+              <div
+                role="row"
+                key={`${position.symbol}-${position.entity}`}
+                onClick={(event) => {
+                  if (event.target instanceof Element && event.target.closest("a, button")) return;
+                  navigate(positionTo);
+                }}
+                className="group grid cursor-pointer grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 px-4 py-4 outline-hidden sm:grid-cols-[minmax(220px,1.35fr)_minmax(130px,.8fr)_minmax(130px,.7fr)_minmax(220px,1fr)] sm:gap-0 sm:px-5 hover:bg-secondary/40 focus-within:bg-secondary/40"
+              >
+                <div role="cell" className="min-w-0 sm:pr-4">
+                  <Link
+                    to={positionTo}
+                    className="block rounded-chip outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                  >
+                    <span className="block truncate font-semibold text-accent group-hover:underline">
+                      {position.description ?? position.symbol}
+                    </span>
+                    <span className="block truncate text-xs text-muted-foreground">
+                      {holdingIdentityLine(position)}
+                    </span>
+                  </Link>
+                </div>
               <div role="cell" className="text-right text-sm tabular-nums">
                 {position.marketValue === null ? (
                   <span className="text-muted-foreground">
@@ -391,8 +402,9 @@ function PositionList({
                   </>
                 )}
               </div>
-            </Link>
-          ))}
+              </div>
+            );
+          })}
         </div>
       </div>
     </div>

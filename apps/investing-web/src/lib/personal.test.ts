@@ -11,6 +11,15 @@ test("a configured origin or path wins, without its trailing slash", () => {
     "https://www.lavega.dev/app",
   );
   expect(resolvePersonalUrl({ VITE_PERSONAL_URL: "/prive" })).toBe("/prive");
+  expect(resolvePersonalUrl({ VITE_PERSONAL_APP_URL: "http://localhost:5174/app/" })).toBe(
+    "http://localhost:5174/app",
+  );
+  expect(
+    resolvePersonalUrl({
+      VITE_PERSONAL_URL: "/custom",
+      VITE_PERSONAL_APP_URL: "http://localhost:5174/app",
+    }),
+  ).toBe("/custom");
 });
 
 /* Leeg is een KEUZE en niet een ontbrekende waarde: wie de investing-app apart
@@ -22,7 +31,7 @@ test("blank means do not offer the link at all", () => {
 });
 
 test("unset falls back per environment, never to a developer's port in production", () => {
-  expect(resolvePersonalUrl({ DEV: true })).toBe("http://127.0.0.1:5173/app");
+  expect(resolvePersonalUrl({ DEV: true })).toBe("http://127.0.0.1:5174/app");
   expect(resolvePersonalUrl({})).toBe("/app");
   expect(resolvePersonalUrl({ DEV: false })).toBe("/app");
 });

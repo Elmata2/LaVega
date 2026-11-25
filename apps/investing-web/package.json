@@ -8,7 +8,8 @@
     "build": "vite build",
     "typecheck": "node ../../scripts/typecheck.mjs",
     "test": "vitest run",
-    "verify:base": "vitest run src/base-guard.test.ts"
+    "verify:base": "vitest run src/base-guard.test.ts",
+    "test:e2e": "e2e run"
   },
   "dependencies": {
     "@ai-sdk/react": "4.0.80",
@@ -30,11 +31,14 @@
     "tailwind-merge": "^3.6.0"
   },
   "devDependencies": {
+    "@e2e-dev/core": "^0.25.0",
+    "@e2e-dev/web": "^0.17.0",
     "@sentry/vite-plugin": "^5.4.0",
     "@tailwindcss/postcss": "^4.3.3",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^4.3.4",
+    "e2e": "^0.25.0",
     "jsdom": "^30.0.1",
     "postcss": "^8.5.26",
     "tailwindcss": "^4.3.3",

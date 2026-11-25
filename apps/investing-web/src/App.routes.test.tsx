@@ -152,3 +152,52 @@ test("Overview shows the DeGiro import age and links the stale problem to the im
   expect(link?.textContent).toBe("Importeer een nieuw rekeningoverzicht");
   act(() => root.unmount());
 });
+
+test("positions table exposes real links inside rows and /profile has an accessible heading", async () => {
+  const apple = {
+    ...dashboard.positions[0]!,
+    symbol: "AAPL",
+    entity: "Trading 212",
+    description: "Apple Inc.",
+    quantity: 1,
+  };
+  vi.stubGlobal(
+    "fetch",
+    vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input).startsWith("/api/investing/dashboard"))
+        return Promise.resolve(new Response(JSON.stringify(positionsDashboard([apple]))));
+      return Promise.resolve(emptyResponseFor(input, init));
+    }),
+  );
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  await act(async () => {
+    root.render(
+      <MemoryRouter initialEntries={["/positions"]}>
+        <App />
+      </MemoryRouter>,
+    );
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+
+  const row = container.querySelector('[role="row"] a[href="/positions/AAPL"]');
+  expect(row).not.toBeNull();
+  expect(row?.getAttribute("role")).toBeNull();
+  expect(row?.textContent).toContain("Apple Inc.");
+  expect(row?.textContent).toContain("AAPL");
+  act(() => root.unmount());
+
+  const profileRoot = createRoot(container);
+  await act(async () => {
+    profileRoot.render(
+      <MemoryRouter initialEntries={["/profile"]}>
+        <App />
+      </MemoryRouter>,
+    );
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+  const headings = [...container.querySelectorAll("h2")].map((h) => h.textContent);
+  expect(headings).toContain("Profile");
+  act(() => profileRoot.unmount());
+});

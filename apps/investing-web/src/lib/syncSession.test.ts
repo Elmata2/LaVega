@@ -175,6 +175,18 @@ test("each lane completion fires the dashboard refresh once", async () => {
   unsubscribe();
 });
 
+test("initial sync state with existing syncedAt does not abort initial dashboard load", async () => {
+  stateServer({ state: [done()] });
+  const refreshes = vi.fn();
+  window.addEventListener("lavega:dashboard-refresh", refreshes);
+  const unsubscribe = session.subscribeSyncSession(() => {});
+  await vi.advanceTimersByTimeAsync(0);
+
+  expect(refreshes).not.toHaveBeenCalled();
+  window.removeEventListener("lavega:dashboard-refresh", refreshes);
+  unsubscribe();
+});
+
 test("one refresh intent: overlapping callers share one POST and start the poll", async () => {
   const server = stateServer({
     refresh: [{ ...running(), claimed: true }],

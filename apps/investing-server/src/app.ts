@@ -699,7 +699,18 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
    * apps/server signals that with 503 on /api/auth/* when DATABASE_URL /
    * BETTER_AUTH_SECRET are unset; match that here so investing-web's
    * RequireAuth renders unguarded on standalone instead of reading the
-   * default Hono 404 as "anonymous" and redirecting to /sign-in. */
+   * default Hono 404 as "anonymous" and redirecting to /sign-in.
+   * When INVESTING_DEV_FIXTURE=1, return a local dev session so the browser
+   * sees a clean 200 instead of repeated 503s in the console. */
+  investingApp.get("/api/auth/get-session", (c) => {
+    if (process.env.INVESTING_DEV_FIXTURE === "1") {
+      return c.json({
+        session: { id: "dev-fixture-session" },
+        user: { id: LOCAL_TENANT_ID, email: "local@lavega.dev", name: "Local Dev" },
+      });
+    }
+    return c.json({ message: "Authentication is not configured" }, 503);
+  });
   investingApp.all("/api/auth/*", (c) =>
     c.json({ message: "Authentication is not configured" }, 503),
   );

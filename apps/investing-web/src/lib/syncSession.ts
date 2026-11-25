@@ -120,6 +120,7 @@ function toPriceProgress(state: SyncRunStateView): PriceSyncProgress {
 /** A lane's `syncedAt` changing is the one durable proof that it finished a
  *  read, so that is what invalidates the dashboard, once per lane. */
 function lanesThatCompleted(previous: SyncRunStateView | null, next: SyncRunStateView): number {
+  if (!previous) return 0;
   const changed = (before: string | null | undefined, after: string | null) =>
     after !== null && after !== (before ?? null);
   return [

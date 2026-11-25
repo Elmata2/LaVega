@@ -9,7 +9,8 @@
     "build": "vite build",
     "typecheck": "node ../../scripts/typecheck.mjs",
     "test": "vitest run",
-    "prerender": "vite build --ssr src/prerender.tsx --outDir dist-ssr && node scripts/prerender-landing.mjs"
+    "prerender": "vite build --ssr src/prerender.tsx --outDir dist-ssr && node scripts/prerender-landing.mjs",
+    "test:e2e": "e2e run"
   },
   "dependencies": {
     "@lavega/adapters": "workspace:*",
@@ -28,12 +29,15 @@
     "tailwind-merge": "^3.6.0"
   },
   "devDependencies": {
+    "@e2e-dev/core": "^0.25.0",
+    "@e2e-dev/web": "^0.17.0",
     "@fontsource/space-grotesk": "^5.3.0",
     "@sentry/vite-plugin": "^5.4.0",
     "@tailwindcss/postcss": "^4.3.3",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^4.3.4",
+    "e2e": "^0.25.0",
     "fake-indexeddb": "^6.0.0",
     "postcss": "^8.5.26",
     "tailwindcss": "^4.3.3",
