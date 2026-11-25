@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { SHOW_ENTITY_CLASSIFIER } from "../archive";
 import type {
   Account,
   OwnAccounts,
@@ -791,7 +792,7 @@ export default function Transacties({
           spaces: at phone width the old layout ran the six controls into each
           other and pushed the page sideways. */}
       <div className="filter-bar">
-        {entityScope === "" && (
+        {SHOW_ENTITY_CLASSIFIER && entityScope === "" && (
           <label>
             {c.transacties.entiteitLabel}{" "}
             <select value={fEntity} onChange={(e) => onFEntityChange(e.target.value)}>
@@ -864,7 +865,7 @@ export default function Transacties({
                 <Th>{c.transacties.tableOmschrijving}</Th>
                 <Th>{c.transacties.tableRekening}</Th>
                 <Th>{c.transacties.tableBedrag}</Th>
-                <Th>{c.transacties.tableEntiteit}</Th>
+                {SHOW_ENTITY_CLASSIFIER && <Th>{c.transacties.tableEntiteit}</Th>}
                 <Th>{c.transacties.tableCategorie}</Th>
               </tr>
             </thead>
@@ -894,7 +895,9 @@ export default function Transacties({
                         );
                       })()}
                   </Td>
-                  <Td data-label={c.transacties.tableEntiteit}>{t.entity}</Td>
+                  {SHOW_ENTITY_CLASSIFIER && (
+                    <Td data-label={c.transacties.tableEntiteit}>{t.entity}</Td>
+                  )}
                   <Td data-label={c.transacties.tableCategorie}>{categoryCell(t)}</Td>
                 </tr>
               ))}

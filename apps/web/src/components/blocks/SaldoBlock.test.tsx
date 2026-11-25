@@ -520,6 +520,18 @@ test("the card asks for a missing IBAN and a missing kind, by name and with the 
   expect(html).toContain("betaal- of spaarrekening?"); // waarom de soort uitmaakt
 });
 
+test("accounts with the same name are listed once, the count carries the number", () => {
+  const html = gapRender([
+    { ...BASE, key: "a1", iban: "", bank: "American Express", name: "American Express" },
+    { ...BASE, key: "a2", iban: "", bank: "American Express", name: "American Express" },
+    { ...BASE, key: "a3", iban: "", bank: "American Express", name: "American Express" },
+  ]);
+  expect(html).toMatch(
+    /3 rekeningen zonder IBAN \(American Express\)|3 accounts without an IBAN \(American Express\)/,
+  );
+  expect(html).not.toContain("American Express, American Express");
+});
+
 test("a complete set of accounts is asked nothing at all", () => {
   const html = gapRender([BASE]);
   expect(html).not.toContain("zonder IBAN");

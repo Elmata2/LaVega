@@ -164,7 +164,7 @@ test("Account: zonder serveraccount staat er alleen de ene zin, geen formulier",
   );
   await render();
   const account = section("Algemeen").querySelector('[data-testid="general-account"]')!;
-  expect(account.textContent).toContain("geen serveraccount ingesteld");
+  expect(account.textContent).toContain("Geen account ingesteld");
   expect(account.querySelector("form")).toBeNull();
   expect(account.querySelector("input")).toBeNull();
 });

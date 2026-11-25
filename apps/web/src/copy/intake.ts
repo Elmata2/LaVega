@@ -169,7 +169,7 @@ export const intakeCopy: Record<Locale, IntakeCopy> = {
         },
         round2: {
           title: "Nog een paar vragen",
-          count: (n) => `${n} ${n === 1 ? "vraag" : "vragen"} zodat LaVega je kan coachen`,
+          count: (n) => `${n} ${n === 1 ? "vraag" : "vragen"}`,
         },
       },
       connect: {
@@ -407,7 +407,7 @@ export const intakeCopy: Record<Locale, IntakeCopy> = {
         },
         round2: {
           title: "A few more questions",
-          count: (n) => `${n} ${n === 1 ? "question" : "questions"} so LaVega can coach you`,
+          count: (n) => `${n} ${n === 1 ? "question" : "questions"}`,
         },
       },
       connect: {

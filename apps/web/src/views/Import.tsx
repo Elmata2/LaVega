@@ -1,3 +1,4 @@
+import { SHOW_ENTITY_CLASSIFIER } from "../archive.js";
 import BankLink from "../components/BankLink";
 import { useAppLocale } from "../appLocale.js";
 import { shellCopy } from "../copy/shell.js";
@@ -39,10 +40,16 @@ export default function Import({
       {/* One wrapping row: a native file input reports its own intrinsic width,
           which overflowed the page at phone width when it sat inline. */}
       <div className="import-controls">
-        <label>
-          {c.import.entityLabel}{" "}
-          <input value={entity} onChange={(e) => onEntityChange(e.target.value)} disabled={busy} />
-        </label>
+        {SHOW_ENTITY_CLASSIFIER && (
+          <label>
+            {c.import.entityLabel}{" "}
+            <input
+              value={entity}
+              onChange={(e) => onEntityChange(e.target.value)}
+              disabled={busy}
+            />
+          </label>
+        )}
         {openCardFile && (
           <button
             type="button"

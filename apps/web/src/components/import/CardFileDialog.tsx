@@ -153,6 +153,8 @@ function Body({
   const guide = guideFor(card?.brand ?? null, locale);
   const phone = isPhone();
   const inputRef = useRef<HTMLInputElement>(null);
+  const addRef = useRef<HTMLButtonElement>(null);
+  const answeredRef = useRef(false);
   const [previews, setPreviews] = useState<FilePreview[]>([]);
   const [override, setOverride] = useState<Set<string>>(new Set());
   // "Is this the same card as your existing account?", per file: true = yes.
@@ -210,6 +212,17 @@ function Body({
   const writable = eligible.filter((pv) => plans.get(pv.id)?.question === null);
   const pending = eligible.some((pv) => plans.get(pv.id)?.question != null);
   const somethingNew = !pending && writable.some((pv) => (plans.get(pv.id)?.newCount ?? 0) > 0);
+
+  // The answered question's buttons unmount with focus on them, which drops focus
+  // to the dialog body. Hand it to Toevoegen once nothing is left to answer, or to the close
+  // button when there is nothing new to add.
+  useEffect(() => {
+    if (!answeredRef.current || pending) return;
+    answeredRef.current = false;
+    const add = addRef.current;
+    if (add && !add.disabled) add.focus();
+    else add?.closest("dialog")?.querySelector<HTMLElement>(".ui-dialog-close")?.focus();
+  }, [pending, somethingNew]);
 
   async function add() {
     setStage("adding");
@@ -370,7 +383,10 @@ function Body({
               cardName={card?.name ?? null}
               overridden={override.has(pv.id)}
               sameAnswer={same.get(pv.id)}
-              onAnswer={(v) => setSame((m) => new Map(m).set(pv.id, v))}
+              onAnswer={(v) => {
+                answeredRef.current = true;
+                setSame((m) => new Map(m).set(pv.id, v));
+              }}
               onOverride={() => setOverride((s) => new Set(s).add(pv.id))}
               onRemove={() => setPreviews((l) => l.filter((x) => x.id !== pv.id))}
               disabled={stage === "adding"}
@@ -390,6 +406,7 @@ function Body({
           {c.cancel}
         </Button>
         <Button
+          ref={addRef}
           variant="primary"
           className="min-h-[44px]"
           disabled={!somethingNew || reading > 0 || stage === "adding"}

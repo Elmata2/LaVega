@@ -129,8 +129,7 @@ const preference = (locale: Locale) => (subject: string, valueId: string) =>
 export const assistantCopy: Record<Locale, AssistantCopy> = {
   nl: {
     title: "Assistent",
-    intro:
-      "Vraag naar je eigen cijfers. De assistent werkt alleen in je browser, op je ontgrendelde kluis.",
+    intro: "Vraag naar je eigen cijfers.",
     placeholder: "Bijvoorbeeld: wat heb ik deze maand uitgegeven?",
     ask: "Vraag",
     close: "Assistent sluiten",
@@ -144,7 +143,7 @@ export const assistantCopy: Record<Locale, AssistantCopy> = {
     readError: "Ik kon je kluis nu niet lezen. Probeer het nog eens.",
     saveError: "Je beslissing kon niet worden opgeslagen. Probeer het nog eens.",
     unknown:
-      "Dat kan ik in deze versie niet beantwoorden. Ik ken drie dingen: je uitgaven van deze maand, je saldo's, en een voorkeur onthouden.",
+      "Dat kan ik niet beantwoorden. Ik laat je uitgaven van deze maand en je saldo's zien, en onthoud een voorkeur.",
     privacy:
       "Alles blijft in je browser: de vraag, het antwoord en je beslissingen. Er gaat niets naar de server.",
     spending: {
@@ -193,7 +192,7 @@ export const assistantCopy: Record<Locale, AssistantCopy> = {
         notNow: "Niet nu",
       },
       declined:
-        "Goed. Zonder slim antwoorden laat ik alleen je saldo's en je uitgaven van deze maand zien, en onthoud ik een voorkeur.",
+        "Goed. Dan laat ik alleen je saldo's en je uitgaven van deze maand zien, en onthoud ik een voorkeur.",
       turnOff: "Slim antwoorden uitzetten",
       needsAccount: "Slim antwoorden heeft een LaVega-account en een ingestelde AI-dienst nodig.",
       working: "Ik zoek het uit.",
@@ -236,8 +235,7 @@ export const assistantCopy: Record<Locale, AssistantCopy> = {
   },
   en: {
     title: "Assistant",
-    intro:
-      "Ask about your own figures. The assistant runs only in your browser, on your unlocked vault.",
+    intro: "Ask about your own figures.",
     placeholder: "For example: what did I spend this month?",
     ask: "Ask",
     close: "Close assistant",
@@ -251,7 +249,7 @@ export const assistantCopy: Record<Locale, AssistantCopy> = {
     readError: "I could not read your vault just now. Try again.",
     saveError: "Your decision could not be saved. Try again.",
     unknown:
-      "I cannot answer that in this version. I know three things: this month's spending, your balances, and remembering one preference.",
+      "I cannot answer that. I can show this month's spending and your balances, and remember a preference.",
     privacy:
       "Everything stays in your browser: the question, the answer and your decisions. Nothing is sent to the server.",
     spending: {
@@ -300,7 +298,7 @@ export const assistantCopy: Record<Locale, AssistantCopy> = {
         notNow: "Not now",
       },
       declined:
-        "Fine. Without smart answers I only show your balances and this month's spending, and remember a preference.",
+        "Fine. Then I only show your balances and this month's spending, and remember a preference.",
       turnOff: "Turn off smart answers",
       needsAccount: "Smart answers need a LaVega account and a configured AI service.",
       working: "Looking into it.",

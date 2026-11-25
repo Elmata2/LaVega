@@ -688,7 +688,7 @@ export default function Profiel({
 
       <Card as="section" aria-label={c.nav.moduleLabels.plan} className="profiel-plan">
         <h2>{c.nav.moduleLabels.plan}</h2>
-        <p>{planUnlocked ? c.profiel.plan.line : invite.intro}</p>
+        {!planUnlocked && <p>{invite.intro}</p>}
         <Button variant="primary" onClick={() => onNavigate?.(planUnlocked ? "plan" : "intake")}>
           {planUnlocked ? c.profiel.plan.open : resuming ? invite.resume : invite.start}
         </Button>

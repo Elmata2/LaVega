@@ -152,6 +152,7 @@ type RekeningenCopy = {
   datumOnbekend: string;
   geenSaldo: string;
   saldoAgeDatedIntro: (date: string) => string;
+  saldoAgeDatedToday: string;
   saldoAgeDatedLater: (laterDate: string) => string;
   saldoAgeDatedInvite: string;
   saldoAgeUndatedLinked: string;
@@ -562,7 +563,6 @@ type BankLinkCopy = {
   typeRekeningAria: string;
   ofKoppelJeBankDirect: string;
   ververs: string;
-  ververshHint: string;
   laden: string;
   koppelBankEnableBanking: string;
   /** The intake's neutral label for the same action (no vendor name). */
@@ -744,47 +744,33 @@ const nl: MoneyCopy = {
     datumOnbekend: "datum onbekend",
     geenSaldo: "geen saldo",
     saldoAgeDatedIntro: (date) =>
-      `Dit bedrag is de stand van ${date}, niet van vandaag. LaVega werkt het daarna niet zelf bij:` +
-      ` een koppeling of een import haalt alleen op het moment zelf gegevens binnen, er loopt niets op de achtergrond.`,
-    saldoAgeDatedLater: (laterDate) =>
-      ` Er zijn transacties van ná die dag; de nieuwste is van ${laterDate}, dus dit is niet de stand van nu.`,
-    saldoAgeDatedInvite: ` Je kunt het bedrag in het veld hierboven overschrijven met wat je bankapp nu laat zien; LaVega legt dan de dag van vandaag erbij vast.`,
-    saldoAgeUndatedLinked:
-      `Bij dit bedrag staat geen dag: de bron stuurde er geen mee, en LaVega vult er zelf geen in.` +
-      ` De koppeling vernieuwt zichzelf niet — er loopt niets op de achtergrond, dus dit cijfer beweegt niet mee.` +
-      ` Wanneer deze rekening binnenkwam, staat in de regel hieronder; dat is de ouderdom van de koppeling en` +
-      ` niet die van dit bedrag.`,
-    saldoAgeUndatedUnlinked:
-      `Bij dit bedrag staat geen dag, en van deze rekening is ook geen koppelmoment vastgelegd (zie de regel hieronder).` +
-      ` De koppeling vernieuwt zichzelf niet: wat hier staat is de stand van het moment waarop je autoriseerde.` +
-      ` Welk moment dat was, weet LaVega niet, en daarom staat er hier geen datum.`,
-    saldoAgeUndatedTx: (date) =>
-      ` De nieuwste transactie die LaVega van deze rekening heeft, is van ${date} — dat zegt iets over de transacties, niet over dit bedrag.`,
-    saldoAgeUndatedInvite: ` Overschrijf het bedrag in het veld hierboven met wat je bankapp nu laat zien; dan staat de dag er wel bij.`,
-    saldoAgeNoneIntro: "Van deze rekening is geen saldo bekend — geen bedrag, en dus ook geen nul.",
-    saldoAgeNoneTx: (date) => ` Er zijn wel transacties: de nieuwste is van ${date}.`,
-    saldoAgeNoneInvite:
-      " Vul het bedrag in het veld hierboven in zoals je bankapp het laat zien; LaVega legt de dag van vandaag erbij vast.",
+      `Dit is de stand van ${date}, niet van vandaag. Alleen een koppeling of import vernieuwt hem.`,
+    saldoAgeDatedToday: "Stand van vandaag.",
+    saldoAgeDatedLater: (laterDate) => ` Nieuwste transactie: ${laterDate}.`,
+    saldoAgeDatedInvite: ` Overschrijf het bedrag hierboven met wat je bankapp nu toont.`,
+    saldoAgeUndatedLinked: `Bij dit bedrag staat geen dag, en de koppeling vernieuwt zichzelf niet. De regel hieronder is de ouderdom van de koppeling, niet van het bedrag.`,
+    saldoAgeUndatedUnlinked: `Bij dit bedrag staat geen dag, en geen koppelmoment is vastgelegd. De koppeling vernieuwt zichzelf niet: dit is de stand van het moment waarop je autoriseerde.`,
+    saldoAgeUndatedTx: (date) => ` Nieuwste transactie: ${date} (zegt niets over dit bedrag).`,
+    saldoAgeUndatedInvite: ` Overschrijf het bedrag in het veld hierboven met wat je bankapp nu toont.`,
+    saldoAgeNoneIntro: "Geen saldo bekend: geen bedrag, en dus ook geen nul.",
+    saldoAgeNoneTx: (date) => ` Nieuwste transactie: ${date}.`,
+    saldoAgeNoneInvite: " Vul het bedrag hierboven in zoals je bankapp het toont.",
     gekoppeldOp: (date) => `gekoppeld op ${date}`,
     opgehaaldOp: (date) => `opgehaald op ${date}`,
     saldoAgeUndatedFetched:
-      "Dit is het saldo zoals je bank het gaf toen LaVega er het laatst om vroeg. De bank stuurde er geen dag bij, dus staat er de dag waarop wij het ophaalden — niet de dag waarop het bedrag gold. ",
+      "Saldo zoals de bank het gaf bij het laatste ophalen. De bank stuurde geen dag mee, dus de datum is die van ophalen, niet van het bedrag. ",
     koppelmomentOnbekend: "koppelmoment onbekend",
     linkedNoteKnown: (date) =>
-      `Deze rekening staat sinds ${date} in LaVega — de dag van de koppeling of de import.` +
-      ` Dat is iets anders dan de dag waarop het saldo hierboven gold: dit zegt hoe oud de koppeling is,` +
-      ` niet hoe oud het bedrag is.`,
+      `Deze rekening staat sinds ${date} in LaVega (koppeling of import). Dat is de ouderdom van de koppeling, niet van het saldo hierboven.`,
     linkedNoteUnknown:
-      `Wanneer deze rekening in LaVega kwam, is niet vastgelegd: hij stond er al voordat LaVega het` +
-      ` koppelmoment bijhield. De dag van vandaag invullen zou van een rekening van maanden geleden een` +
-      ` verse koppeling maken, dus dat gebeurt niet — dit blijft onbekend. Rekeningen die je hierna` +
-      ` koppelt of importeert krijgen hun moment wel.`,
+      `Wanneer deze rekening in LaVega kwam, is niet vastgelegd en blijft onbekend.` +
+      ` Rekeningen die je hierna koppelt of importeert krijgen hun moment wel.`,
     transferLinksDropped: (n) =>
       `${n} overboekingskoppeling${n === 1 ? "" : "en"} losgelaten: een van de twee transacties` +
       ` bestaat niet meer na het samenvoegen of verwijderen.`,
     waarderingen: "Waarderingen",
     waarderingenUitleg:
-      "Een waardering is een absoluut bedrag op een datum. Tot het eerste bedrag is het vermogen onbekend; daarna loopt de reeks met je transacties mee.",
+      "Een waardering is een bedrag op een datum. Tot het eerste bedrag is het vermogen onbekend.",
     begintotaal: "Beginsaldo",
     begindatum: "Begindatum",
     begintotaalVanLabel: (naam) => `Beginsaldo van ${naam}`,
@@ -796,8 +782,7 @@ const nl: MoneyCopy = {
     waarderingDatumVanLabel: (naam) => `Waarderingsdatum van ${naam}`,
     waarderingBedragVanLabel: (naam) => `Waarderingsbedrag van ${naam}`,
     waarderingGeen: "Nog geen waardering.",
-    waarderingGap:
-      "Geen waardering: het vermogen van deze rekening is onbekend tot je er een invult. Onbekend telt niet als nul.",
+    waarderingGap: "Geen waardering: het vermogen is onbekend, en onbekend is geen nul.",
     waarderingActueel: (datum) => `Laatste waardering: ${datum}.`,
     waarderingVerouderd: (datum, dagen) =>
       `Laatste waardering: ${datum} (${dagen} dagen oud). Het bedrag is meegenomen, niet opnieuw vastgesteld.`,
@@ -1017,15 +1002,15 @@ const nl: MoneyCopy = {
       `${n} rekening${n > 1 ? "en" : ""} in vreemde valuta${names ? ` (${names})` : ""} niet meegeteld — LaVega rekent nog niet om naar euro's.`,
     omgerekendViaEcb: "Omgerekend via ECB.",
     ibanOntbreekt: (n, names) =>
-      `${n} rekening${n > 1 ? "en" : ""} zonder IBAN (${names}) — zonder IBAN kan LaVega een factuur niet aan deze rekening koppelen. Vul aan bij Rekeningen.`,
+      `${n} rekening${n > 1 ? "en" : ""} zonder IBAN (${names}) — zonder IBAN koppelt LaVega geen factuur aan deze rekening. Vul het aan bij Rekeningen.`,
     typeOntbreekt: (n, names) =>
-      `${n} rekening${n > 1 ? "en" : ""} zonder soort (${names}) — betaal- of spaarrekening? Zonder dat blijven kosten en rente hier buiten beschouwing. Vul aan bij Rekeningen.`,
+      `${n} rekening${n > 1 ? "en" : ""} zonder soort (${names}) — betaal- of spaarrekening? Zonder soort blijven kosten en rente buiten beeld. Vul het in bij Rekeningen.`,
     positiePerDagAria: "Totale positie per dag",
     positieOpReadout: "Positie op",
     geenTransactiesOpRekeningenMetSaldo:
       "Nog geen transacties op de rekeningen met een saldo — daaruit wordt de grafiek opgebouwd.",
     heeftNogGeenTransacties: (label) =>
-      `${label} heeft nog geen transacties, dus de positie van vorige week of maand is niet af te leiden — alleen aangenomen. Importeer die rekening en de vergelijking verschijnt.`,
+      `${label} heeft nog geen transacties, dus geen vergelijking met vorige week of maand. Importeer die rekening.`,
     pasNDagenTransactiegeschiedenis: (days, min) =>
       `Pas ${days} dag${days === 1 ? "" : "en"} transactiegeschiedenis — te weinig voor een lijn. Vanaf ${min} dagen tekent LaVega hem.`,
     vorigeWeek: "Vorige week",
@@ -1074,7 +1059,7 @@ const nl: MoneyCopy = {
     kiesBegindatumEnEinddatum: "Kies een begindatum en een einddatum.",
     gegevensVanaf: (date) => ` · gegevens vanaf ${date}`,
     alleenKleineUitgaven: (n, small, threshold, days) =>
-      `Alleen kleine uitgaven in deze periode: ${n} categorie${n === 1 ? "" : "ën"}, samen ${small} — elk onder ${threshold} over deze ${days} dagen. Kies een kortere periode om ze te zien.`,
+      `Alleen kleine uitgaven: ${n} categorie${n === 1 ? "" : "ën"}, samen ${small} (elk onder ${threshold} in ${days} dagen). Kies een kortere periode.`,
     geenUitgavenLangerePeriodeOfImport:
       "Geen uitgaven in deze periode — kies een langere periode of importeer meer transacties.",
     bekijkTransactiesIn: (categorie) => `Bekijk transacties in ${categorie}`,
@@ -1088,14 +1073,14 @@ const nl: MoneyCopy = {
     nietGetoondMaanden: (list) =>
       `Niet getoond: ${list} — daar is geen afschrift van geïmporteerd. Een lege maand is geen maand zonder uitgaven.`,
     kleinereCategorieenNietGetoond: (n, range, small, threshold, days) =>
-      `${n} kleinere categorie${n === 1 ? "" : "ën"} niet getoond in ${range}: samen ${small}, elk onder ${threshold} over deze ${days} dagen. Een kortere periode legt die grens lager.`,
+      `${n} kleinere categorie${n === 1 ? "" : "ën"} niet getoond in ${range}: samen ${small}, elk onder ${threshold} in ${days} dagen.`,
     nogNCategorieenBuitenGrafiek: (n, list) =>
       `Nog ${n} categorie${n === 1 ? "" : "ën"} buiten de grafiek: ${list}.`,
     tegenoverEerdereMaanden: (month) => `${month} tegenover je eerdere maanden.`,
     welkeDagenSummary: "Welke dagen naast welke zijn gelegd",
     heleMaandNaast: (n) => `De hele maand, naast de ${n} volledige maanden ervoor.`,
     deelmaandNaast: (range, days, n) =>
-      `Deze maand loopt nog: ${range} is ${days} dagen, en daar liggen dezelfde eerste ${days} dagen van de ${n} maanden ervoor naast.`,
+      `Deze maand loopt nog: ${range} (${days} dagen), naast de eerste ${days} dagen van de ${n} maanden ervoor.`,
     kortePeriodesTellenNiet: (n, days) =>
       ` ${n} ${n === 1 ? "maand telt" : "maanden tellen"} niet mee — korter dan ${days} dagen.`,
     nogGeenVergelijkingGeenTx: (month) =>
@@ -1107,7 +1092,7 @@ const nl: MoneyCopy = {
           ? `er is 1 volledige maand vóór ${month}`
           : `er zijn ${n} volledige maanden vóór ${month}`,
     nogGeenVergelijkingTeWeinig: (month, countPhrase, min) =>
-      `Nog geen vergelijking met je eigen maanden: ${countPhrase} geïmporteerd, en een plaats in je eigen geschiedenis vraagt er minstens ${min}. Oudere afschriften importeren vult dit aan.`,
+      `Nog geen vergelijking met je eigen maanden: ${countPhrase} geïmporteerd, minstens ${min} nodig. Importeer oudere afschriften.`,
     position: {
       geenGegevens: "deze maand is nog niet gemeten",
       teWeinigGeschiedenis: "te weinig eerdere maanden om in te plaatsen",
@@ -1135,7 +1120,7 @@ const nl: MoneyCopy = {
       `Vergeleken met ${beforeStart} — ${beforeEnd}, dezelfde lengte als de gekozen periode. Alleen uitgaven.`,
     geenUitgavenOmWeekpatroon: "Nog geen uitgaven om een weekpatroon uit te halen.",
     pasNDagenGeschiedenisWeekdag: (days, min) =>
-      `Pas ${days} dag${days === 1 ? "" : "en"} geschiedenis in deze periode — een weekdagpatroon vraagt minstens ${min} dagen, anders is elk gemiddelde één waarneming.`,
+      `Pas ${days} dag${days === 1 ? "" : "en"} geschiedenis: een weekdagpatroon vraagt minstens ${min} dagen.`,
     geenWeekdagSpringtEruit:
       "Geen enkele weekdag springt eruit — er zijn nog geen uitgaven gemeten.",
     kostGemiddeldSuffix: " kost je gemiddeld ",
@@ -1161,29 +1146,28 @@ const nl: MoneyCopy = {
     waaroverDezeTweeGemiddeldenGaan: (units, unitPlural) =>
       `Waarover deze twee gemiddelden gaan: ${units} hele ${unitPlural}`,
     gedeeldDoor: (units, unitPlural, range) =>
-      `Gedeeld door ${units} hele ${unitPlural}: ${range}. Geld dat alleen van plaats veranderde telt er niet in mee, net als in de rest van dit blok.`,
+      `Gedeeld door ${units} hele ${unitPlural}: ${range}. Geld dat alleen van plaats veranderde telt niet mee.`,
     restDagenTellenNiet: (days, unit) =>
-      `${days} dag${days === 1 ? "" : "en"} aan de randen tellen niet mee — een aangebroken ${unit} is geen ${unit}. Zouden ze meetellen, dan hing dit gemiddelde ervan af of een vaste afschrijving nog net vóór het einde van de periode viel.`,
+      `${days} dag${days === 1 ? "" : "en"} aan de randen tellen niet mee — een aangebroken ${unit} is geen ${unit}.`,
     nietPerAskedUnit: (askedUnit, min) =>
-      `Niet per ${askedUnit}: deze periode bevat er geen ${min} hele. Over één ${askedUnit} middelen levert dat ${askedUnit}bedrag zelf op.`,
+      `Niet per ${askedUnit}: deze periode bevat er geen ${min} hele.`,
     gemiddeldeDagFallback: "gemiddelde dag",
     adviesLangerePeriode: "Een langere periode pakt de rest van je afschriften mee.",
     adviesOudereAfschriften: "Oudere afschriften importeren vult dit aan.",
     geenGemiddeldeGeenTransacties: (advies) =>
-      `Nog geen gemiddelde: in deze periode staat geen enkele transactie. ${advies}`,
+      `Nog geen gemiddelde: geen transacties in deze periode. ${advies}`,
     geenGemiddeldeTeKortAfschrift: (coveredDays, min, advies) =>
-      `Nog geen gemiddelde: deze periode bevat ${coveredDays} dag${
+      `Nog geen gemiddelde: ${coveredDays} dag${
         coveredDays === 1 ? "" : "en"
-      } afschrift, en middelen vraagt er minstens ${min}. ${advies}`,
+      } afschrift, minstens ${min} nodig. ${advies}`,
   },
   aandacht: {
     waarschuwOnderBuffer: "Waarschuw onder buffer €",
     waarschuwingsbufferAria: "Waarschuwingsbuffer in euro",
-    bufferZeroNote:
-      "Je buffer staat op € 0, dus je hoort pas iets als je verwachte saldo onder nul zakt. Zet er een bedrag in om eerder gewaarschuwd te worden.",
+    bufferZeroNote: "Buffer € 0: je hoort pas iets als je verwachte saldo onder nul zakt.",
     nietsGevondenOmJeOpTeWijzen: "Niets gevonden om je op te wijzen.",
     lavegaKeekNaar: (checksJoined) =>
-      `LaVega keek naar: ${checksJoined}. Dat is alleen zo compleet als wat je hebt geïmporteerd — over een rekening die er niet in zit kan LaVega niets zeggen.`,
+      `LaVega keek naar: ${checksJoined}. Alleen over rekeningen die je hebt geïmporteerd.`,
     checks: [
       "een verwacht tekort tegenover je buffer",
       "een terugkerende betaling of inkomst die uitblijft",
@@ -1228,7 +1212,7 @@ const nl: MoneyCopy = {
           case "tracking-stale":
             return `Laatst bijgewerkt op ${b.updatedAt} (${b.ageDays} dagen geleden). ${nl.betaalschema.trackingQuestion(b)}`;
           case "no-balance":
-            return `${b.count} rekening${b.count > 1 ? "en" : ""} zonder saldo — vul in bij Rekeningen voor een compleet beeld.`;
+            return `${b.count} rekening${b.count > 1 ? "en" : ""} zonder saldo — vul het in bij Rekeningen.`;
         }
       },
     },
@@ -1318,7 +1302,6 @@ const nl: MoneyCopy = {
     typeRekeningAria: "Type rekening",
     ofKoppelJeBankDirect: "Of koppel je bank direct",
     ververs: "Ververs bankgegevens",
-    ververshHint: "Haalt saldo en transacties opnieuw op bij elke gekoppelde bank.",
     laden: "Laden…",
     koppelBankEnableBanking: "Koppel je bank",
     koppelJeBank: "Koppel je bank",
@@ -1359,8 +1342,7 @@ const nl: MoneyCopy = {
       labelParts
         ? `Factuur ${labelParts.counterparty}${labelParts.invoiceNumber ? " " + labelParts.invoiceNumber : ""}`
         : label,
-    nietsIngepland:
-      "Niets ingepland — hier komen je BTW-reserveringen, openstaande facturen en herkende vaste lasten te staan.",
+    nietsIngepland: "Niets ingepland.",
     voorspeldTag: "voorspeld",
     paycheck: {
       until: (date) => `Tot ${date}`,
@@ -1388,8 +1370,7 @@ const nl: MoneyCopy = {
     nietVergelijkbaar: (month, prev) =>
       `${month} en ${prev} zijn niet vergelijkbaar: geen enkele rekening heeft gegevens in beide maanden.`,
     erStaatWelUitgaven: (amount) => ` Er staat wel ${amount} aan uitgaven in deze twee maanden.`,
-    importeerBeideMaanden:
-      "Importeer beide maanden van dezelfde rekeningen, dan verschijnt de vergelijking hier.",
+    importeerBeideMaanden: "Importeer beide maanden van dezelfde rekeningen.",
     maandTOvPrev: (month, prev) => `${month} t.o.v. ${prev}`,
     aandeelEnDeltaTOv: (month, prev) => `${month} · aandeel & Δ t.o.v. ${prev}`,
     telDagenTotNuToe: (month, observed, inMonth) =>
@@ -1469,47 +1450,33 @@ const en: MoneyCopy = {
     datumOnbekend: "date unknown",
     geenSaldo: "no balance",
     saldoAgeDatedIntro: (date) =>
-      `This amount is the balance as of ${date}, not today. LaVega does not update it afterwards by itself:` +
-      ` a link or an import only fetches data at that moment, nothing runs in the background.`,
-    saldoAgeDatedLater: (laterDate) =>
-      ` There are transactions after that day; the newest is from ${laterDate}, so this is not the current balance.`,
-    saldoAgeDatedInvite: ` You can overwrite the amount in the field above with what your banking app shows now; LaVega then records today's date with it.`,
-    saldoAgeUndatedLinked:
-      `This amount has no date: the source did not send one, and LaVega does not fill one in itself.` +
-      ` The link does not refresh itself — nothing runs in the background, so this figure does not move with it.` +
-      ` When this account was added is in the line below; that is the age of the link, not of this amount.`,
-    saldoAgeUndatedUnlinked:
-      `This amount has no date, and no link moment is recorded for this account either (see the line below).` +
-      ` The link does not refresh itself: what is shown here is the balance from the moment you authorised it.` +
-      ` LaVega does not know which moment that was, so no date is shown here.`,
-    saldoAgeUndatedTx: (date) =>
-      ` The newest transaction LaVega has for this account is from ${date} — that says something about the transactions, not about this amount.`,
-    saldoAgeUndatedInvite: ` Overwrite the amount in the field above with what your banking app shows now; then the date will be recorded too.`,
-    saldoAgeNoneIntro:
-      "No balance is known for this account — no amount, and therefore no zero either.",
-    saldoAgeNoneTx: (date) => ` There are transactions though: the newest is from ${date}.`,
-    saldoAgeNoneInvite:
-      " Fill in the amount in the field above as your banking app shows it; LaVega records today's date with it.",
+      `This is the balance as of ${date}, not today. Only a link or an import updates it.`,
+    saldoAgeDatedToday: "Balance as of today.",
+    saldoAgeDatedLater: (laterDate) => ` Newest transaction: ${laterDate}.`,
+    saldoAgeDatedInvite: ` Overwrite the amount above with what your banking app shows now.`,
+    saldoAgeUndatedLinked: `This amount has no date, and the link does not update itself. The line below is the age of the link, not of the amount.`,
+    saldoAgeUndatedUnlinked: `This amount has no date and no link moment is recorded. The link does not update itself: this is the balance from the moment you authorised it.`,
+    saldoAgeUndatedTx: (date) => ` Newest transaction: ${date} (says nothing about this amount).`,
+    saldoAgeUndatedInvite: ` Overwrite the amount in the field above with what your banking app shows now.`,
+    saldoAgeNoneIntro: "No balance known: no amount, and not a zero either.",
+    saldoAgeNoneTx: (date) => ` Newest transaction: ${date}.`,
+    saldoAgeNoneInvite: " Enter the amount above as your banking app shows it.",
     gekoppeldOp: (date) => `linked on ${date}`,
     opgehaaldOp: (date) => `fetched on ${date}`,
     saldoAgeUndatedFetched:
-      "This is the balance your bank gave when LaVega last asked for it. The bank sent no date with it, so what you see is the day we fetched it — not the day the amount held. ",
+      "Balance as the bank gave it at the last fetch. The bank sent no date, so the date is when we fetched it, not when the amount held. ",
     koppelmomentOnbekend: "link date unknown",
     linkedNoteKnown: (date) =>
-      `This account has been in LaVega since ${date} — the day of the link or the import.` +
-      ` That is different from the day the balance above applied: this says how old the link is,` +
-      ` not how old the amount is.`,
+      `This account has been in LaVega since ${date} (link or import). That is the age of the link, not of the balance above.`,
     linkedNoteUnknown:
-      `When this account came into LaVega is not recorded: it was already there before LaVega started` +
-      ` tracking the link moment. Filling in today's date would turn an account from months ago into a` +
-      ` fresh link, so that does not happen — this stays unknown. Accounts you link or import from now` +
-      ` on will get their moment recorded.`,
+      `When this account came into LaVega is not recorded and stays unknown.` +
+      ` Accounts you link or import from now on get their moment recorded.`,
     transferLinksDropped: (n) =>
       `${n} transfer link${n === 1 ? "" : "s"} dropped: one of the two transactions no longer` +
       ` exists after the merge or delete.`,
     waarderingen: "Valuations",
     waarderingenUitleg:
-      "A valuation is an absolute amount on a date. Before the first one the account's value is unknown; after it the series follows your transactions.",
+      "A valuation is an amount on a date. Before the first one the account's value is unknown.",
     begintotaal: "Opening balance",
     begindatum: "Opening date",
     begintotaalVanLabel: (naam) => `Opening balance of ${naam}`,
@@ -1521,8 +1488,7 @@ const en: MoneyCopy = {
     waarderingDatumVanLabel: (naam) => `Valuation date of ${naam}`,
     waarderingBedragVanLabel: (naam) => `Valuation amount of ${naam}`,
     waarderingGeen: "No valuation yet.",
-    waarderingGap:
-      "No valuation: this account's value is unknown until you add one. Unknown does not count as zero.",
+    waarderingGap: "No valuation: the value is unknown, and unknown is not zero.",
     waarderingActueel: (datum) => `Last valuation: ${datum}.`,
     waarderingVerouderd: (datum, dagen) =>
       `Last valuation: ${datum} (${dagen} days old). The amount is carried, not re-established.`,
@@ -1745,13 +1711,13 @@ const en: MoneyCopy = {
     ibanOntbreekt: (n, names) =>
       `${n} account${n > 1 ? "s" : ""} without an IBAN (${names}) — without one LaVega can't match an invoice to this account. Add it under Accounts.`,
     typeOntbreekt: (n, names) =>
-      `${n} account${n > 1 ? "s" : ""} without a kind (${names}) — a payment or a savings account? Without it, costs and interest are left out here. Add it under Accounts.`,
+      `${n} account${n > 1 ? "s" : ""} without a kind (${names}) — a current or a savings account? Without it, costs and interest stay out. Add it under Accounts.`,
     positiePerDagAria: "Total position per day",
     positieOpReadout: "Position on",
     geenTransactiesOpRekeningenMetSaldo:
       "No transactions yet on the accounts with a balance — the chart is built from those.",
     heeftNogGeenTransacties: (label) =>
-      `${label} has no transactions yet, so last week's or last month's position cannot be derived — only assumed. Import that account and the comparison will appear.`,
+      `${label} has no transactions yet, so no comparison with last week or month. Import that account.`,
     pasNDagenTransactiegeschiedenis: (days, min) =>
       `Only ${days} day${days === 1 ? "" : "s"} of transaction history — too little for a line. From ${min} days LaVega draws it.`,
     vorigeWeek: "Last week",
@@ -1800,7 +1766,7 @@ const en: MoneyCopy = {
     kiesBegindatumEnEinddatum: "Choose a start date and an end date.",
     gegevensVanaf: (date) => ` · data from ${date}`,
     alleenKleineUitgaven: (n, small, threshold, days) =>
-      `Only small spending in this period: ${n} categor${n === 1 ? "y" : "ies"}, together ${small} — each under ${threshold} over these ${days} days. Choose a shorter period to see them.`,
+      `Only small spending: ${n} categor${n === 1 ? "y" : "ies"}, ${small} together (each under ${threshold} in ${days} days). Choose a shorter period.`,
     geenUitgavenLangerePeriodeOfImport:
       "No spending in this period — choose a longer period or import more transactions.",
     bekijkTransactiesIn: (categorie) => `View transactions in ${categorie}`,
@@ -1814,14 +1780,14 @@ const en: MoneyCopy = {
     nietGetoondMaanden: (list) =>
       `Not shown: ${list} — no statement was imported for them. An empty month is not a month without spending.`,
     kleinereCategorieenNietGetoond: (n, range, small, threshold, days) =>
-      `${n} smaller categor${n === 1 ? "y" : "ies"} not shown in ${range}: together ${small}, each under ${threshold} over these ${days} days. A shorter period sets that limit lower.`,
+      `${n} smaller categor${n === 1 ? "y" : "ies"} not shown in ${range}: ${small} together, each under ${threshold} in ${days} days.`,
     nogNCategorieenBuitenGrafiek: (n, list) =>
       `${n} more categor${n === 1 ? "y" : "ies"} outside the chart: ${list}.`,
     tegenoverEerdereMaanden: (month) => `${month} against your earlier months.`,
     welkeDagenSummary: "Which days were compared with which",
     heleMaandNaast: (n) => `The whole month, against the ${n} full months before it.`,
     deelmaandNaast: (range, days, n) =>
-      `This month is still running: ${range} is ${days} days, compared with the same first ${days} days of the ${n} months before it.`,
+      `This month is still running: ${range} (${days} days), next to the first ${days} days of the ${n} months before it.`,
     kortePeriodesTellenNiet: (n, days) =>
       ` ${n} month${n === 1 ? "" : "s"} ${n === 1 ? "doesn't" : "don't"} count — shorter than ${days} days.`,
     nogGeenVergelijkingGeenTx: (month) =>
@@ -1833,7 +1799,7 @@ const en: MoneyCopy = {
           ? `there is 1 full month before ${month}`
           : `there are ${n} full months before ${month}`,
     nogGeenVergelijkingTeWeinig: (month, countPhrase, min) =>
-      `No comparison with your own months yet: ${countPhrase} imported, and a place in your own history needs at least ${min}. Importing older statements fills this in.`,
+      `No comparison with your own months yet: ${countPhrase} imported, at least ${min} needed. Import older statements.`,
     position: {
       geenGegevens: "this month hasn't been measured yet",
       teWeinigGeschiedenis: "too few earlier months to place it",
@@ -1860,7 +1826,7 @@ const en: MoneyCopy = {
       `Compared with ${beforeStart} — ${beforeEnd}, the same length as the chosen period. Spending only.`,
     geenUitgavenOmWeekpatroon: "No spending yet to draw a weekly pattern from.",
     pasNDagenGeschiedenisWeekdag: (days, min) =>
-      `Only ${days} day${days === 1 ? "" : "s"} of history in this period — a weekday pattern needs at least ${min} days, otherwise every average is a single observation.`,
+      `Only ${days} day${days === 1 ? "" : "s"} of history: a weekday pattern needs at least ${min} days.`,
     geenWeekdagSpringtEruit: "No weekday stands out — no spending has been measured yet.",
     kostGemiddeldSuffix: " costs you an average of ",
     pctMeerDanGewoneDag: (pct) => ` — ${pct}% more than a normal day`,
@@ -1885,29 +1851,29 @@ const en: MoneyCopy = {
     waaroverDezeTweeGemiddeldenGaan: (units, unitPlural) =>
       `What these two averages are based on: ${units} whole ${unitPlural}`,
     gedeeldDoor: (units, unitPlural, range) =>
-      `Divided by ${units} whole ${unitPlural}: ${range}. Money that only changed place doesn't count, just like in the rest of this block.`,
+      `Divided by ${units} whole ${unitPlural}: ${range}. Money that only changed place doesn't count.`,
     restDagenTellenNiet: (days, unit) =>
-      `${days} day${days === 1 ? "" : "s"} at the edges don't count — a partial ${unit} is not a whole ${unit}. If they did count, this average would depend on whether a fixed payment fell just before the end of the period.`,
+      `${days} day${days === 1 ? "" : "s"} at the edges don't count — a partial ${unit} is not a whole ${unit}.`,
     nietPerAskedUnit: (askedUnit, min) =>
-      `Not per ${askedUnit}: this period doesn't contain ${min} whole ones. Averaging over a single ${askedUnit} just gives you that ${askedUnit}'s own amount.`,
+      `Not per ${askedUnit}: this period doesn't contain ${min} whole ones.`,
     gemiddeldeDagFallback: "average day",
     adviesLangerePeriode: "A longer period picks up the rest of your statements.",
     adviesOudereAfschriften: "Importing older statements fills this in.",
     geenGemiddeldeGeenTransacties: (advies) =>
-      `No average yet: this period has no transaction at all. ${advies}`,
+      `No average yet: no transactions in this period. ${advies}`,
     geenGemiddeldeTeKortAfschrift: (coveredDays, min, advies) =>
-      `No average yet: this period has ${coveredDays} day${
+      `No average yet: ${coveredDays} day${
         coveredDays === 1 ? "" : "s"
-      } of statement, and averaging needs at least ${min}. ${advies}`,
+      } of statement, at least ${min} needed. ${advies}`,
   },
   aandacht: {
     waarschuwOnderBuffer: "Warn below buffer €",
     waarschuwingsbufferAria: "Warning buffer in euros",
     bufferZeroNote:
-      "Your buffer is set to €0, so you will only hear something once your expected balance drops below zero. Set an amount to be warned earlier.",
+      "Buffer €0: you only hear something once your expected balance drops below zero.",
     nietsGevondenOmJeOpTeWijzen: "Nothing found that needs your attention.",
     lavegaKeekNaar: (checksJoined) =>
-      `LaVega checked: ${checksJoined}. That is only as complete as what you have imported — LaVega can't say anything about an account that isn't in it.`,
+      `LaVega checked: ${checksJoined}. Only for accounts you have imported.`,
     checks: [
       "an expected shortfall against your buffer",
       "a recurring payment or income that hasn't arrived",
@@ -1952,7 +1918,7 @@ const en: MoneyCopy = {
           case "tracking-stale":
             return `Last updated on ${b.updatedAt} (${b.ageDays} day${b.ageDays === 1 ? "" : "s"} ago). ${en.betaalschema.trackingQuestion(b)}`;
           case "no-balance":
-            return `${b.count} account${b.count > 1 ? "s" : ""} without a balance — fill it in under Accounts for a complete picture.`;
+            return `${b.count} account${b.count > 1 ? "s" : ""} without a balance — fill it in under Accounts.`;
         }
       },
     },
@@ -2036,7 +2002,6 @@ const en: MoneyCopy = {
     typeRekeningAria: "Account type",
     ofKoppelJeBankDirect: "Or link your bank directly",
     ververs: "Refresh bank data",
-    ververshHint: "Fetches balances and transactions again from every connected bank.",
     laden: "Loading…",
     koppelBankEnableBanking: "Link your bank",
     koppelJeBank: "Connect your bank",
@@ -2072,8 +2037,7 @@ const en: MoneyCopy = {
       labelParts
         ? `Invoice ${labelParts.counterparty}${labelParts.invoiceNumber ? " " + labelParts.invoiceNumber : ""}`
         : label,
-    nietsIngepland:
-      "Nothing scheduled yet — your VAT (BTW) set-asides, outstanding invoices and recognised fixed costs will show up here.",
+    nietsIngepland: "Nothing scheduled.",
     voorspeldTag: "predicted",
     paycheck: {
       until: (date) => `Through ${date}`,
@@ -2102,8 +2066,7 @@ const en: MoneyCopy = {
       `${month} and ${prev} cannot be compared: no account has data in both months.`,
     erStaatWelUitgaven: (amount) =>
       ` There is, however, ${amount} of spending in these two months.`,
-    importeerBeideMaanden:
-      "Import both months for the same accounts, and the comparison will appear here.",
+    importeerBeideMaanden: "Import both months for the same accounts.",
     maandTOvPrev: (month, prev) => `${month} vs. ${prev}`,
     aandeelEnDeltaTOv: (month, prev) => `${month} · share & Δ vs. ${prev}`,
     telDagenTotNuToe: (month, observed, inMonth) =>

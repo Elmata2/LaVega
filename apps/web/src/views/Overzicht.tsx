@@ -183,7 +183,6 @@ export default function Overzicht({
 
         {agentEnabled && (
           <Module title={instinctCopy[locale].overview.title} span={3}>
-            <p className="cell-sub">{instinctCopy[locale].overview.body}</p>
             <Button onClick={() => onNavigate("meldingen")}>
               {instinctCopy[locale].overview.open}
             </Button>

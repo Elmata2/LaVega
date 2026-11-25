@@ -146,7 +146,7 @@ export default function CardDetailsForm(p: CardDetailsFormProps) {
           );
         })}
       </div>
-      <p className="wz-hint">{t.skipHint}</p>
+      {!p.inline && <p className="wz-hint">{t.skipHint}</p>}
       {p.footer}
       <div className={p.inline ? "wz-footer wz-footer--inline" : "wz-footer"}>
         <button type="submit" className="wz-next" disabled={p.busy}>

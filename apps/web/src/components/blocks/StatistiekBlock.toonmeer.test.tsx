@@ -269,7 +269,7 @@ test("de percentiellijst blijft staan; alleen waaróp hij rust vouwt op", () => 
   expect(kop.closest("summary"), "de vergeleken maand mag niet in het paneel").not.toBeNull();
 
   // Wat er precies naast gelegd is, is de onderbouwing en die vouwt wel op.
-  opvouwbaar(el, "en daar liggen dezelfde eerste");
+  opvouwbaar(el, "naast de eerste");
 });
 
 test("een weigering wordt nooit opgevouwen — ook niet als het scherm er leeg van oogt", () => {
@@ -278,7 +278,7 @@ test("een weigering wordt nooit opgevouwen — ook niet als het scherm er leeg v
   // is, en dat is precies het gedrag waar deze app tegen gebouwd is.
   const el = mount(metKleintjes);
   staatVooraan(el, "Nog geen vergelijking met je eigen maanden");
-  staatVooraan(el, "Oudere afschriften importeren vult dit aan.");
+  staatVooraan(el, "Importeer oudere afschriften.");
 
   // En de weigering van de weekdagweergave, met een venster van twee dagen.
   const kaal = mount(freshTxs);

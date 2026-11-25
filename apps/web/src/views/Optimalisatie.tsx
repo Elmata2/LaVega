@@ -1391,7 +1391,7 @@ export default function Optimalisatie({
           {subs.length === 0 ? (
             <div className="border border-dashed border-line rounded-[var(--r)] bg-surface-2 p-[var(--sp-4)]">
               <p className="m-0 mb-[var(--sp-3)] last:mb-0">
-                <strong>{c.subscriptions.empty.heading}</strong> {c.subscriptions.empty.intro}
+                <strong>{c.subscriptions.empty.heading}</strong>
                 {seen.outflows === 0
                   ? c.subscriptions.empty.noOutflows
                   : renderSegments(

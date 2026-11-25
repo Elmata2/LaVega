@@ -98,6 +98,13 @@ test("an account with no saldo yields no figure at all — not a zero", () => {
   expect(html).not.toContain("Je houdt");
 });
 
+test("with no outgoing transactions the empty line reads as full sentences", () => {
+  const html = render([]);
+  expect(html).toContain("Nog geen abonnement herkend.");
+  expect(html).toContain("Er staan nog geen uitgaande transacties in LaVega.");
+  expect(html).not.toContain("herkend.</strong> er staan");
+});
+
 test("the thin subscriptions half reports what was actually measured, and seeds nothing", () => {
   // Two outflows to the same shop, but no cadence — so no subscription.
   const html = render([
@@ -107,7 +114,6 @@ test("the thin subscriptions half reports what was actually measured, and seeds 
   ]);
 
   expect(html).toContain("Nog geen abonnement herkend");
-  expect(html).toContain("Dat is een meting, geen leeg scherm");
   expect(html).toContain("<strong>3</strong> uitgaande transacties");
   expect(html).toContain("2026-07-02 en 2026-08-04");
   expect(html).toContain("<strong>2</strong> ontvangers");
@@ -180,7 +186,7 @@ test("a short import says WHICH rhythms it cannot yet see — the answer to the 
   ]);
   expect(html).toContain("per kwartaal");
   expect(html).toContain("jaarlijks");
-  expect(html).toContain("niet omdat het er niet is");
+  expect(html).toContain("loopt daarvoor nog niet ver genoeg terug");
 });
 
 test("a year of history moves the quarterly window from 'cannot see' to 'can see'", () => {
@@ -193,7 +199,7 @@ test("a year of history moves the quarterly window from 'cannot see' to 'can see
   expect(html).toContain("335</strong> dagen afschrift");
   // Quarterly is now within reach; only the yearly rhythm still needs more.
   expect(html).toContain("per kwartaal, halfjaarlijks</strong> herkenbaar");
-  expect(html).toContain("Nog niet: jaarlijks (vanaf 365 dagen)");
+  expect(html).toContain("Nog niet te zien: jaarlijks (vanaf 365 dagen)");
 });
 
 /* --- App review 2, 20 Aug: remove what earns nothing --------------------- *

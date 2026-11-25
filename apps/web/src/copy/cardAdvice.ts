@@ -102,10 +102,10 @@ const nl: CardAdviceCopy = {
   identifyFailed: "Opslaan lukte niet. Probeer het opnieuw.",
   noAdvice: (a) =>
     a.state === "short-history"
-      ? `Er zijn minder dan ${CARD_ADVICE_MIN_MONTHS} volle maanden aan uitgaven. Voor een jaarcijfer is dat te weinig. Er is niets geschat.`
+      ? `Er zijn minder dan ${CARD_ADVICE_MIN_MONTHS} volle maanden aan uitgaven. Voor een jaarcijfer is dat te weinig.`
       : a.state === "no-spend"
         ? "Er zijn geen uitgaven gevonden die met een kaart te betalen zijn. Zonder uitgaven valt er niets te vergelijken."
-        : `Geen enkele kaart in de catalogus is volledig te vergelijken${distinct(a.notComparable, nl.reasons)}. Er is niets geschat.`,
+        : `Nog geen kaartadvies: van deze kaarten ontbreken gegevens${distinct(a.notComparable, nl.reasons)}.`,
   verdict: (a, f) => {
     const v = a.verdict;
     const best = a.options[0];
@@ -207,14 +207,14 @@ const nl: CardAdviceCopy = {
   notComparableTitle: (n) => `Niet te vergelijken (${n})`,
   notComparableLine: (o) => `${o.name}: ${o.reasons.map((r) => nl.reasons[r]).join("; ")}`,
   reasons: {
-    "fee-unknown": "jaarkosten niet in de catalogus",
-    "fx-unknown": "opslag buitenlandse valuta niet in de catalogus",
-    "points-unknown": "punten per euro niet in de catalogus",
+    "fee-unknown": "jaarkosten onbekend",
+    "fx-unknown": "opslag buitenlandse valuta onbekend",
+    "points-unknown": "punten per euro onbekend",
     "fee-condition-unknown":
       "de jaarkosten hangen af van iets waarvan de prijs niet in de catalogus staat",
     "points-unvalued": "de waarde van de punten of miles is onbekend; vul een inwisselvoorbeeld in",
     "cashback-unknown": "cashback onbekend",
-    "not-in-catalogue": "niet in de catalogus",
+    "not-in-catalogue": "kaart onbekend bij LaVega",
   },
   interestTitle: (i) => `Rente op ${i.name ?? nl.otherCardName}`,
   interestLines: (i, f) => {
@@ -346,10 +346,10 @@ const en: CardAdviceCopy = {
   identifyFailed: "Could not save. Try again.",
   noAdvice: (a) =>
     a.state === "short-history"
-      ? `There are fewer than ${CARD_ADVICE_MIN_MONTHS} full months of spending. That is too little for a yearly figure. Nothing has been estimated.`
+      ? `There are fewer than ${CARD_ADVICE_MIN_MONTHS} full months of spending. That is too little for a yearly figure.`
       : a.state === "no-spend"
         ? "No spending was found that can be paid by card. Without spending there is nothing to compare."
-        : `No card in the catalogue can be compared in full${distinct(a.notComparable, en.reasons)}. Nothing has been estimated.`,
+        : `No card advice yet: data missing for these cards${distinct(a.notComparable, en.reasons)}.`,
   verdict: (a, f) => {
     const v = a.verdict;
     const best = a.options[0];
@@ -450,14 +450,14 @@ const en: CardAdviceCopy = {
   notComparableTitle: (n) => `Cannot be compared (${n})`,
   notComparableLine: (o) => `${o.name}: ${o.reasons.map((r) => en.reasons[r]).join("; ")}`,
   reasons: {
-    "fee-unknown": "annual fee not in the catalogue",
-    "fx-unknown": "foreign currency markup not in the catalogue",
-    "points-unknown": "points per euro not in the catalogue",
+    "fee-unknown": "annual fee unknown",
+    "fx-unknown": "foreign currency markup unknown",
+    "points-unknown": "points per euro unknown",
     "fee-condition-unknown":
       "the annual fee depends on something whose price is not in the catalogue",
     "points-unvalued": "the value of the points or miles is unknown; add a redemption example",
     "cashback-unknown": "cashback unknown",
-    "not-in-catalogue": "not in the catalogue",
+    "not-in-catalogue": "card unknown to LaVega",
   },
   interestTitle: (i) => `Interest on ${i.name ?? en.otherCardName}`,
   interestLines: (i, f) => {

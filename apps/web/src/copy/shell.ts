@@ -144,7 +144,7 @@ export type ShellCopy = {
     /** The card at the top of Profiel: the only way into the plan view. The
      *  title is `nav.moduleLabels.plan`; locked, the card reuses the intake
      *  invitation's own copy. */
-    plan: { line: string; open: string };
+    plan: { open: string };
     languageSwitch: { cardLabel: string; nl: string; en: string; ariaLabel: string };
     appearance: {
       ariaLabel: string;
@@ -484,7 +484,7 @@ const nl: ShellCopy = {
         case "camt-not-supported":
           return "CAMT.053 wordt nog niet ondersteund.";
         case "spreadsheet-not-supported":
-          return `Dit is een Excel-bestand (.${p.format}). LaVega leest CSV, MT940 en .STA — sla het in Excel op via Bestand → Opslaan als → CSV, of download het afschrift bij je bank als CSV.`;
+          return `Dit Excel-bestand (.${p.format}) kunnen we niet lezen. LaVega leest CSV, MT940 en .STA: kies CSV.`;
         case "spreadsheet-unrecognised":
           return `Dit Excel-bestand (.${p.format}) heeft kolommen die we niet kennen. Probeer CSV, of een bestand rechtstreeks van je bank.`;
         case "pdf-not-supported":
@@ -505,11 +505,11 @@ const nl: ShellCopy = {
       case "bank-refresh-failed":
         switch (n.reason) {
           case "rate-limited":
-            return `${n.aspsp} laat even niet meer verversen — wacht even en probeer het later opnieuw.`;
+            return `${n.aspsp} laat nu niet verversen. Probeer het later opnieuw.`;
           case "bank-down":
-            return `${n.aspsp} reageert nu niet — wacht even en probeer het later opnieuw.`;
+            return `${n.aspsp} reageert nu niet. Probeer het later opnieuw.`;
           case "unknown":
-            return `${n.aspsp} verversen lukte niet — probeer het later opnieuw of koppel de bank opnieuw.`;
+            return `Verversen van ${n.aspsp} lukte niet. Probeer het later opnieuw of koppel de bank opnieuw.`;
         }
       case "bank-linked":
         return `Bank gekoppeld: ${n.accounts} rekening${n.accounts === 1 ? "" : "en"}${n.aspsp ? ` via ${n.aspsp}` : ""}, ${n.txs} transactie${n.txs === 1 ? "" : "s"}.`;
@@ -518,14 +518,13 @@ const nl: ShellCopy = {
       case "terms-lookup-failed":
         return `Voorwaarden opzoeken mislukt: ${n.detail}`;
       case "bank-consent-expired":
-        return `De toestemming voor ${n.aspsp} is verlopen — koppel de bank opnieuw om weer bij te werken.`;
+        return `De toestemming voor ${n.aspsp} is verlopen. Koppel de bank opnieuw.`;
       case "bank-nothing-to-refresh":
         return "Er is nog geen bankkoppeling om te verversen.";
     }
   },
   profiel: {
     plan: {
-      line: "Je maand, buffer, schulden en doelen, met de uitleg erbij.",
       open: "Open je plan",
     },
     languageSwitch: {
@@ -544,9 +543,8 @@ const nl: ShellCopy = {
     account: {
       ariaLabel: "Account",
       heading: "Account",
-      unconfigured:
-        "Deze installatie heeft geen serveraccount ingesteld, dus alles blijft lokaal in deze browser.",
-      signedOutIntro: "Log in op de geconfigureerde LaVega-server om de bankkoppeling te testen.",
+      unconfigured: "Geen account ingesteld: alles blijft in deze browser.",
+      signedOutIntro: "Log in met je LaVega-account.",
       emailLabel: "E-mailadres",
       passwordLabel: "Wachtwoord",
       signIn: "Inloggen",
@@ -568,8 +566,7 @@ const nl: ShellCopy = {
       },
       reset: {
         requestTitle: "Wachtwoord vergeten",
-        requestIntro:
-          "Vul het e-mailadres van je account in. We sturen je een link om een nieuw wachtwoord te kiezen.",
+        requestIntro: "We sturen je een link om een nieuw wachtwoord te kiezen.",
         requestSubmit: "Stuur resetlink",
         sentBody: (email) =>
           `Als ${email} bij een LaVega-account hoort, staat er nu een link in je inbox. De link werkt een uur.`,
@@ -594,7 +591,7 @@ const nl: ShellCopy = {
         termsLink: "voorwaarden",
         doneTitle: "Controleer je e-mail",
         doneBody: (email) =>
-          `We hebben een bevestigingslink gestuurd naar ${email}. Open die link om je account te bevestigen. De link werkt een uur.`,
+          `We stuurden een bevestigingslink naar ${email}. De link werkt een uur.`,
         passwordHint: "Minimaal 8 tekens.",
         resend: "Stuur de e-mail opnieuw",
         resendIn: (seconds) => `Opnieuw sturen kan over ${seconds} s`,
@@ -677,7 +674,7 @@ const nl: ShellCopy = {
       ariaLabel: "Uitloggen",
       heading: "Uitloggen",
       description:
-        "Logt je uit en wist alles uit het geheugen van deze browser. Na 15 minuten zonder activiteit gebeurt dit vanzelf.",
+        "Logt je uit en wist het geheugen van deze browser. Gebeurt ook na 15 minuten zonder activiteit.",
       button: "Uitloggen",
     },
     cashback: {
@@ -904,7 +901,7 @@ const en: ShellCopy = {
         case "camt-not-supported":
           return "CAMT.053 isn't supported yet.";
         case "spreadsheet-not-supported":
-          return `This is an Excel file (.${p.format}). LaVega reads CSV, MT940 and .STA — save it from Excel with File → Save As → CSV, or download the statement from your bank as CSV.`;
+          return `We cannot read this Excel file (.${p.format}). LaVega reads CSV, MT940 and .STA: choose CSV.`;
         case "spreadsheet-unrecognised":
           return `This Excel file (.${p.format}) has columns we do not know. Try CSV, or a file straight from your bank.`;
         case "pdf-not-supported":
@@ -925,11 +922,11 @@ const en: ShellCopy = {
       case "bank-refresh-failed":
         switch (n.reason) {
           case "rate-limited":
-            return `${n.aspsp} is temporarily rate-limiting refreshes — wait a while and try again later.`;
+            return `${n.aspsp} is not accepting refreshes right now. Try again later.`;
           case "bank-down":
-            return `${n.aspsp} isn't responding right now — wait a moment and try again later.`;
+            return `${n.aspsp} isn't responding right now. Try again later.`;
           case "unknown":
-            return `Refreshing ${n.aspsp} failed — try again later or reconnect the bank.`;
+            return `Refreshing ${n.aspsp} failed. Try again later or reconnect the bank.`;
         }
       case "bank-linked":
         return `Bank connected: ${n.accounts} account${n.accounts === 1 ? "" : "s"}${n.aspsp ? ` via ${n.aspsp}` : ""}, ${n.txs} transaction${n.txs === 1 ? "" : "s"}.`;
@@ -938,14 +935,13 @@ const en: ShellCopy = {
       case "terms-lookup-failed":
         return `Looking up the terms failed: ${n.detail}`;
       case "bank-consent-expired":
-        return `Your consent for ${n.aspsp} has expired — reconnect the bank to keep it up to date.`;
+        return `Your consent for ${n.aspsp} has expired. Reconnect the bank.`;
       case "bank-nothing-to-refresh":
         return "There's no bank connection to refresh yet.";
     }
   },
   profiel: {
     plan: {
-      line: "Your month, buffer, debts and goals, with the explanation next to each.",
       open: "Open your plan",
     },
     languageSwitch: {
@@ -964,9 +960,8 @@ const en: ShellCopy = {
     account: {
       ariaLabel: "Account",
       heading: "Account",
-      unconfigured:
-        "This installation has no server account configured, so everything stays local to this browser.",
-      signedOutIntro: "Sign in to the configured LaVega server to test the bank connection.",
+      unconfigured: "No account set up: everything stays in this browser.",
+      signedOutIntro: "Sign in with your LaVega account.",
       emailLabel: "Email address",
       passwordLabel: "Password",
       signIn: "Sign in",
@@ -987,8 +982,7 @@ const en: ShellCopy = {
       },
       reset: {
         requestTitle: "Forgot password",
-        requestIntro:
-          "Enter the email address of your account. We will send you a link to choose a new password.",
+        requestIntro: "We will send you a link to choose a new password.",
         requestSubmit: "Send reset link",
         sentBody: (email) =>
           `If ${email} belongs to a LaVega account, a link is now in your inbox. It works for one hour.`,
@@ -1012,8 +1006,7 @@ const en: ShellCopy = {
         consentBetween: " and ",
         termsLink: "terms",
         doneTitle: "Check your email",
-        doneBody: (email) =>
-          `We sent a confirmation link to ${email}. Open it to confirm your account. The link works for one hour.`,
+        doneBody: (email) => `We sent a confirmation link to ${email}. It works for one hour.`,
         passwordHint: "At least 8 characters.",
         resend: "Send the email again",
         resendIn: (seconds) => `You can resend in ${seconds} s`,
@@ -1095,7 +1088,7 @@ const en: ShellCopy = {
       ariaLabel: "Sign out",
       heading: "Sign out",
       description:
-        "Signs you out and clears everything from this browser's memory. This happens by itself after 15 minutes without activity.",
+        "Signs you out and clears this browser's memory. Also happens after 15 minutes without activity.",
       button: "Sign out",
     },
     cashback: {

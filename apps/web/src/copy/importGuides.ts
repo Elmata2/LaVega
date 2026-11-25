@@ -74,12 +74,12 @@ export const IMPORT_GUIDES: Record<GuideKey, Record<Locale, ImportGuide>> = {
     nl: {
       verified: false,
       where: "Op de website of in de app van je bank.",
-      steps: ["Download een CSV- of MT940-export bij je bank en kies het bestand hier."],
+      steps: ["Download een CSV-, Excel- (.xlsx) of MT940-export bij je bank en kies het bestand hier."],
     },
     en: {
       verified: false,
       where: "On your bank's website or in its app.",
-      steps: ["Download a CSV or MT940 export from your bank and choose the file here."],
+      steps: ["Download a CSV, Excel (.xlsx) or MT940 export from your bank and choose the file here."],
     },
   },
 };

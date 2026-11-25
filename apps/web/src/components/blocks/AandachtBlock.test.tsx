@@ -78,7 +78,7 @@ test("AandachtBlock never reports an empty list as a clean bill of health", () =
   expect(html).toContain("Niets gevonden om je op te wijzen");
   expect(html).toContain("een verwacht tekort tegenover je buffer");
   expect(html).toContain("BTW- en belastingdeadlines binnen 30 dagen");
-  expect(html).toContain("zo compleet als wat je hebt geïmporteerd");
+  expect(html).toContain("Alleen over rekeningen die je hebt geïmporteerd");
 });
 
 test("a buffer of zero says what that silently does to the shortfall alert", () => {
@@ -87,13 +87,13 @@ test("a buffer of zero says what that silently does to the shortfall alert", () 
   const zero = renderToStaticMarkup(
     <AandachtBlock alerts={[]} bufferCents={0} onBufferChange={() => {}} />,
   );
-  expect(zero).toContain("Je buffer staat op € 0");
+  expect(zero).toContain("Buffer € 0");
   expect(zero).toContain("onder nul zakt");
 
   const set = renderToStaticMarkup(
     <AandachtBlock alerts={[]} bufferCents={250_000} onBufferChange={() => {}} />,
   );
-  expect(set).not.toContain("Je buffer staat op € 0");
+  expect(set).not.toContain("Buffer € 0");
 });
 
 /* --- Noise control. Six "saldo bijwerken" reminders standing at the same

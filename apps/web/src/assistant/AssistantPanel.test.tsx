@@ -248,7 +248,7 @@ test("an unmapped question says what this version can do instead of guessing", a
   const fake = fakeStorage();
   const view = await mount(fake.storage);
   await ask(view, "Wat is de zin van het leven?");
-  expect(log(view)).toContain("Dat kan ik in deze versie niet beantwoorden");
+  expect(log(view)).toContain("Dat kan ik niet beantwoorden");
 });
 
 test("panel: the close button calls onClose", async () => {

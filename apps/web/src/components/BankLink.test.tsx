@@ -71,6 +71,19 @@ function click(el: Element) {
   });
 }
 
+test("the Zakelijk | Particulier toggle sits on its own row, with the refresh row's gap above the connect button", async () => {
+  const m = mockFetch([{ name: "ING", country: "NL" }]);
+  try {
+    await render();
+    const row = container!.querySelector<HTMLElement>(".scope-switch")!.parentElement!;
+    expect(row.tagName).toBe("DIV");
+    expect(row.style.marginBottom).toBe("var(--sp-3)");
+    expect(row.contains(byText("button", "Koppel je bank"))).toBe(false);
+  } finally {
+    m.restore();
+  }
+});
+
 test("initial load fetches the bank list with psu_type=business, the default", async () => {
   const mock = mockFetch([{ name: "ING", country: "NL" }]);
   try {

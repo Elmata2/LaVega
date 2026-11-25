@@ -402,7 +402,7 @@ test("two full months: no euro figure and no verdict, an honest too-little line"
   });
   const line = row(html, "plan-card-verdict");
   expect(line).toContain("minder dan 3 volle maanden");
-  expect(line).toContain("Er is niets geschat.");
+  expect(line).toContain("Voor een jaarcijfer is dat te weinig.");
   expect(line).not.toMatch(/€|loont nu niet|kan lonen/);
 });
 

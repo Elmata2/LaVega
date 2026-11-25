@@ -393,13 +393,13 @@ test("a held credit card with a switch verdict gets no generic 'niets te winnen'
     cardAdvice: computeCardAdvice(base),
   });
   expect(q(c, "plan-card-verdict")!.textContent).toContain("CHEAP-CARD");
-  expect(c.textContent).not.toContain("er is niets te winnen");
+  expect(c.textContent).not.toContain("even goed of beter");
   expect(c.textContent).not.toContain("Nog geen betaalrekening of creditcard");
 });
 
 test("debit only and no advice: the generic line still shows", () => {
   const c = mount({ entries: [offer("b", "betaalrekening", 1)], facts: FACTS });
-  expect(c.textContent).toContain("er is niets te winnen");
+  expect(c.textContent).toContain("even goed of beter");
 });
 
 const cashbackAnswer = (c: HTMLElement) => q(c, "cashback-antwoord")?.textContent ?? null;

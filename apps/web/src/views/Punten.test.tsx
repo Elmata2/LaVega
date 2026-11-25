@@ -146,8 +146,8 @@ test("bij een onbekende dag hoort elke datum in de melding bij de transacties, n
   const note = saldoAgeNote(saldoAge(acc({ key: "A", balance: 843.21 }), "2026-08-10"), "nl");
   const dated = datedSentences(note);
   expect(dated).toHaveLength(1);
-  expect(dated[0]).toContain("De nieuwste transactie");
-  expect(dated[0]).toContain("niet over dit bedrag");
+  expect(dated[0]).toContain("Nieuwste transactie");
+  expect(dated[0]).toContain("zegt niets over dit bedrag");
 });
 
 test("de melding bij een onbekende dag noemt de oorzaak: de koppeling vernieuwt zichzelf niet", () => {
@@ -183,7 +183,40 @@ test("een gedateerd saldo zegt van welke dag het is, en meldt latere transacties
   expect(saldoAgeShort(age, "nl")).toBe("stand van 31 juli 2026");
   const note = saldoAgeNote(age, "nl");
   expect(note).toContain("stand van 31 juli 2026, niet van vandaag");
-  expect(note).toContain("nieuwste is van 12 augustus 2026");
+  expect(note).toContain("Nieuwste transactie: 12 augustus 2026");
+});
+
+test("een saldo van vandaag zegt niet dat het niet van vandaag is", () => {
+  const age = saldoAge(acc({ key: "A", balance: 10, balanceDate: "2026-11-25" }), "2026-11-25");
+  expect(saldoAgeNote(age, "nl", "2026-11-25")).toBe("Stand van vandaag.");
+  expect(saldoAgeNote(age, "en", "2026-11-25")).toBe("Balance as of today.");
+  expect(saldoAgeNote(age, "nl", "2026-11-26")).toContain("niet van vandaag");
+});
+
+test("alleen de gedateerde tak claimt iets over vandaag", () => {
+  const today = "2026-11-25";
+  const notes = [
+    saldoAgeNote(saldoAge(acc({ key: "A", balance: 10 }), null), "nl", today),
+    saldoAgeNote(saldoAge(acc({ key: "B", balance: 10, linkedAt: today }), today), "nl", today),
+    saldoAgeNote(saldoAge(acc({ key: "C", balance: null }), today), "nl", today),
+  ];
+  for (const n of notes) expect(n).not.toMatch(/niet van vandaag/);
+});
+
+test("het paneel van een saldo van vandaag claimt niet het tegendeel", () => {
+  const today: Account = acc({
+    key: "NL09INGB",
+    name: "Vandaag",
+    bank: "ING",
+    balance: 5,
+    balanceDate: "2026-11-11",
+  });
+  mount(<Rekeningen {...rekProps()} accounts={[today]} txs={[]} />);
+  click(byText("[data-testid=bank-group-head]", "ING"));
+  const panel = container!.querySelector("[data-testid=bank-panel]")!;
+  expect(panel.querySelector("[data-testid=bank-panel-age]")!.textContent).not.toContain(
+    "niet van vandaag",
+  );
 });
 
 test("een transactie op de saldodatum zelf is geen latere transactie", () => {
@@ -275,8 +308,8 @@ test("het paneel van een gekoppelde rekening zegt 'datum onbekend' en vult geen 
   expect(saldoField.querySelector(".cell-sub")!.textContent).not.toMatch(/\d/);
   const dated = datedSentences(age.textContent ?? "");
   expect(dated).toHaveLength(1);
-  expect(dated[0]).toContain("nieuwste transactie");
-  expect(dated[0]).toContain("niet over dit bedrag");
+  expect(dated[0]).toContain("Nieuwste transactie");
+  expect(dated[0]).toContain("zegt niets over dit bedrag");
   expect(age.textContent).toContain("vernieuwt zichzelf niet");
 });
 
@@ -302,7 +335,7 @@ test("een geïmporteerd saldo zegt van welke dag het is, en dat er nieuwere tran
   const panel = container!.querySelector("[data-testid=bank-panel]")!; // eerste tab = Afschrift
   expect(panel.textContent).toContain("stand van 31 juli 2026");
   expect(panel.querySelector("[data-testid=bank-panel-age]")!.textContent).toContain(
-    "nieuwste is van 12 augustus 2026",
+    "Nieuwste transactie: 12 augustus 2026",
   );
 });
 
@@ -628,8 +661,8 @@ test("het koppelmoment en de saldodatum zijn twee verschillende gegevens", () =>
   expect(linkedShort(linkedMoment(a), "nl")).toBe("gekoppeld op 21 augustus 2026");
   // De zin over de koppeling doet geen enkele uitspraak over het bedrag.
   const note = linkedNote(linkedMoment(a), "nl");
-  expect(note).toContain("hoe oud de koppeling is");
-  expect(note).toContain("niet hoe oud het bedrag is");
+  expect(note).toContain("ouderdom van de koppeling");
+  expect(note).toContain("niet van het saldo");
 });
 
 test("geen koppelmoment leest als onbekend — geen cijfer, geen vandaag", () => {
@@ -702,7 +735,7 @@ test("a balance we fetched today says so, even when the bank sent no date", () =
     expect(short, locale).not.toMatch(/8 augustus|8 August/); // niet het koppelmoment
   }
   // En de uitleg zegt expliciet WELKE dag dit is, want de twee zijn niet gelijk.
-  expect(saldoAgeNote(age, "en")).toContain("not the day the amount held");
+  expect(saldoAgeNote(age, "en")).toContain("not when the amount held");
 });
 
 /* Zonder ophaalmoment verandert er niets: dan is het koppelmoment nog steeds

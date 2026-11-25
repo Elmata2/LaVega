@@ -13,6 +13,7 @@ import {
   type AccountTypeKind,
 } from "@lavega/core";
 import { formatEuroIn, formatSignedEuroIn } from "../format";
+import { SHOW_ENTITY_CLASSIFIER } from "../archive";
 import { useAppLocale } from "../appLocale";
 import { moneyCopy } from "../copy/money";
 import { shellCopy } from "../copy/shell";
@@ -761,22 +762,24 @@ function AccountPanel({
             <TypeSelect account={account} busy={busy} onTypeCommit={onTypeCommit} locale={locale} />
           </div>
         </div>
-        <div
-          className="flex flex-col gap-1 min-w-0 [&_input]:max-w-full [&_select]:max-w-full"
-          data-testid="bank-field"
-        >
-          <span className="eyebrow">{c.entiteit}</span>
-          <div>
-            <input
-              aria-label={c.entiteitVanLabel(account.name || account.key)}
-              value={account.entity}
-              placeholder="—"
-              onChange={(e) => onEntityChange(account.key, e.target.value)}
-              onBlur={() => void onAccountCommit(account)}
-              disabled={busy}
-            />
+        {SHOW_ENTITY_CLASSIFIER && (
+          <div
+            className="flex flex-col gap-1 min-w-0 [&_input]:max-w-full [&_select]:max-w-full"
+            data-testid="bank-field"
+          >
+            <span className="eyebrow">{c.entiteit}</span>
+            <div>
+              <input
+                aria-label={c.entiteitVanLabel(account.name || account.key)}
+                value={account.entity}
+                placeholder="—"
+                onChange={(e) => onEntityChange(account.key, e.target.value)}
+                onBlur={() => void onAccountCommit(account)}
+                disabled={busy}
+              />
+            </div>
           </div>
-        </div>
+        )}
         <div
           className="flex flex-col gap-1 min-w-0 [&_input]:max-w-full [&_select]:max-w-full"
           data-testid="bank-field"
@@ -800,7 +803,7 @@ function AccountPanel({
         </div>
       </div>
 
-      <SaldoAgeNote age={age} locale={locale} />
+      <SaldoAgeNote age={age} locale={locale} today={asOf} />
       <LinkedNote moment={linked} locale={locale} />
 
       {account.iban ? (
@@ -992,9 +995,10 @@ export function saldoAgeShort(age: SaldoAge, locale: Locale): string {
 
 /** De uitleg eronder: eerst wat het cijfer is, dan waarom het niet meebeweegt,
  *  dan — alleen als het waar is — wat je hier zelf kunt doen. */
-export function saldoAgeNote(age: SaldoAge, locale: Locale): string {
+export function saldoAgeNote(age: SaldoAge, locale: Locale, today: string | null = null): string {
   const c = moneyCopy[locale].rekeningen;
   if (age.kind === "dated") {
+    if (age.date === today) return c.saldoAgeDatedToday;
     const later = age.laterTx ? c.saldoAgeDatedLater(dayFullIn(locale, age.laterTx)) : "";
     return c.saldoAgeDatedIntro(dayFullIn(locale, age.date)) + later + c.saldoAgeDatedInvite;
   }
@@ -1032,14 +1036,14 @@ export function saldoAgeNote(age: SaldoAge, locale: Locale): string {
 /** Het blokje onder het saldoveld. Eén korte regel bij het bedrag en de uitleg
  *  eronder — de uitleg staat er altijd, want de misleiding (een oude stand die
  *  als de huidige leest) zit in élk saldo, niet alleen in een oud saldo. */
-function SaldoAgeNote({ age, locale }: { age: SaldoAge; locale: Locale }) {
+function SaldoAgeNote({ age, locale, today }: { age: SaldoAge; locale: Locale; today: string }) {
   return (
     <p
       className="mt-3 mb-0 py-3 px-4 border-t border-r border-b border-t-line border-r-line border-b-line border-l-[3px] border-l-accent rounded-sm bg-surface-2 text-muted text-[0.85rem]"
       data-testid="bank-panel-age"
     >
       <strong className="text-ink">{saldoAgeShort(age, locale)}</strong> —{" "}
-      {saldoAgeNote(age, locale)}
+      {saldoAgeNote(age, locale, today)}
     </p>
   );
 }
@@ -1478,7 +1482,7 @@ export default function Rekeningen({
               <tr>
                 <Th>{c.tabelBank}</Th>
                 <Th>{c.tabelType}</Th>
-                <Th>{c.tabelEntiteit}</Th>
+                {SHOW_ENTITY_CLASSIFIER && <Th>{c.tabelEntiteit}</Th>}
                 <Th numeric>{c.tabelSaldo}</Th>
                 <Th numeric>{c.tabelTransacties}</Th>
                 <Th />
@@ -1504,15 +1508,17 @@ export default function Rekeningen({
                       locale={locale}
                     />
                   </Td>
-                  <Td data-label={c.tabelEntiteit}>
-                    <input
-                      value={account.entity}
-                      placeholder="—"
-                      onChange={(e) => onEntityChange(account.key, e.target.value)}
-                      onBlur={() => void onAccountCommit(account)}
-                      disabled={busy}
-                    />
-                  </Td>
+                  {SHOW_ENTITY_CLASSIFIER && (
+                    <Td data-label={c.tabelEntiteit}>
+                      <input
+                        value={account.entity}
+                        placeholder="—"
+                        onChange={(e) => onEntityChange(account.key, e.target.value)}
+                        onBlur={() => void onAccountCommit(account)}
+                        disabled={busy}
+                      />
+                    </Td>
+                  )}
                   <Td numeric data-label={c.tabelSaldo}>
                     <SaldoCell
                       account={account}

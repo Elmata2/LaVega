@@ -83,11 +83,10 @@ test("the 'smaller categories' line names the window and the floor it is true fo
     },
   ];
   // Three small ones, each under core's window-scaled floor: the line names the
-  // window it is true for, the floor, and that a shorter window moves it.
+  // window it is true for and the floor.
   const html2 = render(many);
   expect(html2).toContain("3 kleinere categorieën niet getoond in 9 jun – 11 aug 2026");
-  expect(html2).toContain(`elk onder ${formatEuro((25 * 64) / 30)} over deze 64 dagen`);
-  expect(html2).toContain("Een kortere periode legt die grens lager.");
+  expect(html2).toContain(`elk onder ${formatEuro((25 * 64) / 30)} in 64 dagen`);
 });
 
 test("only-small spending is reported as small, not as no spending at all", () => {
@@ -99,9 +98,9 @@ test("only-small spending is reported as small, not as no spending at all", () =
     { ...txs[1], id: "tiny2", date: "2026-08-11", amount: -2, counterparty: "Kiosk" },
   ];
   const html = render(tiny);
-  expect(html).toContain("Alleen kleine uitgaven in deze periode");
+  expect(html).toContain("Alleen kleine uitgaven");
   expect(html).toContain(formatEuro(5));
-  expect(html).toContain(`elk onder ${formatEuro((25 * 64) / 30)} over deze 64 dagen`);
+  expect(html).toContain(`elk onder ${formatEuro((25 * 64) / 30)} in 64 dagen`);
   expect(html).not.toContain("Geen uitgaven in deze periode");
 });
 

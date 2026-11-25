@@ -102,12 +102,24 @@ test("Trading 212 says it is in the app", () => {
   expect(dialog().textContent).toContain("In de Trading 212-app.");
 });
 
+test("the format hint, the guide line and the file input agree: CSV, Excel (.xlsx) and MT940", () => {
+  mount({ card: null, choices: [AMEX, T212] });
+  act(() => button("Andere bank of kaart").click());
+  const text = dialog().textContent ?? "";
+  expect(text).toContain("CSV, Excel (.xlsx) of MT940");
+  expect(text).toContain("Download een CSV-, Excel- (.xlsx) of MT940-export");
+  const accept = dialog().querySelector<HTMLInputElement>(
+    '[data-testid="card-file-input"]',
+  )!.accept;
+  for (const ext of [".csv", ".xlsx", ".sta", ".mt940"]) expect(accept).toContain(ext);
+});
+
 test("without a card it first offers the not-connected cards, then Andere bank of kaart", () => {
   mount({ card: null, choices: [AMEX, T212] });
   const labels = [...dialog().querySelectorAll("li button")].map((b) => b.textContent);
   expect(labels).toEqual(["American Express Platinum", "Trading 212 Card", "Andere bank of kaart"]);
   act(() => button("Andere bank of kaart").click());
-  expect(dialog().textContent).toContain("Download een CSV- of MT940-export");
+  expect(dialog().textContent).toContain("Download een CSV-, Excel- (.xlsx) of MT940-export");
 });
 
 test("preview shows format, period, counts and writes nothing before Toevoegen", async () => {
@@ -333,6 +345,41 @@ test("a legacy account: the question blocks Toevoegen until answered, both answe
   expect(dialog().querySelector('[data-testid="destination"]')!.textContent).toBe(
     "Komt in: AMEX-2026",
   );
+});
+
+test("answering the same-card question moves focus to Toevoegen, not the dialog body", async () => {
+  mount({ accounts: [legacyAmex] });
+  await feed("a.csv", AMEX_A);
+  const yes = button("Ja, voeg toe aan AMEX-2026");
+  act(() => yes.focus());
+  expect(document.activeElement).toBe(yes);
+  act(() => yes.click());
+  expect(document.activeElement).toBe(button("Toevoegen"));
+});
+
+test("answering yes when every row is already held moves focus to the close button", async () => {
+  const held = ingest(
+    [],
+    parseBankFile("a.csv", AMEX_A).txs.map((t) => ({ ...t, accountKey: legacyAmex.key })),
+  );
+  mount({ accounts: [legacyAmex], txs: held });
+  await feed("a.csv", AMEX_A);
+  const yes = button("Ja, voeg toe aan AMEX-2026");
+  act(() => yes.focus());
+  expect(document.activeElement).toBe(yes);
+  act(() => yes.click());
+  expect(button("Toevoegen").disabled).toBe(true);
+  expect(document.activeElement).toBe(dialog().querySelector('button[aria-label="Sluiten"]'));
+});
+
+test("answering no also lands focus on Toevoegen", async () => {
+  mount({ accounts: [legacyAmex] });
+  await feed("a.csv", AMEX_A);
+  const no = button("Nee, dit is een andere kaart");
+  act(() => no.focus());
+  expect(document.activeElement).toBe(no);
+  act(() => no.click());
+  expect(document.activeElement).toBe(button("Toevoegen"));
 });
 
 test("answering no imports as a separate account", async () => {

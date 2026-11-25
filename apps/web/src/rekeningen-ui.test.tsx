@@ -2,7 +2,7 @@
 import { act, useState, type ComponentProps } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
-import { afterEach, expect, test } from "vitest";
+import { afterEach, expect, test, vi } from "vitest";
 import type { Account, Tx } from "@lavega/core";
 import { accountSummaries } from "@lavega/core";
 import Rekeningen, {
@@ -21,6 +21,11 @@ import Rekeningen, {
  *   - a click opens the bank and the accounts sit behind sub-tabs;
  *   - everything the view could do before it grouped, it still does.
  */
+
+vi.mock("./archive", async (orig) => ({
+  ...(await orig<typeof import("./archive")>()),
+  SHOW_ENTITY_CLASSIFIER: true,
+}));
 
 (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -285,7 +290,7 @@ test("an account with no anchor at all says its value is unknown, not zero", () 
   click(byText("[data-testid=bank-group-head]", "ING"));
   const status = container!.querySelector('[data-testid="valuation-status"]')!.textContent ?? "";
   expect(status).toContain("onbekend");
-  expect(status).toContain("Onbekend telt niet als nul");
+  expect(status).toContain("onbekend is geen nul");
   expect(container!.querySelector('[data-testid="valuation-list"]')).toBeNull();
 });
 

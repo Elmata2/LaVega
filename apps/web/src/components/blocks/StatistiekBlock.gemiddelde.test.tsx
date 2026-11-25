@@ -87,7 +87,7 @@ test("een gemiddelde telt geen geld mee dat alleen van plaats veranderde", () =>
 
 test("te weinig om te middelen is een zin op de voorgrond, geen leeg vak", () => {
   const html = render([tx("k1", "2026-08-05", -30, "Albert Heijn")]);
-  expect(html).toContain("Nog geen gemiddelde: deze periode bevat 1 dag afschrift");
+  expect(html).toContain("Nog geen gemiddelde: 1 dag afschrift");
   expect(html).toContain("minstens 2");
   // Geen verzonnen nul naast de weigering.
   expect(html).not.toContain("gemiddeld € 0,00 per");
@@ -98,7 +98,7 @@ test("te weinig om te middelen is een zin op de voorgrond, geen leeg vak", () =>
 test("gemiddeldeWeigeringNL geeft alleen advies dat in díe toestand werkt", () => {
   // Ligt er afschrift buiten het venster, dan helpt een langere periode.
   expect(gemiddeldeWeigering("te-kort", 1, true)).toBe(
-    "Nog geen gemiddelde: deze periode bevat 1 dag afschrift, en middelen vraagt er minstens 2. " +
+    "Nog geen gemiddelde: 1 dag afschrift, minstens 2 nodig. " +
       "Een langere periode pakt de rest van je afschriften mee.",
   );
   // Is dit alles wat er is, dan klikt hij zich suf aan langere periodes; dan is
@@ -108,6 +108,6 @@ test("gemiddeldeWeigeringNL geeft alleen advies dat in díe toestand werkt", () 
   // Geen enkele transactie is een ander feit dan één dag afschrift, en krijgt
   // een andere zin — niet "0 dagen".
   const leeg = gemiddeldeWeigering("geen-gegevens", 0, true);
-  expect(leeg).toContain("geen enkele transactie");
+  expect(leeg).toContain("geen transacties");
   expect(leeg).not.toContain("0 dagen");
 });
