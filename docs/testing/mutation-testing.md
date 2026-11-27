@@ -37,12 +37,16 @@ tests instead.
 
 ## Baseline (2026-11-27)
 
-| File           | Mutants tested | Score | Survived | No coverage |
-| -------------- | -------------- | ----- | -------- | ----------- |
-| `money.ts`     | 15             | 93.3% | 1        | 0           |
-| `tax.ts`       | 354            | 81.1% | 62       | 5           |
-| `costBasis.ts` | 497            | 67.4% | 141      | 21          |
-| All files      | 866            | 73.4% | 204      | 26          |
+| File             | Mutants tested | Score | Survived | No coverage |
+| ---------------- | -------------- | ----- | -------- | ----------- |
+| `money.ts`       | 15             | 93.3% | 1        | 0           |
+| `tax.ts`         | 354            | 81.1% | 62       | 5           |
+| `costBasis.ts`   | 532            | 67.3% | 153      | 21          |
+| `redact.ts`      | 4              | 100%  | 0        | 0           |
+| `sentryScrub.ts` | 246            | 87.4% | 31       | 0           |
+| `fx.ts`          | 124            | 78.2% | 27       | 0           |
+| `splits.ts`      | 56             | 71.4% | 16       | 0           |
+| All files        | 1331           | 76.3% | 290      | 26          |
 
 The full list runs in about 2.5 minutes with `concurrency: 4`. `costBasis.ts` is
 the weak spot: cost basis, fees and FX handling need tighter assertions.

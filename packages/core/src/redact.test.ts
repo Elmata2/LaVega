@@ -40,6 +40,13 @@ test("credential redaction survives case, spacing and quoting variants", () => {
   }
 });
 
+test("each rule writes its placeholder where the credential was", () => {
+  expect(redactProblem(`https://user:${TOKEN}@broker.example.com/report`)).toBe(
+    "https://user:[REDACTED]@broker.example.com/report",
+  );
+  expect(redactProblem(`Bearer ${TOKEN}`)).toBe("Bearer [REDACTED]");
+});
+
 test("redaction keeps the diagnostic text around the credential", () => {
   const line = redactProblem(
     `ibkr: request failed (401) for https://broker.example.com/report?api_key=${TOKEN}&format=json`,
