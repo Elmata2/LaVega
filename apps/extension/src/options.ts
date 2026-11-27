@@ -404,6 +404,8 @@ puntenFormulier.addEventListener("submit", (e) => {
 
 const sitesLijst = document.getElementById("siteslijst") as HTMLDivElement;
 const sitesMelding = document.getElementById("sites-melding") as HTMLParagraphElement;
+const siteVinken = new Map<string, HTMLInputElement>();
+const siteBezig = new Set<string>();
 
 function meld(tekst: string, fout = false): void {
   sitesMelding.textContent = tekst;
@@ -419,7 +421,6 @@ async function zetSite(site: Site, aan: boolean, vink: HTMLInputElement): Promis
   } else {
     ids.delete(site.id);
     await setEnabledSiteIds([...ids]);
-    /* Pas ná het vinkje: zie de kop van dit bestand. */
     await chrome.permissions.remove({ origins: [site.match] });
     meld(`${site.label} staat uit. De leestoestemming is ingetrokken.`);
   }
@@ -428,25 +429,33 @@ async function zetSite(site: Site, aan: boolean, vink: HTMLInputElement): Promis
 
 function tekenSites(aangevinkt: Set<string>, toegestaan: Set<string>): void {
   leeg(sitesLijst);
+  siteVinken.clear();
   for (const site of SITES) {
     const rij = el("div", "vinkrij");
     const vink = document.createElement("input");
     vink.type = "checkbox";
     vink.id = `site-${site.id}`;
-    /* Aan is aan ALS beide waar zijn. Staat het vinkje in de opslag maar heeft
-     * Chrome de toestemming niet (meer), dan is de waarheid "uit" — en die tonen
-     * we, want een vinkje dat aanstaat bij een site waar niets gebeurt, laat hem
-     * zoeken naar een fout die er niet is. */
     vink.checked = aangevinkt.has(site.id) && toegestaan.has(site.id);
+    vink.disabled = siteBezig.has(site.id);
+    siteVinken.set(site.id, vink);
 
     vink.addEventListener("change", () => {
+      if (siteBezig.has(site.id)) return;
       const wil = vink.checked;
+      siteBezig.add(site.id);
+      vink.disabled = true;
+      const klaar = () => {
+        siteBezig.delete(site.id);
+        vink.disabled = false;
+      };
       if (!wil) {
-        void zetSite(site, false, vink);
+        void zetSite(site, false, vink)
+          .catch(() => {
+            vink.checked = true;
+          })
+          .finally(klaar);
         return;
       }
-      /* EERSTE REGEL van de afhandelaar, zonder await ervoor: anders is het
-       * gebruikersgebaar voorbij en weigert Chrome het verzoek. */
       chrome.permissions
         .request({ origins: [site.match] })
         .then((gegeven) => {
@@ -463,7 +472,8 @@ function tekenSites(aangevinkt: Set<string>, toegestaan: Set<string>): void {
         .catch(() => {
           vink.checked = false;
           meld("Chrome heeft het toestemmingsverzoek afgebroken. Probeer het opnieuw.", true);
-        });
+        })
+        .finally(klaar);
     });
 
     const tekst = document.createElement("label");
@@ -521,6 +531,7 @@ type BronVlakken = {
   vink: HTMLInputElement;
 };
 const vlakken = new Map<string, BronVlakken>();
+const bronBezig = new Set<string>();
 
 function lijstje(items: readonly string[]): HTMLUListElement {
   const ul = document.createElement("ul");
@@ -613,14 +624,25 @@ function tekenBronBlok(bron: Bron, aan: boolean, toegestaan: boolean): void {
    * aanstaat terwijl er niets gebeurt, laat hem zoeken naar een fout die er niet
    * is. */
   vink.checked = aan && toegestaan;
+  vink.disabled = bronBezig.has(bron.id);
 
   vink.addEventListener("change", () => {
-    if (!vink.checked) {
-      void zetBronUit(bron);
+    if (bronBezig.has(bron.id)) return;
+    const wil = vink.checked;
+    bronBezig.add(bron.id);
+    vink.disabled = true;
+    const klaar = () => {
+      bronBezig.delete(bron.id);
+      vink.disabled = false;
+    };
+    if (!wil) {
+      void zetBronUit(bron)
+        .catch(() => {
+          vink.checked = true;
+        })
+        .finally(klaar);
       return;
     }
-    /* EERSTE REGEL van de afhandelaar, zonder await ervoor: anders is het
-     * gebruikersgebaar voorbij en weigert Chrome het verzoek. */
     chrome.permissions
       .request({ origins: [bron.match] })
       .then(async (gegeven) => {
@@ -648,7 +670,8 @@ function tekenBronBlok(bron: Bron, aan: boolean, toegestaan: boolean): void {
           "Chrome heeft het toestemmingsverzoek afgebroken. Probeer het opnieuw.",
           true,
         );
-      });
+      })
+      .finally(klaar);
   });
 
   const tekst = document.createElement("label");
@@ -715,5 +738,53 @@ async function start(): Promise<void> {
   }
   tekenSites(aangevinkteSites, toegestaan);
 }
+
+let verversRij: Promise<void> = Promise.resolve();
+
+function planVervers(taak: () => Promise<void>): void {
+  verversRij = verversRij.then(taak, taak);
+}
+
+async function verversSites(): Promise<void> {
+  const aangevinkt = new Set<string>(await getEnabledSiteIds());
+  for (const site of SITES) {
+    const vink = siteVinken.get(site.id);
+    if (!vink || siteBezig.has(site.id)) continue;
+    const toegestaan = await chrome.permissions.contains({ origins: [site.match] });
+    if (siteBezig.has(site.id)) continue;
+    vink.checked = aangevinkt.has(site.id) && toegestaan;
+  }
+}
+
+async function verversBronnen(): Promise<void> {
+  for (const bron of BRONNEN) {
+    const v = vlakken.get(bron.id);
+    if (!v || bronBezig.has(bron.id)) continue;
+    const aan = await getBronAan(bron);
+    const toegestaan = await chrome.permissions.contains({ origins: [bron.match] });
+    if (bronBezig.has(bron.id)) continue;
+    v.vink.checked = aan && toegestaan;
+    await tekenBronLijst(bron);
+  }
+}
+
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area !== "local") return;
+  if ("enabledSiteIds" in changes) planVervers(verversSites);
+  const raaktBron = BRONNEN.some(
+    (b) =>
+      b.sleutels.aan in changes || b.sleutels.aanbod in changes || b.sleutels.lezing in changes,
+  );
+  if (raaktBron) planVervers(verversBronnen);
+});
+
+const verversAlles = () => {
+  planVervers(async () => {
+    await verversSites();
+    await verversBronnen();
+  });
+};
+chrome.permissions.onRemoved.addListener(verversAlles);
+chrome.permissions.onAdded.addListener(verversAlles);
 
 void start();

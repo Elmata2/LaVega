@@ -148,30 +148,59 @@
     document.documentElement.appendChild(gastheer);
   }
 
+  const startUrl = location.href;
+  let timerId: ReturnType<typeof setTimeout> | null = null;
+  let afgebroken = false;
+
+  function stop(): void {
+    afgebroken = true;
+    if (timerId !== null) {
+      clearTimeout(timerId);
+      timerId = null;
+    }
+    window.removeEventListener("popstate", onNavigatie);
+    window.removeEventListener("hashchange", onNavigatie);
+    window.removeEventListener("pagehide", stop);
+  }
+
+  function onNavigatie(): void {
+    if (location.href !== startUrl) stop();
+  }
+
+  window.addEventListener("popstate", onNavigatie);
+  window.addEventListener("hashchange", onNavigatie);
+  window.addEventListener("pagehide", stop);
+
   function vraag(nummer: number): void {
-    const verzoek: AanbodVerzoek = { soort: "aanbod-vragen" };
+    timerId = null;
+    if (afgebroken || location.href !== startUrl) {
+      stop();
+      return;
+    }
+    const laatste = nummer >= POGINGEN.length - 1;
+    const verzoek: AanbodVerzoek = { soort: "aanbod-vragen", laatstePoging: laatste };
     chrome.runtime
       .sendMessage<AanbodAntwoord | undefined>(verzoek)
       .then((antwoord) => {
-        /* Geen antwoord is geen leeg antwoord. Sliep de service worker, dan
-         * resolvet sendMessage met undefined en weten we niets — dan verschijnt
-         * er niets, want een strook die zegt dat er niets gelezen is terwijl de
-         * worker lag te slapen, is een bewering die op niets rust. */
-        if (!antwoord) return;
-        if (antwoord.soort === "zwijg") return;
-
-        const laatste = nummer >= POGINGEN.length - 1;
-        if (antwoord.gelukt || !antwoord.opnieuw || laatste) {
+        if (afgebroken || location.href !== startUrl) {
+          stop();
+          return;
+        }
+        if (!antwoord || antwoord.soort === "zwijg") {
+          stop();
+          return;
+        }
+        if (antwoord.soort === "gelezen" || antwoord.soort === "mislukt" || laatste) {
+          stop();
           toon(antwoord.regel, antwoord.noot);
           return;
         }
-        setTimeout(() => vraag(nummer + 1), POGINGEN[nummer + 1]);
+        timerId = setTimeout(() => vraag(nummer + 1), POGINGEN[nummer + 1]);
       })
       .catch(() => {
-        /* Afgebroken kanaal. Stil laten: er is op deze pagina geen plek waar een
-         * technische oorzaak thuishoort. */
+        stop();
       });
   }
 
-  setTimeout(() => vraag(0), POGINGEN[0]);
+  timerId = setTimeout(() => vraag(0), POGINGEN[0]);
 })();

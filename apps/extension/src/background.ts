@@ -108,67 +108,65 @@ async function magDraaien(site: Site, aangevinkt: readonly string[]): Promise<bo
  *  verschil. Blind opnieuw registreren gooit een fout ("Duplicate script ID") en
  *  die fout laat de worker halverwege stoppen — waarna de ene registratie er
  *  staat en de andere niet, en het van de volgorde afhangt welke. */
+function zelfdeLijst(a: readonly string[] | undefined, b: readonly string[] | undefined): boolean {
+  const xs = a ?? [];
+  const ys = b ?? [];
+  if (xs.length !== ys.length) return false;
+  return xs.every((waarde, i) => waarde === ys[i]);
+}
+
 async function syncRegistraties(): Promise<void> {
   const aangevinkt = await getEnabledSiteIds();
   const bestaand = await chrome.scripting.getRegisteredContentScripts();
-  const bestaandeIds = new Set(bestaand.map((s) => s.id));
+  const bestaandPerId = new Map(bestaand.map((s) => [s.id, s]));
 
-  /* WELKE WINKELS, en dat is de grens. Alleen een site uit SITES kan hier
-   * langskomen; er is geen `<all_urls>`-tak meer die elke https-pagina
-   * toelaat. Zie de kop van sites.ts voor waarom die lijst terug is. */
   const gewensteSites: Site[] = [];
   for (const site of SITES) {
     if (await magDraaien(site, aangevinkt)) gewensteSites.push(site);
   }
-  const gewensteIds = new Set(gewensteSites.map(regId));
 
-  /* Zijn eigen accountpagina's hangen aan APARTE schakelaars en aparte
-   * toestemmingen — één per bron. Ze lopen hier mee in dezelfde registratielus
-   * omdat het dezelfde twee voorwaarden zijn (vinkje én host-toestemming), maar
-   * het zijn aparte vragen met aparte antwoorden: wie ja zei tegen zijn
-   * Amex-account heeft daarmee geen ja gezegd tegen zijn ING-account. Zie de kop
-   * van amex.ts en van ing.ts. */
   const bronnenAan: Bron[] = [];
   for (const bron of BRONNEN) {
     if (!(await getBronAan(bron))) continue;
     if (!(await chrome.permissions.contains({ origins: [bron.match] }))) continue;
     bronnenAan.push(bron);
-    gewensteIds.add(`${REG_PREFIX}${bron.id}`);
   }
 
-  const wegHalen = [...bestaandeIds].filter(
-    (id) => id.startsWith(REG_PREFIX) && !gewensteIds.has(id),
-  );
+  const bronExcludes = BRONNEN.map((b) => b.match);
+  const gewenst = new Map<
+    string,
+    { id: string; match: string; js: string; excludeMatches?: string[] }
+  >();
+  for (const s of gewensteSites) {
+    const id = regId(s);
+    gewenst.set(id, { id, match: s.match, js: "content.js", excludeMatches: bronExcludes });
+  }
+  for (const bron of bronnenAan) {
+    const id = `${REG_PREFIX}${bron.id}`;
+    gewenst.set(id, { id, match: bron.match, js: AANBOD_CONTENT_JS });
+  }
+
+  const wegHalen: string[] = [];
+  for (const [id, oud] of bestaandPerId) {
+    if (!id.startsWith(REG_PREFIX)) continue;
+    const nieuw = gewenst.get(id);
+    if (
+      !nieuw ||
+      !zelfdeLijst(oud.matches, [nieuw.match]) ||
+      !zelfdeLijst(oud.js, [nieuw.js]) ||
+      !zelfdeLijst(oud.excludeMatches, nieuw.excludeMatches)
+    ) {
+      wegHalen.push(id);
+    }
+  }
   if (wegHalen.length > 0) {
     await chrome.scripting.unregisterContentScripts({ ids: wegHalen });
   }
 
-  const bijZetten: { id: string; match: string; js: string; excludeMatches?: string[] }[] =
-    gewensteSites
-      .filter((s) => !bestaandeIds.has(regId(s)))
-      .map((s) => ({
-        id: regId(s),
-        match: s.match,
-        js: "content.js",
-        /* Anders draaien content.js én aanbod-content.js allebei op dezelfde
-         * ING/Amex-pagina's, met twee overlappende panelen als gevolg. Komt uit
-         * BRONNEN.TS en niet uit een tweede lijstje hier: een derde bron die
-         * hier bij komt, wordt bij de VOLGENDE nieuwe kassa-registratie
-         * automatisch uitgesloten. Alleen dit blok — als de registratie al
-         * bestaat (`bestaandeIds.has(regId(s))`), wordt hij hierboven niet
-         * opnieuw opgebouwd, dus een bestaande registratie neemt de uitsluiting
-         * van een pas toegevoegde bron niet automatisch over totdat hij een
-         * keer wordt afgemeld en opnieuw geregistreerd. */
-        excludeMatches: BRONNEN.map((b) => b.match),
-      }));
-  for (const bron of bronnenAan) {
-    const id = `${REG_PREFIX}${bron.id}`;
-    if (bestaandeIds.has(id)) continue;
-    /* ÉÉN content script voor alle bronnen. Het hoeft niet te weten op welke
-     * pagina het draait: het stuurt "ik ben er" en krijgt afgemaakte zinnen
-     * terug. Zie de uitleg bij AANBOD_CONTENT_JS in bronnen.ts. */
-    bijZetten.push({ id, match: bron.match, js: AANBOD_CONTENT_JS });
-  }
+  const wegSet = new Set(wegHalen);
+  const bijZetten = [...gewenst.values()].filter(
+    (s) => !bestaandPerId.has(s.id) || wegSet.has(s.id),
+  );
   if (bijZetten.length > 0) {
     await chrome.scripting.registerContentScripts(
       bijZetten.map((s) => ({
@@ -176,9 +174,6 @@ async function syncRegistraties(): Promise<void> {
         matches: [s.match],
         excludeMatches: s.excludeMatches,
         js: [s.js],
-        /* document_idle: de pagina is klaar met laden. Eerder heeft geen zin —
-         * de prijsopmaak staat er dan misschien nog niet — en het paneel dat
-         * over een half geladen winkel heen springt is onrustig. */
         runAt: "document_idle",
         persistAcrossSessions: true,
         world: "ISOLATED",
@@ -187,37 +182,15 @@ async function syncRegistraties(): Promise<void> {
   }
 }
 
-/** Eén sync tegelijk, achter elkaar.
- *
- * ── DIT IS GEMETEN EN HET WAS EEN ECHTE FOUT ────────────────────────────────
- *
- * `syncRegistraties` is idempotent zolang hij ALLEEN draait: hij leest eerst wat
- * er staat en doet dan het verschil. Twee keer TEGELIJK is iets anders. Dan lezen
- * ze allebei dezelfde lege lijst, besluiten ze allebei dat er iets bij moet, en
- * roepen ze allebei `registerContentScripts` aan — waarna Chrome de tweede
- * afwijst met "Duplicate script ID" en die fout de worker halverwege laat
- * stoppen.
- *
- * Dat is geen theoretisch geval; het is precies wat het optiescherm doet. Bij het
- * aanzetten van een schakelaar gaat er eerst een `permissions.request` door (die
- * `onAdded` laat afgaan) en meteen daarna een schrijfactie naar de opslag (die
- * `onChanged` laat afgaan). Twee gebeurtenissen, twee syncs, en of ze elkaar in
- * de weg zitten hangt af van de timing van twee await-ketens.
- *
- * Gevonden door background.test.ts: die vuurt twee syncs achter elkaar af en zag
- * `amex-content.js` twee keer in de registratielijst staan. Een wachtrij van één
- * is de goedkoopste oplossing die de eigenschap teruggeeft waar de rest van de
- * functie op rust — dat hij WEET wat er al staat. */
 let syncRij: Promise<void> = Promise.resolve();
 
-function planSync(): Promise<void> {
-  syncRij = syncRij.then(
-    () => syncRegistraties(),
-    /* Een mislukte sync mag de rij niet blokkeren: dan zou één fout alle
-     * volgende registraties tegenhouden tot de worker opnieuw start. */
-    () => syncRegistraties(),
-  );
+function planOpRij(taak: () => Promise<void>): Promise<void> {
+  syncRij = syncRij.then(taak, taak);
   return syncRij;
+}
+
+function planSync(): Promise<void> {
+  return planOpRij(syncRegistraties);
 }
 
 /** Trekt de gebruiker in chrome://extensions een host-toestemming in, dan is het
@@ -225,11 +198,7 @@ function planSync(): Promise<void> {
  *  opent — anders staat er straks een vinkje aan bij een site waar niets meer
  *  gebeurt, en zoekt hij naar een fout die er niet is. */
 chrome.permissions.onRemoved.addListener(() => {
-  void (async () => {
-    /* Trekt de gebruiker de host-toestemming van een winkel in via
-     * chrome://extensions, dan hoort het vinkje in het optiescherm dat ook te
-     * tonen — anders zoekt hij naar een fout die er niet is (zie het
-     * commentaar bij magDraaien). */
+  void planOpRij(async () => {
     const aangevinkt = await getEnabledSiteIds();
     const blijft: string[] = [];
     for (const id of aangevinkt) {
@@ -239,27 +208,14 @@ chrome.permissions.onRemoved.addListener(() => {
     }
     if (blijft.length !== aangevinkt.length) await setEnabledSiteIds(blijft);
 
-    /* EN DE BRONNEN, en die doen meer dan een vinkje omzetten: het opgeslagene
-     * gaat weg.
-     *
-     * Dit is de route die buiten ons scherm om loopt. Trekt hij de toestemming
-     * in via chrome://extensions, dan komt hij nooit langs de schakelaar in het
-     * optiescherm — en zou de gelezen lijst blijven staan terwijl hij zojuist
-     * heeft gezegd dat LaVega daar niet meer mag kijken. Een intrekking die
-     * alleen toekomstig gedrag verandert, is geen intrekking; dat staat in de
-     * kop van amex.ts en het moet dus ook langs deze kant waar zijn.
-     *
-     * PER BRON, en alleen die ene. Trekt hij de ING-toestemming in, dan hoort
-     * zijn Amex-lijst te blijven staan: dat waren twee vragen en dit is één
-     * antwoord. `wisBron` raakt alleen de sleutels uit die ene descriptor. */
     for (const bron of BRONNEN) {
       if (!(await getBronAan(bron))) continue;
       if (await chrome.permissions.contains({ origins: [bron.match] })) continue;
       await wisBron(bron);
     }
 
-    await planSync();
-  })();
+    await syncRegistraties();
+  });
 });
 
 chrome.permissions.onAdded.addListener(() => void planSync());
@@ -473,18 +429,13 @@ function bronVanAfzender(sender: chrome.runtime.MessageSender): Bron | null {
   return bron;
 }
 
-async function beantwoordAanbod(sender: chrome.runtime.MessageSender): Promise<AanbodAntwoord> {
+async function beantwoordAanbod(
+  sender: chrome.runtime.MessageSender,
+  laatstePoging = false,
+): Promise<AanbodAntwoord> {
   const bron = bronVanAfzender(sender);
   if (!bron) return { soort: "zwijg", reden: "afzender hoort niet bij een aanbiedingenbron" };
 
-  /* TWEE SCHAKELAARS, ALLEBEI NODIG, en in deze volgorde. Het vinkje is van hem
-   * en de host-toestemming is van Chrome; de tweede wint altijd, maar de eerste
-   * hoort te kunnen zonder de tweede in te trekken. Beide worden hier opnieuw
-   * gelezen en niet gecachet: tussen het registreren van het script en dit
-   * bericht kan hij ze allebei hebben omgezet.
-   *
-   * EN ZE GELDEN PER BRON. De schakelaar van Amex zegt niets over de ING Winkel
-   * en andersom; daarom staat `bron` hier in beide regels. */
   if (!(await getBronAan(bron))) return { soort: "zwijg", reden: `${bron.id} staat uit` };
   if (!(await chrome.permissions.contains({ origins: [bron.match] }))) {
     return { soort: "zwijg", reden: `geen toestemming voor ${bron.id}` };
@@ -499,21 +450,30 @@ async function beantwoordAanbod(sender: chrome.runtime.MessageSender): Promise<A
   try {
     const uitkomst = await chrome.scripting.executeScript({
       target: { tabId },
-      /* De lezer van DEZE bron. Chrome verstuurt hem als tekst naar de pagina;
-       * zie de uitleg bij `Bron.collect`. */
       func: bron.collect,
       args: [null],
     });
     ruw = uitkomst[0]?.result as RuweLezing | undefined;
   } catch {
-    /* Tabblad weg, of de toestemming een seconde geleden ingetrokken. Geen van
-     * beide is iets waar hij op deze pagina iets aan heeft. */
     return { soort: "zwijg", reden: "injectie mislukt" };
   }
   if (!ruw) return { soort: "zwijg", reden: "geen lezing" };
 
   const { lezing, aanbiedingen } = leesAanbod(ruw, asOf, bron);
-  await setBronLezing(bron, lezing, aanbiedingen);
+  const herhaalbaar =
+    lezing.uitkomst === "geen-aanbiedingenblok" ||
+    lezing.uitkomst === "blok-zonder-kaarten" ||
+    lezing.uitkomst === "afgeschermd";
+  const soort: "gelezen" | "opnieuw" | "mislukt" =
+    lezing.uitkomst === "gelezen"
+      ? "gelezen"
+      : herhaalbaar && !laatstePoging
+        ? "opnieuw"
+        : "mislukt";
+
+  if (soort !== "opnieuw") {
+    await setBronLezing(bron, lezing, aanbiedingen);
+  }
 
   const strook = aanbodStrook(
     lezing,
@@ -521,22 +481,7 @@ async function beantwoordAanbod(sender: chrome.runtime.MessageSender): Promise<A
     bron,
   );
   return {
-    soort: "melding",
-    gelukt: lezing.uitkomst === "gelezen",
-    /* Alleen doorvragen als de pagina nog aan het opbouwen KAN zijn. Bij een
-     * inlogscherm is het antwoord definitief: nog vier keer een uitgelogde
-     * pagina lezen levert vier keer hetzelfde op, en een strook die pas na tien
-     * seconden zegt dat je moet inloggen is tien seconden te laat.
-     *
-     * "afgeschermd" hoort in dezelfde rij, en juist daar: die uitkomst telt
-     * eigen elementen die leeg zijn en geen te openen wortel hebben, en een
-     * component die nog niet GEBOUWD is ziet er precies zo uit als een die
-     * dicht is. Bij de eerste poging is dat verschil het grootst — dus nog een
-     * keer kijken, en pas de laatste lezing op het scherm zetten. */
-    opnieuw:
-      lezing.uitkomst === "geen-aanbiedingenblok" ||
-      lezing.uitkomst === "blok-zonder-kaarten" ||
-      lezing.uitkomst === "afgeschermd",
+    soort,
     regel: strook.regel,
     noot: strook.noot,
   };
@@ -545,14 +490,10 @@ async function beantwoordAanbod(sender: chrome.runtime.MessageSender): Promise<A
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   const m = message as PaneelVerzoek | AanbodVerzoek | undefined;
   if (m?.soort === "aanbod-vragen") {
-    void beantwoordAanbod(sender).then(sendResponse);
+    void beantwoordAanbod(sender, m.laatstePoging === true).then(sendResponse);
     return true;
   }
   if (!m || m.soort !== "paneel-vragen") return;
-  /* `true` teruggeven houdt het antwoordkanaal open tot sendResponse komt. Zonder
-   * dat sluit Chrome het kanaal zodra deze functie terugkeert en krijgt het
-   * content script `undefined` — en dat leest daar als "niets te melden", wat
-   * iets heel anders is dan "nog even wachten". */
   void beantwoord(sender).then(sendResponse);
   return true;
 });

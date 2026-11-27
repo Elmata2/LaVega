@@ -135,32 +135,22 @@ declare type PaneelAntwoord =
  *  zonder inhoud — net als PaneelVerzoek, en om dezelfde reden: de worker weet
  *  uit `sender.url` waar het bericht vandaan komt, en dat is het enige veld dat
  *  niet door de pagina te zetten is. */
-declare type AanbodVerzoek = { soort: "aanbod-vragen" };
+declare type AanbodVerzoek = {
+  soort: "aanbod-vragen";
+  /** True op de laatste poging, zodat tijdelijke laaduitkomsten pas na uitputting worden opgeslagen. */
+  laatstePoging?: boolean;
+};
 
 /** Terug naar die pagina: één zin over wat er gelezen is, en niets anders.
  *
  *  GEEN AANBIEDINGEN IN DIT ANTWOORD. Het script op de Amex-pagina hoeft ze niet
  *  te kennen — het zet één regel neer dat er gelezen is en hoeveel. Zo kan de
  *  bevestigingsstrook niet per ongeluk iets tonen wat er niet in hoort, en is er
- *  op die pagina geen tweede plek waar zijn gegevens langskomen.
- *
- *  `gelukt` bepaalt alleen de toon van de regel, niet of hij verschijnt: een
- *  mislukte lezing hoort hij juist te zien, met de oorzaak. Stil falen op de
- *  pagina die hij net voor ons heeft opengedaan, is de slechtste uitkomst. */
+ *  op die pagina geen tweede plek waar zijn gegevens langskomen. */
 declare type AanbodAntwoord =
-  | {
-      soort: "melding";
-      /** Kwam er een aanbieding uit? Bepaalt de toon van de regel, niet of hij
-       *  verschijnt. */
-      gelukt: boolean;
-      /** Mag het script het over een paar seconden nog eens vragen? De pagina
-       *  bouwt haar aanbiedingen NA het laden op, dus "nog niets gevonden" kan
-       *  gewoon "nog niet klaar" betekenen. Bij een inlogformulier is het
-       *  antwoord definitief en staat hier false: dan is doorvragen zinloos. */
-      opnieuw: boolean;
-      regel: string;
-      noot: string;
-    }
+  | { soort: "gelezen"; regel: string; noot: string }
+  | { soort: "opnieuw"; regel: string; noot: string }
+  | { soort: "mislukt"; regel: string; noot: string }
   /** Niets tonen: de toestemming staat uit of de afzender klopt niet. `reden`
    *  is voor de console van de ontwikkelaar en niet voor het scherm. */
   | { soort: "zwijg"; reden: string };

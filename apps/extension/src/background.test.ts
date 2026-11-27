@@ -246,7 +246,7 @@ describe("de kassa-toestemming is per winkel, met twee onafhankelijke schakelaar
 
     toegestaan.delete(KASSA_MATCH);
     for (const cb of luister.verwijderd) cb();
-    for (let i = 0; i < 20; i++) await Promise.resolve();
+    for (let i = 0; i < 40; i++) await Promise.resolve();
 
     expect(scripts.some((s) => s.id === KASSA_ID)).toBe(false);
     expect(opslag.get("enabledSiteIds")).toEqual([]);
@@ -338,14 +338,10 @@ describe("wie er antwoord krijgt op een leesverzoek", () => {
 
     const a = (await stuur({ soort: "aanbod-vragen" }, AMEX_SENDER)) as {
       soort: string;
-      gelukt: boolean;
-      opnieuw: boolean;
       regel: string;
       noot: string;
     };
-    expect(a.soort).toBe("melding");
-    expect(a.gelukt).toBe(true);
-    expect(a.opnieuw).toBe(false);
+    expect(a.soort).toBe("gelezen");
     expect(a.regel).toContain("5 aanbiedingen");
     expect(a.regel).toContain("JBL");
     expect(a.noot).toContain("saldo");
@@ -384,15 +380,22 @@ describe("wie er antwoord krijgt op een leesverzoek", () => {
     document.documentElement.innerHTML = html.slice(html.indexOf("<body"));
 
     const a = (await stuur({ soort: "aanbod-vragen" }, AMEX_SENDER)) as {
-      gelukt: boolean;
-      opnieuw: boolean;
+      soort: string;
       regel: string;
     };
-    expect(a.gelukt).toBe(false);
-    /* En hij mag het over een paar seconden nog eens vragen: de pagina bouwt
-     * haar aanbiedingen na het laden op, dus "nog niets" kan "nog niet klaar"
-     * betekenen. */
-    expect(a.opnieuw).toBe(true);
+    expect(a.soort).toBe("opnieuw");
+    expect(opslag.has("amexLezing")).toBe(false);
+
+    const laatste = (await stuur(
+      { soort: "aanbod-vragen", laatstePoging: true },
+      AMEX_SENDER,
+    )) as {
+      soort: string;
+      regel: string;
+    };
+    expect(laatste.soort).toBe("mislukt");
+    expect(opslag.has("amexLezing")).toBe(true);
+
     const bewaard = opslag.get("amexAanbiedingen") as { winkel: string; gelezenOp: string }[];
     expect(bewaard).toHaveLength(1);
     expect(bewaard[0]!.gelezenOp).toBe("2026-08-19");
@@ -405,10 +408,11 @@ describe("wie er antwoord krijgt op een leesverzoek", () => {
     const html = readFileSync(join(FIXTURES, "kunstmatig-amex-geen-aanbiedingen.html"), "utf8");
     document.documentElement.innerHTML = html.slice(html.indexOf("<body"));
     const a = (await stuur({ soort: "aanbod-vragen" }, AMEX_SENDER)) as {
-      opnieuw: boolean;
+      soort: string;
       regel: string;
     };
-    expect(a.opnieuw).toBe(false);
+    expect(a.soort).toBe("mislukt");
+    expect(opslag.has("amexLezing")).toBe(true);
     expect(a.regel).toContain("zegt zelf");
   });
 });
@@ -558,11 +562,9 @@ describe("de ING Winkel staat naast Amex en niet in plaats van", () => {
 
     const antwoord = (await stuur({ soort: "aanbod-vragen" }, ING_SENDER)) as {
       soort: string;
-      gelukt: boolean;
       regel: string;
     };
-    expect(antwoord.soort).toBe("melding");
-    expect(antwoord.gelukt).toBe(true);
+    expect(antwoord.soort).toBe("gelezen");
     expect(antwoord.regel).toContain("artikelen");
 
     /* De ING-lijst staat in de opslag en de Amex-sleutels zijn niet aangeraakt. */
@@ -631,5 +633,31 @@ describe("de ING Winkel staat naast Amex en niet in plaats van", () => {
     /* En Amex is niet aangeraakt. */
     expect(opslag.get("amexAan")).toBe(true);
     expect(opslag.has("amexAanbiedingen")).toBe(true);
+  });
+
+  it("vervangt een bestaande kassa-registratie zodra excludeMatches verouderd is", async () => {
+    toegestaan.add(KASSA_MATCH);
+    opslag.set("enabledSiteIds", [IKEA.id]);
+    scripts = [{ id: KASSA_ID, matches: [KASSA_MATCH], js: ["content.js"], excludeMatches: [AMEX_MATCH] }];
+
+    await sync();
+
+    const kassa = scripts.find((s) => s.id === KASSA_ID);
+    expect(kassa?.excludeMatches).toEqual([AMEX_MATCH, ING_MATCH]);
+  });
+
+  it("serialiseert permissions.onRemoved met storage.onChanged via syncRij", async () => {
+    toegestaan.add(KASSA_MATCH);
+    opslag.set("enabledSiteIds", [IKEA.id]);
+    await sync();
+    expect(scripts.some((s) => s.id === KASSA_ID)).toBe(true);
+
+    toegestaan.delete(KASSA_MATCH);
+    for (const cb of luister.verwijderd) cb();
+    for (const cb of luister.opslagWijziging) cb({ enabledSiteIds: { newValue: [IKEA.id] } }, "local");
+    for (let i = 0; i < 40; i++) await Promise.resolve();
+
+    expect(opslag.get("enabledSiteIds")).toEqual([]);
+    expect(scripts.some((s) => s.id === KASSA_ID)).toBe(false);
   });
 });
