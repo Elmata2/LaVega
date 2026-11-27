@@ -48,12 +48,39 @@ export function createStockResearchChat(reportToken: string, agentId: string): C
   });
 }
 
+export type ResearchErrorCode = "history_limit" | "snapshot_expired" | "unknown";
+
+export type ResearchConversationError = {
+  code: ResearchErrorCode;
+  message: string;
+};
+
 export function researchErrorMessage(error: Error): string {
+  return parseResearchError(error).message;
+}
+
+export function parseResearchError(error: Error): ResearchConversationError {
+  let code: ResearchErrorCode | null = null;
+  let message = error.message || "Agent reply failed. Try again.";
   try {
-    const problems = JSON.parse(error.message).problems;
-    if (Array.isArray(problems) && typeof problems[0] === "string") return problems[0];
+    const parsed = JSON.parse(error.message) as { code?: unknown; problems?: unknown };
+    if (
+      parsed.code === "history_limit" ||
+      parsed.code === "snapshot_expired" ||
+      parsed.code === "unknown"
+    ) {
+      code = parsed.code;
+    }
+    if (Array.isArray(parsed.problems) && typeof parsed.problems[0] === "string") {
+      message = parsed.problems[0];
+    }
   } catch {}
-  return error.message || "Agent reply failed. Try again.";
+  if (code === null) {
+    if (/1–40 messages|30,000 character limit/i.test(message)) code = "history_limit";
+    else if (/expir|refresh|rerun|re-run/i.test(message)) code = "snapshot_expired";
+    else code = "unknown";
+  }
+  return { code, message };
 }
 
 export function researchPercent(value: number | null): string {

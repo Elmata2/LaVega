@@ -119,6 +119,7 @@ function useSectorInference(state: SectorState, refresh: () => void): void {
     if (ranFor.current === state.data) return;
     ranFor.current = state.data;
     let cancelled = false;
+    const controller = new AbortController();
     (async () => {
       let classifiedAny = false;
       while (attemptsRef.current < MAX_INFER_ATTEMPTS && !cancelled) {
@@ -127,10 +128,12 @@ function useSectorInference(state: SectorState, refresh: () => void): void {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({ exclude: [...excludeRef.current] }),
+          signal: controller.signal,
         }).catch(() => null);
-        if (!response || !response.ok) break;
+        if (cancelled || !response || !response.ok) break;
         const body: { classified?: unknown; remaining?: unknown; failedSymbols?: unknown } =
           await response.json().catch(() => ({}));
+        if (cancelled) break;
         if (Array.isArray(body.failedSymbols))
           for (const symbol of body.failedSymbols)
             if (typeof symbol === "string") excludeRef.current.add(symbol);
@@ -142,6 +145,7 @@ function useSectorInference(state: SectorState, refresh: () => void): void {
     })();
     return () => {
       cancelled = true;
+      controller.abort();
     };
   }, [enabled, state]);
 }

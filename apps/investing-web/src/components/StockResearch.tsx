@@ -1,12 +1,12 @@
 import { useChat, type Chat } from "@ai-sdk/react";
 import type { UIMessage } from "ai";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useReducer, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { AgentMessageText } from "./AgentMessageText.js";
 import {
   createStockResearchChat,
+  parseResearchError,
   researchAmount,
-  researchErrorMessage,
   researchPercent,
   researchStock,
   type StockJudgment,
@@ -44,10 +44,10 @@ function ResearchConversation({
   const [input, setInput] = useState("");
   const end = useRef<HTMLDivElement>(null);
   const sending = status === "submitted" || status === "streaming";
-  const errorText = error ? researchErrorMessage(error) : null;
-  const historyFull = Boolean(errorText?.match(/1–40 messages|30,000 character limit/i));
-  const needsRefresh =
-    expired || historyFull || Boolean(errorText?.match(/expir|refresh|rerun|re-run/i));
+  const errorInfo = error ? parseResearchError(error) : null;
+  const errorText = errorInfo?.message ?? null;
+  const historyFull = errorInfo?.code === "history_limit";
+  const needsRefresh = expired || historyFull || errorInfo?.code === "snapshot_expired";
   useEffect(() => {
     end.current?.scrollIntoView?.({ block: "nearest" });
   }, [messages, status]);
@@ -156,20 +156,95 @@ function ResearchConversation({
   );
 }
 
+type ResearchSession = {
+  result: StockResearchResult;
+  chats: Map<string, Chat<UIMessage>>;
+  selectedAgentId: string | null;
+};
+
+type ResearchPhase =
+  | { kind: "idle" }
+  | { kind: "loading"; previous: ResearchSession | null }
+  | { kind: "ready"; session: ResearchSession }
+  | { kind: "error"; message: string; previous: ResearchSession | null };
+
+type ResearchState = {
+  symbol: string;
+  phase: ResearchPhase;
+  now: number;
+};
+
+type ResearchAction =
+  | { type: "setSymbol"; symbol: string }
+  | { type: "start" }
+  | { type: "succeed"; result: StockResearchResult; chats: Map<string, Chat<UIMessage>>; now: number }
+  | { type: "fail"; message: string }
+  | { type: "selectAgent"; agentId: string | null }
+  | { type: "tick"; now: number };
+
+function currentSession(phase: ResearchPhase): ResearchSession | null {
+  if (phase.kind === "ready") return phase.session;
+  if (phase.kind === "loading" || phase.kind === "error") return phase.previous;
+  return null;
+}
+
+function researchReducer(state: ResearchState, action: ResearchAction): ResearchState {
+  switch (action.type) {
+    case "setSymbol":
+      return { ...state, symbol: action.symbol };
+    case "start":
+      return {
+        ...state,
+        phase: { kind: "loading", previous: currentSession(state.phase) },
+      };
+    case "succeed":
+      return {
+        symbol: action.result.report.symbol,
+        now: action.now,
+        phase: {
+          kind: "ready",
+          session: {
+            result: action.result,
+            chats: action.chats,
+            selectedAgentId: null,
+          },
+        },
+      };
+    case "fail":
+      return {
+        ...state,
+        phase: {
+          kind: "error",
+          message: action.message,
+          previous: currentSession(state.phase),
+        },
+      };
+    case "selectAgent": {
+      const session = currentSession(state.phase);
+      if (!session) return state;
+      const updated: ResearchSession = { ...session, selectedAgentId: action.agentId };
+      if (state.phase.kind === "ready") return { ...state, phase: { kind: "ready", session: updated } };
+      if (state.phase.kind === "error")
+        return { ...state, phase: { ...state.phase, previous: updated } };
+      return state;
+    }
+    case "tick":
+      return { ...state, now: action.now };
+  }
+}
+
 export function StockResearch() {
-  const [symbol, setSymbol] = useState("AAPL");
-  const [result, setResult] = useState<StockResearchResult | null>(null);
-  const [pending, setPending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [selected, setSelected] = useState<string | null>(null);
-  const [now, setNow] = useState(() => Date.now());
-  const [chats, setChats] = useState(new Map<string, Chat<UIMessage>>());
+  const [state, dispatch] = useReducer(researchReducer, undefined, (): ResearchState => ({
+    symbol: "AAPL",
+    phase: { kind: "idle" },
+    now: Date.now(),
+  }));
   const activeChats = useRef(new Map<string, Chat<UIMessage>>());
   const runId = useRef(0);
 
   useEffect(() => {
     const registry = activeChats.current;
-    const timer = setInterval(() => setNow(Date.now()), 30_000);
+    const timer = setInterval(() => dispatch({ type: "tick", now: Date.now() }), 30_000);
     return () => {
       clearInterval(timer);
       runId.current += 1;
@@ -177,11 +252,14 @@ export function StockResearch() {
     };
   }, []);
 
+  const pending = state.phase.kind === "loading";
+  const error = state.phase.kind === "error" ? state.phase.message : null;
+  const session = currentSession(state.phase);
+
   async function run(ticker: string) {
     if (pending) return;
     const id = ++runId.current;
-    setPending(true);
-    setError(null);
+    dispatch({ type: "start" });
     try {
       const next = await researchStock(ticker);
       if (id !== runId.current) return;
@@ -194,24 +272,23 @@ export function StockResearch() {
         ]),
       );
       for (const [agentId, chat] of nextChats) activeChats.current.set(agentId, chat);
-      setChats(nextChats);
-      setSelected(null);
-      setResult(next);
-      setSymbol(next.report.symbol);
-      setNow(Date.now());
+      dispatch({ type: "succeed", result: next, chats: nextChats, now: Date.now() });
     } catch (failure) {
       if (id === runId.current)
-        setError(failure instanceof Error ? failure.message : "Stock research failed.");
-    } finally {
-      if (id === runId.current) setPending(false);
+        dispatch({
+          type: "fail",
+          message: failure instanceof Error ? failure.message : "Stock research failed.",
+        });
     }
   }
 
+  const result = session?.result ?? null;
+  const selected = session?.selectedAgentId ?? null;
   const report = result?.report;
   const company = report?.company;
   const snapshot = company?.snapshot;
   const judgment = report?.judgments.find((item) => item.agentId === selected);
-  const expired = report ? Date.parse(report.expiresAt) <= now : false;
+  const expired = report ? Date.parse(report.expiresAt) <= state.now : false;
   const metrics =
     company && snapshot
       ? [
@@ -229,7 +306,8 @@ export function StockResearch() {
         ]
       : [];
 
-  const chat = judgment ? chats.get(judgment.agentId) : undefined;
+  const chat = judgment ? session?.chats.get(judgment.agentId) : undefined;
+  const symbol = state.symbol;
 
   return (
     <section className="space-y-5">
@@ -257,7 +335,7 @@ export function StockResearch() {
               className="mt-2"
               value={symbol}
               placeholder="AAPL"
-              onChange={(event) => setSymbol(event.target.value)}
+              onChange={(event) => dispatch({ type: "setSymbol", symbol: event.target.value })}
               disabled={pending}
               required
               maxLength={24}
@@ -347,7 +425,7 @@ export function StockResearch() {
                     className="mb-4"
                     variant="ghost"
                     size="sm"
-                    onClick={() => setSelected(null)}
+                    onClick={() => dispatch({ type: "selectAgent", agentId: null })}
                   >
                     ← Company overview
                   </Button>
@@ -393,7 +471,7 @@ export function StockResearch() {
               <button
                 type="button"
                 key={item.agentId}
-                onClick={() => setSelected(item.agentId)}
+                onClick={() => dispatch({ type: "selectAgent", agentId: item.agentId })}
                 disabled={pending}
                 aria-pressed={selected === item.agentId}
                 className={`pressable w-full rounded-card border bg-card p-4 text-left disabled:opacity-50 ${selected === item.agentId ? "border-accent ring-1 ring-accent" : "border-border hover:bg-secondary/40"}`}

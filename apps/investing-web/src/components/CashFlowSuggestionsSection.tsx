@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { CashFlowKind } from "@lavega/core";
 import { Switch } from "./LayoutPicker.js";
 import { Button } from "@lavega/ui";
@@ -45,6 +45,11 @@ import {
 
 type RowSign = { before: number | null; after: number | null };
 
+type LoadState =
+  | { status: "loading" }
+  | { status: "error" }
+  | { status: "ready"; data: CashFlowState };
+
 function formatSignedAmount(
   amount: number | null,
   currency: string,
@@ -66,60 +71,62 @@ function confidenceLabel(confidence: number | null, copy: CashFlowCopy): string 
 export function CashFlowSuggestionsSection() {
   const locale = readInvestingLocale();
   const copy = cashFlowCopy[locale];
-  const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
-  const [state, setState] = useState<CashFlowState | null>(null);
+  const [load, setLoad] = useState<LoadState>({ status: "loading" });
   const [toggling, setToggling] = useState(false);
   const [globalError, setGlobalError] = useState<string | null>(null);
   const [busyRow, setBusyRow] = useState<string | null>(null);
+  const [busyRule, setBusyRule] = useState<string | null>(null);
   const [rowErrors, setRowErrors] = useState<Record<string, string>>({});
-  /** The kind the owner picked for a row (defaults to the suggestion). */
   const [kindChoice, setKindChoice] = useState<Record<string, Exclude<CashFlowKind, "other">>>({});
-  /** Deliberate acknowledgement for a sign-changing confirmation. */
   const [acknowledged, setAcknowledged] = useState<Record<string, boolean>>({});
-  /** A 409's before/after, when the server disagreed with the local preview. */
   const [serverSign, setServerSign] = useState<Record<string, RowSign>>({});
+  const mountedRef = useRef(true);
+
+  const state = load.status === "ready" ? load.data : null;
 
   const refresh = useCallback(async () => {
     try {
-      setState(await loadCashFlowSuggestions());
-      setStatus("ready");
+      const next = await loadCashFlowSuggestions();
+      if (mountedRef.current) setLoad({ status: "ready", data: next });
     } catch {
-      setStatus("error");
+      if (mountedRef.current) setLoad({ status: "error" });
     }
   }, []);
 
   useEffect(() => {
-    let current = true;
+    mountedRef.current = true;
     void (async () => {
       try {
         const next = await loadCashFlowSuggestions();
-        if (!current) return;
-        setState(next);
-        setStatus("ready");
+        if (!mountedRef.current) return;
+        setLoad({ status: "ready", data: next });
       } catch {
-        if (current) setStatus("error");
+        if (mountedRef.current) setLoad({ status: "error" });
       }
     })();
     return () => {
-      current = false;
+      mountedRef.current = false;
     };
   }, []);
 
   async function handleToggle() {
-    if (state == null || toggling) return;
+    if (load.status !== "ready" || toggling) return;
     setToggling(true);
     setGlobalError(null);
-    const next = !state.enabled;
+    const next = !load.data.enabled;
     try {
       const saved = await setCashFlowSuggestionsEnabled(next);
-      setState((current) => (current == null ? current : { ...current, enabled: saved }));
-      // Enabling can reveal suggestions stored by an earlier run; reloading is
-      // the only way to know, and it costs one round trip.
+      if (!mountedRef.current) return;
+      setLoad((current) =>
+        current.status !== "ready"
+          ? current
+          : { status: "ready", data: { ...current.data, enabled: saved } },
+      );
       if (saved) await refresh();
     } catch {
-      setGlobalError(copy.toggleFailed);
+      if (mountedRef.current) setGlobalError(copy.toggleFailed);
     } finally {
-      setToggling(false);
+      if (mountedRef.current) setToggling(false);
     }
   }
 
@@ -131,7 +138,6 @@ export function CashFlowSuggestionsSection() {
     return suggested != null && suggested !== "other" ? suggested : RULE_KINDS[0];
   }
 
-  /** The before/after the owner must see before a sign-changing confirmation. */
   function signPreview(row: CashFlowSuggestionRow): RowSign | null {
     const key = suggestionKey(row);
     const server = serverSign[key];
@@ -158,6 +164,7 @@ export function CashFlowSuggestionsSection() {
         kind: chosenKind(row),
         acknowledgeSignChange: preview != null,
       });
+      if (!mountedRef.current) return;
       if (result.status === "sign-change") {
         setServerSign((current) => ({
           ...current,
@@ -170,19 +177,23 @@ export function CashFlowSuggestionsSection() {
         setRowErrors((current) => ({ ...current, [key]: result.message }));
         return;
       }
-      setState((current) =>
-        current == null
+      setLoad((current) =>
+        current.status !== "ready"
           ? current
           : {
-              ...current,
-              pending: current.pending.filter((candidate) => suggestionKey(candidate) !== key),
-              rules: result.rules,
+              status: "ready",
+              data: {
+                ...current.data,
+                pending: current.data.pending.filter((candidate) => suggestionKey(candidate) !== key),
+                rules: result.rules,
+              },
             },
       );
     } catch {
-      setRowErrors((current) => ({ ...current, [key]: copy.confirmFailed }));
+      if (mountedRef.current)
+        setRowErrors((current) => ({ ...current, [key]: copy.confirmFailed }));
     } finally {
-      setBusyRow(null);
+      if (mountedRef.current) setBusyRow(null);
     }
   }
 
@@ -193,36 +204,50 @@ export function CashFlowSuggestionsSection() {
     setRowErrors((current) => ({ ...current, [key]: "" }));
     try {
       if (!(await rejectCashFlowSuggestion({ broker: row.broker, typeKey: row.typeKey }))) {
-        setRowErrors((current) => ({ ...current, [key]: copy.rejectFailed }));
+        if (mountedRef.current)
+          setRowErrors((current) => ({ ...current, [key]: copy.rejectFailed }));
         return;
       }
-      // The server remembers the rejection; removing it here matches what a
-      // reload would show, so it is not offered again.
-      setState((current) =>
-        current == null
+      if (!mountedRef.current) return;
+      setLoad((current) =>
+        current.status !== "ready"
           ? current
           : {
-              ...current,
-              pending: current.pending.filter((candidate) => suggestionKey(candidate) !== key),
+              status: "ready",
+              data: {
+                ...current.data,
+                pending: current.data.pending.filter((candidate) => suggestionKey(candidate) !== key),
+              },
             },
       );
     } catch {
-      setRowErrors((current) => ({ ...current, [key]: copy.rejectFailed }));
+      if (mountedRef.current)
+        setRowErrors((current) => ({ ...current, [key]: copy.rejectFailed }));
     } finally {
-      setBusyRow(null);
+      if (mountedRef.current) setBusyRow(null);
     }
   }
 
   async function handleRemoveRule(rule: CashFlowRuleRow) {
+    const key = suggestionKey(rule);
+    if (busyRule != null) return;
+    setBusyRule(key);
     setGlobalError(null);
-    const rules = await removeCashFlowRule({ broker: rule.broker, typeKey: rule.typeKey }).catch(
-      () => null,
-    );
-    if (rules == null) {
-      setGlobalError(copy.removeFailed);
-      return;
+    try {
+      const rules = await removeCashFlowRule({ broker: rule.broker, typeKey: rule.typeKey }).catch(
+        () => null,
+      );
+      if (!mountedRef.current) return;
+      if (rules == null) {
+        setGlobalError(copy.removeFailed);
+        return;
+      }
+      setLoad((current) =>
+        current.status !== "ready" ? current : { status: "ready", data: { ...current.data, rules } },
+      );
+    } finally {
+      if (mountedRef.current) setBusyRule(null);
     }
-    setState((current) => (current == null ? current : { ...current, rules }));
   }
 
   return (
@@ -240,7 +265,7 @@ export function CashFlowSuggestionsSection() {
             </div>
             <Switch
               on={state?.enabled === true}
-              disabled={toggling || status === "loading"}
+              disabled={toggling || load.status === "loading"}
               label={copy.enabledLabel}
               onToggle={() => void handleToggle()}
             />
@@ -252,33 +277,33 @@ export function CashFlowSuggestionsSection() {
             </p>
           )}
 
-          {status === "loading" && <p className="text-sm text-muted-foreground">…</p>}
-          {status === "error" && (
+          {load.status === "loading" && <p className="text-sm text-muted-foreground">…</p>}
+          {load.status === "error" && (
             <p role="alert" className="text-sm text-negative">
               {copy.loadFailed}
             </p>
           )}
 
-          {status === "ready" && state != null && !state.enabled && (
+          {load.status === "ready" && !load.data.enabled && (
             <p data-testid="cash-flow-disabled" className="text-sm text-muted-foreground">
               {copy.disabledNote}
             </p>
           )}
 
-          {status === "ready" && state != null && state.enabled && (
+          {load.status === "ready" && load.data.enabled && (
             <div className="space-y-4" data-testid="cash-flow-enabled">
               <div>
                 <p className="font-semibold" data-testid="cash-flow-pending-count">
-                  {copy.waiting(state.pending.length)}
+                  {copy.waiting(load.data.pending.length)}
                 </p>
                 <p className="text-xs text-muted-foreground">{copy.waitingHint}</p>
               </div>
 
-              {state.pending.length === 0 ? (
+              {load.data.pending.length === 0 ? (
                 <p className="text-sm text-muted-foreground">{copy.noPending}</p>
               ) : (
                 <ul className="space-y-3">
-                  {state.pending.map((row) => {
+                  {load.data.pending.map((row) => {
                     const key = suggestionKey(row);
                     const preview = signPreview(row);
                     const kind = chosenKind(row);
@@ -338,8 +363,15 @@ export function CashFlowSuggestionsSection() {
                             onChange={(event) => {
                               const next = event.target.value as Exclude<CashFlowKind, "other">;
                               setKindChoice((current) => ({ ...current, [key]: next }));
-                              // A 409 preview belonged to the old kind.
                               setServerSign((current) => {
+                                const { [key]: _removed, ...rest } = current;
+                                return rest;
+                              });
+                              setAcknowledged((current) => {
+                                const { [key]: _removed, ...rest } = current;
+                                return rest;
+                              });
+                              setRowErrors((current) => {
                                 const { [key]: _removed, ...rest } = current;
                                 return rest;
                               });
@@ -424,15 +456,15 @@ export function CashFlowSuggestionsSection() {
             </div>
           )}
 
-          {status === "ready" && state != null && (
+          {load.status === "ready" && (
             <div className="border-t border-border pt-4">
               <h3 className="font-sans text-xl font-semibold tracking-tight">{copy.rulesTitle}</h3>
               <p className="mt-1 text-sm text-muted-foreground">{copy.rulesHint}</p>
-              {state.rules.length === 0 ? (
+              {load.data.rules.length === 0 ? (
                 <p className="mt-2 text-sm text-muted-foreground">{copy.rulesEmpty}</p>
               ) : (
                 <ul className="mt-2 divide-y divide-border">
-                  {state.rules.map((rule) => {
+                  {load.data.rules.map((rule) => {
                     const key = suggestionKey(rule);
                     return (
                       <li
@@ -454,6 +486,7 @@ export function CashFlowSuggestionsSection() {
                           type="button"
                           variant="ghost"
                           size="sm"
+                          disabled={busyRule != null}
                           data-testid={`cash-flow-remove-${key}`}
                           onClick={() => void handleRemoveRule(rule)}
                         >

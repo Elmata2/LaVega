@@ -409,3 +409,27 @@ test("Dutch copy follows the shared lavega_locale cookie, English is the default
   );
   expect(container!.textContent).toContain("Opname (geld uit)");
 });
+
+test("switching kind clears a prior sign-change acknowledgement and re-locks confirm", async () => {
+  fake.pending = [suggestion()];
+  await render();
+
+  const ack = byTestId("cash-flow-ack-trading212|SHARES_IN") as HTMLInputElement;
+  act(() => {
+    ack.click();
+  });
+  expect((byTestId("cash-flow-confirm-trading212|SHARES_IN") as HTMLButtonElement).disabled).toBe(
+    false,
+  );
+
+  const select = byTestId("cash-flow-kind-trading212|SHARES_IN") as HTMLSelectElement;
+  act(() => {
+    select.value = "fee";
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+
+  expect((byTestId("cash-flow-ack-trading212|SHARES_IN") as HTMLInputElement).checked).toBe(false);
+  expect((byTestId("cash-flow-confirm-trading212|SHARES_IN") as HTMLButtonElement).disabled).toBe(
+    true,
+  );
+});

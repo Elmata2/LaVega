@@ -198,3 +198,37 @@ test("a missing kind is treated as a stock, for backward compatibility with an o
   expect(container.textContent).toContain("Technology");
   expect(container.querySelector('select[aria-label="Correct sector"]')).not.toBeNull();
 });
+
+test("switching symbol clears fund state learned from a prior 422", async () => {
+  const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input);
+    if (init?.method === "PUT") return new Response(null, { status: 422 });
+    if (url.includes("/VFEM.L/"))
+      return new Response(JSON.stringify({ sector: "Healthcare", source: "provider" }));
+    return new Response(
+      JSON.stringify({ kind: "stock", sector: "Technology", source: "provider" }),
+    );
+  });
+  vi.stubGlobal("fetch", fetchMock);
+  const { container, root } = render();
+  act(() => root.render(<PositionSectorControl symbol="VFEM.L" />));
+  await act(async () => {});
+
+  const select = container.querySelector<HTMLSelectElement>('select[aria-label="Correct sector"]')!;
+  await act(async () => selectSector(select, "Technology"));
+  const saveButton = Array.from(container.querySelectorAll("button")).find(
+    (button) => button.textContent === "Save",
+  )!;
+  await act(async () => {
+    saveButton.click();
+    await Promise.resolve();
+  });
+  expect(container.querySelector('select[aria-label="Correct sector"]')).toBeNull();
+
+  await act(async () => {
+    root.render(<PositionSectorControl symbol="AAPL" />);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+  expect(container.textContent).toContain("Technology");
+  expect(container.querySelector('select[aria-label="Correct sector"]')).not.toBeNull();
+});

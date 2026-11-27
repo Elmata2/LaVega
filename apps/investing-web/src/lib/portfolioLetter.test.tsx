@@ -142,3 +142,51 @@ test("the letter becomes plain text without Markdown", () => {
   expect(text).toContain("1. ASML. It is 42%. (42%)");
   expect(text).not.toMatch(/[*#]/);
 });
+
+test("a slow initial GET cannot overwrite a letter produced by write()", async () => {
+  let resolveGet!: (response: Response) => void;
+  let posts = 0;
+  vi.stubGlobal("fetch", async (_input: RequestInfo | URL, init?: RequestInit) => {
+    if (init?.method === "POST") {
+      posts += 1;
+      return Response.json({ letter, generated: true });
+    }
+    return new Promise<Response>((resolve) => {
+      resolveGet = resolve;
+    });
+  });
+
+  function Probe() {
+    const { state, writeState, write } = useLatestLetter();
+    return (
+      <>
+        <output>{JSON.stringify({ state, writeState })}</output>
+        <button type="button" onClick={write}>
+          write
+        </button>
+      </>
+    );
+  }
+
+  const container = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(container);
+  await act(async () => root.render(<Probe />));
+
+  await act(async () => {
+    container.querySelector("button")!.click();
+    container.querySelector("button")!.click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+  await act(async () => {
+    resolveGet(Response.json({ letter: null }));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+
+  const parsed = JSON.parse(container.querySelector("output")!.textContent ?? "null") as {
+    state: LetterState;
+    writeState: LetterWriteState;
+  };
+  expect(posts).toBe(1);
+  expect(parsed.state).toEqual({ status: "ready", letter });
+  act(() => root.unmount());
+});

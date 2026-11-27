@@ -8,7 +8,7 @@ import {
   type PortfolioValuePoint,
 } from "@lavega/core";
 import { requestRefresh } from "../lib/syncSession";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Line, LineChart, ReferenceArea, ReferenceLine, XAxis, YAxis } from "recharts";
 import { EmptyState } from "./EmptyState";
 import { LineSwatch } from "./Swatch";
@@ -29,6 +29,11 @@ type Props = {
   currency?: string;
 };
 type SearchPayload = { results?: BenchmarkInstrument[]; fallback?: boolean; problems?: string[] };
+type SearchPhase =
+  | { kind: "idle" }
+  | { kind: "searching" }
+  | { kind: "ready"; results: BenchmarkInstrument[]; fallback: boolean }
+  | { kind: "error"; message: string };
 export type VisibleWindow = ChartWindow;
 // Stable identities: a fresh `[]` default prop would bust the derived memos on every render.
 const periodOptions = [...chartRanges, { value: "custom" as const, label: "Custom" }];
@@ -87,10 +92,10 @@ export function PortfolioBenchmarkChart({
   const [visible, setVisible] = useState<Set<string>>(new Set(["portfolio", ...selected]));
   const [comparing, setComparing] = useState(false);
   const [query, setQuery] = useState("");
-  const [results, setResults] = useState<BenchmarkInstrument[]>([]);
-  const [searchStatus, setSearchStatus] = useState<string | null>(null);
+  const [search, setSearch] = useState<SearchPhase>({ kind: "idle" });
   const [selectionError, setSelectionError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const editedRef = useRef(false);
   const fullPoints = useMemo(() => allPoints(data), [data]);
   const presetPoints = useCallback(
     (range: PortfolioRange) => data[range] ?? (range === "All" ? fullPoints : []),
@@ -113,19 +118,20 @@ export function PortfolioBenchmarkChart({
   } = chart;
 
   useEffect(() => {
-    let active = true;
-    void fetch("/api/investing/benchmarks")
+    const controller = new AbortController();
+    void fetch("/api/investing/benchmarks", { signal: controller.signal })
       .then(async (response) =>
         response.ok ? ((await response.json()) as { symbols?: string[] }) : {},
       )
       .then((payload) => {
-        if (!active || !Array.isArray(payload.symbols)) return;
+        if (controller.signal.aborted || editedRef.current || !Array.isArray(payload.symbols))
+          return;
         setSelected(payload.symbols);
         setVisible(new Set(["portfolio", ...payload.symbols]));
       })
       .catch(() => undefined);
     return () => {
-      active = false;
+      controller.abort();
     };
   }, []);
 
@@ -133,7 +139,7 @@ export function PortfolioBenchmarkChart({
     if (!comparing) return;
     const controller = new AbortController();
     const timer = window.setTimeout(() => {
-      setSearchStatus("Searching…");
+      setSearch({ kind: "searching" });
       void fetch(`/api/investing/benchmarks/search?q=${encodeURIComponent(query)}`, {
         signal: controller.signal,
       })
@@ -142,17 +148,16 @@ export function PortfolioBenchmarkChart({
           return (await response.json()) as SearchPayload;
         })
         .then((payload) => {
-          setResults((payload.results ?? []).filter((result) => !selected.includes(result.symbol)));
-          setSearchStatus(payload.fallback ? "European suggestions" : null);
+          if (controller.signal.aborted) return;
+          setSearch({
+            kind: "ready",
+            results: (payload.results ?? []).filter((result) => !selected.includes(result.symbol)),
+            fallback: payload.fallback === true,
+          });
         })
         .catch((error: unknown) => {
           if (error instanceof DOMException && error.name === "AbortError") return;
-          /* A result list left over from an earlier, different query is not a
-           * suggestion for this one. It is stale and would still be clickable,
-           * silently adding whatever the last successful search happened to
-           * return instead of what the visible "Search unavailable" implies. */
-          setResults([]);
-          setSearchStatus("Search unavailable");
+          setSearch({ kind: "error", message: "Search unavailable" });
         });
     }, 250);
     return () => {
@@ -162,6 +167,7 @@ export function PortfolioBenchmarkChart({
   }, [comparing, query, selected]);
 
   async function replaceSelection(symbols: string[]) {
+    editedRef.current = true;
     setBusy(true);
     setSelectionError(null);
     try {
@@ -180,7 +186,6 @@ export function PortfolioBenchmarkChart({
           ]),
       );
       window.dispatchEvent(new Event("lavega:dashboard-refresh"));
-      /* A newly chosen benchmark has no prices yet. The server only fetches them while a request is in flight, so the page asks for them. */
       await requestRefresh();
     } catch (error) {
       setSelectionError(error instanceof Error ? error.message : "Failed to save selection");
@@ -188,6 +193,16 @@ export function PortfolioBenchmarkChart({
       setBusy(false);
     }
   }
+
+  const results = search.kind === "ready" ? search.results : [];
+  const searchStatusText =
+    search.kind === "searching"
+      ? "Searching…"
+      : search.kind === "ready" && search.fallback
+        ? "European suggestions"
+        : search.kind === "error"
+          ? search.message
+          : null;
 
   const selectedSeries = useMemo(
     () =>
@@ -317,15 +332,18 @@ export function PortfolioBenchmarkChart({
               </label>
               <button
                 type="button"
-                onClick={() => setComparing(false)}
+                onClick={() => {
+                  setComparing(false);
+                  setSearch({ kind: "idle" });
+                }}
                 className="pressable self-end rounded-tile px-3 py-2 text-sm font-semibold"
               >
                 Close
               </button>
             </div>
-            {searchStatus && (
+            {searchStatusText && (
               <p role="status" className="mt-2 text-xs text-muted-foreground">
-                {searchStatus}
+                {searchStatusText}
               </p>
             )}
             <ul id="benchmark-results" role="listbox" className="mt-2 grid gap-1 sm:grid-cols-2">
@@ -337,6 +355,7 @@ export function PortfolioBenchmarkChart({
                     onClick={() => {
                       void replaceSelection([...selected, result.symbol]);
                       setComparing(false);
+                      setSearch({ kind: "idle" });
                       setQuery("");
                     }}
                     className="pressable w-full rounded-tile px-3 py-2 text-left hover:bg-background"

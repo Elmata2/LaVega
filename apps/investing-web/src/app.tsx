@@ -1,5 +1,5 @@
 import { useChat } from "@ai-sdk/react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Link,
   NavLink,
@@ -491,6 +491,7 @@ function AgentView() {
   const [, setThreadVersion] = useState(0);
   const threadId = currentThreadId(personaId);
   const [openError, setOpenError] = useState<string | null>(null);
+  const openRequestRef = useRef<{ id: number; controller: AbortController } | null>(null);
   const { messages, sendMessage, status, error } = useChat({
     chat: portfolioChat(personaId, threadId),
   });
@@ -499,7 +500,16 @@ function AgentView() {
    * reply settles (the thread moves to the top). */
   const threadsKey = `${threadId}:${status === "ready" ? messages.length : "busy"}`;
 
+  useEffect(() => {
+    return () => {
+      openRequestRef.current?.controller.abort();
+      openRequestRef.current = null;
+    };
+  }, [personaId]);
+
   function showThread(next: string) {
+    openRequestRef.current?.controller.abort();
+    openRequestRef.current = null;
     selectThread(personaId, next);
     setThreadVersion((value) => value + 1);
     setOpenError(null);
@@ -507,10 +517,17 @@ function AgentView() {
 
   async function openThread(next: string) {
     if (next === threadId) return;
+    openRequestRef.current?.controller.abort();
+    const requestId = (openRequestRef.current?.id ?? 0) + 1;
+    const controller = new AbortController();
+    openRequestRef.current = { id: requestId, controller };
     try {
-      portfolioChat(personaId, next, await fetchThreadMessages(next));
+      const loaded = await fetchThreadMessages(next, controller.signal);
+      if (controller.signal.aborted || openRequestRef.current?.id !== requestId) return;
+      portfolioChat(personaId, next, loaded);
       showThread(next);
     } catch (reason) {
+      if (controller.signal.aborted || openRequestRef.current?.id !== requestId) return;
       setOpenError(reason instanceof Error ? reason.message : "Conversation could not be opened.");
     }
   }
@@ -718,55 +735,77 @@ function AgentView() {
   );
 }
 
+type ConsentPhase =
+  | { kind: "checking" }
+  | { kind: "error"; message: string }
+  | { kind: "required"; busy: boolean; error: string | null }
+  | { kind: "accepted" };
+
 /** Runs the open-time sync and owns the Yahoo consent prompt. Its problems are
  *  reported up through `onProblems` and shown in the Overview's one status
  *  line; the consent prompt keeps showing its own error because that is the
  *  reader's next action. */
 function AppOpenSync({ onProblems }: { onProblems: (problems: string[]) => void }) {
   const [problems, setProblems] = useState<string[]>([]);
-  const [consent, setConsent] = useState<"checking" | "required" | "accepted">("checking");
-  const [consentBusy, setConsentBusy] = useState(false);
+  const [consent, setConsent] = useState<ConsentPhase>({ kind: "checking" });
+  const [attempt, setAttempt] = useState(0);
+  const mountedRef = useRef(true);
+
   useEffect(() => {
-    onProblems(consent === "required" ? [] : problems);
-  }, [consent, problems, onProblems]);
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    onProblems(consent.kind === "accepted" ? problems : []);
+  }, [consent.kind, problems, onProblems]);
+
   const runSync = useCallback(async (current: () => boolean) => {
     try {
-      /* ONE intent. The server owns the run from here; the state poll shows
-       * its progress, and the tab may close. */
       const result = await requestRefresh();
       if (current()) setProblems(filterVisibleSyncProblems(result?.problems ?? []));
     } catch {
       if (current()) setProblems(["Broker sync failed."]);
     }
   }, []);
+
   useEffect(() => {
+    const controller = new AbortController();
     let current = true;
     const verificationMode = new URLSearchParams(window.location.search).has("verify");
     const prepare = async () => {
       try {
-        const response = await fetch("/api/market-data/consent");
+        const response = await fetch("/api/market-data/consent", { signal: controller.signal });
         const decision = (await response.json()) as { accepted?: boolean };
         if (!response.ok) throw new Error("Consent could not be read.");
         if (!current) return;
         if (!decision.accepted) {
-          setConsent("required");
+          setConsent({ kind: "required", busy: false, error: null });
           return;
         }
-        setConsent("accepted");
+        setConsent({ kind: "accepted" });
         if (verificationMode) return;
         await runSync(() => current);
       } catch (error) {
-        if (current)
-          setProblems([error instanceof Error ? error.message : "Consent could not be read."]);
+        if (!current || controller.signal.aborted) return;
+        setConsent({
+          kind: "error",
+          message: error instanceof Error ? error.message : "Consent could not be read.",
+        });
       }
     };
     void prepare();
     return () => {
       current = false;
+      controller.abort();
     };
-  }, [runSync]);
+  }, [runSync, attempt]);
+
   async function acceptYahoo() {
-    setConsentBusy(true);
+    if (consent.kind !== "required" || consent.busy) return;
+    setConsent({ kind: "required", busy: true, error: null });
     setProblems([]);
     try {
       const response = await fetch("/api/market-data/consent", {
@@ -774,16 +813,21 @@ function AppOpenSync({ onProblems }: { onProblems: (problems: string[]) => void 
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ accepted: true }),
       });
+      if (!mountedRef.current) return;
       if (!response.ok) throw new Error("Failed to save consent.");
-      setConsent("accepted");
-      await runSync(() => true);
+      setConsent({ kind: "accepted" });
+      await runSync(() => mountedRef.current);
     } catch (error) {
-      setProblems([error instanceof Error ? error.message : "Failed to save consent."]);
-    } finally {
-      setConsentBusy(false);
+      if (mountedRef.current)
+        setConsent({
+          kind: "required",
+          busy: false,
+          error: error instanceof Error ? error.message : "Failed to save consent.",
+        });
     }
   }
-  if (consent === "required")
+
+  if (consent.kind === "required")
     return (
       <section
         aria-labelledby="yahoo-consent-title"
@@ -796,17 +840,37 @@ function AppOpenSync({ onProblems }: { onProblems: (problems: string[]) => void 
           LaVega sends tickers and search terms to Yahoo Finance to fetch price history and
           benchmarks. Your choice is stored locally. Without consent, cached data remains visible.
         </p>
-        <Button type="button" className="mt-4" onClick={acceptYahoo} disabled={consentBusy}>
-          {consentBusy ? "Saving…" : "Allow Yahoo Finance"}
+        <Button type="button" className="mt-4" onClick={() => void acceptYahoo()} disabled={consent.busy}>
+          {consent.busy ? "Saving…" : "Allow Yahoo Finance"}
         </Button>
-        {problems.length > 0 && (
+        {consent.error && (
           <p role="alert" className="mt-3 text-negative">
-            {problems[0]}
+            {consent.error}
           </p>
         )}
       </section>
     );
-  if (consent === "checking" && problems.length === 0)
+  if (consent.kind === "error")
+    return (
+      <div
+        role="alert"
+        className="flex flex-wrap items-center justify-between gap-3 rounded-card border border-negative/30 bg-negative/5 p-4 text-sm text-negative"
+      >
+        <span>{consent.message}</span>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => {
+            setConsent({ kind: "checking" });
+            setAttempt((count) => count + 1);
+          }}
+        >
+          Try again
+        </Button>
+      </div>
+    );
+  if (consent.kind === "checking")
     return (
       <div
         role="status"
@@ -818,32 +882,45 @@ function AppOpenSync({ onProblems }: { onProblems: (problems: string[]) => void 
   return null;
 }
 
+type HealthPhase =
+  | { kind: "loading" }
+  | { kind: "ok" }
+  | { kind: "error"; message: string };
+
 export function HealthStatus() {
-  const [health, setHealth] = useState<Health | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [phase, setPhase] = useState<HealthPhase>({ kind: "loading" });
   /* The investing runtime answers under /api/, and only /api/ is guaranteed to
    * reach it. `${BASE_URL}health` reads /investing/health on lavega.dev, which
    * the CDN serves as the SPA shell: the check parsed a page as JSON and
    * reported the server down while every API route was answering. Deploys
    * differ in what owns the origin root, so /health is not it either. */
   useEffect(() => {
-    fetch("/api/investing/health")
+    const controller = new AbortController();
+    fetch("/api/investing/health", { signal: controller.signal })
       .then(async (response) => {
         if (!response.ok) throw new Error(`Health check failed: ${response.status}`);
         return (await response.json().catch(() => {
           throw new Error("Health check returned no server response");
         })) as Health;
       })
-      .then(setHealth)
-      .catch((reason: unknown) =>
-        setError(reason instanceof Error ? reason.message : "Health check failed"),
-      );
+      .then((health) => {
+        if (!controller.signal.aborted)
+          setPhase(health.ok ? { kind: "ok" } : { kind: "error", message: "offline" });
+      })
+      .catch((reason: unknown) => {
+        if (!controller.signal.aborted)
+          setPhase({
+            kind: "error",
+            message: reason instanceof Error ? reason.message : "Health check failed",
+          });
+      });
+    return () => controller.abort();
   }, []);
   /* Operator status stays out of the user's way: silent while the server is
    * fine, one plain line when it is not. */
-  if (error || (health && !health.ok))
+  if (phase.kind === "error")
     return <span>Investing data is offline. Figures may be out of date.</span>;
-  if (!health) return <span>Connecting to your investing data…</span>;
+  if (phase.kind === "loading") return <span>Connecting to your investing data…</span>;
   return null;
 }
 

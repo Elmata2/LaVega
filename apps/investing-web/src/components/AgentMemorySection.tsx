@@ -25,6 +25,7 @@ const field =
 
 function ThesisEditor({ thesis, onSaved }: { thesis: Thesis; onSaved: (next: Thesis) => void }) {
   const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [draft, setDraft] = useState(thesis);
   const [error, setError] = useState<string | null>(null);
   const rows: Array<[keyof Pick<Thesis, "why" | "worth" | "entry" | "wrongIf">, string]> = [
@@ -36,12 +37,16 @@ function ThesisEditor({ thesis, onSaved }: { thesis: Thesis; onSaved: (next: The
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
+    if (saving) return;
+    setSaving(true);
     setError(null);
     try {
       onSaved(await saveThesis(draft));
       setEditing(false);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Thesis could not be saved.");
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -91,10 +96,16 @@ function ThesisEditor({ thesis, onSaved }: { thesis: Thesis; onSaved: (next: The
             </label>
           ))}
           <div className="flex gap-2">
-            <Button type="submit" size="sm" disabled={!draft.why.trim()}>
-              Save
+            <Button type="submit" size="sm" disabled={saving || !draft.why.trim()}>
+              {saving ? "Saving…" : "Save"}
             </Button>
-            <Button type="button" size="sm" variant="outline" onClick={() => setEditing(false)}>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={saving}
+              onClick={() => setEditing(false)}
+            >
               Cancel
             </Button>
           </div>
@@ -122,17 +133,22 @@ function ThesisEditor({ thesis, onSaved }: { thesis: Thesis; onSaved: (next: The
 
 function GoalEditor({ goal, onSaved }: { goal: Goal; onSaved: (next: Goal) => void }) {
   const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [text, setText] = useState(goal.text);
   const [error, setError] = useState<string | null>(null);
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
+    if (saving) return;
+    setSaving(true);
     setError(null);
     try {
       onSaved(await saveGoal({ id: goal.id, symbol: goal.symbol, text }));
       setEditing(false);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Goal could not be saved.");
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -166,10 +182,16 @@ function GoalEditor({ goal, onSaved }: { goal: Goal; onSaved: (next: Goal) => vo
             className={field}
           />
           <div className="flex gap-2">
-            <Button type="submit" size="sm" disabled={!text.trim()}>
-              Save
+            <Button type="submit" size="sm" disabled={saving || !text.trim()}>
+              {saving ? "Saving…" : "Save"}
             </Button>
-            <Button type="button" size="sm" variant="outline" onClick={() => setEditing(false)}>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={saving}
+              onClick={() => setEditing(false)}
+            >
               Cancel
             </Button>
           </div>

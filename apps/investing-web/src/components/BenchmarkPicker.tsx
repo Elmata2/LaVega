@@ -4,6 +4,12 @@ import { saveBenchmarkSymbols, searchBenchmarks } from "../lib/benchmarkSelectio
 
 const SEARCH_DEBOUNCE_MS = 250;
 
+type SearchPhase =
+  | { kind: "idle" }
+  | { kind: "searching" }
+  | { kind: "ready"; results: BenchmarkInstrument[]; fallback: boolean }
+  | { kind: "error"; message: string };
+
 /** The card's explicit "which market should beta measure against?" action.
  *  Self-contained: the search and save calls belong to the user's click, not
  *  to mounting this card, so a card that is merely rendered never fetches. */
@@ -11,9 +17,7 @@ export function BenchmarkPicker({ selected = [] }: { selected?: readonly string[
   const [open, setOpen] = useState(false);
   const [symbols, setSymbols] = useState<string[]>([...selected]);
   const [query, setQuery] = useState("");
-  const [results, setResults] = useState<BenchmarkInstrument[]>([]);
-  const [searchStatus, setSearchStatus] = useState<string | null>(null);
-  const [searchError, setSearchError] = useState<string | null>(null);
+  const [search, setSearch] = useState<SearchPhase>({ kind: "idle" });
   const [saveError, setSaveError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const listboxId = useId();
@@ -23,22 +27,23 @@ export function BenchmarkPicker({ selected = [] }: { selected?: readonly string[
     if (!open) return;
     const controller = new AbortController();
     const timer = window.setTimeout(() => {
-      setSearchStatus("Searching…");
-      setSearchError(null);
+      setSearch({ kind: "searching" });
       void searchBenchmarks(query, controller.signal)
         .then((payload) => {
-          setResults(payload.results.filter((result) => !symbols.includes(result.symbol)));
-          setSearchStatus(payload.fallback ? "European suggestions" : null);
+          if (controller.signal.aborted) return;
+          setSearch({
+            kind: "ready",
+            results: payload.results.filter((result) => !symbols.includes(result.symbol)),
+            fallback: payload.fallback === true,
+          });
         })
         .catch((error: unknown) => {
           if (error instanceof DOMException && error.name === "AbortError") return;
-          /* Results from an earlier query are not answers to this one, and
-           * they would still be clickable. Clear them. */
-          setResults([]);
-          setSearchStatus(null);
-          setSearchError(
-            error instanceof Error ? error.message : "Benchmark search failed. Try again.",
-          );
+          setSearch({
+            kind: "error",
+            message:
+              error instanceof Error ? error.message : "Benchmark search failed. Try again.",
+          });
         });
     }, SEARCH_DEBOUNCE_MS);
     return () => {
@@ -46,6 +51,14 @@ export function BenchmarkPicker({ selected = [] }: { selected?: readonly string[
       window.clearTimeout(timer);
     };
   }, [open, query, symbols]);
+
+  const results = search.kind === "ready" ? search.results : [];
+  const statusLabel =
+    search.kind === "searching"
+      ? "Searching…"
+      : search.kind === "ready" && search.fallback
+        ? "European suggestions"
+        : null;
 
   async function replaceSelection(next: string[]): Promise<boolean> {
     setBusy(true);
@@ -98,7 +111,10 @@ export function BenchmarkPicker({ selected = [] }: { selected?: readonly string[
         <button
           type="button"
           disabled={busy}
-          onClick={() => setOpen(false)}
+          onClick={() => {
+            setOpen(false);
+            setSearch({ kind: "idle" });
+          }}
           className="pressable rounded-pill px-2 py-1 text-xs font-semibold text-muted-foreground hover:text-foreground"
         >
           Close
@@ -118,14 +134,14 @@ export function BenchmarkPicker({ selected = [] }: { selected?: readonly string[
           className="mt-1 w-full rounded-chip border border-input bg-background px-2 py-1 text-sm font-normal text-foreground"
         />
       </label>
-      {searchStatus && (
+      {statusLabel && (
         <p role="status" className="text-xs text-muted-foreground">
-          {searchStatus}
+          {statusLabel}
         </p>
       )}
-      {searchError && (
+      {search.kind === "error" && (
         <p role="alert" className="text-xs text-negative">
-          {searchError}
+          {search.message}
         </p>
       )}
       {saveError && (
@@ -149,6 +165,7 @@ export function BenchmarkPicker({ selected = [] }: { selected?: readonly string[
                 void replaceSelection([...symbols, result.symbol]).then((saved) => {
                   if (!saved) return;
                   setQuery("");
+                  setSearch({ kind: "idle" });
                   setOpen(false);
                 });
               }}
@@ -162,7 +179,7 @@ export function BenchmarkPicker({ selected = [] }: { selected?: readonly string[
           </li>
         ))}
       </ul>
-      {results.length === 0 && !searchStatus && !searchError && (
+      {search.kind === "ready" && results.length === 0 && (
         <p className="text-xs text-muted-foreground">No benchmarks found.</p>
       )}
     </div>

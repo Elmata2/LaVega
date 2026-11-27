@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 /* Client side of /api/letters. The page reads the stored letter and never
  * generates one on load; `Write letter now` posts to the same writer the cron
@@ -75,14 +75,15 @@ async function fetchLatestLetter(signal: AbortSignal): Promise<PortfolioLetter |
 /** Asks the server to write a letter now. The server still applies its gate,
  *  so an unchanged snapshot returns the stored letter with `generated: false`
  *  and makes no model call. */
-export async function requestLetter(): Promise<{
+export async function requestLetter(signal?: AbortSignal): Promise<{
   letter: PortfolioLetter;
   generated: boolean;
 }> {
   let response: Response;
   try {
-    response = await fetch("/api/letters/ensure", { method: "POST" });
-  } catch {
+    response = await fetch("/api/letters/ensure", { method: "POST", signal });
+  } catch (reason) {
+    if (reason instanceof DOMException && reason.name === "AbortError") throw reason;
     throw new Error("Failed to write letter: network error.");
   }
   const payload: unknown = await response.json().catch(() => undefined);
@@ -104,35 +105,69 @@ export async function requestLetter(): Promise<{
 export function useLatestLetter(enabled = true): LetterResource {
   const [state, setState] = useState<LetterState>({ status: "loading" });
   const [writeState, setWriteState] = useState<LetterWriteState>({ status: "idle" });
+  const generationRef = useRef(0);
+  const readControllerRef = useRef<AbortController | null>(null);
+  const writeControllerRef = useRef<AbortController | null>(null);
+  const writingRef = useRef(false);
+
   useEffect(() => {
     if (!enabled) return;
+    const generation = ++generationRef.current;
     const controller = new AbortController();
+    readControllerRef.current = controller;
     void fetchLatestLetter(controller.signal)
       .then((letter) => {
-        if (!controller.signal.aborted)
-          setState(letter ? { status: "ready", letter } : { status: "empty" });
+        if (controller.signal.aborted || generation !== generationRef.current) return;
+        setState(letter ? { status: "ready", letter } : { status: "empty" });
       })
       .catch((reason: unknown) => {
-        if (controller.signal.aborted) return;
+        if (controller.signal.aborted || generation !== generationRef.current) return;
         setState({
           status: "error",
           message: reason instanceof Error ? reason.message : "Failed to load letter",
         });
       });
-    return () => controller.abort();
+    return () => {
+      controller.abort();
+      if (readControllerRef.current === controller) readControllerRef.current = null;
+    };
   }, [enabled]);
+
+  useEffect(() => {
+    return () => {
+      generationRef.current += 1;
+      readControllerRef.current?.abort();
+      writeControllerRef.current?.abort();
+      writingRef.current = false;
+    };
+  }, []);
+
   const write = useCallback(() => {
+    if (writingRef.current) return;
+    writingRef.current = true;
+    readControllerRef.current?.abort();
+    const generation = ++generationRef.current;
+    const controller = new AbortController();
+    writeControllerRef.current = controller;
     setWriteState({ status: "writing" });
-    void requestLetter()
+    void requestLetter(controller.signal)
       .then(({ letter, generated }) => {
+        if (controller.signal.aborted || generation !== generationRef.current) return;
         setState({ status: "ready", letter });
         setWriteState(generated ? { status: "idle" } : { status: "unchanged" });
       })
       .catch((reason: unknown) => {
+        if (controller.signal.aborted || generation !== generationRef.current) return;
         setWriteState({
           status: "error",
           message: reason instanceof Error ? reason.message : "Failed to write letter",
         });
+      })
+      .finally(() => {
+        if (writeControllerRef.current === controller) {
+          writeControllerRef.current = null;
+          writingRef.current = false;
+        }
       });
   }, []);
   return { state, writeState, write };

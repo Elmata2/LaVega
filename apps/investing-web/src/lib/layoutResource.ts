@@ -117,7 +117,7 @@ function createLayoutStore() {
   function publish() {
     const layout = displayed(queue);
     snapshot = {
-      status: "ready",
+      status: queue.load === "loaded" || queue.load === "failed" ? "ready" : "loading",
       modules: resolveModules(layout.modules),
       widgets: resolveWidgets(layout.widgets),
       saveError: queue.saveError,
@@ -134,7 +134,10 @@ function createLayoutStore() {
       if (disposed) return;
       queue.inFlight = null;
       if (ok) queue.confirmed = sent;
-      if (!queue.pending) queue.saveError = ok ? null : SAVE_ERROR_MESSAGE;
+      if (!queue.pending) {
+        queue.saveError = ok ? null : SAVE_ERROR_MESSAGE;
+        localEdits = { modules: {}, widgets: {} };
+      }
       pump();
       publish();
     });

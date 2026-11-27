@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Tabs, TabsList, TabsPanel, TabsTab } from "@ui-sdk/react/tabs";
 import {
   BROKERS,
@@ -93,21 +93,39 @@ function BrokerSetupCard({
   );
 }
 
+type SyncActionPhase =
+  | { kind: "idle" }
+  | { kind: "loading" }
+  | { kind: "success" }
+  | { kind: "error"; problems: string[] };
+
 function BrokerSyncAction() {
-  const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
-  const [problems, setProblems] = useState<string[]>([]);
+  const [phase, setPhase] = useState<SyncActionPhase>({ kind: "idle" });
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   async function sync() {
-    setStatus("loading");
-    setProblems([]);
+    if (phase.kind === "loading") return;
+    setPhase({ kind: "loading" });
     try {
       const result = await requestRefresh(true);
+      if (!mountedRef.current) return;
       const nextProblems = filterVisibleSyncProblems(result?.problems ?? []);
-      setProblems(nextProblems);
-      setStatus(nextProblems.length > 0 ? "error" : "success");
+      setPhase(
+        nextProblems.length > 0 ? { kind: "error", problems: nextProblems } : { kind: "success" },
+      );
     } catch (error) {
-      setProblems([error instanceof Error ? error.message : "Broker sync failed."]);
-      setStatus("error");
+      if (!mountedRef.current) return;
+      setPhase({
+        kind: "error",
+        problems: [error instanceof Error ? error.message : "Broker sync failed."],
+      });
     }
   }
 
@@ -120,23 +138,28 @@ function BrokerSyncAction() {
         </p>
       </div>
       <div className="mt-4 shrink-0 sm:mt-0">
-        <Button type="button" variant="outline" onClick={sync} disabled={status === "loading"}>
-          {status === "loading" ? "Syncing…" : "Start sync"}
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => void sync()}
+          disabled={phase.kind === "loading"}
+        >
+          {phase.kind === "loading" ? "Syncing…" : "Start sync"}
         </Button>
       </div>
-      {status === "success" && (
+      {phase.kind === "success" && (
         <p role="status" className="mt-3 text-sm text-positive sm:mt-0">
           Sync completed.
         </p>
       )}
-      {problems.length > 0 && (
+      {phase.kind === "error" && phase.problems.length > 0 && (
         <div
           role="alert"
           className="mt-4 basis-full rounded-tile border border-negative/20 bg-negative/5 px-4 py-3 text-sm"
         >
           <p className="font-semibold">Sync not completed</p>
           <ul className="mt-2 list-disc space-y-1 pl-5">
-            {problems.map((problem, index) => (
+            {phase.problems.map((problem, index) => (
               <li key={`${problem}-${index}`}>{problem}</li>
             ))}
           </ul>
@@ -223,35 +246,45 @@ function useVaultPassphraseMode(): "checking" | "required" | "unused" {
   return mode;
 }
 
+type VaultPhase =
+  | { kind: "checking" }
+  | { kind: "hidden" }
+  | { kind: "locked"; submitting: boolean; error: string | null }
+  | { kind: "unlocked"; message: string };
+
 function BrokerVaultUnlock() {
-  const [vaultStatus, setVaultStatus] = useState<"checking" | "hidden" | "locked" | "unlocked">(
-    "checking",
-  );
+  const [phase, setPhase] = useState<VaultPhase>({ kind: "checking" });
   const [passphrase, setPassphrase] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
+  const mountedRef = useRef(true);
 
   useEffect(() => {
-    let current = true;
-    void fetch("/api/brokers/credentials/status")
+    mountedRef.current = true;
+    const controller = new AbortController();
+    void fetch("/api/brokers/credentials/status", { signal: controller.signal })
       .then(async (response) =>
         response.ok ? ((await response.json()) as { status?: string }) : {},
       )
       .then((result) => {
-        if (current) setVaultStatus(result.status === "locked" ? "locked" : "hidden");
+        if (!controller.signal.aborted)
+          setPhase(
+            result.status === "locked"
+              ? { kind: "locked", submitting: false, error: null }
+              : { kind: "hidden" },
+          );
       })
       .catch(() => {
-        if (current) setVaultStatus("hidden");
+        if (!controller.signal.aborted) setPhase({ kind: "hidden" });
       });
     return () => {
-      current = false;
+      mountedRef.current = false;
+      controller.abort();
     };
   }, []);
 
   async function unlock(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setBusy(true);
-    setMessage(null);
+    if (phase.kind !== "locked" || phase.submitting) return;
+    setPhase({ kind: "locked", submitting: true, error: null });
     try {
       const unlockResponse = await fetch("/api/brokers/credentials/unlock", {
         method: "POST",
@@ -261,41 +294,60 @@ function BrokerVaultUnlock() {
       const unlockResult = (await unlockResponse.json().catch(() => ({}))) as {
         problems?: string[];
       };
-      if (!unlockResponse.ok)
-        throw new Error(unlockResult.problems?.[0] ?? "Failed to unlock vault.");
-      setPassphrase("");
-      const syncResult = await requestRefresh(true);
-      if (!syncResult) {
-        setVaultStatus("unlocked");
-        setMessage(`Vault unlocked. ${SYNC_BACKGROUND_MESSAGE}`);
+      if (!mountedRef.current) return;
+      if (!unlockResponse.ok) {
+        setPhase({
+          kind: "locked",
+          submitting: false,
+          error: unlockResult.problems?.[0] ?? "Failed to unlock vault.",
+        });
         return;
       }
-      setVaultStatus("unlocked");
-      setMessage(
-        (syncResult.problems ?? []).length === 0
-          ? "Vault unlocked. Sync completed."
-          : `Vault unlocked. ${syncResult.problems?.join(" · ")}`,
-      );
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Failed to unlock vault.");
-    } finally {
-      setBusy(false);
+      if (mountedRef.current)
+        setPhase({
+          kind: "locked",
+          submitting: false,
+          error: error instanceof Error ? error.message : "Failed to unlock vault.",
+        });
+      return;
+    }
+
+    setPassphrase("");
+    setPhase({ kind: "unlocked", message: "Vault unlocked. Starting sync…" });
+    try {
+      const syncResult = await requestRefresh(true);
+      if (!mountedRef.current) return;
+      if (!syncResult) {
+        setPhase({ kind: "unlocked", message: `Vault unlocked. ${SYNC_BACKGROUND_MESSAGE}` });
+        return;
+      }
+      setPhase({
+        kind: "unlocked",
+        message:
+          (syncResult.problems ?? []).length === 0
+            ? "Vault unlocked. Sync completed."
+            : `Vault unlocked. ${syncResult.problems?.join(" · ")}`,
+      });
+    } catch {
+      if (mountedRef.current)
+        setPhase({ kind: "unlocked", message: `Vault unlocked. ${SYNC_BACKGROUND_MESSAGE}` });
     }
   }
 
-  if (vaultStatus === "checking" || vaultStatus === "hidden") return null;
-  if (vaultStatus === "unlocked")
+  if (phase.kind === "checking" || phase.kind === "hidden") return null;
+  if (phase.kind === "unlocked")
     return (
       <p
         role="status"
         className="rounded-card border border-positive/30 bg-positive/5 p-4 text-sm text-positive"
       >
-        {message}
+        {phase.message}
       </p>
     );
   return (
     <form
-      onSubmit={unlock}
+      onSubmit={(event) => void unlock(event)}
       className="rounded-card border border-warning/30 bg-warning/10 p-5 sm:flex sm:items-end sm:gap-4 sm:p-6"
     >
       <div className="min-w-0 flex-1">
@@ -312,23 +364,24 @@ function BrokerVaultUnlock() {
             type="password"
             autoComplete="current-password"
             value={passphrase}
+            disabled={phase.submitting}
             onChange={(event) => setPassphrase(event.target.value)}
             className="mt-2 block w-full rounded-tile border border-input bg-background px-3 py-2.5 text-sm font-normal"
           />
         </label>
-        {message && (
+        {phase.error && (
           <p role="alert" className="mt-3 text-sm text-negative">
-            {message}
+            {phase.error}
           </p>
         )}
       </div>
       <Button
         data-action="unlock-vault"
         type="submit"
-        disabled={busy}
+        disabled={phase.submitting}
         className="mt-4 shrink-0 sm:mt-0"
       >
-        {busy ? "Unlocking…" : "Unlock and sync"}
+        {phase.submitting ? "Unlocking…" : "Unlock and sync"}
       </Button>
     </form>
   );
@@ -355,13 +408,14 @@ function BrokerCredentialForm({ onSaved }: { onSaved?: (broker: CredentialBroker
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (status === "loading" || passphraseMode === "checking") return;
     setStatus("loading");
     setMessage(null);
     const payload = {
       broker,
       token,
       ...(broker === "ibkr" ? { queryId } : { secret }),
-      ...(passphraseMode === "unused" ? {} : { passphrase }),
+      ...(passphraseMode === "required" ? { passphrase } : {}),
     };
     try {
       const saveResponse = await fetch("/api/brokers/credentials", {
@@ -406,9 +460,11 @@ function BrokerCredentialForm({ onSaved }: { onSaved?: (broker: CredentialBroker
         <div>
           <h3 className="font-display text-4xl">Save credentials</h3>
           <p className="mt-2 text-sm leading-6 text-muted-foreground">
-            {passphraseMode === "unused"
-              ? "LaVega encrypts these details with the server key before storing them. Sync then starts automatically."
-              : "LaVega encrypts these details in the local vault. Sync then starts automatically."}
+            {passphraseMode === "checking"
+              ? "Checking vault settings…"
+              : passphraseMode === "unused"
+                ? "LaVega encrypts these details with the server key before storing them. Sync then starts automatically."
+                : "LaVega encrypts these details in the local vault. Sync then starts automatically."}
           </p>
         </div>
         <label className="text-sm font-semibold">
@@ -416,6 +472,7 @@ function BrokerCredentialForm({ onSaved }: { onSaved?: (broker: CredentialBroker
           <select
             aria-label="Broker"
             value={broker}
+            disabled={status === "loading"}
             onChange={(event) => {
               if (isCredentialBroker(event.target.value)) resetBroker(event.target.value);
             }}
@@ -468,7 +525,7 @@ function BrokerCredentialForm({ onSaved }: { onSaved?: (broker: CredentialBroker
             />
           </label>
         )}
-        {passphraseMode !== "unused" && (
+        {passphraseMode === "required" && (
           <label className="text-sm font-semibold sm:col-span-2">
             Vault password
             <input
@@ -488,7 +545,7 @@ function BrokerCredentialForm({ onSaved }: { onSaved?: (broker: CredentialBroker
         )}
       </div>
       <div className="mt-6 flex flex-wrap items-center gap-4">
-        <Button type="submit" disabled={status === "loading"}>
+        <Button type="submit" disabled={status === "loading" || passphraseMode === "checking"}>
           {status === "loading" ? "Saving and syncing…" : "Save and sync"}
         </Button>
         {status === "success" && (

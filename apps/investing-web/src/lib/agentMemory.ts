@@ -35,16 +35,25 @@ async function problem(response: Response, fallback: string): Promise<Error> {
   return new Error(typeof first === "string" ? first : fallback);
 }
 
-/** Null when memory is unavailable on this server. */
-export async function fetchThreads(agentId: string): Promise<ThreadSummary[] | null> {
-  const response = await fetch(`/api/memory/threads?agentId=${encodeURIComponent(agentId)}`);
-  if (!response.ok) return null;
+/** Null when memory is unavailable on this server (503). Throws on other errors. */
+export async function fetchThreads(
+  agentId: string,
+  signal?: AbortSignal,
+): Promise<ThreadSummary[] | null> {
+  const response = await fetch(`/api/memory/threads?agentId=${encodeURIComponent(agentId)}`, {
+    signal,
+  });
+  if (response.status === 503) return null;
+  if (!response.ok) throw await problem(response, "Conversations could not be loaded.");
   const body: { threads?: unknown } = await response.json().catch(() => ({}));
   return Array.isArray(body.threads) ? (body.threads as ThreadSummary[]) : null;
 }
 
-export async function fetchThreadMessages(threadId: string): Promise<UIMessage[]> {
-  const response = await fetch(`/api/memory/threads/${threadId}`);
+export async function fetchThreadMessages(
+  threadId: string,
+  signal?: AbortSignal,
+): Promise<UIMessage[]> {
+  const response = await fetch(`/api/memory/threads/${threadId}`, { signal });
   if (!response.ok) throw await problem(response, "Conversation could not be opened.");
   const body = (await response.json()) as { thread?: { messages?: UIMessage[] } };
   return body.thread?.messages ?? [];

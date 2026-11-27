@@ -503,3 +503,48 @@ test("a different account without a sign-out gets a fresh store, and the old que
   expect(text(next.container, "widgets")).toBe("performance,allocation,risk,sectors,agent");
   act(() => next.root.unmount());
 });
+
+test("a failed toggle clears local edits on settle and toggling before GET keeps status loading", async () => {
+  let resolveGet: (value: Response) => void = () => {};
+  const puts: QueuedPut[] = [];
+  vi.stubGlobal(
+    "fetch",
+    vi.fn((_input: RequestInfo | URL, init?: RequestInit) => {
+      if (init?.method === "PUT") {
+        const body: unknown = JSON.parse(String(init.body));
+        return new Promise<Response>((resolve) => {
+          const put: QueuedPut = {
+            body,
+            settled: false,
+            resolve: (response) => {
+              put.settled = true;
+              resolve(response);
+            },
+          };
+          puts.push(put);
+        });
+      }
+      return new Promise<Response>((resolve) => {
+        resolveGet = resolve;
+      });
+    }),
+  );
+
+  const { container, root } = render();
+  act(() => root.render(<ControlProbe />));
+  await step(() => click(container, "toggle-agents"));
+  expect(text(container, "status")).toBe("loading");
+
+  await step(() => resolveGet(new Response(JSON.stringify({ modules: {}, widgets: {} }))));
+  expect(text(container, "status")).toBe("ready");
+  expect(puts).toHaveLength(1);
+
+  await step(() => puts[0]!.resolve(fail()));
+  expect(text(container, "save-error")).toBe("Couldn't save — try again.");
+  expect(text(container, "modules")).toBe("overview,positions,net-worth,agents");
+
+  await step(() => click(container, "toggle-sectors"));
+  expect(puts).toHaveLength(2);
+  expect(puts[1]!.body).toEqual({ modules: {}, widgets: { sectors: false } });
+  act(() => root.unmount());
+});

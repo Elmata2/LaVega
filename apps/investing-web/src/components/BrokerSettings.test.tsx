@@ -60,3 +60,47 @@ test("without the hash the API tab stays the default", async () => {
   expect(view.querySelector("#broker-tab-api")?.getAttribute("aria-selected")).toBe("true");
   expect(view.querySelector("#broker-panel-degiro")?.hasAttribute("hidden")).toBe(true);
 });
+
+test("vault unlock stays unlocked when post-unlock sync fails", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/brokers/credentials/status") return Response.json({ status: "locked" });
+      if (url === "/api/brokers/credentials/unlock" && init?.method === "POST")
+        return Response.json({ unlocked: true });
+      if (url === "/api/sync/refresh") throw new Error("network down");
+      if (url.includes("/api/investing/brokers/degiro/import"))
+        return Response.json({
+          mode: "status",
+          importedAt: null,
+          files: [],
+          coverage: null,
+          positionsAsOf: null,
+        });
+      return Response.json({});
+    }),
+  );
+  container = document.createElement("div");
+  document.body.append(container);
+  root = createRoot(container);
+  await act(async () => {
+    root!.render(<BrokerSettings />);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+
+  const input = container.querySelector<HTMLInputElement>('input[name="unlockPassphrase"]')!;
+  const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
+  await act(async () => {
+    setter.call(input, "secret-pass");
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  const form = input.closest("form")!;
+  await act(async () => {
+    form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+
+  expect(container.querySelector('input[name="unlockPassphrase"]')).toBeNull();
+  expect(container.querySelector('[role="status"]')?.textContent).toContain("Vault unlocked.");
+});

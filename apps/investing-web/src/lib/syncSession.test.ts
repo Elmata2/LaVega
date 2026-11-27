@@ -370,3 +370,51 @@ test("filterVisibleSyncProblems hides an unconfigured broker only", () => {
     ]),
   ).toEqual(["prices: rate limited"]);
 });
+
+test("a forced refresh arriving during a non-forced refresh queues a forced POST", async () => {
+  let resolveFirst!: (response: Response) => void;
+  const bodies: unknown[] = [];
+  const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input);
+    if (url === "/api/sync/refresh" && init?.method === "POST") {
+      bodies.push(JSON.parse(String(init.body)));
+      if (bodies.length === 1) {
+        return new Promise<Response>((resolve) => {
+          resolveFirst = resolve;
+        });
+      }
+      return new Response(JSON.stringify({ ...running(), claimed: true }));
+    }
+    return new Response(JSON.stringify(done()));
+  });
+  vi.stubGlobal("fetch", fetchMock);
+
+  const first = session.requestRefresh(false);
+  const forced = session.requestRefresh(true);
+  expect(bodies).toEqual([{ force: false }]);
+
+  resolveFirst(new Response(JSON.stringify({ ...running(), claimed: true })));
+  await expect(first).resolves.toEqual({ problems: [] });
+  await expect(forced).resolves.toEqual({ problems: [] });
+  expect(bodies).toEqual([{ force: false }, { force: true }]);
+});
+
+test("unsubscribing the last listener aborts an in-flight state read", async () => {
+  let seenSignal: AbortSignal | undefined;
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      seenSignal = init?.signal ?? undefined;
+      return new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener("abort", () =>
+          reject(new DOMException("aborted", "AbortError")),
+        );
+      });
+    }),
+  );
+
+  const unsubscribe = session.subscribeSyncSession(() => {});
+  expect(seenSignal?.aborted).toBe(false);
+  unsubscribe();
+  expect(seenSignal?.aborted).toBe(true);
+});

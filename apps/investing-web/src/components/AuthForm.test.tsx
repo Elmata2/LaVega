@@ -184,6 +184,26 @@ test("expired password reset link offers a fresh request", async () => {
   });
 });
 
+test("successful password reset shows confirmation without flashing an invalid-link error", async () => {
+  const fetchMock = vi.fn(() =>
+    Promise.resolve(new Response(JSON.stringify({ status: true }), { status: 200 })),
+  );
+  vi.stubGlobal("fetch", fetchMock);
+  const replaceSpy = vi.spyOn(window.history, "replaceState");
+  const { container, root } = await render("/reset-password?token=valid-token");
+  type(container, "password", "correct horse battery staple");
+  type(container, "confirm-password", "correct horse battery staple");
+  await submit(container);
+
+  expect(container.textContent).toContain("Password changed");
+  expect(container.textContent).not.toContain("invalid or expired");
+  expect(container.querySelector('a[href="/sign-in"]')).not.toBeNull();
+  expect(replaceSpy).toHaveBeenCalled();
+  await act(async () => {
+    root.unmount();
+  });
+});
+
 test("confirmed email opens dashboard when Better Auth created a session", async () => {
   vi.stubGlobal(
     "fetch",

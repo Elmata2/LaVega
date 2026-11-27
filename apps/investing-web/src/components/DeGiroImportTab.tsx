@@ -128,17 +128,20 @@ export function DeGiroImportTab() {
   const [dragging, setDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const successHeadingRef = useRef<HTMLHeadingElement>(null);
+  const mountedRef = useRef(true);
   /* Kept while a re-read runs: dropping a second file must not hide the date
    * the user already typed for a portfolio that was detected a moment ago. */
   const [portfolioDetected, setPortfolioDetected] = useState(false);
 
   useEffect(() => {
+    mountedRef.current = true;
     const controller = new AbortController();
     let current = true;
     void readDeGiroImportStatus(controller.signal).then((result) => {
       if (current && result.ok) setStatus(result.data);
     });
     return () => {
+      mountedRef.current = false;
       current = false;
       controller.abort();
     };
@@ -162,7 +165,7 @@ export function DeGiroImportTab() {
           ? { kind: "ready", preview: result.data }
           : { kind: "failed", problems: result.problems, preview: null },
       );
-      if (result.ok) setPortfolioDetected(portfolioSelected(result.data.files));
+      setPortfolioDetected(result.ok ? portfolioSelected(result.data.files) : false);
     });
     return () => {
       current = false;
@@ -216,8 +219,10 @@ export function DeGiroImportTab() {
     if (preview === null || !canCommit || flow.kind === "committing") return;
     setFlow({ kind: "committing", preview });
     const result = await commitDeGiroImport(files, asOf);
+    if (!mountedRef.current) return;
     if (result.ok && result.data.committed) {
       setFlow({ kind: "done", result: result.data });
+      setPortfolioDetected(false);
       /* The commit response already proves what was imported. Show that line
        * before the follow-up read, so a failed read cannot hide it. */
       setStatus({
@@ -229,7 +234,7 @@ export function DeGiroImportTab() {
       });
       window.dispatchEvent(new Event(DASHBOARD_REFRESH_EVENT));
       const next = await readDeGiroImportStatus();
-      if (next.ok) setStatus(next.data);
+      if (mountedRef.current && next.ok) setStatus(next.data);
       return;
     }
     const problems = result.ok

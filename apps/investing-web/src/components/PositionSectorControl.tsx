@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "@lavega/ui";
 import { GICS_SECTOR_LABELS } from "@lavega/core";
 
@@ -10,6 +10,9 @@ type SectorState = {
   source: SectorSource;
   confidence?: number;
 };
+
+type LoadPhase = { kind: "loading" } | { kind: "ready"; state: SectorState; isFund: boolean };
+type ActionPhase = "idle" | "saving" | "resetting";
 
 const badgeClass = "ml-2 rounded-pill bg-secondary px-2 py-0.5 text-xs text-muted-foreground";
 
@@ -24,25 +27,43 @@ function sectorUrl(symbol: string): string {
  *  it from that same 422 (a response with no `kind` is treated as a
  *  stock, for a server that hasn't shipped the field yet). */
 export function PositionSectorControl({ symbol }: { symbol: string }) {
-  const [state, setState] = useState<SectorState | null>(null);
+  const [trackedSymbol, setTrackedSymbol] = useState(symbol);
+  const [load, setLoad] = useState<LoadPhase>({ kind: "loading" });
   const [selection, setSelection] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [resetting, setResetting] = useState(false);
-  const [fund, setFund] = useState(false);
+  const [action, setAction] = useState<ActionPhase>("idle");
   const [error, setError] = useState<string | null>(null);
+  const generationRef = useRef(0);
 
-  async function load() {
-    const response = await fetch(sectorUrl(symbol));
-    if (response.ok) setState(await response.json());
+  if (trackedSymbol !== symbol) {
+    setTrackedSymbol(symbol);
+    setLoad({ kind: "loading" });
+    setSelection("");
+    setAction("idle");
+    setError(null);
+  }
+
+  async function loadSector(targetSymbol: string, signal?: AbortSignal): Promise<void> {
+    const generation = generationRef.current;
+    const response = await fetch(sectorUrl(targetSymbol), { signal });
+    if (signal?.aborted || generation !== generationRef.current || !response.ok) return;
+    const next = (await response.json()) as SectorState;
+    if (signal?.aborted || generation !== generationRef.current) return;
+    setLoad({ kind: "ready", state: next, isFund: next.kind === "fund" });
   }
 
   useEffect(() => {
-    void load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    generationRef.current += 1;
+    const controller = new AbortController();
+    void loadSector(symbol, controller.signal).catch(() => undefined);
+    return () => {
+      generationRef.current += 1;
+      controller.abort();
+    };
   }, [symbol]);
 
-  if (!state) return null;
-  const isFund = fund || state.kind === "fund";
+  if (load.kind !== "ready") return null;
+  const { state, isFund } = load;
+  const busy = action !== "idle";
 
   const badge =
     state.source === "inferred" ? (
@@ -54,8 +75,9 @@ export function PositionSectorControl({ symbol }: { symbol: string }) {
     ) : null;
 
   async function save() {
-    if (!selection) return;
-    setSaving(true);
+    if (!selection || busy) return;
+    const generation = generationRef.current;
+    setAction("saving");
     setError(null);
     try {
       const response = await fetch(sectorUrl(symbol), {
@@ -63,8 +85,9 @@ export function PositionSectorControl({ symbol }: { symbol: string }) {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ sector: selection }),
       });
+      if (generation !== generationRef.current) return;
       if (response.status === 422) {
-        setFund(true);
+        setLoad((current) => (current.kind === "ready" ? { ...current, isFund: true } : current));
         setSelection("");
         return;
       }
@@ -73,21 +96,24 @@ export function PositionSectorControl({ symbol }: { symbol: string }) {
         return;
       }
       setSelection("");
-      await load();
+      await loadSector(symbol);
     } finally {
-      setSaving(false);
+      if (generation === generationRef.current) setAction("idle");
     }
   }
 
   async function reset() {
-    setResetting(true);
+    if (busy) return;
+    const generation = generationRef.current;
+    setAction("resetting");
     setError(null);
     try {
       const response = await fetch(sectorUrl(symbol), { method: "DELETE" });
-      if (response.ok) await load();
+      if (generation !== generationRef.current) return;
+      if (response.ok) await loadSector(symbol);
       else setError("Couldn't reset — try again.");
     } finally {
-      setResetting(false);
+      if (generation === generationRef.current) setAction("idle");
     }
   }
 
@@ -111,6 +137,7 @@ export function PositionSectorControl({ symbol }: { symbol: string }) {
               aria-label="Correct sector"
               className="rounded-tile border border-input bg-background px-3 py-2 text-sm"
               value={selection}
+              disabled={busy}
               onChange={(event) => setSelection(event.target.value)}
             >
               <option value="">Choose…</option>
@@ -125,20 +152,20 @@ export function PositionSectorControl({ symbol }: { symbol: string }) {
             type="button"
             variant="outline"
             size="sm"
-            disabled={!selection || saving}
+            disabled={!selection || busy}
             onClick={() => void save()}
           >
-            {saving ? "Saving…" : "Save"}
+            {action === "saving" ? "Saving…" : "Save"}
           </Button>
           {state.source === "correction" && (
             <Button
               type="button"
               variant="ghost"
               size="sm"
-              disabled={resetting}
+              disabled={busy}
               onClick={() => void reset()}
             >
-              {resetting ? "Resetting…" : "Reset to automatic"}
+              {action === "resetting" ? "Resetting…" : "Reset to automatic"}
             </Button>
           )}
         </>

@@ -83,27 +83,35 @@ export function AuthForm({ mode }: { mode: "sign-up" | "sign-in" }) {
   );
 }
 
+type CheckEmailPhase =
+  | { kind: "idle" }
+  | { kind: "submitting" }
+  | { kind: "sent"; message: string }
+  | { kind: "error"; message: string };
+
 export function CheckEmailPage() {
   const location = useLocation();
   const initialEmail = (location.state as AuthLocationState)?.email ?? "";
   const [email, setEmail] = useState(initialEmail);
-  const [pending, setPending] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [phase, setPhase] = useState<CheckEmailPhase>({ kind: "idle" });
 
   async function resend(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setPending(true);
-    setMessage(null);
-    setError(null);
+    if (phase.kind === "submitting") return;
+    setPhase({ kind: "submitting" });
     try {
       const result = await resendVerificationEmail(email.trim());
-      if (result.ok) setMessage("If this address needs confirmation, a new email is on its way.");
-      else setError(result.message);
+      if (result.ok)
+        setPhase({
+          kind: "sent",
+          message: "If this address needs confirmation, a new email is on its way.",
+        });
+      else setPhase({ kind: "error", message: result.message });
     } catch {
-      setError("Connection failed. Check your network and try again.");
-    } finally {
-      setPending(false);
+      setPhase({
+        kind: "error",
+        message: "Connection failed. Check your network and try again.",
+      });
     }
   }
 
@@ -140,18 +148,23 @@ export function CheckEmailPage() {
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
               />
-              {message && (
+              {phase.kind === "sent" && (
                 <p role="status" className="text-sm text-positive">
-                  {message}
+                  {phase.message}
                 </p>
               )}
-              {error && (
+              {phase.kind === "error" && (
                 <p role="alert" className="text-sm text-negative">
-                  {error}
+                  {phase.message}
                 </p>
               )}
-              <Button type="submit" variant="outline" disabled={pending} className="w-full">
-                {pending ? "Sending…" : "Resend confirmation email"}
+              <Button
+                type="submit"
+                variant="outline"
+                disabled={phase.kind === "submitting"}
+                className="w-full"
+              >
+                {phase.kind === "submitting" ? "Sending…" : "Resend confirmation email"}
               </Button>
             </form>
             <p className="text-center text-sm text-muted-foreground">
@@ -228,24 +241,29 @@ export function EmailConfirmedPage() {
   );
 }
 
+type ForgotPhase =
+  | { kind: "idle" }
+  | { kind: "submitting" }
+  | { kind: "sent" }
+  | { kind: "error"; message: string };
+
 export function ForgotPasswordPage() {
-  const [pending, setPending] = useState(false);
-  const [sent, setSent] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [phase, setPhase] = useState<ForgotPhase>({ kind: "idle" });
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (phase.kind === "submitting") return;
     const email = String(new FormData(event.currentTarget).get("email") ?? "").trim();
-    setPending(true);
-    setError(null);
+    setPhase({ kind: "submitting" });
     try {
       const result = await requestPasswordReset(email);
-      if (result.ok) setSent(true);
-      else setError(result.message);
+      if (result.ok) setPhase({ kind: "sent" });
+      else setPhase({ kind: "error", message: result.message });
     } catch {
-      setError("Connection failed. Check your network and try again.");
-    } finally {
-      setPending(false);
+      setPhase({
+        kind: "error",
+        message: "Connection failed. Check your network and try again.",
+      });
     }
   }
 
@@ -261,7 +279,7 @@ export function ForgotPasswordPage() {
         </CardHeader>
         <CardContent>
           <div className="space-y-5">
-            {sent ? (
+            {phase.kind === "sent" ? (
               <p role="status" className="text-sm">
                 If an account uses that address, a reset link is on its way. Check your inbox and
                 spam folder.
@@ -276,13 +294,13 @@ export function ForgotPasswordPage() {
                   autoComplete="email"
                   required
                 />
-                {error && (
+                {phase.kind === "error" && (
                   <p role="alert" className="text-sm text-negative">
-                    {error}
+                    {phase.message}
                   </p>
                 )}
-                <Button type="submit" disabled={pending} className="w-full">
-                  {pending ? "Sending…" : "Send reset link"}
+                <Button type="submit" disabled={phase.kind === "submitting"} className="w-full">
+                  {phase.kind === "submitting" ? "Sending…" : "Send reset link"}
                 </Button>
               </form>
             )}
@@ -301,37 +319,43 @@ export function ForgotPasswordPage() {
   );
 }
 
+type ResetPhase =
+  | { kind: "idle" }
+  | { kind: "submitting" }
+  | { kind: "error"; message: string }
+  | { kind: "done" };
+
 export function ResetPasswordPage() {
   const location = useLocation();
   const params = new URLSearchParams(location.search);
   const token = params.get("token");
-  const [pending, setPending] = useState(false);
-  const [done, setDone] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [phase, setPhase] = useState<ResetPhase>({ kind: "idle" });
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!token) return;
+    if (!token || phase.kind === "submitting") return;
     const data = new FormData(event.currentTarget);
     const password = String(data.get("password") ?? "");
     if (password !== data.get("confirm-password")) {
-      setError("Passwords do not match.");
+      setPhase({ kind: "error", message: "Passwords do not match." });
       return;
     }
-    setPending(true);
-    setError(null);
+    setPhase({ kind: "submitting" });
     try {
       const result = await resetPassword(token, password);
       if (result.ok) {
+        setPhase({ kind: "done" });
         window.history.replaceState(window.history.state, "", window.location.pathname);
-        setDone(true);
-      } else setError(result.message);
+      } else setPhase({ kind: "error", message: result.message });
     } catch {
-      setError("Connection failed. Check your network and try again.");
-    } finally {
-      setPending(false);
+      setPhase({
+        kind: "error",
+        message: "Connection failed. Check your network and try again.",
+      });
     }
   }
+
+  const done = phase.kind === "done";
 
   return (
     <AuthShell>
@@ -347,11 +371,11 @@ export function ResetPasswordPage() {
         </CardHeader>
         <CardContent>
           <div className="space-y-5">
-            {!token || params.has("error") ? (
+            {done ? null : !token || params.has("error") ? (
               <p role="alert" className="text-sm text-negative">
                 Reset link is invalid or expired. Request a new link.
               </p>
-            ) : done ? null : (
+            ) : (
               <form onSubmit={submit} className="space-y-4">
                 <Label htmlFor="new-password">New password</Label>
                 <Input
@@ -372,13 +396,13 @@ export function ResetPasswordPage() {
                   minLength={8}
                   required
                 />
-                {error && (
+                {phase.kind === "error" && (
                   <p role="alert" className="text-sm text-negative">
-                    {error}
+                    {phase.message}
                   </p>
                 )}
-                <Button type="submit" disabled={pending} className="w-full">
-                  {pending ? "Saving…" : "Save new password"}
+                <Button type="submit" disabled={phase.kind === "submitting"} className="w-full">
+                  {phase.kind === "submitting" ? "Saving…" : "Save new password"}
                 </Button>
               </form>
             )}

@@ -1,7 +1,13 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { deleteThread, fetchThreads, type ThreadSummary } from "../lib/agentMemory.js";
 import { Button } from "@lavega/ui";
 import { longDate } from "../lib/dates.js";
+
+type ThreadsPhase =
+  | { kind: "loading" }
+  | { kind: "disabled" }
+  | { kind: "error"; message: string }
+  | { kind: "ready"; threads: ThreadSummary[] };
 
 /* A persona's saved conversations: reopen one, start a new one, or delete
  * one. Deleting a thread also deletes what the agent noted from it, never a
@@ -21,31 +27,68 @@ export function AgentThreads({
   onNew: () => void;
   onDeleted: (threadId: string) => void;
 }) {
-  const [threads, setThreads] = useState<ThreadSummary[] | null>(null);
+  const [phase, setPhase] = useState<ThreadsPhase>({ kind: "loading" });
   const [confirming, setConfirming] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const mountedRef = useRef(true);
 
   useEffect(() => {
-    let current = true;
-    void fetchThreads(agentId)
-      .then((next) => current && setThreads(next))
-      .catch(() => current && setThreads(null));
+    mountedRef.current = true;
+    const controller = new AbortController();
+    void fetchThreads(agentId, controller.signal)
+      .then((next) => {
+        if (controller.signal.aborted) return;
+        setPhase(next === null ? { kind: "disabled" } : { kind: "ready", threads: next });
+      })
+      .catch((reason: unknown) => {
+        if (controller.signal.aborted) return;
+        setPhase({
+          kind: "error",
+          message: reason instanceof Error ? reason.message : "Conversations could not be loaded.",
+        });
+      });
     return () => {
-      current = false;
+      mountedRef.current = false;
+      controller.abort();
     };
   }, [agentId, refreshKey]);
 
-  if (!threads) return null;
+  if (phase.kind === "loading" || phase.kind === "disabled") return null;
+
+  if (phase.kind === "error")
+    return (
+      <div className="mb-5 border-b border-border pb-5">
+        <h3 className="font-display text-3xl">Conversations</h3>
+        <p role="alert" className="mt-2 text-xs text-negative">
+          {phase.message}
+        </p>
+      </div>
+    );
+
+  const { threads } = phase;
 
   async function remove(threadId: string) {
-    setError(null);
+    if (deleting !== null) return;
+    setDeleting(threadId);
+    setDeleteError(null);
     try {
       await deleteThread(threadId);
-      setThreads((list) => list?.filter((thread) => thread.id !== threadId) ?? null);
+      if (!mountedRef.current) return;
+      setPhase((current) =>
+        current.kind === "ready"
+          ? { kind: "ready", threads: current.threads.filter((thread) => thread.id !== threadId) }
+          : current,
+      );
       setConfirming(null);
       onDeleted(threadId);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Conversation could not be deleted.");
+      if (mountedRef.current)
+        setDeleteError(
+          reason instanceof Error ? reason.message : "Conversation could not be deleted.",
+        );
+    } finally {
+      if (mountedRef.current) setDeleting(null);
     }
   }
 
@@ -82,18 +125,20 @@ export function AgentThreads({
               {confirming === thread.id ? (
                 <button
                   type="button"
+                  disabled={deleting !== null}
                   onClick={() => void remove(thread.id)}
                   onBlur={() => setConfirming(null)}
-                  className="pressable shrink-0 text-xs font-semibold text-negative hover:underline"
+                  className="pressable shrink-0 text-xs font-semibold text-negative hover:underline disabled:opacity-50"
                 >
-                  Confirm delete
+                  {deleting === thread.id ? "Deleting…" : "Confirm delete"}
                 </button>
               ) : (
                 <button
                   type="button"
+                  disabled={deleting !== null}
                   onClick={() => setConfirming(thread.id)}
                   aria-label={`Delete conversation ${thread.title}`}
-                  className="pressable shrink-0 text-xs font-semibold text-muted-foreground hover:text-negative"
+                  className="pressable shrink-0 text-xs font-semibold text-muted-foreground hover:text-negative disabled:opacity-50"
                 >
                   Delete
                 </button>
@@ -102,9 +147,9 @@ export function AgentThreads({
           ))}
         </ul>
       )}
-      {error && (
+      {deleteError && (
         <p role="alert" className="mt-2 text-xs text-negative">
-          {error}
+          {deleteError}
         </p>
       )}
     </div>

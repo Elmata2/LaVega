@@ -50,8 +50,18 @@ export type SyncSnapshot = {
 
 type PollLoop =
   | { kind: "stopped" }
-  | { kind: "reading"; rerun: boolean }
+  | { kind: "reading"; rerun: boolean; controller: AbortController }
   | { kind: "scheduled"; timer: ReturnType<typeof setTimeout> };
+
+type RefreshFlight = {
+  force: boolean;
+  promise: Promise<{ problems: string[] } | null>;
+};
+
+type QueuedForceRefresh = {
+  promise: Promise<{ problems: string[] } | null>;
+  resolve: (value: { problems: string[] } | null) => void;
+};
 
 /* One state read every two seconds while a run is active. The server owns the
  * run now; this page only reports it and asks the dashboard to refetch when a
@@ -71,7 +81,9 @@ let snapshot = initialSnapshot;
 let lastState: SyncRunStateView | null = null;
 let loop: PollLoop = { kind: "stopped" };
 let failedReads = 0;
-let refresh: Promise<{ problems: string[] } | null> | null = null;
+let refresh: RefreshFlight | null = null;
+let queuedForceRefresh: QueuedForceRefresh | null = null;
+let sessionGeneration = 0;
 const listeners = new Set<() => void>();
 
 function dispatchDashboardRefresh() {
@@ -136,7 +148,7 @@ function publish(next: Partial<SyncSnapshot>): void {
 }
 
 /** Store one state body. Returns the number of lane completions it proved. */
-function acceptState(state: SyncRunStateView): number {
+function acceptState(state: SyncRunStateView, connection?: SyncConnection): number {
   const completed = lanesThatCompleted(lastState, state);
   lastState = state;
   const priceProblem =
@@ -148,6 +160,7 @@ function acceptState(state: SyncRunStateView): number {
     price: toPriceProgress(state),
     priceProblem,
     vault: state.vault,
+    ...(connection !== undefined ? { connection } : {}),
   });
   return completed;
 }
@@ -156,23 +169,39 @@ function active(state: SyncRunStateView | null): boolean {
   return state?.active === true;
 }
 
+function stopLoop(): void {
+  if (loop.kind === "reading") loop.controller.abort();
+  else if (loop.kind === "scheduled") clearTimeout(loop.timer);
+  loop = { kind: "stopped" };
+}
+
 async function readState(): Promise<void> {
-  loop = { kind: "reading", rerun: false };
+  const controller = new AbortController();
+  const generation = sessionGeneration;
+  loop = { kind: "reading", rerun: false, controller };
   let state: SyncRunStateView | null = null;
   try {
-    const response = await fetch("/api/sync/state");
+    const response = await fetch("/api/sync/state", { signal: controller.signal });
     if (!response.ok) throw new Error(`Sync state failed: ${response.status}`);
     state = decodeSyncRunState(await response.json());
   } catch {
     state = null;
   }
+  if (controller.signal.aborted || generation !== sessionGeneration) return;
+
   failedReads = state === null ? failedReads + 1 : 0;
-  const completed = state === null ? 0 : acceptState(state);
-  const running = active(state) || refresh !== null || (state === null && active(lastState));
-  publish({ connection: state !== null ? "online" : running ? "retrying" : "offline" });
+  const running =
+    active(state) ||
+    refresh !== null ||
+    queuedForceRefresh !== null ||
+    (state === null && active(lastState));
+  const completed =
+    state === null
+      ? (publish({ connection: running ? "retrying" : "offline" }), 0)
+      : acceptState(state, "online");
   if (completed > 0) dispatchDashboardRefresh();
 
-  const rerun = loop.kind === "reading" && loop.rerun;
+  const rerun = loop.kind === "reading" && loop.controller === controller && loop.rerun;
   loop = { kind: "stopped" };
   if (listeners.size === 0) return;
   if (rerun) {
@@ -200,10 +229,23 @@ export function subscribeSyncSession(listener: () => void) {
   wakeSyncSession();
   return () => {
     listeners.delete(listener);
-    if (listeners.size > 0 || loop.kind !== "scheduled") return;
-    clearTimeout(loop.timer);
-    loop = { kind: "stopped" };
+    if (listeners.size > 0) return;
+    stopLoop();
   };
+}
+
+export function resetSyncSession(): void {
+  sessionGeneration += 1;
+  stopLoop();
+  snapshot = initialSnapshot;
+  lastState = null;
+  failedReads = 0;
+  refresh = null;
+  if (queuedForceRefresh) {
+    queuedForceRefresh.resolve(null);
+    queuedForceRefresh = null;
+  }
+  listeners.forEach((listener) => listener());
 }
 
 export function readSyncSnapshot(): SyncSnapshot {
@@ -214,47 +256,73 @@ export function useSyncSession(): SyncSnapshot {
   return useSyncExternalStore(subscribeSyncSession, readSyncSnapshot, () => initialSnapshot);
 }
 
+function startRefresh(force: boolean): Promise<{ problems: string[] } | null> {
+  const generation = sessionGeneration;
+  const pending = (async () => {
+    try {
+      const response = await fetch("/api/sync/refresh", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ force }),
+      });
+      if (generation !== sessionGeneration) return null;
+      const body: unknown = await response.json().catch(() => null);
+      if (generation !== sessionGeneration) return null;
+      if (!response.ok) {
+        const problems = (body as { problems?: unknown } | null)?.problems;
+        return {
+          problems: Array.isArray(problems) ? problems.map(String) : ["Broker sync failed."],
+        };
+      }
+      const state = decodeSyncRefreshState(body);
+      failedReads = 0;
+      acceptState(state, "online");
+      wakeSyncSession();
+      return { problems: [...state.problems] };
+    } catch {
+      if (generation === sessionGeneration && snapshot.connection !== "online")
+        publish({ connection: "retrying" });
+      return null;
+    } finally {
+      if (generation === sessionGeneration) {
+        refresh = null;
+        if (queuedForceRefresh) {
+          const next = queuedForceRefresh;
+          queuedForceRefresh = null;
+          void startRefresh(true).then(next.resolve);
+        }
+      }
+    }
+  })();
+  refresh = { force, promise: pending };
+  return pending;
+}
+
 /**
  * The ONE refresh intent. The server claims or joins the run, answers with the
  * state it is now in, and the page reads `GET /api/sync/state` while that run is
- * active. Callers that overlap share one POST and one run.
- *
- * Returns the state's problems (empty when the run started). `null` means the
- * request itself failed, so the caller shows the background message instead of
- * a start result. A run that joins one already in flight is not a failure.
+ * active. Callers that overlap share one POST and one run; a forced refresh
+ * arriving during a non-forced one queues a follow-up forced POST instead of
+ * dropping the force flag.
  */
 export function requestRefresh(force = false): Promise<{ problems: string[] } | null> {
+  let result: Promise<{ problems: string[] } | null>;
   if (!refresh) {
-    const pending = (async () => {
-      try {
-        const response = await fetch("/api/sync/refresh", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ force }),
-        });
-        const body: unknown = await response.json().catch(() => null);
-        if (!response.ok) {
-          const problems = (body as { problems?: unknown } | null)?.problems;
-          publish({ connection: "retrying" });
-          return {
-            problems: Array.isArray(problems) ? problems.map(String) : ["Broker sync failed."],
-          };
-        }
-        const state = decodeSyncRefreshState(body);
-        acceptState(state);
-        wakeSyncSession();
-        return { problems: [...state.problems] };
-      } catch {
-        publish({ connection: "retrying" });
-        return null;
-      } finally {
-        refresh = null;
-      }
-    })();
-    refresh = pending;
+    result = startRefresh(force);
+  } else if (force && !refresh.force) {
+    if (!queuedForceRefresh) {
+      let resolve!: (value: { problems: string[] } | null) => void;
+      const promise = new Promise<{ problems: string[] } | null>((res) => {
+        resolve = res;
+      });
+      queuedForceRefresh = { promise, resolve };
+    }
+    result = queuedForceRefresh.promise;
+  } else {
+    result = refresh.promise;
   }
   wakeSyncSession();
-  return refresh;
+  return result;
 }
 
 /** Kept for the call sites that only need the state shape typed. */

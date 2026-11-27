@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { getSession, signOut, type SessionState } from "../lib/auth-client.js";
 import { useDashboard } from "../lib/dashboardResource.js";
@@ -95,35 +95,36 @@ export function AccountSection() {
 function DataSection() {
   const [consentAccepted, setConsentAccepted] = useState<boolean | null>(null);
   const [enabled, setEnabled] = useState<boolean | null>(null);
-  /* Defaults to available: a server that omits the field (an older cached
-   * response, a test double) should not read as "misconfigured". Only an
-   * explicit `available: false` — no classifier configured on this
-   * deployment — disables the switch. */
   const [available, setAvailable] = useState(true);
   const [saving, setSaving] = useState(false);
+  const mountedRef = useRef(true);
 
   useEffect(() => {
-    let current = true;
-    void fetch("/api/market-data/consent")
+    mountedRef.current = true;
+    const controller = new AbortController();
+    void fetch("/api/market-data/consent", { signal: controller.signal })
       .then((response) => (response.ok ? response.json() : { accepted: false }))
       .then((body: { accepted?: unknown }) => {
-        if (current) setConsentAccepted(body.accepted === true);
+        if (!controller.signal.aborted) setConsentAccepted(body.accepted === true);
       })
-      .catch(() => current && setConsentAccepted(false));
-    void fetch("/api/investing/sector-inference")
+      .catch(() => {
+        if (!controller.signal.aborted) setConsentAccepted(false);
+      });
+    void fetch("/api/investing/sector-inference", { signal: controller.signal })
       .then((response) => (response.ok ? response.json() : { enabled: false, available: true }))
       .then((body: { enabled?: unknown; available?: unknown }) => {
-        if (!current) return;
+        if (controller.signal.aborted) return;
         setEnabled(body.enabled === true);
         setAvailable(body.available !== false);
       })
       .catch(() => {
-        if (!current) return;
+        if (controller.signal.aborted) return;
         setEnabled(false);
         setAvailable(true);
       });
     return () => {
-      current = false;
+      mountedRef.current = false;
+      controller.abort();
     };
   }, []);
 
@@ -139,12 +140,14 @@ function DataSection() {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ enabled: next }),
       });
+      if (!mountedRef.current) return;
       if (response.ok) {
         const body: { enabled?: unknown } = await response.json().catch(() => ({}));
+        if (!mountedRef.current) return;
         setEnabled(body.enabled === true ? true : body.enabled === false ? false : next);
       }
     } finally {
-      setSaving(false);
+      if (mountedRef.current) setSaving(false);
     }
   }
 
@@ -237,45 +240,59 @@ function StatusChip({
   );
 }
 
+type ClearCachePhase =
+  | { kind: "checking" }
+  | { kind: "hidden" }
+  | { kind: "idle"; message: string | null }
+  | { kind: "confirming" }
+  | { kind: "clearing" };
+
 /** Clears the local price cache. Hidden when the server reports a shared
  *  price store (issue #307): prices are public reference data then, so one
- *  account must not delete what every account reads. `null` while the health
- *  answer is in flight keeps the control hidden rather than flashing a button
- *  that would answer 405. */
+ *  account must not delete what every account reads. */
 export function ClearPriceCache() {
-  const [shared, setShared] = useState<boolean | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [confirming, setConfirming] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
+  const [phase, setPhase] = useState<ClearCachePhase>({ kind: "checking" });
+  const mountedRef = useRef(true);
+
   useEffect(() => {
-    let current = true;
-    void fetch("/api/investing/health")
+    mountedRef.current = true;
+    const controller = new AbortController();
+    void fetch("/api/investing/health", { signal: controller.signal })
       .then((response) => (response.ok ? response.json() : null))
       .then((body: { sharedPriceStore?: unknown } | null) => {
-        if (current) setShared(body?.sharedPriceStore === true);
+        if (!controller.signal.aborted)
+          setPhase(
+            body?.sharedPriceStore === true ? { kind: "hidden" } : { kind: "idle", message: null },
+          );
       })
       .catch(() => {
-        if (current) setShared(false);
+        if (!controller.signal.aborted) setPhase({ kind: "idle", message: null });
       });
     return () => {
-      current = false;
+      mountedRef.current = false;
+      controller.abort();
     };
   }, []);
+
   async function clear() {
-    setBusy(true);
-    setMessage(null);
+    if (phase.kind !== "confirming") return;
+    setPhase({ kind: "clearing" });
     try {
       const response = await fetch("/api/prices/cache", { method: "DELETE" });
       if (!response.ok) throw new Error("Failed to clear");
-      setMessage("Price data deleted");
+      if (mountedRef.current) setPhase({ kind: "idle", message: "Price data deleted" });
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Failed to clear");
-    } finally {
-      setBusy(false);
+      if (mountedRef.current)
+        setPhase({
+          kind: "idle",
+          message: error instanceof Error ? error.message : "Failed to clear",
+        });
     }
   }
-  if (shared !== false) return null;
-  if (confirming)
+
+  if (phase.kind === "checking" || phase.kind === "hidden") return null;
+  if (phase.kind === "confirming" || phase.kind === "clearing") {
+    const busy = phase.kind === "clearing";
     return (
       <div className="flex flex-wrap items-center justify-end gap-3" role="alert">
         <span className="text-xs text-negative">This deletes all locally stored price data.</span>
@@ -283,30 +300,36 @@ export function ClearPriceCache() {
           type="button"
           variant="outline"
           size="sm"
-          onClick={() => setConfirming(false)}
+          onClick={() => setPhase({ kind: "idle", message: null })}
           disabled={busy}
         >
           Cancel
         </Button>
-        <Button type="button" variant="destructive" size="sm" onClick={clear} disabled={busy}>
+        <Button
+          type="button"
+          variant="destructive"
+          size="sm"
+          onClick={() => void clear()}
+          disabled={busy}
+        >
           {busy ? "Clearing…" : "Yes, delete everything"}
         </Button>
       </div>
     );
+  }
   return (
     <div className="flex items-center gap-3">
       <Button
         type="button"
         variant="outline"
         size="sm"
-        onClick={() => setConfirming(true)}
-        disabled={busy}
+        onClick={() => setPhase({ kind: "confirming" })}
       >
         Clear price data
       </Button>
-      {message && (
+      {phase.message && (
         <span role="status" className="text-xs text-muted-foreground">
-          {message}
+          {phase.message}
         </span>
       )}
     </div>

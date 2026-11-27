@@ -50,3 +50,47 @@ test("a local file store still offers the control", async () => {
   const view = await renderWithHealth(false);
   expect(view.querySelector("button")?.textContent).toBe("Clear price data");
 });
+
+test("confirming clear closes the prompt and shows the deleted status", async () => {
+  const calls: string[] = [];
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      calls.push(`${init?.method ?? "GET"} ${url}`);
+      if (url === "/api/prices/cache" && init?.method === "DELETE") {
+        return new Response(null, { status: 204 });
+      }
+      return {
+        ok: true,
+        json: async () => ({ ok: true, service: "investing-server", sharedPriceStore: false }),
+      };
+    }),
+  );
+  container = document.createElement("div");
+  document.body.appendChild(container);
+  root = createRoot(container);
+  await act(async () => {
+    root!.render(<ClearPriceCache />);
+  });
+  await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
+
+  const openButton = container.querySelector<HTMLButtonElement>("button")!;
+  await act(async () => {
+    openButton.click();
+  });
+  expect(container.textContent).toContain("Yes, delete everything");
+
+  const confirmButton = Array.from(container.querySelectorAll("button")).find(
+    (button) => button.textContent === "Yes, delete everything",
+  )!;
+  await act(async () => {
+    confirmButton.click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+
+  expect(calls).toContain("DELETE /api/prices/cache");
+  expect(container.textContent).not.toContain("Yes, delete everything");
+  expect(container.querySelector('[role="status"]')?.textContent).toBe("Price data deleted");
+  expect(container.querySelector("button")?.textContent).toBe("Clear price data");
+});
