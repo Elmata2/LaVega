@@ -74,7 +74,7 @@ test("settings round-trip and the email is not stored in the clear", async () =>
   expect(Buffer.from(row!.channels_blob).includes(Buffer.from("feed"))).toBe(false);
 
   await repo().putSettings({ ...settings, enabled: false, email: null, sendHour: 9 });
-  expect(await repo().getSettings()).toMatchObject({ enabled: false, email: null, sendHour: 9 });
+  expect(await repo().getSettings()).toBeNull();
   expect(await repo("nobody").getSettings()).toBeNull();
   await repo().putSettings({ ...settings, consentedAt: null });
   expect((await repo().getSettings())?.consentedAt).toBeNull();
@@ -462,13 +462,15 @@ test("after deleteAll a late mirror, push subscription or link code writes nothi
   await pglite.exec("RESET ROLE; DELETE FROM personal.agent_link_codes; SET ROLE lavega_runtime;");
 });
 
-test("the day claim only moves forward: an older day cannot be claimed once a newer one is (A2)", async () => {
+test("the day claim only moves forward and releaseDay preserves prior lastSentDate history (A2)", async () => {
   expect(await repo().claimDay("2026-11-12")).toBe(true);
   expect(await repo().claimDay("2026-11-11")).toBe(false);
   expect((await repo().getState()).lastSentDate).toBe("2026-11-12");
   expect(await repo().claimDay("2026-11-13")).toBe(true);
-  // After a release the previous value is gone, but an older day still cannot jump over a newer claim.
+  // Releasing 2026-11-13 restores 2026-11-12 so yesterday cannot be re-claimed while today can.
   await repo().releaseDay("2026-11-13");
+  expect((await repo().getState()).lastSentDate).toBe("2026-11-12");
+  expect(await repo().claimDay("2026-11-12")).toBe(false);
   expect(await repo().claimDay("2026-11-13")).toBe(true);
 });
 

@@ -43,3 +43,22 @@ test("start must persist before model work; rejected start reports storage failu
   await expect(run).rejects.toThrow("Agent run storage failed to start");
   expect(modelCalls).toBe(0);
 });
+
+test("inFlight coalesces concurrent runs per tenant regardless of model string", async () => {
+  const gate = deferred<unknown>();
+  const store = memoryStore();
+  let executions = 0;
+  const controller = createAgentRunController(store, "tenant-a");
+  const first = controller.run("model-a", async () => {
+    executions++;
+    return gate.promise;
+  });
+  const second = controller.run("model-b", async () => {
+    executions++;
+    return { other: true };
+  });
+  expect(second).toBe(first);
+  gate.resolve({ ok: true });
+  await expect(first).resolves.toMatchObject({ status: "done", result: { ok: true } });
+  expect(executions).toBe(1);
+});

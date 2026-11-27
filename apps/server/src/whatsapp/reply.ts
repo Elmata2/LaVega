@@ -132,9 +132,29 @@ type Ctx = {
   locale: "nl" | "en";
   usage: { calls: number; input: number; output: number };
   reservation?: ReservationHandle;
-  /** Set when the deadline passed: the abandoned work must not send or spend more. */
-  abandoned?: boolean;
+  /** Aborted when the deadline passes so in-flight LLM/bank calls cancel before settlement. */
+  signal: AbortSignal;
 };
+
+function throwIfAborted(signal: AbortSignal): void {
+  if (signal.aborted) throw signal.reason ?? new DeadlineError();
+}
+
+async function raceAbort<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
+  throwIfAborted(signal);
+  let onAbort: (() => void) | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<never>((_, reject) => {
+        onAbort = () => reject(signal.reason ?? new DeadlineError());
+        signal.addEventListener("abort", onAbort, { once: true });
+      }),
+    ]);
+  } finally {
+    if (onAbort) signal.removeEventListener("abort", onAbort);
+  }
+}
 
 export async function answerInbound(
   deps: ReplyDeps,
@@ -150,6 +170,7 @@ export async function answerInbound(
     if (!settings?.enabled) return "agent-off";
     if (!link) return "window-closed";
     const opened = link.lastInboundAt ? Date.parse(link.lastInboundAt) : Number.NaN;
+    const controller = new AbortController();
     ctx = {
       deps,
       userId,
@@ -159,21 +180,29 @@ export async function answerInbound(
       consentCurrent: settings.consentVersion === CONSENT_VERSION,
       locale: settings?.locale ?? "nl",
       usage: { calls: 0, input: 0, output: 0 },
+      signal: controller.signal,
     };
     const work = converse(ctx, text);
-    work.catch(() => undefined);
     const timer = deps.timer ?? {
       set: (fn, ms) => setTimeout(fn, ms),
       clear: (h) => clearTimeout(h as never),
     };
     let handle: unknown;
     const deadline = new Promise<never>((_, reject) => {
-      handle = timer.set(() => reject(new DeadlineError()), DEADLINE_MS);
+      handle = timer.set(() => {
+        const err = new DeadlineError();
+        controller.abort(err);
+        reject(err);
+      }, DEADLINE_MS);
     });
     try {
       return await Promise.race([work, deadline]);
     } finally {
       timer.clear(handle);
+      if (controller.signal.aborted) {
+        // Wait for cancelled converse() to unwind before settling ctx.reservation.
+        await work.catch(() => undefined);
+      }
     }
   } catch (error) {
     // Type only: never the message, the question or the error text.
@@ -187,7 +216,6 @@ export async function answerInbound(
       .catch(() => undefined);
     if (error instanceof WindowClosedError) return "window-closed";
     if (ctx) {
-      if (error instanceof DeadlineError) ctx.abandoned = true;
       await sendRaw(ctx, WHATSAPP_COPY[ctx.locale].failed).catch(() => undefined);
     }
     return "error";
@@ -209,7 +237,7 @@ export async function answerInbound(
 }
 
 async function send(ctx: Ctx, body: string): Promise<void> {
-  if (ctx.abandoned) throw new DeadlineError();
+  throwIfAborted(ctx.signal);
   await sendRaw(ctx, body);
 }
 
@@ -232,8 +260,11 @@ const sendFixed = (ctx: Ctx, key: keyof (typeof WHATSAPP_COPY)["nl"]) =>
   send(ctx, WHATSAPP_COPY[ctx.locale][key]);
 
 async function complete(ctx: Ctx, input: Parameters<LlmProvider["complete"]>[0]): Promise<string> {
-  if (ctx.abandoned) throw new DeadlineError();
-  const res = await ctx.deps.llm.complete(input);
+  throwIfAborted(ctx.signal);
+  const res = await raceAbort(
+    ctx.deps.llm.complete({ ...input, signal: ctx.signal }),
+    ctx.signal,
+  );
   ctx.usage.calls += 1;
   ctx.usage.input += res.usage.input;
   ctx.usage.output += res.usage.output;
@@ -258,7 +289,8 @@ async function converse(ctx: Ctx, text: string): Promise<Outcome> {
   const question = scrubPersonalValues(text.slice(0, MAX_QUESTION_CHARS));
   const today = amsterdamDay(new Date(deps.now()));
 
-  const gate = await deps.budget("instinct-reply", userId);
+  throwIfAborted(ctx.signal);
+  const gate = await raceAbort(deps.budget("instinct-reply", userId), ctx.signal);
   if (!gate.ok) {
     await sendFixed(ctx, "budgetRefused");
     return "fallback";
@@ -276,7 +308,8 @@ async function converse(ctx: Ctx, text: string): Promise<Outcome> {
         maxTokens: STEP_1_MAX_TOKENS,
       }),
     );
-  } catch {
+  } catch (err) {
+    if (ctx.signal.aborted || err instanceof DeadlineError) throw err;
     call = { tool: "unknown" };
   }
   if (call.tool === "unknown") {
@@ -285,22 +318,31 @@ async function converse(ctx: Ctx, text: string): Promise<Outcome> {
   }
 
   /* The bank is read only now, and only against the shared daily budget. */
-  const sessions = await deps.fetchSessions(userId);
+  throwIfAborted(ctx.signal);
+  const sessions = await raceAbort(deps.fetchSessions(userId), ctx.signal);
   if (sessions.length === 0) {
     await sendFixed(ctx, "noBank");
     return "no-data";
   }
-  if (!(await deps.repo.takeFetchBudget(today, WHATSAPP_FETCH_CAP))) {
+  throwIfAborted(ctx.signal);
+  if (!(await raceAbort(deps.repo.takeFetchBudget(today, WHATSAPP_FETCH_CAP), ctx.signal))) {
     await sendFixed(ctx, "fetchExhausted");
     return "no-data";
   }
-  const bank = await deps.fetchOutcome(sessions, deps.now()).catch(() => null);
+  throwIfAborted(ctx.signal);
+  const bank = await raceAbort(
+    deps.fetchOutcome(sessions, deps.now(), { signal: ctx.signal }),
+    ctx.signal,
+  ).catch((err) => {
+    if (ctx.signal.aborted || err instanceof DeadlineError) throw err;
+    return null;
+  });
   if (!bank || bank.status !== "ok" || !bank.banks.some((b) => b.state === "ok")) {
     await sendFixed(ctx, "noBank");
     return "no-data";
   }
 
-  const mirror = (await deps.repo.getMirror()) ?? EMPTY_MIRROR;
+  const mirror = (await raceAbort(deps.repo.getMirror(), ctx.signal)) ?? EMPTY_MIRROR;
   const result = runTool(
     call,
     {
@@ -345,7 +387,8 @@ async function converse(ctx: Ctx, text: string): Promise<Outcome> {
         phrases.intros.length,
         phrases.outros.length,
       );
-    } catch {
+    } catch (err) {
+      if (ctx.signal.aborted || err instanceof DeadlineError) throw err;
       selection = null;
     }
   }

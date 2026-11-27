@@ -4,6 +4,7 @@ import type { SSEStreamingApi } from "hono/streaming";
 import { loadLlmConfig, loadIngestConfig, loadBudgetConfig } from "./config.js";
 import {
   checkBudget,
+  readFailureUsage,
   recordFailure,
   recordUsage,
   releaseReservation,
@@ -191,9 +192,13 @@ function budgetErrorMessage(scope: "day" | "month"): string {
 async function requireBudget(
   c: Context,
   route: AiUsage["route"],
+  options?: { reserve?: boolean },
 ): Promise<{ blocked: Response } | { blocked: null; reservation?: ReservationHandle }> {
   try {
-    const budget = await checkBudget(route, sessionUserId(c));
+    const budget =
+      options?.reserve === false
+        ? await checkBudget(route, sessionUserId(c), { reserve: false })
+        : await checkBudget(route, sessionUserId(c));
     if (!budget.ok)
       return {
         blocked: c.json(
@@ -343,6 +348,7 @@ export function registerAgentRoutes(app: Hono, deps: Deps = {}): void {
           model: MISTRAL_SMALL,
           errorCode: aiFailureCode(e),
           ...(upstreamHttpStatus(e) === undefined ? {} : { httpStatus: upstreamHttpStatus(e) }),
+          ...readFailureUsage(e),
         },
         budget.reservation,
       );
@@ -442,6 +448,7 @@ export function registerAgentRoutes(app: Hono, deps: Deps = {}): void {
             model: MISTRAL_MEDIUM,
             errorCode: aiFailureCode(e),
             ...(upstreamHttpStatus(e) === undefined ? {} : { httpStatus: upstreamHttpStatus(e) }),
+            ...readFailureUsage(e),
           },
           budget.reservation,
         );
@@ -607,6 +614,7 @@ export function registerAgentRoutes(app: Hono, deps: Deps = {}): void {
           model: MISTRAL_SMALL,
           errorCode: aiFailureCode(e),
           ...(upstreamHttpStatus(e) === undefined ? {} : { httpStatus: upstreamHttpStatus(e) }),
+          ...readFailureUsage(e),
         },
         budget.reservation,
       );
@@ -639,15 +647,10 @@ export function registerAgentRoutes(app: Hono, deps: Deps = {}): void {
         },
         429,
       );
-    const budget = await requireBudget(c, "travel");
+    // Read-only entry gate: no placeholder reservation created or released.
+    // Each background lookup in travel.ts reserves and settles its own hold.
+    const budget = await requireBudget(c, "travel", { reserve: false });
     if (budget.blocked) return budget.blocked;
-    // This gate only answers "is there room for one more travel call right
-    // now" — it releases its own hold immediately rather than keeping it,
-    // because it never becomes a real call itself. The actual spend, and the
-    // reservation that actually guards it, happens once per BACKGROUNDED
-    // lookup inside travel.ts's checkBudget("travel")/recordUsage() pair
-    // (see the comment above this route and travel.ts's own).
-    await releaseReservation(budget.reservation);
     let input: import("./agent/travel.js").TravelInput;
     try {
       input = sanitizeTravelInput(await c.req.json());

@@ -16,6 +16,17 @@ type Repo = Pick<ReturnType<typeof createAgentRepository>, "getLink" | "appendEv
 export const LINK_MAX_IDLE_DAYS = 90;
 const DAY_MS = 86_400_000;
 
+export function isWhatsappLinkExpired(
+  link: { linkedAt: string; lastInboundAt: string | null },
+  nowMs: number,
+): boolean {
+  const lastSeen = Math.max(
+    Date.parse(link.linkedAt) || 0,
+    link.lastInboundAt ? Date.parse(link.lastInboundAt) || 0 : 0,
+  );
+  return lastSeen > 0 && nowMs - lastSeen > LINK_MAX_IDLE_DAYS * DAY_MS;
+}
+
 export async function sendWhatsAppDaily(
   _userId: string,
   msg: RenderedMessage,
@@ -31,11 +42,7 @@ export async function sendWhatsAppDaily(
   try {
     const link = await repo.getLink();
     if (!link) return "failed";
-    const lastSeen = Math.max(
-      Date.parse(link.linkedAt) || 0,
-      link.lastInboundAt ? Date.parse(link.lastInboundAt) || 0 : 0,
-    );
-    if (lastSeen > 0 && (deps.now?.() ?? Date.now()) - lastSeen > LINK_MAX_IDLE_DAYS * DAY_MS) {
+    if (isWhatsappLinkExpired(link, deps.now?.() ?? Date.now())) {
       /* Notice first: its dedupe key makes a retry after a failed unlink store nothing twice. */
       await repo.appendEvent({
         id: crypto.randomUUID(),

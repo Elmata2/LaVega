@@ -58,23 +58,11 @@ export function createInMemoryAgentMemoryStore(): (tenantId: string) => AgentMem
     const state = stateFor(tenantId);
 
     return {
-      async summary({ held, named, heldKeys = [], namedKeys = [], closeUnheld }): Promise<MemorySummary> {
+      async summary({ held, named, heldKeys = [], namedKeys = [] }): Promise<MemorySummary> {
         const heldSet = new Set(held.map(normalizeSymbol));
         const heldKeySet = new Set(heldKeys);
         const namedSet = new Set(named.map(normalizeSymbol));
         const namedKeySet = new Set(namedKeys);
-        const now = new Date().toISOString();
-
-        if (closeUnheld) {
-          for (const [key, thesis] of state.theses) {
-            const isHeld =
-              heldSet.has(thesis.symbol) ||
-              (thesis.instrumentKey !== null && heldKeySet.has(thesis.instrumentKey));
-            if (thesis.status === "active" && !isHeld) {
-              state.theses.set(key, { ...thesis, status: "dormant", updatedAt: now });
-            }
-          }
-        }
 
         const theses = [...state.theses.values()].filter((thesis) => {
           const isNamed =
@@ -91,6 +79,23 @@ export function createInMemoryAgentMemoryStore(): (tenantId: string) => AgentMem
           goals: [...state.goals.values()].slice(0, 20),
           theses,
         };
+      },
+
+      async closeUnheldTheses({ held, heldKeys = [] }): Promise<number> {
+        const heldSet = new Set(held.map(normalizeSymbol));
+        const heldKeySet = new Set(heldKeys);
+        const now = new Date().toISOString();
+        let closed = 0;
+        for (const [key, thesis] of state.theses) {
+          const isHeld =
+            heldSet.has(thesis.symbol) ||
+            (thesis.instrumentKey !== null && heldKeySet.has(thesis.instrumentKey));
+          if (thesis.status === "active" && !isHeld) {
+            state.theses.set(key, { ...thesis, status: "dormant", updatedAt: now });
+            closed += 1;
+          }
+        }
+        return closed;
       },
 
       async appendMessages(threadId, agentId, title, messages): Promise<void> {

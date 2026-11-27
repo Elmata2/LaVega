@@ -70,7 +70,11 @@ export function createMcpTokenRepository(db: Database): McpTokenRepository {
 
     async touch(id, at) {
       await db.http.query(
-        `UPDATE investing.api_tokens SET last_used_at = $2::timestamptz WHERE id = $1::uuid`,
+        `UPDATE investing.api_tokens
+            SET last_used_at = $2::timestamptz
+          WHERE id = $1::uuid
+            AND revoked_at IS NULL
+            AND (expires_at IS NULL OR expires_at > $2::timestamptz)`,
         [id, at.toISOString()],
       );
     },

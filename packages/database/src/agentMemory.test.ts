@@ -153,35 +153,34 @@ test("the turn summary is one round trip with risk tolerance, goals and the thes
   const summary = await createAgentMemoryRepository(counted, "alice").summary({
     held: ["ASML", "KO", "MSFT"],
     named: ["asml", "MSFT"],
-    closeUnheld: true,
   });
 
   expect(roundTrips).toBe(1);
   expect(summary.riskTolerance).toBe("aggressive");
   expect(summary.goals.map((goal) => goal.text)).toEqual(["€500/month"]);
-  /* KO is held but not named; AAPL is not held and was closed by this turn. */
+  /* summary() is a pure read: AAPL stays active until closeUnheldTheses() runs explicitly. */
   expect(summary.theses.map((t) => [t.symbol, t.status, t.why])).toEqual([
     ["ASML", "active", "Monopoly"],
   ]);
+  expect((await memory.listTheses()).find((t) => t.symbol === "AAPL")?.status).toBe("active");
+  expect(await memory.closeUnheldTheses({ held: ["ASML", "KO", "MSFT"] })).toBe(1);
   expect((await memory.listTheses()).find((t) => t.symbol === "AAPL")?.status).toBe("dormant");
 });
 
 test("a dormant thesis is not read by agents until the symbol is held again", async () => {
   const memory = createAgentMemoryRepository(db, "alice");
   await memory.confirmThesis("AAPL", thesis("Ecosystem"));
-  await memory.summary({ held: ["KO"], named: [], closeUnheld: true });
+  await memory.closeUnheldTheses({ held: ["KO"] });
 
   expect(await memory.recall({ kind: "theses" }, 20)).toEqual({ kind: "theses", theses: [] });
   expect(await memory.recall({ kind: "theses", symbol: "AAPL" }, 20)).toEqual({
     kind: "theses",
     theses: [],
   });
-  expect(
-    (await memory.summary({ held: ["KO"], named: ["AAPL"], closeUnheld: true })).theses,
-  ).toEqual([]);
+  expect((await memory.summary({ held: ["KO"], named: ["AAPL"] })).theses).toEqual([]);
 
   /* Rebought: the summary carries it, still dormant, whether or not it is named. */
-  const rebought = await memory.summary({ held: ["AAPL", "KO"], named: [], closeUnheld: true });
+  const rebought = await memory.summary({ held: ["AAPL", "KO"], named: [] });
   expect(rebought.theses.map((t) => [t.symbol, t.status])).toEqual([["AAPL", "dormant"]]);
 
   await memory.confirmThesis("AAPL", thesis("Ecosystem, still"));
@@ -194,7 +193,7 @@ test("a dormant thesis is not read by agents until the symbol is held again", as
 test("an unguarded turn leaves theses alone", async () => {
   const memory = createAgentMemoryRepository(db, "alice");
   await memory.confirmThesis("AAPL", thesis("Ecosystem"));
-  await memory.summary({ held: [], named: [], closeUnheld: false });
+  await memory.summary({ held: [], named: [] });
   expect((await memory.listTheses())[0]?.status).toBe("active");
 });
 
@@ -255,7 +254,7 @@ test("editing keeps a thesis's status and a goal's source", async () => {
   const memory = createAgentMemoryRepository(db, "alice");
   await memory.appendMessages(THREAD_A, "charlie_munger", "t", [userMessage("m")]);
   await memory.confirmThesis("AAPL", thesis("Ecosystem"));
-  await memory.summary({ held: ["KO"], named: [], closeUnheld: true });
+  await memory.closeUnheldTheses({ held: ["KO"] });
   const goal = await memory.confirmGoal({ symbol: null, text: "income", sourceThreadId: THREAD_A });
 
   expect(await memory.editThesis("aapl", thesis("Services"))).toEqual(

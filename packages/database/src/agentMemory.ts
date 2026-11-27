@@ -125,9 +125,9 @@ export type AgentMemoryExport = {
 
 export type AgentMemoryRepository = {
   /**
-   * One statement. `held` is every symbol the owner holds now, `named` the
-   * held symbols this turn is about. With `closeUnheld`, an active thesis of a
-   * symbol no longer held turns dormant in the same statement.
+   * Pure read-only statement. `held` is every symbol the owner holds now,
+   * `named` the held symbols this turn is about. Call `closeUnheldTheses()`
+   * separately to transition unheld active theses to dormant.
    */
   summary(input: {
     held: string[];
@@ -136,8 +136,11 @@ export type AgentMemoryRepository = {
      *  stored under another broker symbol for the same ISIN is still found. */
     heldKeys?: string[];
     namedKeys?: string[];
-    closeUnheld: boolean;
+    /** @deprecated Use `closeUnheldTheses()` explicitly instead. Ignored here. */
+    closeUnheld?: boolean;
   }): Promise<MemorySummary>;
+  /** Transitions active theses for symbols/keys no longer held to dormant. */
+  closeUnheldTheses(input: { held: string[]; heldKeys?: string[] }): Promise<number>;
   /** Creates the thread on first use. Refuses a thread of another agent. */
   appendMessages(
     threadId: string,
@@ -264,22 +267,13 @@ export function createAgentMemoryRepository(
     withTenantStatement(db, tenantId, (client) => client.query<R>(text, params));
 
   return {
-    async summary({ held, named, heldKeys, namedKeys, closeUnheld }) {
+    async summary({ held, named, heldKeys, namedKeys }) {
       const heldSymbols = held.map(normalizeSymbol);
       const namedSymbols = named.map(normalizeSymbol);
       const heldInstrumentKeys = (heldKeys ?? []).map((key) => key.trim()).filter(Boolean);
       const namedInstrumentKeys = (namedKeys ?? []).map((key) => key.trim()).filter(Boolean);
-      /* The UPDATE and the SELECTs share one snapshot, so the rows below show
-       * the status from before this statement. That is harmless: only theses
-       * of held symbols are selected, and only unheld ones are closed. */
       const result = await one(
-        `WITH closed AS (
-           UPDATE investing.theses SET status = 'dormant', updated_at = CURRENT_TIMESTAMP
-           WHERE $3::boolean AND status = 'active'
-             AND NOT (symbol = ANY($1::text[]) OR instrument_key = ANY($4::text[]))
-           RETURNING symbol
-         )
-         SELECT 'risk' AS kind, risk_tolerance AS value, NULL::text AS symbol, NULL::text AS status,
+        `SELECT 'risk' AS kind, risk_tolerance AS value, NULL::text AS symbol, NULL::text AS status,
                 NULL::bytea AS body_blob, NULL::uuid AS id, NULL::uuid AS source_thread_id,
                 NULL::text AS instrument_key, false AS review_required, updated_at
            FROM investing.preferences
@@ -291,11 +285,11 @@ export function createAgentMemoryRepository(
          SELECT 'thesis', NULL, symbol, status, body_blob, NULL, NULL,
                 instrument_key, review_required, updated_at
            FROM investing.theses
-          WHERE (symbol = ANY($1::text[]) OR instrument_key = ANY($4::text[]))
+          WHERE (symbol = ANY($1::text[]) OR instrument_key = ANY($3::text[]))
             AND (
-              symbol = ANY($2::text[]) OR instrument_key = ANY($5::text[]) OR status = 'dormant'
+              symbol = ANY($2::text[]) OR instrument_key = ANY($4::text[]) OR status = 'dormant'
             )`,
-        [heldSymbols, namedSymbols, closeUnheld, heldInstrumentKeys, namedInstrumentKeys],
+        [heldSymbols, namedSymbols, heldInstrumentKeys, namedInstrumentKeys],
       );
       const summary: MemorySummary = { riskTolerance: null, goals: [], theses: [] };
       for (const row of result.rows) {
@@ -305,6 +299,19 @@ export function createAgentMemoryRepository(
         else summary.theses.push(thesisRow(row));
       }
       return summary;
+    },
+
+    async closeUnheldTheses({ held, heldKeys }) {
+      const heldSymbols = held.map(normalizeSymbol);
+      const heldInstrumentKeys = (heldKeys ?? []).map((key) => key.trim()).filter(Boolean);
+      const result = await one(
+        `UPDATE investing.theses SET status = 'dormant', updated_at = CURRENT_TIMESTAMP
+          WHERE status = 'active'
+            AND NOT (symbol = ANY($1::text[]) OR instrument_key = ANY($2::text[]))
+          RETURNING symbol`,
+        [heldSymbols, heldInstrumentKeys],
+      );
+      return result.rows.length;
     },
 
     async appendMessages(threadId, agentId, title, messages) {
@@ -394,46 +401,47 @@ export function createAgentMemoryRepository(
     },
 
     async applyThesisMigration(plan) {
-      let updated = 0;
-      let merged = 0;
-      let reviewed = 0;
-      /* One statement per call: the tenant helper scopes each statement to the
-       * caller's tenant, and a migration has no cross-row invariant that needs
-       * a single transaction. Reviews first, so a conflicting group leaves the
-       * partial unique index before its second row keeps the same key. */
-      for (const review of plan.reviews) {
-        const result = await one(
-          "UPDATE investing.theses SET review_required = true, updated_at = CURRENT_TIMESTAMP WHERE symbol = ANY($1::text[]) RETURNING symbol",
-          [review.symbols.map(normalizeSymbol)],
+      return withTenant(db, tenantId, async (client) => {
+        let updated = 0;
+        let merged = 0;
+        let reviewed = 0;
+        /* Reviews first inside one tenant transaction, so a conflicting group
+         * leaves the partial unique index before its second row keeps the key,
+         * and a partial failure rolls back cleanly. */
+        for (const review of plan.reviews) {
+          const result = await client.query(
+            "UPDATE investing.theses SET review_required = true, updated_at = CURRENT_TIMESTAMP WHERE symbol = ANY($1::text[]) RETURNING symbol",
+            [review.symbols.map(normalizeSymbol)],
+          );
+          reviewed += result.rows.length;
+        }
+        for (const merge of plan.merges) {
+          const removed = await client.query(
+            "DELETE FROM investing.theses WHERE symbol = ANY($1::text[]) RETURNING symbol",
+            [merge.mergedSymbols.map(normalizeSymbol)],
+          );
+          merged += removed.rows.length;
+          const kept = await client.query(
+            "UPDATE investing.theses SET instrument_key = $2, updated_at = CURRENT_TIMESTAMP WHERE symbol = $1 RETURNING symbol",
+            [normalizeSymbol(merge.keptSymbol), merge.instrumentKey],
+          );
+          updated += kept.rows.length;
+        }
+        const handled = new Set(
+          plan.merges.flatMap((merge) =>
+            [merge.keptSymbol, ...merge.mergedSymbols].map(normalizeSymbol),
+          ),
         );
-        reviewed += result.rows.length;
-      }
-      for (const merge of plan.merges) {
-        const removed = await one(
-          "DELETE FROM investing.theses WHERE symbol = ANY($1::text[]) RETURNING symbol",
-          [merge.mergedSymbols.map(normalizeSymbol)],
-        );
-        merged += removed.rows.length;
-        const kept = await one(
-          "UPDATE investing.theses SET instrument_key = $2, updated_at = CURRENT_TIMESTAMP WHERE symbol = $1 RETURNING symbol",
-          [normalizeSymbol(merge.keptSymbol), merge.instrumentKey],
-        );
-        updated += kept.rows.length;
-      }
-      const handled = new Set(
-        plan.merges.flatMap((merge) =>
-          [merge.keptSymbol, ...merge.mergedSymbols].map(normalizeSymbol),
-        ),
-      );
-      for (const assignment of plan.assignments) {
-        if (handled.has(normalizeSymbol(assignment.symbol))) continue;
-        const result = await one(
-          "UPDATE investing.theses SET instrument_key = $2, updated_at = CURRENT_TIMESTAMP WHERE symbol = $1 RETURNING symbol",
-          [normalizeSymbol(assignment.symbol), assignment.instrumentKey],
-        );
-        updated += result.rows.length;
-      }
-      return { updated, merged, reviewed };
+        for (const assignment of plan.assignments) {
+          if (handled.has(normalizeSymbol(assignment.symbol))) continue;
+          const result = await client.query(
+            "UPDATE investing.theses SET instrument_key = $2, updated_at = CURRENT_TIMESTAMP WHERE symbol = $1 RETURNING symbol",
+            [normalizeSymbol(assignment.symbol), assignment.instrumentKey],
+          );
+          updated += result.rows.length;
+        }
+        return { updated, merged, reviewed };
+      });
     },
 
     async editThesis(symbol, body) {

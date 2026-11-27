@@ -8,12 +8,13 @@ function nextTransitionAt(): string {
   return `${new Date(milliseconds).toISOString().slice(0, -1)}${String(micros).padStart(3, "0")}Z`;
 }
 
-/** Owns durable run transitions. Latest is latest-started, not latest-finished. */
-export function createAgentRunController(store: AgentRunStore) {
+/** Owns durable run transitions. Latest is latest-started, not latest-finished.
+ *  Keyed by tenant (not model) to match the single-slot per-tenant DB storage. */
+export function createAgentRunController(store: AgentRunStore, tenantKey = "default") {
   const inFlight = new Map<string, Promise<AgentRunRecord>>();
   return {
-    run(model: string | undefined, execute: () => Promise<unknown>): Promise<AgentRunRecord> {
-      const key = model?.trim() ?? "";
+    run(_model: string | undefined, execute: () => Promise<unknown>): Promise<AgentRunRecord> {
+      const key = tenantKey;
       const existing = inFlight.get(key);
       if (existing) return existing;
       const record: AgentRunRecord = {

@@ -45,9 +45,15 @@ export function createMcpSessionStore(
   const newId = options.newId ?? randomUUID;
   const sessions = new Map<string, SessionRecord>();
 
+  const maxEntries = 1_000;
   const prune = (at: number) => {
-    if (sessions.size < 1_000) return;
+    if (sessions.size < maxEntries) return;
     for (const [id, record] of sessions) if (record.expiresAt <= at) sessions.delete(id);
+    while (sessions.size >= maxEntries) {
+      const oldest = sessions.keys().next().value;
+      if (oldest === undefined) break;
+      sessions.delete(oldest);
+    }
   };
 
   return {

@@ -247,12 +247,36 @@ test("a send that fails on every channel releases the claim, so the next run ret
   expect(await repoFor("a").claimDay("2026-11-11")).toBe(true);
 });
 
-test("one channel failing still counts as sent; the day stays claimed", async () => {
-  await repoFor("a").putSettings(settings());
+test("one external channel failing still counts as sent when another external channel succeeds", async () => {
+  await repoFor("a").putSettings(settings({ channels: ["feed", "email", "push"] }));
   const { deps } = setup(() => okOutcome({ txs: [spend("2026-11-10", 200, "Shop")] }));
   deps.send.email = async () => "failed";
   expect(await runForUser(deps, "a")).toBe("sent");
   expect(await repoFor("a").claimDay("2026-11-11")).toBe(false);
+});
+
+test("when all external channels fail, forced feed does not mask failure and releaseDay restores the claim", async () => {
+  await repoFor("a").putSettings(settings({ channels: ["feed", "email"] }));
+  const { deps } = setup(() => okOutcome({ txs: [spend("2026-11-10", 200, "Shop")] }));
+  deps.send.email = async () => "failed";
+  expect(await runForUser(deps, "a")).toBe("skipped");
+  expect(writes).toEqual([]);
+  expect(await repoFor("a").claimDay("2026-11-11")).toBe(true);
+});
+
+test("expiryPausedNoted resets on 'none' and 'remind' once bank data is restored", async () => {
+  await repoFor("a").putSettings(settings({ channels: ["feed"] }));
+  await repoFor("a").putState({ expiryPausedNoted: true });
+  const { deps } = setup(okOutcome);
+  expect(await runForUser(deps, "a")).toBe("none");
+  expect((await repoFor("a").getState()).expiryPausedNoted).toBe(false);
+
+  await repoFor("a").putState({ expiryPausedNoted: true });
+  clock += DAY;
+  const expiry = new Date(clock + 7 * DAY).toISOString();
+  const { deps: remindDeps } = setup(() => okOutcome({ consentExpiresAt: expiry }));
+  expect(await runForUser(remindDeps, "a")).toBe("reminded");
+  expect((await repoFor("a").getState()).expiryPausedNoted).toBe(false);
 });
 
 test("sentKeys keep the same deadline from being sent again tomorrow", async () => {

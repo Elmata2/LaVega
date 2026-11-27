@@ -35,6 +35,7 @@ export type LlmProvider = {
     user: string;
     json?: boolean;
     maxTokens: number;
+    signal?: AbortSignal;
   }): Promise<{ text: string; usage: LlmUsage }>;
   ocrPdf(input: {
     pdfBase64: string;

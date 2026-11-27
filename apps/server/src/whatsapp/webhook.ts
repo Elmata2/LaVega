@@ -8,6 +8,7 @@ import {
   type Database,
 } from "@lavega/database";
 import { requireRuntimeDatabase } from "@lavega/database";
+import { isWhatsappLinkExpired } from "./channel.js";
 import { handleUnlinked, toE164 } from "./linking.js";
 import { answerApprovalButton, parseApprovalButton } from "./approval.js";
 import { whatsappClientFromEnv } from "./client.js";
@@ -214,6 +215,12 @@ async function handle(
     return;
   }
   const repo = deps.repository(userId);
+  const link = typeof repo.getLink === "function" ? await repo.getLink() : null;
+  if (link && isWhatsappLinkExpired(link, inbound.at)) {
+    await repo.unlink();
+    if (inbound.kind === "text") await deps.unlinked(inbound);
+    return;
+  }
   /* Touch first: if it fails nothing is stored, so Meta's retry is not blocked by
    * the dedupe key. The stamp is monotonic in the database, so a replayed or late
    * delivery cannot move the window back. */

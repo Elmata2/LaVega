@@ -13,6 +13,7 @@ vi.mock("./mistral.js", () => ({
 }));
 
 import { AGENTS } from "@lavega/core";
+import { readFailureUsage } from "./budget.js";
 import { extractInvoiceFields } from "./invoiceExtract.js";
 import { sanitizeKnownFacts } from "./facts.js";
 
@@ -82,28 +83,38 @@ test("throws 'geen extractie' when OCR returns empty markdown and there is no in
  * zag die uitgave nooit en opnieuw proberen leek gratis. Nu de aanbieder
  * pay-as-you-go is, is dat precies het gat waardoor een rekening oploopt zonder
  * dat de dagteller beweegt. */
-test("onUsage fires with the OCR page count when complete() throws — those pages were bought", async () => {
+test("complete() failure attaches OCR page count to the error without calling onUsage (single settlement)", async () => {
   ocrMock.mockResolvedValue({ markdown: "factuur van ACME", pages: 3 });
   completeMock.mockRejectedValue(new Error("mistral chat 429: Rate limit exceeded"));
   const onUsage = vi.fn();
 
-  await expect(extractInvoiceFields({ pdfBase64: "AAAA" }, "k", [], onUsage)).rejects.toThrow(
-    "429",
-  );
-  expect(onUsage).toHaveBeenCalledTimes(1);
-  expect(onUsage).toHaveBeenCalledWith({ inputTokens: 0, outputTokens: 0, pages: 3 });
+  let caught: unknown;
+  try {
+    await extractInvoiceFields({ pdfBase64: "AAAA" }, "k", [], onUsage);
+  } catch (e) {
+    caught = e;
+  }
+  expect(caught).toBeInstanceOf(Error);
+  expect((caught as Error).message).toContain("429");
+  expect(onUsage).not.toHaveBeenCalled();
+  expect(readFailureUsage(caught)).toEqual({ inputTokens: 0, outputTokens: 0, pages: 3 });
 });
 
-test("onUsage still fires with the OCR page count when a blank/unreadable scan throws before complete() — that OCR call was real and billable", async () => {
+test("blank/unreadable scan attaches OCR page count to the error without calling onUsage (single settlement)", async () => {
   ocrMock.mockResolvedValue({ markdown: "", pages: 2 });
   const onUsage = vi.fn();
 
-  await expect(extractInvoiceFields({ pdfBase64: "AAAA" }, "k", [], onUsage)).rejects.toThrow(
-    "geen extractie",
-  );
+  let caught: unknown;
+  try {
+    await extractInvoiceFields({ pdfBase64: "AAAA" }, "k", [], onUsage);
+  } catch (e) {
+    caught = e;
+  }
+  expect(caught).toBeInstanceOf(Error);
+  expect((caught as Error).message).toContain("geen extractie");
   expect(completeMock).not.toHaveBeenCalled();
-  expect(onUsage).toHaveBeenCalledTimes(1);
-  expect(onUsage).toHaveBeenCalledWith({ inputTokens: 0, outputTokens: 0, pages: 2 });
+  expect(onUsage).not.toHaveBeenCalled();
+  expect(readFailureUsage(caught)).toEqual({ inputTokens: 0, outputTokens: 0, pages: 2 });
 });
 
 /* A EUROPEAN AMOUNT AS A STRING USED TO BECOME NaN, NOT ZERO.

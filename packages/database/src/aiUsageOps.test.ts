@@ -110,7 +110,7 @@ test("a failed row no longer holds budget: the cap sums see cost 0", async () =>
   ).toEqual({ dayCents: 0, monthCents: 0 });
 });
 
-test("fail() after the provider already charged the call keeps the charge and adds the failure reason", async () => {
+test("fail() after reconcile() is a no-op — single settlement enforces reconciled_at IS NULL", async () => {
   const repo = createAiUsageRepository(db);
   const reserved = await repo.reserve({
     userId: "usage-race",
@@ -141,9 +141,41 @@ test("fail() after the provider already charged the call keeps the charge and ad
   );
   expect(await row("usage-race")).toMatchObject({
     cost_cents: 3,
+    outcome: "ok",
+    error_code: null,
+    http_status: null,
+  });
+});
+
+test("fail() accepts partial/ceiling billed usage and error metadata in a single settlement", async () => {
+  const repo = createAiUsageRepository(db);
+  const reserved = await repo.reserve({
+    userId: "usage-fail-billed",
+    day: "2026-11-11",
+    month: "2026-11",
+    route: "extract-invoice",
+    worstCaseCents: 15,
+    dayCapCents: 10_000,
+    monthCapCents: 100_000,
+  });
+  expect(reserved.ok).toBe(true);
+  if (!reserved.ok) return;
+  await repo.fail(
+    {
+      id: reserved.id,
+      model: "mistral-small-latest",
+      errorCode: "ai-upstream-limit",
+      httpStatus: 429,
+      pages: 3,
+      costCents: 2,
+    },
+    "usage-fail-billed",
+  );
+  expect(await row("usage-fail-billed")).toMatchObject({
+    cost_cents: 2,
     outcome: "failed",
-    error_code: "ai-fault",
-    http_status: 500,
+    error_code: "ai-upstream-limit",
+    http_status: 429,
   });
 });
 

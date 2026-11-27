@@ -153,6 +153,7 @@ export async function createPortfolioChatAgent(input: {
   model?: LanguageModel;
   /** Owner of the thread when `agentId` was tagged into it. */
   host?: PortfolioAgentId;
+  abortSignal?: AbortSignal;
   /** Called once when the turn ends, with the hardened status (WS5.6). */
   onTurnStatus?: (status: ToolLoopTurnStatus) => void;
 }): Promise<Agent<never, ToolSet>> {
@@ -178,13 +179,22 @@ export async function createPortfolioChatAgent(input: {
     Promise.all(symbols.map((symbol) => fundamentalsSection(context.fundamentals, symbol))),
     /* A portfolio that read as empty is more likely a sync that has not
      * landed than a sale of everything, so it closes no thesis. */
-    memory?.repository.summary({
-      held: [...held],
-      named,
-      heldKeys: keysOf(held),
-      namedKeys: keysOf(new Set(named)),
-      closeUnheld: held.size > 0,
-    }),
+    memory
+      ? (async () => {
+          if (held.size > 0) {
+            await memory.repository.closeUnheldTheses({
+              held: [...held],
+              heldKeys: keysOf(held),
+            });
+          }
+          return memory.repository.summary({
+            held: [...held],
+            named,
+            heldKeys: keysOf(held),
+            namedKeys: keysOf(new Set(named)),
+          });
+        })()
+      : undefined,
   ]);
 
   /* ONE registry, projected twice: the chat binds the in-process source and the
@@ -194,10 +204,8 @@ export async function createPortfolioChatAgent(input: {
     ...(memory ? createMemoryToolDefinitions(memory, held) : []),
   ]);
 
-  /* Loop accounting for the turn status (WS5.6): rounds run, and whether the
-   * provider failed. `onEnd` may not fire when the provider throws. */
+  /* Loop accounting for the turn status (WS5.6): rounds run and abort signal. */
   let rounds = 0;
-  let failed = false;
   return new ToolLoopAgent<never, ToolSet>({
     model: input.model ?? resolvePortfolioChatModel(),
     instructions: [
@@ -227,7 +235,7 @@ export async function createPortfolioChatAgent(input: {
         toolLoopTurnStatus({
           rounds,
           hasText: typeof event.text === "string" && event.text.trim().length > 0,
-          ...(failed ? { error: true } : {}),
+          ...(input.abortSignal?.aborted ? { aborted: true } : {}),
         }),
       );
     },

@@ -111,14 +111,18 @@ function createMcpTools(
       return { previewToken: stored.previewToken, expiresAt: stored.expiresAt };
     },
     applyPreview: async (previewToken) => {
-      const stored = deps.previewTokens.consume({
+      const check = {
         previewToken,
         tenantId: identity.tenantId,
         tokenId: identity.tokenId,
         now: now(),
-      });
+      };
+      const stored = deps.previewTokens.peek
+        ? deps.previewTokens.peek(check)
+        : deps.previewTokens.consume(check);
       if (!stored) throw new Error("Preview token is unknown, used or expired");
       await createMcpInvestingWrite(identity.tenantId, origin)(stored.entries);
+      if (deps.previewTokens.peek) deps.previewTokens.consume(check);
       return { applied: true as const, entries: [...stored.entries] };
     },
   };

@@ -488,6 +488,48 @@ test("an overall deadline sends the fixed reply, stores an error event and relea
   expect(cleared).toHaveBeenCalled();
 });
 
+test("deadline aborts the AbortSignal threaded into LLM and bank calls and settles billed step-1 tokens cleanly", async () => {
+  const reservation = { kind: "memory" } as never;
+  deps.budget = vi.fn(async () => ({ ok: true as const, reservation }));
+  let capturedBankSignal: AbortSignal | undefined;
+  let capturedLlmSignal: AbortSignal | undefined;
+  deps.llm = {
+    complete: vi.fn(async (input: { signal?: AbortSignal }) => {
+      capturedLlmSignal = input.signal;
+      return { text: toolMulti, usage: { input: 12, output: 6 } };
+    }),
+  } as never;
+  deps.fetchOutcome = vi.fn(
+    (_sessions, _now, opts?: { signal?: AbortSignal }) =>
+      new Promise<FetchOutcome>((_resolve, reject) => {
+        capturedBankSignal = opts?.signal;
+        opts?.signal?.addEventListener("abort", () => reject(opts.signal?.reason), { once: true });
+      }),
+  );
+  let fire: () => void = () => undefined;
+  deps.timer = {
+    set: (fn) => {
+      fire = fn;
+      return 1;
+    },
+    clear: vi.fn(),
+  };
+
+  const pending = answerInbound(deps, USER, "q");
+  await vi.waitFor(() => expect(deps.fetchOutcome).toHaveBeenCalled());
+  expect(capturedLlmSignal).toBeDefined();
+  expect(capturedBankSignal?.aborted).toBe(false);
+  fire();
+  expect(await pending).toBe("error");
+  expect(capturedBankSignal?.aborted).toBe(true);
+  // Step 1 already billed tokens, so recordUsage settles the reservation instead of dropping them.
+  expect(deps.recordUsage).toHaveBeenCalledWith(
+    expect.objectContaining({ route: "instinct-reply", inputTokens: 12, outputTokens: 6 }),
+    reservation,
+  );
+  expect(deps.releaseReservation).not.toHaveBeenCalled();
+});
+
 test("a recurring bank counterparty reaches no model prompt and step 2 is skipped (F1)", async () => {
   // containsBankText: no step-2 call and no framing, even if a model answer were queued.
   const RECURRING = "SENTINELNAME-NETFLIXCO";

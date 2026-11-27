@@ -42,8 +42,10 @@ export type AiBudgetReservation = { ok: true; id: number } | { ok: false; scope:
  * a 2.5x margin — narrow enough that a reservation orphaned by a hard crash
  * (nothing left alive to release it) self-heals well within the same day
  * instead of squatting on the cap until midnight. See 0009_ai_usage_reservation.sql. */
-const RESERVATION_FRESH_SQL =
-  "(reconciled_at IS NOT NULL OR reserved_at IS NULL OR reserved_at > CURRENT_TIMESTAMP - INTERVAL '10 minutes')";
+const RESERVATION_UNEXPIRED_SQL =
+  "(reserved_at IS NULL OR reserved_at > CURRENT_TIMESTAMP - INTERVAL '10 minutes')";
+
+const RESERVATION_FRESH_SQL = `(reconciled_at IS NOT NULL OR ${RESERVATION_UNEXPIRED_SQL})`;
 
 /**
  * The internal AI-spend ledger (`personal.ai_usage`), read and written by the
@@ -153,7 +155,7 @@ export function createAiUsageRepository(db: Database) {
            SET model = $2, input_tokens = $3, output_tokens = $4, pages = $5, searches = $6,
                cost_cents = $7, cache_write_tokens = $9, cache_read_tokens = $10,
                outcome = 'ok', reconciled_at = CURRENT_TIMESTAMP
-           WHERE id = $1 AND user_id = $8 AND reconciled_at IS NULL`,
+           WHERE id = $1 AND user_id = $8 AND reconciled_at IS NULL AND ${RESERVATION_UNEXPIRED_SQL}`,
           [
             usage.id,
             usage.model,
@@ -170,28 +172,23 @@ export function createAiUsageRepository(db: Database) {
       });
     },
 
-    /** Turn a reservation into a FAILED ledger row (#300, WS5.7 leftover).
+    /** Turn an unsettled, unexpired reservation into a FAILED ledger row (#300, #385).
      *
-     *  Before this, the failure path deleted the placeholder, so a provider
-     *  refusal, timeout or 5xx left no trace and an operator could not see why
-     *  spend stopped. The row keeps the reservation id, records the route's own
-     *  machine error code and the upstream HTTP status (0 = timeout/transport),
-     *  sets cost 0 — nothing was billed with certainty — and marks
-     *  `reconciled_at`, so the budget sums ignore it while the ledger keeps it.
-     *
-     *  `costCents` applies only when the row was NOT already reconciled. The
-     *  provider call sites deliberately record their worst-case/ceiling usage
-     *  BEFORE they throw ("a failed call was still billed"), so a row marked
-     *  failed afterwards usually already carries a real charge: that charge and
-     *  its cache counts are KEPT and only the outcome/error columns are added.
-     *  Either way the row ends up `reconciled_at`-stamped, so it counts exactly
-     *  once in the cap sums. */
+     *  Enforces single settlement (`reconciled_at IS NULL` + 10m expiry): once a
+     *  reservation is reconciled, failed, or released (or expired), subsequent
+     *  settlement calls are no-ops. Callers pass any partial/ceiling billed
+     *  usage (e.g. bought searches or OCR pages) directly into `fail()` instead
+     *  of reconciling before failing. */
     async fail(
       failure: {
         id: number;
         model: string;
         errorCode: string;
         httpStatus?: number;
+        inputTokens?: number;
+        outputTokens?: number;
+        pages?: number;
+        searches?: number;
         cacheWriteTokens?: number;
         cacheReadTokens?: number;
         costCents?: number;
@@ -203,16 +200,16 @@ export function createAiUsageRepository(db: Database) {
         await client.query(
           `UPDATE personal.ai_usage
            SET model = $2,
-               input_tokens = CASE WHEN reconciled_at IS NULL THEN 0 ELSE input_tokens END,
-               output_tokens = CASE WHEN reconciled_at IS NULL THEN 0 ELSE output_tokens END,
-               pages = CASE WHEN reconciled_at IS NULL THEN 0 ELSE pages END,
-               searches = CASE WHEN reconciled_at IS NULL THEN 0 ELSE searches END,
-               cost_cents = CASE WHEN reconciled_at IS NULL THEN $8 ELSE cost_cents END,
-               cache_write_tokens = CASE WHEN reconciled_at IS NULL THEN $4 ELSE cache_write_tokens END,
-               cache_read_tokens = CASE WHEN reconciled_at IS NULL THEN $5 ELSE cache_read_tokens END,
+               input_tokens = $9,
+               output_tokens = $10,
+               pages = $11,
+               searches = $12,
+               cost_cents = $8,
+               cache_write_tokens = $4,
+               cache_read_tokens = $5,
                outcome = 'failed', error_code = $3, http_status = $6,
-               reconciled_at = COALESCE(reconciled_at, CURRENT_TIMESTAMP)
-           WHERE id = $1 AND user_id = $7`,
+               reconciled_at = CURRENT_TIMESTAMP
+           WHERE id = $1 AND user_id = $7 AND reconciled_at IS NULL AND ${RESERVATION_UNEXPIRED_SQL}`,
           [
             failure.id,
             failure.model,
@@ -222,23 +219,24 @@ export function createAiUsageRepository(db: Database) {
             failure.httpStatus ?? null,
             identity,
             Math.max(0, Math.round(failure.costCents ?? 0)),
+            Math.max(0, Math.round(failure.inputTokens ?? 0)),
+            Math.max(0, Math.round(failure.outputTokens ?? 0)),
+            Math.max(0, Math.round(failure.pages ?? 0)),
+            Math.max(0, Math.round(failure.searches ?? 0)),
           ],
         );
       });
     },
 
     /** The call this reservation was holding room for never reached
-     *  `reconcile` — it threw first. Deletes the placeholder row rather than
-     *  reconciling it to 0, so a failed call leaves exactly the same trace it
-     *  left before this reservation step existed: none. Guarded the same way
-     *  as `reconcile`, so whichever of the two runs first on a given row
-     *  wins and the other is a no-op. Scoped to the reserving account the same
-     *  way `reconcile` is, and for the same reason. */
+     *  `reconcile` or `fail` — it aborted before the provider was called.
+     *  Deletes the placeholder row only while unsettled and unexpired. */
     async release(id: number, userId: string): Promise<void> {
       const identity = requireUserId(userId);
       await withTenantStatement(db, identity, async (client) => {
         await client.query(
-          "DELETE FROM personal.ai_usage WHERE id = $1 AND user_id = $2 AND reconciled_at IS NULL",
+          `DELETE FROM personal.ai_usage
+           WHERE id = $1 AND user_id = $2 AND reconciled_at IS NULL AND ${RESERVATION_UNEXPIRED_SQL}`,
           [id, identity],
         );
       });
