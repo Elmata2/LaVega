@@ -1,0 +1,90 @@
+name: mutation pilot
+
+# Report-only mutation testing for money and tax logic in @lavega/core.
+#
+# This workflow deliberately does NOT run on pull_request and does NOT fail:
+# a mutation score is a review input, not a gate. It exists so survivors are
+# visible without paying the runtime on every PR. Promotion to a gate is a
+# separate decision — see docs/testing/mutation-testing.md.
+on:
+  schedule:
+    # Weekly, Sunday 04:00 UTC. The pilot is slow (every mutant re-runs the
+    # covering tests), so a nightly cadence would burn runner minutes for a
+    # signal that barely changes day to day.
+    - cron: "0 4 * * 0"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mutation-pilot
+  cancel-in-progress: false
+
+jobs:
+  core-pilot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with: { fetch-depth: 1 }
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with: { bun-version: "1.4.4" }
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with: { node-version: 22 }
+      # Incremental mode: only mutants whose covering tests changed are re-run.
+      # A cache miss just means a full run, never a wrong result.
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: packages/core/.mutation
+          key: mutation-core-${{ github.run_id }}
+          restore-keys: mutation-core-
+      - run: bun install --frozen-lockfile
+      - name: Run mutation pilot (@lavega/core)
+        # continue-on-error keeps a crashed run from colouring the schedule red;
+        # the artifact and the summary still show what happened.
+        continue-on-error: true
+        run: bun run --cwd packages/core mutation
+      - name: Score summary
+        if: always()
+        run: |
+          report=packages/core/reports/mutation/mutation.json
+          if [ ! -f "$report" ]; then
+            echo "No mutation report was produced; see the run log above." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          node -e '
+            const fs = require("node:fs");
+            const r = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+            const mutants = Object.values(r.files ?? {}).flatMap((f) => f.mutants);
+            const count = (k) => mutants.filter((m) => m.status === k).length;
+            const killed = count("Killed");
+            const timeout = count("Timeout");
+            const survived = count("Survived");
+            const noCoverage = count("NoCoverage");
+            const errored = count("RuntimeError") + count("CompileError");
+            const ignored = count("Ignored");
+            const total = mutants.length - ignored;
+            const score = total === 0 ? 0 : ((killed + timeout) / total) * 100;
+            const lines = [
+              "## Mutation pilot — @lavega/core",
+              "",
+              `| Metric | Value |`,
+              `| --- | --- |`,
+              `| Mutation score | ${score.toFixed(1)}% |`,
+              `| Killed | ${killed} |`,
+              `| Survived | ${survived} |`,
+              `| No coverage | ${noCoverage} |`,
+              `| Timeout | ${timeout} |`,
+              `| Errored | ${errored} |`,
+              "",
+              "Survivors are listed in the `mutation-report` artifact. A survivor means a test is missing an assertion, not that the code is wrong.",
+            ];
+            fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, lines.join("\n") + "\n");
+          ' "$report"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: mutation-report
+          path: packages/core/reports/mutation
+          retention-days: 30

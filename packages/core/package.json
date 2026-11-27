@@ -9,7 +9,9 @@
   },
   "scripts": {
     "typecheck": "node ../../scripts/typecheck.mjs",
-    "test": "vitest run --pool=threads --no-isolate"
+    "test": "vitest run --pool=threads --no-isolate",
+    "mutation": "stryker run",
+    "mutation:dry": "stryker run --dryRunOnly"
   },
   "dependencies": {
     "effect": "^4.0.1"

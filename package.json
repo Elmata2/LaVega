@@ -38,13 +38,16 @@
     "business-savings:watch": "tsx scripts/business-savings-watch.ts",
     "catalog:find-pdfs": "tsx scripts/find-tariff-pdfs.ts",
     "worktree:prune": "node scripts/worktree-prune.mjs",
-    "prepare": "git config core.hooksPath .githooks || true"
+    "prepare": "git config core.hooksPath .githooks || true",
+    "mutation:pilot": "bun run --cwd packages/core mutation"
   },
   "devDependencies": {
     "@lavega/core": "workspace:*",
     "@lavega/database": "workspace:*",
     "@neondatabase/serverless": "^1.0.2",
     "@shadcn/lint": "^0.1.0",
+    "@stryker-mutator/core": "10.1.1",
+    "@stryker-mutator/vitest-runner": "10.1.1",
     "@vercel/oidc": "3.2.0",
     "esbuild": "^0.28.1",
     "jsdom": "^30.0.1",

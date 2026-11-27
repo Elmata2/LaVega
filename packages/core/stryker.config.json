@@ -1,0 +1,27 @@
+{
+  "$schema": "https://raw.githubusercontent.com/stryker-mutator/stryker-js/master/packages/core/schema/stryker-core.json",
+  "_comment": [
+    "Mutation pilot: report-only, never gates a PR.",
+    "Scope is deliberately small: money and tax logic, where a wrong comparison",
+    "or a dropped branch is a real financial error. Add files one at a time and",
+    "watch the run time before widening the list.",
+    "src/taxpacks/*.ts are constant rate tables. ignoreStatic skips them entirely,",
+    "so they are not listed: they need their own value assertions instead.",
+    "Full rationale and the survivor workflow: docs/testing/mutation-testing.md"
+  ],
+  "plugins": ["@stryker-mutator/vitest-runner"],
+  "testRunner": "vitest",
+  "vitest": { "configFile": "vitest.mutation.config.ts" },
+  "coverageAnalysis": "perTest",
+  "mutate": ["src/money.ts", "src/tax.ts", "src/investing/costBasis.ts"],
+  "reporters": ["clear-text", "progress", "html", "json"],
+  "htmlReporter": { "fileName": "reports/mutation/index.html" },
+  "jsonReporter": { "fileName": "reports/mutation/mutation.json" },
+  "thresholds": { "high": 80, "low": 60 },
+  "incremental": true,
+  "incrementalFile": ".mutation/incremental.json",
+  "concurrency": 4,
+  "timeoutMS": 60000,
+  "ignoreStatic": true,
+  "ignorePatterns": [".mutation/**", "reports/**", "node_modules/**"]
+}
