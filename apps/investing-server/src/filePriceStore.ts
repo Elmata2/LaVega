@@ -166,7 +166,10 @@ export function createFileSharedPriceStore(
       backend.hydrate(converted);
       if (converted.bars.length > 0 || converted.coverage.length > 0)
         await shared.update(() => converted);
-    })();
+    })().catch((error: unknown) => {
+      ready = null;
+      throw error;
+    });
     return ready;
   };
   const write = async <R>(operation: () => Promise<R>): Promise<R> => {

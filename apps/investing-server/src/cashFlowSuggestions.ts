@@ -41,6 +41,11 @@ export type CashFlowStore = {
   saveSuggestions(suggestions: readonly CashFlowSuggestion[]): Promise<void>;
   listRules(): Promise<CashFlowRule[]>;
   saveRules(rules: readonly CashFlowRule[]): Promise<void>;
+  /** Atomically persists both rules and suggestions together. */
+  saveRulesAndSuggestions?(
+    rules: readonly CashFlowRule[],
+    suggestions: readonly CashFlowSuggestion[],
+  ): Promise<void>;
   /** Explicit owner switch. Default false: the app behaves as it does today. */
   suggestionsEnabled(): Promise<boolean>;
   setSuggestionsEnabled(enabled: boolean): Promise<void>;
@@ -62,6 +67,10 @@ export function createMemoryCashFlowStore(): CashFlowStore {
     },
     async saveRules(next) {
       rules = [...next];
+    },
+    async saveRulesAndSuggestions(nextRules, nextSuggestions) {
+      rules = [...nextRules];
+      suggestions = [...nextSuggestions];
     },
     async suggestionsEnabled() {
       return enabled;

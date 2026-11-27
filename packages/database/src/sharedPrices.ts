@@ -109,6 +109,35 @@ function sharedPriceBarParams(
   ];
 }
 
+export class PriceClaimLostError extends Error {
+  constructor(
+    readonly instrumentKey: string,
+    readonly owner: string,
+  ) {
+    super(`Price claim lost for ${instrumentKey} (owner ${owner})`);
+    this.name = "PriceClaimLostError";
+  }
+}
+
+export class CoverageLifecycleConflictError extends Error {
+  constructor(readonly activeFields: readonly string[]) {
+    super(`Coverage lifecycle dates are mutually exclusive, got: ${activeFields.join(", ")}`);
+    this.name = "CoverageLifecycleConflictError";
+  }
+}
+
+function assertMutuallyExclusiveLifecycleDates(coverage: {
+  delistedSince?: string;
+  listingMissingSince?: string;
+  provisionalThrough?: string;
+}): void {
+  const active: string[] = [];
+  if (coverage.delistedSince != null) active.push("delistedSince");
+  if (coverage.listingMissingSince != null) active.push("listingMissingSince");
+  if (coverage.provisionalThrough != null) active.push("provisionalThrough");
+  if (active.length > 1) throw new CoverageLifecycleConflictError(active);
+}
+
 export type SharedPriceRepository = {
   getRange(key: SharedPriceKey, from?: string, to?: string): Promise<SharedPriceBarRow[]>;
   getRanges(keys: readonly SharedPriceKey[]): Promise<Map<string, SharedPriceBarRow[]>>;
@@ -119,12 +148,18 @@ export type SharedPriceRepository = {
     bars: readonly SharedPriceBarRow[],
     from?: string,
     to?: string,
+    owner?: string,
   ): Promise<void>;
   getCoverage(key: SharedPriceKey): Promise<SharedPriceCoverageRow | null>;
-  putCoverage(instrumentKey: string, coverage: SharedPriceCoverageRow): Promise<void>;
+  putCoverage(
+    instrumentKey: string,
+    coverage: SharedPriceCoverageRow,
+    owner?: string,
+  ): Promise<void>;
   latestChange(instrumentKeys: readonly string[]): Promise<string | null>;
   adoptAlias(key: string, alias: string): Promise<void>;
   claim(key: string, owner: string, ttlMs: number): Promise<boolean>;
+  renewClaim(key: string, owner: string, ttlMs: number): Promise<boolean>;
   release(key: string, owner: string): Promise<void>;
 };
 
@@ -209,23 +244,79 @@ export function createSharedPriceRepository(db: Database): SharedPriceRepository
         touchCoverage(instrumentKey),
       ]);
     },
-    async replaceRange(instrumentKey, bars, from, to) {
+    async replaceRange(instrumentKey, bars, from, to, owner) {
       const conditions = ["instrument_key = $1", "date <> ALL($2::date[])"];
       const params: unknown[] = [instrumentKey, bars.map((bar) => bar.date)];
       if (from !== undefined) conditions.push(`date >= $${params.push(from)}`);
       if (to !== undefined) conditions.push(`date <= $${params.push(to)}`);
+      if (owner !== undefined) {
+        const ownerParam = params.push(owner);
+        conditions.push(
+          `EXISTS (SELECT 1 FROM investing.instrument_price_claims WHERE instrument_key = $1 AND owner = $${ownerParam} AND claimed_until >= now())`,
+        );
+      }
       const statements = [
         db.http.query(
           `DELETE FROM investing.instrument_price_bars WHERE ${conditions.join(" AND ")}`,
           params,
         ),
       ];
-      if (bars.length > 0)
+      if (bars.length > 0) {
+        if (owner !== undefined) {
+          statements.push(
+            db.http.query(
+              `INSERT INTO investing.instrument_price_bars
+                 (instrument_key, date, close, currency, provider, split)
+               SELECT $1, d, c, cur, COALESCE(
+                 (SELECT provider FROM investing.instrument_price_coverage WHERE instrument_key = $1),
+                 'unknown'
+               ), sp
+               FROM unnest($2::date[], $3::numeric[], $4::text[], $5::numeric[]) AS rows(d, c, cur, sp)
+               WHERE EXISTS (
+                 SELECT 1 FROM investing.instrument_price_claims
+                 WHERE instrument_key = $1 AND owner = $6 AND claimed_until >= now()
+               )
+               ON CONFLICT (instrument_key, date) DO UPDATE SET
+                 close = EXCLUDED.close, currency = EXCLUDED.currency,
+                 provider = EXCLUDED.provider, split = EXCLUDED.split, updated_at = CURRENT_TIMESTAMP`,
+              [...sharedPriceBarParams(instrumentKey, bars), owner],
+            ),
+          );
+        } else {
+          statements.push(
+            db.http.query(UPSERT_SHARED_PRICE_BARS, sharedPriceBarParams(instrumentKey, bars)),
+          );
+        }
+      }
+      if (owner !== undefined) {
         statements.push(
-          db.http.query(UPSERT_SHARED_PRICE_BARS, sharedPriceBarParams(instrumentKey, bars)),
+          db.http.query(
+            `UPDATE investing.instrument_price_coverage
+             SET updated_at = CURRENT_TIMESTAMP
+             WHERE instrument_key = $1
+               AND EXISTS (
+                 SELECT 1 FROM investing.instrument_price_claims
+                 WHERE instrument_key = $1 AND owner = $2 AND claimed_until >= now()
+               )`,
+            [instrumentKey, owner],
+          ),
         );
-      statements.push(touchCoverage(instrumentKey));
-      await db.http.transaction(statements);
+        statements.push(
+          db.http.query(
+            `SELECT instrument_key FROM investing.instrument_price_claims
+             WHERE instrument_key = $1 AND owner = $2 AND claimed_until >= now()`,
+            [instrumentKey, owner],
+          ),
+        );
+      } else {
+        statements.push(touchCoverage(instrumentKey));
+      }
+      const results = await db.http.transaction(statements);
+      if (owner !== undefined) {
+        const ownership = results.at(-1);
+        if (!ownership || ownership.rows.length === 0)
+          throw new PriceClaimLostError(instrumentKey, owner);
+      }
     },
     async getCoverage(key) {
       const resolved = await resolveReadKey(key);
@@ -236,7 +327,47 @@ export function createSharedPriceRepository(db: Database): SharedPriceRepository
       const row = result.rows[0];
       return row ? sharedPriceCoverageRow(row) : null;
     },
-    async putCoverage(instrumentKey, coverage) {
+    async putCoverage(instrumentKey, coverage, owner) {
+      assertMutuallyExclusiveLifecycleDates(coverage);
+      const baseParams = [
+        instrumentKey,
+        coverage.from,
+        coverage.to,
+        coverage.listing,
+        coverage.currency,
+        coverage.provider,
+        coverage.delistedSince ?? null,
+        coverage.listingMissingSince ?? null,
+        coverage.listingStart ?? null,
+        coverage.provisionalThrough ?? null,
+      ];
+      if (owner !== undefined) {
+        const result = await db.http.query(
+          `WITH owned AS (
+             SELECT 1 FROM investing.instrument_price_claims
+             WHERE instrument_key = $1 AND owner = $11 AND claimed_until >= now()
+             FOR SHARE
+           )
+           INSERT INTO investing.instrument_price_coverage
+             (instrument_key, from_date, to_date, listing, currency, provider,
+              delisted_since, listing_missing_since, listing_start, provisional_through)
+           SELECT $1, $2::date, $3::date, $4::text, $5::text, $6::text,
+                  $7::date, $8::timestamptz, $9::date, $10::date
+           FROM owned
+           ON CONFLICT (instrument_key) DO UPDATE SET
+             from_date = EXCLUDED.from_date, to_date = EXCLUDED.to_date,
+             listing = EXCLUDED.listing, currency = EXCLUDED.currency,
+             provider = EXCLUDED.provider, delisted_since = EXCLUDED.delisted_since,
+             listing_missing_since = EXCLUDED.listing_missing_since,
+             listing_start = EXCLUDED.listing_start,
+             provisional_through = EXCLUDED.provisional_through,
+             updated_at = CURRENT_TIMESTAMP
+           RETURNING instrument_key`,
+          [...baseParams, owner],
+        );
+        if (result.rows.length === 0) throw new PriceClaimLostError(instrumentKey, owner);
+        return;
+      }
       await db.http.query(
         `INSERT INTO investing.instrument_price_coverage
            (instrument_key, from_date, to_date, listing, currency, provider,
@@ -250,18 +381,7 @@ export function createSharedPriceRepository(db: Database): SharedPriceRepository
            listing_start = EXCLUDED.listing_start,
            provisional_through = EXCLUDED.provisional_through,
            updated_at = CURRENT_TIMESTAMP`,
-        [
-          instrumentKey,
-          coverage.from,
-          coverage.to,
-          coverage.listing,
-          coverage.currency,
-          coverage.provider,
-          coverage.delistedSince ?? null,
-          coverage.listingMissingSince ?? null,
-          coverage.listingStart ?? null,
-          coverage.provisionalThrough ?? null,
-        ],
+        baseParams,
       );
     },
     async latestChange(instrumentKeys) {
@@ -302,6 +422,53 @@ export function createSharedPriceRepository(db: Database): SharedPriceRepository
            ON CONFLICT (instrument_key) DO UPDATE SET
              from_date = LEAST(investing.instrument_price_coverage.from_date, EXCLUDED.from_date),
              to_date = GREATEST(investing.instrument_price_coverage.to_date, EXCLUDED.to_date),
+             listing_start = LEAST(investing.instrument_price_coverage.listing_start, EXCLUDED.listing_start),
+             delisted_since = CASE
+               WHEN investing.instrument_price_coverage.to_date >= EXCLUDED.to_date THEN
+                 CASE
+                   WHEN investing.instrument_price_coverage.delisted_since IS NOT NULL
+                   THEN LEAST(investing.instrument_price_coverage.delisted_since, EXCLUDED.delisted_since)
+                   ELSE NULL
+                 END
+               ELSE EXCLUDED.delisted_since
+             END,
+             listing_missing_since = CASE
+               WHEN investing.instrument_price_coverage.to_date >= EXCLUDED.to_date THEN
+                 CASE
+                   WHEN investing.instrument_price_coverage.delisted_since IS NULL
+                    AND investing.instrument_price_coverage.listing_missing_since IS NOT NULL
+                   THEN LEAST(investing.instrument_price_coverage.listing_missing_since, EXCLUDED.listing_missing_since)
+                   ELSE NULL
+                 END
+               ELSE
+                 CASE
+                   WHEN EXCLUDED.delisted_since IS NULL THEN EXCLUDED.listing_missing_since
+                   ELSE NULL
+                 END
+             END,
+             provisional_through = CASE
+               WHEN investing.instrument_price_coverage.to_date >= EXCLUDED.to_date THEN
+                 CASE
+                   WHEN investing.instrument_price_coverage.delisted_since IS NULL
+                    AND investing.instrument_price_coverage.listing_missing_since IS NULL THEN
+                     CASE
+                       WHEN investing.instrument_price_coverage.provisional_through IS NOT NULL
+                       THEN GREATEST(investing.instrument_price_coverage.provisional_through, EXCLUDED.provisional_through)
+                       WHEN investing.instrument_price_coverage.to_date = EXCLUDED.to_date
+                        AND EXCLUDED.delisted_since IS NULL
+                        AND EXCLUDED.listing_missing_since IS NULL
+                       THEN EXCLUDED.provisional_through
+                       ELSE NULL
+                     END
+                   ELSE NULL
+                 END
+               ELSE
+                 CASE
+                   WHEN EXCLUDED.delisted_since IS NULL AND EXCLUDED.listing_missing_since IS NULL
+                   THEN EXCLUDED.provisional_through
+                   ELSE NULL
+                 END
+             END,
              updated_at = CURRENT_TIMESTAMP`,
           [key, alias],
         ),
@@ -318,6 +485,16 @@ export function createSharedPriceRepository(db: Database): SharedPriceRepository
          ON CONFLICT (instrument_key) DO UPDATE
            SET owner = EXCLUDED.owner, claimed_until = EXCLUDED.claimed_until
            WHERE investing.instrument_price_claims.claimed_until < now()
+         RETURNING instrument_key`,
+        [key, owner, ttlMs],
+      );
+      return result.rows.length > 0;
+    },
+    async renewClaim(key, owner, ttlMs) {
+      const result = await db.http.query(
+        `UPDATE investing.instrument_price_claims
+         SET claimed_until = now() + ($3::double precision * INTERVAL '1 millisecond')
+         WHERE instrument_key = $1 AND owner = $2 AND claimed_until >= now()
          RETURNING instrument_key`,
         [key, owner, ttlMs],
       );

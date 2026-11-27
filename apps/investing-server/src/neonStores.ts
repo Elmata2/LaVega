@@ -7,6 +7,7 @@ import {
   createPriceSyncStateRepository,
   createSharedPriceRepository,
   createSyncStateRepository,
+  withTenantStatement,
   type Database,
 } from "@lavega/database";
 import type { Layer } from "effect";
@@ -340,6 +341,19 @@ export function createNeonCashFlowStore(db: Database, tenantId: string): CashFlo
     },
     async saveRules(rules) {
       await repo().setCashFlowRules([...rules]);
+    },
+    async saveRulesAndSuggestions(rules, suggestions) {
+      await withTenantStatement(db, tenantId, async (client) => {
+        await client.query(
+          `INSERT INTO investing.preferences (user_id, cash_flow_rules, cash_flow_suggestions)
+           VALUES (current_setting('app.user_id'), $1::jsonb, $2::jsonb)
+           ON CONFLICT (user_id) DO UPDATE
+             SET cash_flow_rules = EXCLUDED.cash_flow_rules,
+                 cash_flow_suggestions = EXCLUDED.cash_flow_suggestions,
+                 updated_at = CURRENT_TIMESTAMP`,
+          [JSON.stringify([...rules]), JSON.stringify([...suggestions])],
+        );
+      });
     },
     async suggestionsEnabled() {
       return repo().getCashFlowSuggestionsEnabled();

@@ -13,6 +13,8 @@ export interface FlexQueryConfig {
   token: string;
   queryId: string;
   endpoint?: string;
+  /** Reuse a previously issued Flex reference code instead of calling SendRequest again. */
+  referenceCode?: string;
   /** Test/config override; production defaults match IBKR's expected delay. */
   initialWaitMs?: number;
   pollDelayMs?: number;
@@ -31,10 +33,68 @@ const FLEX_USER_AGENT = "Gloomberb/1.0 Flex";
 const FLEX_STATEMENT_INITIAL_WAIT_MS = 3_000;
 const FLEX_STATEMENT_POLL_DELAY_MS = 5_000;
 const FLEX_STATEMENT_MAX_DOWNLOAD_ATTEMPTS = 60;
+const FLEX_REFERENCE_TTL_MS = 10 * 60_000;
 const FLEX_DEADLINE_MESSAGE =
   "IBKR Flex sync paused before the host time limit; retry on the next sync";
 const FLEX_BUDGET_UNAVAILABLE_MESSAGE =
   "IBKR Flex sync paused: the shared request budget is unavailable; retry on the next sync";
+
+/** Retryable failure while polling a generated Flex statement. Carries the
+ *  issued reference code so the next run can resume polling without calling
+ *  SendRequest again. */
+export class FlexStatementRetryableError extends Error {
+  readonly referenceCode?: string;
+
+  constructor(message: string, referenceCode?: string) {
+    super(message);
+    this.name = "FlexStatementRetryableError";
+    if (referenceCode !== undefined) this.referenceCode = referenceCode;
+  }
+}
+
+type PendingFlexReference = { readonly referenceCode: string; readonly createdAt: number };
+const pendingFlexReferences = new Map<string, PendingFlexReference>();
+
+function pendingReferenceKey(
+  config: Pick<FlexQueryConfig, "endpoint" | "token" | "queryId">,
+): string {
+  return `${config.endpoint || IBKR_STATEMENT_URL}\0${config.token}\0${config.queryId}`;
+}
+
+function takePendingReference(
+  config: Pick<FlexQueryConfig, "endpoint" | "token" | "queryId">,
+): string | null {
+  const key = pendingReferenceKey(config);
+  const entry = pendingFlexReferences.get(key);
+  if (!entry) return null;
+  const now = Date.now();
+  if (now < entry.createdAt || now - entry.createdAt >= FLEX_REFERENCE_TTL_MS) {
+    pendingFlexReferences.delete(key);
+    return null;
+  }
+  return entry.referenceCode;
+}
+
+function savePendingReference(
+  config: Pick<FlexQueryConfig, "endpoint" | "token" | "queryId">,
+  referenceCode: string,
+): void {
+  pendingFlexReferences.set(pendingReferenceKey(config), {
+    referenceCode,
+    createdAt: Date.now(),
+  });
+}
+
+function clearPendingReference(
+  config: Pick<FlexQueryConfig, "endpoint" | "token" | "queryId">,
+): void {
+  pendingFlexReferences.delete(pendingReferenceKey(config));
+}
+
+/** Clears cached pending Flex reference codes (primarily for test isolation). */
+export function clearPendingFlexReferences(): void {
+  pendingFlexReferences.clear();
+}
 
 type FlexRequestPhase = "request" | "download";
 
@@ -145,8 +205,14 @@ function flexError(providerMessage: string, context: FlexErrorContext): Error {
   return new Error(buildFlexErrorMessage(providerMessage, context));
 }
 
-function throwIfFlexDeadline(deadlineMs: number | undefined, workMs = 0): void {
-  if (!hasBrokerSyncTime(deadlineMs, workMs)) throw new Error(FLEX_DEADLINE_MESSAGE);
+function throwIfFlexDeadline(
+  deadlineMs: number | undefined,
+  workMs = 0,
+  referenceCode?: string,
+): void {
+  if (!hasBrokerSyncTime(deadlineMs, workMs)) {
+    throw new FlexStatementRetryableError(FLEX_DEADLINE_MESSAGE, referenceCode);
+  }
 }
 
 /** Flex's budget is per token: `SendRequest` and every `GetStatement` poll share one key. */
@@ -160,12 +226,17 @@ async function awaitFlexSlot(
   budget: PartnerBudgetClient,
   key: PartnerKey,
   deadlineMs: number | undefined,
+  referenceCode?: string,
 ): Promise<void> {
   try {
     await budget.awaitSlot(key, deadlineMs);
   } catch (error) {
-    if (isPartnerWait(error)) throw new Error(FLEX_DEADLINE_MESSAGE);
-    if (isPartnerBudgetUnavailable(error)) throw new Error(FLEX_BUDGET_UNAVAILABLE_MESSAGE);
+    if (isPartnerWait(error)) {
+      throw new FlexStatementRetryableError(FLEX_DEADLINE_MESSAGE, referenceCode);
+    }
+    if (isPartnerBudgetUnavailable(error)) {
+      throw new FlexStatementRetryableError(FLEX_BUDGET_UNAVAILABLE_MESSAGE, referenceCode);
+    }
     throw error;
   }
 }
@@ -227,7 +298,7 @@ async function getFlexStatement(
   const budget = context.partnerBudget ?? createMemoryPartnerBudgetClient();
   const key = await flexKey(token);
   const initialWaitMs = context.initialWaitMs ?? FLEX_STATEMENT_INITIAL_WAIT_MS;
-  throwIfFlexDeadline(context.deadlineMs, initialWaitMs);
+  throwIfFlexDeadline(context.deadlineMs, initialWaitMs, referenceCode);
   await new Promise((resolve) => setTimeout(resolve, initialWaitMs));
 
   const endpoint = resolveFlexGetEndpoint(context.endpoint);
@@ -243,19 +314,22 @@ async function getFlexStatement(
   ) {
     let resp: Response;
     let text: string;
-    throwIfFlexDeadline(context.deadlineMs);
-    await awaitFlexSlot(budget, key, context.deadlineMs);
+    throwIfFlexDeadline(context.deadlineMs, 0, referenceCode);
+    await awaitFlexSlot(budget, key, context.deadlineMs, referenceCode);
     try {
       resp = await httpFetch(url, flexRequestInit());
       text = await resp.text();
     } catch (error) {
-      throw flexError(error instanceof Error ? error.message : "Network request failed", {
-        phase: "download",
-        endpoint,
-        queryId: context.queryId,
-        token,
+      throw new FlexStatementRetryableError(
+        buildFlexErrorMessage(error instanceof Error ? error.message : "Network request failed", {
+          phase: "download",
+          endpoint,
+          queryId: context.queryId,
+          token,
+          referenceCode,
+        }),
         referenceCode,
-      });
+      );
     }
 
     if (text.includes("<FlexQueryResponse") || text.includes("<FlexStatements")) {
@@ -268,7 +342,7 @@ async function getFlexStatement(
       (!providerMessage && (resp.status >= 500 || text.trim() === ""))
     ) {
       const pollDelayMs = context.pollDelayMs ?? FLEX_STATEMENT_POLL_DELAY_MS;
-      throwIfFlexDeadline(context.deadlineMs, pollDelayMs);
+      throwIfFlexDeadline(context.deadlineMs, pollDelayMs, referenceCode);
       await new Promise((resolve) => setTimeout(resolve, pollDelayMs));
       continue;
     }
@@ -299,18 +373,40 @@ async function getFlexStatement(
     );
   }
 
-  throw flexError("statement generation timed out", {
-    phase: "download",
-    endpoint,
-    queryId: context.queryId,
-    token,
+  throw new FlexStatementRetryableError(
+    buildFlexErrorMessage("statement generation timed out", {
+      phase: "download",
+      endpoint,
+      queryId: context.queryId,
+      token,
+      referenceCode,
+    }),
     referenceCode,
-  });
+  );
 }
 
 export async function loadFlexStatement(config: FlexQueryConfig): Promise<string> {
   // One budget for the whole load, so the polls queue behind the request.
   const partnerBudget = config.partnerBudget ?? createMemoryPartnerBudgetClient();
-  const referenceCode = await requestFlexStatement({ ...config, partnerBudget });
-  return getFlexStatement(config.token, referenceCode, { ...config, partnerBudget });
+  const cached = config.referenceCode ?? takePendingReference(config);
+  const referenceCode = cached ?? (await requestFlexStatement({ ...config, partnerBudget }));
+  try {
+    const xml = await getFlexStatement(config.token, referenceCode, {
+      ...config,
+      // When resuming a previously issued referenceCode, IBKR has already had
+      // time to generate the statement, so skip the extra initial wait unless
+      // the caller explicitly asked for one.
+      initialWaitMs: cached !== null ? (config.initialWaitMs ?? 0) : config.initialWaitMs,
+      partnerBudget,
+    });
+    clearPendingReference(config);
+    return xml;
+  } catch (error) {
+    if (error instanceof FlexStatementRetryableError) {
+      savePendingReference(config, referenceCode);
+    } else {
+      clearPendingReference(config);
+    }
+    throw error;
+  }
 }

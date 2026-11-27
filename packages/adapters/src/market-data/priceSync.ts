@@ -108,13 +108,60 @@ export async function syncPrices(input: {
   const today = request.today ?? new Date(nowMs).toISOString().slice(0, 10);
   const symbol = request.symbol;
 
-  const claimed = await store.claim(key, owner, input.claimTtlMs ?? PRICE_KEY_CLAIM_TTL_MS);
+  const claimTtlMs = input.claimTtlMs ?? PRICE_KEY_CLAIM_TTL_MS;
+  const claimed = await store.claim(key, owner, claimTtlMs);
   if (!claimed) return { bars: [], problems: [], fetched: false, pending: true };
 
-  const result = await run();
+  type ClaimAwareStore = Omit<SharedPriceStore, "replaceRange" | "putCoverage"> & {
+    replaceRange(
+      instrumentKey: string,
+      bars: readonly SharedPriceBar[],
+      from?: string,
+      to?: string,
+      owner?: string,
+    ): Promise<void>;
+    putCoverage(
+      instrumentKey: string,
+      coverage: SharedPriceCoverage,
+      owner?: string,
+    ): Promise<void>;
+    renewClaim?: (key: string, owner: string, ttlMs: number) => Promise<boolean>;
+  };
+  const claimStore = store as ClaimAwareStore;
+  let claimLost = false;
+  const renewIntervalMs = claimTtlMs > 0 ? Math.max(1, Math.floor(claimTtlMs / 2)) : 0;
+  const renewTimer =
+    claimStore.renewClaim && renewIntervalMs > 0
+      ? setInterval(() => {
+          void claimStore.renewClaim!(key, owner, claimTtlMs)
+            .then((renewed) => {
+              if (!renewed) claimLost = true;
+            })
+            .catch(() => {
+              claimLost = true;
+            });
+        }, renewIntervalMs)
+      : undefined;
+  renewTimer?.unref?.();
+
+  const isClaimLostError = (error: unknown): boolean =>
+    error instanceof Error && error.name === "PriceClaimLostError";
+
+  let result: PriceSyncResult;
+  try {
+    result = await run();
+  } catch (error) {
+    if (isClaimLostError(error)) {
+      claimLost = true;
+      return { bars: [], problems: [], fetched: false, pending: true };
+    }
+    throw error;
+  } finally {
+    if (renewTimer !== undefined) clearInterval(renewTimer);
+  }
   /* Released only after the write path finished; a throw leaves the claim to
    * expire, which is the retry the next run needs. */
-  await store.release(key, owner);
+  if (!claimLost) await store.release(key, owner);
   return result;
 
   async function run(): Promise<PriceSyncResult> {
@@ -197,9 +244,28 @@ export async function syncPrices(input: {
     const read = async () => withSymbol(await store.getRange(address, wanted.from, today));
     const isClosedNotFound = (answer: Answer | null): boolean =>
       answer?.ok === false && answer.notFound === true && request.kind === "closed";
+    const assertClaimHeld = () => {
+      if (claimLost) {
+        const error = new Error(`Price claim lost for ${key} (owner ${owner})`);
+        error.name = "PriceClaimLostError";
+        throw error;
+      }
+    };
+    const replaceRangeOwned = async (
+      bars: readonly SharedPriceBar[],
+      from?: string,
+      to?: string,
+    ) => {
+      assertClaimHeld();
+      await claimStore.replaceRange(key, bars, from, to, owner);
+    };
+    const putCoverageOwned = async (next: SharedPriceCoverage) => {
+      assertClaimHeld();
+      await claimStore.putCoverage(key, next, owner);
+    };
     const recordDelisted = async (): Promise<PriceSyncResult> => {
       await adoptAliasOnce();
-      await store.putCoverage(key, {
+      await putCoverageOwned({
         from: coverage?.from ?? wanted.from ?? today,
         to: coverage?.to ?? today,
         listing: coverage?.listing ?? null,
@@ -237,8 +303,8 @@ export async function syncPrices(input: {
           fetched: true,
         };
       await adoptAliasOnce();
-      await store.replaceRange(key, withoutSymbol(answer.bars), from, today);
-      await store.putCoverage(key, {
+      await replaceRangeOwned(withoutSymbol(answer.bars), from, today);
+      await putCoverageOwned({
         from: from ?? first.date,
         to: answer.bars.at(-1)!.date,
         ...answer.provenance,
@@ -261,13 +327,15 @@ export async function syncPrices(input: {
       );
       if (answer.ok && answer.provenance) {
         await adoptAliasOnce();
-        await store.replaceRange(key, withoutSymbol(answer.bars), provisionalFrom, today);
+        await replaceRangeOwned(withoutSymbol(answer.bars), provisionalFrom, today);
         const last = answer.bars.at(-1);
-        await store.putCoverage(key, {
+        await putCoverageOwned({
           ...coverage,
           listing: answer.provenance.listing ?? coverage.listing,
           to: last && last.date > coverage.to ? last.date : coverage.to,
           provider: answer.provider,
+          delistedSince: undefined,
+          listingMissingSince: undefined,
           provisionalThrough: answer.provisionalThrough,
         });
         return { bars: await read(), problems: [], fetched: true };
@@ -379,15 +447,19 @@ export async function syncPrices(input: {
     if (answered.length === 0) {
       if (nextListingMissingSince !== coverage.listingMissingSince) {
         await adoptAliasOnce();
-        await store.putCoverage(key, {
+        await putCoverageOwned({
           ...coverage,
           listingMissingSince: nextListingMissingSince,
+          ...(nextListingMissingSince !== undefined
+            ? { delistedSince: undefined, provisionalThrough: undefined }
+            : {}),
         });
       }
       return { bars: withSymbol(cachedBars), problems, fetched: true };
     }
     const bars = answered.flatMap((answer) => answer.bars);
     if (bars.length) {
+      assertClaimHeld();
       await adoptAliasOnce();
       await store.upsert(key, withoutSymbol(bars));
     }
@@ -398,8 +470,47 @@ export async function syncPrices(input: {
       .map((answer) => (answer?.ok ? answer.provisionalThrough : undefined))
       .filter((value): value is string => value !== undefined)
       .at(-1);
+    const nextLifecycle: Pick<
+      SharedPriceCoverage,
+      "delistedSince" | "listingMissingSince" | "provisionalThrough"
+    > =
+      nextListingMissingSince !== undefined
+        ? {
+            listingMissingSince: nextListingMissingSince,
+            delistedSince: undefined,
+            provisionalThrough: undefined,
+          }
+        : answeredProvisional !== undefined
+          ? {
+              provisionalThrough: answeredProvisional,
+              delistedSince: undefined,
+              listingMissingSince: undefined,
+            }
+          : bars.length > 0
+            ? {
+                delistedSince: undefined,
+                listingMissingSince: undefined,
+                provisionalThrough: coverage.provisionalThrough,
+              }
+            : coverage.delistedSince !== undefined
+              ? {
+                  delistedSince: coverage.delistedSince,
+                  listingMissingSince: undefined,
+                  provisionalThrough: undefined,
+                }
+              : coverage.listingMissingSince !== undefined
+                ? {
+                    delistedSince: undefined,
+                    listingMissingSince: coverage.listingMissingSince,
+                    provisionalThrough: undefined,
+                  }
+                : {
+                    delistedSince: undefined,
+                    listingMissingSince: undefined,
+                    provisionalThrough: coverage.provisionalThrough,
+                  };
     await adoptAliasOnce();
-    await store.putCoverage(key, {
+    await putCoverageOwned({
       ...coverage,
       listing: provenances.at(-1)?.listing ?? coverage.listing,
       from: prefix && before?.ok ? prefix.from : coverage.from,
@@ -409,9 +520,7 @@ export async function syncPrices(input: {
           : coverage.to,
       provider: answeredProviders.at(-1) ?? coverage.provider,
       listingStart: coverage.listingStart ?? (prefix && before?.ok ? prefix.from : undefined),
-      ...(answeredProvisional !== undefined ? { provisionalThrough: answeredProvisional } : {}),
-      delistedSince: bars.length > 0 ? undefined : coverage.delistedSince,
-      listingMissingSince: nextListingMissingSince,
+      ...nextLifecycle,
     });
     return { bars: bars.length ? await read() : withSymbol(cachedBars), problems, fetched: true };
   }

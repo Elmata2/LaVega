@@ -107,3 +107,78 @@ test("two views share one crumb negotiation: the short deadline fails alone, the
     vi.useRealTimers();
   }
 });
+
+test("concurrent 401 during crumb negotiation cannot leave crumb set with null cookie", async () => {
+  let releaseGetCrumb!: () => void;
+  const getCrumbGate = new Promise<void>((resolve) => {
+    releaseGetCrumb = resolve;
+  });
+  let cookieCount = 0;
+  let crumbCount = 0;
+  const dataCalls: Array<{ url: string; cookie: string | null }> = [];
+  let firstDataReturned401 = false;
+
+  const fetchFn = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input);
+    if (url === "https://fc.yahoo.com/") {
+      cookieCount += 1;
+      return new Response("", { headers: { "set-cookie": `A=v${cookieCount}; Path=/` } });
+    }
+    if (url.includes("getcrumb")) {
+      crumbCount += 1;
+      if (crumbCount === 2) await getCrumbGate;
+      return new Response(`crumb-v${crumbCount}`);
+    }
+    const cookie = new Headers(init?.headers).get("cookie");
+    dataCalls.push({ url, cookie });
+    if (url.includes("/first") && !firstDataReturned401) {
+      firstDataReturned401 = true;
+      return new Response("Unauthorized", { status: 401 });
+    }
+    return new Response(JSON.stringify({ ok: true }));
+  }) as typeof fetch;
+
+  const budget = createImmediatePartnerBudget();
+  const client = new YahooHttpClient(fetchFn, 20_000, 1, { partnerBudget: budget });
+
+  // Seed initial credentials (v1), then fire a request that gets 401 and triggers v2 negotiation.
+  await client.fetchJsonWithCrumb("https://query1.finance.yahoo.com/seed");
+
+  const first = client.fetchJsonWithCrumb("https://query1.finance.yahoo.com/first");
+  // Wait until v2 getcrumb is in flight, then let a concurrent 401 arrive while getcrumb is pending.
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  const concurrent = client.fetchJsonWithCrumb("https://query1.finance.yahoo.com/second");
+  releaseGetCrumb();
+
+  await expect(first).resolves.toEqual({ ok: true });
+  await expect(concurrent).resolves.toEqual({ ok: true });
+
+  // Every data request must carry a non-empty cookie matching its crumb version.
+  for (const call of dataCalls) {
+    expect(call.cookie).toMatch(/^A=v\d+$/);
+    const version = call.cookie!.slice("A=".length);
+    expect(call.url).toContain(`crumb=crumb-${version}`);
+  }
+  expect(budget.calls.filter((call) => call.call === "reject")).toEqual([]);
+});
+
+test("401 stale-cookie retry re-negotiates locally without rejecting global budget", async () => {
+  let dataAttempt = 0;
+  const budget = createImmediatePartnerBudget();
+  const fetchFn = (async (input: RequestInfo | URL) => {
+    const url = String(input);
+    if (url === "https://fc.yahoo.com/")
+      return new Response("", { headers: { "set-cookie": "A=B; Path=/" } });
+    if (url.includes("getcrumb")) return new Response("fresh-crumb");
+    dataAttempt += 1;
+    if (dataAttempt === 1) return new Response("Unauthorized", { status: 401 });
+    return new Response(JSON.stringify({ ok: true }));
+  }) as typeof fetch;
+
+  const client = new YahooHttpClient(fetchFn, 20_000, 1, { partnerBudget: budget });
+  await expect(
+    client.fetchJsonWithCrumb<{ ok: boolean }>("https://query1.finance.yahoo.com/v10/test"),
+  ).resolves.toEqual({ ok: true });
+  expect(dataAttempt).toBe(2);
+  expect(budget.calls.filter((call) => call.call === "reject")).toEqual([]);
+});

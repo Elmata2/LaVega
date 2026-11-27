@@ -227,3 +227,80 @@ async function contractStore(): Promise<BrokerSyncOperationStore> {
 
 brokerSyncLeaseContract("file broker sync", contractStore);
 brokerSyncCommitContract("file broker sync", contractStore);
+
+test("file broker sync verifies lease inside serialized store.update against concurrent takeover (TOCTOU)", async () => {
+  const filePath = await statePath();
+  let releaseDataRead!: () => void;
+  const dataReadStarted = new Promise<void>((resolve) => {
+    releaseDataRead = resolve;
+  });
+  let unblockDataRead!: () => void;
+  const dataReadGate = new Promise<void>((resolve) => {
+    unblockDataRead = resolve;
+  });
+  let snapshot: BrokerDataSnapshot = {};
+  let pauseNextRead = false;
+  const operations = createFileBrokerSyncStateStore(filePath, {
+    read: async () => {
+      if (pauseNextRead) {
+        pauseNextRead = false;
+        releaseDataRead();
+        await dataReadGate;
+      }
+      return snapshot;
+    },
+    write: async (next) => {
+      snapshot = next;
+    },
+  });
+
+  await operations.claim("trading212", {
+    leaseId: "first",
+    staleBefore: new Date(0).toISOString(),
+    progress: {
+      status: "running",
+      message: "first",
+      updatedAt: "2026-08-19T10:00:00.000Z",
+      leaseId: "first",
+    },
+  });
+
+  // Start commit with lease "first"; pause while reading data so "second" can take over.
+  pauseNextRead = true;
+  const firstCommit = operations.commit("trading212", {
+    leaseId: "first",
+    credentialGeneration: 1,
+    state: { lastSyncedAt: "2026-08-19T10:01:00.000Z", retryAfter: null },
+    progress: {
+      status: "completed",
+      message: "first done",
+      updatedAt: "2026-08-19T10:01:00.000Z",
+      leaseId: "first",
+    },
+    data: { positions: [{ id: "stale" }], trades: [], dividends: [] } as never,
+  });
+
+  await dataReadStarted;
+  // Stale takeover by "second" before "first" finishes committing.
+  const takeover = await operations.claim("trading212", {
+    leaseId: "second",
+    staleBefore: "2026-08-19T11:00:00.000Z",
+    progress: {
+      status: "running",
+      message: "second",
+      updatedAt: "2026-08-19T11:05:00.000Z",
+      leaseId: "second",
+    },
+  });
+  expect(takeover.claimed).toBe(true);
+  unblockDataRead();
+
+  expect(await firstCommit).toBe(false);
+  expect(await operations.publish("trading212", "first", progress)).toBe(false);
+  await operations.release("trading212", "first", progress);
+  // "second" still owns the lease and its progress was not overwritten by "first".
+  expect(await operations.progress("trading212")).toMatchObject({
+    leaseId: "second",
+    status: "running",
+  });
+});

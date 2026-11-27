@@ -1631,3 +1631,124 @@ test("calling syncWith on a key another owner still holds is pending", async () 
   });
   expect(result).toMatchObject({ pending: true, fetched: false, bars: [] });
 });
+
+test("renews claim during a long sync (>120s) so writes still succeed", async () => {
+  vi.useFakeTimers({ now: 1_000_000 });
+  try {
+    const store = createInMemorySharedPriceStore(() => Date.now());
+    const key = priceInstrumentKey({ symbol: "AAPL", currency: "USD" });
+    const provider = {
+      sourceKey: "yahoo",
+      priority: 10,
+      get: async () => {
+        // Simulate a 150s provider fetch (longer than PRICE_KEY_CLAIM_TTL_MS = 120_000)
+        await new Promise((resolve) => setTimeout(resolve, 150_000));
+        return {
+          bars: [{ symbol: "AAPL", date: "2026-01-02", close: 150, currency: "USD", split: 1 }],
+          problems: [],
+          listing: "AAPL",
+        };
+      },
+    };
+    const pending = syncWith({
+      store,
+      owner: "long-run",
+      priceProviders: [provider],
+      request: {
+        symbol: "AAPL",
+        ticker: "AAPL",
+        exchange: "NASDAQ",
+        currency: "USD",
+        backfillFrom: "2026-01-01",
+        today: "2026-01-02",
+      },
+    });
+    await vi.advanceTimersByTimeAsync(150_000);
+    const result = await pending;
+    expect(result.pending).toBeUndefined();
+    expect(result.fetched).toBe(true);
+    expect(result.bars).toHaveLength(1);
+    expect(await store.getCoverage({ key })).toMatchObject({ provider: "yahoo", to: "2026-01-02" });
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test("aborts writes and returns pending when claim is stolen mid-sync", async () => {
+  let clock = 1_000_000;
+  const store = createInMemorySharedPriceStore(() => clock);
+  const key = priceInstrumentKey({ symbol: "AAPL", currency: "USD" });
+  const provider = {
+    sourceKey: "yahoo",
+    priority: 10,
+    get: async () => {
+      // Simulate claim expiry and another owner taking over before writes
+      clock += 200_000;
+      expect(await store.claim(key, "other-run", 120_000)).toBe(true);
+      return {
+        bars: [{ symbol: "AAPL", date: "2026-01-02", close: 999, currency: "USD", split: 1 }],
+        problems: [],
+        listing: "AAPL",
+      };
+    },
+  };
+  const result = await syncWith({
+    store,
+    owner: "stale-run",
+    priceProviders: [provider],
+    request: {
+      symbol: "AAPL",
+      ticker: "AAPL",
+      exchange: "NASDAQ",
+      currency: "USD",
+      backfillFrom: "2026-01-01",
+      today: "2026-01-02",
+    },
+  });
+  expect(result).toMatchObject({ pending: true, fetched: false, bars: [] });
+  expect(await store.getRange({ key })).toEqual([]);
+  expect(await store.getCoverage({ key })).toBeNull();
+});
+
+test("enforces mutual exclusion of lifecycle dates and reconciles them in adoptAlias", async () => {
+  const store = createInMemorySharedPriceStore();
+  await expect(
+    store.putCoverage("sym:CONF:EUR", {
+      from: "2026-01-01",
+      to: "2026-01-03",
+      listing: "CONF.AS",
+      currency: "EUR",
+      provider: "yahoo",
+      delistedSince: "2026-01-03",
+      provisionalThrough: "2026-01-03",
+    }),
+  ).rejects.toThrow(/mutually exclusive/);
+
+  const key = "isin:NL0010273215:EUR";
+  const alias = "sym:ASML:EUR";
+  await store.putCoverage(key, {
+    from: "2026-01-02",
+    to: "2026-01-05",
+    listing: "ASML.AS",
+    currency: "EUR",
+    provider: "yahoo",
+    provisionalThrough: "2026-01-05",
+  });
+  await store.putCoverage(alias, {
+    from: "2026-01-01",
+    to: "2026-01-03",
+    listing: "ASML.AS",
+    currency: "EUR",
+    provider: "yahoo",
+    delistedSince: "2026-01-03",
+  });
+  await store.adoptAlias(key, alias);
+  const merged = await store.getCoverage({ key });
+  expect(merged).toMatchObject({
+    from: "2026-01-01",
+    to: "2026-01-05",
+    provisionalThrough: "2026-01-05",
+  });
+  expect(merged?.delistedSince).toBeUndefined();
+  expect(merged?.listingMissingSince).toBeUndefined();
+});

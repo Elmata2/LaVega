@@ -27,6 +27,96 @@ export const emptySharedPrices = (): SerializedSharedPrices => ({
   coverage: [],
 });
 
+export class PriceClaimLostError extends Error {
+  constructor(
+    readonly instrumentKey: string,
+    readonly owner: string,
+  ) {
+    super(`Price claim lost for ${instrumentKey} (owner ${owner})`);
+    this.name = "PriceClaimLostError";
+  }
+}
+
+export class CoverageLifecycleConflictError extends Error {
+  constructor(readonly activeFields: readonly string[]) {
+    super(`Coverage lifecycle dates are mutually exclusive, got: ${activeFields.join(", ")}`);
+    this.name = "CoverageLifecycleConflictError";
+  }
+}
+
+function assertMutuallyExclusiveLifecycleDates(coverage: {
+  delistedSince?: string;
+  listingMissingSince?: string;
+  provisionalThrough?: string;
+}): void {
+  const active: string[] = [];
+  if (coverage.delistedSince != null) active.push("delistedSince");
+  if (coverage.listingMissingSince != null) active.push("listingMissingSince");
+  if (coverage.provisionalThrough != null) active.push("provisionalThrough");
+  if (active.length > 1) throw new CoverageLifecycleConflictError(active);
+}
+
+function reconcileAdoptedLifecycle(
+  current: SharedCoverageRow,
+  alias: SharedCoverageRow,
+): Pick<SharedPriceCoverage, "delistedSince" | "listingMissingSince" | "provisionalThrough"> {
+  if (current.to >= alias.to) {
+    if (current.delistedSince !== undefined) {
+      return {
+        delistedSince:
+          alias.delistedSince !== undefined && alias.delistedSince < current.delistedSince
+            ? alias.delistedSince
+            : current.delistedSince,
+      };
+    }
+    if (current.listingMissingSince !== undefined) {
+      return {
+        listingMissingSince:
+          alias.listingMissingSince !== undefined &&
+          alias.listingMissingSince < current.listingMissingSince
+            ? alias.listingMissingSince
+            : current.listingMissingSince,
+      };
+    }
+    if (current.provisionalThrough !== undefined) {
+      return {
+        provisionalThrough:
+          alias.provisionalThrough !== undefined &&
+          alias.provisionalThrough > current.provisionalThrough
+            ? alias.provisionalThrough
+            : current.provisionalThrough,
+      };
+    }
+    if (
+      current.to === alias.to &&
+      alias.delistedSince === undefined &&
+      alias.listingMissingSince === undefined &&
+      alias.provisionalThrough !== undefined
+    ) {
+      return { provisionalThrough: alias.provisionalThrough };
+    }
+    return {};
+  }
+  if (alias.delistedSince !== undefined) return { delistedSince: alias.delistedSince };
+  if (alias.listingMissingSince !== undefined)
+    return { listingMissingSince: alias.listingMissingSince };
+  if (alias.provisionalThrough !== undefined)
+    return { provisionalThrough: alias.provisionalThrough };
+  return {};
+}
+
+export type SharedPriceStoreWithClaims = Omit<SharedPriceStore, "replaceRange" | "putCoverage"> & {
+  replaceRange(
+    instrumentKey: string,
+    bars: readonly SharedPriceBar[],
+    from?: string,
+    to?: string,
+    owner?: string,
+  ): Promise<void>;
+  putCoverage(instrumentKey: string, coverage: SharedPriceCoverage, owner?: string): Promise<void>;
+  renewClaim(key: string, owner: string, ttlMs: number): Promise<boolean>;
+};
+
 /** An in-memory `SharedPriceStore` plus the snapshot/hydrate pair that the file
  *  and IndexedDB stores persist. All four adapters share this one behaviour, so
  *  the contract suite tests one implementation of the rules.
@@ -34,7 +124,7 @@ export const emptySharedPrices = (): SerializedSharedPrices => ({
  *  `now` is injectable so a test can prove claim expiry and timestamp ordering
  *  without sleeping; production callers omit it. */
 export function createMemorySharedBackend(now: () => number = () => Date.now()): {
-  store: SharedPriceStore;
+  store: SharedPriceStoreWithClaims;
   snapshot: () => SerializedSharedPrices;
   hydrate: (state: SerializedSharedPrices) => void;
 } {
@@ -72,7 +162,12 @@ export function createMemorySharedBackend(now: () => number = () => Date.now()):
     touchCoverage(key, isoNow());
   };
 
-  const store: SharedPriceStore = {
+  const hasLiveClaim = (key: string, owner: string): boolean => {
+    const held = claims.get(key);
+    return held !== undefined && held.owner === owner && held.until >= now();
+  };
+
+  const store: SharedPriceStoreWithClaims = {
     async getRange(key, from, to) {
       return barsOf(resolve(key)).filter(
         (bar) => (from === undefined || bar.date >= from) && (to === undefined || bar.date <= to),
@@ -89,7 +184,9 @@ export function createMemorySharedBackend(now: () => number = () => Date.now()):
     async upsert(instrumentKey, incoming) {
       putBars(instrumentKey, incoming);
     },
-    async replaceRange(instrumentKey, incoming, from, to) {
+    async replaceRange(instrumentKey, incoming, from, to, owner) {
+      if (owner !== undefined && !hasLiveClaim(instrumentKey, owner))
+        throw new PriceClaimLostError(instrumentKey, owner);
       const byDate = bars.get(instrumentKey);
       if (byDate)
         for (const date of byDate.keys())
@@ -104,7 +201,10 @@ export function createMemorySharedBackend(now: () => number = () => Date.now()):
       const { instrumentKey: _key, updatedAt: _updatedAt, ...rest } = row;
       return rest;
     },
-    async putCoverage(instrumentKey, incoming) {
+    async putCoverage(instrumentKey, incoming, owner) {
+      assertMutuallyExclusiveLifecycleDates(incoming);
+      if (owner !== undefined && !hasLiveClaim(instrumentKey, owner))
+        throw new PriceClaimLostError(instrumentKey, owner);
       coverage.set(instrumentKey, {
         ...incoming,
         instrumentKey,
@@ -138,10 +238,26 @@ export function createMemorySharedBackend(now: () => number = () => Date.now()):
           coverage.set(key, { ...aliasCoverage, instrumentKey: key, updatedAt: isoNow() });
           coverage.delete(alias);
         } else {
+          const {
+            delistedSince: _d,
+            listingMissingSince: _m,
+            provisionalThrough: _p,
+            listingStart: _ls,
+            ...base
+          } = current;
+          const reconciledLifecycle = reconcileAdoptedLifecycle(current, aliasCoverage);
+          const mergedListingStart =
+            current.listingStart !== undefined && aliasCoverage.listingStart !== undefined
+              ? current.listingStart < aliasCoverage.listingStart
+                ? current.listingStart
+                : aliasCoverage.listingStart
+              : (current.listingStart ?? aliasCoverage.listingStart);
           coverage.set(key, {
-            ...current,
+            ...base,
             from: current.from < aliasCoverage.from ? current.from : aliasCoverage.from,
             to: current.to > aliasCoverage.to ? current.to : aliasCoverage.to,
+            ...(mergedListingStart !== undefined ? { listingStart: mergedListingStart } : {}),
+            ...reconciledLifecycle,
             updatedAt: isoNow(),
           });
           coverage.delete(alias);
@@ -156,6 +272,11 @@ export function createMemorySharedBackend(now: () => number = () => Date.now()):
       // the price run claims once per slice and never re-enters its own key.
       if (held && held.until >= at) return false;
       claims.set(key, { owner, until: at + ttlMs });
+      return true;
+    },
+    async renewClaim(key, owner, ttlMs) {
+      if (!hasLiveClaim(key, owner)) return false;
+      claims.set(key, { owner, until: now() + ttlMs });
       return true;
     },
     async release(key, owner) {

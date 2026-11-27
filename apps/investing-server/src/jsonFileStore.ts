@@ -42,7 +42,17 @@ export function createJsonFileStore<T>(
   let hasCache = false;
   let inflight: Promise<T> | null = null;
 
+  const queue = <R>(operation: () => Promise<R>): Promise<R> => {
+    const result = writeQueue.then(operation);
+    writeQueue = result.then(
+      () => undefined,
+      () => undefined,
+    );
+    return result;
+  };
+
   const doRead = async (): Promise<T> => {
+    if (hasCache) return cache as T;
     let contents: string;
     try {
       contents = await fileSystem.readFile(filePath, "utf8");
@@ -59,27 +69,18 @@ export function createJsonFileStore<T>(
     return cache;
   };
 
-  // Single-flight: concurrent callers share one read instead of each loading
-  // the whole file (N x fileSize memory spike on large state files).
+  // Single-flight: concurrent callers share one queued read so it cannot race
+  // with an in-flight update() and clobber the cache with stale disk contents.
   const load = (): Promise<T> => {
     if (hasCache) return Promise.resolve(cache as T);
     if (!inflight) {
-      inflight = doRead().finally(() => {
+      inflight = queue(doRead).finally(() => {
         inflight = null;
       });
     }
     return inflight;
   };
   const read = async (): Promise<T> => structuredClone(await load());
-
-  const queue = <R>(operation: () => Promise<R>): Promise<R> => {
-    const result = writeQueue.then(operation);
-    writeQueue = result.then(
-      () => undefined,
-      () => undefined,
-    );
-    return result;
-  };
 
   const writeValue = async (value: T) => {
     await fileSystem.mkdir(dirname(filePath), { recursive: true });
@@ -92,7 +93,8 @@ export function createJsonFileStore<T>(
     read,
     async update(mutate) {
       await queue(async () => {
-        const next = structuredClone(mutate(await read()));
+        const current = structuredClone(await doRead());
+        const next = structuredClone(mutate(current));
         await writeValue(next);
         cache = next;
         hasCache = true;

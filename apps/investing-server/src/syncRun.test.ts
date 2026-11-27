@@ -1,8 +1,11 @@
 import { expect, test } from "vitest";
+import { createApp } from "./app.js";
 import {
   createMemorySyncRunStore,
   createSyncRun,
   MAX_HOPS,
+  parseSyncRunRow,
+  toSyncState,
   type LaneOutcome,
   type SyncRunLaneReads,
 } from "./syncRun.js";
@@ -100,10 +103,11 @@ test("a stale lease is taken over by the next refresh", async () => {
   const { syncRun, store, calls } = harness();
   await store.claim(
     {
+      phase: "running",
       lease: { id: "dead", heartbeatAt: new Date(Date.now() - 120_000).toISOString() },
       runId: "old",
       hop: 0,
-      startedAt: null,
+      startedAt: new Date(Date.now() - 120_000).toISOString(),
       resumeAt: null,
       finishedAt: null,
       outcome: null,
@@ -207,4 +211,86 @@ test("the state read reports the run and its outcome", async () => {
   expect(state.run.id).not.toBeNull();
   expect(state.run.hop).toBe(0);
   expect(state.vault).toBe("unlocked");
+});
+
+test("parseSyncRunRow strips lease from terminal rows and toSyncState marks terminal rows inactive", () => {
+  const nowMs = Date.parse("2026-11-26T12:00:00.000Z");
+  const parsed = parseSyncRunRow({
+    lease: { id: "stale-lease", heartbeatAt: new Date(nowMs).toISOString() },
+    runId: "run-1",
+    hop: 20,
+    startedAt: new Date(nowMs - 10_000).toISOString(),
+    finishedAt: new Date(nowMs).toISOString(),
+    outcome: "stopped-at-hop-limit",
+    force: false,
+  });
+  expect(parsed?.phase).toBe("terminal");
+  expect(parsed?.lease).toBeNull();
+  const view = toSyncState(parsed, laneReads(), nowMs);
+  expect(view.active).toBe(false);
+  expect(view.run).toEqual({ id: "run-1", hop: 20, outcome: "stopped-at-hop-limit" });
+});
+
+test("app drive advances from completed history to prices lane even when progress.history is populated", async () => {
+  const lanesCalled: string[] = [];
+  process.env.CRON_SECRET = "test-secret";
+  try {
+    const app = createApp({
+      brokerSync: async (_force, lanes) => {
+        lanesCalled.push(...lanes);
+        return { outcomes: [], problems: [], committed: {} };
+      },
+      brokerSyncStatus: async () => ({
+        status: "completed",
+        pages: 1,
+        ordersRead: 5,
+        positionsRead: 2,
+        waitUntil: null,
+        remaining: null,
+        updatedAt: new Date().toISOString(),
+        message: "Done",
+        history: {
+          trading212: {
+            lastSyncedAt: new Date().toISOString(),
+            retryAfter: null,
+            ordersComplete: true,
+            transactionsComplete: true,
+            dividendsComplete: true,
+          },
+          ibkr: {
+            lastSyncedAt: null,
+            retryAfter: null,
+            ordersComplete: true,
+            transactionsComplete: true,
+            dividendsComplete: true,
+          },
+        },
+      }),
+      marketDataConsentStore: {
+        get: async (tenantId) => ({
+          tenantId,
+          accepted: true,
+          decidedAt: new Date().toISOString(),
+          disclosureVersion: "v1",
+        }),
+        set: async () => undefined,
+      },
+      priceSyncTargets: () => {
+        lanesCalled.push("prices");
+        return [];
+      },
+    });
+    const response = await app.request("/api/sync/drive", {
+      method: "POST",
+      headers: {
+        authorization: "Bearer test-secret",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ force: false }),
+    });
+    expect(response.status).toBe(200);
+    expect(lanesCalled).toEqual(["holdings", "history", "prices"]);
+  } finally {
+    delete process.env.CRON_SECRET;
+  }
 });

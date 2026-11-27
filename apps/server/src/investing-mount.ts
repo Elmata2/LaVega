@@ -278,6 +278,7 @@ export async function runInvestingCron(request: Request): Promise<Response> {
     return Response.json({ problems: ["Unauthorized cron request"] }, { status: 401 });
   const url = new URL(request.url);
   const after = url.searchParams.get("after");
+  const queueParam = url.searchParams.get("queue");
   const hopParam = url.searchParams.get("hop");
   const hop = hopParam === null ? 0 : Number(hopParam);
   if (!Number.isInteger(hop) || hop < 0 || hop > CRON_MAX_HOPS)
@@ -285,17 +286,33 @@ export async function runInvestingCron(request: Request): Promise<Response> {
   /* One clock for the whole pass, started before the first thing that costs time. */
   const { cronMs, sliceMs } = syncBudgets((name) => process.env[name]?.trim() || undefined);
   const deadlineMs = cronMs === undefined ? undefined : Date.now() + cronMs;
-  let tenants: string[];
-  try {
-    tenants = await investingCronTenantIds();
-  } catch (error) {
-    cronProblem("Could not list tenants to sync", error);
-    return Response.json({ problems: ["Could not list tenants to sync"] }, { status: 503 });
+  let queue: string[];
+  let snapshotQueue: string[] | null = null;
+  if (queueParam !== null) {
+    try {
+      const parsed: unknown = JSON.parse(queueParam);
+      if (Array.isArray(parsed) && parsed.every((item) => typeof item === "string")) {
+        snapshotQueue = parsed;
+      }
+    } catch {
+      snapshotQueue = null;
+    }
   }
-  /* A cursor that is no longer in the list means it left the queue: start over
-   * rather than skip the tenants before it. */
-  const startIndex = after === null ? 0 : Math.max(0, tenants.indexOf(after) + 1);
-  const queue = tenants.slice(startIndex);
+  if (snapshotQueue !== null) {
+    queue = snapshotQueue;
+  } else {
+    let tenants: string[];
+    try {
+      tenants = await investingCronTenantIds();
+    } catch (error) {
+      cronProblem("Could not list tenants to sync", error);
+      return Response.json({ problems: ["Could not list tenants to sync"] }, { status: 503 });
+    }
+    /* A cursor that is no longer in the list means it left the queue: start over
+     * rather than skip the tenants before it. */
+    const startIndex = after === null ? 0 : Math.max(0, tenants.indexOf(after) + 1);
+    queue = tenants.slice(startIndex);
+  }
   const origin = url.origin;
   const secret = process.env.CRON_SECRET?.trim() ?? "";
   const results: Array<{ tenantId: string; status?: number; result?: unknown; error?: string }> =
@@ -333,14 +350,20 @@ export async function runInvestingCron(request: Request): Promise<Response> {
   const continuing =
     skipped > 0 && lastProcessed !== null && hop < CRON_MAX_HOPS && cronChainEnabled();
   if (continuing && lastProcessed !== null) {
+    const remaining = queue.slice(results.length);
     const next = new URL(request.url);
     next.searchParams.set("after", lastProcessed);
     next.searchParams.set("hop", String(hop + 1));
-    /* Fire and end. The next hop is a fresh invocation; holding this one open
-     * for another budget would exceed the function's maxDuration. */
-    void fetch(next, { headers: { authorization: `Bearer ${secret}` } }).catch((error: unknown) =>
-      cronProblem("Cron continuation failed", error),
-    );
+    next.searchParams.set("queue", JSON.stringify(remaining));
+    await fetch(next, {
+      headers: { authorization: `Bearer ${secret}` },
+    })
+      .then((response) => {
+        if (!response.ok) {
+          cronProblem(`Cron continuation returned HTTP ${response.status}`);
+        }
+      })
+      .catch((error: unknown) => cronProblem("Cron continuation failed", error));
   } else if (skipped > 0 && hop >= CRON_MAX_HOPS) {
     cronProblem(`Stopped at hop ${hop} with ${skipped} tenants left`);
   }

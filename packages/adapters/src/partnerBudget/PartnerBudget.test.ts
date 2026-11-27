@@ -310,3 +310,26 @@ itEffect("awaitSlot: a caller that did not sleep makes exactly one store call", 
     expect(calls).toEqual(["reserve", "reserveBefore"]);
   }).pipe(Effect.provide(PartnerBudget.storeLayer(store)));
 });
+
+itEffect(
+  "awaitSlot: when blockedUntil rejects after sleep, next_at is not left advanced past the block",
+  () =>
+    Effect.gen(function* () {
+      const budget = yield* PartnerBudget;
+      const slowKey: PartnerKey = { partner: "yahoo", endpoint: "any", scopeId: "slow-rollback" };
+      yield* budget.observe(slowKey, { intervalMs: 2_000 });
+      yield* budget.reserve(slowKey); // slot 0, next_at = 2_000
+      yield* TestClock.setTime(1_700);
+      // Caller reserves slot 2_000 (advancing next_at to 4_000), sleeps 300ms.
+      // Deadline 3_500 => notAfter = 2_500.
+      const fiber = yield* Effect.forkChild(Effect.flip(awaitSlot(slowKey, 3_500)));
+      yield* TestClock.adjust(100); // t = 1_800
+      yield* budget.reject(slowKey, at(3_000)); // 3_000 > notAfter 2_500, but < 4_000
+      yield* TestClock.adjust(200); // t = 2_000, wakes and is rejected by blockedUntil
+      const error = yield* Fiber.join(fiber);
+      expect(isPartnerWait(error)).toBe(true);
+      expect(ms((error as PartnerWait).until)).toBe(3_000);
+      // Because the unused slot at 2_000 was rolled back, next reserve starts at 3_000, not 4_000.
+      expect(ms(yield* budget.reserve(slowKey))).toBe(3_000);
+    }).pipe(memory),
+);

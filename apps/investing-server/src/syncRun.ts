@@ -2,21 +2,63 @@ import { decodeSyncRunState, type SyncRefreshState, type SyncRunStateView } from
 
 /** A run row in `investing.sync_state` under `broker = 'run'`. */
 export type SyncRunOutcome = "done" | "stopped-at-hop-limit" | "failed";
-export type SyncRunRow = {
-  lease: { id: string; heartbeatAt: string } | null;
-  runId: string | null;
+export type SyncRunLease = { id: string; heartbeatAt: string };
+
+export type IdleSyncRunRow = {
+  phase: "idle";
+  lease: null;
+  runId: null;
+  hop: 0;
+  startedAt: null;
+  resumeAt: null;
+  finishedAt: null;
+  outcome: null;
+  force: false;
+};
+
+export type RunningSyncRunRow = {
+  phase: "running";
+  lease: SyncRunLease;
+  runId: string;
+  hop: number;
+  startedAt: string;
+  resumeAt: string | null;
+  finishedAt: null;
+  outcome: null;
+  force: boolean;
+};
+
+export type PausedSyncRunRow = {
+  phase: "paused";
+  lease: null;
+  runId: string;
   hop: number;
   startedAt: string | null;
   resumeAt: string | null;
-  finishedAt: string | null;
-  outcome: SyncRunOutcome | null;
+  finishedAt: null;
+  outcome: null;
   force: boolean;
 };
+
+export type TerminalSyncRunRow = {
+  phase: "terminal";
+  lease: null;
+  runId: string;
+  hop: number;
+  startedAt: string | null;
+  resumeAt: null;
+  finishedAt: string;
+  outcome: SyncRunOutcome;
+  force: boolean;
+};
+
+/** Discriminated union making `lease != null && outcome != null` unrepresentable. */
+export type SyncRunRow = IdleSyncRunRow | RunningSyncRunRow | PausedSyncRunRow | TerminalSyncRunRow;
 
 export type SyncRunStore = {
   get(): Promise<SyncRunRow | null>;
   /** Atomic claim; null when this call claimed, the live row otherwise. */
-  claim(candidate: SyncRunRow, staleBefore: string): Promise<SyncRunRow | null>;
+  claim(candidate: RunningSyncRunRow, staleBefore: string): Promise<SyncRunRow | null>;
   /** Writes while `leaseId` still owns the row. False when the lease was lost. */
   put(row: SyncRunRow, leaseId: string): Promise<boolean>;
 };
@@ -46,9 +88,32 @@ export type SyncRunLanes = {
 
 export type SyncRunLaneReads = {
   vault: SyncRunStateView["vault"];
-  holdings: SyncRunStateView["holdings"];
-  history: SyncRunStateView["history"];
-  prices: SyncRunStateView["prices"];
+  holdings: {
+    status: "idle" | "running" | "waiting" | "completed" | "problem";
+    syncedAt: string | null;
+    waitUntil: string | null;
+    message: string | null;
+    positionsRead: number;
+  };
+  history: {
+    status: "idle" | "running" | "waiting" | "completed" | "problem";
+    syncedAt: string | null;
+    waitUntil: string | null;
+    message: string | null;
+    pages: number;
+    ordersRead: number;
+    historyProgress: unknown;
+  };
+  prices: {
+    status: "idle" | "running" | "waiting" | "completed" | "problem";
+    syncedAt: string | null;
+    waitUntil: string | null;
+    message: string | null;
+    total: number;
+    completed: number;
+    currentSymbol: string | null;
+    remainingSymbols: readonly string[];
+  };
   problems: readonly string[];
 };
 
@@ -66,43 +131,95 @@ export type SyncRunDependencies = {
   env?: (name: string) => string | undefined;
 };
 
-const EMPTY_ROW = (): SyncRunRow => ({
-  lease: null,
-  runId: null,
-  hop: 0,
-  startedAt: null,
-  resumeAt: null,
-  finishedAt: null,
-  outcome: null,
-  force: false,
-});
+function isSyncRunOutcome(value: unknown): value is SyncRunOutcome {
+  return value === "done" || value === "stopped-at-hop-limit" || value === "failed";
+}
 
 function parseRow(value: unknown): SyncRunRow | null {
   if (!value || typeof value !== "object") return null;
-  const raw = value as Partial<SyncRunRow> & { lease?: unknown };
+  const raw = value as Record<string, unknown>;
   const lease =
-    raw.lease && typeof raw.lease === "object" && "id" in raw.lease && "heartbeatAt" in raw.lease
+    raw.lease &&
+    typeof raw.lease === "object" &&
+    "id" in raw.lease &&
+    "heartbeatAt" in raw.lease &&
+    typeof (raw.lease as { id: unknown }).id === "string" &&
+    typeof (raw.lease as { heartbeatAt: unknown }).heartbeatAt === "string"
       ? {
-          id: String((raw.lease as { id: unknown }).id),
-          heartbeatAt: String((raw.lease as { heartbeatAt: unknown }).heartbeatAt),
+          id: (raw.lease as { id: string }).id,
+          heartbeatAt: (raw.lease as { heartbeatAt: string }).heartbeatAt,
         }
       : null;
+  const runId = typeof raw.runId === "string" ? raw.runId : null;
+  const hop = typeof raw.hop === "number" && Number.isFinite(raw.hop) ? raw.hop : 0;
+  const startedAt = typeof raw.startedAt === "string" ? raw.startedAt : null;
+  const resumeAt = typeof raw.resumeAt === "string" ? raw.resumeAt : null;
+  const finishedAt = typeof raw.finishedAt === "string" ? raw.finishedAt : null;
+  const outcome = isSyncRunOutcome(raw.outcome) ? raw.outcome : null;
+  const force = raw.force === true;
+
+  if (outcome !== null && runId !== null) {
+    return {
+      phase: "terminal",
+      lease: null,
+      runId,
+      hop,
+      startedAt,
+      resumeAt: null,
+      finishedAt: finishedAt ?? startedAt ?? new Date(0).toISOString(),
+      outcome,
+      force,
+    };
+  }
+  if (lease !== null && runId !== null) {
+    return {
+      phase: "running",
+      lease,
+      runId,
+      hop,
+      startedAt: startedAt ?? lease.heartbeatAt,
+      resumeAt,
+      finishedAt: null,
+      outcome: null,
+      force,
+    };
+  }
+  if (runId !== null) {
+    return {
+      phase: "paused",
+      lease: null,
+      runId,
+      hop,
+      startedAt,
+      resumeAt,
+      finishedAt: null,
+      outcome: null,
+      force,
+    };
+  }
   return {
-    lease,
-    runId: typeof raw.runId === "string" ? raw.runId : null,
-    hop: typeof raw.hop === "number" ? raw.hop : 0,
-    startedAt: typeof raw.startedAt === "string" ? raw.startedAt : null,
-    resumeAt: typeof raw.resumeAt === "string" ? raw.resumeAt : null,
-    finishedAt: typeof raw.finishedAt === "string" ? raw.finishedAt : null,
-    outcome:
-      raw.outcome === "done" || raw.outcome === "stopped-at-hop-limit" || raw.outcome === "failed"
-        ? raw.outcome
-        : null,
-    force: raw.force === true,
+    phase: "idle",
+    lease: null,
+    runId: null,
+    hop: 0,
+    startedAt: null,
+    resumeAt: null,
+    finishedAt: null,
+    outcome: null,
+    force: false,
   };
 }
 
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+function isLiveRunningRow(row: SyncRunRow | null, nowMs: number): row is RunningSyncRunRow {
+  return (
+    row !== null &&
+    row.phase === "running" &&
+    row.outcome === null &&
+    nowMs - Date.parse(row.lease.heartbeatAt) < RUN_LEASE_STALE_MS
+  );
+}
 
 /** Turns a stored row into the one state body every caller reads. */
 export function toSyncState(
@@ -110,18 +227,48 @@ export function toSyncState(
   reads: SyncRunLaneReads,
   nowMs: number,
 ): SyncRunStateView {
-  const active =
-    row?.lease != null && nowMs - Date.parse(row.lease.heartbeatAt) < RUN_LEASE_STALE_MS;
+  const active = isLiveRunningRow(row, nowMs);
+  const holdings = {
+    ...reads.holdings,
+    waitUntil: reads.holdings.status === "waiting" ? reads.holdings.waitUntil : null,
+  };
+  const history = {
+    ...reads.history,
+    waitUntil: reads.history.status === "waiting" ? reads.history.waitUntil : null,
+  };
+  const prices = {
+    ...reads.prices,
+    waitUntil: reads.prices.status === "waiting" ? reads.prices.waitUntil : null,
+    currentSymbol: reads.prices.status === "running" ? reads.prices.currentSymbol : null,
+  };
+  const problems = [...new Set(reads.problems)].filter(
+    (problem) => !/credentials are not configured/i.test(problem),
+  );
+  if (active) {
+    return decodeSyncRunState({
+      active: true,
+      vault: reads.vault,
+      holdings,
+      history,
+      prices,
+      problems,
+      run: { id: row.runId, hop: row.hop, outcome: null },
+    });
+  }
+  const run =
+    row === null || row.phase === "idle"
+      ? { id: null, hop: 0 as const, outcome: null }
+      : row.phase === "terminal"
+        ? { id: row.runId, hop: row.hop, outcome: row.outcome }
+        : { id: row.runId, hop: row.hop, outcome: null };
   return decodeSyncRunState({
-    active,
+    active: false,
     vault: reads.vault,
-    holdings: reads.holdings,
-    history: reads.history,
-    prices: reads.prices,
-    problems: [...new Set(reads.problems)].filter(
-      (problem) => !/credentials are not configured/i.test(problem),
-    ),
-    run: { id: row?.runId ?? null, hop: row?.hop ?? 0, outcome: row?.outcome ?? null },
+    holdings,
+    history,
+    prices,
+    problems,
+    run,
   });
 }
 
@@ -150,29 +297,34 @@ export function createSyncRun(dependencies: SyncRunDependencies) {
     await dependencies.background(work);
   };
 
+  const toUnclaimedRefreshState = (state: SyncRunStateView): SyncRefreshState => ({
+    ...state,
+    claimed: false,
+  });
+
   /** One atomic claim per run. Joining a live run changes nothing and runs no work. */
   const claimRun = async (
     force = false,
-  ): Promise<{ claimed: true; row: SyncRunRow } | { claimed: false; state: SyncRefreshState }> => {
+  ): Promise<
+    { claimed: true; row: RunningSyncRunRow } | { claimed: false; state: SyncRefreshState }
+  > => {
     const nowMs = now();
     const staleBefore = new Date(nowMs - RUN_LEASE_STALE_MS).toISOString();
     const current = await store.get();
-    const live =
-      current?.lease != null && nowMs - Date.parse(current.lease.heartbeatAt) < RUN_LEASE_STALE_MS;
-    if (live && current?.outcome === null) {
+    if (isLiveRunningRow(current, nowMs)) {
       const reads = await dependencies.readLanes();
       return {
         claimed: false,
-        state: { ...toSyncState(current, reads, nowMs), claimed: false },
+        state: toUnclaimedRefreshState(toSyncState(current, reads, nowMs)),
       };
     }
-    // A fresh run continues the same durable cursors; only the lease changes.
-    const candidate: SyncRunRow = {
-      ...(current ?? EMPTY_ROW()),
-      lease: { id: newId(), heartbeatAt: new Date(nowMs).toISOString() },
+    const isoNow = new Date(nowMs).toISOString();
+    const candidate: RunningSyncRunRow = {
+      phase: "running",
+      lease: { id: newId(), heartbeatAt: isoNow },
       runId: newId(),
       hop: 0,
-      startedAt: new Date(nowMs).toISOString(),
+      startedAt: isoNow,
       resumeAt: null,
       finishedAt: null,
       outcome: null,
@@ -181,7 +333,10 @@ export function createSyncRun(dependencies: SyncRunDependencies) {
     const holder = await store.claim(candidate, staleBefore);
     if (holder !== null) {
       const reads = await dependencies.readLanes();
-      return { claimed: false, state: { ...toSyncState(holder, reads, nowMs), claimed: false } };
+      return {
+        claimed: false,
+        state: toUnclaimedRefreshState(toSyncState(holder, reads, nowMs)),
+      };
     }
     return { claimed: true, row: candidate };
   };
@@ -193,11 +348,18 @@ export function createSyncRun(dependencies: SyncRunDependencies) {
     const claimed = await claimRun(force);
     if (!claimed.claimed) return { state: claimed.state, claimed: false };
     await schedule(
-      drive({ runId: claimed.row.runId!, leaseId: claimed.row.lease!.id, hop: 0, origin }),
+      drive({ runId: claimed.row.runId, leaseId: claimed.row.lease.id, hop: 0, origin }),
     );
     const reads = await dependencies.readLanes();
+    const state = toSyncState(claimed.row, reads, now());
+    if (state.active) {
+      return {
+        state: { ...state, claimed: true },
+        claimed: true,
+      };
+    }
     return {
-      state: { ...toSyncState(claimed.row, reads, now()), claimed: true },
+      state: { ...state, claimed: false },
       claimed: true,
     };
   };
@@ -212,42 +374,53 @@ export function createSyncRun(dependencies: SyncRunDependencies) {
     const claimed = await claimRun(force);
     if (!claimed.claimed) {
       const row = await store.get();
-      const live =
-        row?.lease != null && now() - Date.parse(row.lease.heartbeatAt) < RUN_LEASE_STALE_MS;
-      if (live && row?.outcome === null) return "running";
+      if (isLiveRunningRow(row, now())) return "running";
       // The race loser can claim a released row on the next step.
       const retry = await claimRun(force);
       if (!retry.claimed) return "running";
       return drive({
-        runId: retry.row.runId!,
-        leaseId: retry.row.lease!.id,
+        runId: retry.row.runId,
+        leaseId: retry.row.lease.id,
         hop: retry.row.hop,
         deadlineMs,
       });
     }
     return drive({
-      runId: claimed.row.runId!,
-      leaseId: claimed.row.lease!.id,
+      runId: claimed.row.runId,
+      leaseId: claimed.row.lease.id,
       hop: claimed.row.hop,
       deadlineMs,
     });
   };
 
-  const finish = async (row: SyncRunRow, leaseId: string, outcome: SyncRunOutcome) => {
-    await store.put(
-      {
-        ...row,
-        lease: null,
-        finishedAt: new Date(now()).toISOString(),
-        outcome,
-        resumeAt: null,
-      },
-      leaseId,
-    );
+  const finish = async (row: RunningSyncRunRow, leaseId: string, outcome: SyncRunOutcome) => {
+    const terminalRow: TerminalSyncRunRow = {
+      phase: "terminal",
+      lease: null,
+      runId: row.runId,
+      hop: row.hop,
+      startedAt: row.startedAt,
+      resumeAt: null,
+      finishedAt: new Date(now()).toISOString(),
+      outcome,
+      force: row.force,
+    };
+    await store.put(terminalRow, leaseId);
   };
 
-  const releaseKeepingState = async (row: SyncRunRow, leaseId: string) => {
-    await store.put({ ...row, lease: null }, leaseId);
+  const releaseKeepingState = async (row: RunningSyncRunRow, leaseId: string) => {
+    const pausedRow: PausedSyncRunRow = {
+      phase: "paused",
+      lease: null,
+      runId: row.runId,
+      hop: row.hop,
+      startedAt: row.startedAt,
+      resumeAt: row.resumeAt,
+      finishedAt: null,
+      outcome: null,
+      force: row.force,
+    };
+    await store.put(pausedRow, leaseId);
   };
 
   /**
@@ -273,17 +446,22 @@ export function createSyncRun(dependencies: SyncRunDependencies) {
           : Math.min(ownDeadline, input.deadlineMs);
     const laneMargin = () => (deadlineMs ?? Number.POSITIVE_INFINITY) - LANE_MARGIN_MS;
     const loaded = await store.get();
-    if (loaded === null || loaded.runId !== input.runId || loaded.lease?.id !== input.leaseId)
+    if (
+      loaded === null ||
+      loaded.phase !== "running" ||
+      loaded.runId !== input.runId ||
+      loaded.lease.id !== input.leaseId
+    )
       return "done";
-    let row: SyncRunRow = loaded;
+    let row: RunningSyncRunRow = loaded;
     const problems: string[] = [];
     let lastHeartbeat = startedAt;
-    const heartbeat = async (patch: Partial<Omit<SyncRunRow, "lease">> = {}) => {
+    const heartbeat = async (patch: { resumeAt?: string | null } = {}) => {
       row = {
         ...row,
         ...patch,
         lease: { id: input.leaseId, heartbeatAt: new Date(now()).toISOString() },
-      } as SyncRunRow;
+      };
       lastHeartbeat = now();
       if (!(await store.put(row, input.leaseId))) throw new Error("sync run lease lost");
     };
@@ -304,8 +482,7 @@ export function createSyncRun(dependencies: SyncRunDependencies) {
         await sleep(Math.max(0, waitUntilMs - now()));
         return true;
       }
-      row = { ...row, resumeAt: new Date(waitUntilMs).toISOString() };
-      await heartbeat();
+      await heartbeat({ resumeAt: new Date(waitUntilMs).toISOString() });
       return false;
     };
 
@@ -371,17 +548,25 @@ export function createSyncRun(dependencies: SyncRunDependencies) {
     const nowMs = now();
     const staleBefore = new Date(nowMs - RUN_LEASE_STALE_MS).toISOString();
     const current = await store.get();
-    if (current?.runId !== input.runId || current.outcome !== null) return false;
     if (
-      current.lease !== null &&
-      nowMs - Date.parse(current.lease.heartbeatAt) < RUN_LEASE_STALE_MS
+      current === null ||
+      current.phase === "idle" ||
+      current.phase === "terminal" ||
+      current.runId !== input.runId
     )
       return false;
-    const candidate: SyncRunRow = {
-      ...current,
-      lease: { id: newId(), heartbeatAt: new Date(nowMs).toISOString() },
+    if (isLiveRunningRow(current, nowMs)) return false;
+    const isoNow = new Date(nowMs).toISOString();
+    const candidate: RunningSyncRunRow = {
+      phase: "running",
+      lease: { id: newId(), heartbeatAt: isoNow },
+      runId: current.runId,
       hop: input.hop,
+      startedAt: current.startedAt ?? isoNow,
       resumeAt: null,
+      finishedAt: null,
+      outcome: null,
+      force: current.force,
     };
     const holder = await store.claim(candidate, staleBefore);
     if (holder !== null) return false;
@@ -390,8 +575,8 @@ export function createSyncRun(dependencies: SyncRunDependencies) {
     return true;
   };
 
-  const nodeDrive = (row: SyncRunRow, hop: number) =>
-    drive({ runId: row.runId!, leaseId: row.lease!.id, hop });
+  const nodeDrive = (row: RunningSyncRunRow, hop: number) =>
+    drive({ runId: row.runId, leaseId: row.lease.id, hop });
 
   return { requestRefresh, drive, readState, acceptContinue, runNow };
 }
@@ -409,16 +594,15 @@ export function createMemorySyncRunStore(): SyncRunStore {
       return row;
     },
     async claim(candidate, staleBefore) {
-      if (row !== null) {
-        const live =
-          row.lease !== null && Date.parse(row.lease.heartbeatAt) >= Date.parse(staleBefore);
+      if (row !== null && row.phase === "running") {
+        const live = Date.parse(row.lease.heartbeatAt) >= Date.parse(staleBefore);
         if (live) return row;
       }
       row = candidate;
       return null;
     },
     async put(next, leaseId) {
-      if (row?.lease?.id !== leaseId) return false;
+      if (row?.phase !== "running" || row.lease.id !== leaseId) return false;
       row = next;
       return true;
     },

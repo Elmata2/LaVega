@@ -412,6 +412,7 @@ export function createPriceOrchestrator(input: {
   now?: () => Date;
 }) {
   const store = input.progressStore ?? createInMemoryPriceSyncProgressStore();
+  const MAX_TRACKED_TENANTS = 500;
   const local = new Map<string, PriceSyncProgress>();
   const inFlight = new Map<string, Promise<PriceSyncProgress>>();
   const pauseMarginMs = input.pauseMarginMs ?? 10_000;
@@ -420,11 +421,24 @@ export function createPriceOrchestrator(input: {
   const benchmarkRecheckEveryMs = input.benchmarkRecheckEveryMs ?? 5_000;
   const persistEverySymbols = 5;
   const now = input.now ?? (() => new Date());
-  const terminal = (status: PriceSyncProgress["status"]) =>
-    status !== "running" && status !== "waiting";
+  const isActiveStatus = (status: PriceSyncProgress["status"] | undefined) =>
+    status === "running" || status === "waiting";
+  const terminal = (status: PriceSyncProgress["status"]) => !isActiveStatus(status);
 
   const sinceLastPersist = new Map<string, number>();
   const lastPersistAt = new Map<string, number>();
+  const setBounded = <V>(map: Map<string, V>, key: string, value: V) => {
+    map.delete(key);
+    if (map.size >= MAX_TRACKED_TENANTS) {
+      const oldest = map.keys().next().value;
+      if (oldest !== undefined) map.delete(oldest);
+    }
+    map.set(key, value);
+  };
+  const evictTracking = (tenantId: string) => {
+    sinceLastPersist.delete(tenantId);
+    lastPersistAt.delete(tenantId);
+  };
   const update = async (
     tenantId: string,
     next: Omit<PriceSyncProgress, "updatedAt">,
@@ -442,13 +456,83 @@ export function createPriceOrchestrator(input: {
     ) {
       const stored = await store.put(tenantId, value, leaseId);
       if (stored === false) throw new PriceSyncLeaseLost();
-      sinceLastPersist.set(tenantId, 0);
-      lastPersistAt.set(tenantId, now().getTime());
+      if (terminal(value.status)) {
+        evictTracking(tenantId);
+      } else {
+        setBounded(sinceLastPersist, tenantId, 0);
+        setBounded(lastPersistAt, tenantId, now().getTime());
+      }
     } else {
-      sinceLastPersist.set(tenantId, elapsed + 1);
+      setBounded(sinceLastPersist, tenantId, elapsed + 1);
     }
-    local.set(tenantId, value);
+    setBounded(local, tenantId, value);
     return value;
+  };
+
+  type SymbolSyncOutcome =
+    | { kind: "ok"; result: PriceSyncResult }
+    | { kind: "paused"; message?: string }
+    | { kind: "problem"; message: string }
+    | { kind: "heartbeat-error"; error: unknown };
+
+  const syncWithLeaseHeartbeat = async (
+    tenantId: string,
+    target: PriceSyncTarget,
+    deadline: number | undefined,
+    leaseId: string,
+  ): Promise<SymbolSyncOutcome> => {
+    const heartbeatFailures: Array<{ error: unknown }> = [];
+    let heartbeat = Promise.resolve();
+    const renew = () => {
+      heartbeat = heartbeat.then(async () => {
+        if (heartbeatFailures.length > 0) return;
+        const current = local.get(tenantId);
+        if (!current) return;
+        const value = { ...current, updatedAt: now().toISOString() };
+        try {
+          if (!(await store.put(tenantId, value, leaseId))) throw new PriceSyncLeaseLost();
+          setBounded(local, tenantId, value);
+          setBounded(lastPersistAt, tenantId, now().getTime());
+        } catch (error) {
+          heartbeatFailures.push({ error });
+        }
+      });
+    };
+    const timer = setInterval(renew, heartbeatEveryMs);
+    let outcome: SymbolSyncOutcome;
+    try {
+      const result = await input.sync(target, tenantId, { deadline, leaseId });
+      /* A key another run holds the claim for is not a failure and not
+       * finished: the slice ends paused with this key still on the list,
+       * and the next slice reads the rows that run wrote. */
+      outcome = result.pending
+        ? {
+            kind: "paused",
+            message: "Price synchronization paused for an instrument another run is updating",
+          }
+        : { kind: "ok", result };
+    } catch (error) {
+      /* The partner budget has no slot before the deadline, or cannot be
+       * reached. Nothing was sent for this symbol, so it did not fail: the
+       * slice ends and the symbol is tried again on the next one. */
+      if (isPartnerWait(error)) outcome = { kind: "paused" };
+      else if (isPartnerBudgetUnavailable(error))
+        outcome = {
+          kind: "paused",
+          message: "Price synchronization paused: the shared request budget is unavailable",
+        };
+      else
+        outcome = {
+          kind: "problem",
+          message: `${target.symbol}: ${error instanceof Error ? error.message : "Price synchronization failed"}`,
+        };
+    } finally {
+      clearInterval(timer);
+      await heartbeat;
+    }
+    if (heartbeatFailures.length > 0)
+      return { kind: "heartbeat-error", error: heartbeatFailures[0]!.error };
+    return outcome;
   };
 
   const start = (tenantId: string, deadline = input.deadline?.()): Promise<PriceSyncProgress> => {
@@ -461,8 +545,8 @@ export function createPriceOrchestrator(input: {
        * would double the provider traffic and let two writers fight over one
        * progress row; a stale row means that instance died, so we take over. */
       if (
-        stored?.status === "running" &&
-        stored.updatedAt &&
+        isActiveStatus(stored?.status) &&
+        stored?.updatedAt &&
         now().getTime() - Date.parse(stored.updatedAt) < takeoverAfterMs
       )
         return stored;
@@ -480,8 +564,8 @@ export function createPriceOrchestrator(input: {
         new Date(now().getTime() - takeoverAfterMs).toISOString(),
       );
       if (busy) return busy;
-      local.set(tenantId, claimed);
-      lastPersistAt.set(tenantId, now().getTime());
+      setBounded(local, tenantId, claimed);
+      setBounded(lastPersistAt, tenantId, now().getTime());
 
       let targets: PriceSyncTarget[];
       try {
@@ -625,62 +709,22 @@ export function createPriceOrchestrator(input: {
           },
           leaseId,
         );
-        let paused: { message?: string } | undefined;
-        let heartbeatError: unknown;
-        let heartbeat = Promise.resolve();
-        const renew = () => {
-          heartbeat = heartbeat.then(async () => {
-            if (heartbeatError) return;
-            const current = local.get(tenantId);
-            if (!current) return;
-            const value = { ...current, updatedAt: now().toISOString() };
-            try {
-              if (!(await store.put(tenantId, value, leaseId))) throw new PriceSyncLeaseLost();
-              local.set(tenantId, value);
-              lastPersistAt.set(tenantId, now().getTime());
-            } catch (error) {
-              heartbeatError = error;
-            }
-          });
-        };
-        const timer = setInterval(renew, heartbeatEveryMs);
-        try {
-          const result = await input.sync(target, tenantId, { deadline, leaseId });
-          /* A key another run holds the claim for is not a failure and not
-           * finished: the slice ends paused with this key still on the list,
-           * and the next slice reads the rows that run wrote. */
-          if (result.pending) {
-            paused = {
-              message: "Price synchronization paused for an instrument another run is updating",
-            };
-          } else {
-            problems.push(...result.problems.map((problem) => `${target.symbol}: ${problem}`));
-          }
-        } catch (error) {
-          /* The partner budget has no slot before the deadline, or cannot be
-           * reached. Nothing was sent for this symbol, so it did not fail: the
-           * slice ends and the symbol is tried again on the next one. */
-          if (isPartnerWait(error)) paused = {};
-          else if (isPartnerBudgetUnavailable(error))
-            paused = {
-              message: "Price synchronization paused: the shared request budget is unavailable",
-            };
-          else
-            problems.push(
-              `${target.symbol}: ${error instanceof Error ? error.message : "Price synchronization failed"}`,
-            );
-        } finally {
-          clearInterval(timer);
-          await heartbeat;
-        }
-        if (heartbeatError) throw heartbeatError;
+        const outcome = await syncWithLeaseHeartbeat(tenantId, target, deadline, leaseId);
+        if (outcome.kind === "heartbeat-error") throw outcome.error;
         // Paused only after the heartbeat has settled, so it cannot overwrite the pause.
-        if (paused) return pause(index, paused.message);
+        if (outcome.kind === "paused") return pause(index, outcome.message);
+        if (outcome.kind === "problem") {
+          problems.push(outcome.message);
+        } else {
+          problems.push(
+            ...outcome.result.problems.map((problem) => `${target.symbol}: ${problem}`),
+          );
+        }
         if (now().getTime() - (lastPersistAt.get(tenantId) ?? -Infinity) >= heartbeatEveryMs) {
           const current = local.get(tenantId)!;
           if (!(await store.put(tenantId, { ...current, updatedAt: now().toISOString() }, leaseId)))
             throw new PriceSyncLeaseLost();
-          lastPersistAt.set(tenantId, now().getTime());
+          setBounded(lastPersistAt, tenantId, now().getTime());
         }
       }
       return update(
@@ -711,6 +755,7 @@ export function createPriceOrchestrator(input: {
           return (await store.get(tenantId).catch(() => null)) ?? idleProgress();
         throw error;
       } finally {
+        evictTracking(tenantId);
         inFlight.delete(tenantId);
       }
     })();

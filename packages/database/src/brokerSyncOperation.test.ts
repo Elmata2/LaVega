@@ -7,6 +7,7 @@ import {
   createBrokerRepository,
   createBrokerSyncOperationRepository,
   createPriceSyncStateRepository,
+  createSyncRunRepository,
   type Database,
   type SyncProgressRow,
   type SyncStateRow,
@@ -317,8 +318,79 @@ test("a snapshot-only row exists without credentials and refuses a credentialed 
   const snapshot = { positions: [], trades: [], dividends: [] };
   expect(await repository.putSnapshotOnly("degiro", snapshot)).toBe(true);
   expect(await repository.snapshots()).toEqual({ degiro: snapshot });
+  expect(await repository.mode?.("degiro")).toBe("snapshot-only");
+  // Reading credentials on a snapshot-only row returns null rather than throwing UnreadableBrokerCredentialsError.
+  expect(await repository.get("degiro")).toBeNull();
+  // Credentialed snapshot updates cannot overwrite a snapshot-only row even at generation 1.
+  expect(await repository.putSnapshot("degiro", { overwritten: true }, 1)).toBe(false);
+  expect(await repository.snapshots()).toEqual({ degiro: snapshot });
 
   await connectBroker("tenant-a");
+  expect(await repository.mode?.("trading212")).toBe("credentialed");
   expect(await repository.putSnapshotOnly("trading212", snapshot)).toBe(false);
   expect(await repository.snapshots()).toEqual({ degiro: snapshot });
+});
+
+test("investing.sync_state keeps SQL status aligned with waiting/completed/failed phases and clears lease uniformly", async () => {
+  await connectBroker("tenant-a");
+  const repository = createBrokerSyncOperationRepository(db, "tenant-a");
+  await repository.claim("trading212", {
+    leaseId: "lease-1",
+    staleBefore: iso(-60_000),
+    progress: progress("running", "lease-1"),
+  });
+
+  await repository.commit("trading212", {
+    leaseId: "lease-1",
+    state: { lastSyncedAt: null, retryAfter: iso(60_000) },
+    progress: progress("waiting", "lease-1"),
+  });
+
+  await pglite.exec("RESET ROLE");
+  const waitingRow = await pglite.query<{ status: string; state: Record<string, unknown> }>(
+    "SELECT status, state FROM investing.sync_state WHERE user_id = $1 AND broker = 'trading212'",
+    ["tenant-a"],
+  );
+  await pglite.exec("SET ROLE lavega_runtime");
+  expect(waitingRow.rows[0]?.status).toBe("partial");
+  expect("lease" in (waitingRow.rows[0]?.state ?? {})).toBe(false);
+  expect(waitingRow.rows[0]?.state.kind).toBe("broker");
+
+  await expect(
+    repository.claim("prices", {
+      leaseId: "bad",
+      staleBefore: iso(-60_000),
+      progress: progress("running", "bad"),
+    }),
+  ).rejects.toThrow(/Reserved sync_state key/);
+
+  const runRepo = createSyncRunRepository(db, "tenant-a");
+  await expect(runRepo.put({ phase: "running" }, "running", "")).rejects.toThrow(
+    "requires a lease",
+  );
+  await runRepo.claim(
+    { phase: "running", lease: { id: "run-lease", heartbeatAt: iso(0) }, runId: "r1", hop: 0 },
+    "running",
+    iso(-60_000),
+  );
+  const stopped = await runRepo.put(
+    {
+      phase: "terminal",
+      lease: null,
+      runId: "r1",
+      hop: 20,
+      outcome: "stopped-at-hop-limit",
+    },
+    "stopped-at-hop-limit",
+    "run-lease",
+  );
+  expect(stopped).toBe(true);
+  await pglite.exec("RESET ROLE");
+  const runRow = await pglite.query<{ status: string; state: Record<string, unknown> }>(
+    "SELECT status, state FROM investing.sync_state WHERE user_id = $1 AND broker = 'run'",
+    ["tenant-a"],
+  );
+  await pglite.exec("SET ROLE lavega_runtime");
+  expect(runRow.rows[0]?.status).toBe("partial");
+  expect(runRow.rows[0]?.state.kind).toBe("run");
 });

@@ -269,7 +269,10 @@ export async function syncScheduledBrokers(input: {
   cashFlowKindRules?: readonly CashFlowRule[];
 }): Promise<ScheduledSyncResult> {
   const now = input.now ?? new Date();
+  const startedRealMs = Date.now();
   const nowIso = now.toISOString();
+  const currentIso = () =>
+    new Date(now.getTime() + Math.max(0, Date.now() - startedRealMs)).toISOString();
   const staleBefore = new Date(now.getTime() - BROKER_SYNC_LEASE_TTL_MS).toISOString();
   const outcomes: BrokerSyncOutcome[] = [];
   const problems: string[] = [];
@@ -277,7 +280,11 @@ export async function syncScheduledBrokers(input: {
 
   /* Everything between the claim and the commit. Kept separate so the loop
    * below can commit or release on every exit, including the early ones. */
-  async function work(entry: ScheduledBrokerAdapter, claim: BrokerSyncClaim): Promise<ClaimedRun> {
+  async function work(
+    entry: ScheduledBrokerAdapter,
+    claim: BrokerSyncClaim,
+    signal: AbortSignal,
+  ): Promise<ClaimedRun> {
     const broker = entry.broker;
     const prior = claim.state;
     const lastSyncedAt = prior.lastSyncedAt;
@@ -287,7 +294,7 @@ export async function syncScheduledBrokers(input: {
       state: null,
     });
     const failed = (message: string): ClaimedRun => {
-      problems.push(`${broker}: ${message}`);
+      if (!signal.aborted) problems.push(`${broker}: ${message}`);
       return { outcome: { broker, status: "problem", lastSyncedAt, result: null }, state: null };
     };
 
@@ -335,6 +342,7 @@ export async function syncScheduledBrokers(input: {
     } catch (error) {
       return failed(readableError(error, broker));
     }
+    if (signal.aborted) return skipped();
     // No credentials means this broker was never set up: not a sync failure,
     // so it must not appear in `problems`. A broker that WAS configured and
     // then became unreadable (corrupted row, lost decryption key) does not
@@ -391,6 +399,7 @@ export async function syncScheduledBrokers(input: {
     } catch (error) {
       return failed(readableError(error, broker));
     }
+    if (signal.aborted) return skipped();
 
     /* The confirmed-rule seam: applied at the same point the broker's own
      * switch was, before anything is committed, so the stored snapshot and
@@ -464,11 +473,13 @@ export async function syncScheduledBrokers(input: {
         },
       };
     }
-    if (nextResume)
+    if (nextResume) {
+      problems.push(`${broker}: history sync is incomplete and will resume on the next run`);
       return {
         outcome: { broker, status: "problem", lastSyncedAt, result },
         state: { ...advanced, retryAfter: result.retryAfter ?? null, resume: nextResume },
       };
+    }
     return {
       outcome: {
         broker,
@@ -485,7 +496,7 @@ export async function syncScheduledBrokers(input: {
     const claim = await input.operations.claim(entry.broker, {
       leaseId,
       staleBefore,
-      progress: { status: "running", message: null, updatedAt: nowIso, leaseId },
+      progress: { status: "running", message: null, updatedAt: currentIso(), leaseId },
     });
     if (!claim.claimed) {
       // Not a failure: another run owns this broker, and its progress is what a
@@ -506,38 +517,84 @@ export async function syncScheduledBrokers(input: {
     }
 
     const before = problems.length;
+    const controller = new AbortController();
+    let resolveLeaseLost!: () => void;
+    const leaseLost = new Promise<{ readonly _tag: "lease-lost" }>((resolve) => {
+      resolveLeaseLost = () => resolve({ _tag: "lease-lost" });
+    });
     /* The claim is held across the whole read, so heartbeat it while the
-     * adapter works. A publish that loses the lease is not an error here: the
-     * commit below reports it and the result is discarded. */
+     * adapter works. When publish() returns false, the lease was lost to
+     * another run: abort work() immediately instead of continuing to burn
+     * broker requests for a result that cannot be committed. */
     const heartbeat = setInterval(() => {
+      if (controller.signal.aborted) return;
       void input.operations
         .publish(entry.broker, leaseId, {
           status: "running",
           message: null,
-          updatedAt: new Date().toISOString(),
+          updatedAt: currentIso(),
           leaseId,
+        })
+        .then((kept) => {
+          if (!kept && !controller.signal.aborted) {
+            clearInterval(heartbeat);
+            controller.abort();
+            resolveLeaseLost();
+          }
         })
         .catch(() => undefined);
     }, BROKER_SYNC_HEARTBEAT_MS);
     (heartbeat as { unref?: () => void }).unref?.();
-    let run: ClaimedRun;
-    try {
-      run = await work(entry, claim).catch((error): ClaimedRun => {
-        problems.push(`${entry.broker}: ${readableError(error, entry.broker)}`);
+
+    const workRun = work(entry, claim, controller.signal)
+      .then((run) => ({ _tag: "done" as const, run }))
+      .catch((error) => {
+        if (!controller.signal.aborted) {
+          problems.push(`${entry.broker}: ${readableError(error, entry.broker)}`);
+        }
         return {
-          outcome: {
-            broker: entry.broker,
-            status: "problem",
-            lastSyncedAt: claim.state.lastSyncedAt,
-            result: null,
+          _tag: "done" as const,
+          run: {
+            outcome: {
+              broker: entry.broker,
+              status: "problem" as const,
+              lastSyncedAt: claim.state.lastSyncedAt,
+              result: null,
+            },
+            state: null,
           },
-          state: null,
         };
       });
+
+    let settled:
+      | { readonly _tag: "lease-lost" }
+      | { readonly _tag: "done"; readonly run: ClaimedRun };
+    try {
+      settled = await Promise.race([workRun, leaseLost]);
     } finally {
       clearInterval(heartbeat);
     }
-    const progress = progressFor(leaseId, nowIso, run, problems[before] ?? null);
+
+    if (settled._tag === "lease-lost") {
+      // Discard any problems pushed by work() before it noticed the abort and
+      // report the lost lease cleanly without committing or overwriting the new
+      // lease holder's progress.
+      problems.length = before;
+      problems.push(`${entry.broker}: the result was discarded, this run is no longer current`);
+      outcomes.push({
+        broker: entry.broker,
+        status: "skipped",
+        lastSyncedAt: claim.state.lastSyncedAt,
+        result: null,
+      });
+      continue;
+    }
+
+    const { run } = settled;
+    if (run.outcome.status === "problem" && problems.length === before) {
+      problems.push(`${entry.broker}: sync ended with an unspecified problem`);
+    }
+    const progress = progressFor(leaseId, currentIso(), run, problems[before] ?? null);
 
     if (run.state === null) {
       await input.operations.release(entry.broker, leaseId, progress);

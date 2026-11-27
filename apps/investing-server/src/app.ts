@@ -276,8 +276,7 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
   const sharedPriceStore = dependencies.sharedPriceStore ?? false;
   const accountWrapperStore =
     dependencies.accountWrapperStore ?? createInMemoryAccountWrapperStore();
-  const disposalLabelStore =
-    dependencies.disposalLabelStore ?? createInMemoryDisposalLabelStore();
+  const disposalLabelStore = dependencies.disposalLabelStore ?? createInMemoryDisposalLabelStore();
   /* One budget for every partner call this app makes. Hosted, it is Neon's, so
    * the limit holds across invocations and users; elsewhere it is this process's. */
   const partnerBudget =
@@ -575,7 +574,14 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
       history: async (deadlineMs) => {
         const result = await brokerSync(false, ["history"], deadlineMs);
         const progress = await brokerProgress();
-        const pending = progress.status === "waiting" || progress.history != null;
+        const historyIncomplete =
+          progress.history != null &&
+          Object.values(progress.history).some(
+            (entry) =>
+              !entry.ordersComplete || !entry.transactionsComplete || !entry.dividendsComplete,
+          );
+        const pending =
+          progress.status === "waiting" || (progress.status !== "problem" && historyIncomplete);
         return {
           status: laneStatus(progress.status),
           waitUntilMs: progress.waitUntil ? Date.parse(progress.waitUntil) : null,
@@ -908,18 +914,18 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
         position.marketValue !== null && position.marketValue > 0,
     );
     const corrections = await sectorCorrectionStore.getAll(tenantId);
-    return c.json(
-      await inferSectorBatch({
-        tenantId,
-        priced,
-        exclude: excluded,
-        corrections,
-        resolveListing: (position) => resolveSectorListingFor(position),
-        store: sectorStore,
-        classifier: dependencies.sectorClassifier,
-        batchSize: SECTOR_INFERENCE_BATCH_SIZE,
-      }),
-    );
+    const result = await inferSectorBatch({
+      tenantId,
+      priced,
+      exclude: excluded,
+      corrections,
+      resolveListing: (position) => resolveSectorListingFor(position),
+      store: sectorStore,
+      classifier: dependencies.sectorClassifier,
+      batchSize: SECTOR_INFERENCE_BATCH_SIZE,
+    });
+    if (result.classified > 0) await sectorRevisionStore.raise(tenantId);
+    return c.json(result);
   });
   investingApp.get("/api/investing/dashboard", async (c) => {
     const timing = createServerTiming();
@@ -1092,14 +1098,17 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
       ...rules.filter((rule) => cashFlowKey(rule.broker, rule.typeKey) !== key),
       decision.rule,
     ];
-    await cashFlowStore.saveRules(nextRules);
-    await cashFlowStore.saveSuggestions(
-      suggestions.map((suggestion) =>
-        cashFlowKey(suggestion.broker, suggestion.typeKey) === key
-          ? { ...suggestion, state: "confirmed" as const, kind: decision.rule.kind }
-          : suggestion,
-      ),
+    const nextSuggestions = suggestions.map((suggestion) =>
+      cashFlowKey(suggestion.broker, suggestion.typeKey) === key
+        ? { ...suggestion, state: "confirmed" as const, kind: decision.rule.kind }
+        : suggestion,
     );
+    if (cashFlowStore.saveRulesAndSuggestions) {
+      await cashFlowStore.saveRulesAndSuggestions(nextRules, nextSuggestions);
+    } else {
+      await cashFlowStore.saveRules(nextRules);
+      await cashFlowStore.saveSuggestions(nextSuggestions);
+    }
     return c.json({ rule: decision.rule, rules: nextRules });
   });
 
@@ -1112,10 +1121,12 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
       return c.json({ problems: ["Invalid rejection"] }, 400);
     const key = cashFlowKey(body.broker, body.typeKey);
     const suggestions = await cashFlowStore.listSuggestions();
-    if (
-      !suggestions.some((suggestion) => cashFlowKey(suggestion.broker, suggestion.typeKey) === key)
-    )
-      return c.json({ problems: ["No suggestion for that type"] }, 404);
+    const target = suggestions.find(
+      (suggestion) => cashFlowKey(suggestion.broker, suggestion.typeKey) === key,
+    );
+    if (!target) return c.json({ problems: ["No suggestion for that type"] }, 404);
+    if (target.state === "confirmed")
+      return c.json({ problems: ["Confirmed suggestion cannot be rejected"] }, 409);
     await cashFlowStore.saveSuggestions(
       suggestions.map((suggestion) =>
         cashFlowKey(suggestion.broker, suggestion.typeKey) === key
@@ -1143,15 +1154,21 @@ export function createApp(dependencies: Partial<PriceDependencies> = {}) {
     if (!body || typeof body.broker !== "string" || typeof body.typeKey !== "string")
       return c.json({ problems: ["Invalid removal"] }, 400);
     const key = cashFlowKey(body.broker, body.typeKey);
-    const rules = await cashFlowStore.listRules();
+    const [rules, suggestions] = await Promise.all([
+      cashFlowStore.listRules(),
+      cashFlowStore.listSuggestions(),
+    ]);
     const nextRules = rules.filter((rule) => cashFlowKey(rule.broker, rule.typeKey) !== key);
-    await cashFlowStore.saveRules(nextRules);
     /* Removing a rule re-opens its vocabulary word for a future suggestion. */
-    await cashFlowStore.saveSuggestions(
-      (await cashFlowStore.listSuggestions()).filter(
-        (suggestion) => cashFlowKey(suggestion.broker, suggestion.typeKey) !== key,
-      ),
+    const nextSuggestions = suggestions.filter(
+      (suggestion) => cashFlowKey(suggestion.broker, suggestion.typeKey) !== key,
     );
+    if (cashFlowStore.saveRulesAndSuggestions) {
+      await cashFlowStore.saveRulesAndSuggestions(nextRules, nextSuggestions);
+    } else {
+      await cashFlowStore.saveRules(nextRules);
+      await cashFlowStore.saveSuggestions(nextSuggestions);
+    }
     return c.json({ rules: nextRules });
   });
 

@@ -138,14 +138,17 @@ export function createFileCredentialStore(
       data = null;
     },
     async getCredentials<T extends CredentialBroker>(tenantId: string, broker: T) {
-      if (data == null && (await readBlob()) != null) throw new Error("credential vault is locked");
-      const match = data?.credentials.find(
-        (item) => item.tenantId === tenantId && item.broker === broker,
-      );
-      return (match ? structuredClone(match) : null) as Extract<
-        BrokerCredentials,
-        { broker: T }
-      > | null;
+      return queue(async () => {
+        if (data == null && (await readBlob()) != null)
+          throw new Error("credential vault is locked");
+        const match = data?.credentials.find(
+          (item) => item.tenantId === tenantId && item.broker === broker,
+        );
+        return (match ? structuredClone(match) : null) as Extract<
+          BrokerCredentials,
+          { broker: T }
+        > | null;
+      });
     },
     putCredentials(credentials) {
       const credentialValue = structuredClone(credentials);
@@ -171,7 +174,7 @@ export function createFileCredentialStore(
       });
     },
     async getBrokerData() {
-      return data ? structuredClone(data.brokerData ?? {}) : null;
+      return queue(async () => (data ? structuredClone(data.brokerData ?? {}) : null));
     },
     putBrokerData(snapshot) {
       return queue(async () => {
@@ -194,8 +197,10 @@ export function createFileCredentialStore(
       });
     },
     async getAgentRun() {
-      if (!data) throw new Error("credential vault is locked");
-      return structuredClone(data.agentRun ?? null);
+      return queue(async () => {
+        if (!data) throw new Error("credential vault is locked");
+        return structuredClone(data.agentRun ?? null);
+      });
     },
     startAgentRun(record) {
       return queue(async () => {

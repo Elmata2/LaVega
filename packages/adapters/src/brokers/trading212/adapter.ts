@@ -690,10 +690,10 @@ function result(
   cashFlows: CashFlow[],
   problems: string[],
   retryAfterMs: number | null,
-  tradesComplete = true,
-  resume?: BrokerSyncResume,
-  completeness?: {
+  resume: BrokerSyncResume | undefined,
+  completeness: {
     positions: "complete" | "partial" | "unavailable";
+    trades: "complete" | "partial" | "unavailable";
     cashBalances: "complete" | "partial" | "unavailable";
     dividends: "complete" | "partial" | "unavailable";
     cashFlows: "complete" | "partial" | "unavailable";
@@ -702,11 +702,11 @@ function result(
 ): BrokerResult {
   return {
     sections: {
-      positions: { status: completeness?.positions ?? "complete", rows: positions },
-      trades: { status: tradesComplete ? "complete" : "partial", rows: trades },
-      dividends: { status: completeness?.dividends ?? "complete", rows: dividends },
-      cashBalances: { status: completeness?.cashBalances ?? "complete", rows: cashBalances },
-      cashFlows: { status: completeness?.cashFlows ?? "complete", rows: cashFlows },
+      positions: { status: completeness.positions, rows: positions },
+      trades: { status: completeness.trades, rows: trades },
+      dividends: { status: completeness.dividends, rows: dividends },
+      cashBalances: { status: completeness.cashBalances, rows: cashBalances },
+      cashFlows: { status: completeness.cashFlows, rows: cashFlows },
     },
     source: SOURCE,
     problems,
@@ -920,10 +920,66 @@ export const TAIL_READ_STREAMS: readonly BrokerHistoryStream[] = [
   "dividends",
 ];
 
+type HoldingsSectionState =
+  | { readonly _tag: "skipped" }
+  | { readonly _tag: "failed" }
+  | { readonly _tag: "partial" }
+  | { readonly _tag: "complete" };
+
+type HistoryStreamState =
+  | { readonly _tag: "skipped" }
+  | { readonly _tag: "pending"; readonly nextUrl: string | undefined }
+  | { readonly _tag: "paused"; readonly nextUrl: string }
+  | { readonly _tag: "partial"; readonly usedTail: boolean }
+  | { readonly _tag: "complete"; readonly readFull: boolean; readonly usedTail: boolean };
+
+function holdingsSectionStatus(
+  state: HoldingsSectionState,
+): "complete" | "partial" | "unavailable" {
+  switch (state._tag) {
+    case "complete":
+      return "complete";
+    case "partial":
+      return "partial";
+    case "skipped":
+    case "failed":
+      return "unavailable";
+  }
+}
+
+function historySectionStatus(
+  state: HistoryStreamState,
+  rowCount: number,
+): "complete" | "partial" | "unavailable" {
+  switch (state._tag) {
+    case "complete":
+      return "complete";
+    case "partial":
+      return "partial";
+    case "paused":
+    case "pending":
+      return rowCount > 0 ? "partial" : "unavailable";
+    case "skipped":
+      return "unavailable";
+  }
+}
+
+function initialHistoryState(
+  readHistory: boolean,
+  complete: boolean | undefined,
+  nextPagePath: string | null | undefined,
+  defaultNextUrl?: string,
+): HistoryStreamState {
+  if (!readHistory) return { _tag: "skipped" };
+  if (complete === true) return { _tag: "complete", readFull: false, usedTail: false };
+  return { _tag: "pending", nextUrl: nextPagePath ?? defaultNextUrl };
+}
+
 export function createTrading212Adapter(config: Trading212Config): BrokerAccessAdapter {
   // Trading 212 beta docs do not confirm a read-only key scope. The UI consent
   // gate must warn users before storing/using credentials; this adapter only reads.
   const partnerBudget = config.partnerBudget ?? createMemoryPartnerBudgetClient();
+  let cachedAccountCurrency: string | undefined;
   return {
     async sync({ entity, resume: inputResume, deadlineMs, lanes, knownHistory, fullReadStreams }) {
       const requestConfig: Trading212RequestConfig = { ...config, deadlineMs };
@@ -979,32 +1035,29 @@ export function createTrading212Adapter(config: Trading212Config): BrokerAccessA
         !streamFull("dividends") &&
         tailCapable("dividends") &&
         knownHistory?.dividendIds != null;
-      let usedTail = false;
-      let ordersComplete = readHistory && resume.ordersComplete === true;
-      let transactionsComplete = readHistory && resume.transactionsComplete === true;
-      let dividendsComplete = readHistory && resume.dividendsComplete === true;
-      let ordersResume =
-        readHistory && !ordersComplete
-          ? (resume.ordersNextPagePath ?? firstHistoryUrl())
-          : undefined;
-      let transactionsResume =
-        readHistory && !transactionsComplete
-          ? (resume.transactionsNextPagePath ?? undefined)
-          : undefined;
-      let dividendsResume =
-        readHistory && !dividendsComplete ? (resume.dividendsNextPagePath ?? undefined) : undefined;
-      let holdingsComplete = false;
-      let summaryComplete = false;
-      let holdingsPartial = false;
-      let summaryPartial = false;
-      let ordersPartial = false;
-      let transactionsPartial = false;
-      let dividendsPartial = false;
-      let ordersReadFull = false;
-      let transactionsReadFull = false;
-      let dividendsReadFull = false;
 
-      let accountCurrency = "";
+      let positionsState: HoldingsSectionState = { _tag: "skipped" };
+      let summaryState: HoldingsSectionState = { _tag: "skipped" };
+      let ordersState: HistoryStreamState = initialHistoryState(
+        readHistory,
+        resume.ordersComplete,
+        resume.ordersNextPagePath,
+        firstHistoryUrl(),
+      );
+      let transactionsState: HistoryStreamState = initialHistoryState(
+        readHistory,
+        resume.transactionsComplete,
+        resume.transactionsNextPagePath,
+      );
+      let dividendsState: HistoryStreamState = initialHistoryState(
+        readHistory,
+        resume.dividendsComplete,
+        resume.dividendsNextPagePath,
+      );
+
+      let accountCurrency = cachedAccountCurrency ?? "";
+      let accountCurrencyAttempted = false;
+
       if (readHoldings) {
         try {
           throwIfHostDeadline(deadlineMs, 0);
@@ -1013,7 +1066,6 @@ export function createTrading212Adapter(config: Trading212Config): BrokerAccessA
           // current to show.
           const holdingsUrl = new URL(POSITIONS_PATH, config.baseUrl).toString();
           const holdings = await positions(holdingsUrl, requestConfig, budget);
-          holdingsComplete = true;
           config.diagnostics?.({ type: "positions", count: holdings.length });
           // `asOf` is when the broker reported the holding, not when it was
           // opened. Trading 212's per-position `createdAt` is the opening date,
@@ -1021,23 +1073,27 @@ export function createTrading212Adapter(config: Trading212Config): BrokerAccessA
           // past: the FX rate used to value it, and the quantity the chart walks
           // trades out from, both came from the day it was bought.
           const asOf = snapshotDate();
+          let hadRowError = false;
           for (const holding of holdings) {
             try {
               positionsResult.push(mapPosition(holding, entity, asOf));
             } catch (error) {
-              holdingsPartial = true;
+              hadRowError = true;
               problems.push(
                 error instanceof Error ? error.message : "Trading 212 holding is invalid",
               );
             }
           }
+          positionsState = hadRowError ? { _tag: "partial" } : { _tag: "complete" };
         } catch (error) {
+          positionsState = { _tag: "failed" };
           notePaused(error);
           problems.push(
             error instanceof Error ? error.message : "Trading 212 holdings sync failed",
           );
         }
 
+        accountCurrencyAttempted = true;
         try {
           throwIfHostDeadline(deadlineMs, 0);
           const summary = await accountSummary(
@@ -1045,13 +1101,14 @@ export function createTrading212Adapter(config: Trading212Config): BrokerAccessA
             requestConfig,
             budget,
           );
-          summaryComplete = true;
           accountCurrency = string(summary.currency, "account summary currency");
+          cachedAccountCurrency = accountCurrency;
           const mapped = mapCashBalance(summary, entity, snapshotDate());
           if (mapped.balance) cashBalances.push(mapped.balance);
-          if (mapped.problems.length > 0) summaryPartial = true;
           problems.push(...mapped.problems);
+          summaryState = mapped.problems.length > 0 ? { _tag: "partial" } : { _tag: "complete" };
         } catch (error) {
+          summaryState = { _tag: "failed" };
           notePaused(error);
           problems.push(
             error instanceof Error ? error.message : "Trading 212 account-summary sync failed",
@@ -1059,16 +1116,40 @@ export function createTrading212Adapter(config: Trading212Config): BrokerAccessA
         }
       }
 
-      // Account currency is only known from the summary. A history-only call
-      // therefore maps rows that state their own currency and reports a
-      // problem for rows that do not; the app always reads the holdings lane
-      // first, and the cron reads both, so the summary is normally present.
+      /** Lazily resolves account currency on history-only runs when a transaction
+       *  or dividend omits its own currency and no prior holdings run cached it. */
+      const ensureAccountCurrency = async (): Promise<void> => {
+        if (accountCurrency || accountCurrencyAttempted) return;
+        accountCurrencyAttempted = true;
+        try {
+          throwIfHostDeadline(deadlineMs, 0);
+          const summary = await accountSummary(
+            new URL(ACCOUNT_SUMMARY_PATH, config.baseUrl).toString(),
+            requestConfig,
+            budget,
+          );
+          accountCurrency = string(summary.currency, "account summary currency");
+          cachedAccountCurrency = accountCurrency;
+        } catch (error) {
+          if (
+            error instanceof Trading212CredentialsRejectedError ||
+            error instanceof Trading212SyncPausedError
+          ) {
+            throw error;
+          }
+          problems.push(
+            error instanceof Error ? error.message : "Trading 212 account-summary sync failed",
+          );
+        }
+      };
 
-      if (readHistory && !ordersComplete) {
-        let nextUrl = ordersResume ?? firstHistoryUrl();
+      if (ordersState._tag === "pending") {
+        let nextUrl = ordersState.nextUrl ?? firstHistoryUrl();
         const seenOrderPaths = new Set<string>();
         let historyPages = 0;
         let ordersRead = 0;
+        let hadRowErrors = false;
+        let hitTailStop = false;
         try {
           while (nextUrl) {
             throwIfHostDeadline(deadlineMs, 0);
@@ -1096,7 +1177,7 @@ export function createTrading212Adapter(config: Trading212Config): BrokerAccessA
                   skippedTypes.add(String(fill ? (fill.type ?? "missing-fill") : "missing-fill"));
                 }
               } catch (error) {
-                ordersPartial = true;
+                hadRowErrors = true;
                 problems.push(
                   error instanceof Error ? error.message : "Trading 212 order is invalid",
                 );
@@ -1122,19 +1203,18 @@ export function createTrading212Adapter(config: Trading212Config): BrokerAccessA
                 knownHistory!.tradeIds!.has(`trading212:${stableTradeId(trade)}`),
               )
             ) {
-              usedTail = true;
+              hitTailStop = true;
               break;
             }
             nextUrl = current.nextPagePath
               ? new URL(current.nextPagePath, config.baseUrl).toString()
               : "";
           }
-          ordersComplete = true;
-          ordersResume = undefined;
-          ordersReadFull = !tailOrders;
+          ordersState = hadRowErrors
+            ? { _tag: "partial", usedTail: hitTailStop }
+            : { _tag: "complete", readFull: !tailOrders, usedTail: hitTailStop };
         } catch (error) {
-          ordersComplete = false;
-          ordersResume = nextUrl || firstHistoryUrl();
+          ordersState = { _tag: "paused", nextUrl: nextUrl || firstHistoryUrl() };
           notePaused(error);
           problems.push(error instanceof Error ? error.message : "Trading 212 sync failed");
         }
@@ -1142,15 +1222,17 @@ export function createTrading212Adapter(config: Trading212Config): BrokerAccessA
 
       const readCashHistory = async (
         history: "transactions" | "dividends",
+        initialNextUrl: string | undefined,
         tail: boolean,
         known: ReadonlySet<string> | undefined,
-      ): Promise<boolean> => {
+      ): Promise<HistoryStreamState> => {
         const path = history === "transactions" ? TRANSACTIONS_PATH : DIVIDENDS_PATH;
         const seenPaths = new Set<string>();
         const seenReferences = new Set<string>();
-        const stored = history === "transactions" ? transactionsResume : dividendsResume;
-        let nextUrl = stored ?? firstCashUrl(path);
+        let nextUrl = initialNextUrl ?? firstCashUrl(path);
         let pageNumber = 0;
+        let hadRowErrors = false;
+        let hitTailStop = false;
         try {
           while (nextUrl) {
             throwIfHostDeadline(deadlineMs, 0);
@@ -1173,6 +1255,7 @@ export function createTrading212Adapter(config: Trading212Config): BrokerAccessA
             });
             const pageIds: string[] = [];
             for (const row of current.items) {
+              if (!optionalString(row.currency)) await ensureAccountCurrency();
               try {
                 const reference = string(
                   row.reference,
@@ -1193,8 +1276,7 @@ export function createTrading212Adapter(config: Trading212Config): BrokerAccessA
                   pageIds.push(dividend.id);
                 }
               } catch (error) {
-                if (history === "transactions") transactionsPartial = true;
-                else dividendsPartial = true;
+                hadRowErrors = true;
                 problems.push(
                   error instanceof Error ? error.message : `Trading 212 ${history} row is invalid`,
                 );
@@ -1207,77 +1289,80 @@ export function createTrading212Adapter(config: Trading212Config): BrokerAccessA
               pageIds.length > 0 &&
               pageIds.every((id) => known.has(id))
             ) {
-              usedTail = true;
-              return true;
+              hitTailStop = true;
+              break;
             }
             nextUrl = current.nextPagePath
               ? new URL(current.nextPagePath, config.baseUrl).toString()
               : "";
           }
-          return false;
+          // A stream that ran as a tail never read the full history, so it
+          // must merge even when this run exhausted its cursor.
+          return hadRowErrors
+            ? { _tag: "partial", usedTail: hitTailStop }
+            : { _tag: "complete", readFull: !tail, usedTail: hitTailStop };
         } catch (error) {
-          if (history === "transactions") transactionsResume = nextUrl || firstCashUrl(path);
-          else dividendsResume = nextUrl || firstCashUrl(path);
-          throw error;
+          notePaused(error);
+          problems.push(
+            error instanceof Error ? error.message : `Trading 212 ${history} sync failed`,
+          );
+          return { _tag: "paused", nextUrl: nextUrl || firstCashUrl(path) };
         }
       };
 
       // Cash history waits until order history is done so a resumed run does
       // not spend the request budget on a second stream while trades are incomplete.
-      if (readHistory && ordersComplete) {
-        for (const history of ["transactions", "dividends"] as const) {
-          const alreadyDone = history === "transactions" ? transactionsComplete : dividendsComplete;
-          if (alreadyDone) continue;
-          const tail = history === "transactions" ? tailTransactions : tailDividends;
-          const known =
-            history === "transactions" ? knownHistory?.cashFlowIds : knownHistory?.dividendIds;
-          try {
-            await readCashHistory(history, tail, known);
-            // A stream that ran as a tail never read the full history, so it
-            // must merge even when this run exhausted its cursor.
-            if (history === "transactions") {
-              transactionsComplete = true;
-              transactionsResume = undefined;
-              transactionsReadFull = !tailTransactions;
-            } else {
-              dividendsComplete = true;
-              dividendsResume = undefined;
-              dividendsReadFull = !tailDividends;
-            }
-          } catch (error) {
-            notePaused(error);
-            problems.push(
-              error instanceof Error ? error.message : `Trading 212 ${history} sync failed`,
-            );
-          }
+      if (ordersState._tag === "complete") {
+        if (transactionsState._tag === "pending") {
+          transactionsState = await readCashHistory(
+            "transactions",
+            transactionsState.nextUrl,
+            tailTransactions,
+            knownHistory?.cashFlowIds,
+          );
+        }
+        if (dividendsState._tag === "pending") {
+          dividendsState = await readCashHistory(
+            "dividends",
+            dividendsState.nextUrl,
+            tailDividends,
+            knownHistory?.dividendIds,
+          );
         }
       }
 
+      const streamResume = (
+        state: HistoryStreamState,
+        completeKey: "ordersComplete" | "transactionsComplete" | "dividendsComplete",
+        nextKey: "ordersNextPagePath" | "transactionsNextPagePath" | "dividendsNextPagePath",
+      ): Partial<BrokerSyncResume> => {
+        if (state._tag === "complete") return { [completeKey]: true };
+        if (state._tag === "paused") return { [nextKey]: state.nextUrl };
+        if (state._tag === "pending" && state.nextUrl) return { [nextKey]: state.nextUrl };
+        return {};
+      };
+
       const nextResume: BrokerSyncResume | undefined = readHistory
         ? {
-            ...(ordersComplete
-              ? { ordersComplete: true }
-              : ordersResume
-                ? { ordersNextPagePath: ordersResume }
-                : {}),
-            ...(transactionsComplete
-              ? { transactionsComplete: true }
-              : transactionsResume
-                ? { transactionsNextPagePath: transactionsResume }
-                : {}),
-            ...(dividendsComplete
-              ? { dividendsComplete: true }
-              : dividendsResume
-                ? { dividendsNextPagePath: dividendsResume }
-                : {}),
+            ...streamResume(ordersState, "ordersComplete", "ordersNextPagePath"),
+            ...streamResume(transactionsState, "transactionsComplete", "transactionsNextPagePath"),
+            ...streamResume(dividendsState, "dividendsComplete", "dividendsNextPagePath"),
           }
         : undefined;
+
       const fullStreams: BrokerHistoryStream[] = [];
       if (readHistory) {
-        if (ordersReadFull) fullStreams.push("orders");
-        if (transactionsReadFull) fullStreams.push("transactions");
-        if (dividendsReadFull) fullStreams.push("dividends");
+        if (ordersState._tag === "complete" && ordersState.readFull) fullStreams.push("orders");
+        if (transactionsState._tag === "complete" && transactionsState.readFull)
+          fullStreams.push("transactions");
+        if (dividendsState._tag === "complete" && dividendsState.readFull)
+          fullStreams.push("dividends");
       }
+
+      const usedTail = [ordersState, transactionsState, dividendsState].some(
+        (state) => (state._tag === "complete" || state._tag === "partial") && state.usedTail,
+      );
+
       const synced = result(
         positionsResult,
         trades,
@@ -1286,51 +1371,16 @@ export function createTrading212Adapter(config: Trading212Config): BrokerAccessA
         cashFlows,
         problems,
         retryAfterMs,
-        readHistory && ordersComplete && !ordersPartial,
         nextResume,
         {
-          positions: readHoldings
-            ? holdingsComplete
-              ? holdingsPartial
-                ? "partial"
-                : "complete"
-              : positionsResult.length > 0
-                ? "partial"
-                : "unavailable"
-            : "unavailable",
-          cashBalances: readHoldings
-            ? summaryComplete
-              ? summaryPartial
-                ? "partial"
-                : "complete"
-              : "unavailable"
-            : "unavailable",
-          dividends: readHistory
-            ? dividendsComplete
-              ? dividendsPartial
-                ? "partial"
-                : "complete"
-              : dividends.length > 0
-                ? "partial"
-                : "unavailable"
-            : "unavailable",
-          cashFlows: readHistory
-            ? transactionsComplete
-              ? transactionsPartial
-                ? "partial"
-                : "complete"
-              : cashFlows.length > 0
-                ? "partial"
-                : "unavailable"
-            : "unavailable",
+          positions: holdingsSectionStatus(positionsState),
+          trades: historySectionStatus(ordersState, trades.length),
+          cashBalances: holdingsSectionStatus(summaryState),
+          dividends: historySectionStatus(dividendsState, dividends.length),
+          cashFlows: historySectionStatus(transactionsState, cashFlows.length),
         },
         readHistory ? fullStreams : undefined,
       );
-      if (!readHistory) {
-        synced.sections.trades = { status: "unavailable", rows: [] };
-        synced.sections.dividends = { status: "unavailable", rows: [] };
-        synced.sections.cashFlows = { status: "unavailable", rows: [] };
-      }
       const incremental = readHistory && (usedTail || historyPending(inputResume ?? config.resume));
       return {
         ...synced,

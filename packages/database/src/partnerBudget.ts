@@ -33,8 +33,10 @@ export type PartnerBudgetRepository = {
     key: PartnerBudgetKey,
     seen: { blockedUntilMs: number | null; intervalMs: number | null },
   ): Promise<void>;
-  /** No slot before `until`. Never moves an existing block earlier. */
+  /** Records a rejection (429, or 401/403 from Yahoo): no slot before `until`. */
   reject(key: PartnerBudgetKey, until: Date): Promise<void>;
+  /** Releases a previously reserved slot if no later caller has advanced `next_at` past it. */
+  releaseSlot(key: PartnerBudgetKey, slot: Date, intervalMs: number): Promise<void>;
 };
 
 /* The slot is returned as whole epoch milliseconds, not a timestamp: the
@@ -60,7 +62,7 @@ const RESERVE_BEFORE = `
   SET next_at = CASE WHEN c.slot <= $4::timestamptz
                      THEN c.slot + make_interval(secs => COALESCE(b.interval_ms, $5::integer) / 1000.0)
                      ELSE b.next_at END,
-      updated_at = now()
+      updated_at = CASE WHEN c.slot <= $4::timestamptz THEN now() ELSE b.updated_at END
   FROM (
     SELECT GREATEST(now(), next_at, COALESCE(blocked_until, now())) AS slot
     FROM investing.partner_budgets
@@ -70,6 +72,13 @@ const RESERVE_BEFORE = `
   WHERE b.partner = $1 AND b.endpoint = $2 AND b.scope_id = $3
   RETURNING floor(extract(epoch FROM c.slot) * 1000)::bigint AS slot_ms,
             (c.slot <= $4::timestamptz) AS granted`;
+
+const RELEASE_SLOT = `
+  UPDATE investing.partner_budgets
+  SET next_at = $4::timestamptz,
+      updated_at = now()
+  WHERE partner = $1 AND endpoint = $2 AND scope_id = $3
+    AND next_at = $4::timestamptz + make_interval(secs => COALESCE(interval_ms, $5::integer) / 1000.0)`;
 
 const SEED = `
   INSERT INTO investing.partner_budgets (partner, endpoint, scope_id, next_at)
@@ -146,6 +155,15 @@ export function createPartnerBudgetRepository(db: Database): PartnerBudgetReposi
         key.scopeId,
         until.toISOString(),
         null,
+      ]);
+    },
+    async releaseSlot(key, slot, intervalMs) {
+      await db.http.query(RELEASE_SLOT, [
+        key.partner,
+        key.endpoint,
+        key.scopeId,
+        slot.toISOString(),
+        intervalMs,
       ]);
     },
   };

@@ -229,8 +229,9 @@ test("broker sync state round-trips per broker", async () => {
   });
   expect(executed(calls).at(-1)?.values).toEqual([
     "trading212",
-    JSON.stringify({ lastSyncedAt: "2026-01-03T00:00:00.000Z", retryAfter: null }),
+    JSON.stringify({ lastSyncedAt: "2026-01-03T00:00:00.000Z", retryAfter: null, kind: "broker" }),
     "2026-01-03T00:00:00.000Z",
+    "idle",
   ]);
 });
 
@@ -253,7 +254,12 @@ test("price sync claim returns the active row when another invocation owns a fre
   expect(claim.values).toEqual([
     "prices",
     "running",
-    JSON.stringify({ status: "running", leaseId: "newer", updatedAt: "2026-09-03T10:00:10.000Z" }),
+    JSON.stringify({
+      status: "running",
+      leaseId: "newer",
+      updatedAt: "2026-09-03T10:00:10.000Z",
+      kind: "prices",
+    }),
     "2026-09-03T09:59:30.000Z",
   ]);
 });
@@ -276,7 +282,7 @@ test("price sync writes require the lease that claimed the row", async () => {
   expect(write.values?.slice(0, 4)).toEqual([
     "prices",
     "partial",
-    JSON.stringify({ status: "paused", leaseId: "mine", problems: [] }),
+    JSON.stringify({ status: "paused", leaseId: "mine", problems: [], kind: "prices" }),
     "mine",
   ]);
 });
