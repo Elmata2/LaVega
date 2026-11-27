@@ -13,7 +13,15 @@
   "testRunner": "vitest",
   "vitest": { "configFile": "vitest.mutation.config.ts" },
   "coverageAnalysis": "perTest",
-  "mutate": ["src/money.ts", "src/tax.ts", "src/investing/costBasis.ts"],
+  "mutate": [
+    "src/money.ts",
+    "src/tax.ts",
+    "src/investing/costBasis.ts",
+    "src/redact.ts",
+    "src/sentryScrub.ts",
+    "src/fx.ts",
+    "src/investing/splits.ts"
+  ],
   "reporters": ["clear-text", "progress", "html", "json"],
   "htmlReporter": { "fileName": "reports/mutation/index.html" },
   "jsonReporter": { "fileName": "reports/mutation/mutation.json" },

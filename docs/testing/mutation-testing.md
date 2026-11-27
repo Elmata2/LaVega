@@ -26,6 +26,10 @@ Files in the pilot:
 - `src/money.ts`
 - `src/tax.ts`
 - `src/investing/costBasis.ts`
+- `src/redact.ts`
+- `src/sentryScrub.ts`
+- `src/fx.ts`
+- `src/investing/splits.ts`
 
 `src/taxpacks/*.ts` hold constant rate tables. `ignoreStatic` skips every mutant
 in them, so they are not in the list. Assert those values directly in their own

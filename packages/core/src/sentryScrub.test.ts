@@ -24,6 +24,13 @@ test("with a DSN the options are errors-only, carry no PII and enable no tracing
   });
   expect(options).toMatchObject({ sendClientReports: false });
   expect(options?.beforeSendTransaction()).toBeNull();
+  expect(options?.beforeSend({ user: { email: EMAIL }, level: "error" })).toEqual({
+    level: "error",
+  });
+  expect(options?.beforeBreadcrumb({ category: "console", message: "hi" })).toBeNull();
+  expect(options?.beforeBreadcrumb({ category: "custom", message: EMAIL })).toEqual({
+    category: "custom",
+  });
   const kept = options?.integrations([{ name: "BrowserSession" }, { name: "GlobalHandlers" }]);
   expect(kept).toEqual([{ name: "GlobalHandlers" }]);
   expect(options).not.toHaveProperty("tracesSampleRate");
