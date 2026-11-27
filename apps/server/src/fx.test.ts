@@ -198,3 +198,45 @@ test("parseAggregatorPayload weigert wat hij niet kan plaatsen", async () => {
     parseAggregatorPayload({ ...AGG_JSON, time_next_update_utc: undefined })?.nextUpdate,
   ).toBeNull();
 });
+
+test("stale ecbGood fallback is not frozen for 6 hours when aggregator succeeds", async () => {
+  vi.stubGlobal("fetch", routes({ ecb: ECB_JSON, agg: "down" }));
+  await getFxRate();
+
+  vi.useFakeTimers();
+  try {
+    vi.setSystemTime(Date.now() + 7 * 60 * 60 * 1000);
+    const degraded = routes({ ecb: "down", agg: AGG_JSON });
+    vi.stubGlobal("fetch", degraded);
+    const first = await getFxRate();
+    expect(first.layers.ecb?.status).toBe("geheugen");
+
+    const recovered = routes({ ecb: { ...ECB_JSON, date: "2026-08-22" }, agg: AGG_JSON });
+    vi.stubGlobal("fetch", recovered);
+    const second = await getFxRate();
+    expect(second.layers.ecb?.status).toBe("live");
+    expect(second.layers.ecb?.date).toBe("2026-08-22");
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test("concurrent getFxRate calls deduplicate in-flight upstream fetches", async () => {
+  let ecbCalls = 0;
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (input: unknown) => {
+      const url = String(input);
+      await new Promise((r) => setTimeout(r, 10));
+      if (url.includes("frankfurter")) {
+        ecbCalls += 1;
+        return ok(ECB_JSON);
+      }
+      return ok(AGG_JSON);
+    }),
+  );
+  const [a, b, c] = await Promise.all([getFxRate(), getFxRate(), getFxRate()]);
+  expect(ecbCalls).toBe(1);
+  expect(a).toEqual(b);
+  expect(b).toEqual(c);
+});

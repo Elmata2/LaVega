@@ -76,6 +76,9 @@ function carriesInvoiceNumber(t: Tx, invoiceNumber: string | undefined): boolean
 
 export function reconcileInvoices(invoices: Invoice[], txs: Tx[]): Invoice[] {
   const used = new Set<string>();
+  for (const inv of invoices) {
+    if (inv.status === "paid" && inv.matchedTxId) used.add(inv.matchedTxId);
+  }
   return invoices.map((inv) => {
     if (inv.status !== "expected") return inv;
     const tol = Math.max(0.02, inv.amount * 0.01);

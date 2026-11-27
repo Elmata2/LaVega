@@ -47,3 +47,17 @@ test("MT940: the parsed account's balanceDate is the last (max) :61: tx date in 
   const { accounts } = parseMt940(MT940);
   expect(accounts[0].balanceDate).toBe("2026-01-03");
 });
+
+test("MT940: opening balance :60F: never masks a missing closing balance :62F:", () => {
+  const withoutClosing = [
+    ":20:STARTUMS",
+    ":25:NL91ABNA0417164300",
+    ":60F:C260101EUR1000,00",
+    ":61:2601020102D75,50NTRFNONREF",
+    ":86:/NAME/Albert Heijn/REMI/Boodschappen",
+  ].join("\n");
+  const { accounts, txs } = parseMt940(withoutClosing);
+  expect(txs).toHaveLength(1);
+  expect(accounts[0].currency).toBe("EUR");
+  expect(accounts[0].balance).toBeNull();
+});

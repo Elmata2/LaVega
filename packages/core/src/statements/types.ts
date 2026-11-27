@@ -40,6 +40,54 @@ export type DocumentSource = "manual-upload" | "import";
 
 export type DocumentReviewStatus = "unmatched" | "linked" | "rejected";
 
+/** Discriminated union for a document's account-link lifecycle. Only `linked`
+ *  carries an `accountKey`; `unmatched` and `rejected` never do. */
+export type DocumentLinkState =
+  | { status: "unmatched" }
+  | { status: "linked"; accountKey: string }
+  | { status: "rejected" };
+
+/** Derive the canonical link state from a stored document, neutralizing illegal
+ *  field combinations such as `rejected` with a stale `accountKey` or `linked`
+ *  with a missing `accountKey`. */
+export function documentLinkState(
+  doc: Pick<VaultDocument, "reviewStatus" | "accountKey">,
+): DocumentLinkState {
+  if (doc.reviewStatus === "linked") {
+    const key = doc.accountKey?.trim() ?? "";
+    return key !== "" ? { status: "linked", accountKey: key } : { status: "unmatched" };
+  }
+  if (doc.reviewStatus === "rejected") return { status: "rejected" };
+  return { status: "unmatched" };
+}
+
+/** Enforce the reviewStatus/accountKey invariant on a VaultDocument. */
+export function normalizeDocumentLinkState(doc: VaultDocument): VaultDocument {
+  const state = documentLinkState(doc);
+  if (state.status === "linked") {
+    return doc.reviewStatus === "linked" && doc.accountKey === state.accountKey
+      ? doc
+      : { ...doc, reviewStatus: "linked", accountKey: state.accountKey };
+  }
+  return doc.reviewStatus === state.status && doc.accountKey === null
+    ? doc
+    : { ...doc, reviewStatus: state.status, accountKey: null };
+}
+
+export function linkDocument(doc: VaultDocument, accountKey: string): VaultDocument {
+  const key = accountKey.trim();
+  if (key === "") throw new Error("Cannot link a document to an empty accountKey");
+  return { ...doc, reviewStatus: "linked", accountKey: key };
+}
+
+export function rejectDocument(doc: VaultDocument): VaultDocument {
+  return { ...doc, reviewStatus: "rejected", accountKey: null };
+}
+
+export function unmatchDocument(doc: VaultDocument): VaultDocument {
+  return { ...doc, reviewStatus: "unmatched", accountKey: null };
+}
+
 /** The metadata of one stored document. Identity is the SHA-256: the same bytes
  *  uploaded twice is one row, and the sealed bytes live under the same key in
  *  the document store. */
@@ -134,10 +182,11 @@ export function upsertDocument(
   documents: readonly VaultDocument[],
   doc: VaultDocument,
 ): VaultDocument[] {
-  const index = documents.findIndex((existing) => existing.id === doc.id);
-  if (index < 0) return [...documents, doc];
+  const normalized = normalizeDocumentLinkState(doc);
+  const index = documents.findIndex((existing) => existing.id === normalized.id);
+  if (index < 0) return [...documents, normalized];
   const next = [...documents];
-  next[index] = doc;
+  next[index] = normalized;
   return next;
 }
 

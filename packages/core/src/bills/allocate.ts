@@ -328,6 +328,7 @@ export function applyBillAction(input: BillActionInput): BillActionOutcome {
     const existing = decisions.marks.findIndex((m) => m.occurrenceId === occurrence.id);
     if (existing >= 0) decisions.marks[existing] = mark;
     else decisions.marks.push(mark);
+    decisions.matches = decisions.matches.filter((m) => m.occurrenceId !== occurrence.id);
     occurrences[index] = {
       ...occurrence,
       status: "paid",
@@ -349,7 +350,7 @@ export function applyBillAction(input: BillActionInput): BillActionOutcome {
   }
   const occurrence = occurrences[occurrenceIndex.get(match.occurrenceId) ?? -1];
   const billIndexForMatch = billIndex.get(match.billId);
-  if (occurrence == null || billIndexForMatch == null) {
+  if (occurrence == null || billIndexForMatch == null || occurrence.status !== "scheduled") {
     return { bills, occurrences, decisions, changed: false, priceChange: null };
   }
   decisions.matches.push(match);
@@ -414,12 +415,14 @@ export function reconcileBillDecisions(input: BillReconcileInput): BillReconcile
   // payment whose transaction disappeared, not to reopen settled history.
   const hadMatches = new Set<string>();
   for (const match of decisions.matches) hadMatches.add(match.occurrenceId);
-  const matchIds = new Set<string>();
+  const droppedMatchOccIds = new Set<string>();
   decisions.matches = decisions.matches.filter((match) => {
     const keep =
       billIds.has(match.billId) && occurrenceIds.has(match.occurrenceId) && txIds.has(match.txId);
-    if (!keep) dropped.matches.push(match);
-    else matchIds.add(match.occurrenceId);
+    if (!keep) {
+      dropped.matches.push(match);
+      droppedMatchOccIds.add(match.occurrenceId);
+    }
     return keep;
   });
   decisions.marks = decisions.marks.filter((mark) => {
@@ -438,19 +441,40 @@ export function reconcileBillDecisions(input: BillReconcileInput): BillReconcile
     return keep;
   });
 
+  const billById = new Map(input.bills.map((b) => [b.id, b]));
   const reopened: BillOccurrence[] = [];
   const occurrences = input.occurrences.map((occurrence) => {
     const autoClosed = occurrence.status === "paid" && occurrence.closedSource === "auto";
-    if (!autoClosed || !hadMatches.has(occurrence.id) || matchIds.has(occurrence.id)) {
+    if (!autoClosed || !hadMatches.has(occurrence.id)) {
       return occurrence;
     }
-    const next: BillOccurrence = { ...occurrence, status: "scheduled" };
-    delete next.paidOn;
-    delete next.paidAmountCents;
-    delete next.closedAt;
-    delete next.closedSource;
-    reopened.push(next);
-    return next;
+    const remaining = decisions.matches.filter((m) => m.occurrenceId === occurrence.id);
+    const bill = billById.get(occurrence.billId);
+    let stillClosed = false;
+    let remainingPaidCents = 0;
+    if (remaining.length > 0 && bill != null) {
+      const expectedCents = occurrenceAmountCents(bill, occurrence, input.occurrences);
+      const bandCents = billAmountBandCents(bill, expectedCents);
+      const rule = billCloseRule(expectedCents, remaining, bandCents);
+      stillClosed = rule.close;
+      remainingPaidCents = rule.paidAmountCents;
+    }
+    if (!stillClosed) {
+      const next: BillOccurrence = { ...occurrence, status: "scheduled" };
+      delete next.paidOn;
+      delete next.paidAmountCents;
+      delete next.closedAt;
+      delete next.closedSource;
+      reopened.push(next);
+      return next;
+    }
+    if (
+      droppedMatchOccIds.has(occurrence.id) &&
+      occurrence.paidAmountCents !== remainingPaidCents
+    ) {
+      return { ...occurrence, paidAmountCents: remainingPaidCents };
+    }
+    return occurrence;
   });
 
   const changed =

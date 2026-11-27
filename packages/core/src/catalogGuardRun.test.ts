@@ -339,3 +339,13 @@ test("an uncovered FX read keeps behaving as before", () => {
   const out = run(prev, [entry("p", { fxFeePct: read })]);
   expect(out.rows[0]!.fields.fxFeePct).toEqual(read);
 });
+
+test("guardRun prunes stale pending keys past MAX_PENDING_AGE_DAYS or for removed products", () => {
+  const prev = [entry("p", { fxFeePct: val(1.4) }), entry("q", { fxFeePct: val(1.4) })];
+  const pending: PendingMap = {
+    "q.fxFeePct": { value: 3, seenAt: "2026-10-01" },
+    "deleted.fxFeePct": { value: 2, seenAt: "2026-11-20" },
+  };
+  const out = run(prev, [entry("p", { fxFeePct: val(1.4) })], pending);
+  expect(out.pending).toEqual({});
+});

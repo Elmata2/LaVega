@@ -730,3 +730,57 @@ test("a product the catalogue has no fxFeePct for is reported, never served as a
     getCardTerms(input(["Bybit Card"]), "k", { lookup: (async () => []) as never }).terms,
   ).toEqual([]);
 });
+
+test("write preserves prev.agentTried so a subsequent ingest does not re-trigger endless agent lookups", async () => {
+  let calls = 0;
+  const lookup = async () => {
+    calls += 1;
+    return [{ provider: "ING betaalpas", fxFeePct: 1.4 }];
+  };
+  getCardTerms(input(["ING betaalpas"]), "k", { lookup: lookup as never });
+  await settle();
+  expect(calls).toBe(1);
+
+  ingestCardTerms("NL", "USD", [{ provider: "ING betaalpas", fxFeePct: 1.5 }], "provider");
+  getCardTerms(input(["ING betaalpas"]), "k", { lookup: lookup as never });
+  await settle();
+  expect(calls).toBe(1);
+});
+
+test("field-level provenance lets agent fill missing cashback without overwriting provider fxFeePct", () => {
+  ingestCardTerms("NL", "USD", [{ provider: "ING betaalpas", fxFeePct: 1.5 }], "provider");
+  const res = ingestCardTerms(
+    "NL",
+    "USD",
+    [{ provider: "ING betaalpas", fxFeePct: 9.9, cashbackPct: 0.5 }],
+    "agent",
+  );
+  expect(res).toEqual({ accepted: 1, rejected: [] });
+  const row = getCardTerms(input(["ING betaalpas"]), "k", { lookup: (async () => []) as never })
+    .terms[0];
+  expect(row.fxFeePct).toBe(1.5);
+  expect(row.cashbackPct).toBe(0.5);
+});
+
+test("a slow lookup for one provider does not block lookups for another provider or market", async () => {
+  let releaseSlow: (v: never[]) => void = () => {};
+  const lookup = (i: TravelInput) => {
+    if (i.providers[0] === "SlowCard") {
+      return new Promise<never[]>((resolve) => {
+        releaseSlow = resolve;
+      });
+    }
+    return Promise.resolve([{ provider: i.providers[0], fxFeePct: 0.5, cashbackPct: 1 }]);
+  };
+
+  getCardTerms(input(["SlowCard"]), "k", { lookup: lookup as never });
+  getCardTerms(input(["FastCard"]), "k", { lookup: lookup as never });
+
+  await new Promise((r) => setTimeout(r, 10));
+  const fast = getCardTerms(input(["FastCard"]), "k", { lookup: lookup as never });
+  expect(fast.pending).toEqual([]);
+  expect(fast.terms[0]?.fxFeePct).toBe(0.5);
+
+  releaseSlow([]);
+  await settle();
+});

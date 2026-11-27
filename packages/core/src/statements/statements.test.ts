@@ -3,7 +3,10 @@ import type { Account, Tx } from "../model.js";
 import {
   DOCUMENT_MAX_BYTES,
   checkDocumentUpload,
+  documentLinkState,
   findDocumentBySha,
+  linkDocument,
+  rejectDocument,
   removeDocument,
   upsertDocument,
   type VaultDocument,
@@ -413,5 +416,39 @@ describe("month coverage and the review queue", () => {
     expect(queue.find((item) => item.document.id === "sha-oct")?.suggestion.status).toBe(
       "ambiguous",
     );
+  });
+
+  test("rejected document with stale accountKey cannot be simultaneously covered and in the review queue", () => {
+    const corruptRejected = document({
+      accountKey: "NL01INGB",
+      institutionHint: "ing",
+      accountLast4: "1234",
+      reviewStatus: "rejected",
+    });
+    expect(documentLinkState(corruptRejected)).toEqual({ status: "rejected" });
+
+    const coverage = statementCoverage({
+      documents: [corruptRejected],
+      accountKey: "NL01INGB",
+      months: ["2026-10"],
+      accounts: ACCOUNTS,
+      txs: TXS,
+      asOf: "2026-11-11",
+    });
+    expect(coverage[0]?.status).not.toBe("covered");
+    expect(coverage[0]?.status).toBe("ambiguous");
+
+    const queue = statementReviewQueue({ documents: [corruptRejected], accounts: ACCOUNTS });
+    expect(queue).toHaveLength(1);
+    expect(queue[0]?.reason).toBe("rejected");
+
+    const linked = linkDocument(corruptRejected, "NL01INGB");
+    expect(documentLinkState(linked)).toEqual({ status: "linked", accountKey: "NL01INGB" });
+    const rejected = rejectDocument(linked);
+    expect(rejected.accountKey).toBeNull();
+    expect(rejected.reviewStatus).toBe("rejected");
+
+    const stored = upsertDocument([], corruptRejected);
+    expect(stored[0]?.accountKey).toBeNull();
   });
 });

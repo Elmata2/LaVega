@@ -74,8 +74,18 @@ test("readCsv: a quoted field holding only spaces is not an empty record", () =>
   expect(table.rows).toEqual([{ line: 2, cells: ["  ", "1"] }]);
 });
 
-test("readCsv: never throws on an unterminated quote", () => {
-  expect(() => readCsv('A,B\n"unterminated,1\n')).not.toThrow();
+test("readCsv: never throws on an unterminated quote and records its line", () => {
+  const table = readCsv('A,B\n"unterminated,1\n');
+  expect(table.unterminatedQuoteLine).toBe(2);
+});
+
+test("readCsv: mid-field quote in an unquoted cell stays literal per RFC 4180", () => {
+  const table = readCsv('A,B\nfoo"bar,2\n3,4\n');
+  expect(table.unterminatedQuoteLine).toBeUndefined();
+  expect(table.rows).toEqual([
+    { line: 2, cells: ['foo"bar', "2"] },
+    { line: 3, cells: ["3", "4"] },
+  ]);
 });
 
 test("detectLocale: decided once per file, from the numeric columns", () => {

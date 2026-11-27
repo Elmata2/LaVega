@@ -57,13 +57,25 @@ export interface RatesCache {
  *  No-ops safely where localStorage is absent (SSR/tests). The `.v2` suffix
  *  versions the key: bumping it abandons any older cached payload (so a stale
  *  snapshot from a previous rates schema is never shown again). */
+function parseCachedRates(raw: unknown): (RatesPayload & { ts: number }) | null {
+  if (!raw || typeof raw !== "object") return null;
+  const ts = (raw as { ts?: unknown }).ts;
+  if (typeof ts !== "number" || !Number.isFinite(ts)) return null;
+  try {
+    const payload = parseRatesPayload(raw);
+    return { ...payload, ts };
+  } catch {
+    return null;
+  }
+}
+
 export function localStorageRatesCache(key = "lavega.rates.v2"): RatesCache {
   return {
     get() {
       try {
         if (typeof localStorage === "undefined") return null;
         const raw = localStorage.getItem(key);
-        return raw ? (JSON.parse(raw) as RatesPayload & { ts: number }) : null;
+        return raw ? parseCachedRates(JSON.parse(raw)) : null;
       } catch {
         return null;
       }
@@ -125,15 +137,16 @@ export function createRatesProvider(opts: RatesProviderOptions = {}): RatesProvi
 
   async function fetchLive(): Promise<RatesPayload | null> {
     if (!url || !fetchFn) return null;
+    const ctrl = typeof AbortController !== "undefined" ? new AbortController() : null;
+    const timer = ctrl ? setTimeout(() => ctrl.abort(), timeoutMs) : null;
     try {
-      const ctrl = typeof AbortController !== "undefined" ? new AbortController() : null;
-      const timer = ctrl ? setTimeout(() => ctrl.abort(), timeoutMs) : null;
       const res = await fetchFn(url, ctrl ? { signal: ctrl.signal } : undefined);
-      if (timer) clearTimeout(timer);
       if (!res.ok) return null;
       return parseRatesPayload(await res.json());
     } catch {
       return null; // offline / CORS / bad payload → fall back
+    } finally {
+      if (timer) clearTimeout(timer);
     }
   }
 
@@ -158,7 +171,7 @@ export function createRatesProvider(opts: RatesProviderOptions = {}): RatesProvi
         cache.set({ ...live, ts: now() });
         return withCatalogue({ rates: live.rates, asOf: live.asOf, source: "live" });
       }
-      const cached = cache.get();
+      const cached = parseCachedRates(cache.get());
       if (cached && now() - cached.ts < cacheTtlMs) {
         return withCatalogue({ rates: cached.rates, asOf: cached.asOf, source: "cache" });
       }

@@ -14,6 +14,7 @@ export function splitRows(text: string, delim = ";"): string[][] {
   let row: string[] = [];
   let cur = "";
   let q = false;
+  let closedQuote = false;
   for (let i = 0; i < text.length; i++) {
     const ch = text[i];
     if (q) {
@@ -21,22 +22,29 @@ export function splitRows(text: string, delim = ";"): string[][] {
         if (text[i + 1] === '"') {
           cur += '"';
           i++;
-        } else q = false;
+        } else {
+          q = false;
+          closedQuote = true;
+        }
       } else cur += ch;
     } else {
-      if (ch === '"') q = true;
+      if (ch === '"' && cur.length === 0 && !closedQuote) q = true;
       else if (ch === delim) {
         row.push(cur);
         cur = "";
-      } else if (ch === "\n") {
+        closedQuote = false;
+      } else if (ch === "\n" || ch === "\r") {
+        if (ch === "\r" && text[i + 1] === "\n") i++;
         row.push(cur);
         rows.push(row);
         row = [];
         cur = "";
-      } else if (ch === "\r") {
-        /* skip */
+        closedQuote = false;
       } else cur += ch;
     }
+  }
+  if (q) {
+    throw new Error("Unterminated quoted field in CSV input");
   }
   if (cur.length || row.length) {
     row.push(cur);

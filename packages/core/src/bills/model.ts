@@ -296,6 +296,23 @@ export function isBillActive(bill: Pick<Bill, "status">): boolean {
   return bill.status === "active";
 }
 
+/** `ended` is terminal: once a bill ends it keeps its paid history and cannot
+ *  transition back to another lifecycle state. */
+export function canTransitionBillStatus(from: BillStatus, to: BillStatus): boolean {
+  if (from === to) return true;
+  if (from === "ended") return false;
+  return STATUSES.includes(to);
+}
+
+export function transitionBillStatus(bill: Bill, next: BillStatus): Bill {
+  if (!canTransitionBillStatus(bill.status, next)) {
+    throw new Error(
+      `Cannot transition bill "${bill.id}" from terminal status "ended" to "${next}"`,
+    );
+  }
+  return bill.status === next ? bill : { ...bill, status: next };
+}
+
 /** Sure's `resolved_expected_amount`: an explicit occurrence amount wins, then
  *  the series' strategy, then the plain series amount. Magnitude in cents,
  *  never a signed value. */

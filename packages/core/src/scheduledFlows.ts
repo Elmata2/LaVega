@@ -17,19 +17,54 @@ export function scheduledFlowsForScope(flows: ScheduledFlow[], entity = ""): Sch
  *  in a country that prepays profit tax, its prepayments/settlement. */
 const TAX_SOURCES = new Set<ScheduledFlow["source"]>(["vat", "prepayment"]);
 
-/** Recompute-merge for the tax ScheduledFlows: drop every tax-owned flow that
- *  belongs to one of the given `entities`, then append the freshly computed
- *  `fresh` flows. Invoice/manual flows and other entities' tax flows are
- *  preserved. Because ids are content-hashed (see makeScheduledFlow),
- *  recomputing an unchanged period yields the same flow rather than a duplicate. */
+const OWNER_SETTLED_STATUSES = new Set<ScheduledFlow["status"]>(["paid", "cancelled"]);
+
+function taxFlowKey(f: ScheduledFlow): string {
+  return [f.entity, f.source, f.dueDate, f.label].join("|");
+}
+
+/** Recompute-merge for the tax ScheduledFlows: replace unsettled tax-owned flows
+ *  for `entities` with `fresh`, while preserving owner-set `paid`/`cancelled`
+ *  statuses (matching by id or entity/source/dueDate/label) so recomputation
+ *  never re-reserves already-settled tax. */
 export function rebuildTaxFlows(
   existing: ScheduledFlow[],
   entities: string[],
   fresh: ScheduledFlow[],
 ): ScheduledFlow[] {
   const shown = new Set(entities);
-  const kept = existing.filter((f) => !(TAX_SOURCES.has(f.source) && shown.has(f.entity)));
-  return [...kept, ...fresh];
+  const settledById = new Map<string, ScheduledFlow["status"]>();
+  const settledByKey = new Map<string, ScheduledFlow["status"]>();
+  const settledExisting: ScheduledFlow[] = [];
+  const kept: ScheduledFlow[] = [];
+
+  for (const f of existing) {
+    if (TAX_SOURCES.has(f.source) && shown.has(f.entity)) {
+      if (OWNER_SETTLED_STATUSES.has(f.status)) {
+        settledById.set(f.id, f.status);
+        settledByKey.set(taxFlowKey(f), f.status);
+        settledExisting.push(f);
+      }
+      continue;
+    }
+    kept.push(f);
+  }
+
+  const freshIds = new Set<string>();
+  const freshKeys = new Set<string>();
+  const mergedFresh = fresh.map((f) => {
+    freshIds.add(f.id);
+    const key = taxFlowKey(f);
+    freshKeys.add(key);
+    const preserved = settledById.get(f.id) ?? settledByKey.get(key);
+    return preserved ? { ...f, status: preserved } : f;
+  });
+
+  const unmatchedSettled = settledExisting.filter(
+    (f) => !freshIds.has(f.id) && !freshKeys.has(taxFlowKey(f)),
+  );
+
+  return [...kept, ...unmatchedSettled, ...mergedFresh];
 }
 
 /** The name this had when VAT was the only tax LaVega reserved for. */

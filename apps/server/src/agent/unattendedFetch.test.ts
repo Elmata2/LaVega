@@ -213,3 +213,20 @@ test("a row with no booking date and no value date is left out", async () => {
   if (out.status !== "ok") throw new Error("expected ok");
   expect(out.txs.map((t) => t.date)).toEqual(["2026-11-08"]);
 });
+
+test("onExpiredSession is called for both locally expired and 401/403-rejected sessions", async () => {
+  const pruned: string[] = [];
+  const lapsed = { ...session({ validUntil: new Date(now - DAY).toISOString() }), sessionId: "s-lapsed" };
+  const revoked = { ...session({ aspsp: "ABN" }), sessionId: "s-revoked" };
+  const client = vi.fn(async () => {
+    throw reject(403);
+  });
+  await fetchForAgent([lapsed, revoked], now, {
+    eb: client as never,
+    config,
+    onExpiredSession: (id) => {
+      pruned.push(id);
+    },
+  });
+  expect(pruned).toEqual(["s-lapsed", "s-revoked"]);
+});

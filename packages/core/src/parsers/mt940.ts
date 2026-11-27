@@ -34,11 +34,16 @@ export function parseMt940(text: string): { accounts: Account[]; txs: Array<Omit
     let close: number | null = null;
     for (const f of flat) {
       if (f.startsWith(":25:")) acc = findIban(f.slice(4)) || f.slice(4).trim();
-      const mb = f.match(/^:6[02][FM]:([CD])(\d{6})([A-Z]{3})([\d.,]+)/);
-      if (mb) {
-        cur = mb[3];
-        const v = parseAmount(mb[4]);
-        if (v != null) close = mb[1] === "D" ? -v : v;
+      const openMatch = f.match(/^:60[FM]:([CD])(\d{6})([A-Z]{3})([\d.,]+)/);
+      if (openMatch) {
+        cur = openMatch[3];
+        continue;
+      }
+      const closeMatch = f.match(/^:62[FM]:([CD])(\d{6})([A-Z]{3})([\d.,]+)/);
+      if (closeMatch) {
+        cur = closeMatch[3];
+        const v = parseAmount(closeMatch[4]);
+        if (v != null) close = closeMatch[1] === "D" ? -v : v;
       }
     }
     if (!acc) continue;

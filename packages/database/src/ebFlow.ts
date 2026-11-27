@@ -1,8 +1,19 @@
 import type { QueryResultRow } from "@neondatabase/serverless";
-import { requireUserId, withTenantStatement, type Database } from "./connection.js";
+import { requireUserId, withTenant, withTenantStatement, type Database } from "./connection.js";
 import { encryptBlob, tryDecryptBlob } from "./crypto.js";
 
 export type PendingEbAuth = { userId: string; name: string; country: string };
+
+function resolveSessionExpiresAt(payload: unknown, explicit?: string | null): string | null {
+  if (explicit !== undefined) return explicit;
+  const raw =
+    typeof payload === "object" && payload !== null
+      ? (payload as { validUntil?: unknown }).validUntil
+      : undefined;
+  if (typeof raw !== "string") return null;
+  const ms = Date.parse(raw);
+  return Number.isNaN(ms) ? null : new Date(ms).toISOString();
+}
 
 /**
  * The Enable Banking authorisation flow's two stores.
@@ -86,7 +97,7 @@ export function createEbFlowRepository(db: Database) {
       const identity = requireUserId(userId);
       return withTenantStatement(db, identity, async (client) => {
         const result = await client.query(
-          "DELETE FROM personal.eb_sessions WHERE created_at <= CURRENT_TIMESTAMP - ($1::bigint * INTERVAL '1 millisecond')",
+          "DELETE FROM personal.eb_sessions WHERE created_at <= CURRENT_TIMESTAMP - ($1::bigint * INTERVAL '1 millisecond') OR (expires_at IS NOT NULL AND expires_at <= CURRENT_TIMESTAMP)",
           [String(ttlMs)],
         );
         return result.rowCount ?? 0;
@@ -94,14 +105,61 @@ export function createEbFlowRepository(db: Database) {
     },
 
     /** Stash the bank's account list for the user the state named. */
-    async putSession(userId: string, sessionId: string, payload: unknown): Promise<void> {
+    async putSession(
+      userId: string,
+      sessionId: string,
+      payload: unknown,
+      expiresAt?: string | null,
+    ): Promise<void> {
       const identity = requireUserId(userId);
       const blob = encryptBlob(payload);
+      const resolvedExpiresAt = resolveSessionExpiresAt(payload, expiresAt);
       await withTenantStatement(db, identity, async (client) => {
         await client.query(
-          "INSERT INTO personal.eb_sessions (session_id, user_id, payload_blob) VALUES ($1, $2, $3) ON CONFLICT (session_id) DO UPDATE SET payload_blob = EXCLUDED.payload_blob",
-          [sessionId, identity, blob],
+          "INSERT INTO personal.eb_sessions (session_id, user_id, payload_blob, expires_at) VALUES ($1, $2, $3, $4::timestamptz) ON CONFLICT (session_id) DO UPDATE SET payload_blob = EXCLUDED.payload_blob, created_at = CURRENT_TIMESTAMP, expires_at = COALESCE(EXCLUDED.expires_at, personal.eb_sessions.expires_at)",
+          [sessionId, identity, blob, resolvedExpiresAt],
         );
+      });
+    },
+
+    /** Atomically upsert the new session and remove superseded sessions for the same bank. */
+    async replaceSession(
+      userId: string,
+      sessionId: string,
+      payload: unknown,
+      aspsp: string,
+      ttlMs: number,
+      expiresAt?: string | null,
+    ): Promise<number> {
+      const identity = requireUserId(userId);
+      const blob = encryptBlob(payload);
+      const resolvedExpiresAt = resolveSessionExpiresAt(payload, expiresAt);
+      const normalizedAspsp = aspsp.trim().toLowerCase();
+      return withTenant(db, identity, async (client) => {
+        await client.query(
+          "INSERT INTO personal.eb_sessions (session_id, user_id, payload_blob, expires_at) VALUES ($1, $2, $3, $4::timestamptz) ON CONFLICT (session_id) DO UPDATE SET payload_blob = EXCLUDED.payload_blob, created_at = CURRENT_TIMESTAMP, expires_at = COALESCE(EXCLUDED.expires_at, personal.eb_sessions.expires_at)",
+          [sessionId, identity, blob, resolvedExpiresAt],
+        );
+        if (!normalizedAspsp) return 0;
+        const existing = await client.query<QueryResultRow>(
+          "SELECT session_id, payload_blob FROM personal.eb_sessions WHERE user_id = $1 AND session_id <> $2 AND created_at > CURRENT_TIMESTAMP - ($3::bigint * INTERVAL '1 millisecond')",
+          [identity, sessionId, String(ttlMs)],
+        );
+        const toDelete: string[] = [];
+        for (const row of existing.rows) {
+          const decoded = tryDecryptBlob<{ aspsp?: unknown }>(row.payload_blob as Buffer);
+          if (
+            decoded.readable &&
+            typeof decoded.value.aspsp === "string" &&
+            decoded.value.aspsp.trim().toLowerCase() === normalizedAspsp
+          ) {
+            toDelete.push(String(row.session_id));
+          }
+        }
+        for (const oldId of toDelete) {
+          await client.query("DELETE FROM personal.eb_sessions WHERE session_id = $1", [oldId]);
+        }
+        return toDelete.length;
       });
     },
 
@@ -109,7 +167,7 @@ export function createEbFlowRepository(db: Database) {
     async getSession<T>(userId: string, sessionId: string, ttlMs: number): Promise<T | null> {
       return withTenantStatement(db, userId, async (client) => {
         const result = await client.query<QueryResultRow>(
-          "SELECT payload_blob FROM personal.eb_sessions WHERE session_id = $1 AND created_at > CURRENT_TIMESTAMP - ($2::bigint * INTERVAL '1 millisecond')",
+          "SELECT payload_blob FROM personal.eb_sessions WHERE session_id = $1 AND created_at > CURRENT_TIMESTAMP - ($2::bigint * INTERVAL '1 millisecond') AND (expires_at IS NULL OR expires_at > CURRENT_TIMESTAMP)",
           [sessionId, String(ttlMs)],
         );
         const row = result.rows[0];
@@ -131,21 +189,8 @@ export function createEbFlowRepository(db: Database) {
     ): Promise<Array<{ sessionId: string; payload: T; createdAt: string }>> {
       const identity = requireUserId(userId);
       return withTenantStatement(db, identity, async (client) => {
-        /* `user_id = $1` AS WELL AS RLS, and deliberately belt-and-braces —
-         * the same call this file's `eraseUserData` makes, for the same
-         * reason: RLS is a second belt, not the only one. It matters more here
-         * than on `getSession`, which at least needs an unguessable id to say
-         * anything: this query returns EVERY row it is allowed to see, so a
-         * misconfigured DATABASE_URL naming an owner-class role (which
-         * bypasses even FORCE'd RLS) would hand one caller every tenant's bank
-         * list in a single request.
-         *
-         * LIMIT because nothing else bounds this. Every reconnect mints a new
-         * session_id and `putSession` upserts on that id alone, so a user who
-         * reconnects repeatedly accumulates rows, and the refresh path calls
-         * the bank once per account per row. */
         const result = await client.query<QueryResultRow>(
-          "SELECT session_id, payload_blob, created_at FROM personal.eb_sessions WHERE user_id = $1 AND created_at > CURRENT_TIMESTAMP - ($2::bigint * INTERVAL '1 millisecond') ORDER BY created_at DESC LIMIT $3",
+          "SELECT session_id, payload_blob, created_at FROM personal.eb_sessions WHERE user_id = $1 AND created_at > CURRENT_TIMESTAMP - ($2::bigint * INTERVAL '1 millisecond') AND (expires_at IS NULL OR expires_at > CURRENT_TIMESTAMP) ORDER BY created_at DESC LIMIT $3",
           [identity, String(ttlMs), limit],
         );
         const out: Array<{ sessionId: string; payload: T; createdAt: string }> = [];

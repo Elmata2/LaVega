@@ -11,7 +11,12 @@ import {
 } from "@lavega/adapters";
 import { loadConfig, type EbConfig } from "../config.js";
 import { eb } from "../eb-client.js";
-import { consentExpiresAt, fetchSessionItems, type EbSession } from "../eb-routes.js";
+import {
+  consentExpiresAt,
+  fetchSessionItems,
+  isConsentRejection,
+  type EbSession,
+} from "../eb-routes.js";
 
 /* The agent's own, UNATTENDED read of the bank. Banks allow only a few of
  * these a day, and a call counts as "user present" only when PSU headers are
@@ -41,15 +46,15 @@ export type FetchOutcome =
     }
   | { status: "no-bank" };
 
-function isConsentRejection(e: unknown): boolean {
-  const status = (e as { status?: number } | null)?.status;
-  return status === 401 || status === 403;
-}
-
 export async function fetchForAgent(
   userSessions: { sessionId: string; payload: EbSession; createdAt: string }[],
   now: number,
-  deps: { eb?: typeof eb; config?: EbConfig; signal?: AbortSignal } = {},
+  deps: {
+    eb?: typeof eb;
+    config?: EbConfig;
+    signal?: AbortSignal;
+    onExpiredSession?: (sessionId: string) => Promise<void> | void;
+  } = {},
 ): Promise<FetchOutcome> {
   if (deps.signal?.aborted) throw deps.signal.reason ?? new DOMException("Aborted", "AbortError");
   if (userSessions.length === 0) return { status: "no-bank" };
@@ -62,11 +67,12 @@ export async function fetchForAgent(
   const banks: BankState[] = [];
   let earliestOk = Infinity;
 
-  for (const { payload, createdAt } of userSessions) {
+  for (const { sessionId, payload, createdAt } of userSessions) {
     if (deps.signal?.aborted) throw deps.signal.reason ?? new DOMException("Aborted", "AbortError");
     const expiry = consentExpiresAt(payload, createdAt);
     const validUntil = Number.isFinite(expiry) ? new Date(expiry).toISOString() : undefined;
     if (expiry <= now) {
+      await deps.onExpiredSession?.(sessionId);
       banks.push({ bank: payload.aspsp, state: "expired", ...(validUntil ? { validUntil } : {}) });
       continue;
     }
@@ -88,9 +94,6 @@ export async function fetchForAgent(
           sBalances.push({ accountKey: account.key, cents: Math.round(balance * 100) });
         }
         const key = ebAccountKey(raw);
-        /* A row with neither a booking date nor a value date (a pending payment) maps to
-         * date "". It is not booked and has no day, so the agent does not read it: the daily
-         * message and the answers only state things about days. */
         sTxs.push(
           ...assignTxIds(
             (item.transactions as EbTransaction[])
@@ -105,10 +108,11 @@ export async function fetchForAgent(
       earliestOk = Math.min(earliestOk, expiry);
       banks.push({ bank: payload.aspsp, state: "ok", ...(validUntil ? { validUntil } : {}) });
     } catch (e) {
-      // Typed state only: the bank's message may carry its payload.
+      const expired = isConsentRejection(e);
+      if (expired) await deps.onExpiredSession?.(sessionId);
       banks.push({
         bank: payload.aspsp,
-        state: isConsentRejection(e) ? "expired" : "refused",
+        state: expired ? "expired" : "refused",
         ...(validUntil ? { validUntil } : {}),
       });
     }

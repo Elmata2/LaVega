@@ -47,3 +47,37 @@ test("a hung historical request degrades within the configured timeout", async (
     problems: ["Frankfurter historical FX request failed: Frankfurter request timed out after 5ms"],
   });
 });
+
+test("cached latest rate expires after cacheTtlMs and refreshes from Frankfurter", async () => {
+  let clock = 1_000;
+  let calls = 0;
+  const provider = createFrankfurterFxProvider({
+    now: () => clock,
+    cacheTtlMs: 60_000,
+    client: {
+      fetchJson: async () => {
+        calls += 1;
+        return {
+          amount: 1,
+          base: "EUR",
+          date: calls === 1 ? "2026-08-04" : "2026-08-05",
+          rates: { USD: calls === 1 ? 1.15 : 1.2 },
+        };
+      },
+    },
+  });
+
+  const first = await provider.getLatestRate();
+  expect(first.rate.rates.USD).toBe(1.15);
+  expect(calls).toBe(1);
+
+  clock += 30_000;
+  const stillFresh = await provider.getLatestRate();
+  expect(stillFresh.rate.rates.USD).toBe(1.15);
+  expect(calls).toBe(1);
+
+  clock += 30_000;
+  const refreshed = await provider.getLatestRate();
+  expect(refreshed.rate.rates.USD).toBe(1.2);
+  expect(calls).toBe(2);
+});

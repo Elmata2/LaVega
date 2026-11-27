@@ -443,3 +443,52 @@ test("a sync carries a manual basis and lock forward, and only carries provider 
   // Nothing moved, so the provider basis carries forward.
   expect(carried[1]?.brokerCost).toEqual({ status: "known", amount: 30, currency: "EUR" });
 });
+
+test("partial sell of mixed priced + transferred-in units preserves unknownCost until full liquidation", () => {
+  const book = createLotBook();
+  applyBuy(book, { quantity: 10, unitCost: 20 });
+  addUnknownUnits(book, 5);
+  applySell(book, 10);
+
+  expect(openLotQuantity(book)).toBeCloseTo(5, 8);
+  expect(book.unknownCost).toBe(true);
+  expect(averageCost(book)).toBeNull();
+
+  const replay = replayCostBasis({
+    trades: [
+      trade({ id: "b1", date: "2026-01-02", quantity: 10, price: 20, amount: 200 }),
+      trade({ id: "t1", date: "2026-01-03", side: "other", quantity: 5, price: null, amount: null }),
+      trade({ id: "s1", date: "2026-01-04", side: "sell", quantity: 10, price: 25, amount: 250 }),
+    ],
+    presentationCurrency: "EUR",
+    fxRates: undefined,
+    expectedQuantity: 5,
+  });
+  expect(replay).toMatchObject({ status: "unknown", reason: "transfer-in" });
+});
+
+test("reconcileCostBasis allows manual override and unlock of a locked manual basis", () => {
+  const locked = {
+    amountCents: 9900,
+    currency: "EUR",
+    source: "manual" as const,
+    locked: true,
+  };
+  expect(
+    reconcileCostBasis(locked, { source: "manual", amountCents: 12500, currency: "EUR" }),
+  ).toEqual({
+    value: { amountCents: 12500, currency: "EUR", source: "manual", locked: true },
+    updated: true,
+  });
+  expect(
+    reconcileCostBasis(locked, {
+      source: "manual",
+      amountCents: 9900,
+      currency: "EUR",
+      locked: false,
+    }),
+  ).toEqual({
+    value: { amountCents: 9900, currency: "EUR", source: "manual", locked: false },
+    updated: true,
+  });
+});

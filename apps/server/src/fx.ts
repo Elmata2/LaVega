@@ -121,6 +121,7 @@ let ecbGood: FxRate | null = null;
  *  NIET als terugval bij een storing geserveerd, want dan zou hij de tweede laag
  *  levend houden nadat die weggevallen is. */
 let served: { payload: LayeredFxRate; at: number } | null = null;
+let inFlight: Promise<LayeredFxRate> | null = null;
 
 async function fetchEcb(): Promise<FxRate | null> {
   try {
@@ -182,9 +183,7 @@ async function fetchAggregator(): Promise<AggregatorPayload | null> {
   }
 }
 
-export async function getFxRate(): Promise<LayeredFxRate> {
-  if (served && Date.now() - served.at < TTL_MS) return served.payload;
-
+async function loadFxRate(): Promise<LayeredFxRate> {
   const [ecb, aggregator] = await Promise.all([fetchEcb(), fetchAggregator()]);
   if (ecb) ecbGood = ecb;
 
@@ -193,13 +192,8 @@ export async function getFxRate(): Promise<LayeredFxRate> {
 
   const rates: Record<string, number> = {};
   const origins: Record<string, FxOrigin> = {};
-  /** Wie er eerst is wint. De volgorde van de aanroepen hieronder IS de voorrang
-   *  uit de kop van dit bestand; er is geen tweede plek waar die vastligt. */
   const fill = (src: Record<string, number>, origin: FxOrigin) => {
     for (const [code, v] of Object.entries(src)) {
-      // De base is geen koers maar de eenheid. open.er-api zet EUR: 1 in de lijst;
-      // dat als "koers van de aggregator" labelen zou de euro een herkomst geven
-      // die hij niet heeft.
       if (code === BASE) continue;
       if (code in rates) continue;
       rates[code] = v;
@@ -217,10 +211,7 @@ export async function getFxRate(): Promise<LayeredFxRate> {
 
   const ecbLayer: FxLayer | null =
     ecbCount === 0
-      ? // Kan echt gebeuren: valt de ECB weg terwijl de aggregator staat, dan vult
-        // die alles en draagt de bundel niets meer bij. Dan is er geen ECB-laag,
-        // en dat hoort het scherm te zeggen in plaats van een lege laag te tonen.
-        null
+      ? null
       : {
           status: ecb ? "live" : ecbReal ? "geheugen" : "bundel",
           date: ecbReal ? ecbReal.date : FX_RATE_FALLBACK.date,
@@ -238,10 +229,6 @@ export async function getFxRate(): Promise<LayeredFxRate> {
         }
       : null;
 
-  /* De datum bovenaan is die van de STERKSTE laag die er ligt. Hij bestaat alleen
-   * nog omdat FxRate hem vereist en een oudere client hem leest; wie de herkomst
-   * per koers wil weten, leest `origins` en `layers`. Eén datum boven een lijst
-   * met twee peildata zou hoe dan ook voor een deel van die lijst onwaar zijn. */
   const payload: LayeredFxRate = {
     base: BASE,
     date: ecbLayer?.date ?? aggregatorLayer?.date ?? FX_RATE_FALLBACK.date,
@@ -250,13 +237,20 @@ export async function getFxRate(): Promise<LayeredFxRate> {
     layers: { ecb: ecbLayer, aggregator: aggregatorLayer },
   };
 
-  // Alleen een antwoord waarin een bron DEZE RONDE antwoordde wordt vastgehouden.
-  // Ook een antwoord uit `ecbGood` niet: dat is per definitie gebouwd nadat een
-  // poging mislukte, en dat zes uur vasthouden zou een storing van een minuut een
-  // halve dag laten duren. Zonder cache doet het volgende verzoek gewoon een
-  // nieuwe poging.
-  if (ecb || aggregator) served = { payload, at: Date.now() };
+  // Only cache for TTL when ECB answered live in this round; never freeze a
+  // degraded `ecbGood` fallback for 6 hours just because the aggregator answered.
+  if (ecb) served = { payload, at: Date.now() };
   return payload;
+}
+
+export async function getFxRate(): Promise<LayeredFxRate> {
+  if (served && Date.now() - served.at < TTL_MS) return served.payload;
+  if (inFlight) return inFlight;
+  const promise = loadFxRate().finally(() => {
+    if (inFlight === promise) inFlight = null;
+  });
+  inFlight = promise;
+  return promise;
 }
 
 /** Alleen voor tests: gooit het geheugen van dit proces weg. De modulevariabelen
@@ -264,4 +258,5 @@ export async function getFxRate(): Promise<LayeredFxRate> {
 export function __resetFxCacheForTests(): void {
   ecbGood = null;
   served = null;
+  inFlight = null;
 }

@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vitest";
 import type { Bill, BillDecisions, BillOccurrence, BillMatchDecision } from "./model.js";
 import type { Tx } from "../model.js";
-import { billOccurrenceId } from "./model.js";
+import { billOccurrenceId, canTransitionBillStatus, transitionBillStatus } from "./model.js";
 import { makeBillOccurrence } from "./occurrences.js";
 import type { BillMatchCandidate } from "./match.js";
 import { suggestBillMatches } from "./match.js";
@@ -419,5 +419,90 @@ describe("rejection memory and the matcher pass", () => {
       asOf: AS_OF,
     });
     expect(pending.added).toEqual([]);
+  });
+});
+
+describe("bill and occurrence lifecycle invariants", () => {
+  test("ended bill status is terminal", () => {
+    const ended = bill({ status: "ended" });
+    expect(canTransitionBillStatus("ended", "ended")).toBe(true);
+    expect(canTransitionBillStatus("ended", "active")).toBe(false);
+    expect(canTransitionBillStatus("active", "ended")).toBe(true);
+    expect(transitionBillStatus(ended, "ended")).toBe(ended);
+    expect(() => transitionBillStatus(ended, "active")).toThrow(/terminal status "ended"/);
+  });
+
+  test("confirm-match rejects non-scheduled occurrences without appending orphan matches", () => {
+    const series = bill();
+    const closed = occurrence(series, "2026-11-01", { status: "skipped", closedAt: AS_OF });
+    const outcome = applyBillAction({
+      bills: [series],
+      occurrences: [closed],
+      txs: [tx({ id: "t1" })],
+      asOf: AS_OF,
+      action: { kind: "confirm-match", candidate: candidate({}) },
+    });
+    expect(outcome.changed).toBe(false);
+    expect(outcome.decisions.matches).toEqual([]);
+  });
+
+  test("mark-paid clears conflicting matches for the same occurrence", () => {
+    const series = bill();
+    const row = occurrence(series, "2026-11-01");
+    const partial = applyBillAction({
+      bills: [series],
+      occurrences: [row],
+      txs: [tx({ id: "t1", amount: -400 })],
+      asOf: AS_OF,
+      action: { kind: "confirm-match", candidate: candidate({ amountCents: 40_000 }) },
+    });
+    expect(partial.decisions.matches).toHaveLength(1);
+
+    const marked = applyBillAction({
+      bills: partial.bills,
+      occurrences: partial.occurrences,
+      decisions: partial.decisions,
+      asOf: AS_OF,
+      action: { kind: "mark-paid", occurrenceId: row.id },
+    });
+    expect(marked.occurrences[0].status).toBe("paid");
+    expect(marked.decisions.marks).toHaveLength(1);
+    expect(marked.decisions.matches).toEqual([]);
+  });
+
+  test("reconcileBillDecisions reopens a partially-orphaned multi-payment auto-closed occurrence", () => {
+    const series = bill();
+    const row = occurrence(series, "2026-11-01", {
+      status: "paid",
+      paidOn: "2026-11-01",
+      paidAmountCents: 100_000,
+      closedAt: AS_OF,
+      closedSource: "auto",
+    });
+    const decisions = decisionsWith({
+      matches: [
+        match({ id: "m1", txId: "t1", amountCents: 40_000, source: "auto" }),
+        match({ id: "m2", txId: "t2", amountCents: 60_000, source: "auto" }),
+      ],
+    });
+    const repaired = reconcileBillDecisions({
+      bills: [series],
+      occurrences: [row],
+      decisions,
+      txs: [tx({ id: "t1", amount: -400 })],
+    });
+    expect(repaired.dropped.matches.map((m) => m.id)).toEqual(["m2"]);
+    expect(repaired.reopened).toHaveLength(1);
+    expect(repaired.occurrences[0].status).toBe("scheduled");
+    expect(repaired.occurrences[0].paidAmountCents).toBeUndefined();
+    const settlement = billSettlement(
+      series,
+      repaired.occurrences[0],
+      repaired.occurrences,
+      repaired.decisions,
+    );
+    expect(settlement.state).toBe("partial");
+    expect(settlement.allocatedCents).toBe(40_000);
+    expect(settlement.remainingCents).toBe(60_000);
   });
 });
