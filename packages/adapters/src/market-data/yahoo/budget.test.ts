@@ -134,13 +134,12 @@ test("a 403 is reported to the budget like a 429", async () => {
   expect(budget.calls).toContainEqual({ call: "reject", key: KEY, untilMs: NOW + 1_500 });
 });
 
-test("a 401 clears the crumb, is reported to the budget, and the retry negotiates a new crumb", async () => {
-  vi.useFakeTimers({ now: NOW, toFake: ["Date"] });
+test("a 401 clears the crumb, retries locally without rejecting the shared budget, and negotiates a new crumb", async () => {
   const budget = createImmediatePartnerBudget();
   const { fetchFn, log } = yahooFetch((step, call) =>
     step === "data" && call === 1 ? new Response("Unauthorized", { status: 401 }) : ok(step),
   );
-  await new YahooHttpClient(fetchFn, 20_000, 1_500, { partnerBudget: budget }).fetchJsonWithCrumb(
+  await new YahooHttpClient(fetchFn, 20_000, 1, { partnerBudget: budget }).fetchJsonWithCrumb(
     "https://query1.finance.yahoo.com/v10/finance/quoteSummary/AAPL",
   );
   expect(log.map((entry) => entry.step)).toEqual([
@@ -152,7 +151,7 @@ test("a 401 clears the crumb, is reported to the budget, and the retry negotiate
     "data",
   ]);
   expect(budget.calls.filter((call) => call.call === "awaitSlot")).toHaveLength(6);
-  expect(budget.calls).toContainEqual({ call: "reject", key: KEY, untilMs: NOW + 1_500 });
+  expect(budget.calls.filter((call) => call.call === "reject")).toEqual([]);
 });
 
 test("a failed crumb answer of 429 is reported to the budget too", async () => {

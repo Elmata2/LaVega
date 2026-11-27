@@ -2,8 +2,16 @@ import type { QueryResultRow } from "@neondatabase/serverless";
 import { withTenant, withTenantStatement, type Database } from "./connection.js";
 import { encryptBlob, tryDecryptBlob } from "./crypto.js";
 
+export type BrokerVaultMode = "credentialed" | "snapshot-only";
+
+export function brokerVaultModeOf(row: { credentials_blob?: unknown }): BrokerVaultMode {
+  return row.credentials_blob == null ? "snapshot-only" : "credentialed";
+}
+
 export type EncryptedBrokerRepository = {
   get<T>(broker: string): Promise<{ credentials: T; credentialGeneration: number } | null>;
+  /** Explicit storage mode for a broker row, or null when no row exists. */
+  mode?(broker: string): Promise<BrokerVaultMode | null>;
   /** Every broker's snapshot in one read. Snapshots are the large part of a
    *  vault row, so `get` leaves them out and only this reads them. */
   snapshots(): Promise<Record<string, unknown> | null>;
@@ -27,6 +35,11 @@ export class UnreadableBrokerCredentialsError extends Error {
   }
 }
 
+const MODE_PREDICATE: Record<BrokerVaultMode, string> = {
+  credentialed: "investing.broker_vaults.credentials_blob IS NOT NULL",
+  "snapshot-only": "investing.broker_vaults.credentials_blob IS NULL",
+};
+
 export function createBrokerRepository(
   db: Database,
   userId: string | undefined | null,
@@ -40,6 +53,7 @@ export function createBrokerRepository(
         );
         const row = result.rows[0];
         if (!row) return null;
+        if (brokerVaultModeOf(row) === "snapshot-only") return null;
         const credentials = tryDecryptBlob<T>(row.credentials_blob as Buffer);
         /* Credentials are the only copy there is. Reporting them as missing
          * would send the user to re-enter their broker tokens, and that write
@@ -49,6 +63,16 @@ export function createBrokerRepository(
           credentials: credentials.value,
           credentialGeneration: Number(row.credential_generation ?? 1),
         };
+      });
+    },
+    async mode(broker: string) {
+      return withTenantStatement(db, userId, async (client) => {
+        const result = await client.query<QueryResultRow>(
+          "SELECT credentials_blob FROM investing.broker_vaults WHERE broker = $1",
+          [broker],
+        );
+        const row = result.rows[0];
+        return row ? brokerVaultModeOf(row) : null;
       });
     },
     async snapshots() {
@@ -85,7 +109,7 @@ export function createBrokerRepository(
       const snapshotBlob = encryptBlob(snapshot);
       return withTenantStatement(db, userId, async (client) => {
         const result = await client.query(
-          "UPDATE investing.broker_vaults SET snapshot_blob = $2, updated_at = CURRENT_TIMESTAMP WHERE broker = $1 AND credential_generation = $3 RETURNING broker",
+          `UPDATE investing.broker_vaults SET snapshot_blob = $2, updated_at = CURRENT_TIMESTAMP WHERE broker = $1 AND credential_generation = $3 AND ${MODE_PREDICATE.credentialed} RETURNING broker`,
           [broker, snapshotBlob, credentialGeneration],
         );
         return result.rows.length > 0;
@@ -94,11 +118,10 @@ export function createBrokerRepository(
     async putSnapshotOnly(broker: string, snapshot: unknown) {
       const snapshotBlob = encryptBlob(snapshot);
       return withTenantStatement(db, userId, async (client) => {
-        /* The WHERE on the conflict update is the guard: a row that carries
-         * credentials belongs to a broker with an API, whose sync alone may
-         * write its snapshot. */
+        /* Explicit mode guard: only rows in snapshot-only mode may be updated
+         * here; credentialed rows belong to their API sync. */
         const result = await client.query(
-          "INSERT INTO investing.broker_vaults (user_id, broker, credentials_blob, snapshot_blob) VALUES (current_setting('app.user_id'), $1, NULL, $2) ON CONFLICT (user_id, broker) DO UPDATE SET snapshot_blob = EXCLUDED.snapshot_blob, updated_at = CURRENT_TIMESTAMP WHERE investing.broker_vaults.credentials_blob IS NULL RETURNING broker",
+          `INSERT INTO investing.broker_vaults (user_id, broker, credentials_blob, snapshot_blob) VALUES (current_setting('app.user_id'), $1, NULL, $2) ON CONFLICT (user_id, broker) DO UPDATE SET snapshot_blob = EXCLUDED.snapshot_blob, updated_at = CURRENT_TIMESTAMP WHERE ${MODE_PREDICATE["snapshot-only"]} RETURNING broker`,
           [broker, snapshotBlob],
         );
         return result.rows.length > 0;

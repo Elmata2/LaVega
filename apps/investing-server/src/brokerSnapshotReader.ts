@@ -11,7 +11,7 @@ export function createBrokerSnapshotReader(input: {
   isSyncing: () => boolean;
   ttlMs: number;
 }) {
-  let readAt = Date.now();
+  let readAt = 0;
   let refresh: Promise<void> | null = null;
 
   const restore = (snapshot: RuntimeBrokerDataSnapshot) => {

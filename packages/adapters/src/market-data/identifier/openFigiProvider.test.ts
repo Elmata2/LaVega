@@ -524,3 +524,51 @@ test("a single candidate ignores the venue hint", async () => {
   expect(result.resolution).toMatchObject({ tier: "provider", confidence: null });
   expect(calls()).toBe(1);
 });
+
+test("cache key includes venue so different venues for the same ISIN do not collide", async () => {
+  const { post, calls } = withCandidates(VENUE_CANDIDATES);
+  const provider = venueProvider(post);
+
+  const ams = (await provider.get({
+    isin: "NL0010273215",
+    instrument: { venue: "XAMS" },
+  }))!;
+  const lon = (await provider.get({
+    isin: "NL0010273215",
+    instrument: { venue: "XLON" },
+  }))!;
+
+  expect(ams.match).toMatchObject({ ticker: "UNA", exchange: "NA" });
+  expect(lon.match).toMatchObject({ ticker: "ULVR", exchange: "LN" });
+  expect(calls()).toBe(2);
+});
+
+test("cache key includes allowModelSelection so a non-model lookup does not skip the selector later", async () => {
+  const { post, calls } = withCandidates(RAW_CANDIDATES);
+  const fake = countingSelector({
+    kind: "selected",
+    ticker: "VUAA",
+    exchange: "XETRA",
+    confidence: 0.9,
+  });
+  const provider = createOpenFigiIdentifierProvider({
+    client: { postJson: post },
+    selector: fake.selector,
+    ...instant(),
+  });
+
+  const withoutModel = (await provider.get({
+    isin: "IE00BFMXXD54",
+    allowModelSelection: false,
+  }))!;
+  const withModel = (await provider.get({
+    isin: "IE00BFMXXD54",
+    allowModelSelection: true,
+  }))!;
+
+  expect(withoutModel.match).toMatchObject({ ticker: "VUAA", exchange: "LSE" });
+  expect(withModel.match).toMatchObject({ ticker: "VUAA", exchange: "XETRA" });
+  expect(withModel.resolution.tier).toBe("model");
+  expect(fake.calls()).toHaveLength(1);
+  expect(calls()).toBe(2);
+});

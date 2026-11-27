@@ -186,3 +186,41 @@ test("an untouched database reports no ledger and no schema", async () => {
   expect(await ledgerExists(client)).toBe(true);
   expect(await schemaExists(client)).toBe(true);
 }, 60_000);
+
+test("exec and ledger record run in one transaction: a failing record rolls back DDL", async () => {
+  const failingRecordClient: MigrationClient = {
+    exec: (sql) => client.exec(sql),
+    query: async (sql, params) => {
+      if (sql.includes(`INSERT INTO ${LEDGER_TABLE}`))
+        throw new Error("simulated ledger insert failure");
+      return client.query(sql, params);
+    },
+  };
+
+  await expect(
+    applyMigrations(failingRecordClient, [
+      file("0001_atomic.sql", "BEGIN;\nCREATE TABLE atomic_test (id INT);\nCOMMIT;"),
+    ]),
+  ).rejects.toThrow(/simulated ledger insert failure/);
+
+  const { rows } = await client.query<{ exists: boolean }>(
+    "SELECT to_regclass('public.atomic_test') IS NOT NULL AS exists",
+  );
+  expect(rows[0]?.exists).toBe(false);
+  expect(await ledgerNames()).toEqual([]);
+});
+
+test("applyMigrations acquires and releases the advisory lock even when called directly", async () => {
+  const lockCalls: string[] = [];
+  const spyClient: MigrationClient = {
+    exec: (sql) => client.exec(sql),
+    query: async (sql, params) => {
+      if (sql.includes("pg_advisory_lock")) lockCalls.push("lock");
+      if (sql.includes("pg_advisory_unlock")) lockCalls.push("unlock");
+      return client.query(sql, params);
+    },
+  };
+
+  await applyMigrations(spyClient, [file("0001_lock.sql", "CREATE TABLE lock_test (id INT);")]);
+  expect(lockCalls).toEqual(["lock", "unlock"]);
+});

@@ -12,6 +12,7 @@ export type DashboardCache = {
 
 const DASHBOARD_CACHE_TTL_MS = 15_000;
 const MAX_ENTRIES = 100;
+const MAX_TENANT_GENERATIONS = 500;
 
 export function createDashboardCache(input: { now?: () => number } = {}): DashboardCache {
   const entries = new Map<string, { data: InvestingDashboardData; storedAt: number }>();
@@ -20,6 +21,15 @@ export function createDashboardCache(input: { now?: () => number } = {}): Dashbo
   let generation = 0;
   const now = input.now ?? Date.now;
   const id = ({ tenantId, key }: { tenantId: string; key: string }) => `${tenantId}\u0000${key}`;
+  const bumpTenantGeneration = (tenantId: string) => {
+    const next = (tenantGenerations.get(tenantId) ?? 0) + 1;
+    tenantGenerations.delete(tenantId);
+    if (tenantGenerations.size >= MAX_TENANT_GENERATIONS) {
+      const oldest = tenantGenerations.keys().next().value;
+      if (oldest !== undefined) tenantGenerations.delete(oldest);
+    }
+    tenantGenerations.set(tenantId, next);
+  };
   return {
     get(input) {
       const cacheId = id(input);
@@ -62,11 +72,12 @@ export function createDashboardCache(input: { now?: () => number } = {}): Dashbo
     invalidate(tenantId) {
       if (!tenantId) {
         generation += 1;
+        tenantGenerations.clear();
         entries.clear();
         inFlight.clear();
         return;
       }
-      tenantGenerations.set(tenantId, (tenantGenerations.get(tenantId) ?? 0) + 1);
+      bumpTenantGeneration(tenantId);
       const prefix = `${tenantId}\u0000`;
       for (const cacheId of entries.keys()) if (cacheId.startsWith(prefix)) entries.delete(cacheId);
       for (const cacheId of inFlight.keys())

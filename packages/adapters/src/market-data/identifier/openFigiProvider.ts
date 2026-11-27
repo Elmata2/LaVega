@@ -229,7 +229,10 @@ export function createOpenFigiIdentifierProvider(
           resolution: { tier: "owner-override", confidence: null, candidates: [] },
         };
       }
-      const known = cache.get(isin);
+      const venueKey = request.instrument?.venue?.trim().toUpperCase() ?? "";
+      const modelKey = request.allowModelSelection === true ? "1" : "0";
+      const cacheKey = `${isin}|${venueKey}|${modelKey}`;
+      const known = cache.get(cacheKey);
       if (known) return known;
       try {
         const raw = await requestWithBudget(
@@ -245,7 +248,7 @@ export function createOpenFigiIdentifierProvider(
             problems: [],
             resolution: { tier: "provider", confidence: null, candidates },
           };
-          cache.set(isin, result);
+          cache.set(cacheKey, result);
           return result;
         }
         /* The broker prints the execution venue on its own row, so the venue
@@ -258,7 +261,7 @@ export function createOpenFigiIdentifierProvider(
             problems: [],
             resolution: { tier: "provider", confidence: null, candidates },
           };
-          cache.set(isin, result);
+          cache.set(cacheKey, result);
           return result;
         }
         /* Ambiguity: select only when the caller allowed it. Without consent
@@ -269,7 +272,7 @@ export function createOpenFigiIdentifierProvider(
             ? await selectCandidate(request, isin, candidates)
             : null;
         if (selected) {
-          cache.set(isin, selected);
+          cache.set(cacheKey, selected);
           return selected;
         }
         if (request.allowModelSelection === true) {
@@ -286,7 +289,7 @@ export function createOpenFigiIdentifierProvider(
           problems: [],
           resolution: { tier: "provider", confidence: null, candidates },
         };
-        cache.set(isin, result);
+        cache.set(cacheKey, result);
         return result;
       } catch (error) {
         // No slot, or no budget: nothing was asked, so "unresolved" would be a lie

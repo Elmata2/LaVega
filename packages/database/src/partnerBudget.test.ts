@@ -174,3 +174,19 @@ test("blockedUntil reads the block, null when there is none, and writes nothing"
   expect((await budget.blockedUntil(key))?.getTime()).toBe(until.getTime());
   expect(await row()).toEqual(before);
 });
+
+test("releaseSlot rolls back next_at when no later caller reserved after it", async () => {
+  const budget = createPartnerBudgetRepository(db);
+  const first = await budget.reserve(key, 2_000);
+  const afterReserve = await row();
+  expect(Number(afterReserve.next_ms)).toBe(first.getTime() + 2_000);
+
+  await budget.releaseSlot(key, first, 2_000);
+  expect(Number((await row()).next_ms)).toBe(first.getTime());
+
+  // When another caller already advanced next_at, releaseSlot is a no-op.
+  const second = await budget.reserve(key, 2_000);
+  const third = await budget.reserve(key, 2_000);
+  await budget.releaseSlot(key, second, 2_000);
+  expect(Number((await row()).next_ms)).toBe(third.getTime() + 2_000);
+});

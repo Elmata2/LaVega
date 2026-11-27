@@ -89,6 +89,8 @@ export type PartnerBudgetStore = {
   blockedUntil(key: PartnerKey): Promise<Date | null>;
   observe(key: PartnerKey, seen: PartnerObservation): Promise<void>;
   reject(key: PartnerKey, until: Date): Promise<void>;
+  /** Rolls back `next_at` when a reserved slot is rejected by a later `blockedUntil`. */
+  releaseSlot?(key: PartnerKey, slot: Date, intervalMs: number): Promise<void>;
 };
 
 type Row = { nextAt: number; blockedUntil: number | null; intervalMs: number | null };
@@ -129,6 +131,11 @@ export class PartnerBudget extends Context.Service<
     readonly reject: (
       key: PartnerKey,
       until: DateTime.Utc,
+    ) => Effect.Effect<void, PartnerBudgetUnavailable>;
+    /** Rolls back `next_at` for an unused slot rejected by a later `blockedUntil`. */
+    readonly releaseSlot: (
+      key: PartnerKey,
+      slot: DateTime.Utc,
     ) => Effect.Effect<void, PartnerBudgetUnavailable>;
   }
 >()("@lavega/adapters/partnerBudget/PartnerBudget") {
@@ -212,7 +219,15 @@ function makeMemory(intervals: PartnerIntervals) {
     block(upsert(key, yield* Clock.currentTimeMillis), DateTime.toEpochMillis(until));
   });
 
-  return PartnerBudget.of({ reserve, reserveBefore, blockedUntil, observe, reject });
+  const releaseSlot = Effect.fnUntraced(function* (key: PartnerKey, slot: DateTime.Utc) {
+    const intervalMs = yield* intervalOrDie(intervals, key);
+    const row = rows.get(rowId(key));
+    if (row === undefined) return;
+    const slotMs = DateTime.toEpochMillis(slot);
+    if (row.nextAt === slotMs + (row.intervalMs ?? intervalMs)) row.nextAt = slotMs;
+  });
+
+  return PartnerBudget.of({ reserve, reserveBefore, blockedUntil, observe, reject, releaseSlot });
 }
 
 function makeStore(store: PartnerBudgetStore, intervals: PartnerIntervals) {
@@ -253,7 +268,16 @@ function makeStore(store: PartnerBudgetStore, intervals: PartnerIntervals) {
       catch: unavailable,
     });
 
-  return PartnerBudget.of({ reserve, reserveBefore, blockedUntil, observe, reject });
+  const releaseSlot = Effect.fnUntraced(function* (key: PartnerKey, slot: DateTime.Utc) {
+    if (!store.releaseSlot) return;
+    const intervalMs = yield* intervalOrDie(intervals, key);
+    yield* Effect.tryPromise({
+      try: () => store.releaseSlot!(key, DateTime.toDateUtc(slot), intervalMs),
+      catch: unavailable,
+    });
+  });
+
+  return PartnerBudget.of({ reserve, reserveBefore, blockedUntil, observe, reject, releaseSlot });
 }
 
 /**
@@ -289,8 +313,10 @@ export const awaitSlot = Effect.fnUntraced(function* (key: PartnerKey, deadlineM
   const blockedMs = DateTime.toEpochMillis(blockedUntil);
   const afterSleep = yield* Clock.currentTimeMillis;
   if (blockedMs <= afterSleep) return;
-  if (deadlineMs !== undefined && blockedMs > deadlineMs - DEADLINE_MARGIN_MS)
+  if (deadlineMs !== undefined && blockedMs > deadlineMs - DEADLINE_MARGIN_MS) {
+    yield* budget.releaseSlot(key, slot).pipe(Effect.ignore);
     return yield* new PartnerWait({ until: blockedUntil });
+  }
   yield* Effect.sleep(blockedMs - afterSleep);
 });
 

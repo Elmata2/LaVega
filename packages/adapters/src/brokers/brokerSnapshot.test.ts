@@ -1223,3 +1223,72 @@ test("a newer portfolio in a merged DeGiro import applies despite an older accou
     expect.objectContaining({ status: "complete", from: "2026-01-05", to: "2026-03-06" }),
   ]);
 });
+
+test("apply() updates lastImportByBroker alongside merged sections", () => {
+  const cache = createBrokerDataCache();
+  const lastImport = {
+    importedAt: "2026-11-16T10:00:00.000Z",
+    files: [{ filename: "Portfolio.csv", sha256: "a".repeat(64) }],
+  };
+
+  cache.apply({
+    outcomes: [
+      {
+        broker: "degiro",
+        status: "synced",
+        lastSyncedAt: "2026-11-16T10:00:00.000Z",
+        result: window(trade("t-1", "20260301"), "", A),
+        lastImport,
+      },
+    ],
+    problems: [],
+  });
+
+  expect(cache.read().lastImports.degiro).toEqual(lastImport);
+  expect(cache.snapshot().degiro?.lastImport).toEqual(lastImport);
+});
+
+test("apply() is atomic and leaves live state untouched when an outcome throws mid-merge", () => {
+  const cache = createBrokerDataCache();
+  cache.apply(outcome(window(trade("t-existing", "20260301"), "", A)));
+  const beforeVersion = cache.read().dataVersion;
+  const beforeSnapshot = cache.snapshot();
+
+  const brokenResult = {
+    sections: {
+      positions: { status: "complete" as const, rows: [] },
+      get trades(): never {
+        throw new Error("corrupt trades section");
+      },
+      dividends: { status: "complete" as const, rows: [] },
+      cashBalances: { status: "complete" as const, rows: [] },
+      cashFlows: { status: "complete" as const, rows: [] },
+    },
+    source: "ibkr-flex",
+    problems: [],
+  } as unknown as BrokerResult;
+
+  expect(() =>
+    cache.apply({
+      outcomes: [
+        {
+          broker: "ibkr",
+          status: "synced",
+          lastSyncedAt: null,
+          result: window(trade("t-first", "20260302"), "", A),
+        },
+        {
+          broker: "trading212",
+          status: "synced",
+          lastSyncedAt: null,
+          result: brokenResult,
+        },
+      ],
+      problems: ["should not commit"],
+    }),
+  ).toThrow("corrupt trades section");
+
+  expect(cache.read().dataVersion).toBe(beforeVersion);
+  expect(cache.read().problems).toEqual([]);
+  expect(cache.snapshot()).toEqual(beforeSnapshot);
+});

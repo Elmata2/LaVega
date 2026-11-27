@@ -44,7 +44,7 @@ export const SECTOR_FETCH_BUDGET_MS = 8_000;
  *  instead of sleeping past the read's budget. */
 export type SectorProfileLookup = (
   symbol: string,
-  options?: { deadlineMs?: number },
+  options?: { deadlineMs?: number; signal?: AbortSignal },
 ) => Promise<SectorProfile | null>;
 export type SectorCorrectionLookup = (symbol: string) => Promise<string | null>;
 
@@ -226,8 +226,13 @@ export function needsProviderFetch(
   return now - attemptedAt >= PROVIDER_RETRY_HOURS * 60 * 60 * 1000;
 }
 
-/** Resolves to "timeout" after `ms`; the timer is cleared when `work` wins. */
-async function raceBudget<T>(work: Promise<T>, ms: number): Promise<T | "timeout"> {
+/** Resolves to "timeout" after `ms`; aborts the work's signal on timeout and clears the timer when `work` wins. */
+async function raceBudget<T>(
+  run: (signal: AbortSignal) => Promise<T>,
+  ms: number,
+): Promise<T | "timeout"> {
+  const controller = new AbortController();
+  const work = run(controller.signal);
   let timer: ReturnType<typeof setTimeout> | undefined;
   /* The losing call is not awaited. Swallow its late rejection. */
   work.catch(() => undefined);
@@ -235,7 +240,10 @@ async function raceBudget<T>(work: Promise<T>, ms: number): Promise<T | "timeout
     return await Promise.race([
       work,
       new Promise<"timeout">((resolve) => {
-        timer = setTimeout(() => resolve("timeout"), ms);
+        timer = setTimeout(() => {
+          controller.abort();
+          resolve("timeout");
+        }, ms);
       }),
     ]);
   } finally {
@@ -287,7 +295,7 @@ async function resolveWeights(
         let fetched: SectorProfile | null | "timeout" | "threw";
         try {
           fetched = await raceBudget(
-            fetchProfile(lookupSymbol, { deadlineMs: deadline }),
+            (signal) => fetchProfile(lookupSymbol, { deadlineMs: deadline, signal }),
             remaining,
           );
         } catch (error) {

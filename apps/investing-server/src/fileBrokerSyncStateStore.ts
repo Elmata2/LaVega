@@ -114,40 +114,56 @@ export function createFileBrokerSyncStateStore(
       return { claimed, state, data: stored ?? null, credentialGeneration: 1 };
     },
     async publish(broker, leaseId, progress) {
-      if (!(await held(broker, leaseId))) return false;
-      await store.update((operations) => ({
-        ...operations,
-        [broker]: {
-          ...operations[broker]!,
-          lease: { id: leaseId, heartbeatAt: progress.updatedAt ?? new Date().toISOString() },
-          progress,
-        },
-      }));
-      return true;
+      let published = false;
+      await store.update((operations) => {
+        const current = operations[broker];
+        if (!leaseId || current?.lease?.id !== leaseId) return operations;
+        published = true;
+        return {
+          ...operations,
+          [broker]: {
+            ...current,
+            lease: { id: leaseId, heartbeatAt: progress.updatedAt ?? new Date().toISOString() },
+            progress,
+          },
+        };
+      });
+      return published;
     },
     async progress(broker) {
       return (await store.read())[broker]?.progress ?? null;
     },
     async commit(broker, input) {
-      if (!(await held(broker, input.leaseId))) return false;
-      /* The data goes first: a cursor that moved past data nobody stored would
-       * make the next run skip what was lost. */
+      if (!input.leaseId || !(await held(broker, input.leaseId))) return false;
+      /* Verify and atomically release the lease inside the serialized store
+       * update so a concurrent takeover cannot be overwritten (TOCTOU). */
       if (data && input.data) {
         const snapshot = await data.read();
+        if (!(await held(broker, input.leaseId))) return false;
         await data.write({ ...snapshot, [broker]: input.data as BrokerAccountSnapshot });
       }
-      await store.update((operations) => ({
-        ...operations,
-        [broker]: { state: input.state, lease: null, progress: input.progress },
-      }));
-      return true;
+      let committed = false;
+      await store.update((operations) => {
+        const current = operations[broker];
+        if (current?.lease?.id !== input.leaseId) return operations;
+        committed = true;
+        return {
+          ...operations,
+          [broker]: { state: input.state, lease: null, progress: input.progress },
+        };
+      });
+      return committed;
     },
     async release(broker, leaseId, progress) {
-      if (!(await held(broker, leaseId))) return;
-      await store.update((operations) => ({
-        ...operations,
-        [broker]: { ...operations[broker]!, lease: null, progress },
-      }));
+      if (!leaseId) return;
+      await store.update((operations) => {
+        const current = operations[broker];
+        if (current?.lease?.id !== leaseId) return operations;
+        return {
+          ...operations,
+          [broker]: { ...current, lease: null, progress },
+        };
+      });
     },
   };
 }

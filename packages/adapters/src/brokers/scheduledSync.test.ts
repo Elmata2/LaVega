@@ -850,3 +850,117 @@ test("with no rules the adapter's cash-flow output is unchanged", async () => {
   expect(result.committed.trading212?.cashFlows?.[0]).toMatchObject({ kind: "other", amount: 100 });
   expect(result.problems).toEqual([`trading212: ${unknown}`]);
 });
+
+test("aborts work() immediately when heartbeat publish() returns false (lost lease)", async () => {
+  vi.useFakeTimers();
+  try {
+    const base = createMemoryBrokerSyncStateStore();
+    const commit = vi.fn(base.commit);
+    let publishCalls = 0;
+    const operations: BrokerSyncOperationStore = {
+      get: (broker) => base.get(broker),
+      claim: (broker, input) => base.claim(broker, input),
+      progress: (broker) => base.progress(broker),
+      commit,
+      release: (broker, leaseId, progress) => base.release(broker, leaseId, progress),
+      publish: async () => {
+        publishCalls += 1;
+        return false;
+      },
+    };
+    // Adapter never resolves on its own; lost-lease heartbeat must abort the wait.
+    const sync = vi.fn(() => new Promise<BrokerResult>(() => undefined));
+
+    const runPromise = syncScheduledBrokers({
+      lanes: ["holdings", "history"] as const,
+      adapters: adapters(sync),
+      credentials,
+      operations,
+      tenantId: "local",
+      entity: "personal",
+      force: true,
+      now: new Date("2026-09-23T12:00:00.000Z"),
+    });
+
+    await vi.advanceTimersByTimeAsync(10_000);
+    const result = await runPromise;
+
+    expect(publishCalls).toBe(1);
+    expect(commit).not.toHaveBeenCalled();
+    expect(result.outcomes[0]?.status).toBe("skipped");
+    expect(result.problems).toEqual([
+      "trading212: the result was discarded, this run is no longer current",
+    ]);
+    expect(result.committed.trading212).toBeUndefined();
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test("stamps final progress updatedAt with current time rather than stale run-start nowIso", async () => {
+  vi.useFakeTimers();
+  try {
+    const operations = createMemoryBrokerSyncStateStore();
+    const start = new Date("2026-09-23T12:00:00.000Z");
+    const sync = vi.fn(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 25_000));
+      return empty({});
+    });
+
+    const runPromise = syncScheduledBrokers({
+      lanes: ["holdings", "history"] as const,
+      adapters: adapters(sync),
+      credentials,
+      operations,
+      tenantId: "local",
+      entity: "personal",
+      force: true,
+      now: start,
+    });
+
+    await vi.advanceTimersByTimeAsync(25_000);
+    await runPromise;
+
+    const storedProgress = await operations.progress("trading212");
+    expect(storedProgress?.status).toBe("completed");
+    expect(storedProgress?.updatedAt).toBe("2026-09-23T12:00:25.000Z");
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test("reconciles outcome.status='problem' with non-empty problems[] when resume is pending without adapter problems", async () => {
+  const operations = createMemoryBrokerSyncStateStore();
+  const sync = vi.fn(async () =>
+    empty({
+      tradesComplete: false,
+      problems: [],
+      resume: {
+        ordersNextPagePath: "/api/v0/equity/history/orders?cursor=next",
+        transactionsComplete: true,
+        dividendsComplete: true,
+      },
+    }),
+  );
+
+  const result = await syncScheduledBrokers({
+    lanes: ["holdings", "history"] as const,
+    adapters: adapters(sync),
+    credentials,
+    operations,
+    tenantId: "local",
+    entity: "personal",
+    force: true,
+    now: new Date("2026-09-23T12:00:00.000Z"),
+  });
+
+  expect(result.outcomes[0]?.status).toBe("problem");
+  expect(result.problems).toEqual([
+    "trading212: history sync is incomplete and will resume on the next run",
+  ]);
+  const storedProgress = await operations.progress("trading212");
+  expect(storedProgress?.status).toBe("waiting");
+  expect(storedProgress?.message).toBe(
+    "trading212: history sync is incomplete and will resume on the next run",
+  );
+});

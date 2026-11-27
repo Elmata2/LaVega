@@ -3,12 +3,17 @@
 // exercised code LaVega didn't vendor (see vendor/gloomberb/README.md).
 import { afterEach, expect, test, vi } from "vitest";
 import { loadFlexStatement, requestFlexStatement } from "./flexStatementClient.js";
+import {
+  clearPendingFlexReferences,
+  FlexStatementRetryableError,
+} from "./flexStatementClientImpl.js";
 import { setHttpFetchTransport } from "../../../vendor/gloomberb/http-transport.js";
 import { createImmediatePartnerBudget } from "../../partnerBudget/fakes.js";
 
 const originalFetch = globalThis.fetch;
 
 afterEach(() => {
+  clearPendingFlexReferences();
   setHttpFetchTransport(null);
   globalThis.fetch = originalFetch;
   vi.restoreAllMocks();
@@ -265,4 +270,132 @@ test("surfaces an IBKR error carried by a 5xx response instead of retrying", asy
     }),
   ).rejects.toThrow(/IBKR error 1012: Token has expired/);
   expect(getCalls).toBe(1);
+});
+
+test("persists referenceCode across statement generation timeout and reuses it on retry", async () => {
+  const urls: string[] = [];
+  let ready = false;
+  setHttpFetchTransport(async (url) => {
+    urls.push(url);
+    if (url.includes("SendRequest")) {
+      return new Response(
+        "<FlexStatementResponse><ReferenceCode>ref-persist-1</ReferenceCode></FlexStatementResponse>",
+        { status: 200 },
+      );
+    }
+    return ready
+      ? new Response("<FlexQueryResponse><FlexStatements /></FlexQueryResponse>", { status: 200 })
+      : new Response(
+          "<FlexStatementResponse><Status>Statement generation in progress</Status></FlexStatementResponse>",
+          { status: 200 },
+        );
+  });
+
+  const config = {
+    token: "secret-flex-token",
+    partnerBudget: createImmediatePartnerBudget(),
+    queryId: "12345",
+    initialWaitMs: 0,
+    pollDelayMs: 0,
+    maxDownloadAttempts: 1,
+  };
+
+  let firstError: unknown;
+  try {
+    await loadFlexStatement(config);
+  } catch (error) {
+    firstError = error;
+  }
+  expect(firstError).toBeInstanceOf(FlexStatementRetryableError);
+  expect((firstError as FlexStatementRetryableError).referenceCode).toBe("ref-persist-1");
+  expect(urls.filter((u) => u.includes("SendRequest"))).toHaveLength(1);
+
+  // Next call reuses the persisted referenceCode without calling SendRequest again.
+  ready = true;
+  urls.length = 0;
+  await expect(loadFlexStatement(config)).resolves.toContain("<FlexQueryResponse>");
+  expect(urls.filter((u) => u.includes("SendRequest"))).toHaveLength(0);
+  expect(urls).toHaveLength(1);
+  expect(urls[0]).toContain("GetStatement");
+  expect(urls[0]).toContain("q=ref-persist-1");
+
+  // Once succeeded, the persisted referenceCode is cleared and a new load calls SendRequest.
+  urls.length = 0;
+  await expect(loadFlexStatement(config)).resolves.toContain("<FlexQueryResponse>");
+  expect(urls.filter((u) => u.includes("SendRequest"))).toHaveLength(1);
+});
+
+test("clears persisted referenceCode when GetStatement returns a permanent IBKR error", async () => {
+  const urls: string[] = [];
+  let mode: "in-progress" | "expired" | "ready" = "in-progress";
+  setHttpFetchTransport(async (url) => {
+    urls.push(url);
+    if (url.includes("SendRequest")) {
+      return new Response(
+        "<FlexStatementResponse><ReferenceCode>ref-expiring</ReferenceCode></FlexStatementResponse>",
+        { status: 200 },
+      );
+    }
+    if (mode === "in-progress") {
+      return new Response(
+        "<FlexStatementResponse><Status>Statement generation in progress</Status></FlexStatementResponse>",
+        { status: 200 },
+      );
+    }
+    if (mode === "expired") {
+      return new Response(
+        "<FlexStatementResponse><ErrorCode>1018</ErrorCode><ErrorMessage>Invalid reference code</ErrorMessage></FlexStatementResponse>",
+        { status: 200 },
+      );
+    }
+    return new Response("<FlexQueryResponse><FlexStatements /></FlexQueryResponse>", {
+      status: 200,
+    });
+  });
+
+  const config = {
+    token: "secret-flex-token",
+    partnerBudget: createImmediatePartnerBudget(),
+    queryId: "12345",
+    initialWaitMs: 0,
+    pollDelayMs: 0,
+    maxDownloadAttempts: 1,
+  };
+
+  await expect(loadFlexStatement(config)).rejects.toThrow(/timed out/);
+
+  mode = "expired";
+  urls.length = 0;
+  await expect(loadFlexStatement(config)).rejects.toThrow(/Invalid reference code/);
+  expect(urls.filter((u) => u.includes("SendRequest"))).toHaveLength(0);
+
+  // Permanent error cleared the cached referenceCode, so the next load sends a fresh SendRequest.
+  mode = "ready";
+  urls.length = 0;
+  await expect(loadFlexStatement(config)).resolves.toContain("<FlexQueryResponse>");
+  expect(urls.filter((u) => u.includes("SendRequest"))).toHaveLength(1);
+});
+
+test("explicit config.referenceCode skips SendRequest and polls GetStatement directly", async () => {
+  const urls: string[] = [];
+  setHttpFetchTransport(async (url) => {
+    urls.push(url);
+    return new Response("<FlexQueryResponse><FlexStatements /></FlexQueryResponse>", {
+      status: 200,
+    });
+  });
+
+  await expect(
+    loadFlexStatement({
+      token: "secret-flex-token",
+      partnerBudget: createImmediatePartnerBudget(),
+      queryId: "12345",
+      referenceCode: "explicit-ref-42",
+      initialWaitMs: 0,
+      pollDelayMs: 0,
+    }),
+  ).resolves.toContain("<FlexQueryResponse>");
+  expect(urls).toHaveLength(1);
+  expect(urls[0]).toContain("GetStatement");
+  expect(urls[0]).toContain("q=explicit-ref-42");
 });

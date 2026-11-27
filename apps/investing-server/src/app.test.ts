@@ -1281,7 +1281,10 @@ test("GET sectors with consent still fetches a never-attempted symbol under its 
   expect(((await response.json()) as { sectors: unknown }).sectors).toEqual([
     { sector: "Healthcare", weight: 1 },
   ]);
-  expect(sectorProfile).toHaveBeenCalledWith("HIMS", { deadlineMs: expect.any(Number) });
+  expect(sectorProfile).toHaveBeenCalledWith("HIMS", {
+    deadlineMs: expect.any(Number),
+    signal: expect.any(AbortSignal),
+  });
   expect(sectorProfile).not.toHaveBeenCalledWith("OAC_US_EQ", expect.anything());
   expect(await sectorStore.get("HIMS")).toMatchObject({ sector: "Healthcare" });
 });

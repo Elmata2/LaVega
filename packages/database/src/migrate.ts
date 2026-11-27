@@ -118,6 +118,34 @@ async function record(client: MigrationClient, file: MigrationFile): Promise<voi
   );
 }
 
+/** Tracks clients currently holding `LOCK_KEY` so lock enforcement is reentrant. */
+const lockedClients = new WeakMap<MigrationClient, number>();
+
+/**
+ * Strips a single outer `BEGIN; ... COMMIT;` wrapper when present so the runner
+ * can execute the migration SQL and insert its ledger row inside one atomic
+ * transaction. Inner PL/pgSQL `DO $$ ... BEGIN ... END $$;` blocks are untouched.
+ */
+function unwrapOuterTransaction(sql: string): string {
+  const leading = /^\s*(?:--[^\n]*\n|\s)*BEGIN\s*;/i;
+  const trailing = /COMMIT\s*;\s*(?:--[^\n]*\s*)*$/i;
+  if (!leading.test(sql) || !trailing.test(sql)) return sql;
+  return sql.replace(leading, "").replace(trailing, "");
+}
+
+async function applyFileInTransaction(client: MigrationClient, file: MigrationFile): Promise<void> {
+  const body = unwrapOuterTransaction(file.sql);
+  await client.exec("BEGIN");
+  try {
+    await client.exec(body);
+    await record(client, file);
+    await client.exec("COMMIT");
+  } catch (error) {
+    await client.exec("ROLLBACK").catch(() => undefined);
+    throw error;
+  }
+}
+
 export type MigrationEvent =
   | { kind: "applied"; name: string }
   | { kind: "recorded"; name: string }
@@ -128,22 +156,24 @@ export type RunOptions = { onEvent?: (event: MigrationEvent) => void };
 /**
  * Applies every pending migration in order. Drift aborts before anything runs:
  * a changed file means the recorded history no longer describes this database,
- * and guessing which half is right is worse than stopping.
+ * and guessing which half is right is worse than stopping. Always holds the
+ * migration advisory lock and wraps each file + ledger record in one transaction.
  */
 export async function applyMigrations(
   client: MigrationClient,
   files: MigrationFile[],
   options: RunOptions = {},
 ): Promise<MigrationFile[]> {
-  await ensureLedger(client);
-  const plan = await planMigrations(client, files);
-  assertNoDrift(plan);
-  for (const file of plan.pending) {
-    await client.exec(file.sql);
-    await record(client, file);
-    options.onEvent?.({ kind: "applied", name: file.name });
-  }
-  return plan.pending;
+  return withMigrationLock(client, async () => {
+    await ensureLedger(client);
+    const plan = await planMigrations(client, files);
+    assertNoDrift(plan);
+    for (const file of plan.pending) {
+      await applyFileInTransaction(client, file);
+      options.onEvent?.({ kind: "applied", name: file.name });
+    }
+    return plan.pending;
+  });
 }
 
 /**
@@ -156,13 +186,15 @@ export async function baselineMigrations(
   files: MigrationFile[],
   options: RunOptions = {},
 ): Promise<MigrationFile[]> {
-  await ensureLedger(client);
-  const plan = await planMigrations(client, files);
-  for (const file of plan.pending) {
-    await record(client, file);
-    options.onEvent?.({ kind: "recorded", name: file.name });
-  }
-  return plan.pending;
+  return withMigrationLock(client, async () => {
+    await ensureLedger(client);
+    const plan = await planMigrations(client, files);
+    for (const file of plan.pending) {
+      await record(client, file);
+      options.onEvent?.({ kind: "recorded", name: file.name });
+    }
+    return plan.pending;
+  });
 }
 
 /**
@@ -171,21 +203,21 @@ export async function baselineMigrations(
  * For a database that predates the runner and is NOT known to be current: the
  * preview branch, a self-host that stopped applying files by hand halfway.
  * `baseline` would claim those files ran when they did not, so this runs them
- * instead — safe only because every migration is required to be rerunnable,
- * which is the same property the runner already depends on after a crash.
+ * instead — safe only because every migration is required to be rerunnable.
  */
 export async function adoptMigrations(
   client: MigrationClient,
   files: MigrationFile[],
   options: RunOptions = {},
 ): Promise<MigrationFile[]> {
-  await ensureLedger(client);
-  for (const file of files) {
-    await client.exec(file.sql);
-    await record(client, file);
-    options.onEvent?.({ kind: "applied", name: file.name });
-  }
-  return files;
+  return withMigrationLock(client, async () => {
+    await ensureLedger(client);
+    for (const file of files) {
+      await applyFileInTransaction(client, file);
+      options.onEvent?.({ kind: "applied", name: file.name });
+    }
+    return files;
+  });
 }
 
 export function assertNoDrift(plan: MigrationPlan): void {
@@ -199,15 +231,23 @@ export function assertNoDrift(plan: MigrationPlan): void {
   );
 }
 
-/** Serializes concurrent runners. The lock releases when the session ends. */
+/** Serializes concurrent runners. Reentrant for the same client; releases when the outermost call exits. */
 export async function withMigrationLock<T>(
   client: MigrationClient,
   fn: () => Promise<T>,
 ): Promise<T> {
-  await client.query("SELECT pg_advisory_lock($1)", [LOCK_KEY]);
+  const depth = lockedClients.get(client) ?? 0;
+  if (depth === 0) await client.query("SELECT pg_advisory_lock($1)", [LOCK_KEY]);
+  lockedClients.set(client, depth + 1);
   try {
     return await fn();
   } finally {
-    await client.query("SELECT pg_advisory_unlock($1)", [LOCK_KEY]).catch(() => undefined);
+    const next = (lockedClients.get(client) ?? 1) - 1;
+    if (next <= 0) {
+      lockedClients.delete(client);
+      await client.query("SELECT pg_advisory_unlock($1)", [LOCK_KEY]).catch(() => undefined);
+    } else {
+      lockedClients.set(client, next);
+    }
   }
 }

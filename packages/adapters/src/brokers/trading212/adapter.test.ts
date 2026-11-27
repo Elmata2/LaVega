@@ -1334,3 +1334,92 @@ test("60 new orders at the head of a 1,500-order history cost exactly 3 order re
   expect(result.historyMode).toBe("incremental");
   expect(result.fullStreams).not.toContain("orders");
 });
+
+test("does not mark ordersComplete=true when order rows fail mapping (ordersPartial)", async () => {
+  const baseUrl = await serve((request, response) => {
+    if (isOrderHistory(request))
+      return json(response, 200, {
+        items: [order(1, "AAPL"), { id: 2, ticker: "BROKEN" }],
+      });
+    return standardNonOrder(request, response);
+  });
+
+  const result = await createTrading212Adapter({ token: "token", secret: "secret", baseUrl }).sync({
+    lanes: ["holdings", "history"],
+    entity: "BV",
+  });
+
+  expect(result.sections.trades.status).toBe("partial");
+  expect(result.sections.trades.rows).toHaveLength(1);
+  expect(result.resume?.ordersComplete).not.toBe(true);
+  expect(result.fullStreams).not.toContain("orders");
+  expect(result.problems).toContain("Trading 212 historical order fill is missing or invalid");
+});
+
+test("resolves accountCurrency lazily on history-only runs and caches it across runs", async () => {
+  const paths: string[] = [];
+  const baseUrl = await serve((request, response) => {
+    const url = request.url ?? "";
+    paths.push(url);
+    if (url === "/api/v0/equity/account/summary") {
+      return json(response, 200, {
+        currency: "EUR",
+        cash: { availableToTrade: 50, inPies: 0, reservedForOrders: 0 },
+      });
+    }
+    if (url.startsWith("/api/v0/equity/history/transactions")) {
+      return json(response, 200, {
+        items: [
+          {
+            amount: 5,
+            dateTime: "2026-08-02T10:00:00Z",
+            reference: "fee-no-ccy",
+            type: "FEE",
+          },
+        ],
+      });
+    }
+    if (url.startsWith("/api/v0/equity/history/dividends")) {
+      return json(response, 200, {
+        items: [
+          {
+            amount: 2.5,
+            paidOn: "2026-08-03T10:00:00Z",
+            reference: "div-no-ccy",
+            ticker: "AAPL_US_EQ",
+            type: "ORDINARY",
+          },
+        ],
+      });
+    }
+    return json(response, 200, { items: [] });
+  });
+
+  const adapter = createTrading212Adapter({ token: "token", secret: "secret", baseUrl });
+  const first = await adapter.sync({
+    lanes: ["history"],
+    entity: "BV",
+    fullReadStreams: ["orders", "transactions", "dividends"],
+  });
+
+  expect(first.problems).toEqual([]);
+  expect(first.sections.cashFlows.status).toBe("complete");
+  expect(first.sections.cashFlows.rows).toMatchObject([
+    { brokerFlowId: "fee-no-ccy", currency: "EUR", amount: -5 },
+  ]);
+  expect(first.sections.dividends.status).toBe("complete");
+  expect(first.sections.dividends.rows).toMatchObject([
+    { brokerDividendId: "div-no-ccy", currency: "EUR", amount: 2.5 },
+  ]);
+  expect(paths.filter((p) => p === "/api/v0/equity/account/summary")).toHaveLength(1);
+
+  paths.length = 0;
+  const second = await adapter.sync({
+    lanes: ["history"],
+    entity: "BV",
+    fullReadStreams: ["orders", "transactions", "dividends"],
+  });
+  expect(second.problems).toEqual([]);
+  expect(second.sections.cashFlows.rows).toMatchObject([{ currency: "EUR" }]);
+  expect(paths.filter((p) => p === "/api/v0/equity/account/summary")).toHaveLength(0);
+});

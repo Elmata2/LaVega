@@ -14,8 +14,9 @@ const MAX_RETRIES = 3;
 const RETRY_BASE_MS = 1500;
 const RETRYABLE = /429|403|401|502|503|504|ECONNRESET|ETIMEDOUT|ENOTFOUND|fetch failed/i;
 /** Yahoo answers these when it has slowed or blocked our egress IP. The key is
- *  shared by every user, so the budget must hold everyone back, not only this call. */
-const REJECTED = /\[(?:429|403|401)\]|Failed to get crumb: (?:429|403|401)/;
+ *  shared by every user, so the budget must hold everyone back, not only this call.
+ *  401 is a stale crumb/cookie rather than an IP block, so it retries locally. */
+const REJECTED = /\[(?:429|403)\]|Failed to get crumb: (?:429|403)/;
 /** A Retry-After longer than this is not worth holding the shared key for. */
 const MAX_RETRY_AFTER_MS = 120_000;
 /** Chart, search, quoteSummary and crumb requests are one budget: Yahoo counts our IP. */
@@ -45,11 +46,16 @@ export type YahooHttpOptions = {
   deadlineMs?: number;
 };
 
+/** An immutable crumb + cookie pair published atomically once `getcrumb` succeeds. */
+type YahooCredentials = {
+  readonly crumb: string;
+  readonly cookie: string;
+};
+
 /** The crumb and cookie Yahoo hands out, shared by a client and its deadline views. */
 type YahooSession = {
-  crumb: string | null;
-  cookie: string | null;
-  crumbPromise: Promise<void> | null;
+  credentials: YahooCredentials | null;
+  crumbPromise: Promise<YahooCredentials> | null;
 };
 
 export class YahooHttpClient {
@@ -63,7 +69,7 @@ export class YahooHttpClient {
     options: YahooHttpOptions = {},
     session?: YahooSession,
   ) {
-    this.session = session ?? { crumb: null, cookie: null, crumbPromise: null };
+    this.session = session ?? { credentials: null, crumbPromise: null };
     this.budget = options.partnerBudget ?? createMemoryPartnerBudgetClient();
     this.deadlineMs = options.deadlineMs;
   }
@@ -94,10 +100,11 @@ export class YahooHttpClient {
   }
   fetchJsonWithCrumb<T>(url: string): Promise<T> {
     return this.withRetry(async () => {
-      await this.ensureCrumb();
+      const credentials = await this.ensureCrumb();
       return this.request<T>(
-        `${url}${url.includes("?") ? "&" : "?"}crumb=${encodeURIComponent(this.session.crumb!)}`,
-        { Cookie: this.session.cookie! },
+        `${url}${url.includes("?") ? "&" : "?"}crumb=${encodeURIComponent(credentials.crumb)}`,
+        { Cookie: credentials.cookie },
+        credentials,
       );
     });
   }
@@ -107,7 +114,11 @@ export class YahooHttpClient {
     return this.budget.awaitSlot(YAHOO_KEY, this.deadlineMs);
   }
 
-  private async request<T>(url: string, extra: Record<string, string> = {}): Promise<T> {
+  private async request<T>(
+    url: string,
+    extra: Record<string, string> = {},
+    usedCredentials?: YahooCredentials,
+  ): Promise<T> {
     await this.slot();
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.timeoutMs);
@@ -116,9 +127,11 @@ export class YahooHttpClient {
         headers: { ...this.defaultHeaders(), ...extra },
         signal: controller.signal,
       });
-      if (response.status === 401) {
-        this.session.crumb = null;
-        this.session.cookie = null;
+      if (
+        response.status === 401 &&
+        (usedCredentials === undefined || this.session.credentials === usedCredentials)
+      ) {
+        this.session.credentials = null;
       }
       if (!response.ok)
         throw new YahooHttpError(
@@ -136,16 +149,16 @@ export class YahooHttpClient {
    *  own deadline allows. The caller that starts it does not lend it its deadline:
    *  the negotiation has a bound of its own, so a short-deadline starter cannot
    *  fail it for the callers that joined. */
-  private ensureCrumb(): Promise<void> {
+  private ensureCrumb(): Promise<YahooCredentials> {
     const session = this.session;
-    if (session.crumb && session.cookie) return Promise.resolve();
+    if (session.credentials !== null) return Promise.resolve(session.credentials);
     session.crumbPromise ??= this.withDeadline(Date.now() + CREDENTIALS_BOUND_MS).negotiate();
     return this.untilOwnDeadline(session.crumbPromise);
   }
 
   /** The shared promise, or `PartnerWait` for this caller alone at its deadline.
    *  The negotiation goes on for the others. */
-  private untilOwnDeadline(shared: Promise<void>): Promise<void> {
+  private untilOwnDeadline<T>(shared: Promise<T>): Promise<T> {
     const deadlineMs = this.deadlineMs;
     if (deadlineMs === undefined) return shared;
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -159,29 +172,30 @@ export class YahooHttpClient {
   }
 
   /** Runs on a view that carries the negotiation's own deadline. A failure is not
-   *  cached: the `finally` clears the promise, so the next caller starts again. */
-  private negotiate(): Promise<void> {
+   *  cached: the `finally` clears the promise, so the next caller starts again.
+   *  `{ crumb, cookie }` are published atomically only after `getcrumb` succeeds
+   *  so a concurrent 401 cannot leave a half-populated session. */
+  private negotiate(): Promise<YahooCredentials> {
     const session = this.session;
-    const run = (async () => {
+    const run = (async (): Promise<YahooCredentials> => {
       try {
         await this.slot();
         const cookieResponse = await this.fetchFn("https://fc.yahoo.com/", {
           headers: this.defaultHeaders(),
           redirect: "manual",
         });
-        session.cookie = cookieHeaderFromSetCookie(cookieResponse.headers);
+        const cookie = cookieHeaderFromSetCookie(cookieResponse.headers);
         await this.slot();
         const crumbResponse = await this.fetchFn(
           "https://query2.finance.yahoo.com/v1/test/getcrumb",
-          { headers: { ...this.defaultHeaders(), Cookie: session.cookie } },
+          { headers: { ...this.defaultHeaders(), Cookie: cookie } },
         );
         if (!crumbResponse.ok) throw new Error(`Failed to get crumb: ${crumbResponse.status}`);
-        session.crumb = await crumbResponse.text();
-        if (!session.crumb) throw new Error("Empty crumb response");
-      } catch (error) {
-        session.crumb = null;
-        session.cookie = null;
-        throw error;
+        const crumb = await crumbResponse.text();
+        if (!crumb) throw new Error("Empty crumb response");
+        const credentials: YahooCredentials = { crumb, cookie };
+        session.credentials = credentials;
+        return credentials;
       } finally {
         session.crumbPromise = null;
       }

@@ -43,6 +43,12 @@ export function createFileCashFlowStore(filePath: string): CashFlowStore {
       return (await store.read()).rules;
     },
     saveRules: (rules) => store.update((current) => ({ ...current, rules: [...rules] })),
+    saveRulesAndSuggestions: (rules, suggestions) =>
+      store.update((current) => ({
+        ...current,
+        rules: [...rules],
+        suggestions: [...suggestions],
+      })),
     async suggestionsEnabled() {
       return (await store.read()).enabled;
     },

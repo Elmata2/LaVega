@@ -626,6 +626,7 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
         });
       }
     };
+    let activeBrokerSyncs = 0;
     const brokerSync = async (
       force: boolean,
       lanes: readonly BrokerSyncLane[],
@@ -646,6 +647,7 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
         };
         return { outcomes: [], problems: [], committed: {} };
       }
+      activeBrokerSyncs += 1;
       if (syncProgress.status !== "running" && syncProgress.status !== "waiting") {
         syncProgress = {
           status: "running",
@@ -664,25 +666,67 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
         const trading212Problem = result.problems.find((problem) =>
           problem.startsWith("trading212:"),
         );
-        syncProgress = {
-          ...syncProgress,
-          status: trading212Problem ? "problem" : "completed",
-          waitUntil: null,
-          updatedAt: new Date().toISOString(),
-          message: trading212Problem ?? "Trading 212 synchronization completed",
-        };
+        const trading212Outcome = result.outcomes.find(
+          (outcome) => outcome.broker === "trading212",
+        );
+        if (trading212Problem) {
+          syncProgress = {
+            ...syncProgress,
+            status: "problem",
+            waitUntil: null,
+            updatedAt: new Date().toISOString(),
+            message: trading212Problem,
+          };
+        } else if (activeBrokerSyncs === 1) {
+          if (trading212Outcome?.status === "skipped") {
+            const durable = await syncStateStore.progress("trading212").catch(() => null);
+            if (
+              durable &&
+              (durable.status === "running" ||
+                durable.status === "waiting" ||
+                durable.status === "problem")
+            ) {
+              syncProgress = {
+                ...syncProgress,
+                status: durable.status,
+                updatedAt: durable.updatedAt ?? new Date().toISOString(),
+                message: durable.message,
+              };
+            } else {
+              syncProgress = {
+                ...syncProgress,
+                status: "completed",
+                waitUntil: null,
+                updatedAt: new Date().toISOString(),
+                message: "Trading 212 synchronization completed",
+              };
+            }
+          } else {
+            syncProgress = {
+              ...syncProgress,
+              status: "completed",
+              waitUntil: null,
+              updatedAt: new Date().toISOString(),
+              message: "Trading 212 synchronization completed",
+            };
+          }
+        }
         /* Fire and forget: never awaited by the sync, never able to fail it. */
         void suggestCashFlows(result);
         return result;
       } catch (error) {
-        syncProgress = {
-          ...syncProgress,
-          status: "problem",
-          waitUntil: null,
-          updatedAt: new Date().toISOString(),
-          message: error instanceof Error ? error.message : "Broker synchronization failed",
-        };
+        if (activeBrokerSyncs === 1) {
+          syncProgress = {
+            ...syncProgress,
+            status: "problem",
+            waitUntil: null,
+            updatedAt: new Date().toISOString(),
+            message: error instanceof Error ? error.message : "Broker synchronization failed",
+          };
+        }
         throw error;
+      } finally {
+        activeBrokerSyncs -= 1;
       }
     };
     const benchmarkSymbols = options.benchmarkSymbols;
@@ -824,12 +868,20 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
       brokerSyncStatus: async () => {
         /* The counters above live in this invocation only. A problem the last
          * run stored (a revoked key above all) must reach whichever invocation
-         * answers next, or the dashboard shows "idle" while nothing can sync. */
+         * answers next — even a warm instance whose in-memory status is
+         * "completed" from an earlier run. */
         const stored =
-          syncProgress.status === "idle" ? await syncStateStore.progress("trading212") : null;
+          syncProgress.status !== "running" && syncProgress.status !== "waiting"
+            ? await syncStateStore.progress("trading212")
+            : null;
+        const storedProblemWins =
+          stored?.status === "problem" &&
+          (syncProgress.updatedAt === null ||
+            stored.updatedAt === null ||
+            Date.parse(stored.updatedAt) >= Date.parse(syncProgress.updatedAt));
         return {
           ...syncProgress,
-          ...(stored?.status === "problem"
+          ...(storedProblemWins
             ? { status: "problem" as const, message: stored.message, updatedAt: stored.updatedAt }
             : {}),
           history: await readHistoryProgress(),
@@ -1247,7 +1299,13 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
         async put(row, leaseId) {
           const repository = createSyncRunRepository(database, await resolveTenantId());
           const status =
-            row.outcome === "done" ? "done" : row.outcome === "failed" ? "failed" : "running";
+            row.phase === "terminal"
+              ? row.outcome
+              : row.phase === "paused"
+                ? "paused"
+                : row.phase === "idle"
+                  ? "idle"
+                  : "running";
           return repository.put(row, status, leaseId);
         },
       }

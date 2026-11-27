@@ -50,6 +50,7 @@ type AppliedOutcome = {
   status: "synced" | "skipped" | "problem";
   lastSyncedAt: string | null;
   result: BrokerResult | null;
+  lastImport?: BrokerAccountSnapshot["lastImport"];
 };
 
 function mergeById<T extends { id: string }>(existing: T[], incoming: T[]): T[] {
@@ -324,16 +325,45 @@ export function createBrokerDataCache(initial: BrokerDataSnapshot = {}) {
 
   return {
     apply(result: { outcomes: readonly AppliedOutcome[]; problems: string[] }) {
+      // Stage every broker's merged sections before mutating the live maps so a
+      // thrown error mid-apply cannot leave the cache half-updated.
+      const stagedPositions = new Map<string, Position[]>();
+      const stagedTrades = new Map<string, Trade[]>();
+      const stagedDividends = new Map<string, Dividend[]>();
+      const stagedCashBalances = new Map<string, CashBalance[]>();
+      const stagedCashFlows = new Map<string, CashFlow[]>();
+      const stagedCashHistory = new Map<string, CashHistoryCoverage | undefined>();
+      const stagedLastImport = new Map<string, NonNullable<BrokerAccountSnapshot["lastImport"]>>();
+
+      const currentPositions = (broker: string) =>
+        stagedPositions.has(broker) ? stagedPositions.get(broker) : positionsByBroker.get(broker);
+      const currentTrades = (broker: string) =>
+        stagedTrades.has(broker) ? stagedTrades.get(broker) : tradesByBroker.get(broker);
+      const currentDividends = (broker: string) =>
+        stagedDividends.has(broker) ? stagedDividends.get(broker) : dividendsByBroker.get(broker);
+      const currentCashBalances = (broker: string) =>
+        stagedCashBalances.has(broker)
+          ? stagedCashBalances.get(broker)
+          : cashBalancesByBroker.get(broker);
+      const currentCashFlows = (broker: string) =>
+        stagedCashFlows.has(broker) ? stagedCashFlows.get(broker) : cashFlowsByBroker.get(broker);
+      const currentCashHistory = (broker: string) =>
+        stagedCashHistory.has(broker)
+          ? stagedCashHistory.get(broker)
+          : cashHistoryByBroker.get(broker);
+
+      let appliedAny = false;
       for (const outcome of result.outcomes) {
         // Partial results with problems still carry fresh broker data; discarding
         // them left the vault stale while the UI showed only the problem.
         if (outcome.result === null) continue;
+        appliedAny = true;
         const incoming = outcome.result;
         const sections = incoming.sections;
         const storedLatest = latestStoredDate(
-          positionsByBroker.get(outcome.broker),
-          cashBalancesByBroker.get(outcome.broker),
-          cashHistoryByBroker.get(outcome.broker),
+          currentPositions(outcome.broker),
+          currentCashBalances(outcome.broker),
+          currentCashHistory(outcome.broker),
         );
         const statementEnd = incoming.statementTo ?? incoming.period?.to;
         /* A merged DeGiro import can carry an older account window and a newer
@@ -356,7 +386,7 @@ export function createBrokerDataCache(initial: BrokerDataSnapshot = {}) {
          * period. Older holdings are a backfill: they must not move the
          * positions, the cash row or the stored coverage backwards. */
         const today = new Date().toISOString().slice(0, 10);
-        const storedPositionDay = latestDay(positionsByBroker.get(outcome.broker));
+        const storedPositionDay = latestDay(currentPositions(outcome.broker));
         const stalePortfolio =
           outcome.broker === "degiro" &&
           incomingPositionDay !== undefined &&
@@ -366,8 +396,8 @@ export function createBrokerDataCache(initial: BrokerDataSnapshot = {}) {
         if (sections.positions.status === "complete" && !backfill && !stalePortfolio) {
           // A provider sync has no authority over a user-entered basis and its
           // lock, and an unchanged row may carry a basis forward (WS4.2).
-          const stored = positionsByBroker.get(outcome.broker) ?? [];
-          positionsByBroker.set(
+          const stored = currentPositions(outcome.broker) ?? [];
+          stagedPositions.set(
             outcome.broker,
             carryForwardCostBasis(
               stored,
@@ -382,12 +412,12 @@ export function createBrokerDataCache(initial: BrokerDataSnapshot = {}) {
         }));
         const tradeWindow = windowPeriod(outcome.broker, sections.trades.status, incoming.period);
         if (tradeWindow)
-          tradesByBroker.set(
+          stagedTrades.set(
             outcome.broker,
             restoreTrades(
               outcome.broker,
               replaceWindow(
-                tradesByBroker.get(outcome.broker) ?? [],
+                currentTrades(outcome.broker) ?? [],
                 mappedTrades,
                 tradeWindow,
                 incoming.accounts,
@@ -395,13 +425,13 @@ export function createBrokerDataCache(initial: BrokerDataSnapshot = {}) {
             ),
           );
         else if (replacesCollection(outcome.broker, incoming, "orders", sections.trades.status))
-          tradesByBroker.set(outcome.broker, mappedTrades);
+          stagedTrades.set(outcome.broker, mappedTrades);
         else if (sections.trades.status !== "unavailable" && mappedTrades.length > 0)
-          tradesByBroker.set(
+          stagedTrades.set(
             outcome.broker,
             restoreTrades(
               outcome.broker,
-              mergeById(tradesByBroker.get(outcome.broker) ?? [], mappedTrades),
+              mergeById(currentTrades(outcome.broker) ?? [], mappedTrades),
             ),
           );
         const incomingDividends = withBroker(outcome.broker, sections.dividends.rows);
@@ -411,10 +441,10 @@ export function createBrokerDataCache(initial: BrokerDataSnapshot = {}) {
           incoming.period,
         );
         if (dividendWindow)
-          dividendsByBroker.set(
+          stagedDividends.set(
             outcome.broker,
             replaceWindow(
-              dividendsByBroker.get(outcome.broker) ?? [],
+              currentDividends(outcome.broker) ?? [],
               incomingDividends,
               dividendWindow,
               incoming.accounts,
@@ -423,24 +453,24 @@ export function createBrokerDataCache(initial: BrokerDataSnapshot = {}) {
         else if (
           replacesCollection(outcome.broker, incoming, "dividends", sections.dividends.status)
         )
-          dividendsByBroker.set(outcome.broker, incomingDividends);
+          stagedDividends.set(outcome.broker, incomingDividends);
         else if (sections.dividends.status !== "unavailable" && incomingDividends.length > 0)
-          dividendsByBroker.set(
+          stagedDividends.set(
             outcome.broker,
-            mergeById(dividendsByBroker.get(outcome.broker) ?? [], incomingDividends),
+            mergeById(currentDividends(outcome.broker) ?? [], incomingDividends),
           );
         if (sections.cashBalances.status === "complete" && !backfill && !stalePortfolio)
-          cashBalancesByBroker.set(
+          stagedCashBalances.set(
             outcome.broker,
             withBroker(outcome.broker, sections.cashBalances.rows),
           );
         const incomingFlows = withBroker(outcome.broker, sections.cashFlows.rows);
         const flowWindow = windowPeriod(outcome.broker, sections.cashFlows.status, incoming.period);
         if (flowWindow)
-          cashFlowsByBroker.set(
+          stagedCashFlows.set(
             outcome.broker,
             replaceWindow(
-              cashFlowsByBroker.get(outcome.broker) ?? [],
+              currentCashFlows(outcome.broker) ?? [],
               incomingFlows,
               flowWindow,
               incoming.accounts,
@@ -449,26 +479,43 @@ export function createBrokerDataCache(initial: BrokerDataSnapshot = {}) {
         else if (
           replacesCollection(outcome.broker, incoming, "transactions", sections.cashFlows.status)
         )
-          cashFlowsByBroker.set(outcome.broker, incomingFlows);
+          stagedCashFlows.set(outcome.broker, incomingFlows);
         else if (sections.cashFlows.status !== "unavailable" && incomingFlows.length > 0)
-          cashFlowsByBroker.set(
+          stagedCashFlows.set(
             outcome.broker,
-            mergeById(cashFlowsByBroker.get(outcome.broker) ?? [], incomingFlows),
+            mergeById(currentCashFlows(outcome.broker) ?? [], incomingFlows),
           );
         const readCash = [sections.cashBalances, sections.cashFlows, sections.dividends].some(
           (section) => section.status !== "unavailable",
         );
         if (incoming.cashHistory) {
           const merged = mergedCoverage(
-            cashHistoryByBroker.get(outcome.broker),
+            currentCashHistory(outcome.broker),
             incoming.cashHistory,
             backfill || stalePortfolio,
           );
-          if (merged) cashHistoryByBroker.set(outcome.broker, merged);
-        } else if (!backfill && readCash) cashHistoryByBroker.delete(outcome.broker);
+          if (merged) stagedCashHistory.set(outcome.broker, merged);
+        } else if (!backfill && readCash) stagedCashHistory.set(outcome.broker, undefined);
+        if (outcome.lastImport) {
+          stagedLastImport.set(outcome.broker, structuredClone(outcome.lastImport));
+        }
       }
-      problems = result.problems;
-      if (result.outcomes.some((outcome) => outcome.result !== null)) dataVersion += 1;
+
+      // Commit staged updates atomically.
+      for (const [broker, rows] of stagedPositions) positionsByBroker.set(broker, rows);
+      for (const [broker, rows] of stagedTrades) tradesByBroker.set(broker, rows);
+      for (const [broker, rows] of stagedDividends) dividendsByBroker.set(broker, rows);
+      for (const [broker, rows] of stagedCashBalances) cashBalancesByBroker.set(broker, rows);
+      for (const [broker, rows] of stagedCashFlows) cashFlowsByBroker.set(broker, rows);
+      for (const [broker, coverage] of stagedCashHistory) {
+        if (coverage === undefined) cashHistoryByBroker.delete(broker);
+        else cashHistoryByBroker.set(broker, coverage);
+      }
+      for (const [broker, lastImport] of stagedLastImport) {
+        lastImportByBroker.set(broker, lastImport);
+      }
+      problems = [...result.problems];
+      if (appliedAny) dataVersion += 1;
     },
     read() {
       return {
