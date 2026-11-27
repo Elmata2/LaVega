@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   commitProfile,
   emptyProfileStore,
@@ -29,6 +29,13 @@ export function useProfileCommit(
     () => initial ?? emptyProfileStore(now()),
   );
   const storeRef = useRef(store);
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
   const [saveFailed, setSaveFailed] = useState(false);
   const queue = useRef<Promise<unknown>>(Promise.resolve());
 
@@ -38,19 +45,17 @@ export function useProfileCommit(
       const next = commitProfile(previous, fn(previous.current), now());
       if (next === previous) return;
       storeRef.current = next;
-      setStore(next);
+      if (mountedRef.current) setStore(next);
       try {
         await onSave(next);
       } catch (e) {
-        // Not stored: roll back, so the same answer given again is saved again
-        // instead of being taken for a no-op. Only if nothing newer replaced it.
         if (storeRef.current === next) {
           storeRef.current = previous;
-          setStore(previous);
+          if (mountedRef.current) setStore(previous);
         }
         throw e;
       }
-      setSaveFailed(false);
+      if (mountedRef.current) setSaveFailed(false);
     };
     const result = queue.current.then(run);
     queue.current = result.catch(() => undefined);
@@ -61,7 +66,7 @@ export function useProfileCommit(
     commit(fn).then(
       () => true,
       () => {
-        setSaveFailed(true);
+        if (mountedRef.current) setSaveFailed(true);
         return false;
       },
     );

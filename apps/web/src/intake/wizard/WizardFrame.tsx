@@ -6,6 +6,7 @@ export type WizardFrameProps = {
   section: string;
   question: string;
   onBack: (() => void) | null;
+  backDisabled?: boolean;
   backLabel: string;
   children: ReactNode;
   footer?: ReactNode;
@@ -51,7 +52,13 @@ export default function WizardFrame(p: WizardFrameProps) {
         </div>
         <div className="wz-top">
           {p.onBack ? (
-            <button type="button" className="wz-back" aria-label={p.backLabel} onClick={p.onBack}>
+            <button
+              type="button"
+              className="wz-back"
+              aria-label={p.backLabel}
+              disabled={p.backDisabled}
+              onClick={p.onBack}
+            >
               <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
                 <path
                   d="M15 5l-7 7 7 7"

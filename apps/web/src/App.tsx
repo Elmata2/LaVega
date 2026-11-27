@@ -30,6 +30,7 @@ import {
   type CardFileInput,
 } from "@lavega/core";
 import { fxNeedSignature, syncFxHistory } from "./fxHistory.js";
+import { runTravelTermsPoll, type TravelTermsPollState } from "./travelTermsPoll.js";
 import {
   ingest,
   reassignEntity,
@@ -554,7 +555,7 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
     if (gate !== "ready" || !shareNetWorthPendingDelete || owner.kind !== "account") return;
     let cancelled = false;
     void deleteNetWorthTotal().then((outcome) => {
-      if (cancelled || outcome !== "deleted") return;
+      if (cancelled || outcome !== "deleted" || !getShareNetWorthPendingDelete()) return;
       setShareNetWorthEnabled(false);
       setShareNetWorthEnabledStoredState(false);
       setShareNetWorthPendingDelete(false);
@@ -611,13 +612,23 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
   // Providers the server said it is still looking up. The travel block needs
   // this to say "still searching" instead of "nothing came back" — two very
   // different sentences that used to be one.
-  const [pendingTerms, setPendingTerms] = useState<string[]>([]);
-  /** How many providers the last ask covered, so the indicator can count up
-   *  ("2 van 4 gevonden") instead of only counting what is left. */
-  const [termsAsked, setTermsAsked] = useState(0);
-  /** The lookups ran their course without finishing. Said out loud rather than
-   *  leaving a spinner turning forever, which is its own kind of lie. */
-  const [termsGaveUp, setTermsGaveUp] = useState(false);
+  const [travelTermsPoll, setTravelTermsPoll] = useState<TravelTermsPollState>({ status: "idle" });
+  const pendingTerms = travelTermsPoll.status === "idle" ? [] : travelTermsPoll.pending;
+  const termsAsked = travelTermsPoll.status === "idle" ? 0 : travelTermsPoll.asked;
+  const termsGaveUp = travelTermsPoll.status === "gave-up";
+  const travelPollAbortRef = useRef<AbortController | null>(null);
+  const travelPollGenRef = useRef(0);
+  const cancelTravelTermsPoll = useCallback(() => {
+    travelPollAbortRef.current?.abort();
+    travelPollAbortRef.current = null;
+    travelPollGenRef.current += 1;
+    setTravelTermsPoll({ status: "idle" });
+  }, []);
+  useEffect(() => () => {
+    travelPollAbortRef.current?.abort();
+    travelPollAbortRef.current = null;
+    travelPollGenRef.current += 1;
+  }, []);
   // The owner's own module selection: which modules sit in the top nav. A local
   // preference (settings.ts); the registry resolves an unset/stale stored list
   // and guarantees Overzicht is in it.
@@ -795,9 +806,7 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
   const resetTransientVaultUi = useCallback(() => {
     setProblems([]);
     setAgentPlan(null);
-    setPendingTerms([]);
-    setTermsAsked(0);
-    setTermsGaveUp(false);
+    cancelTravelTermsPoll();
     setTransferLinksDropped(null);
     setDocumentNotice(null);
     setDocumentErased(null);
@@ -805,7 +814,7 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
     setFreshVault(false);
     setIntakeRound(1);
     setFileDialog((d) => ({ open: false, card: null, choices: [], session: d.session + 1 }));
-  }, []);
+  }, [cancelTravelTermsPoll]);
 
   const resetVaultScopedState = useCallback(() => {
     accountsRef.current = [];
@@ -831,8 +840,9 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
     setPendingInvoices([]);
     setPendingNotices([]);
     setProfileRead("loading");
+    cancelTravelTermsPoll();
     resetTransientVaultUi();
-  }, [resetTransientVaultUi]);
+  }, [cancelTravelTermsPoll, resetTransientVaultUi]);
 
   // Another tab cleared the personal data (Back-up > Clear personal data). The
   // storage already dropped its copy and refuses writes; reload into the empty vault.
@@ -2424,8 +2434,11 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
 
   // Persist learned facts through the ONE merge rule (upsertFacts): whatever he
   // corrected himself is never overwritten by an agent refresh.
+  const factsRef = useRef(facts);
+  factsRef.current = facts;
   async function saveFacts(incoming: LearnedFact[]) {
-    const next = upsertFacts(facts, incoming);
+    const next = upsertFacts(factsRef.current, incoming);
+    factsRef.current = next;
     setFacts(next);
     await storage.putFacts(next);
   }
@@ -2457,77 +2470,103 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
   const POLL_MS = 15_000;
   const POLL_CEILING_MS = 6 * 60_000;
 
+  function toLearnedTravelFacts(terms: Awaited<ReturnType<typeof travelFacts>>["terms"]): LearnedFact[] {
+    const today = new Date().toISOString().slice(0, 10);
+    const learned: LearnedFact[] = [];
+    for (const t of terms) {
+      const asOfFigure =
+        t.checkedAt && /^\d{4}-\d{2}-\d{2}$/.test(t.checkedAt) ? t.checkedAt : today;
+      const put = (key: string, value: number | undefined) => {
+        if (value === undefined) return;
+        learned.push(
+          makeFact({
+            agent: TRAVEL_AGENT,
+            subject: t.provider,
+            key,
+            value: String(value),
+            source: "agent",
+            updatedAt: asOfFigure,
+            note: t.note,
+          }),
+        );
+      };
+      put("fxFeePct", t.fxFeePct);
+      put("convertFeePct", t.convertFeePct);
+      put("cashbackPct", t.cashbackPct);
+      put("pointsPerEuro", t.pointsPerEuro);
+      put("topUpFree", t.topUpFree);
+    }
+    return learned;
+  }
+
   async function pollTravelTerms(
     destination: string,
     providers: string[],
     knownFacts: { subject: string; key: string; value: string }[],
+    controller: AbortController,
+    pollGen: number,
+    vaultGen: number,
   ) {
-    const until = Date.now() + POLL_CEILING_MS;
-    while (Date.now() < until) {
-      await new Promise((r) => setTimeout(r, POLL_MS));
-      let reply: Awaited<ReturnType<typeof travelFacts>>;
-      try {
-        reply = await travelFacts({
-          homeCountry,
-          destination,
-          currency: countryCurrency(destination) ?? "",
-          providers,
-          knownFacts,
+    const isStale = () =>
+      controller.signal.aborted ||
+      travelPollGenRef.current !== pollGen ||
+      vaultGenerationRef.current !== vaultGen;
+    await runTravelTermsPoll({
+      signal: controller.signal,
+      isStale,
+      pollMs: POLL_MS,
+      ceilingMs: POLL_CEILING_MS,
+      fetchTerms: (signal) =>
+        travelFacts(
+          {
+            homeCountry,
+            destination,
+            currency: countryCurrency(destination) ?? "",
+            providers,
+            knownFacts,
+          },
+          { signal },
+        ),
+      onTerms: async (terms) => {
+        const learned = toLearnedTravelFacts(terms);
+        if (learned.length > 0 && !isStale()) await saveFacts(learned);
+      },
+      onPending: (pending) => {
+        setTravelTermsPoll((prev) => {
+          const asked = prev.status === "idle" ? providers.length : prev.asked;
+          return pending.length === 0
+            ? { status: "idle" }
+            : { status: "polling", pending, asked };
         });
-      } catch {
-        return; // offline or the server went away: stop, do not claim progress
-      }
-      const today = new Date().toISOString().slice(0, 10);
-      const learned: LearnedFact[] = [];
-      for (const t of reply.terms) {
-        const asOfFigure =
-          t.checkedAt && /^\d{4}-\d{2}-\d{2}$/.test(t.checkedAt) ? t.checkedAt : today;
-        const put = (key: string, value: number | undefined) => {
-          if (value === undefined) return;
-          learned.push(
-            makeFact({
-              agent: TRAVEL_AGENT,
-              subject: t.provider,
-              key,
-              value: String(value),
-              source: "agent",
-              updatedAt: asOfFigure,
-              note: t.note,
-            }),
-          );
-        };
-        put("fxFeePct", t.fxFeePct);
-        put("convertFeePct", t.convertFeePct);
-        put("cashbackPct", t.cashbackPct);
-        put("pointsPerEuro", t.pointsPerEuro);
-        put("topUpFree", t.topUpFree);
-      }
-      if (learned.length > 0) await saveFacts(learned);
-      setPendingTerms(reply.pending);
-      if (reply.pending.length === 0) return;
-    }
-    setTermsGaveUp(true);
+      },
+      onGiveUp: () => {
+        setTravelTermsPoll((prev) =>
+          prev.status === "polling"
+            ? { status: "gave-up", pending: prev.pending, asked: prev.asked }
+            : prev,
+        );
+      },
+    });
   }
 
   async function handleRefreshTravelTerms(destination: string) {
-    // He may have added the key since this tab loaded. Ask again before telling
-    // him it cannot be done.
+    travelPollAbortRef.current?.abort();
+    travelPollGenRef.current += 1;
+    const pollGen = travelPollGenRef.current;
+    const vaultGen = vaultGenerationRef.current;
+    const controller = new AbortController();
+    travelPollAbortRef.current = controller;
+    const isStale = () =>
+      controller.signal.aborted ||
+      travelPollGenRef.current !== pollGen ||
+      vaultGenerationRef.current !== vaultGen;
     await recheckLlm();
+    if (isStale()) return;
     await withBusyOp("travel-terms", async () => {
       try {
         const plan = planTravel({ accounts, txs, rates: rates.rates, facts, destination, asOf });
-        // Ask about EVERY provider, not just the ones with no figure yet — the
-        // server holds the freshness clock, and only asking about unknowns meant
-        // a fee, once learned, could never be refreshed again. Corrections are
-        // still safe: upsertFacts never lets an agent overwrite a user fact.
         const providers = plan.spend.map((o) => o.provider).filter(Boolean);
         if (providers.length === 0) return;
-        const today = new Date().toISOString().slice(0, 10);
-        // Send what he corrected so the model is told not to contradict it. A
-        // correction made before the topUpFree rename is still keyed
-        // transferFreeViaIdeal in his vault — translated here, at the wire, so it
-        // still reaches the model under a name the server's registry accepts;
-        // his stored fact itself is never rewritten.
         const knownFacts = facts
           .filter((f) => f.source === "user" && f.agent === TRAVEL_AGENT)
           .map((f) => ({
@@ -2536,69 +2575,30 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
             value: f.value,
           }));
 
-        // One fast call: the server answers from its shared cache of PUBLIC card
-        // tariffs and starts background lookups for whatever it doesn't have yet.
-        // Nothing here waits on the model, so the button never hangs — a gap just
-        // means "press it again in a minute".
-        const { terms, pending } = await travelFacts({
-          homeCountry,
-          destination,
-          currency: countryCurrency(destination) ?? "",
-          providers,
-          knownFacts,
-        });
+        const { terms, pending } = await travelFacts(
+          {
+            homeCountry,
+            destination,
+            currency: countryCurrency(destination) ?? "",
+            providers,
+            knownFacts,
+          },
+          { signal: controller.signal },
+        );
+        if (isStale()) return;
 
-        const learned: LearnedFact[] = [];
-        for (const t of terms) {
-          // Date the figure by WHEN IT WAS TRUE, not when we happened to receive
-          // it. A comparison table states its own last-checked date (bank.nl says
-          // 2026-01-15); stamping that as "today" would tell him a seven-month-old
-          // koersopslag was found this morning — the same lie the precedence
-          // ladder was just fixed to stop believing. No stated date means an agent
-          // lookup, which is as of now.
-          const asOfFigure =
-            t.checkedAt && /^\d{4}-\d{2}-\d{2}$/.test(t.checkedAt) ? t.checkedAt : today;
-          const put = (key: string, value: number | undefined) => {
-            if (value === undefined) return; // unverified stays unknown, never 0
-            learned.push(
-              makeFact({
-                agent: TRAVEL_AGENT,
-                subject: t.provider,
-                key,
-                value: String(value),
-                source: "agent",
-                updatedAt: asOfFigure,
-                note: t.note,
-              }),
-            );
-          };
-          put("fxFeePct", t.fxFeePct);
-          put("convertFeePct", t.convertFeePct);
-          put("cashbackPct", t.cashbackPct);
-          put("pointsPerEuro", t.pointsPerEuro);
-          put("topUpFree", t.topUpFree);
-        }
+        const learned = toLearnedTravelFacts(terms);
         if (learned.length > 0) await saveFacts(learned);
+        if (isStale()) return;
 
-        setPendingTerms(pending);
-        setTermsAsked(providers.length);
-        setTermsGaveUp(false);
-        // The HTTP call is done in ~200ms; the LOOKUPS keep running on the server
-        // for 40s to a few minutes. Tracking the request left the screen still
-        // while the real work was happening, which is exactly what made him guess
-        // whether anything was working. So poll the cheap cached endpoint until
-        // the pending list drains, and stop rather than spin forever.
-        // A LOOKUP IN PROGRESS IS NOT A PROBLEM. This used to push the pending list
-        // into setProblems, which is the page-wide warning channel — so a yellow
-        // banner about the reisblok followed him onto Rekeningen and Valuta, where
-        // it meant nothing. He called it ugly and he is right: the banner is for
-        // things that need him, and waiting does not.
-        //
-        // The reisblok carries its own searching state (a spinner, and a sentence
-        // when a lookup comes back empty), which is where progress belongs — next
-        // to the thing being looked up.
-        if (pending.length > 0) void pollTravelTerms(destination, providers, knownFacts);
+        if (pending.length > 0) {
+          setTravelTermsPoll({ status: "polling", pending, asked: providers.length });
+          void pollTravelTerms(destination, providers, knownFacts, controller, pollGen, vaultGen);
+        } else {
+          setTravelTermsPoll({ status: "idle" });
+        }
       } catch (err) {
+        if (isStale()) return;
         setProblems([
           {
             kind: "terms-lookup-failed",

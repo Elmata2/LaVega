@@ -104,6 +104,7 @@ export function useAgentMirror(i: {
     enabled,
     status,
     setEnabled: (on) => {
+      if (!on) sync.cancel();
       if (i.accountId !== null) setEnabledFor({ accountId: i.accountId, on });
     },
   };

@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useReducer, useRef, useState } from "react";
 import {
   balanceAskKind,
   parseBalanceReply,
@@ -130,7 +130,135 @@ function Choice(p: {
   );
 }
 
-type Stage = "form" | "adding" | "done";
+type BodyStage =
+  | { kind: "form"; failed: "none" | "partial" | null; failedFold: boolean }
+  | { kind: "adding"; previewed: number; failedFold: boolean }
+  | {
+      kind: "done";
+      count: number;
+      previewed: number;
+      askBalance: Account[];
+      savedBalance: boolean;
+    };
+
+type BodyState = {
+  previews: FilePreview[];
+  override: Set<string>;
+  same: Map<string, boolean>;
+  reading: number;
+  dragging: boolean;
+  stage: BodyStage;
+};
+
+type BodyAction =
+  | { type: "read-start"; count: number }
+  | { type: "read-file"; preview: FilePreview }
+  | { type: "set-dragging"; dragging: boolean }
+  | { type: "set-same"; id: string; value: boolean }
+  | { type: "set-override"; id: string }
+  | { type: "remove-preview"; id: string }
+  | { type: "add-start"; previewed: number; failedFold: boolean }
+  | { type: "add-done"; count: number; askBalance: Account[] }
+  | { type: "add-failed"; failed: "none" | "partial" }
+  | { type: "balance-saved"; key: string }
+  | { type: "balance-skipped"; key: string };
+
+const INITIAL_BODY_STATE: BodyState = {
+  previews: [],
+  override: new Set(),
+  same: new Map(),
+  reading: 0,
+  dragging: false,
+  stage: { kind: "form", failed: null, failedFold: false },
+};
+
+function bodyReducer(state: BodyState, action: BodyAction): BodyState {
+  switch (action.type) {
+    case "read-start":
+      return {
+        ...state,
+        reading: state.reading + action.count,
+        stage:
+          state.stage.kind === "form"
+            ? { ...state.stage, failed: null }
+            : state.stage,
+      };
+    case "read-file":
+      return {
+        ...state,
+        previews: [...state.previews, action.preview],
+        reading: Math.max(0, state.reading - 1),
+      };
+    case "set-dragging":
+      return state.dragging === action.dragging ? state : { ...state, dragging: action.dragging };
+    case "set-same": {
+      const next = new Map(state.same);
+      next.set(action.id, action.value);
+      return { ...state, same: next };
+    }
+    case "set-override": {
+      const next = new Set(state.override);
+      next.add(action.id);
+      return { ...state, override: next };
+    }
+    case "remove-preview":
+      return {
+        ...state,
+        previews: state.previews.filter((x) => x.id !== action.id),
+      };
+    case "add-start":
+      return {
+        ...state,
+        dragging: false,
+        stage: {
+          kind: "adding",
+          previewed: action.previewed,
+          failedFold: action.failedFold,
+        },
+      };
+    case "add-done":
+      return {
+        ...state,
+        stage: {
+          kind: "done",
+          count: action.count,
+          previewed: state.stage.kind === "adding" ? state.stage.previewed : 0,
+          askBalance: action.askBalance,
+          savedBalance: false,
+        },
+      };
+    case "add-failed":
+      return {
+        ...state,
+        stage: {
+          kind: "form",
+          failed: action.failed,
+          failedFold: state.stage.kind === "adding" ? state.stage.failedFold : false,
+        },
+      };
+    case "balance-saved":
+      return state.stage.kind === "done"
+        ? {
+            ...state,
+            stage: {
+              ...state.stage,
+              savedBalance: true,
+              askBalance: state.stage.askBalance.filter((x) => x.key !== action.key),
+            },
+          }
+        : state;
+    case "balance-skipped":
+      return state.stage.kind === "done"
+        ? {
+            ...state,
+            stage: {
+              ...state.stage,
+              askBalance: state.stage.askBalance.filter((x) => x.key !== action.key),
+            },
+          }
+        : state;
+  }
+}
 
 function Body({
   firstRef,
@@ -156,33 +284,33 @@ function Body({
   const inputRef = useRef<HTMLInputElement>(null);
   const addRef = useRef<HTMLButtonElement>(null);
   const answeredRef = useRef(false);
-  const [previews, setPreviews] = useState<FilePreview[]>([]);
-  const [override, setOverride] = useState<Set<string>>(new Set());
-  // "Is this the same card as your existing account?", per file: true = yes.
-  const [same, setSame] = useState<Map<string, boolean>>(new Map());
-  const [previewed, setPreviewed] = useState(0);
-  const [reading, setReading] = useState(0);
-  const [stage, setStage] = useState<Stage>("form");
-  const [count, setCount] = useState(0);
-  // Accounts this import wrote that have no balance yet: asked for once, optionally.
-  const [askBalance, setAskBalance] = useState<Account[]>([]);
-  const [savedBalance, setSavedBalance] = useState(false);
-  const [failed, setFailed] = useState<"none" | "partial" | null>(null);
-  // The failed import included a Trading 212 fold: importing again finishes it.
-  const [failedFold, setFailedFold] = useState(false);
-  const [dragging, setDragging] = useState(false);
+  const mountedRef = useRef(true);
+  const addingRef = useRef(false);
+  const [state, dispatch] = useReducer(bodyReducer, INITIAL_BODY_STATE);
+  const { previews, override, same, reading, dragging, stage } = state;
+  const stageKindRef = useRef(stage.kind);
+  useEffect(() => {
+    stageKindRef.current = stage.kind;
+  }, [stage.kind]);
   const cardName = card?.name ?? c.otherName;
 
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
   async function take(files: FileList | File[]) {
+    if (stageKindRef.current === "adding" || addingRef.current) return;
     const list = Array.from(files);
     if (list.length === 0) return;
-    setFailed(null);
-    setReading((n) => n + list.length);
+    dispatch({ type: "read-start", count: list.length });
     for (const file of list) {
       seq += 1;
       const preview = await previewCardFile(file, { id: `f${seq}`, entity, card });
-      setPreviews((prev) => [...prev, preview]);
-      setReading((n) => n - 1);
+      if (!mountedRef.current) return;
+      dispatch({ type: "read-file", preview });
     }
   }
 
@@ -226,30 +354,34 @@ function Body({
   }, [pending, somethingNew]);
 
   async function add() {
-    setStage("adding");
+    if (addingRef.current || stageKindRef.current === "adding") return;
+    addingRef.current = true;
+    const failedFold = writable.some((pv) => plans.get(pv.id)?.foldsExisting === true);
+    const previewed = writable.reduce((n, pv) => n + (plans.get(pv.id)?.newCount ?? 0), 0);
+    dispatch({ type: "add-start", previewed, failedFold });
     onBusy(true);
-    setFailed(null);
-    setFailedFold(writable.some((pv) => plans.get(pv.id)?.foldsExisting === true));
-    setPreviewed(writable.reduce((n, pv) => n + (plans.get(pv.id)?.newCount ?? 0), 0));
     try {
       const r = await onCommit(
         writable.map((pv) => toInput(pv, card, override.has(pv.id), same.get(pv.id))!),
         card,
       );
+      if (!mountedRef.current) return;
       if (r.ok) {
-        setCount(r.count);
-        setAskBalance(onSaveBalance ? (r.written ?? []).filter((a) => a.balance === null) : []);
-        setStage("done");
+        dispatch({
+          type: "add-done",
+          count: r.count,
+          askBalance: onSaveBalance ? (r.written ?? []).filter((a) => a.balance === null) : [],
+        });
         onDone?.(r.count);
       } else {
-        setStage("form");
-        setFailed(r.partial ? "partial" : "none");
+        dispatch({ type: "add-failed", failed: r.partial ? "partial" : "none" });
       }
     } catch {
-      // Whatever went wrong, the dialog must not stay stuck with dismissal blocked.
-      setStage("form");
-      setFailed("partial");
+      if (mountedRef.current) {
+        dispatch({ type: "add-failed", failed: "partial" });
+      }
     } finally {
+      addingRef.current = false;
       onBusy(false);
     }
   }
@@ -257,41 +389,38 @@ function Body({
   // Entering the success state: focus goes to the first balance field when there is
   // one, else to the Sluiten button; never to <body>.
   const doneRef = useRef<HTMLDivElement>(null);
-  const asking = askBalance.length;
+  const asking = stage.kind === "done" ? stage.askBalance.length : 0;
   useEffect(() => {
-    if (stage !== "done") return;
-    // On entering, and again whenever a field was answered or skipped: the next
-    // field, else the Sluiten button.
+    if (stage.kind !== "done") return;
     const next = doneRef.current?.querySelector<HTMLInputElement>("input");
     (next ?? firstRef.current)?.focus();
-  }, [stage, asking, firstRef]);
+  }, [stage.kind, asking, firstRef]);
   const headingId = useId();
 
-  if (stage === "done")
+  if (stage.kind === "done")
     return (
       <div className="card-file flex flex-col gap-4" ref={doneRef}>
         <p role="status" className="m-0" data-testid="card-file-done">
-          {count === 0
+          {stage.count === 0
             ? c.doneNothing(cardName)
-            : count < previewed
-              ? c.doneDiff(count, previewed - count, cardName)
-              : c.done(count, cardName)}
+            : stage.count < stage.previewed
+              ? c.doneDiff(stage.count, stage.previewed - stage.count, cardName)
+              : c.done(stage.count, cardName)}
         </p>
-        {askBalance.map((a) => (
+        {stage.askBalance.map((a) => (
           <BalanceField
             key={a.key}
             account={a}
             onSave={async (value) => {
               await onSaveBalance?.(a.key, value);
-              setSavedBalance(true);
-              setAskBalance((l) => l.filter((x) => x.key !== a.key));
+              if (mountedRef.current) dispatch({ type: "balance-saved", key: a.key });
             }}
             onSkip={() => {
-              setAskBalance((l) => l.filter((x) => x.key !== a.key));
+              dispatch({ type: "balance-skipped", key: a.key });
             }}
           />
         ))}
-        {savedBalance && (
+        {stage.savedBalance && (
           <p role="status" className="m-0 text-muted" data-testid="balance-saved">
             {c.balanceSaved}
           </p>
@@ -304,8 +433,12 @@ function Body({
       </div>
     );
 
+  const isAdding = stage.kind === "adding";
+  const failed = stage.kind === "form" ? stage.failed : null;
+  const failedFold = stage.kind === "form" ? stage.failedFold : false;
+
   return (
-    <div className="card-file flex flex-col gap-4" aria-busy={reading > 0 || stage === "adding"}>
+    <div className="card-file flex flex-col gap-4" aria-busy={reading > 0 || isAdding}>
       <details className="toonmeer toonmeer-regel" open={previews.length === 0}>
         <summary className="toonmeer-summary" id={headingId}>
           <span className="toonmeer-label">{c.stepsHeading}</span>
@@ -331,12 +464,13 @@ function Body({
         style={dragging ? { borderColor: "var(--accent)" } : undefined}
         onDragOver={(e) => {
           e.preventDefault();
-          setDragging(true);
+          if (!isAdding) dispatch({ type: "set-dragging", dragging: true });
         }}
-        onDragLeave={() => setDragging(false)}
+        onDragLeave={() => dispatch({ type: "set-dragging", dragging: false })}
         onDrop={(e) => {
           e.preventDefault();
-          setDragging(false);
+          dispatch({ type: "set-dragging", dragging: false });
+          if (isAdding) return;
           void take(e.dataTransfer.files);
         }}
       >
@@ -347,6 +481,7 @@ function Body({
           ref={inputRef}
           type="file"
           multiple
+          disabled={isAdding}
           className="sr-only"
           tabIndex={-1}
           aria-label={c.chooseButton}
@@ -362,7 +497,7 @@ function Body({
           ref={firstRef}
           variant="primary"
           className="min-h-[44px]"
-          disabled={stage === "adding"}
+          disabled={isAdding}
           onClick={() => inputRef.current?.click()}
         >
           {c.chooseButton}
@@ -386,11 +521,11 @@ function Body({
               sameAnswer={same.get(pv.id)}
               onAnswer={(v) => {
                 answeredRef.current = true;
-                setSame((m) => new Map(m).set(pv.id, v));
+                dispatch({ type: "set-same", id: pv.id, value: v });
               }}
-              onOverride={() => setOverride((s) => new Set(s).add(pv.id))}
-              onRemove={() => setPreviews((l) => l.filter((x) => x.id !== pv.id))}
-              disabled={stage === "adding"}
+              onOverride={() => dispatch({ type: "set-override", id: pv.id })}
+              onRemove={() => dispatch({ type: "remove-preview", id: pv.id })}
+              disabled={isAdding}
             />
           ))}
         </ul>
@@ -403,17 +538,17 @@ function Body({
       )}
 
       <div className="ui-dialog-actions card-file-actions">
-        <Button onClick={onClose} disabled={stage === "adding"} className="min-h-[44px]">
+        <Button onClick={onClose} disabled={isAdding} className="min-h-[44px]">
           {c.cancel}
         </Button>
         <Button
           ref={addRef}
           variant="primary"
           className="min-h-[44px]"
-          disabled={!somethingNew || reading > 0 || stage === "adding"}
+          disabled={!somethingNew || reading > 0 || isAdding}
           onClick={() => void add()}
         >
-          {stage === "adding" ? c.adding : c.add}
+          {isAdding ? c.adding : c.add}
         </Button>
       </div>
     </div>
@@ -583,9 +718,18 @@ function BalanceField(p: {
   const c = cardFileCopy[locale];
   const id = useId();
   const [draft, setDraft] = useState("");
-  const [bad, setBad] = useState(false);
-  const [failed, setFailed] = useState(false);
-  const [saving, setSaving] = useState(false);
+  const [status, setStatus] = useState<"idle" | "invalid" | "saving" | "failed">("idle");
+  const savingRef = useRef(false);
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+  const bad = status === "invalid";
+  const failed = status === "failed";
+  const saving = status === "saving";
   const a = p.account;
   const credit = balanceAskKind(a) === "owed";
   const t212Card = hasStatedCatalogueCard(a) && !credit;
@@ -599,22 +743,24 @@ function BalanceField(p: {
       : c.helperOther;
 
   async function submit() {
+    if (savingRef.current) return;
     if (draft.trim() === "") return p.onSkip();
     const n = parseBalanceReply(draft);
     if (n === null) {
-      setBad(true);
+      setStatus("invalid");
       return;
     }
-    setBad(false);
-    setFailed(false);
-    setSaving(true);
+    savingRef.current = true;
+    setStatus("saving");
     try {
       await p.onSave(String(n));
     } catch {
-      // Keep what was typed and let the user try again; nothing was stored.
-      setFailed(true);
+      if (mountedRef.current) setStatus("failed");
     } finally {
-      setSaving(false);
+      savingRef.current = false;
+      if (mountedRef.current) {
+        setStatus((cur) => (cur === "saving" ? "idle" : cur));
+      }
     }
   }
 
@@ -638,7 +784,10 @@ function BalanceField(p: {
         value={draft}
         aria-describedby={`${id}-h`}
         aria-invalid={bad}
-        onChange={(e) => setDraft(e.target.value)}
+        onChange={(e) => {
+          setDraft(e.target.value);
+          if (status === "invalid" || status === "failed") setStatus("idle");
+        }}
       />
       <div id={`${id}-h`} className="text-muted text-[0.85rem]">
         <div>{helper}</div>

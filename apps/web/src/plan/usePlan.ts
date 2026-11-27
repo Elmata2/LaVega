@@ -155,31 +155,34 @@ export function usePlan(i: UsePlanInput): UsePlan {
   const { storage } = i;
   const readOnly = i.readOnly ?? false;
   const ready = (i.ready ?? true) && !readOnly;
-  // Tagged with the storage it was read from, so state read from another vault
-  // (after a restore or sign-in) is never shown for this one.
-  const [loaded, setLoaded] = useState<{ storage: PlanStorage; value: Stored } | null>(null);
-  const stored = loaded?.storage === storage ? loaded.value : null;
-  /** The storage the loaded state belongs to; ops queued for another one drop. */
-  const current = useRef(storage);
+  type VaultPlanState =
+    | { status: "loading"; storage: PlanStorage }
+    | { status: "ready"; storage: PlanStorage; value: Stored }
+    | { status: "blocked"; storage: PlanStorage; value: Stored };
+  const [vaultState, setVaultState] = useState<VaultPlanState>({ status: "loading", storage });
+  const vaultStateRef = useRef<VaultPlanState>(vaultState);
+  const stored =
+    vaultState.storage === storage && vaultState.status !== "loading" ? vaultState.value : null;
   const [clockDay, setClockDay] = useState<string | null>(null);
-  const ref = useRef<Stored | null>(null);
   const queue = useRef<Promise<unknown>>(Promise.resolve());
-  const [writeError, setWriteError] = useState(false);
-  const blocked = useRef(false);
+  const [writeErrorStorage, setWriteErrorStorage] = useState<PlanStorage | null>(null);
+  const writeError = writeErrorStorage === storage;
+
+  const commitState = useCallback((next: VaultPlanState) => {
+    vaultStateRef.current = next;
+    setVaultState(next);
+  }, []);
 
   const commit = useCallback(
-    (next: Stored) => {
-      ref.current = next;
-      setLoaded({ storage, value: next });
+    (next: Stored, status: "ready" | "blocked" = next.error ? "blocked" : "ready") => {
+      commitState({ status, storage, value: next });
     },
-    [storage],
+    [commitState, storage],
   );
 
   useEffect(() => {
     let alive = true;
-    ref.current = null;
-    blocked.current = false;
-    current.current = storage;
+    vaultStateRef.current = { status: "loading", storage };
     void (async () => {
       let section: PlanSection;
       let events: VaultEvent[];
@@ -191,15 +194,17 @@ export function usePlan(i: UsePlanInput): UsePlan {
         ])) as [PlanSection, VaultEvent[]];
       } catch {
         if (!alive) return;
-        blocked.current = true;
-        commit({
-          preferences: emptyPlanPreferences(),
-          budget: NO_BUDGET,
-          prefsAt: null,
-          snapshots: [],
-          events: [],
-          error: true,
-        });
+        commit(
+          {
+            preferences: emptyPlanPreferences(),
+            budget: NO_BUDGET,
+            prefsAt: null,
+            snapshots: [],
+            events: [],
+            error: true,
+          },
+          "blocked",
+        );
         return;
       }
       if (!alive) return;
@@ -217,30 +222,35 @@ export function usePlan(i: UsePlanInput): UsePlan {
       if (!alive) return;
       try {
         const state = decodePlanState(section);
-        commit({
-          preferences: state.preferences,
-          budget,
-          prefsAt: section.preferences?.at ?? null,
-          snapshots: state.snapshots,
-          events,
-          error: false,
-        });
+        commit(
+          {
+            preferences: state.preferences,
+            budget,
+            prefsAt: section.preferences?.at ?? null,
+            snapshots: state.snapshots,
+            events,
+            error: false,
+          },
+          "ready",
+        );
       } catch {
-        blocked.current = true;
-        commit({
-          preferences: emptyPlanPreferences(),
-          budget,
-          prefsAt: null,
-          snapshots: [],
-          events,
-          error: true,
-        });
+        commit(
+          {
+            preferences: emptyPlanPreferences(),
+            budget,
+            prefsAt: null,
+            snapshots: [],
+            events,
+            error: true,
+          },
+          "blocked",
+        );
       }
     })();
     return () => {
       alive = false;
     };
-  }, [storage, commit]);
+  }, [storage, commit, commitState]);
 
   /** Every write goes through this one queue. An op reads the current state
    *  only after its clock stamp is taken and commits with no await in between,
@@ -256,21 +266,25 @@ export function usePlan(i: UsePlanInput): UsePlan {
         return Promise.reject(new Error("the plan is read-only here; nothing was saved"));
       const p = queue.current.then(async () => {
         const at = await nowIso();
-        if (current.current !== owner) throw new Error("the vault changed; the write was dropped");
-        if (touchesPlan && blocked.current) {
+        const cur = vaultStateRef.current;
+        if (cur.storage !== owner) throw new Error("the vault changed; the write was dropped");
+        if (cur.status === "loading") throw new Error("plan state is not loaded");
+        if (touchesPlan && cur.status === "blocked") {
           throw new Error("the stored plan cannot be read; nothing was saved");
         }
-        const s = ref.current;
-        if (s === null) throw new Error("plan state is not loaded");
+        const s = cur.value;
+        const status = cur.status;
         const r = op(s, at);
         if (r === null) return;
-        commit(r.next);
+        commit(r.next, status);
         try {
           await r.write();
-          setWriteError(false);
+          if (vaultStateRef.current.storage === owner) setWriteErrorStorage(null);
         } catch (e) {
-          commit(s);
-          setWriteError(true);
+          if (vaultStateRef.current.storage === owner) {
+            commit(s, status);
+            setWriteErrorStorage(owner);
+          }
           throw e;
         }
       });
@@ -395,10 +409,11 @@ export function usePlan(i: UsePlanInput): UsePlan {
 
   // On open and whenever the inputs move: queue a snapshot; the queue decides
   // whether the refresh rules ask for one.
+  const vaultReady = vaultState.storage === storage && vaultState.status === "ready";
   useEffect(() => {
-    if (!ready || ref.current === null || blocked.current) return;
+    if (!ready || !vaultReady || stored === null) return;
     store(result, "decide").catch(() => {});
-  }, [ready, stored, result, store]);
+  }, [ready, vaultReady, stored, result, store]);
 
   const recompute = useCallback(async () => {
     const today = await todayIso();
@@ -435,8 +450,18 @@ export function usePlan(i: UsePlanInput): UsePlan {
           next,
           write: async () => {
             await planWrite(next, at)();
-            if (storage.putBudgetPeriods !== undefined)
-              await storage.putBudgetPeriods([...periods]);
+            if (storage.putBudgetPeriods !== undefined) {
+              try {
+                await storage.putBudgetPeriods([...periods]);
+              } catch (err) {
+                try {
+                  await planWrite(s, s.prefsAt ?? at)();
+                } catch {
+                  /* best-effort rollback */
+                }
+                throw err;
+              }
+            }
           },
         };
       }, true),

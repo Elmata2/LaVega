@@ -1959,6 +1959,7 @@ export default function TravelBlock({
   }, [busy]);
 
   function search() {
+    sawBusy.current = false;
     pending.current = destination;
     onRefreshTerms(destination);
   }

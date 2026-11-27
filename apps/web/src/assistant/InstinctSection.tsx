@@ -48,7 +48,6 @@ export function InstinctSection({
   const [load, setLoad] = useState<Load>({ kind: "loading" });
   const [round, setRound] = useState(0);
   const reading = status === "on";
-  /* Leaving "on" forgets what was loaded, so coming back never shows the old list. */
   const [wasReading, setWasReading] = useState(reading);
   if (wasReading !== reading) {
     setWasReading(reading);

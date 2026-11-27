@@ -1,5 +1,5 @@
 import { localId } from "../lib/localId";
-import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useReducer, useRef, useState, type FormEvent } from "react";
 import type { VaultStorage } from "@lavega/adapters";
 import {
   approvalDecision,
@@ -58,6 +58,45 @@ type OpenApproval = {
   payload: Readonly<Record<string, string>>;
   createdAt: string;
 };
+
+export type AssistantTurnState =
+  | { status: "idle" }
+  | { status: "awaiting-approval"; approval: OpenApproval }
+  | { status: "awaiting-optin"; question: string }
+  | { status: "running"; stepLabel: string | null; approval?: OpenApproval }
+  | { status: "error"; reason: AssistantErrorReason; question: string };
+
+export type AssistantTurnAction =
+  | { type: "start-running"; stepLabel?: string | null; approval?: OpenApproval }
+  | { type: "set-step"; stepLabel: string | null }
+  | { type: "await-approval"; approval: OpenApproval }
+  | { type: "await-optin"; question: string }
+  | { type: "set-error"; reason: AssistantErrorReason; question: string }
+  | { type: "reset" };
+
+export function assistantTurnReducer(
+  state: AssistantTurnState,
+  action: AssistantTurnAction,
+): AssistantTurnState {
+  switch (action.type) {
+    case "start-running":
+      return {
+        status: "running",
+        stepLabel: action.stepLabel ?? null,
+        approval: action.approval,
+      };
+    case "set-step":
+      return state.status === "running" ? { ...state, stepLabel: action.stepLabel } : state;
+    case "await-approval":
+      return { status: "awaiting-approval", approval: action.approval };
+    case "await-optin":
+      return { status: "awaiting-optin", question: action.question };
+    case "set-error":
+      return { status: "error", reason: action.reason, question: action.question };
+    case "reset":
+      return { status: "idle" };
+  }
+}
 
 const newId = localId;
 
@@ -124,26 +163,36 @@ export function AssistantPanel({
   const copy = assistantCopy[locale];
   const [assistant, setAssistant] = useState<AssistantState>(emptyAssistantState);
   const [messages, setMessages] = useState<Message[]>([]);
-  const [open, setOpen] = useState<OpenApproval | null>(null);
+  const [turn, dispatchTurn] = useReducer(assistantTurnReducer, { status: "idle" });
   const [input, setInput] = useState("");
-  const [busy, setBusy] = useState(false);
-  /* The synchronous twin of `busy` (state lags a render) and the latest stored
-   * state, for code that runs after an await. */
+  const busy = turn.status === "running";
+  const open =
+    turn.status === "awaiting-approval"
+      ? turn.approval
+      : turn.status === "running"
+        ? (turn.approval ?? null)
+        : null;
+  const optInFor = turn.status === "awaiting-optin" ? turn.question : null;
+  const stepLabel = turn.status === "running" ? turn.stepLabel : null;
+  const chatError =
+    turn.status === "error" ? { reason: turn.reason, question: turn.question } : null;
   const busyRef = useRef(false);
+  const mountedRef = useRef(true);
   const assistantRef = useRef(assistant);
   function applyAssistant(state: AssistantState) {
     assistantRef.current = state;
     setAssistant(state);
   }
-  function startTurn(): boolean {
+  function startTurn(opts?: { stepLabel?: string | null; approval?: OpenApproval }): boolean {
     if (busyRef.current) return false;
     busyRef.current = true;
-    setBusy(true);
+    dispatchTurn({ type: "start-running", stepLabel: opts?.stepLabel, approval: opts?.approval });
     return true;
   }
-  function endTurn() {
+  function endTurn(next?: AssistantTurnAction) {
     busyRef.current = false;
-    setBusy(false);
+    if (!mountedRef.current) return;
+    if (next) dispatchTurn(next);
   }
   const [saveError, setSaveError] = useState(false);
 
@@ -153,13 +202,6 @@ export function AssistantPanel({
   const [configured, setConfigured] = useState<boolean | null>(null);
   const accountId = chat?.accountId ?? "";
   const [optedIn, setOptedIn] = useState(() => getAiAssistantEnabled(accountId));
-  /** The question waiting for the owner's decision on the opt-in card. */
-  const [optInFor, setOptInFor] = useState<string | null>(null);
-  const [stepLabel, setStepLabel] = useState<string | null>(null);
-  const [chatError, setChatError] = useState<{
-    reason: AssistantErrorReason;
-    question: string;
-  } | null>(null);
   const messagesRef = useRef<Message[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
   const wasBusy = useRef(false);
@@ -181,12 +223,13 @@ export function AssistantPanel({
     };
   }, [hasChat]);
 
-  useEffect(
-    () => () => {
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
       abortRef.current?.abort();
-    },
-    [],
-  );
+    };
+  }, []);
 
   /* A scope switch while a question runs must not keep sending the old half's data: the
    * same abort as switching off. */
@@ -196,7 +239,8 @@ export function AssistantPanel({
     if (lastScope.current !== scopeName) {
       lastScope.current = scopeName;
       abortRef.current?.abort();
-      setStepLabel(null);
+      busyRef.current = false;
+      dispatchTurn({ type: "reset" });
     }
   }, [scopeName]);
 
@@ -283,16 +327,17 @@ export function AssistantPanel({
   async function ask(raw: string) {
     const text = raw.trim();
     if (!text || !startTurn()) return;
+    let next: AssistantTurnAction = { type: "reset" };
     try {
-      await runTurn(text);
+      next = await runTurn(text);
     } finally {
-      endTurn();
+      endTurn(next);
     }
   }
 
   /** One question to the model. The tools run on the vault read just now; the
    *  step label follows the tool names; a failed round becomes one plain line. */
-  async function askModel(text: string) {
+  async function askModel(text: string): Promise<AssistantTurnAction> {
     const language = detectChatLanguage(text, locale);
     const today = chatToday();
     const earlier = messagesRef.current.slice(historyStartRef.current);
@@ -302,7 +347,7 @@ export function AssistantPanel({
     ).map((m) => ({ role: m.role, content: m.text }));
     const controller = new AbortController();
     abortRef.current = controller;
-    setStepLabel(copy.chat.stepFallback);
+    dispatchTurn({ type: "set-step", stepLabel: copy.chat.stepFallback });
     try {
       const outcome = await runAssistantQuestion(
         {
@@ -321,14 +366,20 @@ export function AssistantPanel({
             signal: controller.signal,
             enabled: () => getAiAssistantEnabled(accountId),
           }),
-          onRound: (names) =>
-            setStepLabel(
-              (names[0] ? copy.chat.steps[names[0]] : undefined) ?? copy.chat.stepFallback,
-            ),
+          onRound: (names) => {
+            if (abortRef.current === controller && mountedRef.current) {
+              dispatchTurn({
+                type: "set-step",
+                stepLabel:
+                  (names[0] ? copy.chat.steps[names[0]] : undefined) ?? copy.chat.stepFallback,
+              });
+            }
+          },
         },
         text,
         history,
       );
+      if (controller.signal.aborted || !mountedRef.current) return { type: "reset" };
       switch (outcome.kind) {
         case "answer":
           pushMessage("assistant", outcome.text);
@@ -348,26 +399,33 @@ export function AssistantPanel({
           pushMessage("assistant", copy.chat.noAnswer);
           break;
       }
+      return { type: "reset" };
     } catch (error) {
+      if (!mountedRef.current) return { type: "reset" };
       if (error instanceof AssistantStepError) {
         if (error.reason === "cancelled") {
-          /* Consent was withdrawn (here, in another tab) or the panel went away: say nothing. */
           setOptedIn(getAiAssistantEnabled(accountId));
-        } else if (error.reason === "not-configured") {
+          return { type: "reset" };
+        }
+        if (error.reason === "not-configured") {
           setConfigured(false);
           pushMessage("assistant", copy.chat.needsAccount);
-        } else if (
+          return { type: "reset" };
+        }
+        if (
           (error.reason === "offline" ||
             error.reason === "unavailable" ||
             error.reason === "timeout") &&
           (await answerLocally(text))
         ) {
-          /* The model cannot be reached: a balance or this-month question still works from here. */
-        } else setChatError({ reason: error.reason, question: text });
-      } else pushMessage("assistant", copy.readError);
+          return { type: "reset" };
+        }
+        return { type: "set-error", reason: error.reason, question: text };
+      }
+      pushMessage("assistant", copy.readError);
+      return { type: "reset" };
     } finally {
       if (abortRef.current === controller) abortRef.current = null;
-      setStepLabel(null);
     }
   }
 
@@ -381,6 +439,7 @@ export function AssistantPanel({
         chat?.txs ?? [],
         storage.getRules(),
       ]);
+      if (!mountedRef.current) return false;
       answerRead(intent, { accounts, txs, rules, asOf });
       return true;
     } catch {
@@ -389,54 +448,52 @@ export function AssistantPanel({
   }
 
   async function retryChat() {
-    if (!chatError || !getAiAssistantEnabled(accountId) || !startTurn()) return;
-    const question = chatError.question;
-    setChatError(null);
+    if (turn.status !== "error" || !getAiAssistantEnabled(accountId)) return;
+    const question = turn.question;
+    if (!startTurn()) return;
+    let next: AssistantTurnAction = { type: "reset" };
     try {
-      await askModel(question);
+      next = await askModel(question);
     } finally {
-      endTurn();
+      endTurn(next);
     }
   }
 
   async function acceptOptIn() {
+    if (turn.status !== "awaiting-optin") return;
+    const question = turn.question;
     if (!startTurn()) return;
     setAiAssistantEnabled(accountId, true);
     setOptedIn(true);
-    const question = optInFor;
-    /* Nothing from before this moment goes to the model: the history starts at the
-     * question that was waiting. */
     const at = messagesRef.current
       .map((m) => m.role === "user" && m.text === question)
       .lastIndexOf(true);
     historyStartRef.current = at >= 0 ? at : messagesRef.current.length;
-    setOptInFor(null);
+    let next: AssistantTurnAction = { type: "reset" };
     try {
-      if (question !== null) await askModel(question);
+      next = await askModel(question);
     } finally {
-      endTurn();
+      endTurn(next);
     }
   }
 
   function declineOptIn() {
-    setOptInFor(null);
+    if (turn.status !== "awaiting-optin") return;
+    dispatchTurn({ type: "reset" });
     pushMessage("assistant", copy.chat.declined);
   }
 
   function turnChatOff() {
     abortRef.current?.abort();
+    busyRef.current = false;
     setAiAssistantEnabled(accountId, false);
     setOptedIn(false);
-    setChatError(null);
-    setOptInFor(null);
-    setStepLabel(null);
+    dispatchTurn({ type: "reset" });
     historyStartRef.current = Number.POSITIVE_INFINITY;
   }
 
-  async function runTurn(text: string) {
+  async function runTurn(text: string): Promise<AssistantTurnAction> {
     setInput("");
-    setChatError(null);
-    setOptInFor(null);
     pushMessage("user", text);
     const intent = routeAssistantIntent({ text, asOf, locale });
     if (intent.kind === "write") {
@@ -446,23 +503,21 @@ export function AssistantPanel({
         payload: { ...intent.payload },
         createdAt: new Date().toISOString(),
       };
-      setOpen(approval);
       pushMessage(
         "assistant",
         copy.approval.body(copy.preference(intent.payload.subject, intent.payload.valueId)),
       );
-      return;
+      return { type: "await-approval", approval };
     }
     /* Opted in: the model answers everything but a remembered preference, so one
      * figure has one source (the same tools) however the question is phrased. */
     if (chatAvailable && optedIn) {
-      await askModel(text);
-      return;
+      return askModel(text);
     }
     if (intent.kind === "unknown") {
-      if (chatAvailable) setOptInFor(text);
-      else pushMessage("assistant", copy.unknown);
-      return;
+      if (chatAvailable) return { type: "await-optin", question: text };
+      pushMessage("assistant", copy.unknown);
+      return { type: "reset" };
     }
     if (intent.kind === "read") {
       /* Read the vault now, not once at mount: an import since the last turn counts. */
@@ -472,12 +527,13 @@ export function AssistantPanel({
           storage.getTxs(),
           storage.getRules(),
         ]);
-        answerRead(intent, { accounts, txs, rules, asOf });
+        if (mountedRef.current) answerRead(intent, { accounts, txs, rules, asOf });
       } catch {
-        pushMessage("assistant", copy.readError);
+        if (mountedRef.current) pushMessage("assistant", copy.readError);
       }
-      return;
+      return { type: "reset" };
     }
+    return { type: "reset" };
   }
 
   function submit(event: FormEvent) {
@@ -486,32 +542,37 @@ export function AssistantPanel({
   }
 
   async function decide(decision: "approved" | "rejected") {
-    if (!open || !startTurn()) return;
+    if (turn.status !== "awaiting-approval") return;
+    const current = turn.approval;
+    if (!startTurn({ approval: current })) return;
     setSaveError(false);
     const next = decideApproval({
       state: assistantRef.current,
-      id: open.id,
-      tool: open.tool,
-      payload: open.payload,
+      id: current.id,
+      tool: current.tool,
+      payload: current.payload,
       decision,
       decidedAt: new Date().toISOString(),
-      createdAt: open.createdAt,
+      createdAt: current.createdAt,
     });
+    let nextTurn: AssistantTurnAction = { type: "await-approval", approval: current };
     try {
-      /* One save: the decision event and (on approve) the memory it authorises
-       * land together, so a reload cannot show one without the other. */
       await storage.putAssistant(next);
+      if (!mountedRef.current) return;
       applyAssistant(next);
-      setOpen(null);
-      const label = copy.preference(String(open.payload.subject), String(open.payload.valueId));
+      nextTurn = { type: "reset" };
+      const label = copy.preference(
+        String(current.payload.subject),
+        String(current.payload.valueId),
+      );
       pushMessage(
         "assistant",
         decision === "approved" ? copy.approval.stored(label) : copy.approval.rejected,
       );
     } catch {
-      setSaveError(true);
+      if (mountedRef.current) setSaveError(true);
     } finally {
-      endTurn();
+      endTurn(nextTurn);
     }
   }
 

@@ -48,8 +48,11 @@ type Notice =
   | "waLinkFailed"
   | "waUnlinkFailed"
   | null;
-type Wa = { linked: boolean; phone: string | null; number: string | null };
-type Panel = { code: string; expiresAt: string; number: string | null; timedOut: boolean };
+type WaState =
+  | { status: "unlinked"; number: string | null }
+  | { status: "linking"; code: string; expiresAt: string; number: string | null }
+  | { status: "timed-out"; code: string; expiresAt: string; number: string | null }
+  | { status: "linked"; phone: string | null; number: string | null; justLinked: boolean };
 
 const clock = (iso: string, locale: Locale) =>
   new Intl.DateTimeFormat(locale === "nl" ? "nl-NL" : "en-GB", {
@@ -81,9 +84,7 @@ export default function AgentSettings({
   const [push, setPush] = useState(false);
   const [emailOn, setEmailOn] = useState(false);
   const [waOn, setWaOn] = useState(false);
-  const [wa, setWa] = useState<Wa>({ linked: false, phone: null, number: null });
-  const [panel, setPanel] = useState<Panel | null>(null);
-  const [justLinked, setJustLinked] = useState(false);
+  const [wa, setWa] = useState<WaState>({ status: "unlinked", number: null });
   /* Separate from the daily-message consent: WhatsApp questions go to the AI provider. */
   const [aiConsent, setAiConsent] = useState(false);
   const codeRef = useRef<HTMLElement>(null);
@@ -93,12 +94,24 @@ export default function AgentSettings({
   const [hour, setHour] = useState(DEFAULT_HOUR);
   const [consent, setConsent] = useState(false);
   const [busy, setBusy] = useState(false);
+  const busyRef = useRef(false);
   const [notice, setNotice] = useState<Notice>(null);
   const [confirmOff, setConfirmOff] = useState(false);
   const alive = useRef(true);
   const cancelRef = useRef<HTMLButtonElement>(null);
   const turnOffRef = useRef<HTMLButtonElement>(null);
   const confirmWasOpen = useRef(false);
+
+  function beginBusy(): boolean {
+    if (busyRef.current) return false;
+    busyRef.current = true;
+    setBusy(true);
+    return true;
+  }
+  function endBusy() {
+    busyRef.current = false;
+    if (alive.current) setBusy(false);
+  }
 
   /* The confirm destroys server data: focus goes to the safe button on open
    * and back to "Zet uit" on close, so keyboard users never lose their place. */
@@ -134,8 +147,13 @@ export default function AgentSettings({
       else setPhase({ kind: res.kind });
     });
     void api.getWhatsapp().then((res) => {
-      if (alive.current && res.kind === "ok")
-        setWa({ linked: res.linked, phone: res.phone, number: res.number });
+      if (alive.current && res.kind === "ok") {
+        setWa(
+          res.linked
+            ? { status: "linked", phone: res.phone, number: res.number, justLinked: false }
+            : { status: "unlinked", number: res.number },
+        );
+      }
     });
     return () => {
       alive.current = false;
@@ -155,9 +173,8 @@ export default function AgentSettings({
     el.focus();
   });
 
-  /* Waits for the user's first WhatsApp message. Stops on linked, on timeout,
-   * when the panel closes and on unmount; skips the request while the tab is hidden. */
-  const polling = panel !== null && !panel.timedOut;
+  const polling = wa.status === "linking";
+  const linkingCode = wa.status === "linking" ? wa.code : null;
   useEffect(() => {
     if (!polling) return;
     let polls = 0;
@@ -167,7 +184,9 @@ export default function AgentSettings({
       polls += 1;
       if (polls >= MAX_POLLS) {
         clearInterval(id);
-        setPanel((p) => (p ? { ...p, timedOut: true } : p));
+        setWa((cur) =>
+          cur.status === "linking" ? { ...cur, status: "timed-out" } : cur,
+        );
         return;
       }
       if (inFlight || document.hidden) return;
@@ -176,9 +195,7 @@ export default function AgentSettings({
         inFlight = false;
         if (stopped || !alive.current || res.kind !== "ok" || !res.linked) return;
         clearInterval(id);
-        setWa({ linked: true, phone: res.phone, number: res.number });
-        setPanel(null);
-        setJustLinked(true);
+        setWa({ status: "linked", phone: res.phone, number: res.number, justLinked: true });
       });
     }, POLL_MS);
     return () => {
@@ -187,7 +204,7 @@ export default function AgentSettings({
     };
     // The api object is stable for the life of the screen.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [polling, panel?.code]);
+  }, [polling, linkingCode]);
 
   useEffect(() => {
     setEmail((cur) => (cur === "" ? accountEmail : cur));
@@ -229,6 +246,7 @@ export default function AgentSettings({
   const canSave = !busy && emailOk && (!needsConsent || (consent && (bankConnected || stale)));
 
   async function togglePush(on: boolean) {
+    if (busyRef.current) return;
     setNotice(null);
     if (!on) {
       setPush(false);
@@ -239,7 +257,14 @@ export default function AgentSettings({
       return;
     }
     let permission = browser.permission();
-    if (permission === "default") permission = await browser.request();
+    if (permission === "default") {
+      if (!beginBusy()) return;
+      try {
+        permission = await browser.request();
+      } finally {
+        endBusy();
+      }
+    }
     if (!alive.current) return;
     if (permission !== "granted") {
       setPush(false);
@@ -271,129 +296,139 @@ export default function AgentSettings({
   }
 
   async function startLink() {
-    if (!aiConsent) return;
-    setBusy(true);
+    if (!aiConsent || !beginBusy()) return;
     setNotice(null);
-    setJustLinked(false);
-    const res = await api.createLinkCode(true);
-    if (!alive.current) return;
-    setBusy(false);
-    if (res.kind !== "ok") {
-      setNotice("waLinkFailed");
-      return;
+    try {
+      const res = await api.createLinkCode(true);
+      if (!alive.current) return;
+      if (res.kind !== "ok") {
+        setNotice("waLinkFailed");
+        return;
+      }
+      focusAfter.current = "code";
+      setWa((cur) => ({
+        status: "linking",
+        code: res.code,
+        expiresAt: res.expiresAt,
+        number: res.number ?? cur.number,
+      }));
+    } finally {
+      endBusy();
     }
-    focusAfter.current = "code";
-    setPanel({ code: res.code, expiresAt: res.expiresAt, number: res.number, timedOut: false });
   }
 
   async function unlink() {
-    setBusy(true);
+    if (!beginBusy()) return;
     setNotice(null);
-    const ok = await api.unlinkWhatsapp();
-    if (!alive.current) return;
-    if (!ok) {
-      setBusy(false);
-      setNotice("waUnlinkFailed");
-      return;
-    }
-    focusAfter.current = "link";
-    setWa((w) => ({ ...w, linked: false, phone: null }));
-    setWaOn(false);
-    setPanel(null);
-    setJustLinked(false);
-    if (settings?.enabled && !stale && settings.channels.includes("whatsapp")) {
-      const input: AgentSettingsInput = {
-        enabled: true,
-        channels: settings.channels.filter((ch) => ch !== "whatsapp"),
-        sendHour: settings.sendHour,
-        locale: settings.locale,
-        email: settings.email,
-        consentVersion: settings.consentVersion,
-      };
-      const res = await api.putSettings(input);
+    try {
+      const ok = await api.unlinkWhatsapp();
       if (!alive.current) return;
-      if (res.kind === "ok")
-        setPhase((p) =>
-          p.kind === "ready"
-            ? { ...p, settings: { ...input, consentedAt: settings.consentedAt } }
-            : p,
-        );
-      else setNotice("saveFailed");
+      if (!ok) {
+        setNotice("waUnlinkFailed");
+        return;
+      }
+      focusAfter.current = "link";
+      setWa((w) => ({ status: "unlinked", number: w.number }));
+      setWaOn(false);
+      if (settings?.enabled && !stale && settings.channels.includes("whatsapp")) {
+        const input: AgentSettingsInput = {
+          enabled: true,
+          channels: settings.channels.filter((ch) => ch !== "whatsapp"),
+          sendHour: settings.sendHour,
+          locale: settings.locale,
+          email: settings.email,
+          consentVersion: settings.consentVersion,
+        };
+        const res = await api.putSettings(input);
+        if (!alive.current) return;
+        if (res.kind === "ok")
+          setPhase((p) =>
+            p.kind === "ready"
+              ? { ...p, settings: { ...input, consentedAt: settings.consentedAt } }
+              : p,
+          );
+        else setNotice("saveFailed");
+      }
+    } finally {
+      endBusy();
     }
-    setBusy(false);
   }
 
   async function save() {
-    setBusy(true);
+    if (!beginBusy()) return;
     setNotice(null);
-    const channels: AgentChannelName[] = ["feed"];
-    if (push) channels.push("push");
-    if (emailOn) channels.push("email");
-    if (waOn && wa.linked) channels.push("whatsapp");
-    const input = {
-      enabled: true as const,
-      channels,
-      sendHour: hour,
-      locale,
-      email: emailOn ? email.trim() : null,
-      consentVersion,
-    };
-    const res = await api.putSettings(input);
-    if (!alive.current) return;
-    if (res.kind !== "ok") {
-      setBusy(false);
-      setNotice(
-        res.kind === "bank-required"
-          ? "bankRequired"
-          : res.kind === "unavailable"
-            ? "unavailable"
-            : "saveFailed",
-      );
-      return;
-    }
-    const pushOk = await syncPush(settings?.channels.includes("push") === true);
-    if (!alive.current) return;
-    let saved = input;
-    if (!pushOk && push) {
-      /* The server must not keep "push" when this browser has no subscription. */
-      setPush(false);
-      saved = { ...input, channels: input.channels.filter((ch) => ch !== "push") };
-      await api.putSettings(saved);
+    try {
+      const channels: AgentChannelName[] = ["feed"];
+      if (push) channels.push("push");
+      if (emailOn) channels.push("email");
+      if (waOn && wa.status === "linked") channels.push("whatsapp");
+      const input = {
+        enabled: true as const,
+        channels,
+        sendHour: hour,
+        locale,
+        email: emailOn ? email.trim() : null,
+        consentVersion,
+      };
+      const res = await api.putSettings(input);
       if (!alive.current) return;
+      if (res.kind !== "ok") {
+        setNotice(
+          res.kind === "bank-required"
+            ? "bankRequired"
+            : res.kind === "unavailable"
+              ? "unavailable"
+              : "saveFailed",
+        );
+        return;
+      }
+      const pushOk = await syncPush(settings?.channels.includes("push") === true);
+      if (!alive.current) return;
+      let saved = input;
+      if (!pushOk && push) {
+        /* The server must not keep "push" when this browser has no subscription. */
+        setPush(false);
+        saved = { ...input, channels: input.channels.filter((ch) => ch !== "push") };
+        await api.putSettings(saved);
+        if (!alive.current) return;
+      }
+      const consentedAt = settings?.consentedAt ?? new Date().toISOString();
+      setPhase((p) => (p.kind === "ready" ? { ...p, settings: { ...saved, consentedAt } } : p));
+      setConsent(false);
+      setNotice(pushOk ? "saved" : "pushFailed");
+      onEnabledChange?.(true);
+    } finally {
+      endBusy();
     }
-    const consentedAt = settings?.consentedAt ?? new Date().toISOString();
-    setPhase((p) => (p.kind === "ready" ? { ...p, settings: { ...saved, consentedAt } } : p));
-    setConsent(false);
-    setBusy(false);
-    setNotice(pushOk ? "saved" : "pushFailed");
-    onEnabledChange?.(true);
   }
 
   async function turnOff() {
-    setBusy(true);
+    if (!beginBusy()) return;
     setNotice(null);
-    const res = await api.turnOff();
-    if (!alive.current) return;
-    setBusy(false);
-    setConfirmOff(false);
-    if (res.kind !== "ok") {
-      setNotice(res.kind === "unavailable" ? "unavailable" : "saveFailed");
-      return;
-    }
     try {
-      await browser.unsubscribe();
-    } catch {
-      /* nothing left to unsubscribe from */
+      const res = await api.turnOff();
+      if (!alive.current) return;
+      setConfirmOff(false);
+      if (res.kind !== "ok") {
+        setNotice(res.kind === "unavailable" ? "unavailable" : "saveFailed");
+        return;
+      }
+      try {
+        await browser.unsubscribe();
+      } catch {
+        /* nothing left to unsubscribe from */
+      }
+      if (!alive.current) return;
+      setPhase((p) => (p.kind === "ready" ? { ...p, settings: null } : p));
+      setPush(false);
+      setEmailOn(false);
+      setWaOn(false);
+      setWa((w) => ({ status: "unlinked", number: w.number }));
+      setConsent(false);
+      onEnabledChange?.(false);
+    } finally {
+      endBusy();
     }
-    if (!alive.current) return;
-    setPhase((p) => (p.kind === "ready" ? { ...p, settings: null } : p));
-    setPush(false);
-    setEmailOn(false);
-    setWaOn(false);
-    setPanel(null);
-    setWa((w) => ({ ...w, linked: false, phone: null }));
-    setConsent(false);
-    onEnabledChange?.(false);
   }
 
   return (
@@ -445,7 +480,7 @@ export default function AgentSettings({
             <input
               type="checkbox"
               checked={push}
-              disabled={!pushSupported}
+              disabled={!pushSupported || busy}
               onChange={(e) => void togglePush(e.target.checked)}
             />{" "}
             {c.channels.push}
@@ -486,13 +521,13 @@ export default function AgentSettings({
           <label>
             <input
               type="checkbox"
-              checked={waOn && wa.linked}
-              disabled={!wa.linked}
+              checked={waOn && wa.status === "linked"}
+              disabled={wa.status !== "linked"}
               onChange={(e) => setWaOn(e.target.checked)}
             />{" "}
             {c.whatsapp}
           </label>{" "}
-          {wa.linked ? (
+          {wa.status === "linked" ? (
             <>
               <span className="cell-sub">{c.whatsappLinked(wa.phone ?? "")}</span>{" "}
               <Button disabled={busy} onClick={() => void unlink()}>
@@ -504,13 +539,13 @@ export default function AgentSettings({
           )}
         </p>
         <p role="status" data-testid="wa-status">
-          {panel && !panel.timedOut && !wa.linked
+          {wa.status === "linking"
             ? c.whatsappWaiting
-            : justLinked && wa.linked
+            : wa.status === "linked" && wa.justLinked
               ? c.whatsappLinkedNow
               : ""}
         </p>
-        {enabled && !wa.linked && (!panel || panel.timedOut) && (
+        {enabled && (wa.status === "unlinked" || wa.status === "timed-out") && (
           <p>
             <label>
               <input
@@ -520,7 +555,7 @@ export default function AgentSettings({
               />{" "}
               {c.whatsappAiConsent}
             </label>{" "}
-            {panel?.timedOut && (
+            {wa.status === "timed-out" && (
               <>
                 <span role="alert" className="text-warn">
                   {c.whatsappTimedOut}
@@ -538,20 +573,21 @@ export default function AgentSettings({
             </Button>
           </p>
         )}
-        {panel && !panel.timedOut && !wa.linked && (
+        {wa.status === "linking" && (
           <div role="group" aria-label={c.whatsapp}>
-            <p>{c.whatsappSend(panel.number ?? wa.number)}</p>
+            <p>{c.whatsappSend(wa.number)}</p>
             <p>
               {c.whatsappCodeLabel}:{" "}
               <code ref={codeRef} tabIndex={-1}>
-                {panel.code}
+                {wa.code}
               </code>
             </p>
-            <p className="cell-sub">{c.whatsappExpires(clock(panel.expiresAt, locale))}</p>
+            <p className="cell-sub">{c.whatsappExpires(clock(wa.expiresAt, locale))}</p>
             <Button
+              disabled={busy}
               onClick={() => {
                 focusAfter.current = "link";
-                setPanel(null);
+                setWa((w) => ({ status: "unlinked", number: w.number }));
               }}
             >
               {c.whatsappClose}
