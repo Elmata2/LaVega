@@ -99,10 +99,17 @@ export function HomePopups(props: HomePopupsProps) {
 
   // The page changed under an open dialog: close it, no dismissal. The session
   // mark stays, so it does not come back this session.
+  const effectiveOpen = open && view === "overview" && !blocked;
   if (open && (view !== "overview" || blocked)) setOpen(false);
   useEffect(() => {
-    stillOpen.current = open && view === "overview" && !blocked;
-  });
+    stillOpen.current = effectiveOpen;
+  }, [effectiveOpen]);
+  useEffect(
+    () => () => {
+      stillOpen.current = false;
+    },
+    [],
+  );
 
   if (shown === null) return null;
 
@@ -188,7 +195,7 @@ export function HomePopups(props: HomePopupsProps) {
 
   return (
     <Dialog
-      open={open}
+      open={effectiveOpen}
       onClose={dismiss}
       title={heading}
       closeLabel={c.closeDialog}

@@ -255,8 +255,8 @@ export default function Facturen({
   function commitGuide(update: GuideState | ((prev: GuideState) => GuideState)) {
     const next = typeof update === "function" ? update(guideRef.current) : update;
     guideRef.current = next;
-    setGuide(next);
     saveGuideState(next);
+    if (mountedRef.current) setGuide(next);
   }
   /* `""` is "we could not tell", and it is reachable only from an extraction
    * where neither party matched something of his. The manual form still opens
@@ -278,21 +278,31 @@ export default function Facturen({
   // "Toevoegen" as an AI draft so a hallucinated field can't silently move the
   // forecast — the owner still clicks confirm.
   const [aiEnabled, setAiEnabled] = useState<boolean>(() => getAiExtractionEnabled());
-  const [pendingSource, setPendingSource] = useState<Invoice["sourceType"]>("manual");
-  const [pendingConfidence, setPendingConfidence] = useState<number | null>(null);
-  // Extracted BTW rides along with the AI draft: the manual form has no VAT
-  // input, but the Invoice keeps vatAmount for the (later) tax agent, so we
-  // carry it through the confirm rather than silently dropping it.
-  const [pendingVat, setPendingVat] = useState<number | null>(null);
-  /* Both names off an extraction whose direction could not be resolved. Kept so
-   * that picking a direction can fill the counterparty with the correct half —
-   * the seller for a purchase, the buyer for a sale. Null once resolved or
-   * discarded. */
-  const [draftParties, setDraftParties] = useState<{ seller: string; buyer: string } | null>(null);
+  type AiDraftState =
+    | {
+        status: "idle";
+        note: string | null;
+      }
+    | {
+        status: "extracting";
+        note: string;
+      }
+    | {
+        status: "ready";
+        confidence: number | null;
+        vat: number | null;
+        parties: { seller: string; buyer: string } | null;
+        note: string | null;
+      };
+  const [aiDraft, setAiDraft] = useState<AiDraftState>({ status: "idle", note: null });
+  const aiBusy = aiDraft.status === "extracting";
+  const pendingSource: Invoice["sourceType"] = aiDraft.status === "ready" ? "llm" : "manual";
+  const pendingConfidence = aiDraft.status === "ready" ? aiDraft.confidence : null;
+  const pendingVat = aiDraft.status === "ready" ? aiDraft.vat : null;
+  const draftParties = aiDraft.status === "ready" ? aiDraft.parties : null;
+  const aiNote = aiDraft.note;
   /** Het btw-veld op het formulier, als tekst — leeg is een echte staat en niet 0. */
   const [vatInput, setVatInput] = useState("");
-  const [aiNote, setAiNote] = useState<string | null>(null);
-  const [aiBusy, setAiBusy] = useState(false);
 
   // --- Ophalen uit n8n. `n8nNote` is disposable UI text; the ROWS live in App
   // (see the `pending` prop) because they are the only copy that exists.
@@ -309,6 +319,7 @@ export default function Facturen({
   function showN8nNote(
     note: string | { short: string; detail: string; detailSummary: string },
   ): void {
+    if (!mountedRef.current) return;
     setN8nNoteState(
       typeof note === "string"
         ? { text: note }
@@ -317,13 +328,23 @@ export default function Facturen({
   }
   const [rowErrors, setRowErrors] = useState<Record<string, string>>({});
 
+  const mountedRef = useRef(true);
+  const extractAbortRef = useRef<AbortController | null>(null);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      extractAbortRef.current?.abort();
+    };
+  }, []);
+
   // The vault's fallback auto-booked log (see `autoBookedIds` below).
   const [legacyAutoBookedIds, setLegacyAutoBookedIds] = useState<Set<string>>(new Set());
   async function refreshLegacyAutoBooked() {
     if (!storage) return;
     try {
       const list = await getAutoBookedInvoices(storage);
-      setLegacyAutoBookedIds(new Set(list.map((a) => a.invoiceId)));
+      if (mountedRef.current) setLegacyAutoBookedIds(new Set(list.map((a) => a.invoiceId)));
     } catch {
       /* a vault read that fails here just leaves the FIELD-based ids showing */
     }
@@ -364,10 +385,12 @@ export default function Facturen({
   // rejected would come back from a stale closure.
   const pendingRef = useRef(pending);
   const noticesRef = useRef(notices);
-  useEffect(() => {
-    pendingRef.current = pending;
-    noticesRef.current = notices;
-  }, [pending, notices]);
+  const invoicesRef = useRef(invoices);
+  const txsRef = useRef(txs);
+  pendingRef.current = pending;
+  noticesRef.current = notices;
+  invoicesRef.current = invoices;
+  txsRef.current = txs;
 
   /* ── Automatisch ophalen ──────────────────────────────────────────────────
    *
@@ -516,12 +539,14 @@ export default function Facturen({
       if (outcome.setup.length > 0 || outcome.setupDropped > 0) {
         const at = readNowMs();
         commitGuide(applySetupFetch(guideRef.current, outcome, at));
-        setClockMs(at);
+        if (mountedRef.current) setClockMs(at);
       }
 
       const handled = new Set(getHandledInvoiceMessageIds());
       const currentPending = pendingRef.current;
       const currentNotices = noticesRef.current;
+      const currentInvoices = invoicesRef.current;
+      const currentTxs = txsRef.current;
       const already = new Set(currentPending.map((p) => p.messageId));
       const fresh = outcome.rows.filter(
         (r) => !handled.has(r.messageId) && !already.has(r.messageId),
@@ -536,7 +561,7 @@ export default function Facturen({
       const decidedIds: string[] = [];
       let alreadyStored = 0;
       const proposals: PendingInvoice[] = [];
-      const seenIds = new Set(invoices.map((i) => i.id));
+      const seenIds = new Set(currentInvoices.map((i) => i.id));
       const entityCtx = { entityChoices, defaultEntity: selectedEntity };
       for (const row of fresh) {
         const draft = toPending(row, bookingEntity(entityCtx));
@@ -578,7 +603,7 @@ export default function Facturen({
       if (booked.length > 0) {
         // ONE save with everything, and reconciled in the same breath: a payment
         // that already came in links now instead of at the next import.
-        onSaveInvoices(reconcileInvoices([...invoices, ...booked], txs));
+        onSaveInvoices(reconcileInvoices([...currentInvoices, ...booked], currentTxs));
         for (const b of bookedFrom) await rememberAutoBooked(vault, b);
         await refreshLegacyAutoBooked();
       }
@@ -644,7 +669,7 @@ export default function Facturen({
         outcome.dropped === 0;
       if (!quiet) showN8nNote(parts.join(" "));
     } finally {
-      if (!backgroundRef.current) setN8nBusy(false);
+      if (!backgroundRef.current && mountedRef.current) setN8nBusy(false);
     }
   }
 
@@ -832,13 +857,10 @@ export default function Facturen({
     showN8nNote(c.n8nNotices.undone);
   }
 
-  // Drop the AI-draft tags (source/confidence/vat/note) so a following MANUAL
-  // entry isn't mislabeled as "llm" or given a stale confidence/BTW.
+  // Drop the AI-draft tags (source/confidence/vat/parties/note) so a following MANUAL
+  // entry isn't mislabeled as "llm" or given a stale confidence/BTW/parties.
   function clearDraftTags() {
-    setPendingSource("manual");
-    setPendingConfidence(null);
-    setPendingVat(null);
-    setAiNote(null);
+    setAiDraft({ status: "idle", note: null });
   }
 
   // Explicitly throw away a pre-filled AI draft: clears the tags AND the fields
@@ -846,7 +868,6 @@ export default function Facturen({
   // not to use it.
   function discardDraft() {
     clearDraftTags();
-    setDraftParties(null);
     setCounterparty("");
     setInvoiceNumber("");
     setIssueDate("");
@@ -858,15 +879,16 @@ export default function Facturen({
 
   function handleImportFile(file: File) {
     void file.text().then((text) => {
+      if (!mountedRef.current) return;
       const rows = parseInvoiceFile(file.name, text);
       if (rows.length === 0) {
         setImportNote(c.importNotices.noneRecognized);
         return;
       }
       const parsed = rows.map((row) => makeInvoice({ ...row, entity: selectedEntity }));
-      // Dedup by content-hashed id so re-importing the same file (or an
-      // overlapping export) doesn't duplicate rows already on file.
-      const seen = new Set(invoices.map((i) => i.id));
+      const currentInvoices = invoicesRef.current;
+      const currentTxs = txsRef.current;
+      const seen = new Set(currentInvoices.map((i) => i.id));
       const added: Invoice[] = [];
       for (const inv of parsed) {
         if (!seen.has(inv.id)) {
@@ -874,7 +896,7 @@ export default function Facturen({
           added.push(inv);
         }
       }
-      const merged = reconcileInvoices([...invoices, ...added], txs);
+      const merged = reconcileInvoices([...currentInvoices, ...added], currentTxs);
       onSaveInvoices(merged);
       if (added.length > 0) {
         posthog.capture("invoice_file_imported", { invoice_count: added.length });
@@ -891,6 +913,7 @@ export default function Facturen({
    *  behind it. A PDF can only be read by the AI extractor, so without the
    *  opt-in it is refused with a reason instead of being parsed as text. */
   function handleFile(file: File) {
+    if (busy || aiBusy) return;
     setImportNote(null);
     if (isPdf(file)) {
       if (!aiEnabled) {
@@ -906,18 +929,21 @@ export default function Facturen({
   function toggleAi(next: boolean) {
     setAiEnabled(next);
     setAiExtractionEnabled(next);
-    if (!next) setAiNote(null);
+    if (!next) {
+      setAiDraft((prev) =>
+        prev.status === "ready" ? { ...prev, note: null } : prev.status === "idle" ? { status: "idle", note: null } : prev,
+      );
+    }
   }
 
-  // Opt-in, per-document: only fires when the owner has enabled the toggle AND
-  // dropped/picked a specific PDF. Reads the file to base64 and POSTs it to OUR
-  // server proxy (never to Mistral directly). On success it PRE-FILLS the
-  // manual form as a draft — nothing is saved until the owner clicks "Toevoegen".
   async function handleExtractPdf(file: File) {
-    setAiBusy(true);
-    setAiNote(c.aiExtraction.reading);
+    extractAbortRef.current?.abort();
+    const controller = new AbortController();
+    extractAbortRef.current = controller;
+    setAiDraft({ status: "extracting", note: c.aiExtraction.reading });
     try {
       const pdfBase64 = await fileToBase64(file);
+      if (!mountedRef.current || controller.signal.aborted) return;
       const res = await fetch(`${API_BASE}/api/agent/extract-invoice`, {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -926,7 +952,9 @@ export default function Facturen({
           filename: file.name,
           mediaType: file.type || "application/pdf",
         }),
+        signal: controller.signal,
       });
+      if (!mountedRef.current || controller.signal.aborted) return;
       if (!res.ok) {
         console.warn(`AI extraction failed (status ${res.status})`);
         let msg = c.aiExtraction.extractFailed;
@@ -937,51 +965,45 @@ export default function Facturen({
         } catch {
           /* non-JSON error body; keep the status-based message */
         }
-        setAiNote(msg);
+        if (mountedRef.current && !controller.signal.aborted) {
+          setAiDraft({ status: "idle", note: msg });
+        }
         return;
       }
       const { fields, confidence } = (await res.json()) as ExtractResponse;
-      /* The model read the page; this decides what it means for HIM. An
-       * unresolved case leaves the direction empty on purpose — handleAdd
-       * refuses to book until he picks one, exactly as it does for a currency
-       * it could not read. */
+      if (!mountedRef.current || controller.signal.aborted) return;
       const party = resolveInvoiceParties(
         { seller: fields.seller, buyer: fields.buyer, payeeIban: fields.payeeIban },
         { ibans: ownIbans, entityNames: entities },
       );
       setDirection(party.kind === "unknown" ? "" : party.kind === "sales" ? "in" : "out");
       setCounterparty(party.counterparty);
-      setDraftParties(
-        party.kind === "unknown" ? { seller: fields.seller, buyer: fields.buyer } : null,
-      );
-      /* The form has always had this field; the agent was simply never asked
-       * for it, so an AI draft left it blank every time. */
       setInvoiceNumber(fields.invoiceNumber ?? "");
       setIssueDate(fields.issueDate);
       setDueDate(fields.dueDate || fields.issueDate);
       setAmount(String(fields.amount));
-      // No currency read = no currency. Blanking it is deliberate: the manual
-      // form then refuses to book until he fills it in, instead of inheriting
-      // the "EUR" that happened to be standing in the field.
       setCurrency(fields.currency ?? "");
-      setPendingSource("llm");
-      setPendingConfidence(confidence);
       const vat = typeof fields.vatAmount === "number" ? fields.vatAmount : null;
       setVatInput(vat === null ? "" : String(vat));
-      setPendingVat(vat);
-      // Only show a percentage the model actually reported; otherwise just ask
-      // the owner to check every field (no fabricated confidence number).
       const conf =
         typeof confidence === "number"
           ? c.aiExtraction.confidencePart(Math.round(confidence * 100))
           : "";
       const btw = vat !== null ? c.aiExtraction.vatPart(formatEuroIn(locale, vat)) : "";
       const noCcy = fields.currency ? "" : c.aiExtraction.noCurrencyPart;
-      setAiNote(c.aiExtraction.draftReady(conf, btw, noCcy));
+      setAiDraft({
+        status: "ready",
+        confidence,
+        vat,
+        parties: party.kind === "unknown" ? { seller: fields.seller, buyer: fields.buyer } : null,
+        note: c.aiExtraction.draftReady(conf, btw, noCcy),
+      });
     } catch {
-      setAiNote(c.aiExtraction.extractFailed);
+      if (mountedRef.current && !controller.signal.aborted) {
+        setAiDraft({ status: "idle", note: c.aiExtraction.extractFailed });
+      }
     } finally {
-      setAiBusy(false);
+      if (extractAbortRef.current === controller) extractAbortRef.current = null;
     }
   }
 
@@ -1054,12 +1076,13 @@ export default function Facturen({
             aria-label={c.forms.drop.dropzoneAriaLabel}
             onDragOver={(e) => {
               e.preventDefault();
-              setDragOver(true);
+              if (!busy && !aiBusy) setDragOver(true);
             }}
             onDragLeave={() => setDragOver(false)}
             onDrop={(e) => {
               e.preventDefault();
               setDragOver(false);
+              if (busy || aiBusy) return;
               const file = e.dataTransfer?.files?.[0];
               if (file) handleFile(file);
             }}

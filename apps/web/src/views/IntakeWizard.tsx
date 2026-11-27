@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   AdvisorProfile,
   REWARD_PROGRAMS,
@@ -162,6 +162,11 @@ export default function IntakeWizard(props: IntakeWizardProps) {
     return fresh.length === 0 ? null : [...fresh, "summary"];
   });
   const [busy, setBusy] = useState(false);
+  const busyRef = useRef(false);
+  function setBusyState(next: boolean) {
+    busyRef.current = next;
+    setBusy(next);
+  }
   /** Set when a summary line sent the user to edit; Verder goes back there. */
   const [returnTo, setReturnTo] = useState<ScreenId | null>(null);
   /** Screens an edit made newly required, still to be visited before returnTo. */
@@ -187,15 +192,18 @@ export default function IntakeWizard(props: IntakeWizardProps) {
   const together = profile.household?.value.kind === "together";
 
   /** Save one screen, then move on only when the store took it. */
-  async function save(apply: (p: AdvisorProfile) => AdvisorProfile) {
-    if (screen === "done" || busy) return;
+  async function save(
+    apply: (p: AdvisorProfile) => AdvisorProfile,
+    opts?: { alreadyBusy?: boolean },
+  ) {
+    if (screen === "done" || (!opts?.alreadyBusy && busyRef.current)) return;
     const id = screen;
     if (round2) {
       // Answers are saved screen by screen; only the last one marks round 2 done.
       const isLast = id === ROUND2[ROUND2.length - 1];
-      setBusy(true);
+      if (!opts?.alreadyBusy) setBusyState(true);
       const ok = await update((p) => (isLast ? markRound2Done(apply(p)) : apply(p)));
-      setBusy(false);
+      setBusyState(false);
       if (!ok) return;
       setScreen(ROUND2[ROUND2.indexOf(id) + 1] ?? "done");
       return;
@@ -216,9 +224,9 @@ export default function IntakeWizard(props: IntakeWizardProps) {
     };
     const after = screensFor(change(profile));
     const afterWalk = walk(after);
-    setBusy(true);
+    if (!opts?.alreadyBusy) setBusyState(true);
     const ok = await update(change);
-    setBusy(false);
+    setBusyState(false);
     if (!ok) return;
     if (returnTo !== null) {
       const changed = change(profile);
@@ -250,11 +258,19 @@ export default function IntakeWizard(props: IntakeWizardProps) {
   const back =
     at > 0 || returnTo !== null
       ? () => {
+          if (busyRef.current) return;
           setSaveFailed(false);
           if (returnTo !== null) {
+            const stillRequired = [
+              ...new Set(
+                [...(!isAnswered(profile, screen) ? [screen] : []), ...pending].filter(
+                  (x) => fullList.includes(x) && !isAnswered(profile, x),
+                ),
+              ),
+            ];
+            setPending(stillRequired);
             setScreen(returnTo);
             setReturnTo(null);
-            setPending([]);
           } else setScreen(list[at - 1] as ScreenId);
         }
       : null;
@@ -671,17 +687,20 @@ export default function IntakeWizard(props: IntakeWizardProps) {
         })}
         onSkip={() => void save((p) => p)}
         onSubmit={(result) => {
+          if (busyRef.current) return;
           void (async () => {
+            setBusyState(true);
             try {
               if (props.onSaveRewards !== undefined) {
                 const next = applyPoints(rewards, result.points, asOf, upsertBalance);
                 if (next !== null) await props.onSaveRewards(next);
               }
             } catch {
+              setBusyState(false);
               setSaveFailed(true);
               return;
             }
-            await save((p) => applyCardBalances(p, result.balances, asOf));
+            await save((p) => applyCardBalances(p, result.balances, asOf), { alreadyBusy: true });
           })();
         }}
       />
@@ -732,12 +751,12 @@ export default function IntakeWizard(props: IntakeWizardProps) {
                     // Done and stored before the browser leaves, so the return
                     // trip lands in the finished app, not back in the wizard.
                     // Busy meanwhile, so Later and the upload cannot race it.
-                    setBusy(true);
+                    setBusyState(true);
                     try {
                       const ok = await update((p) => markDone(p, "upload"));
                       if (!ok) throw new Error(w.saveFailed);
                     } finally {
-                      setBusy(false);
+                      setBusyState(false);
                     }
                   }}
                 />
@@ -775,6 +794,7 @@ export default function IntakeWizard(props: IntakeWizardProps) {
       section={w.sections[sectionOf(screen)]}
       question={question}
       onBack={back}
+      backDisabled={busy}
       backLabel={w.back}
       topRight={
         <button type="button" className="wz-close" aria-label={w.close} onClick={props.onExit}>

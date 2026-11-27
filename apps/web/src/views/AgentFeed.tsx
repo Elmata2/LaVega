@@ -42,7 +42,9 @@ export function AgentEventList({
     "loading",
   );
   const [more, setMore] = useState(false);
+  const [moreFailed, setMoreFailed] = useState(false);
   const [deleteFailed, setDeleteFailed] = useState(false);
+  const deletingRef = useRef<Set<string>>(new Set());
   const alive = useRef(true);
   const idBase = useId();
 
@@ -58,9 +60,14 @@ export function AgentEventList({
             });
       if (!alive.current) return;
       if (res.kind !== "ok") {
+        if (before && res.kind !== "signedOut") {
+          setMoreFailed(true);
+          return;
+        }
         setState(res.kind);
         return;
       }
+      setMoreFailed(false);
       setEvents((cur) => {
         const seen = new Set(cur.map((e) => e.id));
         const merged = before
@@ -83,18 +90,28 @@ export function AgentEventList({
   }, [load]);
 
   async function loadMore() {
-    if (!next) return;
+    if (!next || more) return;
     setMore(true);
-    await load(next);
-    if (alive.current) setMore(false);
+    setMoreFailed(false);
+    try {
+      await load(next);
+    } finally {
+      if (alive.current) setMore(false);
+    }
   }
 
   async function remove(id: string) {
+    if (deletingRef.current.has(id)) return;
+    deletingRef.current.add(id);
     setDeleteFailed(false);
-    const ok = await api.deleteEvent(id);
-    if (!alive.current) return;
-    if (ok) setEvents((cur) => cur.filter((e) => e.id !== id));
-    else setDeleteFailed(true);
+    try {
+      const ok = await api.deleteEvent(id);
+      if (!alive.current) return;
+      if (ok) setEvents((cur) => cur.filter((e) => e.id !== id));
+      else setDeleteFailed(true);
+    } finally {
+      deletingRef.current.delete(id);
+    }
   }
 
   const when = eventDateFormat(locale);
@@ -136,6 +153,11 @@ export function AgentEventList({
       {deleteFailed && (
         <p role="alert" className="text-warn">
           {c.feed.deleteFailed}
+        </p>
+      )}
+      {moreFailed && (
+        <p role="alert" className="text-warn">
+          {c.feed.loadFailed}
         </p>
       )}
       {next && (

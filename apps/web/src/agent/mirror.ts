@@ -96,8 +96,10 @@ export function createMirrorSync(
   let timer: ReturnType<typeof setTimeout> | undefined;
   let pending: { json: string; mirror: AgentMirror } | undefined;
   let lastSent: string | undefined;
+  let gen = 0;
 
   const cancel = () => {
+    gen += 1;
     if (timer !== undefined) clearTimeout(timer);
     timer = undefined;
     pending = undefined;
@@ -121,11 +123,14 @@ export function createMirrorSync(
         pending = undefined;
         // Re-checked at send time: the agent may have been turned off meanwhile.
         if (!job || !enabled() || job.json === lastSent) return;
+        const sendGen = gen;
         api.put(job.mirror).then(
           () => {
+            if (sendGen !== gen) return;
             lastSent = job.json;
           },
           (error: unknown) => {
+            if (sendGen !== gen) return;
             lastSent = undefined;
             if (error instanceof MirrorRefused) opts.onRefused?.();
           },

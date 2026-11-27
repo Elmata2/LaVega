@@ -239,40 +239,60 @@ export default function Transacties({
     return { txs, items };
   }, [filtered, rules, own]);
   const [aiEnabled, setAiEnabled] = useState<boolean>(() => getAiCategorizeEnabled());
-  // idle → (consent) → loading → review → idle. `consent` only appears the
-  // first time, before the owner opts in.
-  const [aiPhase, setAiPhase] = useState<"idle" | "consent" | "loading" | "review">("idle");
-  const [proposals, setProposals] = useState<{ tx: Tx; category: string }[]>([]);
-  const [aiNote, setAiNote] = useState<string | null>(null);
-  const [aiWarn, setAiWarn] = useState<string | null>(null);
+  type AiBatchState =
+    | { phase: "idle"; note: string | null; warn: string | null }
+    | { phase: "consent" }
+    | { phase: "loading" }
+    | { phase: "review"; proposals: { tx: Tx; category: string }[]; note: string | null };
+  const [aiState, setAiState] = useState<AiBatchState>({ phase: "idle", note: null, warn: null });
+  const aiPhase = aiState.phase;
+  const proposals = aiState.phase === "review" ? aiState.proposals : [];
+  const aiNote =
+    aiState.phase === "idle" || aiState.phase === "review" ? aiState.note : null;
+  const aiWarn = aiState.phase === "idle" ? aiState.warn : null;
+  const mountedRef = useRef(true);
+  const aiAbortRef = useRef<AbortController | null>(null);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      aiAbortRef.current?.abort();
+    };
+  }, []);
 
   async function runAiCategorize() {
-    setAiNote(null);
-    setAiWarn(null);
-    setAiPhase("loading");
+    aiAbortRef.current?.abort();
+    const controller = new AbortController();
+    aiAbortRef.current = controller;
+    setAiState({ phase: "loading" });
     try {
-      const results = await categorizeTxs(batch.items);
+      const results = await categorizeTxs(batch.items, { signal: controller.signal });
+      if (!mountedRef.current || controller.signal.aborted) return;
       const byId = new Map(results.map((r) => [r.id, r.category]));
       // Only surface txs the model could place; the owner reviews/edits/skips each.
       const proposed = batch.txs
         .filter((t) => byId.has(t.id))
         .map((t) => ({ tx: t, category: byId.get(t.id)! }));
       if (proposed.length === 0) {
-        setAiPhase("idle");
-        setAiNote(c.transacties.aiKonGeenIndelen);
+        setAiState({ phase: "idle", note: c.transacties.aiKonGeenIndelen, warn: null });
         return;
       }
-      setProposals(proposed);
-      setAiPhase("review");
+      setAiState({ phase: "review", proposals: proposed, note: null });
     } catch (e) {
-      setAiPhase("idle");
-      setAiNote(e instanceof Error ? e.message : c.transacties.categorisatieMislukt);
+      if (!mountedRef.current || controller.signal.aborted) return;
+      setAiState({
+        phase: "idle",
+        note: e instanceof Error ? e.message : c.transacties.categorisatieMislukt,
+        warn: null,
+      });
+    } finally {
+      if (aiAbortRef.current === controller) aiAbortRef.current = null;
     }
   }
 
   function onCategorizeClick() {
     if (aiEnabled) void runAiCategorize();
-    else setAiPhase("consent");
+    else setAiState({ phase: "consent" });
   }
 
   function enableAndRun() {
@@ -282,32 +302,44 @@ export default function Transacties({
   }
 
   async function applyReview() {
-    const decisions = toDecisions(proposals.map((p) => ({ id: p.tx.id, category: p.category })));
-    if (saving) return;
+    if (aiState.phase !== "review" || saving) return;
+    const decisions = toDecisions(
+      aiState.proposals.map((p) => ({ id: p.tx.id, category: p.category })),
+    );
     // One flag for the picker AND this apply: neither can start while the other
     // is saving (App also serialises them on one queue).
     setSaving(true);
     try {
       const res = await onApplyCategories(decisions);
-      setProposals([]);
-      setAiPhase("idle");
+      if (!mountedRef.current) return;
       if (res && res.rememberFailed) {
-        // The txs ARE saved; only the remembered rules were not. Leave review
-        // (so the same decisions cannot be applied twice) and say so.
-        setAiNote(null);
-        setAiWarn(c.transacties.aiRegelsNietOnthouden);
+        setAiState({
+          phase: "idle",
+          note: null,
+          warn: c.transacties.aiRegelsNietOnthouden,
+        });
       } else {
-        setAiWarn(null);
-        setAiNote(
-          decisions.length > 0
-            ? c.transacties.gecategoriseerdNote(decisions.length)
-            : c.transacties.nietsToegepast,
-        );
+        setAiState({
+          phase: "idle",
+          note:
+            decisions.length > 0
+              ? c.transacties.gecategoriseerdNote(decisions.length)
+              : c.transacties.nietsToegepast,
+          warn: null,
+        });
       }
     } catch (e) {
-      setAiNote(e instanceof Error ? e.message : c.transacties.opslaanMislukt);
+      if (!mountedRef.current) return;
+      setAiState((prev) =>
+        prev.phase === "review"
+          ? {
+              ...prev,
+              note: e instanceof Error ? e.message : c.transacties.opslaanMislukt,
+            }
+          : prev,
+      );
     } finally {
-      setSaving(false);
+      if (mountedRef.current) setSaving(false);
     }
   }
 
@@ -404,8 +436,8 @@ export default function Transacties({
   }
 
   function cancelReview() {
-    setProposals([]);
-    setAiPhase("idle");
+    if (saving) return;
+    setAiState({ phase: "idle", note: null, warn: null });
   }
 
   /** The Categorie cell. For a placed row that is just the category; for an
@@ -509,6 +541,8 @@ export default function Transacties({
           disabled={saving}
           onClick={() => {
             setPickNote(null);
+            resetNav();
+            draftRef.current = null;
             setDraft(null);
             setEditingId(t.id);
           }}
@@ -635,7 +669,9 @@ export default function Transacties({
           <Button variant="primary" onClick={enableAndRun}>
             {c.transacties.aanzettenEnCategoriseren}
           </Button>{" "}
-          <Button onClick={() => setAiPhase("idle")}>{c.transacties.annuleer}</Button>
+          <Button onClick={() => setAiState({ phase: "idle", note: null, warn: null })}>
+            {c.transacties.annuleer}
+          </Button>
         </div>
       )}
 
@@ -675,8 +711,15 @@ export default function Transacties({
                         aria-label={c.transacties.categorieVoor(p.tx.counterparty)}
                         onChange={(e) => {
                           const v = e.target.value;
-                          setProposals((prev) =>
-                            prev.map((q, j) => (j === i ? { ...q, category: v } : q)),
+                          setAiState((prev) =>
+                            prev.phase === "review"
+                              ? {
+                                  ...prev,
+                                  proposals: prev.proposals.map((q, j) =>
+                                    j === i ? { ...q, category: v } : q,
+                                  ),
+                                }
+                              : prev,
                           );
                         }}
                       >
@@ -701,7 +744,9 @@ export default function Transacties({
           <Button variant="primary" disabled={saving} onClick={() => void applyReview()}>
             {c.transacties.toepassen}
           </Button>{" "}
-          <Button onClick={cancelReview}>{c.transacties.annuleer}</Button>
+          <Button disabled={saving} onClick={cancelReview}>
+            {c.transacties.annuleer}
+          </Button>
         </div>
       )}
       {/* --- Possible transfers. DERIVED, not stored: the matcher runs over the

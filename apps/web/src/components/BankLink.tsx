@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useState } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { API_BASE, apiErrorMessageIn } from "../api";
 import { useAppLocale } from "../appLocale";
 import { moneyCopy } from "../copy/money";
@@ -62,24 +62,43 @@ export default function BankLink({
   const [selected, setSelected] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const mountedRef = useRef(true);
+  const loadAbortRef = useRef<AbortController | null>(null);
+  const connectBusyRef = useRef(false);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      loadAbortRef.current?.abort();
+    };
+  }, []);
 
   const loadBanks = useCallback(
     async (type: PsuType) => {
+      loadAbortRef.current?.abort();
+      const controller = new AbortController();
+      loadAbortRef.current = controller;
       setLoading(true);
       setError("");
       try {
-        const res = await fetch(`${API_BASE}/api/eb/aspsps?country=NL&psu_type=${type}`);
+        const res = await fetch(`${API_BASE}/api/eb/aspsps?country=NL&psu_type=${type}`, {
+          signal: controller.signal,
+        });
+        if (!mountedRef.current || controller.signal.aborted) return;
         if (!res.ok) {
           setError(await apiErrorMessageIn(locale, res));
           return;
         }
         const data = await res.json();
+        if (!mountedRef.current || controller.signal.aborted) return;
         setAspsps(data.aspsps || []);
         if (data.aspsps?.length) setSelected(data.aspsps[0].name);
       } catch (e) {
+        if (!mountedRef.current || controller.signal.aborted) return;
         setError(e instanceof Error ? e.message : String(e));
       } finally {
-        setLoading(false);
+        if (loadAbortRef.current === controller) loadAbortRef.current = null;
+        if (mountedRef.current && !controller.signal.aborted) setLoading(false);
       }
     },
     [locale],
@@ -95,8 +114,10 @@ export default function BankLink({
   }
 
   async function connect() {
+    if (connectBusyRef.current) return;
     const bank = (aspsps || []).find((a) => a.name === selected);
     if (!bank) return;
+    connectBusyRef.current = true;
     setLoading(true);
     setError("");
     try {
@@ -105,12 +126,14 @@ export default function BankLink({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: bank.name, country: bank.country, psuType }),
       });
+      if (!mountedRef.current) return;
       if (!res.ok) {
         setError(await apiErrorMessageIn(locale, res));
         setLoading(false);
         return;
       }
       const data = await res.json();
+      if (!mountedRef.current) return;
       if (!data.url) {
         setError(data.error || c.bankLink.bankGeenAutorisatiepagina);
         setLoading(false);
@@ -123,10 +146,15 @@ export default function BankLink({
         return;
       }
       await onBeforeRedirect?.();
+      if (!mountedRef.current) return;
       window.location.href = data.url; // hand off to the bank's authorisation page
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-      setLoading(false);
+      if (mountedRef.current) {
+        setError(e instanceof Error ? e.message : String(e));
+        setLoading(false);
+      }
+    } finally {
+      connectBusyRef.current = false;
     }
   }
 

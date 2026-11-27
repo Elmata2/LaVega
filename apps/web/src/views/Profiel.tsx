@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import type {
   Account,
   AdvisorProfileStore,
@@ -227,6 +227,18 @@ function CashbackCorrigeren({
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [saved, setSaved] = useState<string | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
+  const factsRef = useRef(facts);
+  const mountedRef = useRef(true);
+  const savingRef = useRef(false);
+  useEffect(() => {
+    factsRef.current = facts;
+  }, [facts]);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     let alive = true;
@@ -276,6 +288,7 @@ function CashbackCorrigeren({
   }, [cards]);
 
   async function saveCorrection(product: string) {
+    if (savingRef.current) return;
     setSaved(null);
     setProblem(null);
     const raw = (drafts[product] ?? "").trim();
@@ -293,22 +306,26 @@ function CashbackCorrigeren({
       source: "user",
       updatedAt: asOf,
     });
-    // `learnFacts` en niet `upsertFacts`: dat is dezelfde samenvoeging, maar het
-    // vertelt WAAROM iets geweigerd wordt. Een correctie die stil verdwijnt is
-    // erger dan een correctie die niet kan.
-    const { facts: next, rejected } = learnFacts(facts, [incoming]);
+    const { facts: next, rejected } = learnFacts(factsRef.current, [incoming]);
     if (rejected.length > 0) {
       setProblem(`${product}: ${rejected[0].reason}.`);
       return;
     }
+    savingRef.current = true;
     try {
       await storage.putFacts(next);
     } catch (e) {
-      setProblem(
-        `${c.profiel.cashback.saveFailedPrefix}${e instanceof Error ? e.message : String(e)}.`,
-      );
+      if (mountedRef.current) {
+        setProblem(
+          `${c.profiel.cashback.saveFailedPrefix}${e instanceof Error ? e.message : String(e)}.`,
+        );
+      }
       return;
+    } finally {
+      savingRef.current = false;
     }
+    if (!mountedRef.current) return;
+    factsRef.current = next;
     setFacts(next);
     setDrafts((d) => ({ ...d, [product]: "" }));
     setSaved(product);
@@ -316,18 +333,26 @@ function CashbackCorrigeren({
   }
 
   async function clearCorrection(product: string) {
+    if (savingRef.current) return;
     setSaved(null);
     setProblem(null);
     const id = factId(TRAVEL_AGENT, product, "cashbackPct");
-    const next = facts.filter((f) => f.id !== id);
+    const next = factsRef.current.filter((f) => f.id !== id);
+    savingRef.current = true;
     try {
       await storage.putFacts(next);
     } catch (e) {
-      setProblem(
-        `${c.profiel.cashback.clearFailedPrefix}${e instanceof Error ? e.message : String(e)}.`,
-      );
+      if (mountedRef.current) {
+        setProblem(
+          `${c.profiel.cashback.clearFailedPrefix}${e instanceof Error ? e.message : String(e)}.`,
+        );
+      }
       return;
+    } finally {
+      savingRef.current = false;
     }
+    if (!mountedRef.current) return;
+    factsRef.current = next;
     setFacts(next);
     onRestored();
   }

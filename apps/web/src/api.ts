@@ -67,11 +67,13 @@ export type CategorizeItem = { id: string; text: string; sign: "in" | "out" };
  *  server's `{error}` message on a non-OK response (503/429/400/502). */
 export async function categorizeTxs(
   items: CategorizeItem[],
+  options?: { signal?: AbortSignal },
 ): Promise<{ id: string; category: string }[]> {
   const res = await fetch(`${API_BASE}/api/agent/categorize`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ items }),
+    signal: options?.signal,
   });
   if (!res.ok) throw new Error(await apiErrorMessageIn(readAppLocale(), res));
   return (await res.json()) as { id: string; category: string }[];
@@ -94,13 +96,16 @@ export type ProviderTerms = {
 /** Ask the travel agent for the CURRENT terms of the providers you bank with.
  *  Sends provider NAMES and a country pair — never balances or accounts; the
  *  ranking that needs those is done locally. */
-export async function travelFacts(input: {
-  homeCountry: string;
-  destination: string;
-  currency: string;
-  providers: string[];
-  knownFacts: { subject: string; key: string; value: string }[];
-}): Promise<{ terms: ProviderTerms[]; pending: string[] }> {
+export async function travelFacts(
+  input: {
+    homeCountry: string;
+    destination: string;
+    currency: string;
+    providers: string[];
+    knownFacts: { subject: string; key: string; value: string }[];
+  },
+  options?: { signal?: AbortSignal },
+): Promise<{ terms: ProviderTerms[]; pending: string[] }> {
   // Returns immediately: `terms` is what the server already knows, `pending`
   // is what it just started looking up. Card tariffs are public data cached
   // server-side, so the answer is usually instant and a gap fills in by itself.
@@ -108,6 +113,7 @@ export async function travelFacts(input: {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(input),
+    signal: options?.signal,
   });
   if (!res.ok) throw new Error(await apiErrorMessageIn(readAppLocale(), res));
   const body = (await res.json()) as { terms?: ProviderTerms[]; pending?: string[] };

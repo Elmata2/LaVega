@@ -26,13 +26,19 @@ export function createFeedStore(api: AgentApi, freshMs = FRESH_MS): FeedStore {
       if (!force && kept && Date.now() - kept.at < freshMs) return Promise.resolve(kept.result);
       if (!force && inflight) return inflight;
       kept = null;
-      const request = api.listFeed({ channel: "feed", limit: FEED_PAGE }).then((result) => {
-        if (inflight === request) {
-          inflight = null;
-          if (result.kind === "ok") kept = { at: Date.now(), result };
-        }
-        return result;
-      });
+      const request = api.listFeed({ channel: "feed", limit: FEED_PAGE }).then(
+        (result) => {
+          if (inflight === request) {
+            inflight = null;
+            if (result.kind === "ok") kept = { at: Date.now(), result };
+          }
+          return result;
+        },
+        (error) => {
+          if (inflight === request) inflight = null;
+          throw error;
+        },
+      );
       inflight = request;
       return request;
     },

@@ -206,3 +206,19 @@ test("#369-7: an edit for an account that is gone rejects", async () => {
   await expect(p).rejects.toThrow(/a/);
   expect(r.writes).toHaveLength(0);
 });
+
+test("#387: prior write success does not snapshot unpersisted newer optimistic edits into persisted", async () => {
+  const r = rig([acc("a", { type: "Old", statedCardId: "init" })]);
+  const first = r.editor.edit("a", { type: "NewType" }, { persist: true });
+  const second = r.editor
+    .edit("a", { statedCardId: "optimistic" }, { persist: true })
+    .catch((e: Error) => e.message);
+  await tick();
+  r.pending[0]!.resolve();
+  await first;
+  await tick();
+  r.pending[1]!.reject(new Error("second-failed"));
+  expect(await second).toBe("second-failed");
+  expect(r.state()[0]!.type).toBe("NewType");
+  expect(r.state()[0]!.statedCardId).toBe("init");
+});

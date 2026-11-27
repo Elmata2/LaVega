@@ -81,8 +81,7 @@ export function createAccountEditor(store: AccountEditorStore) {
       if (current === undefined) throw gone(key);
       try {
         await store.put([current]);
-        for (const f of Object.keys(book.persisted))
-          book.persisted[f] = current[f as keyof Account];
+        for (const f of fields) book.persisted[f] = patch[f];
       } catch (e) {
         const undo: Partial<Account> = {};
         for (const f of fields)

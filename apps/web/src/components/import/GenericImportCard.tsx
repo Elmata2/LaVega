@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type {
   Account,
   GenericImportPlan,
@@ -68,15 +68,38 @@ export default function GenericImportCard({
 }: GenericImportCardProps) {
   const [locale] = useAppLocale();
   const c = importSessionCopy[locale];
-  const [filename, setFilename] = useState<string | null>(null);
-  const [format, setFormat] = useState<ImportFormat>("generic-csv");
-  const [headers, setHeaders] = useState<string[]>([]);
-  const [rows, setRows] = useState<string[][]>([]);
-  const [bytes, setBytes] = useState<Uint8Array | null>(null);
-  const [mapping, setMapping] = useState<GenericMapping | null>(null);
+  type LoadedFileState =
+    | { status: "empty" }
+    | { status: "error" }
+    | {
+        status: "loaded";
+        filename: string;
+        format: ImportFormat;
+        headers: string[];
+        rows: string[][];
+        bytes: Uint8Array;
+        mapping: GenericMapping;
+      };
+  const [fileState, setFileState] = useState<LoadedFileState>({ status: "empty" });
   const [accountKey, setAccountKey] = useState("");
   const [allowCrossFormat, setAllowCrossFormat] = useState(false);
-  const [error, setError] = useState(false);
+  const chooseGenRef = useRef(0);
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      chooseGenRef.current += 1;
+    };
+  }, []);
+
+  const error = fileState.status === "error";
+  const filename = fileState.status === "loaded" ? fileState.filename : null;
+  const format: ImportFormat = fileState.status === "loaded" ? fileState.format : "generic-csv";
+  const headers = fileState.status === "loaded" ? fileState.headers : [];
+  const rows = fileState.status === "loaded" ? fileState.rows : [];
+  const bytes = fileState.status === "loaded" ? fileState.bytes : null;
+  const mapping = fileState.status === "loaded" ? fileState.mapping : null;
 
   const plan =
     mapping != null && accountKey !== ""
@@ -92,10 +115,11 @@ export default function GenericImportCard({
       : null;
 
   async function choose(file: File) {
-    setError(false);
+    const gen = ++chooseGenRef.current;
     setAllowCrossFormat(false);
     try {
       const buffer = new Uint8Array(await file.arrayBuffer());
+      if (!mountedRef.current || chooseGenRef.current !== gen) return;
       const isXlsx = /\.xlsx$/i.test(file.name) || file.type.includes("spreadsheet");
       let table: { headers: string[]; rows: string[][] };
       let text: string | undefined;
@@ -105,27 +129,33 @@ export default function GenericImportCard({
         text = new TextDecoder().decode(buffer);
         table = rowsFromCsv(text, detectDelimiter(text));
       }
+      if (!mountedRef.current || chooseGenRef.current !== gen) return;
       const guess = detectGenericMapping({
         headers: table.headers,
         sampleRows: table.rows,
         ...(text == null ? {} : { text }),
       });
-      setFilename(file.name);
-      setFormat(isXlsx ? "generic-xlsx" : "generic-csv");
-      setBytes(buffer);
-      setHeaders(table.headers);
-      setRows(table.rows);
-      setMapping(guess.mapping);
+      setFileState({
+        status: "loaded",
+        filename: file.name,
+        format: isXlsx ? "generic-xlsx" : "generic-csv",
+        bytes: buffer,
+        headers: table.headers,
+        rows: table.rows,
+        mapping: guess.mapping,
+      });
     } catch {
-      setError(true);
-      setFilename(null);
-      setMapping(null);
-      setBytes(null);
+      if (!mountedRef.current || chooseGenRef.current !== gen) return;
+      setFileState({ status: "error" });
     }
   }
 
   const patch = (next: Partial<GenericMapping>) =>
-    setMapping((current) => (current == null ? current : { ...current, ...next }));
+    setFileState((current) =>
+      current.status === "loaded"
+        ? { ...current, mapping: { ...current.mapping, ...next } }
+        : current,
+    );
 
   const columnOptions = (
     <>

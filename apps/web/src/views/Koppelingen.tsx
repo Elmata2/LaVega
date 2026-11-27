@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useReducer, useRef, useState } from "react";
 import { useAppLocale } from "../appLocale.js";
 import { adminCopy } from "../copy/admin.js";
 import {
@@ -29,47 +29,156 @@ type KoppelingenProps = {
   onNavigate?: (view: View) => void;
 };
 
+type ServerStatus =
+  | { status: "loading"; attempt: number }
+  | { status: "ok"; localPart: string | null }
+  | { status: "error" };
+
+type RecordStatus =
+  | { status: "idle"; note: string | null }
+  | { status: "confirming"; address: string }
+  | { status: "recording"; address: string };
+
+type CreateStatus =
+  | { status: "idle"; info: string | null }
+  | { status: "creating" }
+  | { status: "taken" }
+  | { status: "failed"; note: string };
+
+type KoppelingenState = {
+  forwardAddress: string;
+  forwardDraft: string;
+  forwardError: boolean;
+  showOwn: boolean;
+  server: ServerStatus;
+  record: RecordStatus;
+  create: CreateStatus;
+};
+
+type KoppelingenAction =
+  | { type: "draft-change"; value: string }
+  | { type: "draft-commit"; address: string }
+  | { type: "draft-invalid" }
+  | { type: "show-own" }
+  | { type: "read-retry" }
+  | { type: "server-ok"; localPart: string | null }
+  | { type: "server-error" }
+  | { type: "adopt"; serverPart: string; localAddress: string | null; info?: string | null }
+  | { type: "create-start" }
+  | { type: "create-taken" }
+  | { type: "create-failed"; note: string }
+  | { type: "record-confirm"; address: string }
+  | { type: "record-cancel" }
+  | { type: "record-start"; address: string }
+  | { type: "record-done"; note: string; storedLocalPart?: string };
+
+function koppelingenReducer(state: KoppelingenState, action: KoppelingenAction): KoppelingenState {
+  switch (action.type) {
+    case "draft-change":
+      return { ...state, forwardDraft: action.value, forwardError: false };
+    case "draft-commit":
+      return {
+        ...state,
+        forwardAddress: action.address,
+        forwardDraft: action.address,
+        forwardError: false,
+      };
+    case "draft-invalid":
+      return { ...state, forwardError: true };
+    case "show-own":
+      return { ...state, showOwn: true };
+    case "read-retry":
+      return {
+        ...state,
+        server: {
+          status: "loading",
+          attempt: state.server.status === "loading" ? state.server.attempt + 1 : 1,
+        },
+      };
+    case "server-ok":
+      return { ...state, server: { status: "ok", localPart: action.localPart } };
+    case "server-error":
+      return { ...state, server: { status: "error" } };
+    case "adopt":
+      return {
+        ...state,
+        server: { status: "ok", localPart: action.serverPart },
+        create: { status: "idle", info: action.info ?? null },
+        ...(action.localAddress !== null
+          ? {
+              forwardAddress: action.localAddress,
+              forwardDraft: action.localAddress,
+              forwardError: false,
+            }
+          : {}),
+      };
+    case "create-start":
+      return { ...state, create: { status: "creating" } };
+    case "create-taken":
+      return { ...state, create: { status: "taken" } };
+    case "create-failed":
+      return { ...state, create: { status: "failed", note: action.note } };
+    case "record-confirm":
+      return { ...state, record: { status: "confirming", address: action.address } };
+    case "record-cancel":
+      return { ...state, record: { status: "idle", note: null } };
+    case "record-start":
+      return { ...state, record: { status: "recording", address: action.address } };
+    case "record-done":
+      return {
+        ...state,
+        record: { status: "idle", note: action.note },
+        ...(action.storedLocalPart !== undefined
+          ? { server: { status: "ok", localPart: action.storedLocalPart } }
+          : {}),
+      };
+  }
+}
+
 export default function Koppelingen({ fetchImpl, onNavigate }: KoppelingenProps) {
   const [locale] = useAppLocale();
   const c = adminCopy[locale].koppelingen;
-  const [forwardAddress, setForwardAddress] = useState(getInvoiceForwardAddress());
-  const [forwardDraft, setForwardDraft] = useState(getInvoiceForwardAddress());
-  const [forwardError, setForwardError] = useState(false);
+  const [state, dispatch] = useReducer(koppelingenReducer, undefined, (): KoppelingenState => {
+    const initial = getInvoiceForwardAddress();
+    return {
+      forwardAddress: initial,
+      forwardDraft: initial,
+      forwardError: false,
+      showOwn: false,
+      server: { status: "loading", attempt: 0 },
+      record: { status: "idle", note: null },
+      create: { status: "idle", info: null },
+    };
+  });
   const [copied, setCopied] = useState(false);
   const copiedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(
-    () => () => {
-      if (copiedTimer.current) clearTimeout(copiedTimer.current);
-    },
-    [],
-  );
-
-  const [serverState, setServerState] = useState<"loading" | "ok" | "error">("loading");
-  const [serverLocalPart, setServerLocalPart] = useState<string | null>(null);
-  const [confirmRecord, setConfirmRecord] = useState(false);
-  const [recording, setRecording] = useState(false);
-  const [recordNote, setRecordNote] = useState<string | null>(null);
-  const [showOwn, setShowOwn] = useState(false);
-  const [creating, setCreating] = useState(false);
-  const [createNote, setCreateNote] = useState<string | null>(null);
-  const [createTaken, setCreateTaken] = useState(false);
-  const [createInfo, setCreateInfo] = useState<string | null>(null);
+  const mountedRef = useRef(true);
+  const serverGenRef = useRef(0);
   const createBusy = useRef(false);
-  const [readAttempt, setReadAttempt] = useState(0);
+  const recordBusy = useRef(false);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      if (copiedTimer.current) clearTimeout(copiedTimer.current);
+    };
+  }, []);
+
+  const readAttempt = state.server.status === "loading" ? state.server.attempt : -1;
 
   /* READ ONLY. Deze effect POST't nooit — het schrijft alleen naar de server
    * op een expliciete klik door `doRecord`, nooit hierdoor, ongeacht wat
    * localStorage op dat moment bevat. */
   useEffect(() => {
+    if (readAttempt < 0) return;
     let cancelled = false;
-    setServerState("loading");
+    const gen = ++serverGenRef.current;
     void fetchForwardAddress(fetchImpl).then((outcome) => {
-      if (cancelled) return;
+      if (cancelled || !mountedRef.current || serverGenRef.current !== gen) return;
       if (outcome.kind === "ok") {
-        setServerLocalPart(outcome.localPart);
-        setServerState("ok");
+        dispatch({ type: "server-ok", localPart: outcome.localPart });
       } else {
-        setServerState("error");
+        dispatch({ type: "server-error" });
       }
     });
     return () => {
@@ -84,48 +193,45 @@ export default function Koppelingen({ fetchImpl, onNavigate }: KoppelingenProps)
    * heeft: anders zou dit een live adres vervangen en blijft post naar het oude
    * adres onopgemerkt liggen. */
   async function handleCreateAddress() {
-    if (createBusy.current) return;
+    if (createBusy.current || recordBusy.current) return;
     createBusy.current = true;
-    setCreating(true);
-    setCreateInfo(null);
-    setCreateNote(null);
-    setCreateTaken(false);
+    dispatch({ type: "create-start" });
     try {
       for (let attempt = 0; attempt < 3; attempt++) {
         const candidate = generateInvoiceForwardAddress();
         const localPart = candidate.split("@")[0];
         const outcome = await recordForwardAddress(localPart, fetchImpl, { ifAbsent: true });
+        if (!mountedRef.current) return;
         if (outcome.kind === "taken") continue;
         if (outcome.kind === "already-set") {
-          adopt(`${outcome.localPart}@${INVOICE_FORWARD_DOMAIN}`, outcome.localPart);
-          setCreateInfo(c.forwardAddress.createAlreadySet(displayAddressFor(outcome.localPart)));
+          adopt(
+            `${outcome.localPart}@${INVOICE_FORWARD_DOMAIN}`,
+            outcome.localPart,
+            () => c.forwardAddress.createAlreadySet(displayAddressFor(outcome.localPart)),
+          );
           return;
         }
         if (outcome.kind !== "stored") {
-          setCreateNote(c.forwardAddress.createFailed);
+          dispatch({ type: "create-failed", note: c.forwardAddress.createFailed });
           return;
         }
         adopt(candidate, outcome.localPart);
         posthog.capture("invoice_forward_address_created");
         return;
       }
-      setCreateTaken(true);
+      if (mountedRef.current) dispatch({ type: "create-taken" });
     } finally {
       createBusy.current = false;
-      setCreating(false);
     }
   }
 
   /* The server is the truth. Keep a copy on this device when the browser lets us;
    * when it does not, the server's address is still what we show. */
-  function adopt(address: string, serverPart: string) {
-    setServerLocalPart(serverPart);
-    setServerState("ok");
-    if (setInvoiceForwardAddress(address)) {
-      const now = getInvoiceForwardAddress();
-      setForwardAddress(now);
-      setForwardDraft(now);
-    }
+  function adopt(address: string, serverPart: string, buildInfo?: () => string) {
+    serverGenRef.current += 1;
+    const localAddress = setInvoiceForwardAddress(address) ? getInvoiceForwardAddress() : null;
+    const info = buildInfo ? buildInfo() : null;
+    dispatch({ type: "adopt", serverPart, localAddress, info });
   }
 
   /* What this device now holds for that local part, else the bare local part. */
@@ -136,51 +242,71 @@ export default function Koppelingen({ fetchImpl, onNavigate }: KoppelingenProps)
 
   async function handleCopyAddress() {
     try {
-      await navigator.clipboard.writeText(forwardAddress);
+      await navigator.clipboard.writeText(state.forwardAddress);
+      if (!mountedRef.current) return;
       setCopied(true);
       if (copiedTimer.current) clearTimeout(copiedTimer.current);
-      copiedTimer.current = setTimeout(() => setCopied(false), 1500);
+      copiedTimer.current = setTimeout(() => {
+        if (mountedRef.current) setCopied(false);
+      }, 1500);
     } catch {
-      /* clipboard permission denied, or unavailable (older browser, insecure
-       * context) — the address is still plain text in the field, selectable
-       * by hand. Nothing to recover from, so nothing to show. */
+      /* clipboard permission denied, or unavailable */
     }
   }
 
-  /* The server stores only the LOCAL PART (migration 0008) — never a domain.
-   * `INVOICE_FORWARD_DOMAIN` is this app's own assumed default, not a fact
-   * about what any given user actually typed; `settings.ts`'s FORWARD_PATTERN
-   * deliberately accepts any domain Cloudflare might route (see its own
-   * commentary). So a recorded local part is only safe to show as a full
-   * address when it matches the CURRENT local draft — the one place we still
-   * know the real domain the user confirmed. When it doesn't match (a
-   * different browser, or a draft typed after recording), showing a
-   * fabricated "@invoices.lavega.dev" would assert a domain nobody confirmed;
-   * the bare local part is the honest thing to show instead. */
-  function displayAddress(localPart: string): string {
-    const draftLocalPart = forwardAddress.includes("@") ? forwardAddress.split("@")[0] : "";
-    return draftLocalPart === localPart ? forwardAddress : localPart;
+  function displayAddress(localPart: string, baseAddress = state.forwardAddress): string {
+    const draftLocalPart = baseAddress.includes("@") ? baseAddress.split("@")[0] : "";
+    return draftLocalPart === localPart ? baseAddress : localPart;
   }
 
   async function doRecord() {
-    setRecording(true);
-    setRecordNote(null);
-    const localPart = forwardAddress.split("@")[0];
-    const outcome = await recordForwardAddress(localPart, fetchImpl);
-    setRecording(false);
-    setConfirmRecord(false);
-    if (outcome.kind === "stored") {
-      setServerLocalPart(outcome.localPart);
-      setRecordNote(c.forwardAddress.server.recorded(displayAddress(outcome.localPart)));
-      posthog.capture("invoice_forward_address_recorded");
-      return;
+    if (state.record.status !== "confirming" || recordBusy.current || createBusy.current) return;
+    const confirmedAddress = state.record.address;
+    recordBusy.current = true;
+    serverGenRef.current += 1;
+    dispatch({ type: "record-start", address: confirmedAddress });
+    try {
+      const localPart = confirmedAddress.split("@")[0];
+      const outcome = await recordForwardAddress(localPart, fetchImpl);
+      if (!mountedRef.current) return;
+      if (outcome.kind === "stored") {
+        serverGenRef.current += 1;
+        dispatch({
+          type: "record-done",
+          storedLocalPart: outcome.localPart,
+          note: c.forwardAddress.server.recorded(
+            displayAddress(outcome.localPart, confirmedAddress),
+          ),
+        });
+        posthog.capture("invoice_forward_address_recorded");
+        return;
+      }
+      if (outcome.kind === "taken")
+        return dispatch({ type: "record-done", note: c.forwardAddress.server.taken });
+      if (outcome.kind === "invalid")
+        return dispatch({ type: "record-done", note: c.forwardAddress.server.invalid });
+      if (outcome.kind === "unauthorized")
+        return dispatch({ type: "record-done", note: c.forwardAddress.server.unauthorized });
+      dispatch({ type: "record-done", note: c.forwardAddress.server.recordFailed });
+    } finally {
+      recordBusy.current = false;
     }
-    if (outcome.kind === "taken") return setRecordNote(c.forwardAddress.server.taken);
-    if (outcome.kind === "invalid") return setRecordNote(c.forwardAddress.server.invalid);
-    if (outcome.kind === "unauthorized") return setRecordNote(c.forwardAddress.server.unauthorized);
-    setRecordNote(c.forwardAddress.server.recordFailed);
   }
 
+  const { forwardAddress, forwardDraft, forwardError, showOwn, server, record, create } = state;
+  const serverState = server.status;
+  const serverLocalPart = server.status === "ok" ? server.localPart : null;
+  const creating = create.status === "creating";
+  const createTaken = create.status === "taken";
+  const createNote = create.status === "failed" ? create.note : null;
+  const createInfo = create.status === "idle" ? create.info : null;
+  const confirmRecord = record.status === "confirming" || record.status === "recording";
+  const recording = record.status === "recording";
+  const recordNote = record.status === "idle" ? record.note : null;
+  const confirmedAddress =
+    record.status === "confirming" || record.status === "recording"
+      ? record.address
+      : forwardAddress;
   const canCreate = serverState === "ok" && !serverLocalPart;
 
   return (
@@ -228,18 +354,18 @@ export default function Koppelingen({ fetchImpl, onNavigate }: KoppelingenProps)
               id="forward-address"
               className="w-full"
               value={forwardDraft}
+              disabled={confirmRecord}
               placeholder={c.forwardAddress.addressPlaceholder}
               aria-label={c.forwardAddress.addressAriaLabel}
               onChange={(e) => {
-                setForwardDraft(e.target.value);
-                setForwardError(false);
+                dispatch({ type: "draft-change", value: e.target.value });
               }}
               onBlur={() => {
+                if (confirmRecord) return;
                 if (setInvoiceForwardAddress(forwardDraft)) {
-                  setForwardAddress(getInvoiceForwardAddress());
-                  setForwardDraft(getInvoiceForwardAddress());
+                  dispatch({ type: "draft-commit", address: getInvoiceForwardAddress() });
                 } else {
-                  setForwardError(true);
+                  dispatch({ type: "draft-invalid" });
                 }
               }}
             />
@@ -287,7 +413,9 @@ export default function Koppelingen({ fetchImpl, onNavigate }: KoppelingenProps)
           )}
           {!showOwn && (
             <p>
-              <Button onClick={() => setShowOwn(true)}>{c.forwardAddress.useOwnButton}</Button>
+              <Button onClick={() => dispatch({ type: "show-own" })}>
+                {c.forwardAddress.useOwnButton}
+              </Button>
             </p>
           )}
           {createTaken && (
@@ -339,7 +467,7 @@ export default function Koppelingen({ fetchImpl, onNavigate }: KoppelingenProps)
       {serverState === "error" && (
         <StatusLine tone="problem" className="cell-sub" role="status">
           {c.forwardAddress.server.readFailed}{" "}
-          <Button onClick={() => setReadAttempt((n) => n + 1)}>
+          <Button onClick={() => dispatch({ type: "read-retry" })}>
             {c.forwardAddress.server.retryButton}
           </Button>
         </StatusLine>
@@ -353,7 +481,7 @@ export default function Koppelingen({ fetchImpl, onNavigate }: KoppelingenProps)
       )}
       {forwardAddress && !confirmRecord && (
         <p>
-          <Button onClick={() => setConfirmRecord(true)}>
+          <Button onClick={() => dispatch({ type: "record-confirm", address: forwardAddress })}>
             {c.forwardAddress.server.recordButton}
           </Button>
         </p>
@@ -361,7 +489,7 @@ export default function Koppelingen({ fetchImpl, onNavigate }: KoppelingenProps)
       {forwardAddress && confirmRecord && (
         <>
           <StatusLine tone="warning" role="alert">
-            {c.forwardAddress.server.confirmWarning(forwardAddress)}
+            {c.forwardAddress.server.confirmWarning(confirmedAddress)}
           </StatusLine>
           <p>
             <Button variant="primary" disabled={recording} onClick={() => void doRecord()}>
@@ -369,7 +497,7 @@ export default function Koppelingen({ fetchImpl, onNavigate }: KoppelingenProps)
                 ? c.forwardAddress.server.recording
                 : c.forwardAddress.server.confirmButton}
             </Button>{" "}
-            <Button disabled={recording} onClick={() => setConfirmRecord(false)}>
+            <Button disabled={recording} onClick={() => dispatch({ type: "record-cancel" })}>
               {c.forwardAddress.server.cancelButton}
             </Button>
           </p>

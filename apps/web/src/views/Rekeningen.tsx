@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Account, AccountSummary, Tx, DuplicateGroup, Valuation } from "@lavega/core";
 import {
   accountSummaries,
@@ -330,6 +330,18 @@ function NameCell({
 }) {
   const c = moneyCopy[locale].rekeningen;
   const [editing, setEditing] = useState(false);
+  const editingRef = useRef(false);
+  const onEditingChangeRef = useRef(onEditingChange);
+  useEffect(() => {
+    editingRef.current = editing;
+    onEditingChangeRef.current = onEditingChange;
+  });
+  useEffect(
+    () => () => {
+      if (editingRef.current) onEditingChangeRef.current?.(false);
+    },
+    [],
+  );
   const setEdit = (next: boolean) => {
     setEditing(next);
     onEditingChange?.(next);
