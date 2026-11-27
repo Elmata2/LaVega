@@ -84,7 +84,11 @@ export function createAgentRunRepository(
              finished_at = EXCLUDED.finished_at,
              updated_at = CURRENT_TIMESTAMP
            WHERE investing.agent_runs.started_at < EXCLUDED.started_at
-              OR (investing.agent_runs.status IN ('running', 'queued') AND investing.agent_runs.started_at < $6::timestamptz)
+              OR (
+                investing.agent_runs.started_at <= EXCLUDED.started_at
+                AND investing.agent_runs.status IN ('running', 'queued')
+                AND investing.agent_runs.started_at < $6::timestamptz
+              )
            RETURNING run_id`,
           [
             record.id,

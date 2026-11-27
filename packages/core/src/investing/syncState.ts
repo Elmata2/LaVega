@@ -76,7 +76,8 @@ const pricesPhase = <Status extends "idle" | "running" | "waiting" | "completed"
     ...lanePhaseFields(status),
     total: Schema.Number,
     completed: Schema.Number,
-    currentSymbol: status === "running" ? Schema.NullOr(Schema.String) : Schema.Null,
+    currentSymbol:
+      status === "running" || status === "problem" ? Schema.NullOr(Schema.String) : Schema.Null,
     remainingSymbols: Schema.Array(Schema.String),
   });
 
