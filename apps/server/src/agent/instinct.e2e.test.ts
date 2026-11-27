@@ -505,7 +505,7 @@ async function setup() {
 
 test("enable, link, cron twice, signed question, erase: the whole flow", async () => {
   const { A, B, hono, repoA, beforeB } = await setup();
-  expect(beforeB.counts.agent_settings).toBe(1);
+  expect(beforeB.counts.agent_settings).toBe(0);
 
   // Two runs in one hour: one send per channel for A, none for B.
   const first = await (await cron()).json();

@@ -249,6 +249,7 @@ export function decideApproval(input: {
   decidedAt: string;
   createdAt: string;
 }): AssistantState {
+  const prior = input.state.approvals.find((entry) => entry.id === input.id);
   const next = appendApproval(input.state, {
     id: input.id,
     tool: input.tool,
@@ -257,18 +258,47 @@ export function decideApproval(input: {
     decidedAt: input.decidedAt,
     createdAt: input.createdAt,
   });
-  if (input.decision !== "approved" || input.tool !== "remember_preference") return next;
+  if (input.tool !== "remember_preference") return next;
   const memory = validateAssistantMemory(input.payload);
-  if (!memory) return next;
-  const record: AssistantMemory = {
-    id: memoryIdFor(memory.subject),
-    subject: memory.subject,
-    valueId: memory.valueId,
-    createdAt: input.decidedAt,
-  };
+  if (input.decision === "approved") {
+    if (!memory) return next;
+    const record: AssistantMemory = {
+      id: memoryIdFor(memory.subject),
+      subject: memory.subject,
+      valueId: memory.valueId,
+      createdAt: input.decidedAt,
+    };
+    return {
+      ...next,
+      memories: [...next.memories.filter((entry) => entry.subject !== memory.subject), record],
+    };
+  }
+  // Undoing an earlier approval: remove the memory it wrote, or restore any earlier
+  // still-approved preference for the same subject.
+  const revokedMemory = memory ?? (prior ? validateAssistantMemory(prior.payload) : null);
+  if (prior?.decision !== "approved" || !revokedMemory) return next;
+  const fallbackEvent = [...next.approvals]
+    .reverse()
+    .find(
+      (entry) =>
+        entry.decision === "approved" &&
+        entry.tool === "remember_preference" &&
+        validateAssistantMemory(entry.payload)?.subject === revokedMemory.subject,
+    );
+  const remaining = next.memories.filter((entry) => entry.subject !== revokedMemory.subject);
+  if (!fallbackEvent) return { ...next, memories: remaining };
+  const restored = validateAssistantMemory(fallbackEvent.payload)!;
   return {
     ...next,
-    memories: [...next.memories.filter((entry) => entry.subject !== memory.subject), record],
+    memories: [
+      ...remaining,
+      {
+        id: memoryIdFor(restored.subject),
+        subject: restored.subject,
+        valueId: restored.valueId,
+        createdAt: fallbackEvent.decidedAt,
+      },
+    ],
   };
 }
 

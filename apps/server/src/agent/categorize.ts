@@ -3,6 +3,7 @@ import { loadAgentPrompt } from "./prompts.js";
 import { factsBlock } from "./facts.js";
 import { createMistralProvider } from "./mistral.js";
 import { createAiObservationContext } from "./aiObservability.js";
+import { attachFailureUsage } from "./budget.js";
 import { MISTRAL_SMALL } from "./models.js";
 import { ValidationError } from "./validationError.js";
 
@@ -82,7 +83,7 @@ export async function categorizeTransactions(
       maxTokens: 8192,
     });
   } catch (e) {
-    await onUsage?.({ inputTokens: MAX_BILLED_INPUT_TOKENS, outputTokens: 8192 });
+    attachFailureUsage(e, { inputTokens: MAX_BILLED_INPUT_TOKENS, outputTokens: 8192 });
     throw e;
   }
   // Called regardless of what happens to res.text below — tokens were spent

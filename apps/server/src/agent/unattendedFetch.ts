@@ -49,8 +49,9 @@ function isConsentRejection(e: unknown): boolean {
 export async function fetchForAgent(
   userSessions: { sessionId: string; payload: EbSession; createdAt: string }[],
   now: number,
-  deps: { eb?: typeof eb; config?: EbConfig } = {},
+  deps: { eb?: typeof eb; config?: EbConfig; signal?: AbortSignal } = {},
 ): Promise<FetchOutcome> {
+  if (deps.signal?.aborted) throw deps.signal.reason ?? new DOMException("Aborted", "AbortError");
   if (userSessions.length === 0) return { status: "no-bank" };
 
   const cfg = deps.config ?? loadConfig();
@@ -62,6 +63,7 @@ export async function fetchForAgent(
   let earliestOk = Infinity;
 
   for (const { payload, createdAt } of userSessions) {
+    if (deps.signal?.aborted) throw deps.signal.reason ?? new DOMException("Aborted", "AbortError");
     const expiry = consentExpiresAt(payload, createdAt);
     const validUntil = Number.isFinite(expiry) ? new Date(expiry).toISOString() : undefined;
     if (expiry <= now) {

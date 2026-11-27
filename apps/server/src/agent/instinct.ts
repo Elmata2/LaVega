@@ -175,7 +175,9 @@ async function act(
       if (decision.release) await repo.releaseDay(today);
       return "skipped";
     case "none":
-      // Nothing to say today: keep the claim so the bank is not read again.
+      // Nothing to say today: keep the claim so the bank is not read again,
+      // and clear expiryPausedNoted now that bank data is healthy again.
+      if (state.expiryPausedNoted) await repo.putState({ expiryPausedNoted: false });
       return "none";
     case "paused": {
       const msg = renderPausedNotice(settings.locale);
@@ -199,7 +201,7 @@ async function act(
     case "remind": {
       const msg = renderConsentReminder(settings.locale);
       const key = `reminder:${decision.expiryDay}`;
-      const patch = { expiryRemindedFor: decision.expiryDay };
+      const patch = { expiryRemindedFor: decision.expiryDay, expiryPausedNoted: false };
       if (!(await deliver(deps, repo, userId, settings, msg, key, today, progress, patch)))
         return "skipped";
       return "reminded";
@@ -249,7 +251,9 @@ async function deliver(
   patch: Partial<AgentState>,
 ): Promise<boolean> {
   const eventId = randomUUID();
-  let sent = false;
+  let externalAttempted = false;
+  let externalSent = false;
+  let feedSent = false;
   for (const channel of settings.channels) {
     let outcome: "sent" | "failed";
     try {
@@ -257,8 +261,14 @@ async function deliver(
     } catch {
       outcome = "failed";
     }
-    if (outcome === "sent") sent = true;
+    if (channel === "feed") {
+      if (outcome === "sent") feedSent = true;
+    } else {
+      externalAttempted = true;
+      if (outcome === "sent") externalSent = true;
+    }
   }
+  const sent = externalAttempted ? externalSent : feedSent;
   if (!sent) {
     await repo.releaseDay(today);
     return false;

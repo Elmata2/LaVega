@@ -30,6 +30,8 @@ export type StoredRulePreview = {
   readonly expiresAt: number;
 };
 
+export const MAX_RULE_PREVIEWS = 1_000;
+
 export type RulePreviewStore = {
   issue(input: {
     tenantId: string;
@@ -40,6 +42,14 @@ export type RulePreviewStore = {
     /** Overrides the store's default TTL; the tool passes the plan's 30 min. */
     ttlMs?: number;
   }): { previewToken: string; expiresAt: string };
+  /** Validates a token without consuming it on match, so the caller can consume
+   *  only after the write succeeds. Still burns expired or mismatched tokens. */
+  peek?(input: {
+    previewToken: string;
+    tenantId: string;
+    tokenId: string;
+    now: number;
+  }): StoredRulePreview | null;
   /** Consumes the token. Null when unknown, used, expired or for another
    *  identity: every one of those is the same refusal, so nothing changes. */
   consume(input: {
@@ -52,10 +62,24 @@ export type RulePreviewStore = {
   clear(): void;
 };
 
-export function createRulePreviewStore(ttlMs = RULE_PREVIEW_TTL_MS): RulePreviewStore {
+export function createRulePreviewStore(
+  ttlMs = RULE_PREVIEW_TTL_MS,
+  maxEntries = MAX_RULE_PREVIEWS,
+): RulePreviewStore {
   const previews = new Map<string, StoredRulePreview>();
+  const prune = (now: number) => {
+    for (const [token, entry] of previews) {
+      if (entry.expiresAt <= now) previews.delete(token);
+    }
+    while (previews.size >= maxEntries) {
+      const oldest = previews.keys().next().value;
+      if (oldest === undefined) break;
+      previews.delete(oldest);
+    }
+  };
   return {
     issue({ tenantId, tokenId, entries, changes, now, ttlMs: overrideTtlMs }) {
+      prune(now);
       const previewToken = newPreviewToken();
       const expiresAt = now + (overrideTtlMs ?? ttlMs);
       previews.set(previewToken, {
@@ -66,6 +90,15 @@ export function createRulePreviewStore(ttlMs = RULE_PREVIEW_TTL_MS): RulePreview
         expiresAt,
       });
       return { previewToken, expiresAt: new Date(expiresAt).toISOString() };
+    },
+    peek({ previewToken, tenantId, tokenId, now }) {
+      const stored = previews.get(previewToken);
+      if (!stored) return null;
+      if (stored.tenantId !== tenantId || stored.tokenId !== tokenId || stored.expiresAt <= now) {
+        previews.delete(previewToken);
+        return null;
+      }
+      return stored;
     },
     consume({ previewToken, tenantId, tokenId, now }) {
       const stored = previews.get(previewToken);

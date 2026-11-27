@@ -67,10 +67,14 @@ export async function fetchWithTimeout(
   init: RequestInit,
   timeoutMs: number,
   label: string,
+  signal?: AbortSignal,
 ): Promise<Response> {
+  const timeoutSignal = AbortSignal.timeout(timeoutMs);
+  const combined = signal ? AbortSignal.any([timeoutSignal, signal]) : timeoutSignal;
   try {
-    return await fetch(url, { ...init, signal: AbortSignal.timeout(timeoutMs) });
+    return await fetch(url, { ...init, signal: combined });
   } catch (err) {
+    if (signal?.aborted) throw err;
     if (err instanceof DOMException && (err.name === "TimeoutError" || err.name === "AbortError")) {
       throw new Error(`mistral ${label} timeout after ${timeoutMs}ms`);
     }
@@ -154,7 +158,7 @@ export function createMistralProvider(
   };
 
   return {
-    async complete({ system, user, json, maxTokens }) {
+    async complete({ system, user, json, maxTokens, signal }) {
       const startedAt = Date.now();
       const res = await fetchWithTimeout(
         `${BASE_URL}/chat/completions`,
@@ -173,6 +177,7 @@ export function createMistralProvider(
         },
         DEFAULT_TIMEOUT_MS,
         "chat",
+        signal,
       );
       if (!res.ok) throw new MistralHttpError(res.status, "chat", await errorBody(res));
       const data = await res.json();

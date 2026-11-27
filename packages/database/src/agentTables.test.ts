@@ -535,7 +535,7 @@ test("a link code is 8 characters from the 31 character alphabet (W4)", async ()
 
 test("a code made before the agent was turned off no longer links, and records no attempt (W1)", async () => {
   const { code } = await makeCode("a");
-  await repo("a").putSettings({ ...SETTINGS, channels: ["feed"], enabled: false });
+  await asSuperuser("UPDATE personal.agent_settings SET enabled = false WHERE user_id = 'a'");
   expect(await tryCode(code, PHONE_A)).toEqual({ ok: false, reason: "invalid" });
   expect(await asSuperuser("SELECT 1 FROM personal.agent_whatsapp")).toHaveLength(0);
   expect(await attempts()).toHaveLength(0);

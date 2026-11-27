@@ -410,4 +410,36 @@ describe("isLoopUserMessage: only the loop's own pattern is synthetic", () => {
     ).toBe(false);
     expect(isLoopUserMessage([u("q"), a("fout"), u(nudge)])).toBe(false);
   });
+
+  it("repeated synthetic corrections in the same turn are rejected after the once-per-turn cap", () => {
+    expect(isLoopUserMessage([u("q"), a("fout 1"), u(number), a("fout 2"), u(number)])).toBe(false);
+    expect(isLoopUserMessage([u("q"), a("fout 1"), u(advice), a("fout 2"), u(advice)])).toBe(false);
+    // One number correction followed by one advice correction in the same turn is valid.
+    expect(isLoopUserMessage([u("q"), a("fout 1"), u(number), a("advies"), u(advice)])).toBe(true);
+  });
+});
+
+describe("bounded regeneration state machine", () => {
+  it("allows at most one number regen and one advice regen in sequence, without re-sending NO_MORE_TOOLS", async () => {
+    const s = script(
+      calls(call("c1", "spending_on_day", { date: "2026-11-17" })),
+      answer("Gisteren gaf je € 40 uit."),
+      answer("Je kunt het beste € 32,35 in ETF's stoppen."),
+      answer("Gisteren gaf je € 32,35 uit."),
+    );
+    const out = await runChatTurn({
+      question: "Gisteren?",
+      history: [],
+      tools: tools(),
+      step: s.step,
+    });
+    expect(out).toEqual({ kind: "answer", text: "Gisteren gaf je € 32,35 uit." });
+    expect(s.requests).toHaveLength(4);
+    expect(s.requests[2]!.noTools).toBe(true);
+    expect(s.requests[3]!.noTools).toBe(true);
+    const nudges = s.requests[3]!.messages.filter(
+      (m) => m.role === "user" && m.content === "Geen tools meer; antwoord met wat je hebt.",
+    );
+    expect(nudges).toHaveLength(0);
+  });
 });

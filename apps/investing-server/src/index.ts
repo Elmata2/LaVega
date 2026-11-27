@@ -387,7 +387,7 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
       (database
         ? createNeonAgentRunStore(database, tenantId)
         : createFileAgentRunStore(credentials as ReturnType<typeof createFileCredentialStore>));
-    const agentRuns = createAgentRunController(agentRunStore);
+    const agentRuns = createAgentRunController(agentRunStore, tenantId);
     const startupPassphrase = environment("LAVEGA_VAULT_PASSPHRASE");
     if (startupPassphrase && (await credentials.status()) === "locked")
       await credentials.unlock(startupPassphrase);
@@ -1153,6 +1153,7 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
                 ? { memory: { repository, agentId: host, threadId } }
                 : {}),
               ...(options.chatModel ? { model: options.chatModel } : {}),
+              abortSignal: c.req.raw.signal,
               onTurnStatus: (status) => {
                 turnStatus = status;
               },
@@ -1177,13 +1178,16 @@ export async function createRuntimeApp(options: RuntimeAppOptions) {
           onEnd: async ({ responseMessage }) => {
             if (!repository || !threadId) return;
             const status = turnStatus as ToolLoopTurnStatus | null;
-            const failedTurn = status?.status === "failed" || streamError;
+            const aborted = c.req.raw.signal.aborted;
+            const failedTurn = status?.status === "failed" || streamError || aborted;
             const hasText = responseMessage.parts.some((part) => part.type === "text");
             /* A turn with no usable text is persisted as FAILED, never as an
              * empty completed answer (WS5.6). A turn that produced text but
              * ended on an error keeps the text and is marked failed. */
             if (failedTurn && !hasText) {
-              await persistFailedTurn(status?.status === "failed" ? status.reason : "error");
+              await persistFailedTurn(
+                status?.status === "failed" ? status.reason : aborted ? "aborted" : "error",
+              );
               return;
             }
             if (responseMessage.parts.length === 0) return;

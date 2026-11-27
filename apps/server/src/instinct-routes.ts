@@ -17,6 +17,7 @@ import {
 import { consentLive, SESSION_TTL_MS, type EbSession } from "./eb-routes.js";
 import { investingTenantId } from "./auth.js";
 import { CONSENT_VERSION } from "./instinctConsent.js";
+import { isWhatsappLinkExpired } from "./whatsapp/channel.js";
 import { maskPhone } from "./whatsapp/linking.js";
 
 export { CONSENT_VERSION } from "./instinctConsent.js";
@@ -311,7 +312,11 @@ export function registerInstinctRoutes(app: Hono, deps: InstinctRouteDependencie
 
   app.get("/api/agent/whatsapp", (c) =>
     withAgent(c, async (repo) => {
-      const link = await repo.getLink();
+      let link = await repo.getLink();
+      if (link && isWhatsappLinkExpired(link, now().getTime())) {
+        await repo.unlink();
+        link = null;
+      }
       return c.json({
         linked: link !== null,
         phone: link ? maskPhone(link.phone) : null,

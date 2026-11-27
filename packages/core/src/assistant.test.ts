@@ -194,4 +194,29 @@ describe("approval events", () => {
     expect(state.approvals).toHaveLength(1);
     expect(state.memories).toEqual([]);
   });
+
+  test("changing an approved decision to rejected or dismissed removes its written memory", () => {
+    const approved = decideApproval({
+      state: emptyAssistantState(),
+      id: "undo-1",
+      tool: "remember_preference",
+      payload: { subject: "lengte", valueId: "kort" },
+      decision: "approved",
+      decidedAt: "2026-11-11T10:00:00.000Z",
+      createdAt: "2026-11-11T09:59:00.000Z",
+    });
+    expect(storedMemory(approved, "lengte")?.valueId).toBe("kort");
+
+    const rejected = decideApproval({
+      state: approved,
+      id: "undo-1",
+      tool: "remember_preference",
+      payload: { subject: "lengte", valueId: "kort" },
+      decision: "rejected",
+      decidedAt: "2026-11-11T10:05:00.000Z",
+      createdAt: "2026-11-11T09:59:00.000Z",
+    });
+    expect(storedMemory(rejected, "lengte")).toBeNull();
+    expect(rejected.memories).toEqual([]);
+  });
 });

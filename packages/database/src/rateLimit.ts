@@ -21,6 +21,8 @@ export type RateLimitRepository = {
   consume(keyHash: string, at: number): Promise<boolean>;
 };
 
+const GLOBAL_CLEANUP_FLOOR_MS = 24 * 60 * 60_000;
+
 export function createRateLimitRepository(
   db: Database,
   window: RateLimitWindow,
@@ -28,14 +30,15 @@ export function createRateLimitRepository(
   return {
     async consume(keyHash, at) {
       const windowStart = Math.floor(at / window.windowMs) * window.windowMs;
-      /* The DELETE rides in the same statement as the upsert, so a request never
-       * pays for a second round trip to clean up. `expired` names the previous
-       * window and everything older; the window_start index makes that an index
-       * range scan, and in the steady state it removes nothing. */
+      const globalSweepBefore = at - Math.max(window.windowMs * 2, GLOBAL_CLEANUP_FLOOR_MS);
+      /* Scope the per-window DELETE to this key_hash so a shorter-window repo
+       * (e.g. 1 min) never deletes active buckets of a longer-window repo
+       * (e.g. 1 hour), while still sweeping abandoned rows older than 24h. */
       const result = await db.http.query(
         `WITH expired AS (
            DELETE FROM personal.rate_limit_buckets
-           WHERE window_start < $4::timestamptz
+           WHERE (key_hash = $1 AND window_start < $4::timestamptz)
+              OR window_start < $5::timestamptz
          )
          INSERT INTO personal.rate_limit_buckets AS bucket (key_hash, window_start, hits)
          VALUES ($1, $2::timestamptz, 1)
@@ -47,6 +50,7 @@ export function createRateLimitRepository(
           new Date(windowStart).toISOString(),
           window.max,
           new Date(windowStart - window.windowMs).toISOString(),
+          new Date(globalSweepBefore).toISOString(),
         ],
       );
       return result.rows[0]?.allowed === true;

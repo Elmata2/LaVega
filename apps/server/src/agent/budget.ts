@@ -22,21 +22,44 @@ export type UsageInput = {
   cacheReadTokens?: number;
 };
 
+export type ReservationState = "reserved" | "reconciled" | "failed" | "released";
+
+export type FailureUsage = {
+  inputTokens?: number;
+  outputTokens?: number;
+  pages?: number;
+  searches?: number;
+  cacheWriteTokens?: number;
+  cacheReadTokens?: number;
+};
+
+const failureUsageByError = new WeakMap<object, FailureUsage>();
+
+/** Attach partial/ceiling billable usage to an error thrown by an AI helper so
+ *  the outer route settles the reservation ONCE via `recordFailure()` instead
+ *  of reconciling before rethrowing. */
+export function attachFailureUsage(error: unknown, usage: FailureUsage): void {
+  if (error && typeof error === "object") {
+    failureUsageByError.set(error, usage);
+  }
+}
+
+export function readFailureUsage(error: unknown): FailureUsage | undefined {
+  return error && typeof error === "object" ? failureUsageByError.get(error) : undefined;
+}
+
 /** A held reservation, returned by `checkBudget()` and threaded into
- *  `recordUsage()` (to turn it into the real spend) or `releaseReservation()`
- *  (when the call it was holding room for never happened). `settled` is only
- *  meaningful for the memory kind: since reconcile and release are two
- *  separate, independently-callable functions rather than one guarded SQL
- *  statement, this flag is what stops one call site's reconcile racing a
- *  different call site's release into double-counting the same reservation —
- *  the DB kind gets the same guarantee from `reconciled_at IS NULL` in the
- *  UPDATE/DELETE itself. */
+ *  `recordUsage()` (Reserved -> Reconciled), `recordFailure()` (Reserved ->
+ *  Failed), or `releaseReservation()` (Reserved -> Released). Single-settlement
+ *  is enforced both on the handle (`state` / `settled`) and in SQL
+ *  (`reconciled_at IS NULL` + 10m expiry). */
 export type ReservationHandle =
-  /* `userId` travels with the DB handle so `reconcile`/`release` can scope the
-   * row to the account that reserved it. The id alone used to be the whole
-   * address of a reservation; `personal.ai_usage` is per-account and 0025
-   * forces RLS on it, so the account is part of the row's identity now. */
-  | { readonly kind: "db"; readonly id: number; readonly userId: string }
+  | {
+      readonly kind: "db";
+      readonly id: number;
+      readonly userId: string;
+      state?: ReservationState;
+    }
   | {
       readonly kind: "memory";
       readonly userId: string;
@@ -44,7 +67,20 @@ export type ReservationHandle =
       readonly month: string;
       readonly amount: number;
       settled: boolean;
+      state?: ReservationState;
     };
+
+function trySettle(
+  reservation: ReservationHandle | undefined,
+  next: Exclude<ReservationState, "reserved">,
+): boolean {
+  if (!reservation) return true;
+  if (reservation.state !== undefined && reservation.state !== "reserved") return false;
+  if (reservation.kind === "memory" && reservation.settled) return false;
+  reservation.state = next;
+  if (reservation.kind === "memory") reservation.settled = true;
+  return true;
+}
 
 export type BudgetGate =
   | { ok: true; reservation?: ReservationHandle }
@@ -150,15 +186,20 @@ export const WORST_CASE_CENTS: Record<AiUsage["route"], number> = {
  *  `releaseReservation(reservation)` (it didn't; give the room back) —
  *  `reservation` is `undefined` only when `route` itself was omitted, the
  *  read-only form used to just peek at the caps without charging anything. */
-export async function checkBudget(route?: AiUsage["route"], userId?: string): Promise<BudgetGate> {
+export async function checkBudget(
+  route?: AiUsage["route"],
+  userId?: string,
+  options?: { reserve?: boolean },
+): Promise<BudgetGate> {
   const account = aiAccountId(userId);
   const caps = loadBudgetConfig();
 
-  if (!route) {
-    // Nothing to attribute a hold to — read-only, as this always was.
+  if (!route || options?.reserve === false) {
+    // Read-only gate: no placeholder row created or released.
+    const worstCase = route ? WORST_CASE_CENTS[route] : 0;
     const spent = await spentCents(account);
-    if (spent.dayCents >= caps.dayCents) return { ok: false, scope: "day" };
-    if (spent.monthCents >= caps.monthCents) return { ok: false, scope: "month" };
+    if (spent.dayCents + worstCase >= caps.dayCents) return { ok: false, scope: "day" };
+    if (spent.monthCents + worstCase >= caps.monthCents) return { ok: false, scope: "month" };
     return { ok: true };
   }
 
@@ -177,7 +218,10 @@ export async function checkBudget(route?: AiUsage["route"], userId?: string): Pr
       monthCapCents: caps.monthCents,
     });
     if (!result.ok) return { ok: false, scope: result.scope };
-    return { ok: true, reservation: { kind: "db", id: result.id, userId: account } };
+    return {
+      ok: true,
+      reservation: { kind: "db", id: result.id, userId: account, state: "reserved" },
+    };
   }
 
   if (!warnedNoDatabase) {
@@ -203,7 +247,15 @@ export async function checkBudget(route?: AiUsage["route"], userId?: string): Pr
   memory.set(monthKey, monthCents + worstCase);
   return {
     ok: true,
-    reservation: { kind: "memory", userId: account, day, month, amount: worstCase, settled: false },
+    reservation: {
+      kind: "memory",
+      userId: account,
+      day,
+      month,
+      amount: worstCase,
+      settled: false,
+      state: "reserved",
+    },
   };
 }
 
@@ -262,6 +314,8 @@ export async function recordUsage(
     await releaseReservation(reservation);
     return;
   }
+  if (reservation && !trySettle(reservation, "reconciled")) return;
+
   console.log(
     `ai.usage route=${input.route} model=${input.model} in=${inputTokens} out=${outputTokens} pages=${pages} cost_cents=${costCents}`,
   );
@@ -304,8 +358,6 @@ export async function recordUsage(
       return;
     }
     if (reservation?.kind === "memory") {
-      if (reservation.settled) return; // already reconciled or released — see ReservationHandle's own comment
-      reservation.settled = true;
       memory.set(
         memoryKey("day", reservation.userId, reservation.day),
         (memory.get(memoryKey("day", reservation.userId, reservation.day)) ?? 0) -
@@ -336,25 +388,15 @@ export async function recordUsage(
   }
 }
 
-/** Record a model call that REACHED the provider and then failed (#300, WS5.7
- *  leftover).
- *
- *  Before this, the failure path called `releaseReservation`, which deletes the
- *  placeholder: a provider refusal, timeout or 5xx left no ledger trace, so an
- *  operator could not see why spend had stopped. This turns the hold into a
- *  FAILED row instead — same row, cost 0 (nothing was billed with certainty) or
- *  the price of bought searches when the route bought any, plus the route's own
- *  machine error code and the upstream HTTP status (0 = timeout/transport).
- *
- *  Never throws: it runs from a route's catch block, which must not fail twice.
- *  A database error releases the hold so the cap does not keep a worst-case
- *  charge for a call that never completed. */
 export async function recordFailure(
   input: {
     route: AiUsage["route"];
     model: string;
     errorCode: string;
     httpStatus?: number;
+    inputTokens?: number;
+    outputTokens?: number;
+    pages?: number;
     /** A travel lookup buys its searches before the model can time out. */
     searches?: number;
     cacheWriteTokens?: number;
@@ -362,17 +404,29 @@ export async function recordFailure(
   },
   reservation?: ReservationHandle,
 ): Promise<void> {
+  if (reservation && !trySettle(reservation, "failed")) return;
+
+  const inputTokens = input.inputTokens ?? 0;
+  const outputTokens = input.outputTokens ?? 0;
+  const pages = input.pages ?? 0;
   const searches = input.searches ?? 0;
   const cacheWriteTokens = input.cacheWriteTokens ?? 0;
   const cacheReadTokens = input.cacheReadTokens ?? 0;
   let costCents = 0;
-  if (searches > 0) {
+  if (
+    inputTokens > 0 ||
+    outputTokens > 0 ||
+    pages > 0 ||
+    searches > 0 ||
+    cacheWriteTokens > 0 ||
+    cacheReadTokens > 0
+  ) {
     try {
       costCents = totalCostCents({
         model: input.model,
-        inputTokens: 0,
-        outputTokens: 0,
-        pages: 0,
+        inputTokens,
+        outputTokens,
+        pages,
         searches,
         cacheWriteTokens,
         cacheReadTokens,
@@ -395,6 +449,10 @@ export async function recordFailure(
           model: input.model,
           errorCode: input.errorCode,
           ...(input.httpStatus === undefined ? {} : { httpStatus: input.httpStatus }),
+          inputTokens,
+          outputTokens,
+          pages,
+          searches,
           cacheWriteTokens,
           cacheReadTokens,
           costCents,
@@ -403,39 +461,53 @@ export async function recordFailure(
       );
       return;
     }
-    /* No database, no row to write; the failure still has to give back the
-     * worst-case hold, exactly as releaseReservation would have. */
-    await releaseReservation(reservation);
+    if (reservation?.kind === "memory") {
+      memory.set(
+        memoryKey("day", reservation.userId, reservation.day),
+        Math.max(
+          0,
+          (memory.get(memoryKey("day", reservation.userId, reservation.day)) ?? 0) -
+            reservation.amount +
+            costCents,
+        ),
+      );
+      memory.set(
+        memoryKey("month", reservation.userId, reservation.month),
+        Math.max(
+          0,
+          (memory.get(memoryKey("month", reservation.userId, reservation.month)) ?? 0) -
+            reservation.amount +
+            costCents,
+        ),
+      );
+      return;
+    }
   } catch (e) {
     console.error(
       `agent/budget: failed to persist failure: ${e instanceof Error ? e.message : String(e)}`,
     );
-    await releaseReservation(reservation);
+    if (reservation?.kind === "db") {
+      const db = runtimeDatabase();
+      if (db) {
+        await createAiUsageRepository(db)
+          .release(reservation.id, reservation.userId)
+          .catch(() => undefined);
+      }
+    }
   }
 }
 
-/** The call `reservation` was holding room for never reached `recordUsage` —
- *  it threw first. Gives the held room back instead of leaving it stuck until
- *  the DB path's own 10-minute freshness window ages it out (see
- *  RESERVATION_FRESH_SQL in packages/database) or, on the memory path,
- *  forever (nothing else ever frees a memory reservation). Never throws, for
- *  the same reason `recordUsage` never does: this always runs from inside a
- *  route's own catch block, which must not itself fail. Safe to call on a
- *  reservation that was already turned into a real charge by `recordUsage` —
- *  a no-op then, not a double-release — see ReservationHandle's own comment
- *  and `reconcile`/`release`'s shared `reconciled_at IS NULL` guard. */
 export async function releaseReservation(
   reservation: ReservationHandle | undefined,
 ): Promise<void> {
   if (!reservation) return;
+  if (!trySettle(reservation, "released")) return;
   try {
     if (reservation.kind === "db") {
       const db = runtimeDatabase();
       if (db) await createAiUsageRepository(db).release(reservation.id, reservation.userId);
       return;
     }
-    if (reservation.settled) return;
-    reservation.settled = true;
     memory.set(
       memoryKey("day", reservation.userId, reservation.day),
       Math.max(

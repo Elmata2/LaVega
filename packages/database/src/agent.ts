@@ -179,7 +179,7 @@ export type AgentRepository = {
   /** True for the first caller of a day only; the claim is the "one message a day" lock. It only
    *  moves forward: a day on or before the stored claim is refused. */
   claimDay(today: string): Promise<boolean>;
-  releaseDay(today: string): Promise<void>;
+  releaseDay(today: string, restoreTo?: string | null): Promise<void>;
   /** "skipped" when the agent is off (or was turned off meanwhile): nothing is written. */
   putState(patch: Partial<AgentState>): Promise<WriteResult>;
   /** True while fewer than `max` fetches were taken today; the count resets on a new day. */
@@ -217,11 +217,31 @@ export type AgentRepository = {
   purgeOlderThan(days: number): Promise<number>;
 };
 
+const priorClaimDateByDb = new WeakMap<Database, Map<string, string | null>>();
+
+function priorClaimsFor(db: Database): Map<string, string | null> {
+  let map = priorClaimDateByDb.get(db);
+  if (!map) {
+    map = new Map();
+    priorClaimDateByDb.set(db, map);
+  }
+  return map;
+}
+
 export function createAgentRepository(
   db: Database,
   userId: string | undefined | null,
 ): AgentRepository {
   const ME = "current_setting('app.user_id')";
+  const claimMapKey = (today: string) => `${userId ?? ""}:${today}`;
+  const clearPriorClaims = () => {
+    const map = priorClaimDateByDb.get(db);
+    if (!map) return;
+    const prefix = `${userId ?? ""}:`;
+    for (const key of map.keys()) {
+      if (key.startsWith(prefix)) map.delete(key);
+    }
+  };
   /* The turn-off race: deleteAll can run between a caller's settings read and its write. Writes
    * that would re-create state or events only happen while an enabled settings row exists.
    * FOR SHARE makes a concurrent deleteAll (which removes the settings row first) wait for
@@ -280,6 +300,14 @@ export function createAgentRepository(
       });
     },
     async putSettings(s) {
+      if (!s.enabled) {
+        await withTenant(db, userId, async (client) => {
+          for (const table of AGENT_TABLES)
+            await client.query(`DELETE FROM ${table} WHERE user_id = ${ME}`);
+        });
+        clearPriorClaims();
+        return;
+      }
       const channelsBlob = encryptBlob(s.channels);
       const emailBlob = s.email === null ? null : encryptBlob(s.email);
       await withTenantStatement(db, userId, async (client) => {
@@ -319,6 +347,11 @@ export function createAgentRepository(
           `INSERT INTO personal.agent_state (user_id) SELECT ${ME} WHERE ${ENABLED}
            ON CONFLICT (user_id) DO NOTHING`,
         );
+        const prior = await client.query<{ prev: string | null }>(
+          `SELECT to_char(last_sent_date, '${DAY}') AS prev
+           FROM personal.agent_state WHERE user_id = ${ME} FOR UPDATE`,
+        );
+        const prev = (prior.rows[0]?.prev as string | null) ?? null;
         const result = await client.query(
           `UPDATE personal.agent_state SET last_sent_date = $1::date
            WHERE user_id = ${ME} AND (last_sent_date IS NULL OR last_sent_date < $1::date)
@@ -326,17 +359,25 @@ export function createAgentRepository(
            RETURNING 1`,
           [today],
         );
-        return (result.rows?.length ?? 0) > 0;
+        if ((result.rows?.length ?? 0) > 0) {
+          priorClaimsFor(db).set(claimMapKey(today), prev);
+          return true;
+        }
+        return false;
       });
     },
-    async releaseDay(today) {
+    async releaseDay(today, restoreTo) {
+      const map = priorClaimsFor(db);
+      const key = claimMapKey(today);
+      const nextDate = restoreTo !== undefined ? restoreTo : (map.get(key) ?? null);
       await withTenantStatement(db, userId, async (client) => {
         await client.query(
-          `UPDATE personal.agent_state SET last_sent_date = NULL
+          `UPDATE personal.agent_state SET last_sent_date = $2::date
            WHERE user_id = ${ME} AND last_sent_date = $1::date`,
-          [today],
+          [today, nextDate],
         );
       });
+      map.delete(key);
     },
     async putState(patch) {
       return withTenant(db, userId, async (client): Promise<WriteResult> => {
@@ -529,6 +570,7 @@ export function createAgentRepository(
         for (const table of AGENT_TABLES)
           await client.query(`DELETE FROM ${table} WHERE user_id = ${ME}`);
       });
+      clearPriorClaims();
     },
 
     async appendEvent(e) {

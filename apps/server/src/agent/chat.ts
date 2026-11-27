@@ -5,6 +5,7 @@ import { loadChatPrompt } from "./prompts.js";
 import { factsBlock } from "./facts.js";
 import { createMistralProvider } from "./mistral.js";
 import { createAiObservationContext } from "./aiObservability.js";
+import { attachFailureUsage } from "./budget.js";
 import { MISTRAL_MEDIUM } from "./models.js";
 
 /**
@@ -63,7 +64,7 @@ export async function* runChat(args: {
       maxTokens: CHAT_MAX_OUTPUT_TOKENS,
     });
   } catch (e) {
-    await args.onUsage?.({ inputTokens: 0, outputTokens: CHAT_MAX_OUTPUT_TOKENS });
+    attachFailureUsage(e, { inputTokens: 0, outputTokens: CHAT_MAX_OUTPUT_TOKENS, searches: 1 });
     throw e;
   }
   await args.onUsage?.({

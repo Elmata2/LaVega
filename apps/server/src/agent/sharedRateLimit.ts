@@ -99,7 +99,8 @@ const WARN_INTERVAL_MS = 60_000;
  */
 export function createSharedRateLimiter(options: SharedRateLimiterOptions): SharedRateLimiter {
   const database = options.database ?? runtimeDatabase;
-  const local = memoryRateLimitStore(options.max, options.windowMs, options.now);
+  const now = options.now ?? (() => Date.now());
+  const local = memoryRateLimitStore(options.max, options.windowMs, now);
   const report =
     options.report ??
     ((message: string, error?: unknown) => {
@@ -110,23 +111,33 @@ export function createSharedRateLimiter(options: SharedRateLimiterOptions): Shar
   let noDatabaseWarnedAt = Number.NEGATIVE_INFINITY;
   let failureWarnedAt = Number.NEGATIVE_INFINITY;
   let retryAt = 0;
+  let probing = false;
 
   return async (key) => {
     const db = database();
+    const t = now();
     if (!db) {
-      if (Date.now() - noDatabaseWarnedAt >= WARN_INTERVAL_MS) {
-        noDatabaseWarnedAt = Date.now();
+      if (t - noDatabaseWarnedAt >= WARN_INTERVAL_MS) {
+        noDatabaseWarnedAt = t;
         report("no DATABASE_URL — the rate limit is per-process, not shared across instances");
       }
       return local.hit(key);
     }
-    if (Date.now() < retryAt) return local.hit(key);
+    if (retryAt > 0) {
+      if (t < retryAt || probing) return local.hit(key);
+      probing = true;
+    }
     try {
-      return await postgresRateLimitStore(db, options.max, options.windowMs, options.now).hit(key);
+      const allowed = await postgresRateLimitStore(db, options.max, options.windowMs, now).hit(key);
+      retryAt = 0;
+      probing = false;
+      return allowed;
     } catch (error) {
-      retryAt = Date.now() + RETRY_AFTER_MS;
-      if (Date.now() - failureWarnedAt >= WARN_INTERVAL_MS) {
-        failureWarnedAt = Date.now();
+      const failedAt = now();
+      retryAt = failedAt + RETRY_AFTER_MS;
+      probing = false;
+      if (failedAt - failureWarnedAt >= WARN_INTERVAL_MS) {
+        failureWarnedAt = failedAt;
         report("shared store failed — falling back to the per-process limit", error);
       }
       return local.hit(key);

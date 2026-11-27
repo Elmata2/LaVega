@@ -266,3 +266,40 @@ test("recordFailure never throws when there is no reservation and no database", 
     recordFailure({ route: "chat", model: MISTRAL_MEDIUM, errorCode: "ai-fault" }),
   ).resolves.toBeUndefined();
 });
+
+test("single settlement: recordFailure with billed usage settles once and subsequent recordUsage/releaseReservation are no-ops", async () => {
+  process.env.AI_DAILY_BUDGET_CENTS = "1000";
+  process.env.AI_MONTHLY_BUDGET_CENTS = "10000";
+  const gate = await checkBudget("extract-invoice");
+  expect(gate.ok).toBe(true);
+  if (!gate.ok) return;
+
+  await recordFailure(
+    {
+      route: "extract-invoice",
+      model: MISTRAL_SMALL,
+      errorCode: "ai-upstream-limit",
+      httpStatus: 429,
+      pages: 20,
+    },
+    gate.reservation,
+  );
+  const afterFailure = (await spentCents()).dayCents;
+  expect(afterFailure).toBeGreaterThan(0);
+
+  await recordUsage(
+    { route: "extract-invoice", model: MISTRAL_SMALL, inputTokens: 1_000_000, outputTokens: 1_000_000 },
+    gate.reservation,
+  );
+  await releaseReservation(gate.reservation);
+  expect((await spentCents()).dayCents).toBe(afterFailure);
+});
+
+test("checkBudget with reserve:false checks caps without holding a reservation", async () => {
+  process.env.AI_DAILY_BUDGET_CENTS = String(WORST_CASE_CENTS.travel + 1);
+  process.env.AI_MONTHLY_BUDGET_CENTS = "10000";
+
+  const peek = await checkBudget("travel", undefined, { reserve: false });
+  expect(peek).toEqual({ ok: true });
+  expect(await spentCents()).toEqual({ dayCents: 0, monthCents: 0 });
+});

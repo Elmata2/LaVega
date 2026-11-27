@@ -301,6 +301,58 @@ test("an unreconciled reservation stops counting toward the cap once it goes sta
   expect(admittedAfterExpiry.ok).toBe(true);
 });
 
+test("reconcile() and release() ignore reservations past the 10-minute expiry window", async () => {
+  const repo = createAiUsageRepository(db);
+  const reservedA = await repo.reserve({
+    day: "2026-09-20",
+    userId: "user-a",
+    month: "2026-09",
+    route: "categorize",
+    worstCaseCents: 5,
+    dayCapCents: 1000,
+    monthCapCents: 1000,
+  });
+  const reservedB = await repo.reserve({
+    day: "2026-09-20",
+    userId: "user-a",
+    month: "2026-09",
+    route: "categorize",
+    worstCaseCents: 5,
+    dayCapCents: 1000,
+    monthCapCents: 1000,
+  });
+  if (!reservedA.ok || !reservedB.ok) throw new Error("expected reservations to succeed");
+
+  await expireReservation(reservedA.id);
+  await expireReservation(reservedB.id);
+
+  await repo.reconcile(
+    {
+      id: reservedA.id,
+      model: "mistral-small-latest",
+      inputTokens: 10,
+      outputTokens: 10,
+      pages: 0,
+      searches: 0,
+      costCents: 4,
+    },
+    "user-a",
+  );
+  await repo.release(reservedB.id, "user-a");
+
+  expect(await dayTotal("2026-09-20")).toBe(0);
+  const { rows: rowsA } = await pglite.query<{ reconciled_at: string | null }>(
+    "SELECT reconciled_at FROM personal.ai_usage WHERE id = $1",
+    [reservedA.id],
+  );
+  expect(rowsA[0]?.reconciled_at).toBeNull();
+  const { rows: rowsB } = await pglite.query<{ id: number }>(
+    "SELECT id FROM personal.ai_usage WHERE id = $1",
+    [reservedB.id],
+  );
+  expect(rowsB).toHaveLength(1);
+});
+
 test("one account's reservation does not fill another account's cap", async () => {
   const repo = createAiUsageRepository(db);
   const params = {

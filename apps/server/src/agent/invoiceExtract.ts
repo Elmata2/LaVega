@@ -4,6 +4,7 @@ import { loadAgentPrompt } from "./prompts.js";
 import { factsBlock } from "./facts.js";
 import { createMistralProvider } from "./mistral.js";
 import { createAiObservationContext } from "./aiObservability.js";
+import { attachFailureUsage } from "./budget.js";
 import { MISTRAL_SMALL } from "./models.js";
 
 /* WHAT IS PRINTED, NOT WHO THE OWNER IS.
@@ -82,24 +83,20 @@ export async function extractInvoiceFields(
       markdown = ocr.markdown;
       pages = ocr.pages;
     } catch (e) {
-      await onUsage?.({ inputTokens: 0, outputTokens: 0, pages: MAX_OCR_PAGES });
+      attachFailureUsage(e, { inputTokens: 0, outputTokens: 0, pages: MAX_OCR_PAGES });
       throw e;
     }
   }
   const documentText = markdown || input.text;
   if (!documentText) {
-    // A blank/unreadable scan still burned a real, billable OCR call — record
-    // it before throwing, or the spend never reaches the budget ledger.
-    await onUsage?.({ inputTokens: 0, outputTokens: 0, pages });
-    throw new Error("geen extractie");
+    // A blank/unreadable scan still burned a real, billable OCR call — attach
+    // it to the error so outer recordFailure settles the hold once.
+    const err = new Error("geen extractie");
+    attachFailureUsage(err, { inputTokens: 0, outputTokens: 0, pages });
+    throw err;
   }
 
   // THE OCR PAGES ARE ALREADY BOUGHT BY HERE, whatever the completion does.
-  //
-  // Recording only on the happy path is how spend goes missing: on 14 Sep the
-  // owner's OCR calls were succeeding while every completion answered 429, so
-  // each attempt billed real pages that the cap never saw, and retrying looked
-  // free. The blank-scan branch above always knew this; this one did not.
   let res: Awaited<ReturnType<typeof provider.complete>>;
   try {
     res = await provider.complete({
@@ -109,12 +106,11 @@ export async function extractInvoiceFields(
       maxTokens: 1024,
     });
   } catch (e) {
-    await onUsage?.({ inputTokens: 0, outputTokens: 0, pages });
+    attachFailureUsage(e, { inputTokens: 0, outputTokens: 0, pages });
     throw e;
   }
-  // One row covers both the OCR pass and the completion — call it once, after
-  // complete() resolves, so it reflects the full cost of this extraction.
-  await onUsage?.({
+
+  const billedUsage = {
     inputTokens: res.usage.input,
     outputTokens: res.usage.output,
     pages,
@@ -124,15 +120,24 @@ export async function extractInvoiceFields(
     ...(res.usage.cacheReadTokens === undefined
       ? {}
       : { cacheReadTokens: res.usage.cacheReadTokens }),
-  });
+  };
 
   let parsed: unknown;
   try {
     parsed = JSON.parse(res.text);
   } catch {
-    throw new Error("geen extractie");
+    const err = new Error("geen extractie");
+    attachFailureUsage(err, billedUsage);
+    throw err;
   }
-  if (!parsed || typeof parsed !== "object") throw new Error("geen extractie");
+  if (!parsed || typeof parsed !== "object") {
+    const err = new Error("geen extractie");
+    attachFailureUsage(err, billedUsage);
+    throw err;
+  }
+  // One row covers both the OCR pass and the completion — call it once on the
+  // success path so failures settle once via outer recordFailure.
+  await onUsage?.(billedUsage);
 
   const f = parsed as Record<string, unknown>;
   /* Number(), then a finiteness check. `Number("1.234,56")` is NaN, not 0, and
