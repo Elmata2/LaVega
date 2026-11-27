@@ -66,6 +66,13 @@ export type EbFlowStore = {
   sweepAuth(ttlMs: number): Promise<void>;
   sweepSessions(userId: string, ttlMs: number): Promise<number>;
   putSession(userId: string, sessionId: string, payload: EbSession): Promise<void>;
+  replaceSession?(
+    userId: string,
+    sessionId: string,
+    payload: EbSession,
+    aspsp: string,
+    ttlMs: number,
+  ): Promise<number>;
   listSessions(
     userId: string,
     ttlMs: number,
@@ -351,23 +358,32 @@ export function registerEbRoutes(app: Hono, dependencies: EbRouteDependencies): 
       if (!data.session_id)
         return c.redirect(`/?eb_error=${encodeURIComponent("Geen sessie ontvangen.")}`);
       const aspspName = data.aspsp?.name ?? "";
-      await store.putSession(authorised.userId, data.session_id, {
+      const sessionPayload: EbSession = {
         accounts: data.accounts ?? [],
         aspsp: aspspName,
-        /* What the bank granted (echoed from the consent we asked for in
-         * /auth); an absent or unparseable value falls back to the safe 89. */
         validUntil: grantedValidUntil(data.access?.valid_until),
-      });
-      /* ONE LIVE ROW PER BANK. Every authorisation mints a fresh session_id and
-       * `putSession` upserts on that id alone, so without this a user who
-       * reconnects ING four times keeps four live consents — and the refresh
-       * path would then call the bank once per account FOUR times over,
-       * burning quota and the function's time budget on three answers it
-       * throws away. Superseding on reconnect is also what makes "reconnect
-       * this bank" a complete fix for an expired consent. */
-      for (const old of await store.listSessions(authorised.userId, SESSION_TTL_MS)) {
-        if (old.sessionId !== data.session_id && old.payload.aspsp === aspspName)
-          await store.deleteSession(authorised.userId, old.sessionId);
+      };
+      if (store.replaceSession) {
+        await store.replaceSession(
+          authorised.userId,
+          data.session_id,
+          sessionPayload,
+          aspspName,
+          SESSION_TTL_MS,
+        );
+      } else {
+        await store.putSession(authorised.userId, data.session_id, sessionPayload);
+        const normalized = aspspName.trim().toLowerCase();
+        if (normalized) {
+          for (const old of await store.listSessions(authorised.userId, SESSION_TTL_MS)) {
+            if (
+              old.sessionId !== data.session_id &&
+              old.payload.aspsp.trim().toLowerCase() === normalized
+            ) {
+              await store.deleteSession(authorised.userId, old.sessionId);
+            }
+          }
+        }
       }
       return c.redirect(`/?eb=${encodeURIComponent(data.session_id)}`);
     } catch (e) {
@@ -390,20 +406,22 @@ export function registerEbRoutes(app: Hono, dependencies: EbRouteDependencies): 
     const session = await store.getSession(userId, sessionId, SESSION_TTL_MS);
     if (!session)
       return c.json({ error: "Sessie onbekend of verlopen — koppel de bank opnieuw." }, 404);
+    if (session.validUntil && !consentLive(session, "", Date.now())) {
+      await store.deleteSession(userId, sessionId);
+      return c.json({ error: "Sessie onbekend of verlopen — koppel de bank opnieuw." }, 404);
+    }
     try {
       const items = await fetchSessionItems(cfg, session, syncWindowDays(session));
       await store.putSession(userId, sessionId, {
         ...session,
         lastSyncedAt: new Date().toISOString(),
       });
-      /* THE SESSION STAYS. It used to be deleted here — "one-shot: data
-         delivered" — which is why a connected bank could never be re-read.
-         The consent is good for CONSENT_DAYS; throwing away our half of it
-         after one fetch made every balance a snapshot of the minute it was
-         connected. Disconnecting is now an explicit act, not a side effect of
-         succeeding. */
       return c.json({ aspsp: session.aspsp, items });
     } catch (e) {
+      if (isConsentRejection(e)) {
+        await store.deleteSession(userId, sessionId);
+        return c.json({ error: "Sessie onbekend of verlopen — koppel de bank opnieuw." }, 404);
+      }
       return c.json({ error: ebFailure("accounts", e) }, 502);
     }
   });
@@ -572,7 +590,7 @@ export function consentLive(session: EbSession, createdAt: string, now: number):
 /** A bank refusing our credentials means the consent is gone, not that the
  *  bank is broken — and those two need different words in front of the user:
  *  one says "reconnect", the other says "try later". */
-function isConsentRejection(e: unknown): boolean {
+export function isConsentRejection(e: unknown): boolean {
   const status = (e as { status?: number } | null)?.status;
   return status === 401 || status === 403;
 }
@@ -606,6 +624,8 @@ function requestScopedEbStore(): EbFlowStore {
     sweepAuth: (ttlMs) => repository().sweepAuth(ttlMs),
     sweepSessions: (userId, ttlMs) => repository().sweepSessions(userId, ttlMs),
     putSession: (userId, sessionId, payload) => repository().putSession(userId, sessionId, payload),
+    replaceSession: (userId, sessionId, payload, aspsp, ttlMs) =>
+      repository().replaceSession!(userId, sessionId, payload, aspsp, ttlMs),
     getSession: (userId, sessionId, ttlMs) => repository().getSession(userId, sessionId, ttlMs),
     listSessions: (userId, ttlMs) => repository().listSessions(userId, ttlMs),
     deleteSession: (userId, sessionId) => repository().deleteSession(userId, sessionId),

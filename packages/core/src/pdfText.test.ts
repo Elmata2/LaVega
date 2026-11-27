@@ -319,3 +319,17 @@ describe("readDocumentDate: 'gelden/geldt vanaf'", () => {
     expect(readDocumentDate("Vanaf volgend jaar wijzigen de tarieven.")).toBeNull();
   });
 });
+
+test("readIngTariffs resets the 3-line context window on a new section heading", () => {
+  const snippet = [
+    "• Vreemde valuta opnemen tot € 500 euro per creditcardperiode",
+    "0,00% koersopslag",
+    "Met een ING Creditcard Max",
+    "• In vreemde valuta 1,40% koersopslag",
+  ].join("\n");
+  const figures = readIngTariffs(snippet);
+  expect(figures).toHaveLength(2);
+  expect(figures[0]?.conditions).toMatch(/tot € 500/i);
+  expect(figures[1]?.conditions).toBeNull();
+  expect(figures[1]?.line).not.toMatch(/tot € 500/i);
+});

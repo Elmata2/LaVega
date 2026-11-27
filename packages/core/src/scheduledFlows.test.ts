@@ -242,3 +242,71 @@ test("rebuildTaxFlows replaces both tax sources for the shown entities in one pa
   const result = rebuildTaxFlows([oldVat, oldPrepay, invoice], ["BV1"], [fresh]);
   expect(result).toEqual([invoice, fresh]);
 });
+
+test("rebuildTaxFlows preserves owner-set paid and cancelled statuses and does not re-reserve tax", () => {
+  const paidVat = makeScheduledFlow({
+    entity: "BV1",
+    label: "BTW Q2 2026",
+    sign: -1,
+    amountCents: 20000,
+    dueDate: "2026-07-31",
+    source: "vat",
+    status: "paid",
+  });
+  const cancelledPrepay = makeScheduledFlow({
+    entity: "BV1",
+    label: "Vorauszahlung 2/4 2026",
+    sign: -1,
+    amountCents: 15000,
+    dueDate: "2026-06-10",
+    source: "prepayment",
+    status: "cancelled",
+  });
+  const pastPaidVat = makeScheduledFlow({
+    entity: "BV1",
+    label: "BTW Q1 2026",
+    sign: -1,
+    amountCents: 12000,
+    dueDate: "2026-04-30",
+    source: "vat",
+    status: "paid",
+  });
+  const freshVat = makeScheduledFlow({
+    entity: "BV1",
+    label: "BTW Q2 2026",
+    sign: -1,
+    amountCents: 21000,
+    dueDate: "2026-07-31",
+    source: "vat",
+    status: "confirmed",
+  });
+  const freshPrepay = makeScheduledFlow({
+    entity: "BV1",
+    label: "Vorauszahlung 2/4 2026",
+    sign: -1,
+    amountCents: 15000,
+    dueDate: "2026-06-10",
+    source: "prepayment",
+    status: "expected",
+  });
+  const freshOpenVat = makeScheduledFlow({
+    entity: "BV1",
+    label: "BTW Q3 2026",
+    sign: -1,
+    amountCents: 30000,
+    dueDate: "2026-10-31",
+    source: "vat",
+    status: "expected",
+  });
+
+  const result = rebuildTaxFlows(
+    [paidVat, cancelledPrepay, pastPaidVat],
+    ["BV1"],
+    [freshVat, freshPrepay, freshOpenVat],
+  );
+  expect(result.find((f) => f.label === "BTW Q2 2026")?.status).toBe("paid");
+  expect(result.find((f) => f.label === "Vorauszahlung 2/4 2026")?.status).toBe("cancelled");
+  expect(result.find((f) => f.label === "BTW Q1 2026")?.status).toBe("paid");
+  expect(result.find((f) => f.label === "BTW Q3 2026")?.status).toBe("expected");
+  expect(reservedCents(result, "2026-08-01")).toBe(30000);
+});

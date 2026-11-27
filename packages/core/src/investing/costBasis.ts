@@ -172,14 +172,31 @@ function relieveLots(book: LotBook, quantity: number): void {
  *  from a clean basis, and float drift cannot leave a phantom remainder. */
 export function applySell(book: LotBook, quantity: number): void {
   if (!(quantity > EPSILON)) return;
+  const openBefore = openLotQuantity(book);
   relieveLots(book, quantity);
-  // Sure returns here when no priced pool exists (a transfer-only position):
-  // its lots keep shrinking and the unknown mark stays until a real crossing.
+  const openAfter = openLotQuantity(book);
+  if (openAfter <= EPSILON) {
+    resetBook(book);
+    return;
+  }
   if (book.totalQuantity <= EPSILON) return;
+  if (book.unknownCost && openBefore > EPSILON) {
+    const keepRatio = openAfter / openBefore;
+    book.totalCost *= keepRatio;
+    book.totalQuantity *= keepRatio;
+    if (book.totalQuantity <= EPSILON) {
+      book.totalQuantity = 0;
+      book.totalCost = 0;
+    }
+    return;
+  }
   const relieved = Math.min(quantity, book.totalQuantity);
   book.totalCost -= (book.totalCost / book.totalQuantity) * relieved;
   book.totalQuantity -= relieved;
-  if (book.totalQuantity <= EPSILON) resetBook(book);
+  if (book.totalQuantity <= EPSILON) {
+    book.totalQuantity = 0;
+    book.totalCost = 0;
+  }
 }
 
 /** A split changes the share count and not the money invested, so total cost
@@ -248,12 +265,10 @@ export function replayCostBasis(input: {
   };
 
   const book = createLotBook();
-  let transferredIn = false;
   /** Sure releases the transfer mark only on a genuine downward crossing
    *  through zero: a position already at zero never held these units. */
   const releaseIfCrossed = (before: number) => {
     if (before > EPSILON && openLotQuantity(book) <= EPSILON) {
-      transferredIn = false;
       book.unknownCost = false;
     }
   };
@@ -268,7 +283,6 @@ export function replayCostBasis(input: {
           sourceId: trade.id,
           acquiredOn: trade.date,
         });
-        transferredIn = true;
       } else if (trade.quantity < -EPSILON) {
         applySell(book, -trade.quantity);
       }
@@ -333,7 +347,7 @@ export function replayCostBasis(input: {
     return { status: "unknown", reason: "quantity-mismatch", firstBuyDate };
   if (held <= EPSILON)
     return { status: "known", totalCost: 0, quantity: 0, averageCost: null, firstBuyDate };
-  if (transferredIn || book.unknownCost)
+  if (book.unknownCost)
     return { status: "unknown", reason: "transfer-in", firstBuyDate };
   return {
     status: "known",
@@ -484,12 +498,14 @@ export function reconcileCostBasis(
     };
   }
 
-  if (existing.locked) return keep;
+  if (existing.locked && incoming.source !== "manual") return keep;
 
   const replaceable =
-    existing.source === "manual"
-      ? incoming.source === "calculated"
-      : SOURCE_PRIORITY[incoming.source] >= SOURCE_PRIORITY[existing.source];
+    incoming.source === "manual"
+      ? true
+      : existing.source === "manual"
+        ? incoming.source === "calculated"
+        : SOURCE_PRIORITY[incoming.source] >= SOURCE_PRIORITY[existing.source];
   if (!replaceable) return keep;
 
   if (amountCents === null) {
@@ -500,8 +516,15 @@ export function reconcileCostBasis(
     return keep;
   }
 
-  if (existing.source === incoming.source && existing.amountCents === amountCents) return keep;
   const locked = incoming.source === "manual" ? (incoming.locked ?? true) : false;
+  if (
+    existing.source === incoming.source &&
+    existing.amountCents === amountCents &&
+    existing.currency === incoming.currency &&
+    existing.locked === locked
+  ) {
+    return keep;
+  }
   return {
     value: { amountCents, currency: incoming.currency, source: incoming.source, locked },
     updated: true,

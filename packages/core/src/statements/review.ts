@@ -20,7 +20,12 @@
 import type { Account, Tx } from "../model.js";
 import type { Valuation } from "../balance.js";
 import { accountBalanceSeries } from "../balanceSeries.js";
-import { documentCoversMonth, isStatement, type VaultDocument } from "./types.js";
+import {
+  documentCoversMonth,
+  documentLinkState,
+  isStatement,
+  type VaultDocument,
+} from "./types.js";
 
 /** The metadata one detection pass can produce. */
 export type DetectedMetadata = {
@@ -282,12 +287,15 @@ export type CoverageInput = {
  *  instead of being averaged away. */
 export function statementCoverage(input: CoverageInput): StatementMonthCoverage[] {
   const account = input.accounts.find((a) => a.key === input.accountKey) ?? null;
-  const linked = input.documents.filter(
-    (doc) => isStatement(doc) && doc.accountKey === input.accountKey,
-  );
-  const unmatched = input.documents.filter(
-    (doc) => isStatement(doc) && doc.accountKey == null && doc.reviewStatus !== "linked",
-  );
+  const linked = input.documents.filter((doc) => {
+    if (!isStatement(doc)) return false;
+    const state = documentLinkState(doc);
+    return state.status === "linked" && state.accountKey === input.accountKey;
+  });
+  const unmatched = input.documents.filter((doc) => {
+    if (!isStatement(doc)) return false;
+    return documentLinkState(doc).status !== "linked";
+  });
   return input.months.map((month) => {
     if (input.expectedFromMonth != null && month < input.expectedFromMonth) {
       return { month, status: "not_expected", documentIds: [], reason: "outside" };
@@ -360,7 +368,8 @@ export function statementReviewQueue(input: {
   const items: ReviewItem[] = [];
   for (const doc of input.documents) {
     if (!isStatement(doc)) continue;
-    if (doc.reviewStatus === "linked" && doc.accountKey != null) continue;
+    const linkState = documentLinkState(doc);
+    if (linkState.status === "linked") continue;
     const suggestion = matchStatementAccount(hintsOf(doc), input.accounts);
     const reason: ReviewReason =
       doc.periodFrom == null || doc.periodTo == null
@@ -369,7 +378,7 @@ export function statementReviewQueue(input: {
           ? "ambiguous"
           : suggestion.status === "none"
             ? "no-hint"
-            : doc.reviewStatus === "rejected"
+            : linkState.status === "rejected"
               ? "rejected"
               : "unmatched";
     items.push({ document: doc, suggestion, reason });

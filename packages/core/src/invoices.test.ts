@@ -90,6 +90,28 @@ test("reconcileInvoices: one tx cannot settle two invoices", () => {
   expect(out.filter((i) => i.status === "paid")).toHaveLength(1);
 });
 
+test("reconcileInvoices: already-paid invoice matchedTxId cannot be double-claimed by another expected invoice", () => {
+  const alreadyPaid = inv({
+    counterparty: "X",
+    amount: 100,
+    dueDate: "2026-09-01",
+    invoiceNumber: "INV-001",
+    status: "paid",
+    matchedTxId: "t1",
+  });
+  const secondExpected = inv({
+    counterparty: "X",
+    amount: 100,
+    dueDate: "2026-09-02",
+    invoiceNumber: "INV-002",
+    status: "expected",
+  });
+  const out = reconcileInvoices([alreadyPaid, secondExpected], [tx("t1", "2026-08-30", -100, "X")]);
+  expect(out[0]).toMatchObject({ status: "paid", matchedTxId: "t1" });
+  expect(out[1].status).toBe("expected");
+  expect(out[1].matchedTxId).toBeUndefined();
+});
+
 /* Automatic linking, part two: WHICH transaction settles this invoice.
  *
  * The counterparty on a bank statement is often not the name on the invoice —

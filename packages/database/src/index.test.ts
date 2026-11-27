@@ -640,7 +640,7 @@ test("sweepSessions drops one user's own stale eb_sessions, scoped through withT
     call.sql.startsWith("DELETE FROM personal.eb_sessions"),
   );
   expect(deleteCall?.sql).toBe(
-    "DELETE FROM personal.eb_sessions WHERE created_at <= CURRENT_TIMESTAMP - ($1::bigint * INTERVAL '1 millisecond')",
+    "DELETE FROM personal.eb_sessions WHERE created_at <= CURRENT_TIMESTAMP - ($1::bigint * INTERVAL '1 millisecond') OR (expires_at IS NOT NULL AND expires_at <= CURRENT_TIMESTAMP)",
   );
   expect(deleteCall?.values).toEqual(["3600000"]);
   expect(calls.at(-1)).toBe("COMMIT");

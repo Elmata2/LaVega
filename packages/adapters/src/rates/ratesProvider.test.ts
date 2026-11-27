@@ -158,3 +158,18 @@ test("supplying no catalogue rates changes nothing", async () => {
   });
   expect((await p.getRates()).rates).toEqual(live.rates);
 });
+
+test("corrupt cached JSON is rejected and falls back to bundled rates", async () => {
+  const corruptCache: RatesCache = {
+    get: () => ({ asOf: "2026-08-03", rates: [{ bank: "Broken" }], ts: 1000 }) as never,
+    set: () => {},
+  };
+  const p = createRatesProvider({
+    url: "http://x/api/rates",
+    fetchFn: failFetch,
+    cache: corruptCache,
+    now: () => 2000,
+  });
+  const got = await p.getRates();
+  expect(got.source).toBe("bundled");
+});

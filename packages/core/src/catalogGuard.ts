@@ -1,5 +1,6 @@
 import { FEE_PERIOD_MONTHS, type FeePeriod } from "./accountCosts.js";
 import { isCovered, type CatalogField, type CatalogValue } from "./catalog.js";
+import { lastConfirmed } from "./catalogAge.js";
 import type { MergeEntry } from "./catalogMerge.js";
 
 /** A figure that jumped and waits for a second read. seenAt = YYYY-MM-DD of first read. */
@@ -93,6 +94,9 @@ export function sourceHost(sourceUrl: string): string | null {
 /** A second read counts only in a later weekly run: at least this many days after the first. */
 export const MIN_DAYS_BETWEEN_READS = 6;
 
+/** A pending jump that has not been re-read within 5 weekly sweeps is stale and pruned. */
+export const MAX_PENDING_AGE_DAYS = 35;
+
 const DAY = /^(\d{4})-(\d{2})-(\d{2})$/;
 const MS_PER_DAY = 86_400_000;
 
@@ -177,7 +181,12 @@ export function judgeField(input: {
   }
 
   if (!baseline) return { kind: "publish", viaPending: false };
-  if (sameValue) return { kind: "publish", viaPending: false, conditionsOnly: true };
+  if (sameValue) {
+    if (isArchiveUrl(found.sourceUrl) && found.checkedAt < lastConfirmed(baseline)) {
+      return { kind: "confirm" };
+    }
+    return { kind: "publish", viaPending: false, conditionsOnly: true };
+  }
 
   // Both the stored and the new figure are on the page: one of the two reads is wrong,
   // and the stored one has the longer record. Never pass the new one on as a change.

@@ -705,3 +705,12 @@ test("an account whose explicit type names crypto is in the investment scope", (
     ]),
   ).toBe("funds_movement");
 });
+
+test("confirmed <-> rejected transitions are guarded", () => {
+  const confirmed = confirmTransfer(pair("o1", "i1"), ASOF);
+  const rejected = rejectTransfer(pair("o2", "i2"), ASOF);
+  expect(confirmTransfer(confirmed, ASOF)).toBe(confirmed);
+  expect(rejectTransfer(rejected, ASOF)).toBe(rejected);
+  expect(() => rejectTransfer(confirmed, ASOF)).toThrow(/Cannot reject transfer pair/);
+  expect(() => confirmTransfer(rejected, ASOF)).toThrow(/Cannot confirm transfer pair/);
+});

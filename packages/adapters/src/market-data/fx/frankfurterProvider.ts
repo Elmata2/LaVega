@@ -8,6 +8,7 @@ export type FrankfurterFxProvider = Provider<FxRequest, FxProviderResult> & {
 };
 
 const DEFAULT_TIMEOUT_MS = 5_000;
+const DEFAULT_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
 
 function within<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -23,12 +24,13 @@ function within<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
 }
 
 export function createFrankfurterFxProvider(
-  input: { client?: FxHttpClient; now?: () => number; timeoutMs?: number } = {},
+  input: { client?: FxHttpClient; now?: () => number; timeoutMs?: number; cacheTtlMs?: number } = {},
 ): FrankfurterFxProvider {
   let cached: { rate: FxRate; at: number } | null = null;
   let historicalCache: { from: string; to: string; rates: FxRate[]; at: number } | null = null;
   const now = input.now ?? Date.now;
   const timeoutMs = input.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  const cacheTtlMs = input.cacheTtlMs ?? DEFAULT_CACHE_TTL_MS;
   const fetchJson =
     input.client?.fetchJson ??
     (async (url: string) => {
@@ -37,7 +39,7 @@ export function createFrankfurterFxProvider(
       return response.json();
     });
   const loadRate = async (): Promise<FxRate> => {
-    if (!cached) {
+    if (!cached || now() - cached.at >= cacheTtlMs) {
       const parsed = parseFxRatePayload(
         await within(fetchJson("https://api.frankfurter.dev/v1/latest?base=EUR"), timeoutMs),
       );

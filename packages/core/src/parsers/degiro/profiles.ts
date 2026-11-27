@@ -180,6 +180,14 @@ const EMPTY_FILE_PROBLEM = "leeg bestand — geen DeGiro-export gevonden";
  */
 export function readDeGiroCsv(text: string): DeGiroRead {
   const table = readCsv(text);
+  if (table.unterminatedQuoteLine !== undefined) {
+    const problem = `rij ${table.unterminatedQuoteLine}: niet-afgesloten aanhalingsteken`;
+    return {
+      detection: { known: false, problem },
+      table,
+      problems: [problem],
+    };
+  }
   if (table.header.length === 0) {
     return {
       detection: { known: false, problem: EMPTY_FILE_PROBLEM },

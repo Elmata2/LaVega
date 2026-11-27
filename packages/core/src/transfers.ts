@@ -418,15 +418,32 @@ export function autoConfirmTransfers(input: TransferMatchInput): {
   return { pairs: [...decisions, ...added], added };
 }
 
+/** Valid transfer lifecycle transitions: `suggested -> confirmed | rejected` (plus idempotent self). */
+export function canTransitionTransferStatus(
+  from: TransferStatus,
+  to: TransferStatus,
+): boolean {
+  if (from === to) return true;
+  return from === "suggested" && (to === "confirmed" || to === "rejected");
+}
+
 /** A suggestion becomes a decision the owner can defend later. The kind was
  *  derived when the pair was proposed; confirming keeps it. */
 export function confirmTransfer(pair: TransferPair, asOf: string): TransferPair {
+  if (!canTransitionTransferStatus(pair.status, "confirmed")) {
+    throw new Error(`Cannot confirm transfer pair "${pair.id}" from status "${pair.status}"`);
+  }
+  if (pair.status === "confirmed") return pair;
   return { ...pair, status: "confirmed", decidedAt: asOf };
 }
 
 /** Rejection memory (Sure `rejected_transfers`): the pair is kept as
  *  `rejected` so the matcher never proposes the same two legs again. */
 export function rejectTransfer(pair: TransferPair, asOf: string): TransferPair {
+  if (!canTransitionTransferStatus(pair.status, "rejected")) {
+    throw new Error(`Cannot reject transfer pair "${pair.id}" from status "${pair.status}"`);
+  }
+  if (pair.status === "rejected") return pair;
   return { ...pair, status: "rejected", decidedAt: asOf };
 }
 

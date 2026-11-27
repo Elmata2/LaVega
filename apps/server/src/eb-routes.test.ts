@@ -64,6 +64,28 @@ function fakeStore() {
         createdAt: sessions.get(sessionId)?.createdAt ?? new Date().toISOString(),
       });
     },
+    async replaceSession(userId, sessionId, payload, aspsp) {
+      sessions.set(sessionId, {
+        userId,
+        payload,
+        createdAt: new Date().toISOString(),
+      });
+      const norm = aspsp.trim().toLowerCase();
+      let removed = 0;
+      if (norm) {
+        for (const [id, entry] of sessions.entries()) {
+          if (
+            id !== sessionId &&
+            entry.userId === userId &&
+            entry.payload.aspsp.trim().toLowerCase() === norm
+          ) {
+            sessions.delete(id);
+            removed++;
+          }
+        }
+      }
+      return removed;
+    },
     async listSessions(userId) {
       /* Gefilterd op userId in JS. DAT BEWIJST DE ECHTE AFSCHERMING NIET — die
        * zit in `user_id = $1` plus RLS op de tabel, en wordt getest in
@@ -768,4 +790,49 @@ test("refresh enforces the shared daily read budget and returns rate-limited wit
     expect.objectContaining({ aspsp: "ING", status: 429, reason: "rate-limited" }),
   );
   spy.mockRestore();
+});
+
+test("callback atomically replaces old sessions for the same bank regardless of casing", async () => {
+  const s1 = await issueState();
+  ebMock.mockResolvedValueOnce({ session_id: "sess-old", accounts: [], aspsp: { name: "ING" } });
+  await app.request(`/api/eb/callback?code=c1&state=${s1}`);
+  expect(sessions.has("sess-old")).toBe(true);
+
+  ebMock.mockClear();
+  const s2 = await issueState();
+  ebMock.mockResolvedValueOnce({ session_id: "sess-new", accounts: [], aspsp: { name: " ing " } });
+  const res = await app.request(`/api/eb/callback?code=c2&state=${s2}`);
+  expect(res.headers.get("location")).toBe("/?eb=sess-new");
+  expect(sessions.has("sess-new")).toBe(true);
+  expect(sessions.has("sess-old")).toBe(false);
+});
+
+test("accounts prunes expired or 401/403-rejected sessions and returns 404", async () => {
+  sessions.set("sess-lapsed", {
+    userId: "user-123",
+    createdAt: new Date(Date.now() - 10 * 86_400_000).toISOString(),
+    payload: {
+      aspsp: "ING",
+      accounts: [{ uid: "a1" }],
+      validUntil: new Date(Date.now() - 1000).toISOString(),
+    },
+  });
+  const lapsedRes = await app.request("/api/eb/accounts?session_id=sess-lapsed");
+  expect(lapsedRes.status).toBe(404);
+  expect(sessions.has("sess-lapsed")).toBe(false);
+  expect(ebMock).not.toHaveBeenCalled();
+
+  sessions.set("sess-revoked", {
+    userId: "user-123",
+    createdAt: new Date().toISOString(),
+    payload: {
+      aspsp: "ING",
+      accounts: [{ uid: "a1" }],
+      validUntil: new Date(Date.now() + 86_400_000).toISOString(),
+    },
+  });
+  ebMock.mockRejectedValueOnce(new EnableBankingApiError(401, "Enable Banking 401: revoked"));
+  const revokedRes = await app.request("/api/eb/accounts?session_id=sess-revoked");
+  expect(revokedRes.status).toBe(404);
+  expect(sessions.has("sess-revoked")).toBe(false);
 });

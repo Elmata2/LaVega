@@ -1,6 +1,13 @@
 import type { CatalogField, CatalogValue } from "./catalog.js";
 import { lastConfirmed } from "./catalogAge.js";
-import { isArchiveUrl, judgeField, type GuardVerdict, type PendingFigure } from "./catalogGuard.js";
+import {
+  isArchiveUrl,
+  judgeField,
+  MAX_PENDING_AGE_DAYS,
+  wholeDaysBetween,
+  type GuardVerdict,
+  type PendingFigure,
+} from "./catalogGuard.js";
 import { EXTRA_FIELDS } from "./catalogCoverage.js";
 import type { MergeEntry } from "./catalogMerge.js";
 
@@ -33,7 +40,16 @@ export function guardRun(input: {
 }): { rows: MergeEntry[]; verdicts: FieldVerdict[]; pending: PendingMap } {
   const { prev, knownHosts, today } = input;
   const byId = new Map(prev.map((e) => [e.id, e]));
-  const pending: PendingMap = { ...input.pending };
+  const knownProductIds = new Set<string>([...byId.keys(), ...input.rows.map((r) => r.id)]);
+  const pending: PendingMap = {};
+  for (const [key, entry] of Object.entries(input.pending)) {
+    const dot = key.lastIndexOf(".");
+    const productId = dot > 0 ? key.slice(0, dot) : "";
+    const age = wholeDaysBetween(entry.seenAt, today);
+    if (knownProductIds.has(productId) && age !== null && age <= MAX_PENDING_AGE_DAYS) {
+      pending[key] = entry;
+    }
+  }
   const verdicts: FieldVerdict[] = [];
 
   const rows = input.rows.map((row) => {
@@ -44,7 +60,7 @@ export function guardRun(input: {
       if (!found) continue;
       const before = byId.get(row.id)?.fields[field];
       const key = `${row.id}.${field}`;
-      const judged = judgeField({
+      const verdict = judgeField({
         field,
         current: before,
         found,
@@ -54,19 +70,7 @@ export function guardRun(input: {
         storedCheck: input.storedChecks?.get(key),
         manualHold: input.manualHolds?.has(key),
       });
-      // An archive read was true on the snapshot date, not today.
-      const fromArchive = isArchiveUrl(found.sourceUrl);
-      const readDate = fromArchive ? found.checkedAt : today;
-      // New conditions text from a snapshot older than the last confirmation describes a
-      // page that may have changed since: it confirms the stored figure, it does not rewrite it.
-      const verdict: GuardVerdict =
-        judged.kind === "publish" &&
-        judged.conditionsOnly &&
-        fromArchive &&
-        before &&
-        readDate < lastConfirmed(before)
-          ? { kind: "confirm" }
-          : judged;
+      const readDate = isArchiveUrl(found.sourceUrl) ? found.checkedAt : today;
       verdicts.push({ id: row.id, product: row.product, field, verdict, before, found });
 
       switch (verdict.kind) {

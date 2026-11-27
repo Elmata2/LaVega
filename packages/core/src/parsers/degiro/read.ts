@@ -12,7 +12,7 @@ import { Schema } from "effect";
 export type CsvRow = { line: number; cells: string[] };
 
 /** A parsed CSV file: the trimmed first record plus every later record. */
-export type CsvTable = { header: string[]; rows: CsvRow[] };
+export type CsvTable = { header: string[]; rows: CsvRow[]; unterminatedQuoteLine?: number };
 
 export const CsvRowSchema = Schema.Struct({ line: Schema.Int, cells: Schema.Array(Schema.String) });
 export const CsvTableSchema = Schema.Struct({
@@ -54,6 +54,8 @@ export function readCsv(text: string): CsvTable {
   let cells: string[] = [];
   let cell = "";
   let quoted = false;
+  let cellClosedQuote = false;
+  let quoteOpenedLine = 1;
   /* A quoted field that holds only spaces is real content, so it survives the
    * blank-record filter; only quoted emptiness proves the record was intended. */
   let recordQuoted = false;
@@ -63,6 +65,7 @@ export function readCsv(text: string): CsvTable {
   const pushCell = (): void => {
     cells.push(cell);
     cell = "";
+    cellClosedQuote = false;
   };
 
   const finishRecord = (): void => {
@@ -83,6 +86,7 @@ export function readCsv(text: string): CsvTable {
           i++;
         } else {
           quoted = false;
+          cellClosedQuote = true;
         }
       } else {
         if (character === "\n") line++;
@@ -90,8 +94,9 @@ export function readCsv(text: string): CsvTable {
       }
       continue;
     }
-    if (character === '"') {
+    if (character === '"' && cell === "" && !cellClosedQuote) {
       quoted = true;
+      quoteOpenedLine = line;
       recordQuoted = true;
       continue;
     }
@@ -115,12 +120,14 @@ export function readCsv(text: string): CsvTable {
     }
     cell += character;
   }
+  const unterminatedQuoteLine = quoted ? quoteOpenedLine : undefined;
   if (cells.length > 0 || cell !== "" || recordQuoted) finishRecord();
 
   const [first, ...rest] = records;
   return {
     header: first ? first.cells.map((value) => value.trim()) : [],
     rows: rest,
+    ...(unterminatedQuoteLine !== undefined ? { unterminatedQuoteLine } : {}),
   };
 }
 

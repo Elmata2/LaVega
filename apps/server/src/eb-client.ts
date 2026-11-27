@@ -175,7 +175,12 @@ export type EbRequestOptions = {
   timeoutMs?: number;
   now?: () => number;
   signal?: AbortSignal;
+  /** Cooldown isolation key (e.g. bank/tenant). Defaults to the account or endpoint path. */
+  scope?: string;
 };
+
+/** Cap any upstream Retry-After value so a bogus header cannot wedge cooldowns. */
+export const MAX_RETRY_AFTER_MS = 15 * 60 * 1000;
 
 /**
  * Parse an HTTP `Retry-After` header (RFC 9110 §10.2.3) into a delay in ms.
@@ -190,20 +195,31 @@ export function parseRetryAfter(
   if (!trimmed) return null;
   if (/^-?\d+$/.test(trimmed)) {
     const seconds = Number(trimmed);
-    return Number.isFinite(seconds) && seconds >= 0 ? seconds * 1000 : null;
+    return Number.isFinite(seconds) && seconds >= 0
+      ? Math.min(seconds * 1000, MAX_RETRY_AFTER_MS)
+      : null;
   }
   const parsedDate = Date.parse(trimmed);
   if (!Number.isNaN(parsedDate)) {
-    return Math.max(0, parsedDate - nowMs);
+    return Math.min(Math.max(0, parsedDate - nowMs), MAX_RETRY_AFTER_MS);
   }
   return null;
 }
 
-const retryAfterUntilByBaseUrl = new Map<string, number>();
+type CooldownEntry = { until: number; status: 429 | 503 };
+const retryAfterByScope = new Map<string, CooldownEntry>();
+
+function cooldownKey(baseUrl: string, urlPath: string, scope?: string): string {
+  if (scope && scope.trim() !== "") return `${baseUrl}|${scope.trim().toLowerCase()}`;
+  const pathOnly = urlPath.split("?")[0] ?? urlPath;
+  const accountMatch = /^\/accounts\/([^/]+)/.exec(pathOnly);
+  if (accountMatch) return `${baseUrl}|account:${accountMatch[1]}`;
+  return `${baseUrl}|${pathOnly}`;
+}
 
 /** Clear in-memory Retry-After cooldowns (used by tests). */
 export function resetEbRetryAfter(): void {
-  retryAfterUntilByBaseUrl.clear();
+  retryAfterByScope.clear();
 }
 
 function extractErrorMessage(data: unknown): string | null {
@@ -240,17 +256,19 @@ export async function eb(
 ): Promise<unknown> {
   const nowFn = options?.now ?? Date.now;
   const now = nowFn();
-  const blockedUntil = retryAfterUntilByBaseUrl.get(baseUrl);
-  if (blockedUntil !== undefined) {
-    if (blockedUntil > now) {
-      const remainingMs = blockedUntil - now;
+  const key = cooldownKey(baseUrl, urlPath, options?.scope);
+  const cooldown = retryAfterByScope.get(key);
+  if (cooldown !== undefined) {
+    if (cooldown.until > now) {
+      const remainingMs = cooldown.until - now;
+      const label = cooldown.status === 503 ? "service unavailable" : "rate limited";
       throw new EnableBankingApiError(
-        429,
-        `Enable Banking 429: rate limited (retry after ${Math.ceil(remainingMs / 1000)}s)`,
+        cooldown.status,
+        `Enable Banking ${cooldown.status}: ${label} (retry after ${Math.ceil(remainingMs / 1000)}s)`,
         remainingMs,
       );
     }
-    retryAfterUntilByBaseUrl.delete(baseUrl);
+    retryAfterByScope.delete(key);
   }
 
   const timeoutMs = options?.timeoutMs ?? DEFAULT_EB_TIMEOUT_MS;
@@ -301,7 +319,7 @@ export async function eb(
   if (!res.ok) {
     const retryAfterMs = parseRetryAfter(res.headers.get("retry-after"), nowFn());
     if ((res.status === 429 || res.status === 503) && retryAfterMs !== null && retryAfterMs > 0) {
-      retryAfterUntilByBaseUrl.set(baseUrl, nowFn() + retryAfterMs);
+      retryAfterByScope.set(key, { until: nowFn() + retryAfterMs, status: res.status });
     }
     const message = extractErrorMessage(data) ?? text.slice(0, 400);
     throw new EnableBankingApiError(

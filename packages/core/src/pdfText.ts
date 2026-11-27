@@ -83,6 +83,9 @@ function governingThreshold(text: string, pctIndex: number): string | null {
  *  neighbouring row. */
 const CONTEXT_LINES = 3;
 
+const SECTION_HEADING =
+  /^(?:Met een\s+|ING\s+(?:Studenten\s+)?Creditcard\b|Betaalpakketten\b|OranjePakket\b|Vreemde valuta opnemen met\b)/i;
+
 export function readIngTariffs(text: string): PdfFigure[] {
   const out: PdfFigure[] = [];
   const context: string[] = [];
@@ -90,6 +93,7 @@ export function readIngTariffs(text: string): PdfFigure[] {
   for (const raw of text.split("\n")) {
     const line = raw.replace(/\s+/g, " ").trim();
     if (!line || /^\d{1,3}$/.test(line)) continue; // blank lines and page numbers state nothing
+    if (SECTION_HEADING.test(line)) context.length = 0;
 
     if (/koersopslag/i.test(line)) {
       const m = PCT.exec(line); // the value comes from THIS line, never from the context

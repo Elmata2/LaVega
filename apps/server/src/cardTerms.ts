@@ -37,10 +37,16 @@ const MAX_TRACKED = 60;
 export type TermsSource = "provider" | "comparison" | "agent";
 const PRECISION: Record<TermsSource, number> = { provider: 3, comparison: 2, agent: 1 };
 
+type FieldProvenance = {
+  source: TermsSource;
+  date: number;
+};
+
 type Entry = {
   terms: ProviderTerms;
   at: number;
   source: TermsSource;
+  fieldMeta: Partial<Record<string, FieldProvenance>>;
   /** An agent lookup has already run for this key in this TTL, whatever it
    *  returned. Without this, a provider the agent has no cashback figure for
    *  would be re-asked on every single request, forever. */
@@ -116,44 +122,93 @@ function figureDate(e: Entry): number {
   return Number.isFinite(stated) ? stated : e.at;
 }
 
+const DATA_FIELDS: ReadonlyArray<keyof ProviderTerms> = [
+  "fxFeePct",
+  "convertFeePct",
+  "cashbackPct",
+  "pointsPerEuro",
+  "topUpFree",
+];
+
+function fieldAccepts(
+  prevMeta: FieldProvenance | undefined,
+  prevFresh: boolean,
+  incomingSource: TermsSource,
+  incomingDate: number,
+): boolean {
+  if (!prevMeta || !prevFresh) return true;
+  const gap = incomingDate - prevMeta.date;
+  if (gap < -STALE_GAP_MS) return false;
+  if (gap <= STALE_GAP_MS && PRECISION[incomingSource] < PRECISION[prevMeta.source]) return false;
+  return true;
+}
+
 function write(key: string, terms: ProviderTerms, source: TermsSource): boolean {
   const prev = cache.get(key);
+  const now = Date.now();
+  const prevFresh = fresh(prev);
   const incomingDate =
     terms.checkedAt && Number.isFinite(Date.parse(terms.checkedAt))
       ? Date.parse(terms.checkedAt)
-      : Date.now();
-  // Age beats precision once the gap is wide enough. Without this the ladder
-  // says a tidy source wins forever, and a stale figure freezes in place -
-  // which is exactly how bank.nl's January table would have overwritten a
-  // lookup done today.
-  if (prev && fresh(prev)) {
-    const gap = incomingDate - figureDate(prev); // positive = the incoming figure is newer
-    // Much OLDER: refused however tidy its source. This is the rule that stops
-    // bank.nl's January table from overwriting a lookup done this morning.
-    if (gap < -STALE_GAP_MS) return false;
-    // Much NEWER: accepted even from a less precise source, because a current
-    // figure beats a stale one for a fee that moves.
-    // Similar age: precision decides, as before.
-    if (gap <= STALE_GAP_MS && PRECISION[source] < PRECISION[prev.source]) return false;
+      : now;
+
+  const incoming = stated(terms);
+  const prevMeta = prev?.fieldMeta ?? {};
+  const nextMeta: Partial<Record<string, FieldProvenance>> = prevFresh ? { ...prevMeta } : {};
+  const merged: Record<string, unknown> = prev ? { ...prev.terms } : { ...incoming };
+
+  let acceptedAnyDataField = false;
+  let sawDataField = false;
+
+  for (const field of DATA_FIELDS) {
+    if (!(field in incoming)) continue;
+    sawDataField = true;
+    const existingMeta =
+      prevMeta[field] ??
+      (prev && isStated(prev.terms[field])
+        ? { source: prev.source, date: figureDate(prev) }
+        : undefined);
+    if (fieldAccepts(existingMeta, prevFresh, source, incomingDate)) {
+      merged[field] = incoming[field];
+      nextMeta[field] = { source, date: incomingDate };
+      acceptedAnyDataField = true;
+    }
   }
+
+  if (sawDataField && !acceptedAnyDataField) return false;
+
   if (!prev && cache.size >= MAX_TRACKED) {
-    // Evict the oldest entry rather than growing without bound.
     const oldest = [...cache.entries()].sort((a, b) => a[1].at - b[1].at)[0];
     if (oldest) cache.delete(oldest[0]);
   }
-  // Merge the FIGURES, never the date. Fields the incoming row does not state are
-  // kept (bank.nl publishes only a koersopslag, so letting it land must not wipe
-  // a cashback the agent found) — but `checkedAt` describes WHEN A SOURCE
-  // CHECKED, and it belongs to the write that carried it, not to the entry.
-  //
-  // Left to merge, it detached from its own number: bank.nl stamped 2026-01-15,
-  // the agent then found 1,2% today, and the merged entry served a figure looked
-  // up this morning under January's date. The screen dutifully printed "laatst
-  // opgezocht op 15 jan 2026" about something minutes old. A source that states
-  // no date is as of now, which `at` already records.
-  const merged = prev ? { ...prev.terms, ...stated(terms) } : { ...terms };
-  if (!isStated(terms.checkedAt)) delete merged.checkedAt;
-  cache.set(key, { terms: merged, at: Date.now(), source });
+
+  if ("provider" in incoming) merged.provider = incoming.provider;
+  if ("note" in incoming) {
+    const noteMeta =
+      prevMeta.note ??
+      (prev && isStated(prev.terms.note)
+        ? { source: prev.source, date: figureDate(prev) }
+        : undefined);
+    if (fieldAccepts(noteMeta, prevFresh, source, incomingDate)) {
+      merged.note = incoming.note;
+      nextMeta.note = { source, date: incomingDate };
+    }
+  }
+  if (isStated(terms.checkedAt)) merged.checkedAt = terms.checkedAt;
+  else delete merged.checkedAt;
+
+  const nextSource =
+    prev && prevFresh && PRECISION[prev.source] > PRECISION[source] && incomingDate - figureDate(prev) <= STALE_GAP_MS
+      ? prev.source
+      : source;
+  const agentTried = prev && prevFresh ? prev.agentTried : undefined;
+  cache.set(key, {
+    terms: merged as ProviderTerms,
+    at: now,
+    source: nextSource,
+    fieldMeta: nextMeta,
+    ...(agentTried ? { agentTried } : {}),
+  });
   return true;
 }
 
@@ -179,18 +234,16 @@ function incomplete(e: Entry): boolean {
   return e.terms.cashbackPct === undefined || e.terms.convertFeePct === undefined;
 }
 
-/** Test seam: resolves once every background lookup queued so far has finished.
- *  The tests used to wait one macrotask tick, which worked while the lookups
- *  were detached and independent. Chained, that is a guess about how many
- *  microtask hops a run takes. Awaiting the chain itself is exact. */
-export function awaitLookups(): Promise<void> {
-  return queue;
+/** Test seam: resolves once every background lookup queued so far has finished. */
+export async function awaitLookups(): Promise<void> {
+  while (queues.size > 0) {
+    await Promise.allSettled(queues.values());
+  }
 }
 
-/* The serial chain every background lookup joins. Rejections are swallowed so
- * one failed lookup cannot break the chain for the ones behind it; each link
- * already logs its own failure. */
-let queue: Promise<void> = Promise.resolve();
+/* Per-key chains so one slow 240s lookup never stalls lookups for other
+ * providers or markets, while repeated triggers for the same key stay ordered. */
+const queues = new Map<string, Promise<void>>();
 
 function startLookup(
   provider: string,
@@ -202,48 +255,29 @@ function startLookup(
   const held = cache.get(key);
   if (inFlight.has(key) || (fresh(held) && !incomplete(held as Entry))) return;
   inFlight.add(key);
-  /* ONE AT A TIME, ON PURPOSE.
-   *
-   * These used to fire together, up to MAX_PROVIDERS of them from a single
-   * request. Each lookup checks the spend cap before it calls, but twelve
-   * concurrent checks all read the ledger before any of them has written to
-   * it, so every one is admitted and the cap is decided by a number that is
-   * already stale. A review measured it: 240 concurrent lookups were all
-   * admitted against a one-cent cap and landed EUR 14.39 past it.
-   *
-   * Chaining them is the smallest change that makes the gate real, because
-   * each lookup's check now sees the previous one's recorded spend and the
-   * run stops when the cap is reached. Nobody waits on these anyway: the
-   * request has already returned what it had, and a lookup takes 40s to 5min,
-   * so serial is the right shape for them regardless of cost. */
-  queue = queue.then(async () => {
-    try {
-      const found = await (deps.lookup ?? lookupProviderTerms)(
-        { ...base, providers: [provider] },
-        apiKey,
-        { userId: deps.userId },
-      );
-      // Only cache an answer that actually carries a NUMBER. A reply with just
-      // a note ("couldn't verify — the search tool hit its limit") is a failed
-      // lookup wearing an answer's clothes; caching it for a week would lock in
-      // that failure and stop us retrying. Better to leave it unknown and let
-      // the next ask try again.
-      if (found.length > 0 && usable(found[0])) write(key, found[0], "agent");
-      // Record the attempt either way: a provider with no cashback programme
-      // must not be re-asked on every request for the rest of the TTL.
-      const after = cache.get(key);
-      if (after) cache.set(key, { ...after, agentTried: true });
-    } catch (e) {
-      // Stays unknown; the UI says so and the owner can correct it. Logged
-      // (not surfaced) so a run of upstream failures is visible in the
-      // server log without ever putting Mistral's raw error text in front
-      // of the user, who never sees this lookup fail — only "unknown".
-      console.error(`agent/travel-facts: ${e instanceof Error ? e.message : String(e)}`);
-    } finally {
-      inFlight.delete(key);
-    }
-  });
-  queue = queue.catch(() => {});
+  const prev = queues.get(key) ?? Promise.resolve();
+  const task = prev
+    .then(async () => {
+      try {
+        const found = await (deps.lookup ?? lookupProviderTerms)(
+          { ...base, providers: [provider] },
+          apiKey,
+          { userId: deps.userId },
+        );
+        if (found.length > 0 && usable(found[0])) write(key, found[0], "agent");
+        const after = cache.get(key);
+        if (after) cache.set(key, { ...after, agentTried: true });
+      } catch (e) {
+        console.error(`agent/travel-facts: ${e instanceof Error ? e.message : String(e)}`);
+      } finally {
+        inFlight.delete(key);
+      }
+    })
+    .catch(() => {})
+    .finally(() => {
+      if (queues.get(key) === task) queues.delete(key);
+    });
+  queues.set(key, task);
 }
 
 /** Fill the gaps from the bank.nl comparison table — ONE HTTP GET covering
@@ -434,9 +468,5 @@ export function resetCardTerms(): void {
   cache.clear();
   inFlight.clear();
   comparisonInFlight.clear();
-  /* The lookup chain is module state too. Without this a test that leaves a
-   * lookup pending blocks every later `awaitLookups()` forever, which is a
-   * test-only hazard but an instructive one: the same chain couples every
-   * background lookup in a process to the slowest one ahead of it. */
-  queue = Promise.resolve();
+  queues.clear();
 }

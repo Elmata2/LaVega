@@ -10,6 +10,7 @@ import {
   ebJWT,
   EnableBankingApiError,
   EnableBankingTimeoutError,
+  MAX_RETRY_AFTER_MS,
   parseRetryAfter,
   resetEbRetryAfter,
   type EbClientConfig,
@@ -259,5 +260,38 @@ describe("eb", () => {
       eb(config, "GET", "/accounts/a1/balances", undefined, baseUrl, { now }),
     ).rejects.toBeInstanceOf(EnableBankingApiError);
     expect(hits).toBe(1);
+  });
+
+  test("scopes Retry-After cooldown per bank/account, preserves 503 vs 429, and clamps excessive Retry-After", async () => {
+    expect(parseRetryAfter("99999999", 0)).toBe(MAX_RETRY_AFTER_MS);
+
+    let a2Hits = 0;
+    const baseUrl = await listen((req, res) => {
+      if (req.url?.includes("/accounts/a1/")) {
+        res.writeHead(503, { "Content-Type": "application/json", "Retry-After": "120" });
+        res.end(JSON.stringify({ message: "bank maintenance" }));
+        return;
+      }
+      a2Hits += 1;
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ ok: true }));
+    });
+
+    const clock = Date.parse("2026-11-23T12:00:00.000Z");
+    const now = () => clock;
+
+    const first = await eb(config, "GET", "/accounts/a1/balances", undefined, baseUrl, {
+      now,
+    }).catch((e) => e);
+    expect((first as EnableBankingApiError).status).toBe(503);
+
+    const cached = await eb(config, "GET", "/accounts/a1/balances", undefined, baseUrl, {
+      now,
+    }).catch((e) => e);
+    expect((cached as EnableBankingApiError).status).toBe(503);
+
+    const other = await eb(config, "GET", "/accounts/a2/balances", undefined, baseUrl, { now });
+    expect(other).toEqual({ ok: true });
+    expect(a2Hits).toBe(1);
   });
 });
