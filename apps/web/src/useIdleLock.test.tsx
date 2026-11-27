@@ -82,3 +82,33 @@ test("hidden past the threshold locks on the visibilitychange back to visible", 
   setVisibility("visible");
   expect(lock).toHaveBeenCalledTimes(1);
 });
+
+test("mounting while tab is already hidden does not arm a foreground timer and locks on return past threshold", () => {
+  const lock = vi.fn();
+  Object.defineProperty(document, "visibilityState", {
+    configurable: true,
+    get: () => "hidden",
+  });
+  mount(true, lock, 1000);
+  act(() => vi.advanceTimersByTime(1500));
+  expect(lock).not.toHaveBeenCalled();
+  setVisibility("visible");
+  expect(lock).toHaveBeenCalledTimes(1);
+});
+
+test("lockNow fires at most once even if activity and visibility events follow before disable", () => {
+  const lock = vi.fn();
+  Object.defineProperty(document, "visibilityState", {
+    configurable: true,
+    get: () => "visible",
+  });
+  mount(true, lock, 1000);
+  act(() => vi.advanceTimersByTime(1000));
+  expect(lock).toHaveBeenCalledTimes(1);
+  act(() => window.dispatchEvent(new KeyboardEvent("keydown")));
+  act(() => vi.advanceTimersByTime(2000));
+  setVisibility("hidden");
+  act(() => vi.advanceTimersByTime(2000));
+  setVisibility("visible");
+  expect(lock).toHaveBeenCalledTimes(1);
+});

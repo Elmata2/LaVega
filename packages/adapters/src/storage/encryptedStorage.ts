@@ -414,18 +414,37 @@ function deleteDatabase(name: string, timeoutMs: number): Promise<void> {
   });
 }
 
+type VaultState =
+  | { kind: "locked" }
+  | { kind: "password-vault"; key: CryptoKey; ownerDb: string }
+  | {
+      kind: "unlocked";
+      key: CryptoKey;
+      ownerDb: string;
+      data: VaultData;
+      blob: AccountCipherBlob;
+    }
+  | { kind: "destroying"; lockedDb: string; stallTimer: ReturnType<typeof setTimeout> }
+  | { kind: "destroyed" }
+  | { kind: "stalled" };
+
 export function createEncryptedStorage(dbName: string = DEFAULT_DB_NAME): VaultStorage {
-  // In-memory-only state. Never persisted. Dropped entirely on lock().
-  let key: CryptoKey | null = null;
-  let data: VaultData | null = null;
-  let blob: AccountCipherBlob | null = null;
-  // The open owner's database. `dbName` itself holds only a password vault
-  // from before accounts held the key.
-  let ownerDb: string | null = null;
+  // In-memory-only state machine. Never persisted. Dropped entirely on lock().
+  // `dbName` itself holds only a legacy password vault from before accounts held the key.
+  let state: VaultState = { kind: "locked" };
+
   const destroyedListeners = new Set<(phase: VaultDestroyPhase) => void>();
   const tell = (phase: VaultDestroyPhase) => {
     for (const listener of destroyedListeners) listener(phase);
   };
+  const clearStallTimer = () => {
+    if (state.kind === "destroying") clearTimeout(state.stallTimer);
+  };
+  const requireUnlocked = (): Extract<VaultState, { kind: "unlocked" }> => {
+    if (state.kind !== "unlocked") throw new Error(LOCKED_ERROR);
+    return state;
+  };
+
   /* Other tabs/instances of this origin, in two phases. "destroying": an
    * instance holding that database locks AT ONCE and synchronously (key, data,
    * blob and name dropped, so no later save can re-create it) but does not
@@ -434,26 +453,35 @@ export function createEncryptedStorage(dbName: string = DEFAULT_DB_NAME): VaultS
    * never comes the listener hears "stalled". `unref` keeps a Node test process
    * from waiting on the channel or the timer. Where BroadcastChannel is absent
    * the same messages travel as `storage` events on the marker keys. */
-  let lockedDb: string | null = null;
-  let stallTimer: ReturnType<typeof setTimeout> | undefined;
   function onDestroyMessage(message: DestroyMessage) {
     if (message.type === "destroying") {
-      if (ownerDb == null || message.db !== ownerDb) return;
-      lockedDb = ownerDb;
-      key = null;
-      data = null;
-      blob = null;
-      ownerDb = null;
-      clearTimeout(stallTimer);
-      stallTimer = setTimeout(() => tell("stalled"), STALL_MS);
+      if (
+        (state.kind !== "unlocked" && state.kind !== "password-vault") ||
+        message.db !== state.ownerDb
+      ) {
+        return;
+      }
+      const db = state.ownerDb;
+      const stallTimer = setTimeout(() => {
+        if (state.kind === "destroying" && state.lockedDb === db) {
+          state = { kind: "stalled" };
+          tell("stalled");
+        }
+      }, STALL_MS);
       (stallTimer as unknown as { unref?: () => void }).unref?.();
+      state = { kind: "destroying", lockedDb: db, stallTimer };
       tell("locked");
       return;
     }
-    if (lockedDb == null || message.db !== lockedDb) return;
-    clearTimeout(stallTimer);
-    lockedDb = null;
-    tell(message.type === "destroyed" ? "destroyed" : "stalled");
+    if (state.kind !== "destroying" || message.db !== state.lockedDb) return;
+    clearTimeout(state.stallTimer);
+    if (message.type === "destroyed") {
+      state = { kind: "destroyed" };
+      tell("destroyed");
+    } else {
+      state = { kind: "stalled" };
+      tell("stalled");
+    }
   }
   /* A constructor that throws (blocked, sandboxed, unsupported) must never stop
    * the vault from opening: no channel, and the `storage`-event fallback below. */
@@ -498,10 +526,8 @@ export function createEncryptedStorage(dbName: string = DEFAULT_DB_NAME): VaultS
     });
   }
 
-  /** One short-lived connection per document operation, the same pattern the
-   *  blob read/write helpers use. A document write never touches the vault
-   *  ciphertext, which is the whole reason the store exists. */
-  async function withDocumentStore<T>(
+  async function withDocumentStoreFor<T>(
+    targetDb: string,
     mode: "readonly" | "readwrite",
     run: (store: {
       put(value: unknown, key: string): Promise<unknown>;
@@ -511,8 +537,7 @@ export function createEncryptedStorage(dbName: string = DEFAULT_DB_NAME): VaultS
       clear(): Promise<unknown>;
     }) => Promise<T> | T,
   ): Promise<T> {
-    if (ownerDb == null) throw new Error(LOCKED_ERROR);
-    const db = await openVaultDb(ownerDb);
+    const db = await openVaultDb(targetDb);
     try {
       const tx = db.transaction(DOCUMENT_STORE, mode);
       const result = await run(
@@ -529,6 +554,23 @@ export function createEncryptedStorage(dbName: string = DEFAULT_DB_NAME): VaultS
     } finally {
       db.close();
     }
+  }
+
+  /** One short-lived connection per document operation, the same pattern the
+   *  blob read/write helpers use. A document write never touches the vault
+   *  ciphertext, which is the whole reason the store exists. */
+  async function withDocumentStore<T>(
+    mode: "readonly" | "readwrite",
+    run: (store: {
+      put(value: unknown, key: string): Promise<unknown>;
+      get(key: string): Promise<unknown>;
+      delete(key: string): Promise<unknown>;
+      getAllKeys(): Promise<unknown[]>;
+      clear(): Promise<unknown>;
+    }) => Promise<T> | T,
+  ): Promise<T> {
+    const { ownerDb } = requireUnlocked();
+    return withDocumentStoreFor(ownerDb, mode, run);
   }
 
   async function readBlobFromDisk(name: string): Promise<CipherBlob | null> {
@@ -557,21 +599,45 @@ export function createEncryptedStorage(dbName: string = DEFAULT_DB_NAME): VaultS
 
   // Re-encrypts the full in-memory data set with a fresh IV and overwrites
   // the single on-disk blob record. Ciphertext only ever leaves memory.
-  async function persist(): Promise<void> {
-    if (key == null || data == null || ownerDb == null) throw new Error(LOCKED_ERROR);
-    const name = ownerDb;
-    const fresh = await sealJSON(key, data);
+  async function sealAndWrite(
+    expectedKey: CryptoKey,
+    expectedDb: string,
+    next: VaultData,
+  ): Promise<void> {
+    const fresh = await sealJSON(expectedKey, next);
     // Another tab may have locked this instance while it sealed; never write to
     // a database named from an absent owner, and never to one being destroyed.
-    if (ownerDb !== name) throw new Error(LOCKED_ERROR);
-    await writeBlobToDisk(name, fresh);
-    if (ownerDb !== name) throw new Error(LOCKED_ERROR);
-    blob = fresh;
+    if (
+      (state.kind !== "unlocked" && state.kind !== "password-vault") ||
+      state.ownerDb !== expectedDb ||
+      state.key !== expectedKey
+    ) {
+      throw new Error(LOCKED_ERROR);
+    }
+    await writeBlobToDisk(expectedDb, fresh);
+    if (
+      (state.kind !== "unlocked" && state.kind !== "password-vault") ||
+      state.ownerDb !== expectedDb ||
+      state.key !== expectedKey
+    ) {
+      throw new Error(LOCKED_ERROR);
+    }
+    state = { kind: "unlocked", key: expectedKey, ownerDb: expectedDb, data: next, blob: fresh };
   }
 
   async function adopt(next: VaultData): Promise<void> {
-    data = next;
-    await persist();
+    if (state.kind !== "unlocked" && state.kind !== "password-vault") {
+      throw new Error(LOCKED_ERROR);
+    }
+    await sealAndWrite(state.key, state.ownerDb, next);
+  }
+
+  function updateUnlocked(mutate: (current: VaultData) => VaultData): Promise<void> {
+    return enqueueWrite(async () => {
+      const current = requireUnlocked();
+      const next = mutate(current.data);
+      await sealAndWrite(current.key, current.ownerDb, next);
+    });
   }
 
   // Serialize every write: each put's read-mutate-encrypt-write runs atomically
@@ -646,30 +712,40 @@ export function createEncryptedStorage(dbName: string = DEFAULT_DB_NAME): VaultS
       // the old blob it is about to delete (bounded; a stale marker is ignored).
       await waitForResetWindow(name, MARKER_WAIT_MS);
       const onDisk = await readBlobFromDisk(name);
-      key = ownerKey;
-      ownerDb = name;
-      data = null;
-      blob = null;
+      clearStallTimer();
+      state = { kind: "locked" };
       if (onDisk?.v === 2) {
         // Throws if another key sealed it. That is not a state to paper over:
         // the key is per account and never replaced.
         const opened = await decryptJSON<VaultData>(ownerKey, onDisk);
         const migrated = withMigrations(opened);
-        data = migrated.vault;
-        blob = onDisk;
+        state = {
+          kind: "unlocked",
+          key: ownerKey,
+          ownerDb: name,
+          data: migrated.vault,
+          blob: onDisk,
+        };
         // Exactly one save for the whole vault, and only when this open was the
         // one that upgraded an old row (WS1.6). A re-open writes nothing.
-        if (migrated.changed) await enqueueWrite(() => persist());
+        if (migrated.changed) {
+          await enqueueWrite(() => sealAndWrite(ownerKey, name, migrated.vault));
+        }
         return "opened";
       }
-      if (await passwordVault()) return "password-vault";
+      if (await passwordVault()) {
+        state = { kind: "password-vault", key: ownerKey, ownerDb: name };
+        return "password-vault";
+      }
+      state = { kind: "password-vault", key: ownerKey, ownerDb: name };
       await enqueueWrite(() => adopt({ accounts: [], txs: [], rules: [] }));
       return "created";
     },
 
     async adoptPasswordVault(passphrase): Promise<boolean> {
+      if (state.kind !== "password-vault") return false;
       const legacy = await passwordVault();
-      if (legacy == null || key == null) return false;
+      if (legacy == null) return false;
       let opened: VaultData;
       try {
         opened = await openPasswordBlob<VaultData>(legacy, passphrase);
@@ -684,17 +760,22 @@ export function createEncryptedStorage(dbName: string = DEFAULT_DB_NAME): VaultS
 
     async startFresh(): Promise<void> {
       await enqueueWrite(async () => {
+        if (state.kind !== "password-vault" && state.kind !== "unlocked") {
+          throw new Error(LOCKED_ERROR);
+        }
         // A fresh vault must not leave the previous vault's sealed documents
         // behind: bytes nothing points at are still the owner's data.
-        await withDocumentStore("readwrite", (store) => store.clear());
+        await withDocumentStoreFor(state.ownerDb, "readwrite", (store) => store.clear());
         await adopt({ accounts: [], txs: [], rules: [] });
       });
     },
 
     async destroyVault(options = {}): Promise<void> {
       const { timeoutMs = DESTROY_TIMEOUT_MS, settleMs = DESTROY_SETTLE_MS } = options;
-      const name = ownerDb;
-      if (name == null) throw new VaultDestroyError("locked", LOCKED_ERROR);
+      if (state.kind !== "unlocked" && state.kind !== "password-vault") {
+        throw new VaultDestroyError("locked", LOCKED_ERROR);
+      }
+      const name = state.ownerDb;
       const store = marker();
       const announce = (type: DestroyMessage["type"]) => {
         try {
@@ -702,12 +783,6 @@ export function createEncryptedStorage(dbName: string = DEFAULT_DB_NAME): VaultS
         } catch {
           /* the marker and the storage event still reach the other tabs */
         }
-      };
-      const lockSelf = () => {
-        key = null;
-        data = null;
-        blob = null;
-        ownerDb = null;
       };
       try {
         store?.setItem(MARKER_KEY, JSON.stringify({ db: name, at: Date.now() }));
@@ -719,11 +794,18 @@ export function createEncryptedStorage(dbName: string = DEFAULT_DB_NAME): VaultS
       try {
         // Behind the write queue, so a save in flight cannot recreate the database.
         await enqueueWrite(async () => {
-          if (ownerDb == null) throw new VaultDestroyError("locked", LOCKED_ERROR);
+          if (
+            (state.kind !== "unlocked" && state.kind !== "password-vault") ||
+            state.ownerDb !== name
+          ) {
+            throw new VaultDestroyError("locked", LOCKED_ERROR);
+          }
           // From here this instance never writes again, success or not: after a
           // blocked delete the browser still finishes it later.
-          lockSelf();
+          clearStallTimer();
+          state = { kind: "locked" };
           await deleteDatabase(name, timeoutMs);
+          state = { kind: "destroyed" };
         });
       } catch (error) {
         try {
@@ -750,17 +832,17 @@ export function createEncryptedStorage(dbName: string = DEFAULT_DB_NAME): VaultS
     },
 
     lock(): void {
-      key = null;
-      data = null;
-      ownerDb = null;
+      clearStallTimer();
+      state = { kind: "locked" };
     },
 
     export(): CipherBlob | null {
-      return blob;
+      return state.kind === "unlocked" ? state.blob : null;
     },
 
     async restore(imported: CipherBlob, passphrase?: string): Promise<boolean> {
-      if (key == null) return false;
+      if (state.kind !== "unlocked") return false;
+      const { key: currentKey, ownerDb: currentDb } = state;
       // Verify OUTSIDE the write queue — this only reads the imported blob.
       let vault: VaultData;
       let documents: Array<{ sha256: string; blob: AccountCipherBlob }> = [];
@@ -770,12 +852,12 @@ export function createEncryptedStorage(dbName: string = DEFAULT_DB_NAME): VaultS
           const bundle = await decryptJSON<{
             vault: VaultData;
             documents: Array<{ sha256: string; blob: AccountCipherBlob }>;
-          }>(key, imported);
+          }>(currentKey, imported);
           vault = bundle.vault;
           documents = Array.isArray(bundle.documents) ? bundle.documents : [];
           carriesDocuments = true;
         } else if (imported.v === 2) {
-          vault = await decryptJSON<VaultData>(key, imported);
+          vault = await decryptJSON<VaultData>(currentKey, imported);
         } else {
           vault = await openPasswordBlob<VaultData>(imported, passphrase ?? "");
         }
@@ -790,11 +872,14 @@ export function createEncryptedStorage(dbName: string = DEFAULT_DB_NAME): VaultS
       // the replaced vault would otherwise point at bytes nothing can vouch
       // for.
       await enqueueWrite(async () => {
-        await withDocumentStore("readwrite", (store) => store.clear());
+        if (state.kind !== "unlocked" || state.ownerDb !== currentDb || state.key !== currentKey) {
+          throw new Error(LOCKED_ERROR);
+        }
+        await withDocumentStoreFor(currentDb, "readwrite", (store) => store.clear());
         if (carriesDocuments) {
           // The bundle carries the already-sealed bytes; restoring them writes
           // the same ciphertext, never a re-encryption with a fresh IV.
-          await withDocumentStore("readwrite", async (store) => {
+          await withDocumentStoreFor(currentDb, "readwrite", async (store) => {
             for (const doc of documents) await store.put(doc.blob, doc.sha256);
           });
         }
@@ -804,57 +889,48 @@ export function createEncryptedStorage(dbName: string = DEFAULT_DB_NAME): VaultS
     },
 
     async exportBundle(): Promise<BundleBlob | null> {
-      if (key == null || data == null) return null;
+      if (state.kind !== "unlocked") return null;
+      const { key: currentKey, data: currentData } = state;
       const documents = await withDocumentStore("readonly", async (store) => {
         const keys = (await store.getAllKeys()) as string[];
         const out: Array<{ sha256: string; blob: AccountCipherBlob }> = [];
         for (const sha256 of keys) {
-          const blob = (await store.get(sha256)) as AccountCipherBlob | undefined;
-          if (blob != null) out.push({ sha256, blob });
+          const docBlob = (await store.get(sha256)) as AccountCipherBlob | undefined;
+          if (docBlob != null) out.push({ sha256, blob: docBlob });
         }
         return out;
       });
-      const sealed = await sealJSON(key, { vault: data, documents });
+      const sealed = await sealJSON(currentKey, { vault: currentData, documents });
       return { v: 3, kdf: "account-key", iv: sealed.iv, ct: sealed.ct };
     },
 
     async getDocuments(): Promise<VaultDocument[]> {
-      if (data == null) throw new Error(LOCKED_ERROR);
-      return [...(data.documents ?? [])];
+      return [...(requireUnlocked().data.documents ?? [])];
     },
     putDocuments(documents: VaultDocument[]): Promise<void> {
-      return enqueueWrite(async () => {
-        if (key == null || data == null) throw new Error(LOCKED_ERROR);
-        data = { ...data, documents: [...documents] };
-        await persist();
-      });
+      return updateUnlocked((data) => ({ ...data, documents: [...documents] }));
     },
     async getImportSessions(): Promise<ImportSession[]> {
-      if (data == null) throw new Error(LOCKED_ERROR);
-      return [...(data.importSessions ?? [])];
+      return [...(requireUnlocked().data.importSessions ?? [])];
     },
     putImportSessions(sessions: ImportSession[]): Promise<void> {
-      return enqueueWrite(async () => {
-        if (key == null || data == null) throw new Error(LOCKED_ERROR);
-        data = { ...data, importSessions: [...sessions] };
-        await persist();
-      });
+      return updateUnlocked((data) => ({ ...data, importSessions: [...sessions] }));
     },
     async putDocumentBytes(sha256: string, bytes: Uint8Array): Promise<void> {
       // Sealed with the same vault key as everything else (ADR 0009): the store
       // never holds plaintext bytes.
-      if (key == null) throw new Error(LOCKED_ERROR);
-      const blob = await sealBytes(key, bytes);
-      await withDocumentStore("readwrite", (store) => store.put(blob, sha256));
+      const { key: currentKey } = requireUnlocked();
+      const docBlob = await sealBytes(currentKey, bytes);
+      await withDocumentStore("readwrite", (store) => store.put(docBlob, sha256));
     },
     async getDocumentBytes(sha256: string): Promise<Uint8Array | null> {
-      if (key == null) throw new Error(LOCKED_ERROR);
-      const blob = (await withDocumentStore("readonly", (store) => store.get(sha256))) as
+      const { key: currentKey } = requireUnlocked();
+      const docBlob = (await withDocumentStore("readonly", (store) => store.get(sha256))) as
         | AccountCipherBlob
         | null
         | undefined;
-      if (blob == null) return null;
-      return openBytes(key, blob);
+      if (docBlob == null) return null;
+      return openBytes(currentKey, docBlob);
     },
     async hasDocumentBytes(sha256: string): Promise<boolean> {
       return (await withDocumentStore("readonly", (store) => store.get(sha256))) != null;
@@ -874,39 +950,29 @@ export function createEncryptedStorage(dbName: string = DEFAULT_DB_NAME): VaultS
     async eraseDocuments(): Promise<number> {
       const documents = await this.getDocuments();
       await withDocumentStore("readwrite", (store) => store.clear());
-      await enqueueWrite(async () => {
-        if (key == null || data == null) throw new Error(LOCKED_ERROR);
-        data = { ...data, documents: [] };
-        await persist();
-      });
+      await updateUnlocked((data) => ({ ...data, documents: [] }));
       return documents.length;
     },
 
     async getAccounts(): Promise<Account[]> {
-      if (data == null) throw new Error(LOCKED_ERROR);
-      return [...data.accounts];
+      return [...requireUnlocked().data.accounts];
     },
     putAccounts(a: Account[]): Promise<void> {
-      return enqueueWrite(async () => {
-        if (key == null || data == null) throw new Error(LOCKED_ERROR);
+      return updateUnlocked((data) => {
         const byKey = new Map(data.accounts.map((acc) => [acc.key, acc]));
         for (const acc of a) byKey.set(acc.key, acc);
-        data = { ...data, accounts: [...byKey.values()] };
-        await persist();
+        return { ...data, accounts: [...byKey.values()] };
       });
     },
 
     async getTxs(): Promise<Tx[]> {
-      if (data == null) throw new Error(LOCKED_ERROR);
-      return [...data.txs];
+      return [...requireUnlocked().data.txs];
     },
     putTxs(t: Tx[]): Promise<void> {
-      return enqueueWrite(async () => {
-        if (key == null || data == null) throw new Error(LOCKED_ERROR);
+      return updateUnlocked((data) => {
         const byId = new Map(data.txs.map((tx) => [tx.id, tx]));
         for (const tx of t) byId.set(tx.id, tx);
-        data = { ...data, txs: [...byId.values()] };
-        await persist();
+        return { ...data, txs: [...byId.values()] };
       });
     },
 
@@ -915,211 +981,144 @@ export function createEncryptedStorage(dbName: string = DEFAULT_DB_NAME): VaultS
     // let a stale snapshot's persist() revert the blob (and bring the row back).
     // `accountKey` (not `key`) — a `key` param would shadow the vault CryptoKey.
     deleteAccount(accountKey: string): Promise<void> {
-      return enqueueWrite(async () => {
-        if (key == null || data == null) throw new Error(LOCKED_ERROR);
-        data = { ...data, accounts: data.accounts.filter((a) => a.key !== accountKey) };
-        await persist();
-      });
+      return updateUnlocked((data) => ({
+        ...data,
+        accounts: data.accounts.filter((a) => a.key !== accountKey),
+      }));
     },
     deleteTxs(ids: string[]): Promise<void> {
-      return enqueueWrite(async () => {
-        if (key == null || data == null) throw new Error(LOCKED_ERROR);
+      return updateUnlocked((data) => {
         const drop = new Set(ids);
-        data = { ...data, txs: data.txs.filter((t) => !drop.has(t.id)) };
-        await persist();
+        return { ...data, txs: data.txs.filter((t) => !drop.has(t.id)) };
       });
     },
 
     async getRules(): Promise<Rule[]> {
-      if (data == null) throw new Error(LOCKED_ERROR);
-      return [...data.rules];
+      return [...requireUnlocked().data.rules];
     },
     // Replace-all: mirrors createIndexedDbStorage's putRules semantics.
     putRules(rules: Rule[]): Promise<void> {
-      return enqueueWrite(async () => {
-        if (key == null || data == null) throw new Error(LOCKED_ERROR);
-        data = { ...data, rules: [...rules] };
-        await persist();
-      });
+      return updateUnlocked((data) => ({ ...data, rules: [...rules] }));
     },
 
     // scheduledFlows/vatSettings are optional VaultData fields — a legacy vault
     // decrypts without them, so getters default to []. Replace-all, like putRules.
     async getScheduledFlows(): Promise<ScheduledFlow[]> {
-      if (data == null) throw new Error(LOCKED_ERROR);
-      return [...(data.scheduledFlows ?? [])];
+      return [...(requireUnlocked().data.scheduledFlows ?? [])];
     },
     putScheduledFlows(f: ScheduledFlow[]): Promise<void> {
-      return enqueueWrite(async () => {
-        if (key == null || data == null) throw new Error(LOCKED_ERROR);
-        data = { ...data, scheduledFlows: [...f] };
-        await persist();
-      });
+      return updateUnlocked((data) => ({ ...data, scheduledFlows: [...f] }));
     },
     async getVatSettings(): Promise<VatSettings[]> {
-      if (data == null) throw new Error(LOCKED_ERROR);
-      return [...(data.vatSettings ?? [])];
+      return [...(requireUnlocked().data.vatSettings ?? [])];
     },
     putVatSettings(s: VatSettings[]): Promise<void> {
-      return enqueueWrite(async () => {
-        if (key == null || data == null) throw new Error(LOCKED_ERROR);
-        data = { ...data, vatSettings: [...s] };
-        await persist();
-      });
+      return updateUnlocked((data) => ({ ...data, vatSettings: [...s] }));
     },
     // invoices is also an optional VaultData field — a legacy vault decrypts
     // without it, so the getter defaults to []. Replace-all, like putScheduledFlows.
     async getInvoices(): Promise<Invoice[]> {
-      if (data == null) throw new Error(LOCKED_ERROR);
-      return [...(data.invoices ?? [])];
+      return [...(requireUnlocked().data.invoices ?? [])];
     },
     putInvoices(i: Invoice[]): Promise<void> {
-      return enqueueWrite(async () => {
-        if (key == null || data == null) throw new Error(LOCKED_ERROR);
-        data = { ...data, invoices: [...i] };
-        await persist();
-      });
+      return updateUnlocked((data) => ({ ...data, invoices: [...i] }));
     },
     // rewards is also an optional VaultData field — a legacy vault decrypts
     // without it, so the getter defaults to []. Replace-all, like putScheduledFlows.
     async getRewards(): Promise<RewardsBalance[]> {
-      if (data == null) throw new Error(LOCKED_ERROR);
-      return [...(data.rewards ?? [])];
+      return [...(requireUnlocked().data.rewards ?? [])];
     },
     putRewards(r: RewardsBalance[]): Promise<void> {
-      return enqueueWrite(async () => {
-        if (key == null || data == null) throw new Error(LOCKED_ERROR);
-        data = { ...data, rewards: [...r] };
-        await persist();
-      });
+      return updateUnlocked((data) => ({ ...data, rewards: [...r] }));
     },
     // transfers is also an optional VaultData field — a legacy vault decrypts
     // without it, so the getter defaults to []. Replace-all, like putRewards.
     // Only decisions are stored; a fresh import can invalidate a suggestion,
     // so suggestions stay derived and never become stale vault state.
     async getTransfers(): Promise<TransferPair[]> {
-      if (data == null) throw new Error(LOCKED_ERROR);
-      return [...(data.transfers ?? [])];
+      return [...(requireUnlocked().data.transfers ?? [])];
     },
     putTransfers(p: TransferPair[]): Promise<void> {
-      return enqueueWrite(async () => {
-        if (key == null || data == null) throw new Error(LOCKED_ERROR);
-        data = { ...data, transfers: [...p] };
-        await persist();
-      });
+      return updateUnlocked((data) => ({ ...data, transfers: [...p] }));
     },
     // Budget envelopes (issue #289): replace-all, additive optional fields. A
     // vault written before this reads [] and the plan falls back to the legacy
     // `categoryLimits` (see `budgetPeriodsOf` in @lavega/core).
     async getBudgetPeriods(): Promise<BudgetPeriod[]> {
-      if (data == null) throw new Error(LOCKED_ERROR);
-      return structuredClone(data.budgetPeriods ?? []);
+      return structuredClone(requireUnlocked().data.budgetPeriods ?? []);
     },
     putBudgetPeriods(periods: BudgetPeriod[]): Promise<void> {
-      return enqueueWrite(async () => {
-        if (key == null || data == null) throw new Error(LOCKED_ERROR);
-        data = { ...data, budgetPeriods: structuredClone(periods) };
-        await persist();
-      });
+      return updateUnlocked((data) => ({ ...data, budgetPeriods: structuredClone(periods) }));
     },
     async getCategoryGroups(): Promise<CategoryGroup[]> {
-      if (data == null) throw new Error(LOCKED_ERROR);
-      return structuredClone(data.categoryGroups ?? []);
+      return structuredClone(requireUnlocked().data.categoryGroups ?? []);
     },
     putCategoryGroups(groups: CategoryGroup[]): Promise<void> {
-      return enqueueWrite(async () => {
-        if (key == null || data == null) throw new Error(LOCKED_ERROR);
-        data = { ...data, categoryGroups: structuredClone(groups) };
-        await persist();
-      });
+      return updateUnlocked((data) => ({ ...data, categoryGroups: structuredClone(groups) }));
     },
     // Bills and occurrences are the same additive optional field shape:
     // replace-all, read [] on a legacy vault. They are written by ONE mutator
     // because the generator's output (rows) only makes sense with its series,
     // and the unlock pass must not pay two seals for one materialization.
     async getBills(): Promise<Bill[]> {
-      if (data == null) throw new Error(LOCKED_ERROR);
-      return [...(data.bills ?? [])];
+      return [...(requireUnlocked().data.bills ?? [])];
     },
     async getBillOccurrences(): Promise<BillOccurrence[]> {
-      if (data == null) throw new Error(LOCKED_ERROR);
-      return [...(data.billOccurrences ?? [])];
+      return [...(requireUnlocked().data.billOccurrences ?? [])];
     },
     async getBillDecisions(): Promise<BillDecisions> {
-      if (data == null) throw new Error(LOCKED_ERROR);
-      return structuredClone(billDecisionsOf(data.billDecisions));
+      return structuredClone(billDecisionsOf(requireUnlocked().data.billDecisions));
     },
     putBillPlan(
       bills: Bill[],
       occurrences: BillOccurrence[],
       decisions?: BillDecisions,
     ): Promise<void> {
-      return enqueueWrite(async () => {
-        if (key == null || data == null) throw new Error(LOCKED_ERROR);
-        data = {
-          ...data,
-          bills: [...bills],
-          billOccurrences: [...occurrences],
-          // Undefined keeps the stored decisions: a schedule edit or a
-          // materialization must not silently forget which rows were paid.
-          billDecisions: structuredClone(decisions ?? billDecisionsOf(data.billDecisions)),
-        };
-        await persist();
-      });
+      return updateUnlocked((data) => ({
+        ...data,
+        bills: [...bills],
+        billOccurrences: [...occurrences],
+        // Undefined keeps the stored decisions: a schedule edit or a
+        // materialization must not silently forget which rows were paid.
+        billDecisions: structuredClone(decisions ?? billDecisionsOf(data.billDecisions)),
+      }));
     },
     // merchants is the same additive optional field shape: replace-all, and a
     // legacy vault reads [] so `labels.ts` falls back to its token key.
     async getValuations(): Promise<Valuation[]> {
-      if (data == null) throw new Error(LOCKED_ERROR);
-      return [...(data.valuations ?? [])];
+      return [...(requireUnlocked().data.valuations ?? [])];
     },
     putValuations(valuations: Valuation[]): Promise<void> {
-      return enqueueWrite(async () => {
-        if (key == null || data == null) throw new Error(LOCKED_ERROR);
-        data = { ...data, valuations: valuations.map(normalizeValuation) };
-        await persist();
-      });
+      return updateUnlocked((data) => ({
+        ...data,
+        valuations: valuations.map(normalizeValuation),
+      }));
     },
 
     async getMerchants(): Promise<Merchant[]> {
-      if (data == null) throw new Error(LOCKED_ERROR);
-      return [...(data.merchants ?? [])];
+      return [...(requireUnlocked().data.merchants ?? [])];
     },
     putMerchants(m: Merchant[]): Promise<void> {
-      return enqueueWrite(async () => {
-        if (key == null || data == null) throw new Error(LOCKED_ERROR);
-        data = { ...data, merchants: [...m] };
-        await persist();
-      });
+      return updateUnlocked((data) => ({ ...data, merchants: [...m] }));
     },
 
     // Privé/zakelijk per entity (item 4). Additive optional field, replace-all,
     // legacy vault => [] => every entity is personal, which is the default the
     // feature asks for anyway. No migration: nothing existing is rewritten.
     async getEntityProfiles(): Promise<EntityProfile[]> {
-      if (data == null) throw new Error(LOCKED_ERROR);
-      return [...(data.entityProfiles ?? [])];
+      return [...(requireUnlocked().data.entityProfiles ?? [])];
     },
     putEntityProfiles(profiles: EntityProfile[]): Promise<void> {
-      return enqueueWrite(async () => {
-        if (key == null || data == null) throw new Error(LOCKED_ERROR);
-        data = { ...data, entityProfiles: [...profiles] };
-        await persist();
-      });
+      return updateUnlocked((data) => ({ ...data, entityProfiles: [...profiles] }));
     },
 
     // What the agents have learned (and what the owner corrected). Same additive
     // optional field + replace-all shape as the rest; a legacy vault has none.
     async getFacts(): Promise<LearnedFact[]> {
-      if (data == null) throw new Error(LOCKED_ERROR);
-      return [...(data.facts ?? [])];
+      return [...(requireUnlocked().data.facts ?? [])];
     },
     putFacts(f: LearnedFact[]): Promise<void> {
-      return enqueueWrite(async () => {
-        if (key == null || data == null) throw new Error(LOCKED_ERROR);
-        data = { ...data, facts: [...f] };
-        await persist();
-      });
+      return updateUnlocked((data) => ({ ...data, facts: [...f] }));
     },
 
     // The personal assistant's approval events and approved memories
@@ -1127,118 +1126,84 @@ export function createEncryptedStorage(dbName: string = DEFAULT_DB_NAME): VaultS
     // facts above; a legacy vault reads the empty state, so the panel starts
     // with no timeline rather than a fabricated one.
     async getAssistant(): Promise<AssistantState> {
-      if (data == null) throw new Error(LOCKED_ERROR);
-      const state = data.assistant;
+      const assistant = requireUnlocked().data.assistant;
       return {
-        approvals: [...(state?.approvals ?? [])],
-        memories: [...(state?.memories ?? [])],
+        approvals: [...(assistant?.approvals ?? [])],
+        memories: [...(assistant?.memories ?? [])],
       };
     },
-    putAssistant(state: AssistantState): Promise<void> {
-      return enqueueWrite(async () => {
-        if (key == null || data == null) throw new Error(LOCKED_ERROR);
-        data = {
-          ...data,
-          assistant: { approvals: [...state.approvals], memories: [...state.memories] },
-        };
-        await persist();
-      });
+    putAssistant(next: AssistantState): Promise<void> {
+      return updateUnlocked((data) => ({
+        ...data,
+        assistant: { approvals: [...next.approvals], memories: [...next.memories] },
+      }));
     },
 
     // His n8n webhook/API credentials (settings.ts). Additive optional field,
     // replace-all — same shape as entityProfiles/facts above. A legacy vault
     // decrypts without it, so the getter defaults to {}: "never set", not "".
     async getN8nSettings(): Promise<N8nSettings> {
-      if (data == null) throw new Error(LOCKED_ERROR);
-      return { ...data.n8nSettings };
+      return { ...requireUnlocked().data.n8nSettings };
     },
     putN8nSettings(settings: N8nSettings): Promise<void> {
-      return enqueueWrite(async () => {
-        if (key == null || data == null) throw new Error(LOCKED_ERROR);
-        data = { ...data, n8nSettings: { ...settings } };
-        await persist();
-      });
+      return updateUnlocked((data) => ({ ...data, n8nSettings: { ...settings } }));
     },
 
     // Invoices that booked themselves from the n8n queue (n8n.ts). The `Invoice`
     // record itself carries `autoBooked: true`; this list is only the fallback
     // for rows booked before that field existed, kept alive the same way.
     async getAutoBookedInvoices(): Promise<N8nAutoBooked[]> {
-      if (data == null) throw new Error(LOCKED_ERROR);
-      return [...(data.n8nAutoBooked ?? [])];
+      return [...(requireUnlocked().data.n8nAutoBooked ?? [])];
     },
     putAutoBookedInvoices(list: N8nAutoBooked[]): Promise<void> {
-      return enqueueWrite(async () => {
-        if (key == null || data == null) throw new Error(LOCKED_ERROR);
-        data = { ...data, n8nAutoBooked: [...list] };
-        await persist();
-      });
+      return updateUnlocked((data) => ({ ...data, n8nAutoBooked: [...list] }));
     },
 
     // Rows apps/web is still reviewing from the n8n queue (n8n.ts). Same
     // replace-all shape as getAutoBookedInvoices/putAutoBookedInvoices above —
     // opaque JSON here because this package cannot import apps/web's types.
     async getPendingInvoices(): Promise<unknown[]> {
-      if (data == null) throw new Error(LOCKED_ERROR);
-      return [...(data.n8nPendingInvoices ?? [])];
+      return [...(requireUnlocked().data.n8nPendingInvoices ?? [])];
     },
     putPendingInvoices(list: unknown[]): Promise<void> {
-      return enqueueWrite(async () => {
-        if (key == null || data == null) throw new Error(LOCKED_ERROR);
-        data = { ...data, n8nPendingInvoices: [...list] };
-        await persist();
-      });
+      return updateUnlocked((data) => ({ ...data, n8nPendingInvoices: [...list] }));
     },
     async getPendingNotices(): Promise<unknown[]> {
-      if (data == null) throw new Error(LOCKED_ERROR);
-      return [...(data.n8nPendingNotices ?? [])];
+      return [...(requireUnlocked().data.n8nPendingNotices ?? [])];
     },
     putPendingNotices(list: unknown[]): Promise<void> {
-      return enqueueWrite(async () => {
-        if (key == null || data == null) throw new Error(LOCKED_ERROR);
-        data = { ...data, n8nPendingNotices: [...list] };
-        await persist();
-      });
+      return updateUnlocked((data) => ({ ...data, n8nPendingNotices: [...list] }));
     },
 
     // fxHistory is also an optional VaultData field — a legacy vault decrypts
     // without it, so the getter defaults to {}. Replace-all, like n8nSettings.
     async getFxHistory(): Promise<Record<string, Record<string, number>>> {
-      if (data == null) throw new Error(LOCKED_ERROR);
-      return { ...data.fxHistory };
+      return { ...requireUnlocked().data.fxHistory };
     },
     putFxHistory(h: Record<string, Record<string, number>>): Promise<void> {
-      return enqueueWrite(async () => {
-        if (key == null || data == null) throw new Error(LOCKED_ERROR);
-        data = { ...data, fxHistory: { ...h } };
-        await persist();
-      });
+      return updateUnlocked((data) => ({ ...data, fxHistory: { ...h } }));
     },
 
     // The adviser profile and the three sections that sit beside it. All are
     // optional VaultData fields, so a legacy vault decrypts without them.
     async getProfile(): Promise<ProfileRead> {
-      if (data == null) throw new Error(LOCKED_ERROR);
-      return readProfile(data.profile);
+      return readProfile(requireUnlocked().data.profile);
     },
     putProfile(store: AdvisorProfileStore): Promise<void> {
-      return enqueueWrite(async () => {
-        if (key == null || data == null) throw new Error(LOCKED_ERROR);
+      return updateUnlocked((data) => {
         const previous = readProfile(data.profile);
         const encoded = encodeProfileStore(store);
-        data =
-          previous.kind === "corrupt"
-            ? {
-                ...data,
-                profile: encoded,
-                profileCorruptBackup: data.profileCorruptBackup ?? data.profile,
-              }
-            : { ...data, profile: carryUnknownKeys(data.profile, encoded) };
-        await persist();
+        return previous.kind === "corrupt"
+          ? {
+              ...data,
+              profile: encoded,
+              profileCorruptBackup: data.profileCorruptBackup ?? data.profile,
+            }
+          : { ...data, profile: carryUnknownKeys(data.profile, encoded) };
       });
     },
     async getSection<N extends "plan" | "learning" | "events">(name: N): Promise<SectionValue[N]> {
-      if (data == null) throw new Error(LOCKED_ERROR);
+      const data = requireUnlocked().data;
       // One cast: the three branches each return their own section type.
       const value =
         name === "plan"
@@ -1249,18 +1214,13 @@ export function createEncryptedStorage(dbName: string = DEFAULT_DB_NAME): VaultS
       return structuredClone(value) as SectionValue[N];
     },
     putSection<N extends "plan" | "learning">(name: N, value: SectionValue[N]): Promise<void> {
-      return enqueueWrite(async () => {
-        if (key == null || data == null) throw new Error(LOCKED_ERROR);
-        data = { ...data, [name]: structuredClone(value) };
-        await persist();
-      });
+      return updateUnlocked((data) => ({ ...data, [name]: structuredClone(value) }));
     },
     appendEvents(events: readonly VaultEvent[]): Promise<void> {
-      return enqueueWrite(async () => {
-        if (key == null || data == null) throw new Error(LOCKED_ERROR);
-        data = { ...data, events: mergeEvents(data.events ?? [], events) };
-        await persist();
-      });
+      return updateUnlocked((data) => ({
+        ...data,
+        events: mergeEvents(data.events ?? [], events),
+      }));
     },
 
     async getCredentials<T extends CredentialBroker>(
@@ -1269,8 +1229,8 @@ export function createEncryptedStorage(dbName: string = DEFAULT_DB_NAME): VaultS
     ): Promise<Extract<BrokerCredentials, { broker: T }> | null> {
       // Credential reads are deliberately different from ordinary vault reads:
       // locked state is an absent secret, not an error-producing data path.
-      if (data == null) return null;
-      const credentials = data.credentials?.find(
+      if (state.kind !== "unlocked") return null;
+      const credentials = state.data.credentials?.find(
         (item) => item.tenantId === tenantId && item.broker === broker,
       );
       return credentials == null
@@ -1278,14 +1238,12 @@ export function createEncryptedStorage(dbName: string = DEFAULT_DB_NAME): VaultS
         : (credentials as Extract<BrokerCredentials, { broker: T }>);
     },
     putCredentials(credentials: BrokerCredentials): Promise<void> {
-      return enqueueWrite(async () => {
-        if (key == null || data == null) throw new Error(LOCKED_ERROR);
+      return updateUnlocked((data) => {
         const existing = data.credentials ?? [];
         const withoutCurrent = existing.filter(
           (item) => item.tenantId !== credentials.tenantId || item.broker !== credentials.broker,
         );
-        data = { ...data, credentials: [...withoutCurrent, credentials] };
-        await persist();
+        return { ...data, credentials: [...withoutCurrent, credentials] };
       });
     },
   };

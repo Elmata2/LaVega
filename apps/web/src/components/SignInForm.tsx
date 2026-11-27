@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type { FormEvent } from "react";
 import type { Locale } from "../locale.js";
 import { signIn, type SignInFailure } from "../authClient.js";
@@ -8,6 +8,11 @@ import Button from "./ui/Button.js";
 import { Field } from "./ui/Field.js";
 import PasswordInput from "./ui/PasswordInput.js";
 import StatusLine from "./ui/StatusLine.js";
+
+type SignInPhase =
+  | { kind: "idle" }
+  | { kind: "submitting" }
+  | { kind: "failed"; failure: SignInFailure };
 
 /* Extracted from Profiel's AccountBlock so the same sign-in UI can also render
  * on the public landing page. `locale` is a prop rather than read via
@@ -46,23 +51,34 @@ export default function SignInForm({
   const c = shellCopy[locale];
   const [email, setEmail] = useState(initialEmail);
   const [password, setPassword] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [failure, setFailure] = useState<SignInFailure | null>(null);
+  const [phase, setPhase] = useState<SignInPhase>({ kind: "idle" });
+  const inFlightRef = useRef(false);
+
+  const busy = phase.kind === "submitting";
+  const failure = phase.kind === "failed" ? phase.failure : null;
 
   async function handleSignIn(e: FormEvent) {
     e.preventDefault();
-    setBusy(true);
-    setFailure(null);
-    const result = await signIn(email, password);
-    setBusy(false);
-    if (!result.ok) {
-      setFailure(result.kind);
-      posthog.capture("sign_in_failed", { reason: result.kind });
-      return;
+    if (!email || !password || busy || inFlightRef.current) return;
+    inFlightRef.current = true;
+    setPhase({ kind: "submitting" });
+    try {
+      const result = await signIn(email, password);
+      if (!result.ok) {
+        setPhase({ kind: "failed", failure: result.kind });
+        posthog.capture("sign_in_failed", { reason: result.kind });
+        return;
+      }
+      setPassword("");
+      setPhase({ kind: "idle" });
+      posthog.capture("sign_in_succeeded");
+      onSuccess();
+    } catch {
+      setPhase({ kind: "failed", failure: "unreachable" });
+      posthog.capture("sign_in_failed", { reason: "unreachable" });
+    } finally {
+      inFlightRef.current = false;
     }
-    setPassword("");
-    posthog.capture("sign_in_succeeded");
-    onSuccess();
   }
 
   return (

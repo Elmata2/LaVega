@@ -32,6 +32,12 @@ type BackupProps = {
   onRestored: () => void;
 };
 
+type PortableExportState =
+  | { kind: "idle" }
+  | { kind: "building" }
+  | { kind: "verified"; message: string }
+  | { kind: "failed"; message: string };
+
 /**
  * Draagbare export (WS6.1, #302): a readable, versioned ZIP of the open vault,
  * read back through the core reader before the screen reports success. The
@@ -41,14 +47,24 @@ type BackupProps = {
 function PortableExport({ storage, asOf }: { storage: VaultStorage; asOf: string }) {
   const [locale] = useAppLocale();
   const c = adminCopy[locale].backup.portable;
-  const [state, setState] = useState<"idle" | "building" | "verified" | "failed">("idle");
-  const [message, setMessage] = useState("");
+  const [state, setState] = useState<PortableExportState>({ kind: "idle" });
+  const mountedRef = useRef(true);
+  const inFlightRef = useRef(false);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   async function handleExport() {
-    setState("building");
-    setMessage("");
+    if (state.kind === "building" || inFlightRef.current) return;
+    inFlightRef.current = true;
+    setState({ kind: "building" });
     try {
       const built = await buildPortableExport(storage, asOf);
+      if (!mountedRef.current) return;
       const url = URL.createObjectURL(
         new Blob([built.bytes.slice().buffer as ArrayBuffer], { type: "application/zip" }),
       );
@@ -62,15 +78,20 @@ function PortableExport({ storage, asOf }: { storage: VaultStorage; asOf: string
           (sum, count) => sum + count,
           0,
         );
-        setState("verified");
-        setMessage(c.verified(rows, built.manifest.sections.length));
+        setState({
+          kind: "verified",
+          message: c.verified(rows, built.manifest.sections.length),
+        });
       } else {
-        setState("failed");
-        setMessage(c.verificationFailed(built.readback.problems.length));
+        setState({
+          kind: "failed",
+          message: c.verificationFailed(built.readback.problems.length),
+        });
       }
     } catch {
-      setState("failed");
-      setMessage(c.error);
+      if (mountedRef.current) setState({ kind: "failed", message: c.error });
+    } finally {
+      inFlightRef.current = false;
     }
   }
 
@@ -81,14 +102,17 @@ function PortableExport({ storage, asOf }: { storage: VaultStorage; asOf: string
       <Button
         variant="primary"
         data-testid="portable-export"
-        disabled={state === "building"}
-        onClick={handleExport}
+        disabled={state.kind === "building"}
+        onClick={() => void handleExport()}
       >
-        {state === "building" ? c.building : c.button}
+        {state.kind === "building" ? c.building : c.button}
       </Button>
-      {message !== "" && (
-        <p role={state === "failed" ? "alert" : undefined} data-testid="portable-export-result">
-          {message}
+      {(state.kind === "verified" || state.kind === "failed") && (
+        <p
+          role={state.kind === "failed" ? "alert" : undefined}
+          data-testid="portable-export-result"
+        >
+          {state.message}
         </p>
       )}
     </>
@@ -97,6 +121,12 @@ function PortableExport({ storage, asOf }: { storage: VaultStorage; asOf: string
 
 const formatDateTime = (locale: Locale, iso: string) =>
   new Date(iso).toLocaleString(locale === "nl" ? "nl-NL" : "en-GB");
+
+type ResetPersonalPhase =
+  | { kind: "idle"; returnFocus?: boolean }
+  | { kind: "confirming" }
+  | { kind: "running" }
+  | { kind: "failed"; message: string };
 
 /**
  * Reset the personal side only.
@@ -118,25 +148,25 @@ function ResetPersonal({
   const c = adminCopy[locale].backup;
   const r = c.resetPersonal;
   const account = owner.kind === "account";
-  const [confirming, setConfirming] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-  const running = useRef(false);
+  const [phase, setPhase] = useState<ResetPersonalPhase>({ kind: "idle" });
+  const runningRef = useRef(false);
+  const mountedRef = useRef(true);
   const introRef = useRef<HTMLParagraphElement>(null);
   const confirmRef = useRef<HTMLDivElement>(null);
   const errorRef = useRef<HTMLDivElement>(null);
-  const cancelled = useRef(false);
 
   useEffect(() => {
-    if (confirming) confirmRef.current?.focus();
-    else if (cancelled.current) {
-      cancelled.current = false;
-      introRef.current?.focus();
-    }
-  }, [confirming]);
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
   useEffect(() => {
-    if (error) errorRef.current?.focus();
-  }, [error]);
+    if (phase.kind === "confirming") confirmRef.current?.focus();
+    else if (phase.kind === "failed") errorRef.current?.focus();
+    else if (phase.kind === "idle" && phase.returnFocus) introRef.current?.focus();
+  }, [phase]);
 
   function describe(err: unknown): string {
     if (!(err instanceof PersonalResetError)) return r.errors.generic;
@@ -158,37 +188,32 @@ function ResetPersonal({
   }
 
   async function reset() {
-    if (running.current) return; // a double click must not start a second run
-    running.current = true;
-    setBusy(true);
-    setError("");
+    if (runningRef.current || phase.kind === "running") return; // a double click must not start a second run
+    runningRef.current = true;
+    setPhase({ kind: "running" });
     try {
       await resetPersonalData({ locale, storage, owner });
       posthog.capture("personal_data_reset", { account });
-      // The page is navigating to /app; keep the busy state until it does.
+      // The page is navigating to /app; keep the running state until it does.
     } catch (err) {
-      setError(describe(err));
-      setBusy(false);
-      running.current = false;
+      runningRef.current = false;
+      if (mountedRef.current) setPhase({ kind: "failed", message: describe(err) });
     }
   }
 
+  const busy = phase.kind === "running";
+  const showConfirm = phase.kind !== "idle";
+
   return (
     <>
-      {!confirming && (
+      {!showConfirm && (
         <p ref={introRef} tabIndex={-1}>
-          <Button
-            data-testid="reset-personal"
-            onClick={() => {
-              setConfirming(true);
-              setError("");
-            }}
-          >
+          <Button data-testid="reset-personal" onClick={() => setPhase({ kind: "confirming" })}>
             {r.button}
           </Button>
         </p>
       )}
-      {confirming && (
+      {showConfirm && (
         <div data-testid="reset-personal-confirm" ref={confirmRef} tabIndex={-1}>
           <StatusLine tone="warning" role="alert">
             {r.closeTabs} {account ? r.goes : r.goesLocalOnly}{" "}
@@ -199,28 +224,46 @@ function ResetPersonal({
           <Button disabled={busy || !ready} onClick={() => void reset()}>
             {busy ? c.common.busy : r.confirmButton}
           </Button>{" "}
-          <Button
-            disabled={busy}
-            onClick={() => {
-              cancelled.current = true;
-              setError("");
-              setConfirming(false);
-            }}
-          >
+          <Button disabled={busy} onClick={() => setPhase({ kind: "idle", returnFocus: true })}>
             {r.cancelButton}
           </Button>
         </div>
       )}
-      {error && (
+      {phase.kind === "failed" && (
         <div ref={errorRef} tabIndex={-1} data-testid="reset-personal-error">
           <StatusLine tone="problem" role="alert">
-            {error}
+            {phase.message}
           </StatusLine>
         </div>
       )}
     </>
   );
 }
+
+type UploadPhase =
+  | { kind: "idle" }
+  | { kind: "uploading" }
+  | { kind: "conflict"; updatedAt: string | null }
+  | { kind: "succeeded"; message: string }
+  | { kind: "failed"; message: string };
+
+type ErasePhase =
+  | { kind: "idle" }
+  | { kind: "confirming" }
+  | { kind: "erasing" }
+  | { kind: "succeeded"; message: string }
+  | { kind: "failed"; message: string };
+
+type ServerSession =
+  | { kind: "checking" }
+  | { kind: "signed-out" }
+  | {
+      kind: "ready";
+      updatedAt: string | null;
+      serverBlob: CipherBlob | null;
+      upload: UploadPhase;
+      erase: ErasePhase;
+    };
 
 /**
  * Back-up naar de server. De kluis wordt hier versleuteld en gaat er versleuteld
@@ -239,33 +282,37 @@ function ServerBackup({
 }) {
   const [locale] = useAppLocale();
   const c = adminCopy[locale].backup;
-  const [state, setState] = useState<"checking" | "signed-out" | "ready">("checking");
-  const [updatedAt, setUpdatedAt] = useState<string | null>(null);
-  const [serverBlob, setServerBlob] = useState<CipherBlob | null>(null);
-  const [conflict, setConflict] = useState<{ updatedAt: string | null } | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState("");
-  const [error, setError] = useState("");
-  const [confirmErase, setConfirmErase] = useState(false);
-  const [erasing, setErasing] = useState(false);
-  const [eraseMessage, setEraseMessage] = useState("");
-  const [eraseError, setEraseError] = useState("");
+  const [session, setSession] = useState<ServerSession>({ kind: "checking" });
+  const mountedRef = useRef(true);
+  const uploadInFlightRef = useRef(false);
+  const eraseInFlightRef = useRef(false);
 
-  function applyStatus(result: Awaited<ReturnType<typeof fetchServerBackup>>) {
-    if (result === "signed-out") return setState("signed-out");
-    setState("ready");
-    setUpdatedAt(result.updatedAt);
-    setServerBlob(result.blob);
-  }
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     let current = true;
     void fetchServerBackup()
       .then((result) => {
-        if (current) applyStatus(result);
+        if (!current) return;
+        if (result === "signed-out") {
+          setSession({ kind: "signed-out" });
+          return;
+        }
+        setSession({
+          kind: "ready",
+          updatedAt: result.updatedAt,
+          serverBlob: result.blob,
+          upload: { kind: "idle" },
+          erase: { kind: "idle" },
+        });
       })
       .catch(() => {
-        if (current) setState("signed-out");
+        if (current) setSession({ kind: "signed-out" });
       });
     return () => {
       current = false;
@@ -273,61 +320,117 @@ function ServerBackup({
   }, []);
 
   async function upload(overwrite: boolean) {
+    if (session.kind !== "ready" || uploadInFlightRef.current || eraseInFlightRef.current) return;
     const blob = storage.export();
-    if (!blob) return setError(c.server.errors.locked);
-    setBusy(true);
-    setError("");
-    setMessage("");
-    setConflict(null);
+    if (!blob) {
+      setSession((prev) =>
+        prev.kind === "ready"
+          ? { ...prev, upload: { kind: "failed", message: c.server.errors.locked } }
+          : prev,
+      );
+      return;
+    }
+    const baseUpdatedAt = session.updatedAt;
+    uploadInFlightRef.current = true;
+    setSession((prev) =>
+      prev.kind === "ready" ? { ...prev, upload: { kind: "uploading" } } : prev,
+    );
     try {
-      const result = await uploadServerBackup(blob, updatedAt, overwrite);
-      if (result.status === "signed-out") return setState("signed-out");
+      const result = await uploadServerBackup(blob, baseUpdatedAt, overwrite);
+      if (!mountedRef.current) return;
+      if (result.status === "signed-out") {
+        setSession({ kind: "signed-out" });
+        return;
+      }
       if (result.status === "conflict") {
         /* Niet stilletjes overschrijven: de andere kant is iemands echte
          * administratie. De datum erbij, zodat de keuze een keuze is. */
-        setConflict({ updatedAt: result.updatedAt });
+        setSession((prev) =>
+          prev.kind === "ready"
+            ? { ...prev, upload: { kind: "conflict", updatedAt: result.updatedAt } }
+            : prev,
+        );
         return;
       }
-      setUpdatedAt(result.updatedAt);
-      setServerBlob(blob);
-      setMessage(c.server.success);
+      setSession((prev) =>
+        prev.kind === "ready"
+          ? {
+              ...prev,
+              updatedAt: result.updatedAt,
+              serverBlob: blob,
+              upload: { kind: "succeeded", message: c.server.success },
+            }
+          : prev,
+      );
       posthog.capture("server_backup_uploaded", { overwritten: overwrite });
     } catch {
-      setError(c.server.errors.saveFailed);
+      if (mountedRef.current) {
+        setSession((prev) =>
+          prev.kind === "ready"
+            ? { ...prev, upload: { kind: "failed", message: c.server.errors.saveFailed } }
+            : prev,
+        );
+      }
     } finally {
-      setBusy(false);
+      uploadInFlightRef.current = false;
     }
   }
 
   async function eraseData() {
-    setErasing(true);
-    setEraseError("");
-    setEraseMessage("");
+    if (session.kind !== "ready" || eraseInFlightRef.current || uploadInFlightRef.current) return;
+    eraseInFlightRef.current = true;
+    setSession((prev) => (prev.kind === "ready" ? { ...prev, erase: { kind: "erasing" } } : prev));
     try {
       const report = await eraseServerData(locale);
+      if (!mountedRef.current) return;
       const touched = report.filter((entry) => entry.rows > 0);
       const rows = touched.reduce((sum, entry) => sum + entry.rows, 0);
-      setEraseMessage(c.server.erase.success(rows, touched.length));
+      const successMessage = c.server.erase.success(rows, touched.length);
       posthog.capture("server_data_erased", {
         collections_erased: touched.length,
         rows_erased: rows,
       });
-      await fetchServerBackup()
-        .then(applyStatus)
-        .catch(() => setState("signed-out"));
+      try {
+        const refreshed = await fetchServerBackup();
+        if (!mountedRef.current) return;
+        if (refreshed === "signed-out") {
+          setSession({ kind: "signed-out" });
+          return;
+        }
+        setSession({
+          kind: "ready",
+          updatedAt: refreshed.updatedAt,
+          serverBlob: refreshed.blob,
+          upload: { kind: "idle" },
+          erase: { kind: "succeeded", message: successMessage },
+        });
+      } catch {
+        if (mountedRef.current) setSession({ kind: "signed-out" });
+      }
     } catch (err) {
-      setEraseError(err instanceof Error ? err.message : c.server.erase.errorGeneric);
+      if (mountedRef.current) {
+        setSession((prev) =>
+          prev.kind === "ready"
+            ? {
+                ...prev,
+                erase: {
+                  kind: "failed",
+                  message: err instanceof Error ? err.message : c.server.erase.errorGeneric,
+                },
+              }
+            : prev,
+        );
+      }
     } finally {
-      setErasing(false);
-      setConfirmErase(false);
+      eraseInFlightRef.current = false;
     }
   }
 
-  if (state === "checking") {
+  if (session.kind === "checking") {
     // Nothing to show yet except the reset, whose confirm waits for an account owner.
     return <ResetPersonal storage={storage} owner={owner} ready={owner.kind === "device"} />;
   }
-  if (state === "signed-out") {
+  if (session.kind === "signed-out") {
     return (
       <>
         <h3>{c.server.title}</h3>
@@ -336,6 +439,12 @@ function ServerBackup({
       </>
     );
   }
+
+  const { updatedAt, serverBlob, upload: uploadPhase, erase: erasePhase } = session;
+  const uploading = uploadPhase.kind === "uploading";
+  const erasing = erasePhase.kind === "erasing";
+  const actionDisabled = uploading || erasing;
+  const confirmErase = erasePhase.kind === "confirming" || erasePhase.kind === "erasing";
 
   return (
     <>
@@ -351,27 +460,27 @@ function ServerBackup({
       )}
       <Button
         variant="primary"
-        disabled={busy || erasing || documentCount > 0}
+        disabled={actionDisabled || documentCount > 0}
         onClick={() => void upload(false)}
       >
-        {busy ? c.common.busy : c.server.backupNowButton}
+        {uploading ? c.common.busy : c.server.backupNowButton}
       </Button>
-      {conflict && (
+      {uploadPhase.kind === "conflict" && (
         <>
           <StatusLine tone="problem" role="alert">
-            {conflict.updatedAt
-              ? c.server.conflict.message(formatDateTime(locale, conflict.updatedAt))
+            {uploadPhase.updatedAt
+              ? c.server.conflict.message(formatDateTime(locale, uploadPhase.updatedAt))
               : c.server.conflict.missing}
           </StatusLine>
-          <Button disabled={busy || erasing} onClick={() => void upload(true)}>
+          <Button disabled={actionDisabled} onClick={() => void upload(true)}>
             {c.server.conflict.overwriteButton}
           </Button>
         </>
       )}
-      {message && <p>{message}</p>}
-      {error && (
+      {uploadPhase.kind === "succeeded" && <p>{uploadPhase.message}</p>}
+      {uploadPhase.kind === "failed" && (
         <StatusLine tone="problem" role="alert">
-          {error}
+          {uploadPhase.message}
         </StatusLine>
       )}
       {serverBlob && (
@@ -397,12 +506,12 @@ function ServerBackup({
       {!confirmErase && (
         <p>
           <Button
-            disabled={busy || erasing}
-            onClick={() => {
-              setConfirmErase(true);
-              setEraseMessage("");
-              setEraseError("");
-            }}
+            disabled={actionDisabled}
+            onClick={() =>
+              setSession((prev) =>
+                prev.kind === "ready" ? { ...prev, erase: { kind: "confirming" } } : prev,
+              )
+            }
           >
             {c.server.erase.button}
           </Button>
@@ -413,23 +522,34 @@ function ServerBackup({
           <StatusLine tone="warning" role="alert">
             {c.server.erase.warning}
           </StatusLine>
-          <Button disabled={busy || erasing} onClick={() => void eraseData()}>
+          <Button disabled={actionDisabled} onClick={() => void eraseData()}>
             {erasing ? c.common.busy : c.server.erase.confirmButton}
           </Button>{" "}
-          <Button disabled={busy || erasing} onClick={() => setConfirmErase(false)}>
+          <Button
+            disabled={actionDisabled}
+            onClick={() =>
+              setSession((prev) =>
+                prev.kind === "ready" ? { ...prev, erase: { kind: "idle" } } : prev,
+              )
+            }
+          >
             {c.server.erase.cancelButton}
           </Button>
         </>
       )}
-      {eraseMessage && <p>{eraseMessage}</p>}
-      {eraseError && (
+      {erasePhase.kind === "succeeded" && <p>{erasePhase.message}</p>}
+      {erasePhase.kind === "failed" && (
         <StatusLine tone="problem" role="alert">
-          {eraseError}
+          {erasePhase.message}
         </StatusLine>
       )}
     </>
   );
 }
+
+type RestorePanelState =
+  | { kind: "closed"; restored: boolean }
+  | { kind: "open"; status: "idle" | "restoring"; error: string | null };
 
 export default function Backup({
   storage,
@@ -443,10 +563,36 @@ export default function Backup({
   const [file, setFile] = useState<File | null>(null);
   const [pass, setPass] = useState("");
   const [confirmed, setConfirmed] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-  const [restored, setRestored] = useState(false);
-  const [restoreOpen, setRestoreOpen] = useState(false);
+  const [restorePanel, setRestorePanel] = useState<RestorePanelState>({
+    kind: "closed",
+    restored: false,
+  });
+  const mountedRef = useRef(true);
+  const restoreInFlightRef = useRef(false);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
+  const restoreOpen = restorePanel.kind === "open";
+  const busy = restorePanel.kind === "open" && restorePanel.status === "restoring";
+  const error = restorePanel.kind === "open" ? (restorePanel.error ?? "") : "";
+  const restored = restorePanel.kind === "closed" && restorePanel.restored;
+
+  function toggleRestorePanel() {
+    if (busy || restoreInFlightRef.current) return;
+    setFile(null);
+    setPass("");
+    setConfirmed(false);
+    setRestorePanel((prev) =>
+      prev.kind === "open"
+        ? { kind: "closed", restored: false }
+        : { kind: "open", status: "idle", error: null },
+    );
+  }
 
   async function handleDownload() {
     // The FULL bundle (v3): the vault AND the sealed document bytes. A download
@@ -466,29 +612,30 @@ export default function Backup({
 
   async function handleRestore(e: FormEvent) {
     e.preventDefault();
-    if (!file || !confirmed) return;
-    setBusy(true);
-    setError("");
-    setRestored(false);
+    if (!file || !confirmed || busy || restoreInFlightRef.current) return;
+    restoreInFlightRef.current = true;
+    setRestorePanel({ kind: "open", status: "restoring", error: null });
     try {
       const text = await file.text();
       const blob = parseBackup(text); // throws on malformed/misshaped file
       const ok = await storage.restore(blob, pass || undefined);
+      if (!mountedRef.current) return;
       if (!ok) {
-        setError(c.restore.error);
+        setRestorePanel({ kind: "open", status: "idle", error: c.restore.error });
         return;
       }
-      setRestored(true);
-      setRestoreOpen(false);
       setPass("");
       setFile(null);
       setConfirmed(false);
+      setRestorePanel({ kind: "closed", restored: true });
       onRestored();
       posthog.capture("backup_restored");
     } catch {
-      setError(c.restore.error);
+      if (mountedRef.current) {
+        setRestorePanel({ kind: "open", status: "idle", error: c.restore.error });
+      }
     } finally {
-      setBusy(false);
+      restoreInFlightRef.current = false;
     }
   }
 
@@ -503,7 +650,8 @@ export default function Backup({
         <Button
           aria-expanded={restoreOpen}
           aria-controls="backup-restore-form"
-          onClick={() => setRestoreOpen((open) => !open)}
+          disabled={busy}
+          onClick={toggleRestorePanel}
         >
           {c.simple.restoreButton}
         </Button>

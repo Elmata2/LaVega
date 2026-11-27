@@ -1576,3 +1576,79 @@ test("an open that waited out a live marker removes it before it proceeds", asyn
     vi.unstubAllGlobals();
   }
 });
+
+test("lock() clears the sealed blob, lockedDb, and pending stall timer", async () => {
+  globalThis.indexedDB = new IDBFactory();
+  vi.useFakeTimers({ toFake: ["setTimeout"] });
+  try {
+    const sender = createEncryptedStorage("lavega-vault-test-lock-clears");
+    const receiver = createEncryptedStorage("lavega-vault-test-lock-clears");
+    await sender.open(KEY, "user:a");
+    await sender.putAccounts([acc("A", 1)]);
+    await receiver.open(KEY, "user:a");
+    expect(receiver.export()).not.toBeNull();
+
+    // Locking directly drops the sealed blob immediately.
+    receiver.lock();
+    expect(receiver.export()).toBeNull();
+
+    // Re-open, enter cross-tab destroying state, then lock() before stall fires.
+    await receiver.open(KEY, "user:a");
+    const phases: string[] = [];
+    receiver.onVaultDestroyed((p) => phases.push(p));
+    const ch = new BroadcastChannel("lavega-vault-destroyed");
+    ch.postMessage({ type: "destroying", db: "lavega-vault-test-lock-clears:user:a" });
+    await vi.waitFor(() => expect(phases).toEqual(["locked"]));
+
+    receiver.lock();
+    expect(receiver.export()).toBeNull();
+    await vi.advanceTimersByTimeAsync(20_000);
+    ch.postMessage({ type: "destroyed", db: "lavega-vault-test-lock-clears:user:a" });
+    await vi.advanceTimersByTimeAsync(100);
+    expect(phases).toEqual(["locked"]);
+    ch.close();
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test("password-vault state refuses unlocked-only APIs until adopted or started fresh", async () => {
+  globalThis.indexedDB = new IDBFactory();
+  const dbName = "lavega-vault-test-pw-state";
+  // Seed a v1 password-sealed blob in the legacy bare DB.
+  const salt = new Uint8Array(16).fill(7);
+  const pwKey = await deriveKey("old-passphrase", salt, 210_000);
+  const sealed = await sealJSON(pwKey, { accounts: [acc("LEGACY", 42)], txs: [], rules: [] });
+  const legacyBlob = {
+    v: 1 as const,
+    kdf: "PBKDF2-SHA256" as const,
+    iterations: 210_000,
+    salt: btoa(String.fromCharCode(...salt)),
+    iv: sealed.iv,
+    ct: sealed.ct,
+  };
+  const db = await openDB(dbName, 2, {
+    upgrade(d) {
+      d.createObjectStore("vault");
+      d.createObjectStore("documents");
+    },
+  });
+  await db.put("vault", legacyBlob, "blob");
+  db.close();
+
+  const s = createEncryptedStorage(dbName);
+  expect(await s.open(KEY, "user:a")).toBe("password-vault");
+  expect(s.export()).toBeNull();
+  expect(await s.exportBundle()).toBeNull();
+  await expect(s.getAccounts()).rejects.toThrow();
+  await expect(s.putDocumentBytes("sha-x", bytesOf("secret"))).rejects.toThrow();
+  await expect(s.getDocumentBytes("sha-x")).rejects.toThrow();
+  await expect(s.hasDocumentBytes("sha-x")).rejects.toThrow();
+  await expect(s.listDocumentBytes()).rejects.toThrow();
+  expect(await s.restore(legacyBlob, "old-passphrase")).toBe(false);
+
+  // Adopting transitions cleanly to unlocked.
+  expect(await s.adoptPasswordVault("old-passphrase")).toBe(true);
+  expect(s.export()).not.toBeNull();
+  expect((await s.getAccounts())[0]?.balance).toBe(42);
+});

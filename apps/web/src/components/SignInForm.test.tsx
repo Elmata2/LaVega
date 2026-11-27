@@ -105,3 +105,18 @@ test("an ok result calls onSuccess once", async () => {
   await act(async () => submit(el.querySelector("form") as HTMLFormElement));
   expect(onSuccess).toHaveBeenCalledTimes(1);
 });
+
+test("double submit while in flight calls signIn only once", async () => {
+  let release!: (res: { ok: false; kind: "wrong-credentials" }) => void;
+  vi.mocked(signIn).mockImplementation(() => new Promise((r) => (release = r)));
+  const el = render();
+  act(() => setNativeValue(el.querySelector("#account-email") as HTMLInputElement, "x@y.nl"));
+  act(() => setNativeValue(el.querySelector("#account-password") as HTMLInputElement, "secret"));
+  const form = el.querySelector("form") as HTMLFormElement;
+  act(() => {
+    submit(form);
+    submit(form);
+  });
+  expect(signIn).toHaveBeenCalledTimes(1);
+  await act(async () => release({ ok: false, kind: "wrong-credentials" }));
+});

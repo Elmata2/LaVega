@@ -107,3 +107,50 @@ test("retry button still works and loading state has no sign-out", () => {
   const loading = render("loading", "en");
   expect(buttons(loading.el)).toHaveLength(0);
 });
+
+test("AdoptScreen startFresh clears stale wrong-password error", async () => {
+  setAppLocale("en");
+  container = document.createElement("div");
+  document.body.appendChild(container);
+  root = createRoot(container);
+  const onReady = vi.fn();
+  let releaseFresh!: () => void;
+  const storage = {
+    adoptPasswordVault: vi.fn(async () => false),
+    startFresh: vi.fn(() => new Promise<void>((r) => (releaseFresh = r))),
+  } as unknown as VaultStorage;
+
+  act(() =>
+    root!.render(
+      <VaultGate
+        gate="password-vault"
+        storage={storage}
+        onReady={onReady}
+        onRetry={vi.fn()}
+        onSignedOut={vi.fn()}
+      />,
+    ),
+  );
+
+  const input = container.querySelector<HTMLInputElement>("#adopt-pass")!;
+  act(() => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, "wrong");
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await act(async () => {
+    container!
+      .querySelector("form")!
+      .dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+  });
+  expect(container.querySelector('[role="alert"]')).not.toBeNull();
+
+  const freshBtn = buttons(container).find(
+    (b) => b.textContent === shellCopy.en.vaultGate.adopt.startFresh,
+  )!;
+  act(() => freshBtn.click());
+  // Stale error must clear immediately when starting fresh.
+  expect(container.querySelector('[role="alert"]')).toBeNull();
+
+  await act(async () => releaseFresh());
+  expect(onReady).toHaveBeenCalledWith(true);
+});

@@ -2,8 +2,8 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import SignUpForm from "./SignUpForm";
-import { signUp } from "../authClient.js";
+import SignUpForm, { RESEND_COOLDOWN } from "./SignUpForm";
+import { resendVerification, signUp } from "../authClient.js";
 import type { Locale } from "../locale.js";
 import posthog from "../posthog.js";
 
@@ -11,7 +11,7 @@ import posthog from "../posthog.js";
 
 vi.mock("../authClient.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../authClient.js")>();
-  return { ...actual, signUp: vi.fn() };
+  return { ...actual, signUp: vi.fn(), resendVerification: vi.fn() };
 });
 
 let root: Root | null = null;
@@ -19,6 +19,7 @@ let container: HTMLElement | null = null;
 
 beforeEach(() => {
   vi.mocked(signUp).mockReset();
+  vi.mocked(resendVerification).mockReset();
   vi.spyOn(posthog, "capture").mockReturnValue(undefined);
 });
 
@@ -152,4 +153,45 @@ test("a whitespace-only field never reaches signUp even if the form event fires"
   act(() => consent(el).click());
   await act(async () => submit(el));
   expect(signUp).not.toHaveBeenCalled();
+});
+
+test("double submit while in flight calls signUp only once", async () => {
+  let release!: (res: { ok: true }) => void;
+  vi.mocked(signUp).mockImplementation(() => new Promise((r) => (release = r)));
+  const el = render();
+  fill(el);
+  act(() => consent(el).click());
+  act(() => {
+    submit(el);
+    submit(el);
+  });
+  expect(signUp).toHaveBeenCalledTimes(1);
+  await act(async () => release({ ok: true }));
+});
+
+test("failed verification resend does not start the 60s cooldown", async () => {
+  vi.useFakeTimers();
+  try {
+    vi.mocked(signUp).mockResolvedValue({ ok: true });
+    vi.mocked(resendVerification).mockResolvedValue({ ok: false, kind: "unreachable" });
+    const el = render("en");
+    fill(el);
+    act(() => consent(el).click());
+    await act(async () => submit(el));
+
+    // Advance past initial cooldown.
+    for (let i = 0; i < RESEND_COOLDOWN; i++) {
+      act(() => vi.advanceTimersByTime(1000));
+    }
+    const resendBtn = el.querySelector('button[type="button"]') as HTMLButtonElement;
+    expect(resendBtn.disabled).toBe(false);
+
+    await act(async () => resendBtn.click());
+    expect(resendVerification).toHaveBeenCalledTimes(1);
+    expect(el.querySelector('[role="alert"]')).not.toBeNull();
+    // Cooldown must NOT have started on failure, so user can retry right away.
+    expect(resendBtn.disabled).toBe(false);
+  } finally {
+    vi.useRealTimers();
+  }
 });

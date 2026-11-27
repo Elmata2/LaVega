@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type { FormEvent } from "react";
 import type { VaultStorage } from "@lavega/adapters";
 import type { GateState } from "../vault-gate.js";
@@ -21,6 +21,8 @@ type VaultGateProps = {
   onSignedOut: () => void;
 };
 
+type SignOutPhase = { kind: "idle" } | { kind: "signing-out" } | { kind: "failed" };
+
 // The vault opens with the account's key, so in the normal case this renders
 // only a loading line. App only mounts it while gate !== "ready".
 export default function VaultGate({
@@ -32,20 +34,24 @@ export default function VaultGate({
 }: VaultGateProps) {
   const [locale] = useAppLocale();
   const c = shellCopy[locale].vaultGate;
-  const [signingOut, setSigningOut] = useState(false);
-  const [signOutFailed, setSignOutFailed] = useState(false);
+  const [signOutPhase, setSignOutPhase] = useState<SignOutPhase>({ kind: "idle" });
+  const signingOutRef = useRef(false);
+
+  const signingOut = signOutPhase.kind === "signing-out";
+  const signOutFailed = signOutPhase.kind === "failed";
 
   async function handleSignOut() {
-    setSigningOut(true);
-    setSignOutFailed(false);
+    if (signingOut || signingOutRef.current) return;
+    signingOutRef.current = true;
+    setSignOutPhase({ kind: "signing-out" });
     try {
       await signOut();
+      onSignedOut();
     } catch {
-      setSignOutFailed(true);
-      setSigningOut(false);
-      return;
+      setSignOutPhase({ kind: "failed" });
+    } finally {
+      signingOutRef.current = false;
     }
-    onSignedOut();
   }
 
   if (gate === "loading") {
@@ -80,6 +86,12 @@ export default function VaultGate({
   return null; // "ready" — App renders the app itself in this state
 }
 
+type AdoptPhase =
+  | { kind: "idle" }
+  | { kind: "adopting" }
+  | { kind: "starting-fresh" }
+  | { kind: "error"; message: string };
+
 /* Shown once, to someone whose browser holds a vault sealed with the vault
  * password LaVega used to ask for. The password proves the vault is theirs;
  * after this it opens with the account like any other. */
@@ -94,31 +106,43 @@ function AdoptScreen({
   const c = shellCopy[locale];
   const g = c.vaultGate;
   const [pass, setPass] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
+  const [phase, setPhase] = useState<AdoptPhase>({ kind: "idle" });
+  const inFlightRef = useRef(false);
+
+  const busy = phase.kind === "adopting" || phase.kind === "starting-fresh";
+  const error = phase.kind === "error" ? phase.message : "";
 
   async function submit(e: FormEvent) {
     e.preventDefault();
-    setBusy(true);
-    setError("");
+    if (busy || inFlightRef.current || pass.length === 0) return;
+    inFlightRef.current = true;
+    setPhase({ kind: "adopting" });
     try {
       if (!(await storage.adoptPasswordVault(pass))) {
-        setError(g.adopt.wrongPassword);
+        setPhase({ kind: "error", message: g.adopt.wrongPassword });
         return;
       }
+      setPhase({ kind: "idle" });
       onReady(false);
+    } catch {
+      setPhase({ kind: "error", message: g.adopt.wrongPassword });
     } finally {
-      setBusy(false);
+      inFlightRef.current = false;
     }
   }
 
   async function startFresh() {
-    setBusy(true);
+    if (busy || inFlightRef.current) return;
+    inFlightRef.current = true;
+    setPhase({ kind: "starting-fresh" });
     try {
       await storage.startFresh();
+      setPhase({ kind: "idle" });
       onReady(true);
+    } catch {
+      setPhase({ kind: "idle" });
     } finally {
-      setBusy(false);
+      inFlightRef.current = false;
     }
   }
 

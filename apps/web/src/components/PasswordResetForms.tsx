@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type { FormEvent } from "react";
 import type { Locale } from "../locale.js";
 import {
@@ -16,6 +16,12 @@ import StatusLine from "./ui/StatusLine.js";
 
 type MailFailure = Extract<MailResult, { ok: false }>["kind"];
 
+type RequestResetPhase =
+  | { kind: "idle" }
+  | { kind: "submitting" }
+  | { kind: "failed"; failure: MailFailure }
+  | { kind: "sent"; email: string };
+
 /* Step one of a reset: ask for the address, then say the same thing whether or
  * not it has an account. Saying "no account found" would let anyone test which
  * addresses use LaVega. */
@@ -32,22 +38,31 @@ export function RequestResetForm({
 }) {
   const c = shellCopy[locale].profiel.account;
   const [email, setEmail] = useState(initialEmail);
-  const [busy, setBusy] = useState(false);
-  const [failure, setFailure] = useState<MailFailure | null>(null);
-  const [sentTo, setSentTo] = useState<string | null>(null);
+  const [phase, setPhase] = useState<RequestResetPhase>({ kind: "idle" });
+  const inFlightRef = useRef(false);
+
+  const busy = phase.kind === "submitting";
+  const failure = phase.kind === "failed" ? phase.failure : null;
 
   async function submit(e: FormEvent) {
     e.preventDefault();
-    setBusy(true);
-    setFailure(null);
-    const result = await requestPasswordReset(email.trim());
-    setBusy(false);
-    if (!result.ok) {
-      setFailure(result.kind);
-      return;
+    const trimmed = email.trim();
+    if (!trimmed || busy || inFlightRef.current) return;
+    inFlightRef.current = true;
+    setPhase({ kind: "submitting" });
+    try {
+      const result = await requestPasswordReset(trimmed);
+      if (!result.ok) {
+        setPhase({ kind: "failed", failure: result.kind });
+        return;
+      }
+      setPhase({ kind: "sent", email: trimmed });
+      posthog.capture("password_reset_requested");
+    } catch {
+      setPhase({ kind: "failed", failure: "unreachable" });
+    } finally {
+      inFlightRef.current = false;
     }
-    setSentTo(email.trim());
-    posthog.capture("password_reset_requested");
   }
 
   const back = (
@@ -60,10 +75,10 @@ export function RequestResetForm({
     </button>
   );
 
-  if (sentTo !== null)
+  if (phase.kind === "sent")
     return (
       <div role="status">
-        <p className={introClassName}>{c.reset.sentBody(sentTo)}</p>
+        <p className={introClassName}>{c.reset.sentBody(phase.email)}</p>
         {back}
       </div>
     );
@@ -98,6 +113,12 @@ export function RequestResetForm({
   );
 }
 
+type NewPasswordPhase =
+  | { kind: "idle" }
+  | { kind: "submitting" }
+  | { kind: "invalid-link" }
+  | { kind: "failed"; failure: Exclude<ResetPasswordFailure, "invalid-link"> };
+
 /* Step two: the emailed link landed on /reset-password?token=…. A token
  * better-auth already rejected arrives as `null` and shows the expired-link
  * message without a form that cannot succeed. */
@@ -115,29 +136,49 @@ export function NewPasswordForm({
   onRequestNew: () => void;
 }) {
   const c = shellCopy[locale].profiel.account;
+  const [prevToken, setPrevToken] = useState(token);
   const [password, setPassword] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [failure, setFailure] = useState<ResetPasswordFailure | null>(
-    token === null ? "invalid-link" : null,
+  const [phase, setPhase] = useState<NewPasswordPhase>(() =>
+    token === null ? { kind: "invalid-link" } : { kind: "idle" },
   );
+  const inFlightRef = useRef(false);
+
+  if (prevToken !== token) {
+    setPrevToken(token);
+    setPassword("");
+    setPhase(token === null ? { kind: "invalid-link" } : { kind: "idle" });
+  }
+
+  const busy = phase.kind === "submitting";
+  const failure = phase.kind === "failed" ? phase.failure : null;
 
   async function submit(e: FormEvent) {
     e.preventDefault();
-    if (token === null) return;
-    setBusy(true);
-    setFailure(null);
-    const result = await resetPassword(token, password);
-    setBusy(false);
-    if (!result.ok) {
-      setFailure(result.kind);
-      return;
+    if (token === null || password.length === 0 || busy || inFlightRef.current) return;
+    inFlightRef.current = true;
+    setPhase({ kind: "submitting" });
+    try {
+      const result = await resetPassword(token, password);
+      if (!result.ok) {
+        setPhase(
+          result.kind === "invalid-link"
+            ? { kind: "invalid-link" }
+            : { kind: "failed", failure: result.kind },
+        );
+        return;
+      }
+      setPassword("");
+      setPhase({ kind: "idle" });
+      posthog.capture("password_reset_completed");
+      onDone();
+    } catch {
+      setPhase({ kind: "failed", failure: "unreachable" });
+    } finally {
+      inFlightRef.current = false;
     }
-    setPassword("");
-    posthog.capture("password_reset_completed");
-    onDone();
   }
 
-  if (failure === "invalid-link")
+  if (phase.kind === "invalid-link")
     return (
       <>
         <p role="alert" className={introClassName}>

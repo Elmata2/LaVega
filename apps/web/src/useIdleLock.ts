@@ -43,24 +43,37 @@ export default function useIdleLock(
 
     let timer: ReturnType<typeof setTimeout> | undefined;
     let hiddenAt: number | null = null;
+    let fired = false;
 
-    const arm = () => {
+    const triggerLock = () => {
+      if (fired) return;
+      fired = true;
       clearTimeout(timer);
-      timer = setTimeout(() => lockRef.current(), idleMs);
+      lockRef.current();
     };
 
-    const onActivity = () => arm();
+    const arm = () => {
+      if (fired) return;
+      clearTimeout(timer);
+      timer = setTimeout(triggerLock, idleMs);
+    };
+
+    const onActivity = () => {
+      if (fired || document.visibilityState === "hidden") return;
+      arm();
+    };
 
     const onVisibilityChange = () => {
+      if (fired) return;
       if (document.visibilityState === "hidden") {
-        hiddenAt = Date.now();
+        hiddenAt ??= Date.now();
         clearTimeout(timer);
         return;
       }
       const wasHiddenFor = hiddenAt === null ? null : Date.now() - hiddenAt;
       hiddenAt = null;
       if (wasHiddenFor !== null && wasHiddenFor >= idleMs) {
-        lockRef.current();
+        triggerLock();
         return;
       }
       arm();
@@ -71,7 +84,11 @@ export default function useIdleLock(
     for (const type of ACTIVITY_EVENTS)
       window.addEventListener(type, onActivity, { passive: true, capture: true });
     document.addEventListener("visibilitychange", onVisibilityChange);
-    arm();
+    if (document.visibilityState === "hidden") {
+      hiddenAt = Date.now();
+    } else {
+      arm();
+    }
 
     return () => {
       clearTimeout(timer);

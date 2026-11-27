@@ -21,11 +21,19 @@ vi.mock("./archive", async (importOriginal) => ({
  * (empty by default) so a test that needs a real total to share can seed one
  * account before rendering. */
 let mockAccounts: unknown[] = [];
+let pendingGetAccounts: (() => Promise<unknown[]>) | null = null;
+let destroyedListener: ((phase: "locked" | "destroyed" | "stalled") => void) | null = null;
 function fakeStorage(): VaultStorage {
   return {
     open: async () => "opened",
-    onVaultDestroyed: () => () => {},
-    getAccounts: async () => mockAccounts,
+    lock: () => {},
+    onVaultDestroyed: (listener: (phase: "locked" | "destroyed" | "stalled") => void) => {
+      destroyedListener = listener;
+      return () => {
+        if (destroyedListener === listener) destroyedListener = null;
+      };
+    },
+    getAccounts: async () => (pendingGetAccounts ? pendingGetAccounts() : mockAccounts),
     getTxs: async () => [],
     getRules: async () => [],
     getTransfers: async () => [],
@@ -113,6 +121,8 @@ beforeEach(async () => {
   resetNetWorthShareStateForTests();
   localStorage.clear();
   mockAccounts = [];
+  pendingGetAccounts = null;
+  destroyedListener = null;
   fetchMock = vi.fn(async (input: RequestInfo | URL) => {
     const url = typeof input === "string" ? input : input.toString();
     if (url.includes("/api/personal/net-worth-total")) return new Response(null, { status: 200 });
@@ -413,4 +423,34 @@ test("account with the agent on: one settings request and one feed request, the 
   expect(el.querySelector('[data-testid="instinct-section"]')?.textContent).toContain(
     "Je huur komt eraan.",
   );
+});
+
+test("mid-load cross-tab lock cancels pending vault load so stale accounts never repopulate state", async () => {
+  let resolveAccounts!: (accounts: unknown[]) => void;
+  pendingGetAccounts = () =>
+    new Promise<unknown[]>((resolve) => {
+      resolveAccounts = resolve;
+    });
+
+  container = document.createElement("div");
+  document.body.appendChild(container);
+  root = createRoot(container);
+  await act(async () => {
+    root!.render(<App owner={ACCOUNT} />);
+  });
+  await act(async () => {});
+
+  // Vault-load is in flight; trigger cross-tab lock before getAccounts resolves.
+  await act(async () => {
+    destroyedListener!("locked");
+  });
+  // Now resolve the stale getAccounts promise with sensitive balance data.
+  await act(async () => {
+    resolveAccounts([SEED_ACCOUNT]);
+  });
+  await act(async () => {});
+
+  // Stale load must not repopulate accounts or trigger a net-worth PUT.
+  expect(container.querySelector('[data-testid="reset-elsewhere"]')).not.toBeNull();
+  expect(puts()).toHaveLength(0);
 });

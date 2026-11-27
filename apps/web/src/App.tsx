@@ -302,9 +302,20 @@ function upsertTransferPair(pairs: TransferPair[], pair: TransferPair): Transfer
   return [...pairs.filter((p) => p.id !== pair.id), pair];
 }
 
+type AsyncOpKind =
+  | "bank-refresh"
+  | "bank-link"
+  | "card-files"
+  | "document-upload"
+  | "generic-import"
+  | "delete-account"
+  | "merge-accounts"
+  | "travel-terms";
+
 export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner }) {
   const [gate, setGate] = useState<GateState>("loading");
   const [openAttempt, setOpenAttempt] = useState(0);
+  const vaultGenerationRef = useRef(0);
   const [accounts, setAccounts] = useState<Account[]>([]);
   // The latest list for handlers that edit one account: a render's `accounts` can be
   // one edit behind when two edits land in the same moment.
@@ -322,7 +333,26 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
     [],
   );
   const [txs, setTxs] = useState<Tx[]>([]);
-  const [busy, setBusy] = useState(false);
+  // Ref-counted, typed async-op tracker so finishing one write never re-arms
+  // useIdleLock or autoRefreshDue while another write is still in flight.
+  const activeOpsRef = useRef(new Map<number, AsyncOpKind>());
+  const nextOpIdRef = useRef(1);
+  const [activeOps, setActiveOps] = useState<readonly AsyncOpKind[]>([]);
+  const busy = activeOps.length > 0;
+  const withBusyOp = useCallback(
+    async <T,>(kind: AsyncOpKind, fn: () => Promise<T>): Promise<T> => {
+      const id = nextOpIdRef.current++;
+      activeOpsRef.current.set(id, kind);
+      setActiveOps([...activeOpsRef.current.values()]);
+      try {
+        return await fn();
+      } finally {
+        activeOpsRef.current.delete(id);
+        setActiveOps([...activeOpsRef.current.values()]);
+      }
+    },
+    [],
+  );
   const [locale] = useAppLocale();
   const shell = shellCopy[locale];
   /* Which entity an import files its accounts under. The personal half, because
@@ -762,6 +792,48 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
     };
   }, []);
 
+  const resetTransientVaultUi = useCallback(() => {
+    setProblems([]);
+    setAgentPlan(null);
+    setPendingTerms([]);
+    setTermsAsked(0);
+    setTermsGaveUp(false);
+    setTransferLinksDropped(null);
+    setDocumentNotice(null);
+    setDocumentErased(null);
+    setImportNotice(null);
+    setFreshVault(false);
+    setIntakeRound(1);
+    setFileDialog((d) => ({ open: false, card: null, choices: [], session: d.session + 1 }));
+  }, []);
+
+  const resetVaultScopedState = useCallback(() => {
+    accountsRef.current = [];
+    txsRef.current = [];
+    rulesRef.current = [];
+    setAccounts([]);
+    setTxs([]);
+    setRules([]);
+    setTransfers([]);
+    setScheduledFlows([]);
+    setBills([]);
+    setBillOccurrences([]);
+    setBillDecisions(EMPTY_BILL_DECISIONS);
+    setValuations([]);
+    setDocuments([]);
+    setImportSessions([]);
+    setVatSettings([]);
+    setInvoices([]);
+    setRewards([]);
+    setFacts([]);
+    setEntityProfiles([]);
+    setFxHistoryState({});
+    setPendingInvoices([]);
+    setPendingNotices([]);
+    setProfileRead("loading");
+    resetTransientVaultUi();
+  }, [resetTransientVaultUi]);
+
   // Another tab cleared the personal data (Back-up > Clear personal data). The
   // storage already dropped its copy and refuses writes; reload into the empty vault.
   // Two phases: "locked" shows a neutral wait state (reloading now could re-open the
@@ -774,11 +846,13 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
         else {
           // Another tab is clearing the personal data: this one must not PUT a
           // total back while it does. Reuses this lock signal, no second one.
+          vaultGenerationRef.current += 1;
+          resetVaultScopedState();
           setNetWorthShareSuspended(true);
           setTabReset(phase);
         }
       }),
-    [],
+    [resetVaultScopedState],
   );
 
   // Open the vault with the owner's key (docs/adr/0009-account-held-vault-key.md).
@@ -818,10 +892,64 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
 
   // Load persisted data once the vault is unlocked, so a reload (or a fresh
   // unlock after Vergrendel) shows prior imports. Gated on `gate` — never runs
-  // against a locked/empty vault, which would just throw.
+  // against a locked/empty vault, which would just throw. Guarded by both
+  // `cancelled` and `vaultGenerationRef` so a mid-load lock or cross-tab reset
+  // can never repopulate decrypted state.
   useEffect(() => {
-    if (gate !== "ready") return;
+    if (gate !== "ready" || tabReset !== null) return;
+    let cancelled = false;
+    const gen = vaultGenerationRef.current;
+    const isStale = () => cancelled || vaultGenerationRef.current !== gen;
     (async () => {
+      let loaded: [
+        Account[],
+        Tx[],
+        Rule[],
+        TransferPair[],
+        ScheduledFlow[],
+        VatSettings[],
+        Invoice[],
+        RewardsBalance[],
+        LearnedFact[],
+        EntityProfile[],
+        Record<string, Record<string, number>>,
+        unknown[],
+        unknown[],
+        Bill[],
+        BillOccurrence[],
+        BillDecisions,
+        Valuation[],
+        VaultDocument[],
+        ImportSession[],
+      ];
+      try {
+        loaded = await Promise.all([
+          storage.getAccounts(),
+          storage.getTxs(),
+          storage.getRules(),
+          storage.getTransfers(),
+          storage.getScheduledFlows(),
+          storage.getVatSettings(),
+          storage.getInvoices(),
+          storage.getRewards(),
+          storage.getFacts(),
+          storage.getEntityProfiles(),
+          storage.getFxHistory(),
+          storage.getPendingInvoices(),
+          storage.getPendingNotices(),
+          storage.getBills(),
+          storage.getBillOccurrences(),
+          storage.getBillDecisions(),
+          storage.getValuations(),
+          storage.getDocuments(),
+          storage.getImportSessions(),
+        ]);
+      } catch {
+        // A lock or cross-tab destroy mid-load makes storage reads reject;
+        // ignore stale reads instead of leaving an unhandled rejection.
+        return;
+      }
+      if (isStale()) return;
       const [
         loadedAccounts,
         loadedTxs,
@@ -842,27 +970,7 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
         loadedValuations,
         loadedDocuments,
         loadedImportSessions,
-      ] = await Promise.all([
-        storage.getAccounts(),
-        storage.getTxs(),
-        storage.getRules(),
-        storage.getTransfers(),
-        storage.getScheduledFlows(),
-        storage.getVatSettings(),
-        storage.getInvoices(),
-        storage.getRewards(),
-        storage.getFacts(),
-        storage.getEntityProfiles(),
-        storage.getFxHistory(),
-        storage.getPendingInvoices(),
-        storage.getPendingNotices(),
-        storage.getBills(),
-        storage.getBillOccurrences(),
-        storage.getBillDecisions(),
-        storage.getValuations(),
-        storage.getDocuments(),
-        storage.getImportSessions(),
-      ]);
+      ] = loaded;
       setAccounts(loadedAccounts);
       setTxs(loadedTxs);
       // Rows are parsed and upgraded once, at the vault boundary. A row that
@@ -897,7 +1005,12 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
       setDocuments(loadedDocuments);
       setImportSessions(loadedImportSessions);
       if (generated.added > 0 || matched.changed) {
-        await storage.putBillPlan(matched.bills, matched.occurrences, matched.decisions);
+        try {
+          await storage.putBillPlan(matched.bills, matched.occurrences, matched.decisions);
+        } catch {
+          if (isStale()) return;
+        }
+        if (isStale()) return;
       }
       setVatSettings(loadedVat);
       setInvoices(loadedInvoices);
@@ -908,10 +1021,12 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
       setPendingInvoices(loadedPendingInvoices.filter(isPendingInvoiceLike));
       setPendingNotices(loadedPendingNotices.filter(isN8nNoticeLike));
       try {
-        setProfileRead(await storage.getProfile());
+        const profile = await storage.getProfile();
+        if (!isStale()) setProfileRead(profile);
       } catch {
-        setProfileRead("error");
+        if (!isStale()) setProfileRead("error");
       }
+      if (isStale()) return;
       // Fire, don't block: refresh the ECB history against what's ALREADY on
       // screen. A slow or failed fetch must never delay showing the vault's
       // own data — it just leaves fxHistory as it was until this lands. The
@@ -920,14 +1035,19 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
       // is not an error worth surfacing for a background refresh nobody asked
       // to see finish.
       void syncFxHistory(storage, loadedAccounts, loadedTxs)
-        .then(() => storage.getFxHistory())
-        .then(setFxHistoryState)
+        .then(() => (isStale() ? null : storage.getFxHistory()))
+        .then((history) => {
+          if (history !== null && !isStale()) setFxHistoryState(history);
+        })
         .catch(() => {});
     })();
+    return () => {
+      cancelled = true;
+    };
     // `asOf` is mount-stable (useMemo above), so it cannot retrigger the load;
     // it is listed because the lazy bill materialization needs the same day the
     // rest of the screen renders.
-  }, [gate, asOf]);
+  }, [gate, tabReset, asOf]);
 
   /* Which foreign currencies the ledger holds, and how far back each one
    * reaches. Connecting a bank mid-session adds pockets AFTER the unlock
@@ -946,16 +1066,24 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
   );
 
   useEffect(() => {
-    if (gate !== "ready" || fxNeed === "") return;
+    if (gate !== "ready" || tabReset !== null || fxNeed === "") return;
+    let cancelled = false;
+    const gen = vaultGenerationRef.current;
+    const isStale = () => cancelled || vaultGenerationRef.current !== gen;
     void syncFxHistory(storage, accounts, txs)
-      .then(() => storage.getFxHistory())
-      .then(setFxHistoryState)
+      .then(() => (isStale() ? null : storage.getFxHistory()))
+      .then((history) => {
+        if (history !== null && !isStale()) setFxHistoryState(history);
+      })
       .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
     // `accounts`/`txs` are read, not depended on: fxNeed is the signature that
     // says a fetch is actually warranted, and re-running on every edit to an
     // unrelated row would hammer the ECB route for nothing.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [gate, fxNeed]);
+  }, [gate, tabReset, fxNeed]);
 
   /* THE PERSONAL-TO-INVESTING NET WORTH SHARE, opt-in (docs/investing/
    * DASHBOARD.md). `accounts`/`txs`/`fxHistory` all change on every sync and
@@ -1093,74 +1221,74 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
    *  a lapsed consent, or a failure. A banner on every open that says nothing
    *  happened trains the eye to skip the banner that one day does. */
   async function handleRefreshBank(silent = false) {
-    setBusy(true);
-    try {
-      const res = await fetch(`${API_BASE}/api/eb/refresh`, { method: "POST" });
-      const data = (await res.json()) as {
-        error?: string;
-        refreshed?: Array<{ aspsp: string; items: [] }>;
-        expired?: string[];
-        failed?: Array<{ aspsp: string; reason?: string; retryAfterSeconds?: number }>;
-      };
-      if (!res.ok || data.error) {
-        setProblems([{ kind: "bank-link-failed", detail: String(data.error ?? res.status) }]);
-        return;
+    await withBusyOp("bank-refresh", async () => {
+      try {
+        const res = await fetch(`${API_BASE}/api/eb/refresh`, { method: "POST" });
+        const data = (await res.json()) as {
+          error?: string;
+          refreshed?: Array<{ aspsp: string; items: [] }>;
+          expired?: string[];
+          failed?: Array<{ aspsp: string; reason?: string; retryAfterSeconds?: number }>;
+        };
+        if (!res.ok || data.error) {
+          setProblems([{ kind: "bank-link-failed", detail: String(data.error ?? res.status) }]);
+          return;
+        }
+        const notices: ShellNotice[] = [];
+        let accounts = 0;
+        let txs = 0;
+        for (const conn of data.refreshed ?? []) {
+          const got = await ingestEbItems(conn.aspsp, conn.items);
+          accounts += got.accounts;
+          txs += got.txs;
+        }
+        /* STIL BETEKENT STIL. De timer draait vier keer per dag en vindt meestal
+           niets nieuws; een balk die dan "0 rekeningen, 0 transacties" meldt,
+           leert het oog de balk over te slaan op de dag dat er wél iets staat.
+           Een verversing die de gebruiker zelf aanzette meldt zich altijd — hij
+           drukte op een knop en verdient een antwoord. */
+        const changed = accounts > 0 || txs > 0;
+        if ((data.refreshed ?? []).length > 0 && (changed || !silent))
+          notices.push({
+            kind: "bank-linked",
+            accounts,
+            aspsp: (data.refreshed ?? []).map((r) => r.aspsp).join(", "),
+            txs,
+          });
+        for (const name of data.expired ?? [])
+          notices.push({ kind: "bank-consent-expired", aspsp: name });
+        for (const f of data.failed ?? []) {
+          const reason: BankRefreshFailureReason =
+            f.reason === "rate-limited" || f.reason === "bank-down" || f.reason === "unknown"
+              ? f.reason
+              : "unknown";
+          notices.push({
+            kind: "bank-refresh-failed",
+            aspsp: f.aspsp,
+            reason,
+            ...(typeof f.retryAfterSeconds === "number"
+              ? { retryAfterSeconds: f.retryAfterSeconds }
+              : {}),
+          });
+        }
+        if (notices.length === 0 && !silent) notices.push({ kind: "bank-nothing-to-refresh" });
+        // Niets te melden en niemand die erom vroeg: de balk blijft staan zoals
+        // hij stond, in plaats van leeggemaakt te worden en daarmee een eerdere
+        // melding op te ruimen die de gebruiker nog niet gelezen had.
+        if (silent && notices.length === 0) return;
+        setProblems(notices);
+      } catch (e) {
+        setProblems([
+          { kind: "bank-link-failed", detail: e instanceof Error ? e.message : String(e) },
+        ]);
+      } finally {
+        /* DE POGING WORDT GESTEMPELD, niet de uitkomst — zie
+           `markEbRefreshAttempted`. Alleen bij succes stempelen maakt van elke
+           mislukking een lus: het effect draait opnieuw zodra `busy` omslaat, en
+           vindt de verversing dan meteen weer nodig. */
+        markEbRefreshAttempted(Date.now());
       }
-      const notices: ShellNotice[] = [];
-      let accounts = 0;
-      let txs = 0;
-      for (const conn of data.refreshed ?? []) {
-        const got = await ingestEbItems(conn.aspsp, conn.items);
-        accounts += got.accounts;
-        txs += got.txs;
-      }
-      /* STIL BETEKENT STIL. De timer draait vier keer per dag en vindt meestal
-         niets nieuws; een balk die dan "0 rekeningen, 0 transacties" meldt,
-         leert het oog de balk over te slaan op de dag dat er wél iets staat.
-         Een verversing die de gebruiker zelf aanzette meldt zich altijd — hij
-         drukte op een knop en verdient een antwoord. */
-      const changed = accounts > 0 || txs > 0;
-      if ((data.refreshed ?? []).length > 0 && (changed || !silent))
-        notices.push({
-          kind: "bank-linked",
-          accounts,
-          aspsp: (data.refreshed ?? []).map((r) => r.aspsp).join(", "),
-          txs,
-        });
-      for (const name of data.expired ?? [])
-        notices.push({ kind: "bank-consent-expired", aspsp: name });
-      for (const f of data.failed ?? []) {
-        const reason: BankRefreshFailureReason =
-          f.reason === "rate-limited" || f.reason === "bank-down" || f.reason === "unknown"
-            ? f.reason
-            : "unknown";
-        notices.push({
-          kind: "bank-refresh-failed",
-          aspsp: f.aspsp,
-          reason,
-          ...(typeof f.retryAfterSeconds === "number"
-            ? { retryAfterSeconds: f.retryAfterSeconds }
-            : {}),
-        });
-      }
-      if (notices.length === 0 && !silent) notices.push({ kind: "bank-nothing-to-refresh" });
-      // Niets te melden en niemand die erom vroeg: de balk blijft staan zoals
-      // hij stond, in plaats van leeggemaakt te worden en daarmee een eerdere
-      // melding op te ruimen die de gebruiker nog niet gelezen had.
-      if (silent && notices.length === 0) return;
-      setProblems(notices);
-    } catch (e) {
-      setProblems([
-        { kind: "bank-link-failed", detail: e instanceof Error ? e.message : String(e) },
-      ]);
-    } finally {
-      /* DE POGING WORDT GESTEMPELD, niet de uitkomst — zie
-         `markEbRefreshAttempted`. Alleen bij succes stempelen maakt van elke
-         mislukking een lus: het effect draait opnieuw zodra `busy` omslaat, en
-         vindt de verversing dan meteen weer nodig. */
-      markEbRefreshAttempted(Date.now());
-      setBusy(false);
-    }
+    });
   }
 
   // via appRoutes.ts) already stripped that off the URL on load, so the id
@@ -1178,8 +1306,7 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
       setProblems([{ kind: "bank-link-failed", detail: String(ebError) }]);
       return;
     }
-    (async () => {
-      setBusy(true);
+    void withBusyOp("bank-link", async () => {
       try {
         const res = await fetch(
           `${API_BASE}/api/eb/accounts?session_id=${encodeURIComponent(ebSession as string)}`,
@@ -1197,10 +1324,8 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
         setProblems([
           { kind: "bank-link-failed", detail: e instanceof Error ? e.message : String(e) },
         ]);
-      } finally {
-        setBusy(false);
       }
-    })();
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gate]);
 
@@ -1245,29 +1370,9 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
   // sign-in, so locking IS signing out. Without accounts there is no session
   // to end; the page reopens the vault with this browser's key.
   function handleLock() {
+    vaultGenerationRef.current += 1;
     storage.lock();
-    setAccounts([]);
-    setTxs([]);
-    setRules([]);
-    setTransfers([]);
-    setTransferLinksDropped(null);
-    setScheduledFlows([]);
-    setBills([]);
-    setBillOccurrences([]);
-    setBillDecisions(EMPTY_BILL_DECISIONS);
-    setValuations([]);
-    setDocuments([]);
-    setDocumentNotice(null);
-    setImportSessions([]);
-    setImportNotice(null);
-    setVatSettings([]);
-    setInvoices([]);
-    setRewards([]);
-    setFacts([]);
-    setEntityProfiles([]);
-    setPendingInvoices([]);
-    setPendingNotices([]);
-    setProfileRead("loading");
+    resetVaultScopedState();
     setGate("loading");
     if (owner.kind === "account") void signOut().finally(() => window.location.assign("/"));
     else setOpenAttempt((n) => n + 1);
@@ -1390,6 +1495,57 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
   // After storage.restore() swaps in a different vault's data (Task 5), reload
   // everything from it — restore() itself only touches storage, never React state.
   async function handleRestored() {
+    vaultGenerationRef.current += 1;
+    const gen = vaultGenerationRef.current;
+    const isStale = () => vaultGenerationRef.current !== gen;
+    resetTransientVaultUi();
+    let fresh: [
+      Account[],
+      Tx[],
+      Rule[],
+      TransferPair[],
+      ScheduledFlow[],
+      VatSettings[],
+      Invoice[],
+      RewardsBalance[],
+      LearnedFact[],
+      EntityProfile[],
+      Record<string, Record<string, number>>,
+      unknown[],
+      unknown[],
+      Bill[],
+      BillOccurrence[],
+      BillDecisions,
+      VaultDocument[],
+      Valuation[],
+      ImportSession[],
+    ];
+    try {
+      fresh = await Promise.all([
+        storage.getAccounts(),
+        storage.getTxs(),
+        storage.getRules(),
+        storage.getTransfers(),
+        storage.getScheduledFlows(),
+        storage.getVatSettings(),
+        storage.getInvoices(),
+        storage.getRewards(),
+        storage.getFacts(),
+        storage.getEntityProfiles(),
+        storage.getFxHistory(),
+        storage.getPendingInvoices(),
+        storage.getPendingNotices(),
+        storage.getBills(),
+        storage.getBillOccurrences(),
+        storage.getBillDecisions(),
+        storage.getDocuments(),
+        storage.getValuations(),
+        storage.getImportSessions(),
+      ]);
+    } catch {
+      return;
+    }
+    if (isStale()) return;
     const [
       freshAccounts,
       freshTxs,
@@ -1399,28 +1555,18 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
       freshVat,
       freshInvoices,
       freshRewards,
+      freshFacts,
       freshProfiles,
+      freshFxHistory,
+      freshPendingInvoices,
+      freshPendingNotices,
       freshBills,
       freshOccurrences,
+      freshDecisions,
       freshDocuments,
       freshValuations,
       freshImportSessions,
-    ] = await Promise.all([
-      storage.getAccounts(),
-      storage.getTxs(),
-      storage.getRules(),
-      storage.getTransfers(),
-      storage.getScheduledFlows(),
-      storage.getVatSettings(),
-      storage.getInvoices(),
-      storage.getRewards(),
-      storage.getEntityProfiles(),
-      storage.getBills(),
-      storage.getBillOccurrences(),
-      storage.getDocuments(),
-      storage.getValuations(),
-      storage.getImportSessions(),
-    ]);
+    ] = fresh;
     // A restored vault carries its statement metadata AND its valuations; the
     // document BYTES came back in the document store, so the card can show
     // them immediately instead of after a reload.
@@ -1438,14 +1584,20 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
     setScheduledFlows(freshFlows);
     setBills(freshBills);
     setBillOccurrences(freshOccurrences);
+    setBillDecisions(freshDecisions);
     setVatSettings(freshVat);
     setInvoices(freshInvoices);
     setRewards(freshRewards);
+    setFacts(freshFacts);
     setEntityProfiles(freshProfiles);
+    setFxHistoryState(freshFxHistory);
+    setPendingInvoices(freshPendingInvoices.filter(isPendingInvoiceLike));
+    setPendingNotices(freshPendingNotices.filter(isN8nNoticeLike));
     try {
-      setProfileRead(await storage.getProfile());
+      const profile = await storage.getProfile();
+      if (!isStale()) setProfileRead(profile);
     } catch {
-      setProfileRead("error");
+      if (!isStale()) setProfileRead("error");
     }
   }
 
@@ -1734,8 +1886,7 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
     files: CardFileInput[],
     _card: CardTarget | null,
   ): Promise<{ ok: true; count: number; written: Account[] } | { ok: false; partial: boolean }> {
-    setBusy(true);
-    try {
+    return withBusyOp("card-files", async () => {
       // The records that point at transaction ids / account keys: a Trading 212
       // fold rewrites them BEFORE it deletes the old rows (see commitToStorage), and
       // the follow-up below reads the rewritten copies, not the stale closure.
@@ -1748,7 +1899,7 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
         sessions: importSessions,
         documents,
       };
-      return await categorizeSaver.current!.enqueue(async () => {
+      return categorizeSaver.current!.enqueue(async () => {
         const r = await commitToStorage(
           storage,
           { accounts, txs: txsRef.current },
@@ -1799,9 +1950,7 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
         }
         return { ok: false, partial: r.partial };
       });
-    } finally {
-      setBusy(false);
-    }
+    });
   }
 
   /** The stated cards no real account stands in for, as choices for the dialog. */
@@ -1991,73 +2140,72 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
   // → detect the metadata → suggest an account. The bytes go FIRST, so metadata
   // never points at something the vault does not hold.
   async function handleDocumentUpload(file: File) {
-    setBusy(true);
-    setDocumentNotice(null);
-    try {
-      const bytes = new Uint8Array(await file.arrayBuffer());
-      const check = checkDocumentUpload({
-        filename: file.name,
-        mime: file.type,
-        byteSize: bytes.byteLength,
-      });
-      if (!check.ok) {
-        setDocumentNotice({ kind: "refused", filename: file.name, problem: check.problem });
-        return;
-      }
-      const sha256 = await sha256Hex(bytes);
-      if (findDocumentBySha(documents, sha256) != null) {
-        setDocumentNotice({ kind: "duplicate", filename: file.name });
-        return;
-      }
-      await storage.putDocumentBytes(sha256, bytes);
-      // A CSV is text we can read, so the detector's content tier works there
-      // exactly as Sure's does for an extracted PDF page.
-      const text =
-        check.extension === ".csv" || file.type.startsWith("text/")
-          ? new TextDecoder().decode(bytes.slice(0, 256 * 1024))
-          : null;
-      const detected = detectStatementMetadata({ filename: file.name, mime: file.type, text });
-      const match = matchStatementAccount(
-        {
+    await withBusyOp("document-upload", async () => {
+      setDocumentNotice(null);
+      try {
+        const bytes = new Uint8Array(await file.arrayBuffer());
+        const check = checkDocumentUpload({
+          filename: file.name,
+          mime: file.type,
+          byteSize: bytes.byteLength,
+        });
+        if (!check.ok) {
+          setDocumentNotice({ kind: "refused", filename: file.name, problem: check.problem });
+          return;
+        }
+        const sha256 = await sha256Hex(bytes);
+        if (findDocumentBySha(documents, sha256) != null) {
+          setDocumentNotice({ kind: "duplicate", filename: file.name });
+          return;
+        }
+        await storage.putDocumentBytes(sha256, bytes);
+        // A CSV is text we can read, so the detector's content tier works there
+        // exactly as Sure's does for an extracted PDF page.
+        const text =
+          check.extension === ".csv" || file.type.startsWith("text/")
+            ? new TextDecoder().decode(bytes.slice(0, 256 * 1024))
+            : null;
+        const detected = detectStatementMetadata({ filename: file.name, mime: file.type, text });
+        const match = matchStatementAccount(
+          {
+            institutionHint: detected.institutionHint,
+            accountNameHint: detected.accountNameHint,
+            accountLast4: detected.accountLast4,
+            currency: detected.currency,
+          },
+          accounts,
+        );
+        const doc: VaultDocument = {
+          id: sha256,
+          sha256,
+          filename: file.name,
+          mime: file.type || "application/octet-stream",
+          byteSize: bytes.byteLength,
+          kind: "statement",
+          source: "manual-upload",
+          uploadedAt: asOf,
+          periodFrom: detected.periodFrom,
+          periodTo: detected.periodTo,
+          currency: detected.currency ?? "EUR",
+          accountKey: null,
+          suggestedAccountKey: match.status === "matched" ? match.accountKey : null,
+          matchConfidence: match.status === "matched" ? match.confidence : null,
+          accountLast4: detected.accountLast4,
           institutionHint: detected.institutionHint,
           accountNameHint: detected.accountNameHint,
-          accountLast4: detected.accountLast4,
-          currency: detected.currency,
-        },
-        accounts,
-      );
-      const doc: VaultDocument = {
-        id: sha256,
-        sha256,
-        filename: file.name,
-        mime: file.type || "application/octet-stream",
-        byteSize: bytes.byteLength,
-        kind: "statement",
-        source: "manual-upload",
-        uploadedAt: asOf,
-        periodFrom: detected.periodFrom,
-        periodTo: detected.periodTo,
-        currency: detected.currency ?? "EUR",
-        accountKey: null,
-        suggestedAccountKey: match.status === "matched" ? match.accountKey : null,
-        matchConfidence: match.status === "matched" ? match.confidence : null,
-        accountLast4: detected.accountLast4,
-        institutionHint: detected.institutionHint,
-        accountNameHint: detected.accountNameHint,
-        openingBalanceCents: null,
-        closingBalanceCents: null,
-        reviewStatus: "unmatched",
-        metadataSources: detected.metadataSources,
-      };
-      await saveDocuments(upsertDocument(documents, doc));
-      setDocumentNotice({ kind: "stored", filename: file.name });
-    } catch (err) {
-      setProblems([
-        { kind: "import-failed", detail: err instanceof Error ? err.message : String(err) },
-      ]);
-    } finally {
-      setBusy(false);
-    }
+          openingBalanceCents: null,
+          closingBalanceCents: null,
+          reviewStatus: "unmatched",
+          metadataSources: detected.metadataSources,
+        };
+        await saveDocuments(upsertDocument(documents, doc));
+        setDocumentNotice({ kind: "stored", filename: file.name });
+      } catch (err) {
+        setProblems([
+          { kind: "import-failed", detail: err instanceof Error ? err.message : String(err) },
+        ]);
+      }
+    });
   }
 
   async function handleDocumentLink(id: string, accountKey: string) {
@@ -2104,69 +2252,68 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
   // session so a revert is exact. The source file is retained in the #293
   // document store under its SHA-256.
   async function handleGenericImport(request: GenericImportRequest) {
-    setBusy(true);
-    setImportNotice(null);
-    try {
-      const sha256 = await sha256Hex(request.bytes);
-      const sessionId = `import-${sha256.slice(0, 12)}-${importSessions.length + 1}`;
-      const result = await categorizeSaver.current!.upsertTxs((curTxs) => {
-        const next = applyGenericImport({
-          existingTxs: curTxs,
-          plan: request.plan,
-          id: sessionId,
-          filename: request.filename,
-          asOf,
-          documentId: sha256,
+    await withBusyOp("generic-import", async () => {
+      setImportNotice(null);
+      try {
+        const sha256 = await sha256Hex(request.bytes);
+        const sessionId = `import-${sha256.slice(0, 12)}-${importSessions.length + 1}`;
+        const result = await categorizeSaver.current!.upsertTxs((curTxs) => {
+          const next = applyGenericImport({
+            existingTxs: curTxs,
+            plan: request.plan,
+            id: sessionId,
+            filename: request.filename,
+            asOf,
+            documentId: sha256,
+          });
+          const { upserts } = txDiff(curTxs, next.txs);
+          return { upserts, result: next };
         });
-        const { upserts } = txDiff(curTxs, next.txs);
-        return { upserts, result: next };
-      });
-      const nextSessions = [...importSessions, result.session];
-      setImportSessions(nextSessions);
-      await storage.putImportSessions(nextSessions);
+        const nextSessions = [...importSessions, result.session];
+        setImportSessions(nextSessions);
+        await storage.putImportSessions(nextSessions);
 
-      const dates = request.plan.parsed.map((row) => row.date).sort();
-      const mime =
-        request.format === "generic-xlsx"
-          ? "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-          : "text/csv";
-      const document: VaultDocument = {
-        id: sha256,
-        sha256,
-        filename: request.filename,
-        mime,
-        byteSize: request.bytes.byteLength,
-        kind: "statement",
-        source: "import",
-        uploadedAt: asOf,
-        periodFrom: dates[0] ?? null,
-        periodTo: dates[dates.length - 1] ?? null,
-        currency: "EUR",
-        accountKey: request.plan.accountKey,
-        suggestedAccountKey: null,
-        matchConfidence: 1,
-        accountLast4: null,
-        institutionHint: null,
-        accountNameHint: null,
-        openingBalanceCents: null,
-        closingBalanceCents: null,
-        reviewStatus: "linked",
-        metadataSources: ["import"],
-        txIds: result.importedIds,
-        importId: sessionId,
-      };
-      await storage.putDocumentBytes(sha256, request.bytes);
-      const nextDocuments = upsertDocument(documents, document);
-      setDocuments(nextDocuments);
-      await storage.putDocuments(nextDocuments);
-      setImportNotice(importSessionCopy[locale].imported(result.importedIds.length));
-    } catch (err) {
-      setProblems([
-        { kind: "import-failed", detail: err instanceof Error ? err.message : String(err) },
-      ]);
-    } finally {
-      setBusy(false);
-    }
+        const dates = request.plan.parsed.map((row) => row.date).sort();
+        const mime =
+          request.format === "generic-xlsx"
+            ? "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            : "text/csv";
+        const document: VaultDocument = {
+          id: sha256,
+          sha256,
+          filename: request.filename,
+          mime,
+          byteSize: request.bytes.byteLength,
+          kind: "statement",
+          source: "import",
+          uploadedAt: asOf,
+          periodFrom: dates[0] ?? null,
+          periodTo: dates[dates.length - 1] ?? null,
+          currency: "EUR",
+          accountKey: request.plan.accountKey,
+          suggestedAccountKey: null,
+          matchConfidence: 1,
+          accountLast4: null,
+          institutionHint: null,
+          accountNameHint: null,
+          openingBalanceCents: null,
+          closingBalanceCents: null,
+          reviewStatus: "linked",
+          metadataSources: ["import"],
+          txIds: result.importedIds,
+          importId: sessionId,
+        };
+        await storage.putDocumentBytes(sha256, request.bytes);
+        const nextDocuments = upsertDocument(documents, document);
+        setDocuments(nextDocuments);
+        await storage.putDocuments(nextDocuments);
+        setImportNotice(importSessionCopy[locale].imported(result.importedIds.length));
+      } catch (err) {
+        setProblems([
+          { kind: "import-failed", detail: err instanceof Error ? err.message : String(err) },
+        ]);
+      }
+    });
   }
 
   // Revert ONE import: exactly the rows its session recorded. The retained
@@ -2215,8 +2362,7 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
   // deletable again, while orphaned transactions belong to nothing and would
   // still count toward the totals.
   async function handleDeleteAccount(key: string) {
-    setBusy(true);
-    try {
+    await withBusyOp("delete-account", async () => {
       const ids = txIdsForAccount(txs, key);
       if (ids.length > 0) await storage.deleteTxs(ids);
       await storage.deleteAccount(key);
@@ -2239,9 +2385,7 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
         setValuations(droppedValuations.valuations);
         await storage.putValuations(droppedValuations.valuations);
       }
-    } finally {
-      setBusy(false);
-    }
+    });
   }
 
   // Merge a duplicate account into its survivor: one real account that got
@@ -2250,8 +2394,7 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
   // overlapping range by content, so a period present in both statements is
   // never double-counted. Persist exactly the diff it produced.
   async function handleMergeDuplicates(survivorKey: string, duplicateKey: string) {
-    setBusy(true);
-    try {
+    await withBusyOp("merge-accounts", async () => {
       const merged = mergeAccounts(accounts, txs, survivorKey, duplicateKey);
       const { removedIds, upserts } = txDiff(txs, merged.txs);
       if (removedIds.length > 0) await storage.deleteTxs(removedIds);
@@ -2276,9 +2419,7 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
         setValuations(mergedValuations.valuations);
         await storage.putValuations(mergedValuations.valuations);
       }
-    } finally {
-      setBusy(false);
-    }
+    });
   }
 
   // Persist learned facts through the ONE merge rule (upsertFacts): whatever he
@@ -2372,98 +2513,100 @@ export default function App({ owner = { kind: "device" } }: { owner?: VaultOwner
     // He may have added the key since this tab loaded. Ask again before telling
     // him it cannot be done.
     await recheckLlm();
-    setBusy(true);
-    try {
-      const plan = planTravel({ accounts, txs, rates: rates.rates, facts, destination, asOf });
-      // Ask about EVERY provider, not just the ones with no figure yet — the
-      // server holds the freshness clock, and only asking about unknowns meant
-      // a fee, once learned, could never be refreshed again. Corrections are
-      // still safe: upsertFacts never lets an agent overwrite a user fact.
-      const providers = plan.spend.map((o) => o.provider).filter(Boolean);
-      if (providers.length === 0) return;
-      const today = new Date().toISOString().slice(0, 10);
-      // Send what he corrected so the model is told not to contradict it. A
-      // correction made before the topUpFree rename is still keyed
-      // transferFreeViaIdeal in his vault — translated here, at the wire, so it
-      // still reaches the model under a name the server's registry accepts;
-      // his stored fact itself is never rewritten.
-      const knownFacts = facts
-        .filter((f) => f.source === "user" && f.agent === TRAVEL_AGENT)
-        .map((f) => ({
-          subject: f.subject,
-          key: f.key === "transferFreeViaIdeal" ? "topUpFree" : f.key,
-          value: f.value,
-        }));
+    await withBusyOp("travel-terms", async () => {
+      try {
+        const plan = planTravel({ accounts, txs, rates: rates.rates, facts, destination, asOf });
+        // Ask about EVERY provider, not just the ones with no figure yet — the
+        // server holds the freshness clock, and only asking about unknowns meant
+        // a fee, once learned, could never be refreshed again. Corrections are
+        // still safe: upsertFacts never lets an agent overwrite a user fact.
+        const providers = plan.spend.map((o) => o.provider).filter(Boolean);
+        if (providers.length === 0) return;
+        const today = new Date().toISOString().slice(0, 10);
+        // Send what he corrected so the model is told not to contradict it. A
+        // correction made before the topUpFree rename is still keyed
+        // transferFreeViaIdeal in his vault — translated here, at the wire, so it
+        // still reaches the model under a name the server's registry accepts;
+        // his stored fact itself is never rewritten.
+        const knownFacts = facts
+          .filter((f) => f.source === "user" && f.agent === TRAVEL_AGENT)
+          .map((f) => ({
+            subject: f.subject,
+            key: f.key === "transferFreeViaIdeal" ? "topUpFree" : f.key,
+            value: f.value,
+          }));
 
-      // One fast call: the server answers from its shared cache of PUBLIC card
-      // tariffs and starts background lookups for whatever it doesn't have yet.
-      // Nothing here waits on the model, so the button never hangs — a gap just
-      // means "press it again in a minute".
-      const { terms, pending } = await travelFacts({
-        homeCountry,
-        destination,
-        currency: countryCurrency(destination) ?? "",
-        providers,
-        knownFacts,
-      });
+        // One fast call: the server answers from its shared cache of PUBLIC card
+        // tariffs and starts background lookups for whatever it doesn't have yet.
+        // Nothing here waits on the model, so the button never hangs — a gap just
+        // means "press it again in a minute".
+        const { terms, pending } = await travelFacts({
+          homeCountry,
+          destination,
+          currency: countryCurrency(destination) ?? "",
+          providers,
+          knownFacts,
+        });
 
-      const learned: LearnedFact[] = [];
-      for (const t of terms) {
-        // Date the figure by WHEN IT WAS TRUE, not when we happened to receive
-        // it. A comparison table states its own last-checked date (bank.nl says
-        // 2026-01-15); stamping that as "today" would tell him a seven-month-old
-        // koersopslag was found this morning — the same lie the precedence
-        // ladder was just fixed to stop believing. No stated date means an agent
-        // lookup, which is as of now.
-        const asOfFigure =
-          t.checkedAt && /^\d{4}-\d{2}-\d{2}$/.test(t.checkedAt) ? t.checkedAt : today;
-        const put = (key: string, value: number | undefined) => {
-          if (value === undefined) return; // unverified stays unknown, never 0
-          learned.push(
-            makeFact({
-              agent: TRAVEL_AGENT,
-              subject: t.provider,
-              key,
-              value: String(value),
-              source: "agent",
-              updatedAt: asOfFigure,
-              note: t.note,
-            }),
-          );
-        };
-        put("fxFeePct", t.fxFeePct);
-        put("convertFeePct", t.convertFeePct);
-        put("cashbackPct", t.cashbackPct);
-        put("pointsPerEuro", t.pointsPerEuro);
-        put("topUpFree", t.topUpFree);
+        const learned: LearnedFact[] = [];
+        for (const t of terms) {
+          // Date the figure by WHEN IT WAS TRUE, not when we happened to receive
+          // it. A comparison table states its own last-checked date (bank.nl says
+          // 2026-01-15); stamping that as "today" would tell him a seven-month-old
+          // koersopslag was found this morning — the same lie the precedence
+          // ladder was just fixed to stop believing. No stated date means an agent
+          // lookup, which is as of now.
+          const asOfFigure =
+            t.checkedAt && /^\d{4}-\d{2}-\d{2}$/.test(t.checkedAt) ? t.checkedAt : today;
+          const put = (key: string, value: number | undefined) => {
+            if (value === undefined) return; // unverified stays unknown, never 0
+            learned.push(
+              makeFact({
+                agent: TRAVEL_AGENT,
+                subject: t.provider,
+                key,
+                value: String(value),
+                source: "agent",
+                updatedAt: asOfFigure,
+                note: t.note,
+              }),
+            );
+          };
+          put("fxFeePct", t.fxFeePct);
+          put("convertFeePct", t.convertFeePct);
+          put("cashbackPct", t.cashbackPct);
+          put("pointsPerEuro", t.pointsPerEuro);
+          put("topUpFree", t.topUpFree);
+        }
+        if (learned.length > 0) await saveFacts(learned);
+
+        setPendingTerms(pending);
+        setTermsAsked(providers.length);
+        setTermsGaveUp(false);
+        // The HTTP call is done in ~200ms; the LOOKUPS keep running on the server
+        // for 40s to a few minutes. Tracking the request left the screen still
+        // while the real work was happening, which is exactly what made him guess
+        // whether anything was working. So poll the cheap cached endpoint until
+        // the pending list drains, and stop rather than spin forever.
+        // A LOOKUP IN PROGRESS IS NOT A PROBLEM. This used to push the pending list
+        // into setProblems, which is the page-wide warning channel — so a yellow
+        // banner about the reisblok followed him onto Rekeningen and Valuta, where
+        // it meant nothing. He called it ugly and he is right: the banner is for
+        // things that need him, and waiting does not.
+        //
+        // The reisblok carries its own searching state (a spinner, and a sentence
+        // when a lookup comes back empty), which is where progress belongs — next
+        // to the thing being looked up.
+        if (pending.length > 0) void pollTravelTerms(destination, providers, knownFacts);
+      } catch (err) {
+        setProblems([
+          {
+            kind: "terms-lookup-failed",
+            detail: err instanceof Error ? err.message : String(err),
+          },
+        ]);
       }
-      if (learned.length > 0) await saveFacts(learned);
-
-      setPendingTerms(pending);
-      setTermsAsked(providers.length);
-      setTermsGaveUp(false);
-      // The HTTP call is done in ~200ms; the LOOKUPS keep running on the server
-      // for 40s to a few minutes. Tracking the request left the screen still
-      // while the real work was happening, which is exactly what made him guess
-      // whether anything was working. So poll the cheap cached endpoint until
-      // the pending list drains, and stop rather than spin forever.
-      // A LOOKUP IN PROGRESS IS NOT A PROBLEM. This used to push the pending list
-      // into setProblems, which is the page-wide warning channel — so a yellow
-      // banner about the reisblok followed him onto Rekeningen and Valuta, where
-      // it meant nothing. He called it ugly and he is right: the banner is for
-      // things that need him, and waiting does not.
-      //
-      // The reisblok carries its own searching state (a spinner, and a sentence
-      // when a lookup comes back empty), which is where progress belongs — next
-      // to the thing being looked up.
-      if (pending.length > 0) void pollTravelTerms(destination, providers, knownFacts);
-    } catch (err) {
-      setProblems([
-        { kind: "terms-lookup-failed", detail: err instanceof Error ? err.message : String(err) },
-      ]);
-    } finally {
-      setBusy(false);
-    }
+    });
   }
 
   if (tabReset) {

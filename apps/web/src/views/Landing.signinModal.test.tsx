@@ -167,3 +167,42 @@ test("submitting valid credentials navigates to the app, not a pushState", async
   expect(assign).toHaveBeenCalledWith("/app");
   expect(onEnter).not.toHaveBeenCalled();
 });
+
+test("closing the modal resets forgot-password sub-flow back to sign-in on reopen", () => {
+  vi.mocked(useAuthState).mockReturnValue({ state: { kind: "signed-out" }, refresh: vi.fn() });
+  const el = render();
+  act(() => click(loginButton(el)));
+  act(() => setNativeValue(el.querySelector("#account-email") as HTMLInputElement, "user@a.nl"));
+  const forgotBtn = [...el.querySelectorAll("button")].find((b) =>
+    b.textContent?.includes("Wachtwoord vergeten"),
+  ) as HTMLButtonElement;
+  act(() => click(forgotBtn));
+  expect(el.querySelector("#reset-email")).not.toBeNull();
+
+  const closeButton = el.querySelector('[aria-label="Sluiten"]') as HTMLButtonElement;
+  act(() => click(closeButton));
+  expect(dialog(el).open).toBe(false);
+
+  // Reopen via Login button: must be back on sign-in with clean email state.
+  act(() => click(loginButton(el)));
+  expect(el.querySelector("#reset-email")).toBeNull();
+  expect(el.querySelector("#account-email")).not.toBeNull();
+});
+
+test("__lpTap waits for authState to finish loading and calls onEnter when signed-in", () => {
+  const w = window as Window & { __lpTap?: string };
+  w.__lpTap = "sign-in";
+  vi.mocked(useAuthState).mockReturnValue({ state: { kind: "loading" }, refresh: vi.fn() });
+  const onEnter = vi.fn();
+  const el = render(onEnter);
+  expect(dialog(el).open).toBe(false);
+  expect(onEnter).not.toHaveBeenCalled();
+
+  vi.mocked(useAuthState).mockReturnValue({
+    state: { kind: "signed-in", id: "u1", email: "x@y.nl" },
+    refresh: vi.fn(),
+  });
+  act(() => root!.render(<Landing onEnter={onEnter} locale="nl" />));
+  expect(onEnter).toHaveBeenCalledTimes(1);
+  expect(dialog(el).open).toBe(false);
+});

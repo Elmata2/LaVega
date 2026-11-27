@@ -603,3 +603,92 @@ test("the personal reset confirmation names the daily message and its messages, 
   );
   expect(adminCopy.en.backup.resetPersonal.goes).toContain("your daily message and its messages");
 });
+
+test("signed-out during upload clears serverBlob, conflict, and erase confirmation", async () => {
+  let putCalls = 0;
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (_url: string, init?: RequestInit) => {
+      if (init?.method !== "PUT") {
+        return new Response(JSON.stringify({ blob, updatedAt: "2026-08-31T00:00:00.000Z" }));
+      }
+      putCalls += 1;
+      if (putCalls === 1) {
+        return new Response(
+          JSON.stringify({ problems: ["nieuwer"], updatedAt: "2026-08-31T09:00:00.000Z" }),
+          { status: 409 },
+        );
+      }
+      return new Response(null, { status: 401 });
+    }),
+  );
+  await render();
+
+  await act(async () => {
+    button("Nu back-uppen")!.click();
+  });
+  expect(button("Toch overschrijven")).toBeDefined();
+
+  await act(async () => {
+    button("Servergegevens verwijderen")!.click();
+  });
+  expect(button("Ja, verwijder")).toBeDefined();
+
+  await act(async () => {
+    button("Toch overschrijven")!.click();
+  });
+
+  expect(container!.textContent).toContain("Log in om je versleutelde kluis");
+  expect(button("Toch overschrijven")).toBeUndefined();
+  expect(button("Ja, verwijder")).toBeUndefined();
+  expect(button("Download van server")).toBeUndefined();
+});
+
+test("local restore toggle is disabled while busy and resets stale error/state on reopen", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => new Response(null, { status: 401 })),
+  );
+  let releaseRestore!: (ok: boolean) => void;
+  const restore = vi.fn(
+    () =>
+      new Promise<boolean>((resolve) => {
+        releaseRestore = resolve;
+      }),
+  );
+  await render({ restore });
+
+  const toggle = () =>
+    container!.querySelector<HTMLButtonElement>('button[aria-controls="backup-restore-form"]')!;
+
+  await act(async () => toggle().click());
+
+  const fileInput = container!.querySelector<HTMLInputElement>("#backup-restore-file")!;
+  const badFile = new File([JSON.stringify(blob)], "test.lavega", { type: "application/json" });
+  Object.defineProperty(badFile, "text", { value: async () => JSON.stringify(blob) });
+  Object.defineProperty(fileInput, "files", { configurable: true, value: [badFile] });
+  await act(async () => fileInput.dispatchEvent(new Event("change", { bubbles: true })));
+
+  const checkbox = container!.querySelector<HTMLInputElement>('input[type="checkbox"]')!;
+  await act(async () => checkbox.click());
+
+  const form = container!.querySelector<HTMLFormElement>("#backup-restore-form")!;
+  act(() => {
+    form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+  });
+  await act(async () => {});
+
+  // While restore is in flight, toggle must be disabled.
+  expect(toggle().disabled).toBe(true);
+
+  await act(async () => releaseRestore(false));
+  expect(toggle().disabled).toBe(false);
+  expect(container!.querySelector('[role="alert"]')).not.toBeNull();
+
+  // Closing and reopening clears stale error, password, and confirmation.
+  await act(async () => toggle().click());
+  await act(async () => toggle().click());
+  expect(container!.querySelector('[role="alert"]')).toBeNull();
+  expect(container!.querySelector<HTMLInputElement>('input[type="checkbox"]')!.checked).toBe(false);
+  expect(container!.querySelector<HTMLInputElement>("#backup-restore-pass")!.value).toBe("");
+});

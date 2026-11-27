@@ -20,24 +20,26 @@ import RevealWords from "./landing/RevealWords.js";
 import ThreeBoxes from "./landing/ThreeBoxes.js";
 import { useAnimated, useReducedMotion } from "./landing/motion.js";
 
-type AuthView = "sign-in" | "sign-up" | "forgot" | "new-password";
+type AuthModalState =
+  | { kind: "closed" }
+  | { kind: "sign-in"; initialEmail: string; notice?: string }
+  | { kind: "sign-up" }
+  | { kind: "forgot"; initialEmail: string }
+  | { kind: "new-password"; token: string | null };
 
 const CONTACT_EMAIL = "alexander.steunenberg@gmail.com";
 const SECTION_IDS = ["does", "faq"] as const;
 const delay = (n: number) => ({ "--d": n }) as CSSProperties;
 
 /** The emailed reset link lands on /reset-password?token=… (or ?error=… when
- *  better-auth already refused the token). Read once, then strip the token
- *  from the address bar so it does not sit in history or a shared screenshot. */
-let resetLinkTaken: { token: string | null } | null | undefined;
-function takeResetLink(): { token: string | null } | null {
-  if (resetLinkTaken !== undefined) return resetLinkTaken;
+ *  better-auth already refused the token). Pure read during render so StrictMode
+ *  and repeated mounts never share sticky module-level state; an effect strips
+ *  the token from the address bar once mounted. */
+function readResetLink(): { token: string | null } | null {
   if (typeof window === "undefined" || window.location.pathname !== RESET_PASSWORD_PATH)
     return null;
   const params = new URLSearchParams(window.location.search);
-  resetLinkTaken = { token: params.has("error") ? null : params.get("token") };
-  window.history.replaceState({}, "", "/");
-  return resetLinkTaken;
+  return { token: params.has("error") ? null : params.get("token") };
 }
 
 /** Heading with its last words in italics. */
@@ -67,13 +69,12 @@ export default function Landing({
   const { state: authState } = useAuthState();
   const reduce = useReducedMotion();
   const animated = useAnimated();
-  const [resetLink] = useState(takeResetLink);
-  const [showSignIn, setShowSignIn] = useState(linkError || resetLink !== null);
-  const [authView, setAuthView] = useState<AuthView>(resetLink ? "new-password" : "sign-in");
-  /* Carries the typed address from sign-in into "forgot password" and back,
-   * and the "password changed" line onto the sign-in form after a reset. */
-  const [resetEmail, setResetEmail] = useState("");
-  const [signInNotice, setSignInNotice] = useState<string | undefined>(undefined);
+  const [resetLink] = useState(readResetLink);
+  const [authModal, setAuthModal] = useState<AuthModalState>(() => {
+    if (resetLink !== null) return { kind: "new-password", token: resetLink.token };
+    if (linkError) return { kind: "sign-in", initialEmail: "" };
+    return { kind: "closed" };
+  });
   const [menuOpen, setMenuOpen] = useState(false);
   const [activeSection, setActiveSection] = useState<string | null>(null);
   const account = shellCopy[locale].profiel.account;
@@ -85,20 +86,31 @@ export default function Landing({
   const burgerRef = useRef<HTMLButtonElement | null>(null);
   const panelRef = useRef<HTMLDivElement | null>(null);
 
+  useEffect(() => {
+    if (resetLink !== null && window.location.pathname === RESET_PASSWORD_PATH) {
+      window.history.replaceState({}, "", "/");
+    }
+  }, [resetLink]);
+
+  function closeAuthModal() {
+    setAuthModal({ kind: "closed" });
+  }
+
   /* The dialog is always mounted; only showModal()/close() move it on/off
    * screen. That's what gives the CSS exit transition something to animate
    * (an unmount has nothing left to fade), and it's why a failed sign-in
    * never wipes the typed email — the form stays alive underneath.
    *
-   * `showSignIn` is the only thing that opens or closes it. The obvious
-   * alternative, syncing state back from the dialog's `close` event, does not
-   * work: measured in Chrome on the built page, showModal() and close() both
-   * work and the `close` event never fires at all, which left the trigger
-   * needing two clicks to reopen and focus stranded inside a hidden dialog. */
+   * `authModal.kind !== "closed"` is the only thing that opens or closes it.
+   * The obvious alternative, syncing state back from the dialog's `close`
+   * event, does not work: measured in Chrome on the built page, showModal()
+   * and close() both work and the `close` event never fires at all, which left
+   * the trigger needing two clicks to reopen and focus stranded inside a
+   * hidden dialog. */
   useEffect(() => {
     const dialog = dialogRef.current;
     if (!dialog) return;
-    const shouldOpen = showSignIn && authState.kind !== "signed-in";
+    const shouldOpen = authModal.kind !== "closed" && authState.kind !== "signed-in";
     if (shouldOpen && !dialog.open) {
       dialog.showModal();
       dialog.querySelector<HTMLInputElement>("input")?.focus();
@@ -106,15 +118,14 @@ export default function Landing({
       dialog.close();
       (openerRef.current ?? triggerRef.current)?.focus();
     }
-  }, [showSignIn, authState.kind]);
+  }, [authModal.kind, authState.kind]);
 
   function openSignUp() {
     if (authState.kind === "signed-in") {
       onEnter();
       return;
     }
-    setAuthView("sign-up");
-    setShowSignIn(true);
+    setAuthModal({ kind: "sign-up" });
   }
 
   function openSignIn() {
@@ -122,12 +133,11 @@ export default function Landing({
       onEnter();
       return;
     }
-    if (showSignIn && authView === "sign-in") {
-      setShowSignIn(false);
+    if (authModal.kind === "sign-in") {
+      closeAuthModal();
       return;
     }
-    setAuthView("sign-in");
-    setShowSignIn(true);
+    setAuthModal({ kind: "sign-in", initialEmail: "" });
   }
 
   const withOpener = (open: () => void) => (e: MouseEvent<HTMLElement>) => {
@@ -138,15 +148,28 @@ export default function Landing({
   const onLogin = withOpener(openSignIn);
 
   /* A tap that landed before this bundle did (public/lp-early.js records it).
-   * Replayed once, so a visitor on a slow connection still gets the dialog. */
+   * Captured once on mount and replayed once authState is known so a signed-in
+   * visitor enters /app instead of seeing the sign-in dialog. */
+  const pendingTapRef = useRef<"sign-up" | "sign-in" | null>(null);
   useEffect(() => {
     const w = window as Window & { __lpTap?: string };
     const tap = w.__lpTap;
     delete w.__lpTap;
-    if (tap === "sign-up") openSignUp();
-    else if (tap === "sign-in") openSignIn();
-    // oxlint-disable-next-line react-hooks/exhaustive-deps -- mount-only replay
+    if (tap === "sign-up" || tap === "sign-in") {
+      pendingTapRef.current = tap;
+    }
   }, []);
+  useEffect(() => {
+    const tap = pendingTapRef.current;
+    if (!tap || authState.kind === "loading") return;
+    pendingTapRef.current = null;
+    if (authState.kind === "signed-in") {
+      onEnter();
+      return;
+    }
+    if (tap === "sign-up") setAuthModal({ kind: "sign-up" });
+    else setAuthModal({ kind: "sign-in", initialEmail: "" });
+  }, [authState.kind, onEnter]);
 
   /* `<html lang>` has to follow the copy, and the two pages have to declare
    * each other as alternates — otherwise the English page reads to a search
@@ -382,62 +405,57 @@ export default function Landing({
         className="lp-signin-dialog"
         aria-labelledby="lp-dialog-title"
         onClick={(e) => {
-          if (e.target === dialogRef.current) setShowSignIn(false);
+          if (e.target === dialogRef.current) closeAuthModal();
         }}
         onCancel={(e) => {
           e.preventDefault();
-          setShowSignIn(false);
+          closeAuthModal();
         }}
       >
         <button
           type="button"
           className="lp-signin-dialog-close"
           aria-label={c.login.close}
-          onClick={() => setShowSignIn(false)}
+          onClick={closeAuthModal}
         >
           ×
         </button>
         <h2 id="lp-dialog-title">
-          {authView === "sign-up"
+          {authModal.kind === "sign-up"
             ? c.login.signUpTitle
-            : authView === "forgot"
+            : authModal.kind === "forgot"
               ? account.reset.requestTitle
-              : authView === "new-password"
+              : authModal.kind === "new-password"
                 ? account.reset.newTitle
                 : c.nav.login}
         </h2>
-        {linkError && authView === "sign-in" && <p role="alert">{c.login.linkInvalid}</p>}
-        {authView === "forgot" ? (
+        {linkError && authModal.kind === "sign-in" && <p role="alert">{c.login.linkInvalid}</p>}
+        {authModal.kind === "forgot" ? (
           <RequestResetForm
             locale={locale}
-            initialEmail={resetEmail}
-            onBack={() => setAuthView("sign-in")}
+            initialEmail={authModal.initialEmail}
+            onBack={() => setAuthModal({ kind: "sign-in", initialEmail: authModal.initialEmail })}
           />
-        ) : authView === "new-password" ? (
+        ) : authModal.kind === "new-password" ? (
           <NewPasswordForm
             locale={locale}
-            token={resetLink?.token ?? null}
-            onDone={() => {
-              setSignInNotice(account.reset.done);
-              setAuthView("sign-in");
-            }}
-            onRequestNew={() => setAuthView("forgot")}
+            token={authModal.token}
+            onDone={() =>
+              setAuthModal({ kind: "sign-in", initialEmail: "", notice: account.reset.done })
+            }
+            onRequestNew={() => setAuthModal({ kind: "forgot", initialEmail: "" })}
           />
-        ) : authView === "sign-up" ? (
+        ) : authModal.kind === "sign-up" ? (
           <SignUpForm locale={locale} intro={c.login.signUpIntro} />
         ) : (
           <SignInForm
             locale={locale}
             intro={c.login.intro}
-            notice={signInNotice}
-            initialEmail={resetEmail}
-            onForgotPassword={(email) => {
-              setResetEmail(email);
-              setSignInNotice(undefined);
-              setAuthView("forgot");
-            }}
+            notice={authModal.kind === "sign-in" ? authModal.notice : undefined}
+            initialEmail={authModal.kind === "sign-in" ? authModal.initialEmail : ""}
+            onForgotPassword={(email) => setAuthModal({ kind: "forgot", initialEmail: email })}
             onSuccess={() => {
-              setShowSignIn(false);
+              closeAuthModal();
               /* A full navigation, not onEnter()'s pushState. Root holds its own
                * useAuthState, fetched once at page load, and a client-side
                * transition leaves it reading "signed-out" — so Root's gate sent
@@ -449,14 +467,18 @@ export default function Landing({
             }}
           />
         )}
-        {(authView === "sign-in" || authView === "sign-up") && (
+        {(authModal.kind === "sign-in" || authModal.kind === "sign-up") && (
           <button
             type="button"
             data-testid="auth-toggle"
             className="lp-dialog-link"
-            onClick={() => setAuthView((v) => (v === "sign-in" ? "sign-up" : "sign-in"))}
+            onClick={() =>
+              setAuthModal((m) =>
+                m.kind === "sign-in" ? { kind: "sign-up" } : { kind: "sign-in", initialEmail: "" },
+              )
+            }
           >
-            {authView === "sign-up" ? c.login.toSignIn : c.login.toSignUp}
+            {authModal.kind === "sign-up" ? c.login.toSignIn : c.login.toSignUp}
           </button>
         )}
       </dialog>

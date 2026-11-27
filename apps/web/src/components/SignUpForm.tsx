@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import type { Locale } from "../locale.js";
 import {
@@ -24,6 +24,12 @@ export type SignUpFormProps = {
   introClassName?: string;
 };
 
+type SignUpPhase =
+  | { kind: "idle" }
+  | { kind: "submitting" }
+  | { kind: "failed"; failure: SignUpFailure }
+  | { kind: "sent"; email: string };
+
 export default function SignUpForm({
   locale,
   intro,
@@ -34,41 +40,48 @@ export default function SignUpForm({
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [agreed, setAgreed] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [failure, setFailure] = useState<SignUpFailure | null>(null);
-  const [sentTo, setSentTo] = useState<string | null>(null);
+  const [phase, setPhase] = useState<SignUpPhase>({ kind: "idle" });
+  const inFlightRef = useRef(false);
 
+  const busy = phase.kind === "submitting";
+  const failure = phase.kind === "failed" ? phase.failure : null;
   const complete = name.trim() !== "" && email.trim() !== "" && password.trim() !== "" && agreed;
 
   async function handleSignUp(e: FormEvent) {
     e.preventDefault();
-    if (!complete) return;
-    setBusy(true);
-    setFailure(null);
-    const result = await signUp({
-      name: name.trim(),
-      email,
-      password,
-      callbackURL: verificationCallbackUrl(),
-    });
-    setBusy(false);
-    if (!result.ok) {
-      setFailure(result.kind);
-      posthog.capture("sign_up_failed", { reason: result.kind });
-      return;
+    if (!complete || busy || inFlightRef.current) return;
+    inFlightRef.current = true;
+    setPhase({ kind: "submitting" });
+    try {
+      const result = await signUp({
+        name: name.trim(),
+        email,
+        password,
+        callbackURL: verificationCallbackUrl(),
+      });
+      if (!result.ok) {
+        setPhase({ kind: "failed", failure: result.kind });
+        posthog.capture("sign_up_failed", { reason: result.kind });
+        return;
+      }
+      setPassword("");
+      setPhase({ kind: "sent", email });
+      posthog.capture("sign_up_requested");
+    } catch {
+      setPhase({ kind: "failed", failure: "unreachable" });
+      posthog.capture("sign_up_failed", { reason: "unreachable" });
+    } finally {
+      inFlightRef.current = false;
     }
-    setPassword("");
-    setSentTo(email);
-    posthog.capture("sign_up_requested");
   }
 
-  if (sentTo !== null)
+  if (phase.kind === "sent")
     return (
       <CheckEmail
         locale={locale}
-        email={sentTo}
+        email={phase.email}
         introClassName={introClassName}
-        onOtherEmail={() => setSentTo(null)}
+        onOtherEmail={() => setPhase({ kind: "idle" })}
       />
     );
 
@@ -151,6 +164,12 @@ export default function SignUpForm({
 
 type MailFailure = Extract<MailResult, { ok: false }>["kind"];
 
+type ResendPhase =
+  | { kind: "idle" }
+  | { kind: "sending" }
+  | { kind: "resent" }
+  | { kind: "failed"; failure: MailFailure };
+
 /* The screen most new accounts stall on. It names the address (typos show up
  * here), offers a resend after a short wait, and a way back to fix the address. */
 function CheckEmail({
@@ -166,9 +185,12 @@ function CheckEmail({
 }) {
   const c = shellCopy[locale].profiel.account;
   const [wait, setWait] = useState(RESEND_COOLDOWN);
-  const [busy, setBusy] = useState(false);
-  const [resent, setResent] = useState(false);
-  const [failure, setFailure] = useState<MailFailure | null>(null);
+  const [phase, setPhase] = useState<ResendPhase>({ kind: "idle" });
+  const inFlightRef = useRef(false);
+
+  const busy = phase.kind === "sending";
+  const resent = phase.kind === "resent";
+  const failure = phase.kind === "failed" ? phase.failure : null;
 
   useEffect(() => {
     if (wait <= 0) return;
@@ -177,18 +199,23 @@ function CheckEmail({
   }, [wait]);
 
   async function resend() {
-    setBusy(true);
-    setFailure(null);
-    setResent(false);
-    const result = await resendVerification(email);
-    setBusy(false);
-    setWait(RESEND_COOLDOWN);
-    if (!result.ok) {
-      setFailure(result.kind);
-      return;
+    if (busy || wait > 0 || inFlightRef.current) return;
+    inFlightRef.current = true;
+    setPhase({ kind: "sending" });
+    try {
+      const result = await resendVerification(email);
+      if (!result.ok) {
+        setPhase({ kind: "failed", failure: result.kind });
+        return;
+      }
+      setWait(RESEND_COOLDOWN);
+      setPhase({ kind: "resent" });
+      posthog.capture("verification_email_resent");
+    } catch {
+      setPhase({ kind: "failed", failure: "unreachable" });
+    } finally {
+      inFlightRef.current = false;
     }
-    setResent(true);
-    posthog.capture("verification_email_resent");
   }
 
   return (
